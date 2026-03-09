@@ -100,6 +100,42 @@ For DDS support also install [ImageMagick](https://imagemagick.org/).
 python main.py
 ```
 
+## Building a Standalone Executable
+
+You can package the app into a standalone executable (no Python installation needed on
+the target machine) using [PyInstaller](https://pyinstaller.org/).
+
+### Quick build
+
+```bash
+# Install build tools
+pip install -r requirements-dev.txt
+
+# Linux / macOS
+bash scripts/build_exe.sh
+
+# Windows
+scripts\build_exe.bat
+```
+
+The finished application is placed in `dist/AlphaFixerConverter/`.
+Run `AlphaFixerConverter` (Linux/macOS) or `AlphaFixerConverter.exe` (Windows) from that folder.
+
+### Single-file build (slower startup)
+
+```bash
+bash scripts/build_exe.sh --onefile      # Linux / macOS
+scripts\build_exe.bat --onefile          # Windows
+```
+
+### Manual PyInstaller invocation
+
+The repo ships with a fully-configured spec file:
+
+```bash
+pyinstaller alpha_fixer.spec
+```
+
 ## Running Tests
 
 ```bash
@@ -110,30 +146,34 @@ python -m pytest tests/ -v
 
 ```
 src/
+  version.py           - App version constant (1.0.0)
   core/
-    alpha_processor.py   – Alpha channel processing logic
-    file_converter.py    – Image format conversion
-    presets.py           – Built-in and custom preset definitions
-    worker.py            – Background QThread workers (non-blocking)
-    settings_manager.py  – Persistent settings (QSettings) + export/import
+    alpha_processor.py   - Alpha channel processing logic
+    file_converter.py    - Image format conversion
+    presets.py           - Built-in and custom preset definitions
+    worker.py            - Background QThread workers (non-blocking)
+    settings_manager.py  - Persistent settings (QSettings) + export/import
   ui/
-    main_window.py       – Main window + menu + Patreon link + unlock system
-    alpha_tool.py        – Alpha Fixer tab (comparison slider, keyboard shortcuts)
-    converter_tool.py    – File Converter tab (image preview, shortcuts, history recording)
-    history_tab.py       – Conversion History tab (timestamped, colour-coded)
-    preview_pane.py      – ImagePreviewPane thumbnail + BeforeAfterWidget comparison slider
-    settings_dialog.py   – Settings dialog (themes, effects, tooltip mode, unlock display)
-    theme_engine.py      – Qt stylesheet generator + 10 theme palettes + THEME_EFFECTS map
-    click_effects.py     – Per-theme click particle overlay (blood, bats, stars, skulls, otters…)
-    tooltip_manager.py   – Cycling tooltip engine: Normal / Off / Dumbed Down / No Filter 🤬
-    drop_list.py         – DropFileList: drag-and-drop, Delete key, right-click remove
-    mouse_trail.py       – Mouse trail particle overlay
-    sound_engine.py      – Click sound engine (QSoundEffect + fallback)
+    main_window.py       - Main window + menu + Patreon link + unlock system
+    alpha_tool.py        - Alpha Fixer tab (comparison slider, keyboard shortcuts)
+    converter_tool.py    - File Converter tab (image preview, shortcuts, history recording)
+    history_tab.py       - Conversion History tab (timestamped, colour-coded)
+    preview_pane.py      - ImagePreviewPane thumbnail + BeforeAfterWidget comparison slider
+    settings_dialog.py   - Settings dialog (themes, effects, tooltip mode, unlock display)
+    theme_engine.py      - Qt stylesheet generator + 10 theme palettes + THEME_EFFECTS map
+    click_effects.py     - Per-theme click particle overlay (blood, bats, stars, skulls, otters)
+    tooltip_manager.py   - Cycling tooltip engine: Normal / Off / Dumbed Down / No Filter
+    drop_list.py         - DropFileList: drag-and-drop, Delete key, right-click remove
+    mouse_trail.py       - Mouse trail particle overlay
+    sound_engine.py      - Click sound engine (QSoundEffect + fallback)
 tests/
-  test_core.py           – Unit tests for alpha processing & presets
-  test_converter.py      – Unit tests for file conversion
-  test_ui_components.py  – Unit tests for all UI components (69 tests)
-main.py                  – Entry point with crash prevention, logging, libEGL check
+  test_core.py           - Unit tests for alpha processing & presets
+  test_converter.py      - Unit tests for file conversion
+  test_ui_components.py  - Unit tests for all UI components
+main.py                  - Entry point with crash prevention, logging, libEGL check
+alpha_fixer.spec         - PyInstaller build spec
 scripts/
-  install_linux_deps.sh  – One-shot system-library installer (libegl1, libpulse0, …)
+  install_linux_deps.sh  - One-shot system-library installer (libegl1, libpulse0, ...)
+  build_exe.sh           - Linux / macOS standalone build script
+  build_exe.bat          - Windows standalone build script
 ```

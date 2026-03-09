@@ -19,7 +19,7 @@ import math
 import random
 from collections import deque
 
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -262,7 +262,10 @@ class ClickEffectsOverlay(QWidget):
     • WA_TransparentForMouseEvents – all clicks pass through.
     • An event filter on QApplication intercepts mouse press events.
     • A 60fps timer drives animation.
+    • click_registered signal fires with the total click count after each click.
     """
+
+    click_registered = pyqtSignal(int)  # emitted with total click count on each click
 
     def __init__(self, main_window: QWidget):
         super().__init__(main_window)
@@ -349,6 +352,7 @@ class ClickEffectsOverlay(QWidget):
                 for p in spawner(lp.x(), lp.y()):
                     self._add_particle(p)
                 self._click_count += 1
+                self.click_registered.emit(self._click_count)
             except AttributeError:
                 pass
         elif event.type() == QEvent.Type.Resize and obj is self._main_window:

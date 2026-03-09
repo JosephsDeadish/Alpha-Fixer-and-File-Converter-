@@ -48,5 +48,7 @@ logs/
 Thumbs.db
 
 # App data
-~/.alpha_fixer_converter/
-=6.4.0
+*.alpha_fixer_converter/
+
+# PyInstaller build artefacts
+*.spec.bak

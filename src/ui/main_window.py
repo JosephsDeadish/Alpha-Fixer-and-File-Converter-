@@ -18,6 +18,7 @@ from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
 from .theme_engine import build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS
+from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
@@ -49,7 +50,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _setup_window(self):
-        self.setWindowTitle("🐼 Alpha Fixer & File Converter")
+        self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
         self.setMinimumSize(800, 600)
 
     def _setup_ui(self):
@@ -175,6 +176,7 @@ class MainWindow(QMainWindow):
         self._click_effects.raise_()
         effects_enabled = self._settings.get("click_effects_enabled", True)
         self._click_effects.set_enabled(effects_enabled)
+        self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
 
         # Cursor
@@ -214,8 +216,6 @@ class MainWindow(QMainWindow):
 
     def _check_unlocks(self) -> None:
         """Check whether any hidden theme should be unlocked."""
-        if self._click_effects is None:
-            return
         total = self._settings.get("total_clicks", 0) + 1
         self._settings.set("total_clicks", total)
 
@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
             self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
             QApplication.instance().beep()
 
-
+    def _apply_cursor(self):
         cursor_name = self._settings.get("cursor", "Default")
         shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
         self.setCursor(QCursor(shape))
@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About 🐼 Alpha Fixer & File Converter",
-            "<h2>🐼 Alpha Fixer & File Converter</h2>"
+            f"<h2>🐼 Alpha Fixer & File Converter  v{__version__}</h2>"
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
