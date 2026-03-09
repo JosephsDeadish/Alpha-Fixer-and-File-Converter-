@@ -13,7 +13,11 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QFileDialog,
 )
 
-from .theme_engine import PRESET_THEMES, DEFAULT_THEME, build_stylesheet
+from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet
+from .tooltip_manager import TOOLTIP_MODES
+
+# Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
+_THEME_PREFIX_CHARS = "★🔓 "
 
 
 class ColorButton(QPushButton):
@@ -172,6 +176,23 @@ class SettingsDialog(QDialog):
         gv.addWidget(self._font_size_spin, row, 1)
         row += 1
 
+        # Click effects
+        gv.addWidget(QLabel("Click Effects:"), row, 0)
+        self._click_effects_check = QCheckBox("Enable per-theme click particle effects")
+        gv.addWidget(self._click_effects_check, row, 1, 1, 2)
+        row += 1
+
+        # Tooltip mode
+        gv.addWidget(QLabel("Tooltip Mode:"), row, 0)
+        self._tooltip_mode_combo = QComboBox()
+        self._tooltip_mode_combo.addItems(TOOLTIP_MODES)
+        self._tooltip_mode_combo.setToolTip(
+            "Controls how tooltips appear throughout the app.\n"
+            "Potty Mouth Pro 🤬 is the best mode – trust us."
+        )
+        gv.addWidget(self._tooltip_mode_combo, row, 1)
+        row += 1
+
         gv.setRowStretch(row, 1)
         tabs.addTab(gen_tab, "⚙ General")
 
@@ -205,9 +226,14 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.clear()
         for name in PRESET_THEMES:
             self._theme_preset_combo.addItem(name)
+        # Show hidden themes that have been unlocked
+        for name, t in HIDDEN_THEMES.items():
+            unlock_key = f"unlock_{t.get('_unlock', '')}"
+            if self._settings.get(unlock_key, False):
+                self._theme_preset_combo.addItem(f"🔓 {name}")
         saved = self._settings.get_saved_themes()
         if saved:
-            self._theme_preset_combo.insertSeparator(len(PRESET_THEMES))
+            self._theme_preset_combo.insertSeparator(self._theme_preset_combo.count())
             for name in sorted(saved):
                 self._theme_preset_combo.addItem(f"★ {name}")
         self._theme_preset_combo.addItem("— Custom —")
@@ -219,7 +245,7 @@ class SettingsDialog(QDialog):
         self._update_delete_btn()
 
     def _update_delete_btn(self):
-        name = self._theme_preset_combo.currentText().lstrip("★ ")
+        name = self._theme_preset_combo.currentText().lstrip(_THEME_PREFIX_CHARS)
         is_user = name in self._settings.get_saved_themes()
         self._btn_delete_theme.setEnabled(is_user)
 
@@ -236,6 +262,8 @@ class SettingsDialog(QDialog):
         idx = self._theme_preset_combo.findText(theme_name)
         if idx < 0:
             idx = self._theme_preset_combo.findText(f"★ {theme_name}")
+        if idx < 0:
+            idx = self._theme_preset_combo.findText(f"🔓 {theme_name}")
         self._theme_preset_combo.setCurrentIndex(
             idx if idx >= 0 else self._theme_preset_combo.count() - 1
         )
@@ -248,6 +276,12 @@ class SettingsDialog(QDialog):
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
+        self._click_effects_check.setChecked(
+            self._settings.get("click_effects_enabled", True)
+        )
+        mode_val = self._settings.get("tooltip_mode", "Normal")
+        idx_m = self._tooltip_mode_combo.findText(mode_val)
+        self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
 
     # ------------------------------------------------------------------
     # Color-button callback
@@ -262,9 +296,11 @@ class SettingsDialog(QDialog):
 
     def _apply_preset(self):
         raw_name = self._theme_preset_combo.currentText()
-        name = raw_name.lstrip("★ ")
+        name = raw_name.lstrip(_THEME_PREFIX_CHARS)
         if name in PRESET_THEMES:
             self._theme = dict(PRESET_THEMES[name])
+        elif name in HIDDEN_THEMES:
+            self._theme = dict(HIDDEN_THEMES[name])
         else:
             saved = self._settings.get_saved_themes()
             if name in saved:
@@ -288,7 +324,7 @@ class SettingsDialog(QDialog):
         QMessageBox.information(self, "Save Theme", f"Theme '{name}' saved.")
 
     def _delete_custom_theme(self):
-        raw_name = self._theme_preset_combo.currentText().lstrip("★ ")
+        raw_name = self._theme_preset_combo.currentText().lstrip(_THEME_PREFIX_CHARS)
         reply = QMessageBox.question(
             self, "Delete Theme",
             f"Delete saved theme '{raw_name}'?",
@@ -322,6 +358,8 @@ class SettingsDialog(QDialog):
         self._settings.set("trail_color", self._trail_color_btn.color())
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("font_size", self._font_size_spin.value())
+        self._settings.set("click_effects_enabled", self._click_effects_check.isChecked())
+        self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
         self.theme_changed.emit(self._theme)
         self.settings_changed.emit()
         self.accept()

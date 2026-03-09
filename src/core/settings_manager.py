@@ -62,6 +62,13 @@ class SettingsManager:
         "window_w": 1100,
         "window_h": 750,
         "window_maximized": False,
+        # Tooltip
+        "tooltip_mode": "Normal",
+        # Click effects
+        "click_effects_enabled": True,
+        # Unlock flags
+        "unlock_skeleton": False,
+        "total_clicks": 0,
     }
 
     def __init__(self):
@@ -174,6 +181,7 @@ class SettingsManager:
         "sound_enabled", "click_sound_path",
         "cursor", "trail_enabled", "trail_color",
         "font_size",
+        "click_effects_enabled", "tooltip_mode",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",

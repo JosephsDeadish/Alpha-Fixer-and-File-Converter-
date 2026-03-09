@@ -1,6 +1,8 @@
 """
 Main application window.
 """
+import webbrowser
+
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction, QCursor, QFont, QIcon
 from PyQt6.QtWidgets import (
@@ -15,14 +17,15 @@ from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
-from .theme_engine import build_stylesheet
+from .theme_engine import build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS
 
+PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
 _CURSOR_MAP = {
-    "Default":      Qt.CursorShape.ArrowCursor,
-    "Cross":        Qt.CursorShape.CrossCursor,
+    "Default":       Qt.CursorShape.ArrowCursor,
+    "Cross":         Qt.CursorShape.CrossCursor,
     "Pointing Hand": Qt.CursorShape.PointingHandCursor,
-    "Open Hand":    Qt.CursorShape.OpenHandCursor,
+    "Open Hand":     Qt.CursorShape.OpenHandCursor,
 }
 
 
@@ -32,6 +35,8 @@ class MainWindow(QMainWindow):
         self._settings = settings
         self._preset_mgr = PresetManager(settings)
         self._trail_overlay = None
+        self._click_effects = None
+        self._tooltip_mgr = None
         self._sound = None
         self._setup_window()
         self._setup_ui()
@@ -80,6 +85,10 @@ class MainWindow(QMainWindow):
         act_about = QAction("About", self)
         act_about.triggered.connect(self._show_about)
         help_menu.addAction(act_about)
+        help_menu.addSeparator()
+        act_patreon = QAction("❤  Support on Patreon…", self)
+        act_patreon.triggered.connect(self._open_patreon)
+        help_menu.addAction(act_patreon)
 
         # Central widget with tabs
         central = QWidget()
@@ -128,8 +137,23 @@ class MainWindow(QMainWindow):
         self._theme_label.setObjectName("subheader")
         toolbar.addWidget(self._theme_label)
 
+        toolbar.addSeparator()
+        btn_patreon = QPushButton("❤ Patreon")
+        btn_patreon.setToolTip(
+            "Support development on Patreon!\n"
+            "patreon.com/c/DeadOnTheInside"
+        )
+        btn_patreon.clicked.connect(self._open_patreon)
+        toolbar.addWidget(btn_patreon)
+
+        # Unlock status label (shown when a secret theme unlocks)
+        self._unlock_lbl = QLabel("")
+        self._unlock_lbl.setObjectName("subheader")
+        self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 8px;")
+        toolbar.addWidget(self._unlock_lbl)
+
     # ------------------------------------------------------------------
-    # Visual / audio effects (trail, cursor, sound)
+    # Visual / audio effects (trail, cursor, sound, click effects, tooltips)
     # ------------------------------------------------------------------
 
     def _setup_effects(self):
@@ -144,6 +168,15 @@ class MainWindow(QMainWindow):
         self._trail_overlay.set_color(trail_color)
         self._trail_overlay.set_enabled(trail_enabled)
 
+        # Click effects overlay
+        from .click_effects import ClickEffectsOverlay
+        self._click_effects = ClickEffectsOverlay(self)
+        self._click_effects.setGeometry(self.rect())
+        self._click_effects.raise_()
+        effects_enabled = self._settings.get("click_effects_enabled", True)
+        self._click_effects.set_enabled(effects_enabled)
+        self._apply_theme_effect()
+
         # Cursor
         self._apply_cursor()
 
@@ -155,7 +188,39 @@ class MainWindow(QMainWindow):
         # Font size
         self._apply_font_size()
 
-    def _apply_cursor(self):
+        # Tooltip manager
+        from .tooltip_manager import TooltipManager
+        self._tooltip_mgr = TooltipManager(self._settings, parent=self)
+        self._tooltip_mgr.install_on_app(QApplication.instance())
+
+    def _apply_theme_effect(self):
+        """Set the click-effects overlay to match the active theme's effect key."""
+        if self._click_effects is None:
+            return
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "Panda Dark")
+        effect_key = THEME_EFFECTS.get(theme_name, "default")
+        self._click_effects.set_effect(effect_key)
+
+    # ------------------------------------------------------------------
+    # Unlock hidden themes based on click count
+    # ------------------------------------------------------------------
+
+    def _check_unlocks(self) -> None:
+        """Check whether any hidden theme should be unlocked."""
+        if self._click_effects is None:
+            return
+        total = self._settings.get("total_clicks", 0) + 1
+        self._settings.set("total_clicks", total)
+
+        # Secret Skeleton unlocks at 100 total clicks
+        already_unlocked = self._settings.get("unlock_skeleton", False)
+        if not already_unlocked and total >= 100:
+            self._settings.set("unlock_skeleton", True)
+            self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
+            QApplication.instance().beep()
+
+
         cursor_name = self._settings.get("cursor", "Default")
         shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
         self.setCursor(QCursor(shape))
@@ -223,12 +288,17 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._apply_cursor()
         self._apply_font_size()
+        self._apply_theme_effect()
         if self._trail_overlay is not None:
             self._trail_overlay.set_color(
                 self._settings.get("trail_color", "#e94560")
             )
             self._trail_overlay.set_enabled(
                 self._settings.get("trail_enabled", False)
+            )
+        if self._click_effects is not None:
+            self._click_effects.set_enabled(
+                self._settings.get("click_effects_enabled", True)
             )
 
     def _export_settings(self):
@@ -293,12 +363,19 @@ class MainWindow(QMainWindow):
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
             "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
+            "<li>Before/after comparison slider preview</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
-            "<li>Customizable panda themes, mouse trail, cursor, sounds</li>"
+            "<li>10+ themed effects: Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Goth…</li>"
+            "<li>Cycling tooltips with Normal, Dumbed Down, and Potty Mouth Pro 🤬 modes</li>"
+            "<li>Hidden unlockable themes (keep clicking to discover them!)</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"
-            "<p>Built with Python + PyQt6 + Pillow.</p>",
+            "<p>Built with Python + PyQt6 + Pillow.</p>"
+            f'<p><a href="{PATREON_URL}">❤ Support on Patreon</a></p>',
         )
+
+    def _open_patreon(self):
+        webbrowser.open(PATREON_URL)
 
     # ------------------------------------------------------------------
     # Resize – keep the trail overlay covering the whole window
@@ -309,6 +386,9 @@ class MainWindow(QMainWindow):
         if self._trail_overlay is not None:
             self._trail_overlay.setGeometry(self.rect())
             self._trail_overlay.raise_()
+        if self._click_effects is not None:
+            self._click_effects.setGeometry(self.rect())
+            self._click_effects.raise_()
 
     # ------------------------------------------------------------------
     # Lifecycle

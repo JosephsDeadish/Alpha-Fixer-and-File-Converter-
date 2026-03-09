@@ -580,5 +580,210 @@ class _FakeQSettings:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Theme engine – new palettes and THEME_EFFECTS
+# ---------------------------------------------------------------------------
+
+class TestNewThemes(unittest.TestCase):
+    def test_preset_themes_contains_new_entries(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        for name in ("Gore", "Bat Cave", "Rainbow Chaos",
+                     "Otter Cove", "Galaxy", "Galaxy Otter", "Goth"):
+            self.assertIn(name, PRESET_THEMES, f"{name} should be in PRESET_THEMES")
+
+    def test_hidden_themes_contains_secret_skeleton(self):
+        from src.ui.theme_engine import HIDDEN_THEMES
+        self.assertIn("Secret Skeleton", HIDDEN_THEMES)
+
+    def test_theme_effects_map_populated(self):
+        from src.ui.theme_engine import THEME_EFFECTS
+        self.assertIn("Gore", THEME_EFFECTS)
+        self.assertEqual(THEME_EFFECTS["Gore"], "gore")
+        self.assertEqual(THEME_EFFECTS["Bat Cave"], "bat")
+        self.assertEqual(THEME_EFFECTS["Galaxy Otter"], "galaxy_otter")
+
+    def test_all_presets_have_required_keys(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        required = {"background", "surface", "primary", "accent",
+                    "text", "button_bg", "progress_bar"}
+        for name, theme in PRESET_THEMES.items():
+            for key in required:
+                self.assertIn(key, theme, f"{name} missing key '{key}'")
+
+    def test_build_stylesheet_works_for_all_themes(self):
+        from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
+        for name, theme in PRESET_THEMES.items():
+            sheet = build_stylesheet(theme)
+            self.assertIsInstance(sheet, str)
+            self.assertIn("QWidget", sheet, f"{name} stylesheet missing QWidget rule")
+
+
+# ---------------------------------------------------------------------------
+# ClickEffectsOverlay
+# ---------------------------------------------------------------------------
+
+class TestClickEffectsOverlay(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(600, 400)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_creates_without_error(self):
+        from src.ui.click_effects import ClickEffectsOverlay
+        overlay = ClickEffectsOverlay(self._parent)
+        self.assertIsNotNone(overlay)
+
+    def test_initial_click_count_is_zero(self):
+        from src.ui.click_effects import ClickEffectsOverlay
+        overlay = ClickEffectsOverlay(self._parent)
+        self.assertEqual(overlay.click_count, 0)
+
+    def test_record_click_increments_counter(self):
+        from src.ui.click_effects import ClickEffectsOverlay
+        overlay = ClickEffectsOverlay(self._parent)
+        overlay.record_click()
+        overlay.record_click()
+        self.assertEqual(overlay.click_count, 2)
+
+    def test_set_effect_unknown_key_falls_back_to_default(self):
+        from src.ui.click_effects import ClickEffectsOverlay
+        overlay = ClickEffectsOverlay(self._parent)
+        overlay.set_effect("nonexistent_effect_xyz")
+        self.assertEqual(overlay._effect_key, "default")
+
+    def test_set_effect_all_known_keys(self):
+        from src.ui.click_effects import ClickEffectsOverlay, _SPAWNERS
+        overlay = ClickEffectsOverlay(self._parent)
+        for key in _SPAWNERS:
+            overlay.set_effect(key)
+            self.assertEqual(overlay._effect_key, key)
+
+    def test_spawners_return_particles(self):
+        from src.ui.click_effects import _SPAWNERS
+        for key, spawner in _SPAWNERS.items():
+            particles = spawner(100, 100)
+            self.assertGreater(len(particles), 0, f"Spawner '{key}' returned no particles")
+
+    def test_paint_does_not_crash_without_particles(self):
+        from src.ui.click_effects import ClickEffectsOverlay
+        overlay = ClickEffectsOverlay(self._parent)
+        overlay.show()
+        overlay.resize(600, 400)
+        self._app.processEvents()
+
+    def test_set_enabled_does_not_crash(self):
+        from src.ui.click_effects import ClickEffectsOverlay
+        overlay = ClickEffectsOverlay(self._parent)
+        overlay.set_enabled(True)
+        overlay.set_enabled(False)
+
+
+# ---------------------------------------------------------------------------
+# TooltipManager
+# ---------------------------------------------------------------------------
+
+class TestTooltipManager(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        self._store: dict = {}
+        self._qs = _FakeQSettings(self._store)
+
+    def _make_manager(self, mode="Normal"):
+        from src.ui.tooltip_manager import TooltipManager
+
+        class _FakeSettings:
+            def __init__(self, store):
+                self._store = store
+
+            def get(self, key, fallback=None):
+                return self._store.get(key, fallback)
+
+        settings = _FakeSettings({"tooltip_mode": mode})
+        return TooltipManager(settings)
+
+    def test_creates_without_error(self):
+        mgr = self._make_manager()
+        self.assertIsNotNone(mgr)
+
+    def test_mode_returns_stored_mode(self):
+        mgr = self._make_manager("Dumbed Down")
+        self.assertEqual(mgr.mode(), "Dumbed Down")
+
+    def test_register_stores_key(self):
+        from PyQt6.QtWidgets import QPushButton
+        btn = QPushButton()
+        mgr = self._make_manager()
+        mgr.register(btn, "add_files")
+        self.assertEqual(mgr._widget_keys.get(id(btn)), "add_files")
+        btn.deleteLater()
+        self._app.processEvents()
+
+    def test_tooltip_modes_list_has_four_entries(self):
+        from src.ui.tooltip_manager import TOOLTIP_MODES
+        self.assertEqual(len(TOOLTIP_MODES), 4)
+        self.assertIn("Normal", TOOLTIP_MODES)
+        self.assertIn("Off", TOOLTIP_MODES)
+        self.assertIn("Dumbed Down", TOOLTIP_MODES)
+        # Potty Mouth Pro should be in the list
+        self.assertTrue(any("Potty Mouth" in m for m in TOOLTIP_MODES))
+
+    def test_normal_tips_cycle(self):
+        from src.ui.tooltip_manager import _NORMAL
+        self.assertIn("add_files", _NORMAL)
+        self.assertEqual(len(_NORMAL["add_files"]), 5)
+
+    def test_vulgar_tips_exist_for_all_normal_keys(self):
+        from src.ui.tooltip_manager import _NORMAL, _VULGAR
+        for key in _NORMAL:
+            self.assertIn(key, _VULGAR,
+                          f"Missing Potty Mouth Pro tip for key '{key}'")
+
+    def test_all_tip_variants_have_exactly_five_entries(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for mode_name, tips_dict in [("Normal", _NORMAL), ("Dumbed", _DUMBED), ("Vulgar", _VULGAR)]:
+            for key, variants in tips_dict.items():
+                self.assertEqual(len(variants), 5,
+                                 f"{mode_name}['{key}'] should have 5 variants, got {len(variants)}")
+
+    def test_dumbed_down_tips_exist_for_all_normal_keys(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED
+        for key in _NORMAL:
+            self.assertIn(key, _DUMBED,
+                          f"Missing Dumbed Down tip for key '{key}'")
+
+    def test_cycle_index_increments(self):
+        mgr = self._make_manager("Normal")
+        from PyQt6.QtWidgets import QPushButton
+        btn = QPushButton()
+        mgr.register(btn, "add_files")
+        self.assertEqual(mgr._cycle.get("add_files", 0), 0)
+        btn.deleteLater()
+        self._app.processEvents()
+
+    def test_settings_manager_has_tooltip_mode_default(self):
+        from src.core.settings_manager import SettingsManager
+        mgr = SettingsManager.__new__(SettingsManager)
+        default = mgr._DEFAULTS.get("tooltip_mode", None)
+        self.assertEqual(default, "Normal")
+
+
+# ---------------------------------------------------------------------------
+# Patreon URL constant
+# ---------------------------------------------------------------------------
+
+class TestPatreonLink(unittest.TestCase):
+    def test_patreon_url_correct(self):
+        from src.ui.main_window import PATREON_URL
+        self.assertIn("patreon.com", PATREON_URL)
+        self.assertIn("DeadOnTheInside", PATREON_URL)
+
+
 if __name__ == "__main__":
     unittest.main()
+

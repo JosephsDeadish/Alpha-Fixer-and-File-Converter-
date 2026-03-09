@@ -29,13 +29,20 @@ Convert between image formats with optional resize and quality control.
 - Custom output folder
 
 ## UI & Customization
-- 🐼 Panda Dark theme (default), Panda Light, Neon Panda
+- 🐼 **10 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth
+- **🔓 Hidden unlockable themes** – earn them through use (Secret Skeleton unlocks at 100 clicks, more to come)
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
+- **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth)
 - Mouse trail effect with configurable color
 - Custom cursor style (Default, Cross, Pointing Hand, Open Hand)
 - Click sound effects (built-in synthetic beep or point to your own .wav file)
 - Font size control (8–24pt)
+- **Cycling tooltips** with 4 modes (Settings → General → Tooltip Mode):
+  - **Normal** – 5 helpful variants per widget, cycles on each hover
+  - **Off** – tooltips disabled
+  - **Dumbed Down** – simplified tips with gentle user-roasting
+  - **Potty Mouth Pro 🤬** – extremely vulgar, profanity-filled, and *still actually helpful*
 - All settings are persisted across sessions (last-used preset, format, quality, window geometry, etc.)
 - **Export / Import all settings** to a portable JSON file (Settings → Export / Import)
 - Drag-and-drop files from Explorer/Finder directly onto the file lists
@@ -43,6 +50,7 @@ Convert between image formats with optional resize and quality control.
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - **Conversion history tab** – all past conversion sessions recorded with timestamp, format, and file count
+- **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
 - **Keyboard shortcuts** (F1 for full list):
   - `F5` – Run / Process / Convert
   - `Esc` – Stop current operation
@@ -109,22 +117,22 @@ src/
     worker.py            – Background QThread workers (non-blocking)
     settings_manager.py  – Persistent settings (QSettings) + export/import
   ui/
-    main_window.py       – Main application window + menu (Settings ▸ Export/Import)
-    alpha_tool.py        – Alpha Fixer tab (with image preview + keyboard shortcuts)
-    converter_tool.py    – File Converter tab (with image preview + keyboard shortcuts + history recording)
+    main_window.py       – Main window + menu + Patreon link + unlock system
+    alpha_tool.py        – Alpha Fixer tab (comparison slider, keyboard shortcuts)
+    converter_tool.py    – File Converter tab (image preview, shortcuts, history recording)
     history_tab.py       – Conversion History tab (timestamped, colour-coded)
-    preview_pane.py      – ImagePreviewPane thumbnail (Converter) + BeforeAfterWidget comparison slider (Alpha Fixer)
-    settings_dialog.py   – Settings & theme customization dialog
-    theme_engine.py      – Qt stylesheet generator
+    preview_pane.py      – ImagePreviewPane thumbnail + BeforeAfterWidget comparison slider
+    settings_dialog.py   – Settings dialog (themes, effects, tooltip mode, unlock display)
+    theme_engine.py      – Qt stylesheet generator + 10 theme palettes + THEME_EFFECTS map
+    click_effects.py     – Per-theme click particle overlay (blood, bats, stars, skulls, otters…)
+    tooltip_manager.py   – Cycling tooltip engine: Normal / Off / Dumbed Down / Potty Mouth Pro 🤬
     drop_list.py         – DropFileList: drag-and-drop, Delete key, right-click remove
     mouse_trail.py       – Mouse trail particle overlay
     sound_engine.py      – Click sound engine (QSoundEffect + fallback)
 tests/
   test_core.py           – Unit tests for alpha processing & presets
   test_converter.py      – Unit tests for file conversion
-  test_ui_components.py  – Unit tests for UI components (DropFileList, SoundEngine,
-                           MouseTrailOverlay, ImagePreviewPane, settings export/import,
-                           converter history)
+  test_ui_components.py  – Unit tests for all UI components (69 tests)
 main.py                  – Entry point with crash prevention, logging, libEGL check
 scripts/
   install_linux_deps.sh  – One-shot system-library installer (libegl1, libpulse0, …)
