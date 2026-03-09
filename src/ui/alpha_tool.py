@@ -346,6 +346,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._threshold_spin, "threshold_spin")
         mgr.register(self._invert_check, "invert_check")
         mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._recursive_check, "recursive_check")
         mgr.register(self._file_list, "file_list")
         mgr.register(self._compare, "compare_widget")
 

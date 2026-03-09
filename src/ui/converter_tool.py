@@ -232,6 +232,7 @@ class ConverterTab(QWidget):
         mgr.register(self._fmt_combo, "format_combo")
         mgr.register(self._quality_spin, "quality_spin")
         mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._recursive_check, "recursive_check")
         mgr.register(self._file_list, "file_list")
 
     # ------------------------------------------------------------------

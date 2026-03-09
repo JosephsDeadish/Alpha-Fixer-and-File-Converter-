@@ -239,6 +239,13 @@ class MainWindow(QMainWindow):
             self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
             QApplication.instance().beep()
 
+        # Secret Sakura unlocks at 250 total clicks
+        already_sakura = self._settings.get("unlock_sakura", False)
+        if not already_sakura and total >= 250:
+            self._settings.set("unlock_sakura", True)
+            self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (Settings → Theme)")
+            QApplication.instance().beep()
+
     def _apply_cursor(self):
         cursor_name = self._settings.get("cursor", "Default")
         shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
@@ -384,9 +391,9 @@ class MainWindow(QMainWindow):
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
-            "<li>10+ themed effects: Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Goth…</li>"
+            "<li>12 preset themes + 2 hidden unlockables (keep clicking to find them!)</li>"
+            "<li>13 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥, Ice ❄, Panda 🐼, and more…</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
-            "<li>Hidden unlockable themes (keep clicking to discover them!)</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"
             "<p>Built with Python + PyQt6 + Pillow.</p>"

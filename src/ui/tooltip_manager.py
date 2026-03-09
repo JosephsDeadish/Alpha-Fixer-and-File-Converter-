@@ -112,6 +112,13 @@ _NORMAL: dict[str, list[str]] = {
         "Use the Browse button to pick the folder visually.",
         "The folder will be created automatically if it doesn't exist.",
     ],
+    "recursive_check": [
+        "When enabled, subfolders inside the selected folder are also scanned.",
+        "Useful for processing entire project trees of images in one go.",
+        "Disable if you only want images directly in the selected folder.",
+        "Works for both Add Folder in Alpha Fixer and the Converter tab.",
+        "Deep nested directories are all included when this is checked.",
+    ],
     "compare_widget": [
         "Drag the red ◀▶ handle left or right to compare before and after.",
         "Left side = original image.  Right side = processed image.",
@@ -262,6 +269,13 @@ _DUMBED: dict[str, list[str]] = {
         "Browse = open a folder picker. Typing also works if you remember paths.",
         "Output folder is just where the results end up. You got this.",
         "Pro tip: create a folder called 'FIXED' first. Very professional.",
+    ],
+    "recursive_check": [
+        "Check this to include ALL subfolders. Uncheck to stay shallow.",
+        "Subfolders. It goes deeper. Check it. Or don't. Your call.",
+        "Recursive means it digs through ALL your nested folders. Very thorough.",
+        "Leave it checked unless you specifically want only the top folder. Simple.",
+        "Subfolders go in. All of them. If that's what you want, check it.",
     ],
     "compare_widget": [
         "See that red handle? Drag it. Look at the pretty before/after.",
@@ -427,6 +441,13 @@ _VULGAR: dict[str, list[str]] = {
         "Pro move: make an 'output' folder first so your organized ass can find things.",
         "Browse button works. Typing a path works too if you remember where the hell your stuff is.",
         "The folder gets CREATED if it doesn't exist. The app has your back, you messy bastard.",
+    ],
+    "recursive_check": [
+        "Check this to dig through ALL your subfolders like the organized bastard you are.",
+        "Recursive = it goes deeper than your last therapy session. Check it or don't.",
+        "Subfolders, sub-subfolders, sub-sub-subfolders. It finds ALL of them. Insane.",
+        "Leave it on and the app will hunt down every image in every nested folder. Thorough as hell.",
+        "Uncheck it if you only want the top folder. Sometimes shallow is fine.",
     ],
     "compare_widget": [
         "Drag the red handle and see what the f**k you just did to your image.",
