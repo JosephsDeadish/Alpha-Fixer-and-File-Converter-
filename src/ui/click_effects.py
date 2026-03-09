@@ -1,0 +1,416 @@
+"""
+click_effects.py – per-theme click-triggered particle effects overlay.
+
+Each theme maps to an "effect key" (see THEME_EFFECTS in theme_engine.py).
+When the user clicks anywhere in the main window, a burst of themed particles
+is spawned at the cursor position.  For the Bat Cave theme a periodic timer
+also spawns bats that fly across the top of the window.
+
+Public API
+----------
+  ClickEffectsOverlay(main_window)   – create and attach to main window
+  .set_effect(effect_key: str)       – change the active effect
+  .set_enabled(enabled: bool)        – toggle globally on/off
+  .record_click()                    – increment click counter (for unlocks)
+  .click_count → int                 – total clicks recorded
+"""
+
+import math
+import random
+from collections import deque
+
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PyQt6.QtWidgets import QApplication, QWidget
+
+from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI as _DEFAULT_EMOJI_STR
+
+
+# ---------------------------------------------------------------------------
+# Particle data class
+# ---------------------------------------------------------------------------
+
+class _Particle:
+    """A single animated particle."""
+    __slots__ = ("x", "y", "vx", "vy", "life", "max_life",
+                 "kind", "size", "color", "text")
+
+    def __init__(self, x, y, vx, vy, life, kind, size, color, text=""):
+        self.x = float(x)
+        self.y = float(y)
+        self.vx = float(vx)
+        self.vy = float(vy)
+        self.life = float(life)
+        self.max_life = float(life)
+        self.kind = kind
+        self.size = float(size)
+        self.color = color
+        self.text = text  # emoji / char for text-type particles
+
+    @property
+    def alpha_frac(self) -> float:
+        return max(0.0, self.life / self.max_life)
+
+
+# ---------------------------------------------------------------------------
+# Effect spawner registry
+# ---------------------------------------------------------------------------
+
+def _rand_vel(speed_lo: float, speed_hi: float):
+    angle = random.uniform(0, 2 * math.pi)
+    speed = random.uniform(speed_lo, speed_hi)
+    return math.cos(angle) * speed, math.sin(angle) * speed
+
+
+def _spawn_default(x, y):
+    return [
+        _Particle(x, y, *_rand_vel(1, 5), random.uniform(0.4, 0.8),
+                  "circle", random.uniform(4, 10), QColor("#e94560"))
+        for _ in range(10)
+    ]
+
+
+def _spawn_gore(x, y):
+    particles = []
+    for _ in range(18):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(2, 9)
+        vy = random.uniform(-8, 4)
+        vx = math.cos(angle) * speed
+        r = random.randint(160, 220)
+        g = random.randint(0, 30)
+        b = random.randint(0, 20)
+        # Mix of circles and elongated drops
+        kind = random.choice(["circle", "drop"])
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
+                                   kind, random.uniform(4, 14),
+                                   QColor(r, g, b)))
+    return particles
+
+
+def _spawn_bat(x, y):
+    particles = []
+    for _ in range(8):
+        vx, vy = _rand_vel(2, 7)
+        life = random.uniform(0.5, 1.2)
+        particles.append(_Particle(x, y, vx, vy, life, "text",
+                                   random.uniform(16, 26), QColor("#7b2dff"),
+                                   random.choice(["🦇", "🦇", "🦇", "·"])))
+    return particles
+
+
+def _spawn_rainbow(x, y):
+    particles = []
+    rainbow_colors = ["#ff0000", "#ff7700", "#ffff00",
+                      "#00ff00", "#0088ff", "#8800ff", "#ff00ff"]
+    emojis = ["🌈", "✨", "⭐", "🌟", "💫"]
+    for i in range(14):
+        vx, vy = _rand_vel(2, 7)
+        color = QColor(rainbow_colors[i % len(rainbow_colors)])
+        kind = "text" if i % 3 == 0 else "circle"
+        text = random.choice(emojis) if kind == "text" else ""
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.0),
+                                   kind, random.uniform(8, 18), color, text))
+    # Occasional unicorn
+    if random.random() < 0.3:
+        particles.append(_Particle(x, y, random.uniform(-3, 3),
+                                   random.uniform(-6, -2), 1.2,
+                                   "text", 28, QColor("#ff88ff"), "🦄"))
+    return particles
+
+
+def _spawn_otter(x, y):
+    particles = []
+    otter_emojis = ["🦦", "🐟", "💧", "🌊", "✨"]
+    for _ in range(8):
+        vx, vy = _rand_vel(1, 5)
+        kind = "text" if random.random() < 0.5 else "circle"
+        text = random.choice(otter_emojis) if kind == "text" else ""
+        color = QColor(random.choice(["#e8a040", "#6699cc", "#88ccee", "#c8a870"]))
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.1),
+                                   kind, random.uniform(12, 22), color, text))
+    return particles
+
+
+def _spawn_galaxy(x, y):
+    particles = []
+    star_colors = ["#4477ff", "#aabbff", "#ffffff", "#00ddaa",
+                   "#ffcc00", "#ff4477", "#88aaff"]
+    star_chars = ["✦", "✧", "★", "·", "⋆"]
+    for _ in range(16):
+        vx, vy = _rand_vel(1, 6)
+        color = QColor(random.choice(star_colors))
+        kind = random.choice(["text", "circle"])
+        text = random.choice(star_chars) if kind == "text" else ""
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.2),
+                                   kind, random.uniform(6, 18), color, text))
+    return particles
+
+
+def _spawn_galaxy_otter(x, y):
+    particles = _spawn_galaxy(x, y)
+    otter_chars = ["🦦", "⭐", "🌟", "✨"]
+    for _ in range(4):
+        vx, vy = _rand_vel(1, 4)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.2),
+                                   "text", random.uniform(16, 24),
+                                   QColor("#a06aff"),
+                                   random.choice(otter_chars)))
+    return particles
+
+
+def _spawn_goth(x, y):
+    particles = []
+    goth_chars = ["💀", "🕷", "🦇", "☠", "🌑"]
+    for _ in range(10):
+        vx, vy = _rand_vel(1, 5)
+        kind = "text" if random.random() < 0.5 else "circle"
+        text = random.choice(goth_chars) if kind == "text" else ""
+        color = QColor(random.choice(["#8800aa", "#330033", "#aa00cc",
+                                      "#221122", "#ffffff"]))
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.0),
+                                   kind, random.uniform(10, 20), color, text))
+    return particles
+
+
+# ---------------------------------------------------------------------------
+# Custom emoji effect (user-configurable)
+# ---------------------------------------------------------------------------
+
+# Mutable module-level list – updated by ClickEffectsOverlay.set_custom_emoji()
+_CUSTOM_EMOJI: list[str] = _DEFAULT_EMOJI_STR.split()
+
+
+def set_custom_emoji(emoji_list: list[str]) -> None:
+    """Update the emoji used by the 'custom' effect spawner."""
+    global _CUSTOM_EMOJI
+    _CUSTOM_EMOJI = list(emoji_list) if emoji_list else _DEFAULT_EMOJI_STR.split()
+
+
+def _spawn_custom(x, y):
+    particles = []
+    emoji_list = _CUSTOM_EMOJI or ["✨"]
+    accent_colors = ["#e94560", "#00ff88", "#4477ff", "#ffcc00", "#ff88ff",
+                     "#ff8800", "#00ddaa", "#a06aff"]
+    for _ in range(10):
+        vx, vy = _rand_vel(1, 6)
+        kind = "text" if random.random() < 0.7 else "circle"
+        text = random.choice(emoji_list) if kind == "text" else ""
+        color = QColor(random.choice(accent_colors))
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.1),
+                                   kind, random.uniform(12, 22), color, text))
+    return particles
+
+
+_SPAWNERS = {
+    "default":      _spawn_default,
+    "gore":         _spawn_gore,
+    "bat":          _spawn_bat,
+    "rainbow":      _spawn_rainbow,
+    "otter":        _spawn_otter,
+    "galaxy":       _spawn_galaxy,
+    "galaxy_otter": _spawn_galaxy_otter,
+    "goth":         _spawn_goth,
+    "custom":       _spawn_custom,
+}
+
+
+# ---------------------------------------------------------------------------
+# Bat flock (periodic background animation for Bat Cave theme)
+# ---------------------------------------------------------------------------
+
+class _BatFlock(QObject):
+    """Spawns bats flying across the top of the window every few seconds."""
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._launch)
+        self._timer.setInterval(random.randint(4000, 8000))
+
+    def start(self):
+        self._timer.start()
+
+    def stop(self):
+        self._timer.stop()
+
+    def _launch(self):
+        self._timer.setInterval(random.randint(4000, 9000))
+        w = self._overlay.width()
+        count = random.randint(3, 7)
+        for i in range(count):
+            y_start = random.randint(10, 60)
+            x_start = random.randint(-20, 20)
+            speed = random.uniform(3, 7)
+            life = (w + 60) / max(speed, 1) / 60 + random.uniform(0.5, 1.5)
+            bat = _Particle(x_start + i * 25, y_start,
+                            speed, random.uniform(-0.5, 0.5), life,
+                            "bat_fly", random.uniform(18, 28),
+                            QColor("#7b2dff"), "🦇")
+            self._overlay._add_particle(bat)
+
+
+# ---------------------------------------------------------------------------
+# Main overlay widget
+# ---------------------------------------------------------------------------
+
+class ClickEffectsOverlay(QWidget):
+    """
+    Transparent overlay that renders per-theme click effects.
+
+    • WA_TransparentForMouseEvents – all clicks pass through.
+    • An event filter on QApplication intercepts mouse press events.
+    • A 60fps timer drives animation.
+    """
+
+    def __init__(self, main_window: QWidget):
+        super().__init__(main_window)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAutoFillBackground(False)
+
+        self._main_window = main_window
+        self._effect_key = "default"
+        self._particles: list[_Particle] = []
+        self._enabled = False
+        self._click_count = 0
+        self._bat_flock: _BatFlock | None = None
+        self._font = QFont("Segoe UI Emoji", 14)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)
+        self._timer.timeout.connect(self._tick)
+
+        self.setGeometry(main_window.rect())
+        self.raise_()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    @property
+    def click_count(self) -> int:
+        return self._click_count
+
+    def set_enabled(self, enabled: bool) -> None:
+        if self._enabled == enabled:
+            return
+        self._enabled = enabled
+        if enabled:
+            QApplication.instance().installEventFilter(self)
+            self._timer.start()
+            self.raise_()
+            self.show()
+        else:
+            QApplication.instance().removeEventFilter(self)
+            self._timer.stop()
+            self._particles.clear()
+            if self._bat_flock:
+                self._bat_flock.stop()
+            self.update()
+
+    def set_effect(self, effect_key: str) -> None:
+        self._effect_key = effect_key if effect_key in _SPAWNERS else "default"
+        # Manage bat flock timer
+        if effect_key == "bat" and self._enabled:
+            if self._bat_flock is None:
+                self._bat_flock = _BatFlock(self)
+            self._bat_flock.start()
+        else:
+            if self._bat_flock:
+                self._bat_flock.stop()
+
+    def set_custom_emoji(self, emoji_list: list[str]) -> None:
+        """Update the emoji list used by the 'custom' effect spawner."""
+        set_custom_emoji(emoji_list)
+
+    def record_click(self) -> int:
+        self._click_count += 1
+        return self._click_count
+
+    def _add_particle(self, p: _Particle) -> None:
+        self._particles.append(p)
+        if len(self._particles) > 300:
+            self._particles = self._particles[-200:]
+
+    # ------------------------------------------------------------------
+    # Event filter
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if not self._enabled:
+            return False
+        if event.type() == QEvent.Type.MouseButtonPress:
+            try:
+                gp = event.globalPosition().toPoint()
+                lp = self._main_window.mapFromGlobal(gp)
+                spawner = _SPAWNERS.get(self._effect_key, _spawn_default)
+                for p in spawner(lp.x(), lp.y()):
+                    self._add_particle(p)
+                self._click_count += 1
+            except AttributeError:
+                pass
+        elif event.type() == QEvent.Type.Resize and obj is self._main_window:
+            self.setGeometry(self._main_window.rect())
+            self.raise_()
+        return False
+
+    # ------------------------------------------------------------------
+    # Animation tick
+    # ------------------------------------------------------------------
+
+    _GRAVITY = 0.4
+
+    def _tick(self) -> None:
+        if not self._particles:
+            return
+        surviving = []
+        for p in self._particles:
+            p.x += p.vx
+            p.y += p.vy
+            if p.kind != "bat_fly":
+                p.vy += self._GRAVITY
+            p.life -= 0.02
+            if p.life > 0:
+                surviving.append(p)
+        self._particles = surviving
+        if surviving:
+            self.update()
+
+    # ------------------------------------------------------------------
+    # Paint
+    # ------------------------------------------------------------------
+
+    def paintEvent(self, _event) -> None:
+        if not self._particles:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        for p in self._particles:
+            alpha = max(0, min(255, int(p.alpha_frac * 220)))
+            if p.kind == "text" or p.kind == "bat_fly":
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                self._font.setPointSize(max(6, int(p.size)))
+                painter.setFont(self._font)
+                painter.setPen(QPen(c))
+                painter.drawText(int(p.x), int(p.y), p.text)
+                painter.setPen(Qt.PenStyle.NoPen)
+            elif p.kind == "drop":
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                painter.setBrush(QBrush(c))
+                w = max(2, int(p.size * 0.6))
+                h = max(2, int(p.size * 1.4))
+                painter.drawEllipse(int(p.x) - w // 2, int(p.y) - h // 2, w, h)
+            else:
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                painter.setBrush(QBrush(c))
+                r = max(2, int(p.size * p.alpha_frac * 0.5 + p.size * 0.5))
+                painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
+
+        painter.end()
