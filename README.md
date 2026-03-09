@@ -40,7 +40,8 @@ Convert between image formats with optional resize and quality control.
 - **Export / Import all settings** to a portable JSON file (Settings → Export / Import)
 - Drag-and-drop files from Explorer/Finder directly onto the file lists
 - Right-click or Delete key to remove items from file lists
-- **Image preview pane** – select any file in the list to see a live thumbnail + dimensions + size
+- **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
+- **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - **Conversion history tab** – all past conversion sessions recorded with timestamp, format, and file count
 - **Keyboard shortcuts** (F1 for full list):
   - `F5` – Run / Process / Convert
@@ -112,7 +113,7 @@ src/
     alpha_tool.py        – Alpha Fixer tab (with image preview + keyboard shortcuts)
     converter_tool.py    – File Converter tab (with image preview + keyboard shortcuts + history recording)
     history_tab.py       – Conversion History tab (timestamped, colour-coded)
-    preview_pane.py      – Image thumbnail preview widget (background-threaded loader)
+    preview_pane.py      – ImagePreviewPane thumbnail (Converter) + BeforeAfterWidget comparison slider (Alpha Fixer)
     settings_dialog.py   – Settings & theme customization dialog
     theme_engine.py      – Qt stylesheet generator
     drop_list.py         – DropFileList: drag-and-drop, Delete key, right-click remove

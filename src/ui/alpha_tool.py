@@ -4,8 +4,8 @@ Alpha Fixer tab widget.
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QSlider, QCheckBox, QFileDialog,
@@ -18,8 +18,65 @@ from ..core.presets import AlphaPreset, PresetManager
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
-from .preview_pane import ImagePreviewPane
+from .preview_pane import BeforeAfterWidget
 
+
+# ---------------------------------------------------------------------------
+# Background worker: load + process one image for the comparison pane
+# ---------------------------------------------------------------------------
+
+class _AlphaPreviewLoader(QThread):
+    """
+    Load a single image, apply the current preset/manual settings,
+    and emit both the original and processed images as QImages.
+    """
+    preview_ready = pyqtSignal(QImage, QImage)   # (before, after)
+    failed = pyqtSignal(str)
+
+    def __init__(self, path: str, preset=None, manual_params: dict | None = None):
+        super().__init__()
+        self._path = path
+        self._preset = preset
+        self._manual = manual_params
+
+    def run(self):
+        try:
+            from ..core.alpha_processor import (
+                load_image,
+                apply_alpha_preset,
+                apply_manual_alpha,
+            )
+            from .preview_pane import _pil_to_qimage
+
+            orig = load_image(self._path)  # always RGBA PIL image
+
+            before_qi = _pil_to_qimage(orig)
+
+            if self._preset is not None:
+                processed = apply_alpha_preset(orig, self._preset)
+            elif self._manual is not None:
+                processed = apply_manual_alpha(
+                    orig,
+                    mode=self._manual.get("mode", "set"),
+                    value=self._manual.get("value", 255),
+                    threshold=self._manual.get("threshold", 0),
+                    invert=self._manual.get("invert", False),
+                    clamp_min=self._manual.get("clamp_min", 0),
+                    clamp_max=self._manual.get("clamp_max", 255),
+                )
+            else:
+                processed = orig
+
+            after_qi = _pil_to_qimage(processed)
+            self.preview_ready.emit(before_qi, after_qi)
+        except Exception as exc:
+            import traceback
+            self.failed.emit(traceback.format_exc())
+
+
+# ---------------------------------------------------------------------------
+# Main tab widget
+# ---------------------------------------------------------------------------
 
 class AlphaFixerTab(QWidget):
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
@@ -27,6 +84,9 @@ class AlphaFixerTab(QWidget):
         self._presets = preset_manager
         self._settings = settings_manager
         self._worker = None
+        # Compare preview state
+        self._preview_path: str | None = None
+        self._preview_loader: _AlphaPreviewLoader | None = None
         self._setup_ui()
         self._setup_shortcuts()
         self._populate_presets()
@@ -45,13 +105,16 @@ class AlphaFixerTab(QWidget):
         hdr.setObjectName("header")
         main_layout.addWidget(hdr)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setChildrenCollapsible(False)
+        outer_splitter = QSplitter(Qt.Orientation.Horizontal)
+        outer_splitter.setChildrenCollapsible(False)
 
-        # ---- Left panel: input files + preview ----
+        # ==============================================================
+        # Left panel: file list  +  before/after comparison
+        # ==============================================================
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
+        lv.setSpacing(6)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
@@ -72,26 +135,54 @@ class AlphaFixerTab(QWidget):
         )
         lv.addWidget(self._recursive_check)
 
+        # ---- Vertical splitter: file list (top) / compare (bottom) ----
+        left_vsplit = QSplitter(Qt.Orientation.Vertical)
+        left_vsplit.setChildrenCollapsible(False)
+
+        # Top: file list
+        list_area = QWidget()
+        la_layout = QVBoxLayout(list_area)
+        la_layout.setContentsMargins(0, 0, 0, 0)
+        la_layout.setSpacing(4)
+
         self._file_list = DropFileList()
         self._file_list.setToolTip(
             "Files queued for processing.\n"
             "• Drag files/folders here from Explorer/Finder\n"
             "• Delete key or right-click → Remove Selected"
         )
-        lv.addWidget(self._file_list, 1)
+        la_layout.addWidget(self._file_list, 1)
 
         self._file_count_lbl = QLabel("0 files  |  F5 to process  |  Esc to stop")
         self._file_count_lbl.setObjectName("subheader")
-        lv.addWidget(self._file_count_lbl)
+        la_layout.addWidget(self._file_count_lbl)
 
-        # Preview pane below the list
-        self._preview = ImagePreviewPane()
-        self._preview.setFixedHeight(260)
-        lv.addWidget(self._preview)
+        left_vsplit.addWidget(list_area)
 
-        splitter.addWidget(left)
+        # Bottom: before/after compare widget
+        compare_area = QWidget()
+        ca_layout = QVBoxLayout(compare_area)
+        ca_layout.setContentsMargins(0, 0, 0, 0)
+        ca_layout.setSpacing(2)
 
-        # ---- Right panel: options ----
+        compare_lbl = QLabel("Before / After Comparison  ◀▶ drag to compare")
+        compare_lbl.setObjectName("section")
+        compare_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ca_layout.addWidget(compare_lbl)
+
+        self._compare = BeforeAfterWidget()
+        self._compare.setMinimumHeight(200)
+        ca_layout.addWidget(self._compare, 1)
+
+        left_vsplit.addWidget(compare_area)
+        left_vsplit.setSizes([220, 280])
+
+        lv.addWidget(left_vsplit, 1)
+        outer_splitter.addWidget(left)
+
+        # ==============================================================
+        # Right panel: presets + fine-tune + output + run controls
+        # ==============================================================
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
@@ -201,11 +292,13 @@ class AlphaFixerTab(QWidget):
         rv.addWidget(self._log)
 
         rv.addStretch(1)
-        splitter.addWidget(right)
-        splitter.setSizes([340, 560])
-        main_layout.addWidget(splitter, 1)
+        outer_splitter.addWidget(right)
+        outer_splitter.setSizes([360, 540])
+        main_layout.addWidget(outer_splitter, 1)
 
-        # ---- Connections ----
+        # ==============================================================
+        # Connections
+        # ==============================================================
         self._btn_add_files.clicked.connect(self._add_files)
         self._btn_add_folder.clicked.connect(self._add_folder)
         self._btn_clear.clicked.connect(self._file_list._clear_all)
@@ -220,8 +313,14 @@ class AlphaFixerTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
-        # Preview on selection change
+        # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
+        # Fine-tune controls → refresh compare preview
+        self._mode_combo.currentTextChanged.connect(self._on_finetune_changed)
+        self._alpha_spin.valueChanged.connect(self._on_finetune_changed)
+        self._threshold_spin.valueChanged.connect(self._on_finetune_changed)
+        self._invert_check.toggled.connect(self._on_finetune_changed)
+        self._use_preset_check.toggled.connect(self._update_compare)
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -240,7 +339,6 @@ class AlphaFixerTab(QWidget):
         for p in self._presets.all_presets():
             self._preset_combo.addItem(p.name)
 
-        # Restore last-used preset from settings
         last = self._settings.get("last_alpha_preset", "")
         target = last if last else current
         idx = self._preset_combo.findText(target)
@@ -253,19 +351,17 @@ class AlphaFixerTab(QWidget):
         preset = self._presets.get_preset(name)
         if preset is None:
             return
-        # Persist last selection
         self._settings.set("last_alpha_preset", name)
-        # Show description
         self._preset_desc.setText(preset.description)
-        # Mirror values into fine-tune controls
         self._mode_combo.setCurrentText(preset.fill_mode)
         val = preset.alpha_value if preset.alpha_value is not None else preset.fill_value
         self._alpha_spin.setValue(int(val))
         self._alpha_slider.setValue(int(val))
         self._threshold_spin.setValue(int(preset.threshold))
         self._invert_check.setChecked(bool(preset.invert))
-        # Disable delete for built-ins
         self._btn_delete_preset.setEnabled(not preset.builtin)
+        # Refresh compare preview with the new preset
+        self._update_compare()
 
     def _save_preset(self):
         name, ok = QInputDialog.getText(self, "Save Preset", "Preset name:")
@@ -347,10 +443,62 @@ class AlphaFixerTab(QWidget):
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
         item = self._file_list.item(row)
-        if item:
-            self._preview.show_file(item.text())
+        if item and os.path.isfile(item.text()):
+            self._preview_path = item.text()
+            self._update_compare()
         else:
-            self._preview.clear()
+            self._preview_path = None
+            self._compare.clear()
+
+    @pyqtSlot()
+    def _on_finetune_changed(self, *args):
+        """Only refresh the compare when fine-tune mode is active."""
+        if not self._use_preset_check.isChecked():
+            self._update_compare()
+
+    # ------------------------------------------------------------------
+    # Compare preview
+    # ------------------------------------------------------------------
+
+    def _update_compare(self, *args):
+        """Start a background load+process to update the before/after comparison."""
+        if not self._preview_path:
+            return
+
+        # Cancel previous loader if still running (500 ms matches _ThumbLoader timeout)
+        if self._preview_loader and self._preview_loader.isRunning():
+            self._preview_loader.quit()
+            self._preview_loader.wait(500)
+
+        preset = None
+        manual = None
+        if self._use_preset_check.isChecked():
+            preset = self._presets.get_preset(self._preset_combo.currentText())
+        else:
+            manual = {
+                "mode": self._mode_combo.currentText(),
+                "value": self._alpha_spin.value(),
+                "threshold": self._threshold_spin.value(),
+                "invert": self._invert_check.isChecked(),
+            }
+
+        self._compare.set_loading()
+        self._preview_loader = _AlphaPreviewLoader(
+            self._preview_path, preset=preset, manual_params=manual
+        )
+        self._preview_loader.preview_ready.connect(self._on_compare_ready)
+        self._preview_loader.failed.connect(self._on_compare_failed)
+        self._preview_loader.start()
+
+    @pyqtSlot(QImage, QImage)
+    def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
+        self._compare.set_before(before_qi)
+        self._compare.set_after(after_qi)
+
+    @pyqtSlot(str)
+    def _on_compare_failed(self, err: str):
+        self._compare.clear()
+        self._log_msg(f"⚠ Preview failed: {err.splitlines()[0]}")
 
     # ------------------------------------------------------------------
     # Output dir
@@ -374,7 +522,6 @@ class AlphaFixerTab(QWidget):
             QMessageBox.information(self, "No Files", "Please add files or a folder first.")
             return
 
-        # Expand any directories that were added (edge case)
         expanded = collect_files(files, recursive=self._recursive_check.isChecked())
         if not expanded:
             QMessageBox.information(self, "No Files", "No supported image files found.")
@@ -442,10 +589,11 @@ class AlphaFixerTab(QWidget):
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        # Refresh compare for currently selected file to show the processed result
+        if self._preview_path and success > 0:
+            self._update_compare()
 
     def _log_msg(self, msg: str):
         self._log.append(msg)
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
-
-

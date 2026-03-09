@@ -308,8 +308,164 @@ class TestImagePreviewPane(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SettingsManager – export / import
+# BeforeAfterWidget
 # ---------------------------------------------------------------------------
+
+class TestBeforeAfterWidget(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(400, 300)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_creates_without_error(self):
+        from src.ui.preview_pane import BeforeAfterWidget
+        w = BeforeAfterWidget(self._parent)
+        self.assertIsNotNone(w)
+
+    def test_initial_split_is_half(self):
+        from src.ui.preview_pane import BeforeAfterWidget
+        w = BeforeAfterWidget(self._parent)
+        self.assertAlmostEqual(w._split, 0.5)
+
+    def test_split_clamps_low(self):
+        from src.ui.preview_pane import BeforeAfterWidget
+        w = BeforeAfterWidget(self._parent)
+        w._update_split(-100)
+        self.assertGreaterEqual(w._split, 0.02)
+
+    def test_split_clamps_high(self):
+        from src.ui.preview_pane import BeforeAfterWidget
+        w = BeforeAfterWidget(self._parent)
+        w._update_split(99999)
+        self.assertLessEqual(w._split, 0.98)
+
+    def test_split_moves_to_correct_fraction(self):
+        from src.ui.preview_pane import BeforeAfterWidget
+        w = BeforeAfterWidget(self._parent)
+        w.resize(400, 300)
+        w._update_split(200)   # exactly half
+        self.assertAlmostEqual(w._split, 0.5, places=2)
+
+    def test_set_before_does_not_raise(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        qi = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 0, 0, 128)))
+        w.set_before(qi)
+        self.assertIsNotNone(w._pix_before)
+
+    def test_set_after_does_not_raise(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        qi = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 200)))
+        w.set_after(qi)
+        self.assertIsNotNone(w._pix_after)
+
+    def test_set_loading_clears_after(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        qi = _pil_to_qimage(Image.new("RGBA", (32, 32)))
+        w.set_after(qi)
+        w.set_loading()
+        self.assertIsNone(w._pix_after)
+        self.assertTrue(w._loading)
+
+    def test_clear_resets_state(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        qi = _pil_to_qimage(Image.new("RGBA", (32, 32)))
+        w.set_before(qi)
+        w.set_after(qi)
+        w.clear()
+        self.assertIsNone(w._pix_before)
+        self.assertIsNone(w._pix_after)
+        self.assertFalse(w._loading)
+
+    def test_paint_does_not_crash_when_empty(self):
+        """paintEvent must not crash even with no images."""
+        from src.ui.preview_pane import BeforeAfterWidget
+        w = BeforeAfterWidget(self._parent)
+        w.show()
+        w.resize(300, 200)
+        self._app.processEvents()
+
+    def test_paint_does_not_crash_with_images(self):
+        """paintEvent must not crash with both images set."""
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        w.resize(300, 200)
+        qi = _pil_to_qimage(Image.new("RGBA", (64, 64), (100, 150, 200, 180)))
+        w.set_before(qi)
+        w.set_after(qi)
+        w.show()
+        self._app.processEvents()
+
+
+# ---------------------------------------------------------------------------
+# _AlphaPreviewLoader (before/after background processor)
+# ---------------------------------------------------------------------------
+
+class TestAlphaPreviewLoader(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+
+    def tearDown(self):
+        self._app.processEvents()
+
+    def test_processes_image_and_emits_both_sides(self):
+        """preview_ready should emit (before QImage, after QImage)."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from src.ui.alpha_tool import _AlphaPreviewLoader
+        from src.core.presets import BUILTIN_PRESETS
+        from PIL import Image
+
+        results = []
+
+        with tempfile.TemporaryDirectory() as td:
+            img_path = os.path.join(td, "test.png")
+            Image.new("RGBA", (32, 32), (200, 200, 200, 200)).save(img_path)
+
+            preset = BUILTIN_PRESETS[0]  # PS2 preset
+            loader = _AlphaPreviewLoader(img_path, preset=preset)
+            loader.preview_ready.connect(
+                lambda b, a: results.append((b, a))
+            )
+            loader.start()
+            loader.wait(5000)
+            self._app.processEvents()
+
+        self.assertEqual(len(results), 1, "preview_ready should fire once")
+        before_qi, after_qi = results[0]
+        self.assertFalse(before_qi.isNull())
+        self.assertFalse(after_qi.isNull())
+        # Before and after should differ (PS2 changes alpha from 200 → 128)
+        self.assertNotEqual(before_qi.pixel(10, 10), after_qi.pixel(10, 10))
+
+    def test_failed_signal_on_bad_path(self):
+        """failed signal should fire when the path doesn't exist."""
+        from src.ui.alpha_tool import _AlphaPreviewLoader
+
+        errors = []
+        loader = _AlphaPreviewLoader("/nonexistent/bad.png")
+        loader.failed.connect(errors.append)
+        loader.start()
+        loader.wait(3000)
+        self._app.processEvents()
+        self.assertEqual(len(errors), 1)
+
+
+
 
 class TestSettingsExportImport(unittest.TestCase):
     def setUp(self):
