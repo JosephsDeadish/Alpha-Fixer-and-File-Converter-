@@ -253,6 +253,159 @@ class TestMouseTrailOverlay(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# ImagePreviewPane
+# ---------------------------------------------------------------------------
+
+class TestImagePreviewPane(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(400, 400)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_pane_creates_without_error(self):
+        from src.ui.preview_pane import ImagePreviewPane
+        pane = ImagePreviewPane(self._parent)
+        self.assertIsNotNone(pane)
+
+    def test_clear_resets_label(self):
+        from src.ui.preview_pane import ImagePreviewPane
+        pane = ImagePreviewPane(self._parent)
+        pane.clear()
+        self.assertEqual(pane._meta_label.text(), "Select a file to preview")
+
+    def test_show_nonexistent_file_calls_clear(self):
+        from src.ui.preview_pane import ImagePreviewPane
+        pane = ImagePreviewPane(self._parent)
+        pane.show_file("/nonexistent/path/image.png")
+        # Should clear gracefully (no exception); meta label stays at placeholder
+        self.assertEqual(pane._meta_label.text(), "Select a file to preview")
+
+    def test_show_real_image(self):
+        """Thumbnail load should eventually set a non-placeholder label."""
+        from src.ui.preview_pane import _ThumbLoader
+        from PIL import Image
+
+        results = []
+
+        with tempfile.TemporaryDirectory() as td:
+            img_path = os.path.join(td, "test.png")
+            Image.new("RGBA", (64, 64), (255, 0, 128, 200)).save(img_path)
+
+            loader = _ThumbLoader(img_path)
+            loader.loaded.connect(lambda qimg, meta: results.append(meta))
+            loader.start()
+            loader.wait(3000)  # wait for thread to finish
+            self._app.processEvents()  # flush signals into the main thread
+
+        self.assertEqual(len(results), 1, "loaded signal should fire once")
+        self.assertIn("test.png", results[0])
+
+
+# ---------------------------------------------------------------------------
+# SettingsManager – export / import
+# ---------------------------------------------------------------------------
+
+class TestSettingsExportImport(unittest.TestCase):
+    def setUp(self):
+        _get_app()
+        from src.core.settings_manager import SettingsManager
+        with patch.object(
+            __import__("src.core.settings_manager", fromlist=["SettingsManager"]),
+            "SettingsManager",
+        ):
+            pass
+        self._mgr = SettingsManager()
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_export_creates_json_file(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr.set("font_size", 14)
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "settings.json")
+            self._mgr.export_settings(path)
+            self.assertTrue(os.path.isfile(path))
+            import json
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("font_size", data)
+            self.assertEqual(data["font_size"], 14)
+
+    def test_import_restores_keys(self):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "settings.json")
+            with open(path, "w") as f:
+                json.dump({"font_size": 18, "cursor": "Cross"}, f)
+            imported = self._mgr.import_settings(path)
+            self.assertIn("font_size", imported)
+            self.assertIn("cursor", imported)
+            self.assertEqual(self._mgr.get("font_size", 10), 18)
+            self.assertEqual(self._mgr.get("cursor", "Default"), "Cross")
+
+    def test_import_skips_unknown_keys(self):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "settings.json")
+            with open(path, "w") as f:
+                json.dump({"unknown_key_xyz": "should_be_ignored", "font_size": 12}, f)
+            imported = self._mgr.import_settings(path)
+            self.assertNotIn("unknown_key_xyz", imported)
+            self.assertIn("font_size", imported)
+
+
+# ---------------------------------------------------------------------------
+# SettingsManager – converter history
+# ---------------------------------------------------------------------------
+
+class TestConverterHistory(unittest.TestCase):
+    def setUp(self):
+        _get_app()
+        from src.core.settings_manager import SettingsManager
+        with patch.object(
+            __import__("src.core.settings_manager", fromlist=["SettingsManager"]),
+            "SettingsManager",
+        ):
+            pass
+        self._mgr = SettingsManager()
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_add_and_retrieve_history(self):
+        entry = {"timestamp": "2026-03-09T12:00:00", "format": "PNG",
+                 "file_count": 3, "success": 3, "errors": 0, "files": ["a.jpg"]}
+        self._mgr.add_converter_history(entry)
+        history = self._mgr.get_converter_history()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["format"], "PNG")
+
+    def test_history_capped_at_max(self):
+        for i in range(60):
+            self._mgr.add_converter_history(
+                {"timestamp": f"2026-03-09T{i:02d}:00:00", "format": "PNG",
+                 "file_count": 1, "success": 1, "errors": 0, "files": []}
+            )
+        history = self._mgr.get_converter_history()
+        self.assertLessEqual(len(history), 50)
+
+    def test_history_newest_first(self):
+        self._mgr.add_converter_history({"timestamp": "A", "format": "BMP",
+                                          "file_count": 1, "success": 1,
+                                          "errors": 0, "files": []})
+        self._mgr.add_converter_history({"timestamp": "B", "format": "PNG",
+                                          "file_count": 1, "success": 1,
+                                          "errors": 0, "files": []})
+        history = self._mgr.get_converter_history()
+        self.assertEqual(history[0]["timestamp"], "B")  # most recent first
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

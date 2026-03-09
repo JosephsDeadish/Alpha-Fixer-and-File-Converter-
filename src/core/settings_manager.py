@@ -164,3 +164,43 @@ class SettingsManager:
         history = history[:max_entries]
         self._qs.setValue("converter_history", json.dumps(history))
         self._qs.sync()
+
+    # ------------------------------------------------------------------
+    # Export / import all settings to a JSON file
+    # ------------------------------------------------------------------
+
+    EXPORT_KEYS = [
+        "theme", "theme_data", "saved_themes",
+        "sound_enabled", "click_sound_path",
+        "cursor", "trail_enabled", "trail_color",
+        "font_size",
+        "batch_recursive", "output_suffix", "overwrite_originals",
+        "converter_output_dir", "converter_recursive",
+        "last_alpha_preset", "last_converter_format", "last_converter_quality",
+        "custom_presets",
+    ]
+
+    def export_settings(self, path: str) -> None:
+        """Write a subset of settings to *path* as JSON."""
+        data = {}
+        for key in self.EXPORT_KEYS:
+            val = self._qs.value(key, None)
+            if val is not None:
+                data[key] = val
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def import_settings(self, path: str) -> list[str]:
+        """
+        Load settings from a JSON file exported by export_settings().
+        Returns a list of keys that were imported.
+        """
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        imported = []
+        for key in self.EXPORT_KEYS:
+            if key in data:
+                self._qs.setValue(key, data[key])
+                imported.append(key)
+        self._qs.sync()
+        return imported

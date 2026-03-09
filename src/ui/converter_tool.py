@@ -1,10 +1,12 @@
 """
 File Converter tab widget.
 """
+import datetime
 import os
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
@@ -16,6 +18,7 @@ from ..core.alpha_processor import collect_files
 from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
+from .preview_pane import ImagePreviewPane
 
 
 class ConverterTab(QWidget):
@@ -23,7 +26,11 @@ class ConverterTab(QWidget):
         super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
+        # Track source files so we can record history
+        self._last_run_files: list[str] = []
+        self._last_run_format: str = ""
         self._setup_ui()
+        self._setup_shortcuts()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -41,7 +48,7 @@ class ConverterTab(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
 
-        # ---- Left: input files ----
+        # ---- Left: input files + preview ----
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
@@ -71,11 +78,16 @@ class ConverterTab(QWidget):
             "• Drag files/folders here from Explorer/Finder\n"
             "• Delete key or right-click → Remove Selected"
         )
-        lv.addWidget(self._file_list)
+        lv.addWidget(self._file_list, 1)
 
-        self._file_count_lbl = QLabel("0 files")
+        self._file_count_lbl = QLabel("0 files  |  F5 to convert  |  Esc to stop")
         self._file_count_lbl.setObjectName("subheader")
         lv.addWidget(self._file_count_lbl)
+
+        # Preview pane
+        self._preview = ImagePreviewPane()
+        self._preview.setFixedHeight(260)
+        lv.addWidget(self._preview)
 
         splitter.addWidget(left)
 
@@ -151,10 +163,10 @@ class ConverterTab(QWidget):
 
         # Run
         run_row = QHBoxLayout()
-        self._btn_run = QPushButton("▶  Convert")
+        self._btn_run = QPushButton("▶  Convert  [F5]")
         self._btn_run.setObjectName("accent")
         self._btn_run.setMinimumHeight(42)
-        self._btn_stop = QPushButton("■  Stop")
+        self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
         run_row.addWidget(self._btn_run, 1)
         run_row.addWidget(self._btn_stop)
@@ -197,6 +209,14 @@ class ConverterTab(QWidget):
         self._quality_spin.valueChanged.connect(
             lambda v: self._settings.set("last_converter_quality", v)
         )
+        # Preview on selection change
+        self._file_list.currentRowChanged.connect(self._on_selection_changed)
+
+    def _setup_shortcuts(self):
+        QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self._stop)
+        QShortcut(QKeySequence("Ctrl+O"), self).activated.connect(self._add_files)
+        QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
 
     # ------------------------------------------------------------------
     # File management
@@ -233,7 +253,17 @@ class ConverterTab(QWidget):
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
-        self._file_count_lbl.setText(f"{n} file{'s' if n != 1 else ''}")
+        self._file_count_lbl.setText(
+            f"{n} file{'s' if n != 1 else ''}  |  F5 to convert  |  Esc to stop"
+        )
+
+    @pyqtSlot(int)
+    def _on_selection_changed(self, row: int):
+        item = self._file_list.item(row)
+        if item:
+            self._preview.show_file(item.text())
+        else:
+            self._preview.clear()
 
     def _browse_out_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")
@@ -283,6 +313,10 @@ class ConverterTab(QWidget):
                 input_root = os.path.commonpath(dirs)
             except ValueError:
                 pass
+
+        # Remember for history
+        self._last_run_files = expanded
+        self._last_run_format = target_format
 
         self._log.clear()
         self._progress.setValue(0)
@@ -335,5 +369,15 @@ class ConverterTab(QWidget):
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log.append(f"─── Finished: {success} ok, {errors} error(s) ───")
 
+        # Record in history
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "format": self._last_run_format,
+            "file_count": len(self._last_run_files),
+            "success": success,
+            "errors": errors,
+            "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
+        }
+        self._settings.add_converter_history(entry)
 
-    # ------------------------------------------------------------------
+

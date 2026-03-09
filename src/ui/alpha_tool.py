@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QSlider, QCheckBox, QFileDialog,
@@ -17,6 +18,7 @@ from ..core.presets import AlphaPreset, PresetManager
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
+from .preview_pane import ImagePreviewPane
 
 
 class AlphaFixerTab(QWidget):
@@ -26,6 +28,7 @@ class AlphaFixerTab(QWidget):
         self._settings = settings_manager
         self._worker = None
         self._setup_ui()
+        self._setup_shortcuts()
         self._populate_presets()
 
     # ------------------------------------------------------------------
@@ -45,7 +48,7 @@ class AlphaFixerTab(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
 
-        # ---- Left panel: input files ----
+        # ---- Left panel: input files + preview ----
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
@@ -75,11 +78,16 @@ class AlphaFixerTab(QWidget):
             "• Drag files/folders here from Explorer/Finder\n"
             "• Delete key or right-click → Remove Selected"
         )
-        lv.addWidget(self._file_list)
+        lv.addWidget(self._file_list, 1)
 
-        self._file_count_lbl = QLabel("0 files")
+        self._file_count_lbl = QLabel("0 files  |  F5 to process  |  Esc to stop")
         self._file_count_lbl.setObjectName("subheader")
         lv.addWidget(self._file_count_lbl)
+
+        # Preview pane below the list
+        self._preview = ImagePreviewPane()
+        self._preview.setFixedHeight(260)
+        lv.addWidget(self._preview)
 
         splitter.addWidget(left)
 
@@ -167,10 +175,10 @@ class AlphaFixerTab(QWidget):
 
         # Run controls
         run_row = QHBoxLayout()
-        self._btn_run = QPushButton("▶  Process")
+        self._btn_run = QPushButton("▶  Process  [F5]")
         self._btn_run.setObjectName("accent")
         self._btn_run.setMinimumHeight(42)
-        self._btn_stop = QPushButton("■  Stop")
+        self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
         run_row.addWidget(self._btn_run, 1)
         run_row.addWidget(self._btn_stop)
@@ -212,6 +220,14 @@ class AlphaFixerTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
+        # Preview on selection change
+        self._file_list.currentRowChanged.connect(self._on_selection_changed)
+
+    def _setup_shortcuts(self):
+        QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self._stop)
+        QShortcut(QKeySequence("Ctrl+O"), self).activated.connect(self._add_files)
+        QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
 
     # ------------------------------------------------------------------
     # Preset management
@@ -324,7 +340,17 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int)
     def _update_file_count(self, n: int):
-        self._file_count_lbl.setText(f"{n} file{'s' if n != 1 else ''}")
+        self._file_count_lbl.setText(
+            f"{n} file{'s' if n != 1 else ''}  |  F5 to process  |  Esc to stop"
+        )
+
+    @pyqtSlot(int)
+    def _on_selection_changed(self, row: int):
+        item = self._file_list.item(row)
+        if item:
+            self._preview.show_file(item.text())
+        else:
+            self._preview.clear()
 
     # ------------------------------------------------------------------
     # Output dir
@@ -423,4 +449,3 @@ class AlphaFixerTab(QWidget):
         sb.setValue(sb.maximum())
 
 
-    # ------------------------------------------------------------------

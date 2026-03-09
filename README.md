@@ -37,8 +37,19 @@ Convert between image formats with optional resize and quality control.
 - Click sound effects (built-in synthetic beep or point to your own .wav file)
 - Font size control (8–24pt)
 - All settings are persisted across sessions (last-used preset, format, quality, window geometry, etc.)
+- **Export / Import all settings** to a portable JSON file (Settings → Export / Import)
 - Drag-and-drop files from Explorer/Finder directly onto the file lists
 - Right-click or Delete key to remove items from file lists
+- **Image preview pane** – select any file in the list to see a live thumbnail + dimensions + size
+- **Conversion history tab** – all past conversion sessions recorded with timestamp, format, and file count
+- **Keyboard shortcuts** (F1 for full list):
+  - `F5` – Run / Process / Convert
+  - `Esc` – Stop current operation
+  - `Ctrl+O` – Add files
+  - `Ctrl+Shift+O` – Add folder
+  - `Delete` – Remove selected files from list
+  - `Ctrl+,` – Open Settings
+  - `Ctrl+Q` – Quit
 
 ## Requirements
 
@@ -95,15 +106,25 @@ src/
     file_converter.py    – Image format conversion
     presets.py           – Built-in and custom preset definitions
     worker.py            – Background QThread workers (non-blocking)
-    settings_manager.py  – Persistent settings (QSettings)
+    settings_manager.py  – Persistent settings (QSettings) + export/import
   ui/
-    main_window.py       – Main application window
-    alpha_tool.py        – Alpha Fixer tab
-    converter_tool.py    – File Converter tab
+    main_window.py       – Main application window + menu (Settings ▸ Export/Import)
+    alpha_tool.py        – Alpha Fixer tab (with image preview + keyboard shortcuts)
+    converter_tool.py    – File Converter tab (with image preview + keyboard shortcuts + history recording)
+    history_tab.py       – Conversion History tab (timestamped, colour-coded)
+    preview_pane.py      – Image thumbnail preview widget (background-threaded loader)
     settings_dialog.py   – Settings & theme customization dialog
     theme_engine.py      – Qt stylesheet generator
+    drop_list.py         – DropFileList: drag-and-drop, Delete key, right-click remove
+    mouse_trail.py       – Mouse trail particle overlay
+    sound_engine.py      – Click sound engine (QSoundEffect + fallback)
 tests/
   test_core.py           – Unit tests for alpha processing & presets
   test_converter.py      – Unit tests for file conversion
-main.py                  – Entry point with crash prevention & logging
+  test_ui_components.py  – Unit tests for UI components (DropFileList, SoundEngine,
+                           MouseTrailOverlay, ImagePreviewPane, settings export/import,
+                           converter history)
+main.py                  – Entry point with crash prevention, logging, libEGL check
+scripts/
+  install_linux_deps.sh  – One-shot system-library installer (libegl1, libpulse0, …)
 ```

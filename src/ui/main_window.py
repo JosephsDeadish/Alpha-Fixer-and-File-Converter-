@@ -6,13 +6,14 @@ from PyQt6.QtGui import QAction, QCursor, QFont, QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
     QLabel, QPushButton, QWidget, QVBoxLayout, QApplication,
-    QMessageBox,
+    QMessageBox, QFileDialog,
 )
 
 from ..core.settings_manager import SettingsManager
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
+from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
 from .theme_engine import build_stylesheet
 
@@ -61,7 +62,21 @@ class MainWindow(QMainWindow):
         act_settings.triggered.connect(self._open_settings)
         settings_menu.addAction(act_settings)
 
+        settings_menu.addSeparator()
+
+        act_export = QAction("Export Settings…", self)
+        act_export.triggered.connect(self._export_settings)
+        settings_menu.addAction(act_export)
+
+        act_import = QAction("Import Settings…", self)
+        act_import.triggered.connect(self._import_settings)
+        settings_menu.addAction(act_import)
+
         help_menu = menubar.addMenu("Help")
+        act_shortcuts = QAction("Keyboard Shortcuts", self)
+        act_shortcuts.setShortcut("F1")
+        act_shortcuts.triggered.connect(self._show_shortcuts)
+        help_menu.addAction(act_shortcuts)
         act_about = QAction("About", self)
         act_about.triggered.connect(self._show_about)
         help_menu.addAction(act_about)
@@ -82,8 +97,12 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget()
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
+        self._history_tab = HistoryTab(self._settings)
         self._tabs.addTab(self._alpha_tab, "🖼  Alpha Fixer")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
+        self._tabs.addTab(self._history_tab, "📋  History")
+        # Refresh history whenever the user switches to it
+        self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
 
         self.setCentralWidget(central)
@@ -133,6 +152,9 @@ class MainWindow(QMainWindow):
         self._sound = SoundEngine(self._settings, parent=self)
         self._sound.install_on_app(QApplication.instance())
 
+        # Font size
+        self._apply_font_size()
+
     def _apply_cursor(self):
         cursor_name = self._settings.get("cursor", "Default")
         shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
@@ -179,6 +201,14 @@ class MainWindow(QMainWindow):
         self._theme_label.setText(f"  Theme: {theme.get('name', 'Custom')}  ")
 
     # ------------------------------------------------------------------
+    # Tabs
+    # ------------------------------------------------------------------
+
+    def _on_tab_changed(self, index: int):
+        if self._tabs.widget(index) is self._history_tab:
+            self._history_tab.refresh()
+
+    # ------------------------------------------------------------------
     # Settings
     # ------------------------------------------------------------------
 
@@ -201,9 +231,57 @@ class MainWindow(QMainWindow):
                 self._settings.get("trail_enabled", False)
             )
 
+    def _export_settings(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Settings", "alpha_fixer_settings.json",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        try:
+            self._settings.export_settings(path)
+            QMessageBox.information(self, "Export Settings",
+                                    f"Settings exported to:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Failed", str(exc))
+
+    def _import_settings(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Settings", "",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        try:
+            keys = self._settings.import_settings(path)
+            self._on_settings_changed()
+            QMessageBox.information(
+                self, "Import Settings",
+                f"Imported {len(keys)} settings from:\n{path}\n\n"
+                "Restart the app to fully apply all changes.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Failed", str(exc))
+
     # ------------------------------------------------------------------
     # Dialogs
     # ------------------------------------------------------------------
+
+    def _show_shortcuts(self):
+        QMessageBox.information(
+            self,
+            "Keyboard Shortcuts",
+            "<table>"
+            "<tr><td><b>F5</b></td><td>Run / Process / Convert</td></tr>"
+            "<tr><td><b>Esc</b></td><td>Stop current operation</td></tr>"
+            "<tr><td><b>Ctrl+O</b></td><td>Add files</td></tr>"
+            "<tr><td><b>Ctrl+Shift+O</b></td><td>Add folder</td></tr>"
+            "<tr><td><b>Delete</b></td><td>Remove selected files from list</td></tr>"
+            "<tr><td><b>Ctrl+,</b></td><td>Open Settings</td></tr>"
+            "<tr><td><b>Ctrl+Q</b></td><td>Quit</td></tr>"
+            "<tr><td><b>F1</b></td><td>This help</td></tr>"
+            "</table>",
+        )
 
     def _show_about(self):
         QMessageBox.about(
@@ -215,7 +293,9 @@ class MainWindow(QMainWindow):
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
             "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
+            "<li>Image preview, conversion history, export/import settings</li>"
             "<li>Customizable panda themes, mouse trail, cursor, sounds</li>"
+            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"
             "<p>Built with Python + PyQt6 + Pillow.</p>",
         )
@@ -245,3 +325,4 @@ class MainWindow(QMainWindow):
             self._sound.cleanup()
         self._save_geometry()
         super().closeEvent(event)
+
