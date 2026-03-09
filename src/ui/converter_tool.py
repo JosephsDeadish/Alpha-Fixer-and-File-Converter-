@@ -7,14 +7,15 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QSpinBox, QSlider, QCheckBox, QFileDialog,
-    QListWidget, QProgressBar, QGroupBox, QGridLayout,
-    QLineEdit, QSplitter, QMessageBox, QTextEdit, QSizePolicy,
+    QComboBox, QSpinBox, QCheckBox, QFileDialog,
+    QProgressBar, QGroupBox, QGridLayout,
+    QLineEdit, QSplitter, QMessageBox, QTextEdit,
 )
 
 from ..core.alpha_processor import collect_files
 from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST
 from ..core.worker import ConverterWorker
+from .drop_list import DropFileList
 
 
 class ConverterTab(QWidget):
@@ -22,7 +23,6 @@ class ConverterTab(QWidget):
         super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
-        self._files: list[str] = []
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -46,7 +46,7 @@ class ConverterTab(QWidget):
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
 
-        lbl_files = QLabel("Input Files / Folders")
+        lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
         lv.addWidget(lbl_files)
 
@@ -65,8 +65,12 @@ class ConverterTab(QWidget):
         )
         lv.addWidget(self._recursive_check)
 
-        self._file_list = QListWidget()
-        self._file_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._file_list = DropFileList()
+        self._file_list.setToolTip(
+            "Files queued for conversion.\n"
+            "• Drag files/folders here from Explorer/Finder\n"
+            "• Delete key or right-click → Remove Selected"
+        )
         lv.addWidget(self._file_list)
 
         self._file_count_lbl = QLabel("0 files")
@@ -90,10 +94,16 @@ class ConverterTab(QWidget):
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
         gf_layout.addWidget(self._fmt_combo, 0, 1)
 
+        # Restore last-used format
+        last_fmt = self._settings.get("last_converter_format", "PNG")
+        idx = self._fmt_combo.findText(last_fmt, Qt.MatchFlag.MatchContains)
+        if idx >= 0:
+            self._fmt_combo.setCurrentIndex(idx)
+
         gf_layout.addWidget(QLabel("JPEG/WEBP quality:"), 1, 0)
         self._quality_spin = QSpinBox()
         self._quality_spin.setRange(1, 100)
-        self._quality_spin.setValue(90)
+        self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
         gf_layout.addWidget(self._quality_spin, 1, 1)
 
         rv.addWidget(grp_fmt)
@@ -173,12 +183,20 @@ class ConverterTab(QWidget):
         # ---- Connections ----
         self._btn_add_files.clicked.connect(self._add_files)
         self._btn_add_folder.clicked.connect(self._add_folder)
-        self._btn_clear.clicked.connect(self._clear_files)
+        self._btn_clear.clicked.connect(self._file_list._clear_all)
         self._btn_run.clicked.connect(self._run)
         self._btn_stop.clicked.connect(self._stop)
         self._btn_out_dir.clicked.connect(self._browse_out_dir)
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
         self._resize_check.toggled.connect(self._height_spin.setEnabled)
+        # DropFileList signals
+        self._file_list.paths_dropped.connect(self._add_to_list)
+        self._file_list.count_changed.connect(self._update_count)
+        # Persist format/quality on change
+        self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
+        self._quality_spin.valueChanged.connect(
+            lambda v: self._settings.set("last_converter_quality", v)
+        )
 
     # ------------------------------------------------------------------
     # File management
@@ -204,19 +222,17 @@ class ConverterTab(QWidget):
 
     def _add_to_list(self, paths: list[str]):
         existing = {self._file_list.item(i).text() for i in range(self._file_list.count())}
+        added = 0
         for p in paths:
             if p not in existing:
                 self._file_list.addItem(p)
-                self._files.append(p)
-        self._update_count()
+                existing.add(p)
+                added += 1
+        if added:
+            self._file_list.count_changed.emit(self._file_list.count())
 
-    def _clear_files(self):
-        self._file_list.clear()
-        self._files.clear()
-        self._update_count()
-
-    def _update_count(self):
-        n = self._file_list.count()
+    @pyqtSlot(int)
+    def _update_count(self, n: int):
         self._file_count_lbl.setText(f"{n} file{'s' if n != 1 else ''}")
 
     def _browse_out_dir(self):
@@ -224,6 +240,11 @@ class ConverterTab(QWidget):
         if folder:
             self._out_dir_edit.setText(folder)
             self._settings.set("converter_output_dir", folder)
+
+    def _save_format_setting(self):
+        fmt_data = self._fmt_combo.currentData()
+        if fmt_data:
+            self._settings.set("last_converter_format", fmt_data[0])
 
     # ------------------------------------------------------------------
     # Processing
@@ -313,3 +334,6 @@ class ConverterTab(QWidget):
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log.append(f"─── Finished: {success} ok, {errors} error(s) ───")
+
+
+    # ------------------------------------------------------------------

@@ -8,14 +8,15 @@ from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QSlider, QCheckBox, QFileDialog,
-    QListWidget, QListWidgetItem, QProgressBar, QGroupBox,
-    QGridLayout, QLineEdit, QFrame, QSizePolicy, QSplitter,
-    QMessageBox, QInputDialog, QTextEdit, QScrollArea,
+    QProgressBar, QGroupBox,
+    QGridLayout, QLineEdit, QSplitter,
+    QMessageBox, QInputDialog, QTextEdit,
 )
 
 from ..core.presets import AlphaPreset, PresetManager
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.worker import AlphaWorker
+from .drop_list import DropFileList
 
 
 class AlphaFixerTab(QWidget):
@@ -24,7 +25,6 @@ class AlphaFixerTab(QWidget):
         self._presets = preset_manager
         self._settings = settings_manager
         self._worker = None
-        self._files: list[str] = []
         self._setup_ui()
         self._populate_presets()
 
@@ -50,7 +50,7 @@ class AlphaFixerTab(QWidget):
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
 
-        lbl_files = QLabel("Input Files / Folders")
+        lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
         lv.addWidget(lbl_files)
 
@@ -69,9 +69,12 @@ class AlphaFixerTab(QWidget):
         )
         lv.addWidget(self._recursive_check)
 
-        self._file_list = QListWidget()
-        self._file_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self._file_list.setToolTip("Files queued for processing")
+        self._file_list = DropFileList()
+        self._file_list.setToolTip(
+            "Files queued for processing.\n"
+            "• Drag files/folders here from Explorer/Finder\n"
+            "• Delete key or right-click → Remove Selected"
+        )
         lv.addWidget(self._file_list)
 
         self._file_count_lbl = QLabel("0 files")
@@ -197,7 +200,7 @@ class AlphaFixerTab(QWidget):
         # ---- Connections ----
         self._btn_add_files.clicked.connect(self._add_files)
         self._btn_add_folder.clicked.connect(self._add_folder)
-        self._btn_clear.clicked.connect(self._clear_files)
+        self._btn_clear.clicked.connect(self._file_list._clear_all)
         self._btn_run.clicked.connect(self._run)
         self._btn_stop.clicked.connect(self._stop)
         self._btn_out_dir.clicked.connect(self._browse_out_dir)
@@ -206,6 +209,9 @@ class AlphaFixerTab(QWidget):
         self._preset_combo.currentTextChanged.connect(self._on_preset_changed)
         self._alpha_spin.valueChanged.connect(self._alpha_slider.setValue)
         self._alpha_slider.valueChanged.connect(self._alpha_spin.setValue)
+        # DropFileList signals
+        self._file_list.paths_dropped.connect(self._add_to_list)
+        self._file_list.count_changed.connect(self._update_file_count)
 
     # ------------------------------------------------------------------
     # Preset management
@@ -217,12 +223,12 @@ class AlphaFixerTab(QWidget):
         self._preset_combo.clear()
         for p in self._presets.all_presets():
             self._preset_combo.addItem(p.name)
-        # Try to restore previous selection
-        idx = self._preset_combo.findText(current)
-        if idx >= 0:
-            self._preset_combo.setCurrentIndex(idx)
-        else:
-            self._preset_combo.setCurrentIndex(0)
+
+        # Restore last-used preset from settings
+        last = self._settings.get("last_alpha_preset", "")
+        target = last if last else current
+        idx = self._preset_combo.findText(target)
+        self._preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._preset_combo.blockSignals(False)
         self._on_preset_changed(self._preset_combo.currentText())
 
@@ -231,6 +237,8 @@ class AlphaFixerTab(QWidget):
         preset = self._presets.get_preset(name)
         if preset is None:
             return
+        # Persist last selection
+        self._settings.set("last_alpha_preset", name)
         # Show description
         self._preset_desc.setText(preset.description)
         # Mirror values into fine-tune controls
@@ -309,17 +317,13 @@ class AlphaFixerTab(QWidget):
         for p in paths:
             if p not in existing:
                 self._file_list.addItem(p)
-                self._files.append(p)
+                existing.add(p)
                 added += 1
-        self._update_file_count()
+        if added:
+            self._file_list.count_changed.emit(self._file_list.count())
 
-    def _clear_files(self):
-        self._file_list.clear()
-        self._files.clear()
-        self._update_file_count()
-
-    def _update_file_count(self):
-        n = self._file_list.count()
+    @pyqtSlot(int)
+    def _update_file_count(self, n: int):
         self._file_count_lbl.setText(f"{n} file{'s' if n != 1 else ''}")
 
     # ------------------------------------------------------------------
@@ -417,3 +421,6 @@ class AlphaFixerTab(QWidget):
         self._log.append(msg)
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+
+    # ------------------------------------------------------------------

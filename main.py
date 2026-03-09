@@ -2,8 +2,11 @@
 """
 Alpha Fixer & File Converter – Entry Point.
 
-Includes global exception handling, crash logging, and Qt-specific
-workarounds to ensure the application never silently freezes or crashes.
+Includes:
+  • Pre-flight system-library check (libEGL, libGL) with clear install instructions
+  • Global exception handling so uncaught errors show a dialog instead of crashing
+  • Crash logging with automatic rotation
+  • Qt environment flags for compatibility on both good and bad hardware
 """
 import sys
 import os
@@ -14,7 +17,7 @@ from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
-# Logging configuration
+# Logging configuration  (done early so even pre-Qt errors are logged)
 # ---------------------------------------------------------------------------
 
 LOG_DIR = Path.home() / ".alpha_fixer_converter" / "logs"
@@ -42,11 +45,118 @@ for old in existing_logs[:-10]:
 
 
 # ---------------------------------------------------------------------------
+# Pre-flight: verify system libraries required by PyQt6
+# ---------------------------------------------------------------------------
+
+_LINUX_INSTALL = {
+    "libEGL.so.1": {
+        "debian":   "sudo apt-get install -y libegl1",
+        "fedora":   "sudo dnf install -y mesa-libEGL",
+        "arch":     "sudo pacman -S mesa",
+        "opensuse": "sudo zypper install -y libEGL1",
+        "generic":  "Install the Mesa EGL library for your distribution",
+    },
+    "libGL.so.1": {
+        "debian":   "sudo apt-get install -y libgl1",
+        "fedora":   "sudo dnf install -y mesa-libGL",
+        "arch":     "sudo pacman -S mesa",
+        "opensuse": "sudo zypper install -y libGL1",
+        "generic":  "Install the Mesa GL library for your distribution",
+    },
+    "libGLES": {
+        "debian":   "sudo apt-get install -y libgles2",
+        "fedora":   "sudo dnf install -y mesa-libGLES",
+        "arch":     "sudo pacman -S mesa",
+        "opensuse": "sudo zypper install -y libGLESv2-2",
+        "generic":  "Install the Mesa GLES library for your distribution",
+    },
+    "libpulse.so.0": {
+        "debian":   "sudo apt-get install -y libpulse0",
+        "fedora":   "sudo dnf install -y pulseaudio-libs",
+        "arch":     "sudo pacman -S libpulse",
+        "opensuse": "sudo zypper install -y libpulse0",
+        "generic":  "Install the PulseAudio client library (libpulse) for your distribution",
+    },
+}
+
+
+def _detect_distro() -> str:
+    """Return a simple distribution key for install command lookup."""
+    try:
+        import distro  # optional third-party package
+        name = distro.id().lower()
+    except ImportError:
+        # Fall back to /etc/os-release
+        name = ""
+        try:
+            with open("/etc/os-release") as f:
+                for line in f:
+                    if line.startswith("ID="):
+                        name = line.split("=", 1)[1].strip().strip('"').lower()
+                        break
+        except OSError:
+            pass
+
+    if name in ("ubuntu", "debian", "linuxmint", "pop", "elementary"):
+        return "debian"
+    if name in ("fedora", "rhel", "centos", "rocky", "alma"):
+        return "fedora"
+    if name in ("arch", "manjaro", "endeavouros"):
+        return "arch"
+    if name in ("opensuse", "opensuse-leap", "opensuse-tumbleweed", "sles"):
+        return "opensuse"
+    return "generic"
+
+
+def _check_system_libs() -> bool:
+    """
+    Try to import PyQt6's core module. If it fails due to a missing shared
+    library, print a clear error with distro-specific install commands and
+    return False so the caller can exit cleanly.
+    """
+    if sys.platform != "linux":
+        # On Windows / macOS the required DLLs are bundled with PyQt6-Qt6
+        return True
+
+    try:
+        from PyQt6.QtCore import QCoreApplication  # noqa: F401 – just a probe
+        return True
+    except ImportError as exc:
+        err = str(exc)
+        logger.critical("PyQt6 import failed: %s", err)
+
+        # Match the missing library name from the error message
+        matched_lib = None
+        for lib_key in _LINUX_INSTALL:
+            if lib_key.rstrip(".0123456789") in err:
+                matched_lib = lib_key
+                break
+
+        print("\n" + "=" * 62)
+        print("  ERROR: A required system library is missing.")
+        print("=" * 62)
+        print(f"\n  Missing: {err}")
+
+        distro = _detect_distro()
+        if matched_lib:
+            cmd = _LINUX_INSTALL[matched_lib].get(distro) or _LINUX_INSTALL[matched_lib]["generic"]
+            print(f"\n  Install it with:\n\n    {cmd}\n")
+        else:
+            print("\n  Install all required Qt system libraries by running:\n")
+            print("    bash scripts/install_linux_deps.sh\n")
+
+        print("  Then run the application again.\n")
+        print(f"  Full error logged to: {log_file}")
+        print("=" * 62 + "\n")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Qt environment setup (must be before QApplication)
 # ---------------------------------------------------------------------------
 
 os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
-# Software rasterizer fallback for hardware without proper OpenGL
+# Software rasterizer fallback for hardware without proper OpenGL / EGL
 os.environ.setdefault("QT_OPENGL", "software")
 
 
@@ -84,6 +194,10 @@ sys.excepthook = _excepthook
 # ---------------------------------------------------------------------------
 
 def main():
+    # Run the pre-flight check before anything else
+    if not _check_system_libs():
+        sys.exit(1)
+
     # Add src to path so relative imports work when run directly
     src_dir = os.path.dirname(os.path.abspath(__file__))
     if src_dir not in sys.path:

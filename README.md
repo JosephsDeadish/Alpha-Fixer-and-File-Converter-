@@ -30,8 +30,15 @@ Convert between image formats with optional resize and quality control.
 
 ## UI & Customization
 - 🐼 Panda Dark theme (default), Panda Light, Neon Panda
-- Fully customizable color palette via Settings → Theme
-- Settings are persisted across sessions
+- Fully customizable color palette via Settings → Theme (15 editable colors)
+- Save your own named themes and switch between them
+- Mouse trail effect with configurable color
+- Custom cursor style (Default, Cross, Pointing Hand, Open Hand)
+- Click sound effects (built-in synthetic beep or point to your own .wav file)
+- Font size control (8–24pt)
+- All settings are persisted across sessions (last-used preset, format, quality, window geometry, etc.)
+- Drag-and-drop files from Explorer/Finder directly onto the file lists
+- Right-click or Delete key to remove items from file lists
 
 ## Requirements
 
@@ -42,10 +49,28 @@ Convert between image formats with optional resize and quality control.
 - imageio ≥ 2.33.0
 - wand ≥ 0.6.13 (for DDS via ImageMagick — optional but recommended)
 
-Install dependencies:
+Install Python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+
+### Linux system libraries
+
+PyQt6 requires several system-level shared libraries.  Use the one-shot installer:
+
+```bash
+bash scripts/install_linux_deps.sh
+```
+
+Or install manually by distribution:
+
+| Library | Ubuntu / Debian | Fedora / RHEL | Arch | openSUSE |
+|---|---|---|---|---|
+| libEGL (`libegl1`) | `sudo apt-get install -y libegl1` | `sudo dnf install -y mesa-libEGL` | `sudo pacman -S mesa` | `sudo zypper install -y libEGL1` |
+| libGL (`libgl1`) | `sudo apt-get install -y libgl1` | `sudo dnf install -y mesa-libGL` | *(included)* | `sudo zypper install -y libGL1` |
+| libpulse (`libpulse0`) | `sudo apt-get install -y libpulse0` | `sudo dnf install -y pulseaudio-libs` | `sudo pacman -S libpulse` | `sudo zypper install -y libpulse0` |
+
+If any of these are missing, `main.py` will detect the problem at startup and print the exact install command for your distribution before exiting cleanly — no cryptic crashes.
 
 For DDS support also install [ImageMagick](https://imagemagick.org/).
 

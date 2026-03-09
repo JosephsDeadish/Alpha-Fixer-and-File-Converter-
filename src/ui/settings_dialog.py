@@ -2,14 +2,15 @@
 Settings / Customization dialog.
 """
 import json
+import os
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
-    QLineEdit, QColorDialog, QGroupBox, QScrollArea, QFrame,
-    QMessageBox, QInputDialog,
+    QLineEdit, QColorDialog, QGroupBox, QScrollArea,
+    QMessageBox, QInputDialog, QSpinBox, QFileDialog,
 )
 
 from .theme_engine import PRESET_THEMES, DEFAULT_THEME, build_stylesheet
@@ -56,7 +57,7 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        self.setMinimumSize(600, 520)
+        self.setMinimumSize(620, 540)
         self._setup_ui()
         self._load_values()
 
@@ -64,19 +65,25 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
 
+        # ================================================================
         # ---- Theme tab ----
+        # ================================================================
         theme_tab = QWidget()
         tv = QVBoxLayout(theme_tab)
 
+        # Preset / saved-theme row
         preset_row = QHBoxLayout()
-        preset_row.addWidget(QLabel("Preset Theme:"))
+        preset_row.addWidget(QLabel("Theme:"))
         self._theme_preset_combo = QComboBox()
-        for name in PRESET_THEMES:
-            self._theme_preset_combo.addItem(name)
-        self._theme_preset_combo.addItem("Custom")
+        self._theme_preset_combo.setMinimumWidth(160)
+        self._rebuild_theme_combo()
         preset_row.addWidget(self._theme_preset_combo, 1)
-        self._btn_apply_preset = QPushButton("Apply Preset")
+        self._btn_apply_preset = QPushButton("Apply")
+        self._btn_save_theme = QPushButton("Save as…")
+        self._btn_delete_theme = QPushButton("Delete")
         preset_row.addWidget(self._btn_apply_preset)
+        preset_row.addWidget(self._btn_save_theme)
+        preset_row.addWidget(self._btn_delete_theme)
         tv.addLayout(preset_row)
 
         # Color grid
@@ -111,39 +118,66 @@ class SettingsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(280)
+        scroll.setMaximumHeight(290)
         tv.addWidget(scroll)
-
         tv.addStretch(1)
         tabs.addTab(theme_tab, "🎨 Theme")
 
+        # ================================================================
         # ---- General tab ----
+        # ================================================================
         gen_tab = QWidget()
         gv = QGridLayout(gen_tab)
+        row = 0
 
-        gv.addWidget(QLabel("Sound Effects:"), 0, 0)
-        self._sound_check = QCheckBox("Enable")
-        gv.addWidget(self._sound_check, 0, 1)
+        # Sound
+        gv.addWidget(QLabel("Sound Effects:"), row, 0)
+        self._sound_check = QCheckBox("Enable click sounds")
+        gv.addWidget(self._sound_check, row, 1, 1, 2)
+        row += 1
 
-        gv.addWidget(QLabel("Mouse Trail:"), 1, 0)
+        gv.addWidget(QLabel("Custom click sound:"), row, 0)
+        sound_row = QHBoxLayout()
+        self._click_sound_edit = QLineEdit()
+        self._click_sound_edit.setPlaceholderText("Path to .wav file (blank = built-in)")
+        self._btn_sound_browse = QPushButton("Browse")
+        sound_row.addWidget(self._click_sound_edit, 1)
+        sound_row.addWidget(self._btn_sound_browse)
+        gv.addLayout(sound_row, row, 1, 1, 2)
+        row += 1
+
+        # Mouse trail
+        gv.addWidget(QLabel("Mouse Trail:"), row, 0)
         self._trail_check = QCheckBox("Enable")
-        gv.addWidget(self._trail_check, 1, 1)
+        gv.addWidget(self._trail_check, row, 1)
+        row += 1
 
-        gv.addWidget(QLabel("Trail Color:"), 2, 0)
+        gv.addWidget(QLabel("Trail Color:"), row, 0)
         self._trail_color_btn = ColorButton("#e94560")
-        gv.addWidget(self._trail_color_btn, 2, 1)
+        gv.addWidget(self._trail_color_btn, row, 1)
+        row += 1
 
-        gv.addWidget(QLabel("Cursor:"), 3, 0)
+        # Cursor
+        gv.addWidget(QLabel("Cursor Style:"), row, 0)
         self._cursor_combo = QComboBox()
         self._cursor_combo.addItems(["Default", "Cross", "Pointing Hand", "Open Hand"])
-        gv.addWidget(self._cursor_combo, 3, 1)
+        gv.addWidget(self._cursor_combo, row, 1)
+        row += 1
 
-        gv.setRowStretch(10, 1)
+        # Font size
+        gv.addWidget(QLabel("Font Size (pt):"), row, 0)
+        self._font_size_spin = QSpinBox()
+        self._font_size_spin.setRange(8, 24)
+        self._font_size_spin.setValue(10)
+        gv.addWidget(self._font_size_spin, row, 1)
+        row += 1
+
+        gv.setRowStretch(row, 1)
         tabs.addTab(gen_tab, "⚙ General")
 
         layout.addWidget(tabs)
 
-        # Buttons
+        # ---- Dialog buttons ----
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         self._btn_ok = QPushButton("Apply & Close")
@@ -155,41 +189,139 @@ class SettingsDialog(QDialog):
 
         # Connections
         self._btn_apply_preset.clicked.connect(self._apply_preset)
+        self._btn_save_theme.clicked.connect(self._save_custom_theme)
+        self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
         self._btn_ok.clicked.connect(self._apply_and_close)
         self._btn_cancel.clicked.connect(self.reject)
-        self._theme_preset_combo.currentTextChanged.connect(self._on_preset_selected)
+        self._btn_sound_browse.clicked.connect(self._browse_sound)
+        self._theme_preset_combo.currentTextChanged.connect(self._update_delete_btn)
+
+    # ------------------------------------------------------------------
+    # Theme combo helpers
+    # ------------------------------------------------------------------
+
+    def _rebuild_theme_combo(self, select: str = ""):
+        self._theme_preset_combo.blockSignals(True)
+        self._theme_preset_combo.clear()
+        for name in PRESET_THEMES:
+            self._theme_preset_combo.addItem(name)
+        saved = self._settings.get_saved_themes()
+        if saved:
+            self._theme_preset_combo.insertSeparator(len(PRESET_THEMES))
+            for name in sorted(saved):
+                self._theme_preset_combo.addItem(f"★ {name}")
+        self._theme_preset_combo.addItem("— Custom —")
+        if select:
+            idx = self._theme_preset_combo.findText(select)
+            if idx >= 0:
+                self._theme_preset_combo.setCurrentIndex(idx)
+        self._theme_preset_combo.blockSignals(False)
+        self._update_delete_btn()
+
+    def _update_delete_btn(self):
+        name = self._theme_preset_combo.currentText().lstrip("★ ")
+        is_user = name in self._settings.get_saved_themes()
+        self._btn_delete_theme.setEnabled(is_user)
+
+    # ------------------------------------------------------------------
+    # Load persisted values into controls
+    # ------------------------------------------------------------------
 
     def _load_values(self):
         t = self._theme
         for key, btn in self._color_buttons.items():
             btn.set_color(t.get(key, "#888888"))
 
-        name = t.get("name", "")
-        idx = self._theme_preset_combo.findText(name)
-        self._theme_preset_combo.setCurrentIndex(idx if idx >= 0 else self._theme_preset_combo.count() - 1)
+        theme_name = t.get("name", "")
+        idx = self._theme_preset_combo.findText(theme_name)
+        if idx < 0:
+            idx = self._theme_preset_combo.findText(f"★ {theme_name}")
+        self._theme_preset_combo.setCurrentIndex(
+            idx if idx >= 0 else self._theme_preset_combo.count() - 1
+        )
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", True))
+        self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
+        cursor_val = self._settings.get("cursor", "Default")
+        idx = self._cursor_combo.findText(cursor_val)
+        self._cursor_combo.setCurrentIndex(max(idx, 0))
+        self._font_size_spin.setValue(self._settings.get("font_size", 10))
+
+    # ------------------------------------------------------------------
+    # Color-button callback
+    # ------------------------------------------------------------------
 
     def _on_color_changed(self, key: str, color: str):
         self._theme[key] = color
 
-    def _on_preset_selected(self, name: str):
-        pass  # Only apply on button click
+    # ------------------------------------------------------------------
+    # Preset & custom theme management
+    # ------------------------------------------------------------------
 
     def _apply_preset(self):
-        name = self._theme_preset_combo.currentText()
+        raw_name = self._theme_preset_combo.currentText()
+        name = raw_name.lstrip("★ ")
         if name in PRESET_THEMES:
             self._theme = dict(PRESET_THEMES[name])
-            for key, btn in self._color_buttons.items():
-                btn.set_color(self._theme.get(key, "#888888"))
+        else:
+            saved = self._settings.get_saved_themes()
+            if name in saved:
+                self._theme = dict(saved[name])
+            else:
+                return  # "— Custom —" or separator
+        for key, btn in self._color_buttons.items():
+            btn.set_color(self._theme.get(key, "#888888"))
+
+    def _save_custom_theme(self):
+        name, ok = QInputDialog.getText(self, "Save Theme", "Theme name:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        if name in PRESET_THEMES:
+            QMessageBox.warning(self, "Save Theme",
+                                f"'{name}' is a built-in theme name. Choose a different name.")
+            return
+        self._settings.save_named_theme(name, dict(self._theme))
+        self._rebuild_theme_combo(select=f"★ {name}")
+        QMessageBox.information(self, "Save Theme", f"Theme '{name}' saved.")
+
+    def _delete_custom_theme(self):
+        raw_name = self._theme_preset_combo.currentText().lstrip("★ ")
+        reply = QMessageBox.question(
+            self, "Delete Theme",
+            f"Delete saved theme '{raw_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._settings.delete_named_theme(raw_name)
+            self._rebuild_theme_combo()
+
+    # ------------------------------------------------------------------
+    # Sound file browser
+    # ------------------------------------------------------------------
+
+    def _browse_sound(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Click Sound", "",
+            "WAV Files (*.wav);;All Files (*)",
+        )
+        if path:
+            self._click_sound_edit.setText(path)
+
+    # ------------------------------------------------------------------
+    # Apply & close
+    # ------------------------------------------------------------------
 
     def _apply_and_close(self):
         self._settings.set_theme(self._theme)
         self._settings.set("sound_enabled", self._sound_check.isChecked())
+        self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
         self._settings.set("trail_enabled", self._trail_check.isChecked())
         self._settings.set("trail_color", self._trail_color_btn.color())
+        self._settings.set("cursor", self._cursor_combo.currentText())
+        self._settings.set("font_size", self._font_size_spin.value())
         self.theme_changed.emit(self._theme)
         self.settings_changed.emit()
         self.accept()

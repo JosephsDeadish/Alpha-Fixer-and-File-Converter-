@@ -2,7 +2,7 @@
 Main application window.
 """
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QAction, QIcon, QFont
+from PyQt6.QtGui import QAction, QCursor, QFont, QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
     QLabel, QPushButton, QWidget, QVBoxLayout, QApplication,
@@ -17,15 +17,26 @@ from .settings_dialog import SettingsDialog
 from .theme_engine import build_stylesheet
 
 
+_CURSOR_MAP = {
+    "Default":      Qt.CursorShape.ArrowCursor,
+    "Cross":        Qt.CursorShape.CrossCursor,
+    "Pointing Hand": Qt.CursorShape.PointingHandCursor,
+    "Open Hand":    Qt.CursorShape.OpenHandCursor,
+}
+
+
 class MainWindow(QMainWindow):
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
         self._preset_mgr = PresetManager(settings)
+        self._trail_overlay = None
+        self._sound = None
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
         self._apply_theme()
+        self._setup_effects()
 
     # ------------------------------------------------------------------
     # Window setup
@@ -99,6 +110,43 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._theme_label)
 
     # ------------------------------------------------------------------
+    # Visual / audio effects (trail, cursor, sound)
+    # ------------------------------------------------------------------
+
+    def _setup_effects(self):
+        # Mouse trail overlay
+        from .mouse_trail import MouseTrailOverlay
+        self._trail_overlay = MouseTrailOverlay(self)
+        self._trail_overlay.setGeometry(self.rect())
+        self._trail_overlay.raise_()
+
+        trail_enabled = self._settings.get("trail_enabled", False)
+        trail_color = self._settings.get("trail_color", "#e94560")
+        self._trail_overlay.set_color(trail_color)
+        self._trail_overlay.set_enabled(trail_enabled)
+
+        # Cursor
+        self._apply_cursor()
+
+        # Sound engine
+        from .sound_engine import SoundEngine
+        self._sound = SoundEngine(self._settings, parent=self)
+        self._sound.install_on_app(QApplication.instance())
+
+    def _apply_cursor(self):
+        cursor_name = self._settings.get("cursor", "Default")
+        shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
+        self.setCursor(QCursor(shape))
+
+    def _apply_font_size(self):
+        size = self._settings.get("font_size", 10)
+        size = max(8, min(24, int(size)))
+        app = QApplication.instance()
+        font = QFont(app.font())
+        font.setPointSize(size)
+        app.setFont(font)
+
+    # ------------------------------------------------------------------
     # Geometry / state
     # ------------------------------------------------------------------
 
@@ -131,13 +179,31 @@ class MainWindow(QMainWindow):
         self._theme_label.setText(f"  Theme: {theme.get('name', 'Custom')}  ")
 
     # ------------------------------------------------------------------
-    # Dialogs
+    # Settings
     # ------------------------------------------------------------------
 
     def _open_settings(self):
         dlg = SettingsDialog(self._settings, self)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
+        dlg.settings_changed.connect(self._on_settings_changed)
         dlg.exec()
+
+    def _on_settings_changed(self):
+        """Re-apply all effect-related settings after the dialog closes."""
+        self._apply_theme()
+        self._apply_cursor()
+        self._apply_font_size()
+        if self._trail_overlay is not None:
+            self._trail_overlay.set_color(
+                self._settings.get("trail_color", "#e94560")
+            )
+            self._trail_overlay.set_enabled(
+                self._settings.get("trail_enabled", False)
+            )
+
+    # ------------------------------------------------------------------
+    # Dialogs
+    # ------------------------------------------------------------------
 
     def _show_about(self):
         QMessageBox.about(
@@ -148,11 +214,21 @@ class MainWindow(QMainWindow):
             "<ul>"
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
             "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF</li>"
-            "<li>Batch processing with folder/subfolder support</li>"
-            "<li>Customizable panda themes</li>"
+            "<li>Drag-and-drop + batch folder/subfolder processing</li>"
+            "<li>Customizable panda themes, mouse trail, cursor, sounds</li>"
             "</ul>"
             "<p>Built with Python + PyQt6 + Pillow.</p>",
         )
+
+    # ------------------------------------------------------------------
+    # Resize – keep the trail overlay covering the whole window
+    # ------------------------------------------------------------------
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._trail_overlay is not None:
+            self._trail_overlay.setGeometry(self.rect())
+            self._trail_overlay.raise_()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -164,5 +240,8 @@ class MainWindow(QMainWindow):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
                 tab._worker.stop()
                 tab._worker.wait(3000)
+        # Clean up temp sound file
+        if self._sound is not None:
+            self._sound.cleanup()
         self._save_geometry()
         super().closeEvent(event)

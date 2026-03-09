@@ -35,18 +35,28 @@ class SettingsManager:
     _DEFAULTS = {
         "theme": "Panda Dark",
         "theme_data": json.dumps(_DEFAULT_THEME),
+        # Sound
         "sound_enabled": True,
-        "click_sound": "",
-        "cursor": "default",
+        "click_sound_path": "",
+        # Cursor & trail
+        "cursor": "Default",
         "trail_enabled": False,
         "trail_color": "#e94560",
+        # Appearance
+        "font_size": 10,
+        # Last-used state
         "last_input_dir": "",
         "last_output_dir": "",
+        "last_alpha_preset": "",
+        "last_converter_format": "PNG",
+        "last_converter_quality": 90,
+        # Batch options
         "batch_recursive": True,
         "output_suffix": "",
         "overwrite_originals": False,
         "converter_output_dir": "",
         "converter_recursive": True,
+        # Window geometry
         "window_x": 100,
         "window_y": 100,
         "window_w": 1100,
@@ -81,6 +91,10 @@ class SettingsManager:
         self._qs.setValue(key, value)
         self._qs.sync()
 
+    # ------------------------------------------------------------------
+    # Theme
+    # ------------------------------------------------------------------
+
     def get_theme(self) -> dict:
         raw = self.get("theme_data", json.dumps(self._DEFAULT_THEME))
         try:
@@ -92,7 +106,34 @@ class SettingsManager:
         self.set("theme_data", json.dumps(theme_dict))
 
     # ------------------------------------------------------------------
-    # Preset persistence (stored alongside settings)
+    # Named custom themes
+    # ------------------------------------------------------------------
+
+    def get_saved_themes(self) -> dict:
+        """Return {name: theme_dict} for all user-saved named themes."""
+        raw = self._qs.value("saved_themes", "{}")
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def save_named_theme(self, name: str, theme: dict) -> None:
+        saved = self.get_saved_themes()
+        saved[name] = theme
+        self._qs.setValue("saved_themes", json.dumps(saved))
+        self._qs.sync()
+
+    def delete_named_theme(self, name: str) -> bool:
+        saved = self.get_saved_themes()
+        if name in saved:
+            del saved[name]
+            self._qs.setValue("saved_themes", json.dumps(saved))
+            self._qs.sync()
+            return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Alpha presets
     # ------------------------------------------------------------------
 
     def get_custom_presets(self) -> list:
