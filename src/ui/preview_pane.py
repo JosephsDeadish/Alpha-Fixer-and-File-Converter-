@@ -372,9 +372,17 @@ class ImagePreviewPane(QWidget):
         if not path or not os.path.isfile(path):
             self.clear()
             return
-        if self._loader and self._loader.isRunning():
-            self._loader.quit()
-            self._loader.wait(500)
+        # Disconnect stale signals before replacing the loader so a slow
+        # previous thread can't overwrite the current preview when it finishes.
+        if self._loader is not None:
+            try:
+                self._loader.loaded.disconnect()
+                self._loader.failed.disconnect()
+            except RuntimeError:
+                pass  # already disconnected
+            if self._loader.isRunning():
+                self._loader.quit()
+                self._loader.wait(500)
         self._meta_label.setText("Loading…")
         self._loader = _ThumbLoader(path)
         self._loader.loaded.connect(self._on_loaded)
@@ -392,12 +400,19 @@ class ImagePreviewPane(QWidget):
     def _on_loaded(self, qimg: QImage, meta: str):
         pix = QPixmap.fromImage(qimg)
         available = self._img_label.size()
-        scaled = pix.scaled(
-            available,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._img_label.setPixmap(scaled)
+        # Guard against a zero/tiny label size when the widget hasn't been
+        # laid out yet (the thread may finish before the first layout pass).
+        if available.width() < 10 or available.height() < 10:
+            available = pix.size()
+        if not available.isEmpty():
+            scaled = pix.scaled(
+                available,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._img_label.setPixmap(scaled)
+        else:
+            self._img_label.setPixmap(pix)
         self._meta_label.setText(meta)
 
     def _on_failed(self, err: str):

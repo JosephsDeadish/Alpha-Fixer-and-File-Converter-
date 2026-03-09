@@ -78,7 +78,7 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        self.setMinimumSize(620, 540)
+        self.setMinimumSize(720, 580)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:
@@ -303,6 +303,10 @@ class SettingsDialog(QDialog):
         self._update_delete_btn()
 
     def _update_delete_btn(self):
+        # _rebuild_theme_combo() is called during _setup_ui() before
+        # _btn_delete_theme is created; guard against that ordering.
+        if not hasattr(self, "_btn_delete_theme"):
+            return
         name = self._theme_preset_combo.currentText().lstrip(_THEME_PREFIX_CHARS)
         is_user = name in self._settings.get_saved_themes()
         self._btn_delete_theme.setEnabled(is_user)

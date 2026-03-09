@@ -370,8 +370,11 @@ class ClickEffectsOverlay(QWidget):
     def __init__(self, main_window: QWidget):
         super().__init__(main_window)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        # Do NOT set WA_NoSystemBackground – without it Qt erases the widget
+        # region before paintEvent, which is required for proper transparency.
         self.setAutoFillBackground(False)
+        # Transparent background so Qt composites parent content through it.
+        self.setStyleSheet("background-color: transparent;")
 
         self._main_window = main_window
         self._effect_key = "default"
@@ -479,18 +482,33 @@ class ClickEffectsOverlay(QWidget):
             if p.life > 0:
                 surviving.append(p)
         self._particles = surviving
-        if surviving:
-            self.update()
+        # Always repaint: if surviving is empty the paintEvent will clear
+        # the overlay so stale particle pixels don't ghost on screen.
+        self.update()
 
     # ------------------------------------------------------------------
     # Paint
     # ------------------------------------------------------------------
 
     def paintEvent(self, _event) -> None:
-        if not self._particles:
-            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Erase the overlay's pixel buffer each frame (CompositionMode_Source
+        # writes through the destination, replacing old pixels with transparent).
+        # This prevents stale particles from ghosting after they have died.
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_Source
+        )
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_SourceOver
+        )
+
+        if not self._particles:
+            painter.end()
+            return
+
         painter.setPen(Qt.PenStyle.NoPen)
 
         for p in self._particles:

@@ -66,8 +66,8 @@ class SettingsManager:
         # Window geometry
         "window_x": 100,
         "window_y": 100,
-        "window_w": 1100,
-        "window_h": 750,
+        "window_w": 1024,
+        "window_h": 720,
         "window_maximized": False,
         # Tooltip
         "tooltip_mode": "Normal",

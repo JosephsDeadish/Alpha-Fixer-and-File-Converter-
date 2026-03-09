@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
 
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(950, 700)
 
     def _setup_ui(self):
         # Menu bar

@@ -28,8 +28,11 @@ class MouseTrailOverlay(QWidget):
 
         # Transparent, non-interactive overlay
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        # Do NOT set WA_NoSystemBackground – without it Qt erases the widget
+        # region before paintEvent, required for correct transparent behaviour.
         self.setAutoFillBackground(False)
+        # Transparent background so Qt composites parent content through it.
+        self.setStyleSheet("background-color: transparent;")
 
         self._main_window = main_window
         self._color = QColor("#e94560")
@@ -108,6 +111,7 @@ class MouseTrailOverlay(QWidget):
             if a > 0.0:
                 new_trail.append([x, y, a])
         self._trail = new_trail
+        # Always repaint so the clear-frame is issued when the trail empties.
         self.update()
 
     # ------------------------------------------------------------------
@@ -115,10 +119,23 @@ class MouseTrailOverlay(QWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, _event) -> None:
-        if not self._trail:
-            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Erase stale trail pixels from the previous frame so the trail fades
+        # correctly rather than leaving permanent ghost marks.
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_Source
+        )
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_SourceOver
+        )
+
+        if not self._trail:
+            painter.end()
+            return
+
         painter.setPen(Qt.PenStyle.NoPen)
 
         for x, y, alpha_frac in self._trail:
