@@ -207,11 +207,12 @@ def main():
         sys.path.insert(0, parent_dir)
 
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtCore import Qt, QCoreApplication
+    from PyQt6.QtCore import QCoreApplication
 
     QCoreApplication.setApplicationName("AlphaFixerConverter")
     QCoreApplication.setOrganizationName("PandaTools")
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    # AA_UseHighDpiPixmaps was removed in Qt6; high-DPI pixmaps are always
+    # enabled by default in Qt6/PyQt6 so no setAttribute call is needed.
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # Consistent baseline across all platforms
