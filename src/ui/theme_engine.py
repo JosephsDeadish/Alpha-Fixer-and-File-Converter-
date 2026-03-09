@@ -27,6 +27,7 @@ DEFAULT_THEME = {
     "input_bg": "#0d1b3e",
     "scrollbar": "#2a2a4a",
     "scrollbar_handle": "#e94560",
+    "_effect": "panda",
 }
 
 LIGHT_THEME = {
@@ -50,6 +51,7 @@ LIGHT_THEME = {
     "input_bg": "#e8eaf6",
     "scrollbar": "#c8c8d8",
     "scrollbar_handle": "#e94560",
+    "_effect": "panda",
 }
 
 NEON_THEME = {
@@ -73,6 +75,7 @@ NEON_THEME = {
     "input_bg": "#050505",
     "scrollbar": "#111111",
     "scrollbar_handle": "#00ff88",
+    "_effect": "neon",
 }
 
 GORE_THEME = {
@@ -243,6 +246,54 @@ GOTH_THEME = {
     "_effect": "goth",
 }
 
+VOLCANO_THEME = {
+    "name": "Volcano",
+    "background": "#1a0800",
+    "surface": "#2a1000",
+    "primary": "#3a1800",
+    "accent": "#ff4400",
+    "text": "#ffddcc",
+    "text_secondary": "#cc8866",
+    "border": "#6a2800",
+    "success": "#559933",
+    "warning": "#ff8800",
+    "error": "#ff1100",
+    "tab_selected": "#ff4400",
+    "button_bg": "#3a1800",
+    "button_hover": "#ff6600",
+    "panda_white": "#ffddcc",
+    "panda_black": "#1a0800",
+    "progress_bar": "#ff5500",
+    "input_bg": "#120500",
+    "scrollbar": "#2a1000",
+    "scrollbar_handle": "#ff4400",
+    "_effect": "fire",
+}
+
+ARCTIC_THEME = {
+    "name": "Arctic",
+    "background": "#030d1a",
+    "surface": "#071525",
+    "primary": "#0d2040",
+    "accent": "#44aaff",
+    "text": "#e8f4ff",
+    "text_secondary": "#88aabb",
+    "border": "#1a3a5a",
+    "success": "#33ddaa",
+    "warning": "#aaccff",
+    "error": "#ff4488",
+    "tab_selected": "#44aaff",
+    "button_bg": "#0d2040",
+    "button_hover": "#66ccff",
+    "panda_white": "#e8f4ff",
+    "panda_black": "#030d1a",
+    "progress_bar": "#44aaff",
+    "input_bg": "#020810",
+    "scrollbar": "#071525",
+    "scrollbar_handle": "#44aaff",
+    "_effect": "ice",
+}
+
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
 SECRET_SKELETON_THEME = {
     "name": "Secret Skeleton",
@@ -269,6 +320,31 @@ SECRET_SKELETON_THEME = {
     "_unlock": "skeleton",
 }
 
+SECRET_SAKURA_THEME = {
+    "name": "Secret Sakura",
+    "background": "#1a0810",
+    "surface": "#2a1020",
+    "primary": "#3d1530",
+    "accent": "#ff6699",
+    "text": "#ffe8f4",
+    "text_secondary": "#cc88aa",
+    "border": "#6a2045",
+    "success": "#88cc88",
+    "warning": "#ffcc88",
+    "error": "#ff4477",
+    "tab_selected": "#ff6699",
+    "button_bg": "#3d1530",
+    "button_hover": "#ff88bb",
+    "panda_white": "#ffe8f4",
+    "panda_black": "#1a0810",
+    "progress_bar": "#ff6699",
+    "input_bg": "#120510",
+    "scrollbar": "#2a1020",
+    "scrollbar_handle": "#ff6699",
+    "_effect": "panda",
+    "_unlock": "sakura",
+}
+
 PRESET_THEMES = {
     "Panda Dark": DEFAULT_THEME,
     "Panda Light": LIGHT_THEME,
@@ -280,10 +356,13 @@ PRESET_THEMES = {
     "Galaxy": GALAXY_THEME,
     "Galaxy Otter": GALAXY_OTTER_THEME,
     "Goth": GOTH_THEME,
+    "Volcano": VOLCANO_THEME,
+    "Arctic": ARCTIC_THEME,
 }
 
 HIDDEN_THEMES = {
     "Secret Skeleton": SECRET_SKELETON_THEME,
+    "Secret Sakura": SECRET_SAKURA_THEME,
 }
 
 # Which effects each theme uses (name → effect key)

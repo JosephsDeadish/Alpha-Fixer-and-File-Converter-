@@ -31,6 +31,10 @@ class SettingsManager:
         "tab_selected": "#e94560",
         "button_bg": "#0f3460",
         "button_hover": "#e94560",
+        "progress_bar": "#e94560",
+        "input_bg": "#0d1b3e",
+        "scrollbar": "#2a2a4a",
+        "scrollbar_handle": "#e94560",
         "panda_white": "#f0f0f0",
         "panda_black": "#1a1a1a",
     }
@@ -73,6 +77,7 @@ class SettingsManager:
         "custom_emoji": DEFAULT_CUSTOM_EMOJI,
         # Unlock flags
         "unlock_skeleton": False,
+        "unlock_sakura": False,
         "total_clicks": 0,
     }
 
@@ -175,6 +180,24 @@ class SettingsManager:
         history.insert(0, entry)
         history = history[:max_entries]
         self._qs.setValue("converter_history", json.dumps(history))
+        self._qs.sync()
+
+    # ------------------------------------------------------------------
+    # Alpha Fixer history
+    # ------------------------------------------------------------------
+
+    def get_alpha_history(self) -> list:
+        raw = self._qs.value("alpha_history", "[]")
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def add_alpha_history(self, entry: dict, max_entries: int = 50):
+        history = self.get_alpha_history()
+        history.insert(0, entry)
+        history = history[:max_entries]
+        self._qs.setValue("alpha_history", json.dumps(history))
         self._qs.sync()
 
     # ------------------------------------------------------------------

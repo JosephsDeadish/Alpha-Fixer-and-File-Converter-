@@ -562,8 +562,77 @@ class TestConverterHistory(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# SettingsManager – alpha fixer history
 # ---------------------------------------------------------------------------
+
+class TestAlphaHistory(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_empty_by_default(self):
+        history = self._mgr.get_alpha_history()
+        self.assertEqual(history, [])
+
+    def test_add_and_retrieve(self):
+        entry = {"timestamp": "2026-03-09T12:00:00", "preset": "PS2",
+                 "file_count": 2, "success": 2, "errors": 0,
+                 "files": ["a.png", "b.png"]}
+        self._mgr.add_alpha_history(entry)
+        history = self._mgr.get_alpha_history()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["preset"], "PS2")
+
+    def test_alpha_history_capped_at_max(self):
+        for i in range(60):
+            self._mgr.add_alpha_history(
+                {"timestamp": f"2026-03-09T{i:02d}:00:00", "preset": "PS2",
+                 "file_count": 1, "success": 1, "errors": 0, "files": []}
+            )
+        history = self._mgr.get_alpha_history()
+        self.assertLessEqual(len(history), 50)
+
+    def test_alpha_history_newest_first(self):
+        self._mgr.add_alpha_history({"timestamp": "A", "preset": "N64",
+                                     "file_count": 1, "success": 1,
+                                     "errors": 0, "files": []})
+        self._mgr.add_alpha_history({"timestamp": "B", "preset": "PS2",
+                                     "file_count": 1, "success": 1,
+                                     "errors": 0, "files": []})
+        history = self._mgr.get_alpha_history()
+        self.assertEqual(history[0]["timestamp"], "B")
+
+
+# ---------------------------------------------------------------------------
+# SettingsManager – unlock_sakura default + theme color keys
+# ---------------------------------------------------------------------------
+
+class TestSettingsDefaults(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+
+    def test_unlock_sakura_default_is_false(self):
+        default = self._mgr._DEFAULTS.get("unlock_sakura")
+        self.assertIs(default, False)
+
+    def test_unlock_skeleton_default_is_false(self):
+        default = self._mgr._DEFAULTS.get("unlock_skeleton")
+        self.assertIs(default, False)
+
+    def test_default_theme_has_progress_bar(self):
+        self.assertIn("progress_bar", self._mgr._DEFAULT_THEME)
+
+    def test_default_theme_has_input_bg(self):
+        self.assertIn("input_bg", self._mgr._DEFAULT_THEME)
+
+    def test_default_theme_has_scrollbar_handle(self):
+        self.assertIn("scrollbar_handle", self._mgr._DEFAULT_THEME)
+
+
+
 
 class _FakeQSettings:
     """Minimal QSettings substitute backed by a plain dict."""
@@ -588,12 +657,36 @@ class TestNewThemes(unittest.TestCase):
     def test_preset_themes_contains_new_entries(self):
         from src.ui.theme_engine import PRESET_THEMES
         for name in ("Gore", "Bat Cave", "Rainbow Chaos",
-                     "Otter Cove", "Galaxy", "Galaxy Otter", "Goth"):
+                     "Otter Cove", "Galaxy", "Galaxy Otter", "Goth",
+                     "Volcano", "Arctic"):
             self.assertIn(name, PRESET_THEMES, f"{name} should be in PRESET_THEMES")
 
     def test_hidden_themes_contains_secret_skeleton(self):
         from src.ui.theme_engine import HIDDEN_THEMES
         self.assertIn("Secret Skeleton", HIDDEN_THEMES)
+
+    def test_hidden_themes_contains_secret_sakura(self):
+        from src.ui.theme_engine import HIDDEN_THEMES
+        self.assertIn("Secret Sakura", HIDDEN_THEMES)
+        self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_effect"), "panda")
+        self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_unlock"), "sakura")
+
+    def test_panda_themes_have_panda_effect(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        self.assertEqual(PRESET_THEMES["Panda Dark"].get("_effect"), "panda")
+        self.assertEqual(PRESET_THEMES["Panda Light"].get("_effect"), "panda")
+
+    def test_volcano_uses_fire_effect(self):
+        from src.ui.theme_engine import PRESET_THEMES, THEME_EFFECTS
+        self.assertIn("Volcano", PRESET_THEMES)
+        self.assertEqual(PRESET_THEMES["Volcano"].get("_effect"), "fire")
+        self.assertEqual(THEME_EFFECTS["Volcano"], "fire")
+
+    def test_arctic_uses_ice_effect(self):
+        from src.ui.theme_engine import PRESET_THEMES, THEME_EFFECTS
+        self.assertIn("Arctic", PRESET_THEMES)
+        self.assertEqual(PRESET_THEMES["Arctic"].get("_effect"), "ice")
+        self.assertEqual(THEME_EFFECTS["Arctic"], "ice")
 
     def test_theme_effects_map_populated(self):
         from src.ui.theme_engine import THEME_EFFECTS
@@ -892,6 +985,30 @@ class TestThemeMakerEffect(unittest.TestCase):
         theme = {"name": custom_theme_name, "_effect": "otter"}
         effect_key = THEME_EFFECTS.get(theme["name"]) or theme.get("_effect", "default")
         self.assertEqual(effect_key, "otter")
+
+    def test_recursive_check_key_in_all_modes(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for mode_name, tips in [("Normal", _NORMAL),
+                                  ("Dumbed Down", _DUMBED),
+                                  ("No Filter", _VULGAR)]:
+            self.assertIn("recursive_check", tips,
+                          f"{mode_name} missing 'recursive_check' tip")
+            self.assertEqual(len(tips["recursive_check"]), 5,
+                             f"{mode_name}['recursive_check'] should have 5 variants")
+
+    def test_settings_dialog_tooltip_keys_in_all_modes(self):
+        """All 6 new settings-dialog tooltip keys must appear in every active mode."""
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        new_keys = ("sound_check", "trail_check", "trail_color",
+                    "cursor_combo", "font_size", "click_effects_check")
+        for mode_name, tips in [("Normal", _NORMAL),
+                                  ("Dumbed Down", _DUMBED),
+                                  ("No Filter", _VULGAR)]:
+            for key in new_keys:
+                self.assertIn(key, tips,
+                              f"{mode_name} missing '{key}' tip")
+                self.assertEqual(len(tips[key]), 5,
+                                 f"{mode_name}['{key}'] should have 5 variants")
 
 
 if __name__ == "__main__":

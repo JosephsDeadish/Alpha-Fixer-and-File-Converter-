@@ -1,6 +1,7 @@
 """
 Alpha Fixer tab widget.
 """
+import datetime
 import os
 from pathlib import Path
 
@@ -329,6 +330,28 @@ class AlphaFixerTab(QWidget):
         QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
 
     # ------------------------------------------------------------------
+    # Tooltip registration
+    # ------------------------------------------------------------------
+
+    def register_tooltips(self, mgr) -> None:
+        """Register tab widgets with the TooltipManager for cycling tips."""
+        mgr.register(self._btn_add_files, "add_files")
+        mgr.register(self._btn_add_folder, "add_folder")
+        mgr.register(self._btn_clear, "clear_list")
+        mgr.register(self._btn_run, "process_btn")
+        mgr.register(self._btn_stop, "stop_btn")
+        mgr.register(self._preset_combo, "preset_combo")
+        mgr.register(self._btn_save_preset, "save_preset")
+        mgr.register(self._btn_delete_preset, "delete_preset")
+        mgr.register(self._alpha_slider, "alpha_slider")
+        mgr.register(self._threshold_spin, "threshold_spin")
+        mgr.register(self._invert_check, "invert_check")
+        mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._recursive_check, "recursive_check")
+        mgr.register(self._file_list, "file_list")
+        mgr.register(self._compare, "compare_widget")
+
+    # ------------------------------------------------------------------
     # Preset management
     # ------------------------------------------------------------------
 
@@ -542,6 +565,12 @@ class AlphaFixerTab(QWidget):
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()
 
+        # Remember for history recording in _on_finished
+        self._last_run_files = expanded
+        self._last_run_preset = (
+            self._preset_combo.currentText() if self._use_preset_check.isChecked() else "manual"
+        )
+
         self._log.clear()
         self._progress.setValue(0)
         self._btn_run.setEnabled(False)
@@ -592,6 +621,17 @@ class AlphaFixerTab(QWidget):
         # Refresh compare for currently selected file to show the processed result
         if self._preview_path and success > 0:
             self._update_compare()
+
+        # Record in history
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "preset": getattr(self, "_last_run_preset", "manual"),
+            "file_count": len(getattr(self, "_last_run_files", [])),
+            "success": success,
+            "errors": errors,
+            "files": [Path(f).name for f in getattr(self, "_last_run_files", [])[:10]],
+        }
+        self._settings.add_alpha_history(entry)
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

@@ -18,6 +18,7 @@ from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
 from .theme_engine import build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS
+from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
@@ -49,7 +50,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _setup_window(self):
-        self.setWindowTitle("🐼 Alpha Fixer & File Converter")
+        self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
         self.setMinimumSize(800, 600)
 
     def _setup_ui(self):
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         btn_settings = QPushButton("⚙ Settings")
         btn_settings.clicked.connect(self._open_settings)
         toolbar.addWidget(btn_settings)
+        self._btn_settings = btn_settings
         toolbar.addSeparator()
 
         self._theme_label = QLabel("  Theme: Panda Dark  ")
@@ -145,6 +147,7 @@ class MainWindow(QMainWindow):
         )
         btn_patreon.clicked.connect(self._open_patreon)
         toolbar.addWidget(btn_patreon)
+        self._btn_patreon = btn_patreon
 
         # Unlock status label (shown when a secret theme unlocks)
         self._unlock_lbl = QLabel("")
@@ -175,6 +178,7 @@ class MainWindow(QMainWindow):
         self._click_effects.raise_()
         effects_enabled = self._settings.get("click_effects_enabled", True)
         self._click_effects.set_enabled(effects_enabled)
+        self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
 
         # Cursor
@@ -192,6 +196,17 @@ class MainWindow(QMainWindow):
         from .tooltip_manager import TooltipManager
         self._tooltip_mgr = TooltipManager(self._settings, parent=self)
         self._tooltip_mgr.install_on_app(QApplication.instance())
+        self._register_tooltips()
+
+    def _register_tooltips(self) -> None:
+        """Wire all main-window and tab widgets to the TooltipManager."""
+        mgr = self._tooltip_mgr
+        if mgr is None:
+            return
+        mgr.register(self._btn_settings, "settings_btn")
+        mgr.register(self._btn_patreon, "patreon_btn")
+        self._alpha_tab.register_tooltips(mgr)
+        self._converter_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""
@@ -214,8 +229,6 @@ class MainWindow(QMainWindow):
 
     def _check_unlocks(self) -> None:
         """Check whether any hidden theme should be unlocked."""
-        if self._click_effects is None:
-            return
         total = self._settings.get("total_clicks", 0) + 1
         self._settings.set("total_clicks", total)
 
@@ -226,7 +239,14 @@ class MainWindow(QMainWindow):
             self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
             QApplication.instance().beep()
 
+        # Secret Sakura unlocks at 250 total clicks
+        already_sakura = self._settings.get("unlock_sakura", False)
+        if not already_sakura and total >= 250:
+            self._settings.set("unlock_sakura", True)
+            self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (Settings → Theme)")
+            QApplication.instance().beep()
 
+    def _apply_cursor(self):
         cursor_name = self._settings.get("cursor", "Default")
         shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
         self.setCursor(QCursor(shape))
@@ -284,7 +304,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _open_settings(self):
-        dlg = SettingsDialog(self._settings, self)
+        dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
         dlg.settings_changed.connect(self._on_settings_changed)
         dlg.exec()
@@ -363,7 +383,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About 🐼 Alpha Fixer & File Converter",
-            "<h2>🐼 Alpha Fixer & File Converter</h2>"
+            f"<h2>🐼 Alpha Fixer & File Converter  v{__version__}</h2>"
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
@@ -371,9 +391,9 @@ class MainWindow(QMainWindow):
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
-            "<li>10+ themed effects: Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Goth…</li>"
+            "<li>12 preset themes + 2 hidden unlockables (keep clicking to find them!)</li>"
+            "<li>13 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥, Ice ❄, Panda 🐼, and more…</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
-            "<li>Hidden unlockable themes (keep clicking to discover them!)</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"
             "<p>Built with Python + PyQt6 + Pillow.</p>"

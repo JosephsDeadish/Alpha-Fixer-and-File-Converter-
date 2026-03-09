@@ -19,8 +19,9 @@ Tip variants are stored in this file.  Add new tip keys for new widgets.
 The active mode is stored in settings under the key "tooltip_mode".
 """
 
+# QtCore (QEvent, QObject) does not require a display server.
+# QtWidgets (QToolTip) does – so it is imported lazily inside eventFilter.
 from PyQt6.QtCore import QEvent, QObject
-from PyQt6.QtWidgets import QApplication, QToolTip
 
 # ---------------------------------------------------------------------------
 # Tip variant database
@@ -112,6 +113,13 @@ _NORMAL: dict[str, list[str]] = {
         "Use the Browse button to pick the folder visually.",
         "The folder will be created automatically if it doesn't exist.",
     ],
+    "recursive_check": [
+        "When enabled, subfolders inside the selected folder are also scanned.",
+        "Useful for processing entire project trees of images in one go.",
+        "Disable if you only want images directly in the selected folder.",
+        "Works for both Add Folder in Alpha Fixer and the Converter tab.",
+        "Deep nested directories are all included when this is checked.",
+    ],
     "compare_widget": [
         "Drag the red ◀▶ handle left or right to compare before and after.",
         "Left side = original image.  Right side = processed image.",
@@ -163,9 +171,9 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "effect_combo": [
         "Choose the click particle effect style for this theme.",
-        "Each effect matches its theme — try Gore for blood, Galaxy for stars.",
+        "Each effect matches its theme — try Gore for blood, Galaxy for stars, Neon for lightning ⚡.",
         "Select 'Custom' to fire your own emoji as particles on every click.",
-        "The effect activates whenever you click anywhere in the main window.",
+        "New effects: Fire 🔥 (rising flames), Ice ❄ (snowflakes), Panda 🐼 (cute burst), Neon ⚡ (electric bolts).",
         "Mix and match: any color theme can use any effect style you like!",
     ],
     "custom_emoji": [
@@ -188,6 +196,48 @@ _NORMAL: dict[str, list[str]] = {
         "Patrons get early access to new hidden themes.",
         "Even $1/month helps keep the panda well-fed 🐼",
         "Visit patreon.com/c/DeadOnTheInside",
+    ],
+    "sound_check": [
+        "Enable or disable click sound effects throughout the app.",
+        "Sounds play on button clicks and other interactions.",
+        "You can set a custom .wav file in the box below this checkbox.",
+        "Leave the sound path blank to use the built-in click sound.",
+        "Disable if you're in a library, or just hate fun.",
+    ],
+    "trail_check": [
+        "Toggle the mouse trail overlay on or off.",
+        "The trail draws a colored streak wherever your cursor moves.",
+        "Use the Trail Color button below to change the trail color.",
+        "Trail is rendered on a transparent overlay that ignores clicks.",
+        "Turn it on for extra visual flair — it's surprisingly satisfying.",
+    ],
+    "trail_color": [
+        "Click to pick the color for the mouse trail effect.",
+        "Any RGB color works — go neon green, blood red, galaxy blue…",
+        "The color updates live on the trail overlay after you apply settings.",
+        "Pair with a matching theme for maximum visual coherence.",
+        "Hot pink and rainbow theme: chaotic perfection.",
+    ],
+    "cursor_combo": [
+        "Change the mouse cursor shape used throughout the application.",
+        "Default is the standard arrow. Cross gives you a precision crosshair.",
+        "Pointing Hand looks like you're about to poke the screen.",
+        "Open Hand is great for a relaxed, browsing feel.",
+        "Cursor changes apply immediately when you click Apply & Close.",
+    ],
+    "font_size": [
+        "Adjust the global font size (in points) for all text in the app.",
+        "Range is 8–24 pt. Default is 10 pt for a clean, compact look.",
+        "Increase if you're squinting at the screen. We don't judge.",
+        "Decrease if you want to cram more information on screen.",
+        "Changes take effect immediately after clicking Apply & Close.",
+    ],
+    "click_effects_check": [
+        "Enable or disable the per-theme click particle effects.",
+        "When enabled, clicking anywhere spawns themed particles at the cursor.",
+        "Each theme has its own effect — bats, blood, stars, pandas, etc.",
+        "Disable if particles are distracting during heavy batch work.",
+        "You can also change the effect style in the Theme tab above.",
     ],
 }
 
@@ -263,6 +313,13 @@ _DUMBED: dict[str, list[str]] = {
         "Output folder is just where the results end up. You got this.",
         "Pro tip: create a folder called 'FIXED' first. Very professional.",
     ],
+    "recursive_check": [
+        "Check this to include ALL subfolders. Uncheck to stay shallow.",
+        "Subfolders. It goes deeper. Check it. Or don't. Your call.",
+        "Recursive means it digs through ALL your nested folders. Very thorough.",
+        "Leave it checked unless you specifically want only the top folder. Simple.",
+        "Subfolders go in. All of them. If that's what you want, check it.",
+    ],
     "compare_widget": [
         "See that red handle? Drag it. Look at the pretty before/after.",
         "Left = old. Right = new. Drag the handle. That's it. That's the tip.",
@@ -316,7 +373,7 @@ _DUMBED: dict[str, list[str]] = {
         "It's the sparkle chooser. Pick how things explode when you click.",
         "Yes, you can pick which particles fly out — it's the dropdown above.",
         "Select 'Custom' and then add your own emoji in the section below.",
-        "Each option makes different things shoot out. Apparently this needs explaining.",
+        "New ones: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Each one does a different thing. Apparently this needs explaining.",
         "Press Apply and Close. The sparkles change. That's it. You did it.",
     ],
     "custom_emoji": [
@@ -353,6 +410,48 @@ _DUMBED: dict[str, list[str]] = {
         "Think of it as a tip jar. For software. For a panda.",
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
+    ],
+    "sound_check": [
+        "Check = sounds on. Uncheck = silence. Riveting decision.",
+        "This enables the clickety-clack noises. You know what sounds are.",
+        "Sounds. Noises. Enabled or disabled. This checkbox handles it.",
+        "Custom sound goes in the box below. Or leave it blank for the default blip.",
+        "If you uncheck it, the app goes quiet. Like a mime. A software mime.",
+    ],
+    "trail_check": [
+        "Mouse trail means a colorful line follows your cursor. Decorative. Fancy.",
+        "Check for trail. Uncheck for no trail. Easy decisions are fun.",
+        "It follows your mouse and looks cool. That's the whole point.",
+        "The color is set in the Trail Color picker below. Very logical.",
+        "Turn it on. Wiggle your mouse. It's honestly quite pleasing.",
+    ],
+    "trail_color": [
+        "Click this to pick a pretty color for the trail. Color picker appears. Amazing.",
+        "It's a color for the trail. The trail that follows your mouse. Yes, that one.",
+        "Click. Pick color. Done. This is genuinely that simple.",
+        "Go wild. Neon pink. Boring gray. Radioactive green. Sky's the limit.",
+        "The color only shows if Trail is enabled. You did check that, right?",
+    ],
+    "cursor_combo": [
+        "Your cursor shape. You can change it. Here. With this dropdown.",
+        "Default = normal arrow. The rest are slightly fancier arrows.",
+        "Pointing Hand feels very 'I'm a web developer circa 2002'.",
+        "Cross cursor is great for feeling like a precise, serious person.",
+        "Pick one. Click Apply. Your cursor changes. Life continues.",
+    ],
+    "font_size": [
+        "Makes text bigger or smaller. Spinbox. Number. You know how this works.",
+        "Higher number = bigger text. Lower number = smaller text. Math!",
+        "8pt is tiny. 24pt is huge. 10pt is normal. Pick one.",
+        "Squinting? Go bigger. Too big? Go smaller. The controls are right there.",
+        "This changes fonts everywhere. In the app. Not on your computer.",
+    ],
+    "click_effects_check": [
+        "This enables the fancy particles that explode when you click stuff.",
+        "Checked = sparkles happen. Unchecked = no sparkles. Your choice.",
+        "The particles match the theme. Bats, blood, stars… all configurable.",
+        "Turn it off if the constant explosions are too distracting. Fair.",
+        "Each theme has different particles. See Theme tab to change which ones.",
     ],
 }
 
@@ -428,6 +527,13 @@ _VULGAR: dict[str, list[str]] = {
         "Browse button works. Typing a path works too if you remember where the hell your stuff is.",
         "The folder gets CREATED if it doesn't exist. The app has your back, you messy bastard.",
     ],
+    "recursive_check": [
+        "Check this to dig through ALL your subfolders like the organized bastard you are.",
+        "Recursive = it goes deeper than your last therapy session. Check it or don't.",
+        "Subfolders, sub-subfolders, sub-sub-subfolders. It finds ALL of them. Insane.",
+        "Leave it on and the app will hunt down every image in every nested folder. Thorough as hell.",
+        "Uncheck it if you only want the top folder. Sometimes shallow is fine.",
+    ],
     "compare_widget": [
         "Drag the red handle and see what the f**k you just did to your image.",
         "Left = original. Right = fixed. Drag to compare. This is literally the point.",
@@ -479,9 +585,9 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "effect_combo": [
         "Choose your f**king particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
-        "This controls what explodes out of your cursor. It's important. Choose wisely.",
+        "This controls what explodes out of your cursor. New options: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Choose wisely.",
         "Custom lets you use your own emoji. What kind of unhinged particles will you pick?",
-        "Galaxy shoots stars. Otter shoots otters. What more do you want from life?",
+        "Galaxy shoots stars. Otter shoots otters. Panda shoots… pandas. What more do you want from life?",
         "If you pick Default and complain about the sparks, that's entirely on you.",
     ],
     "custom_emoji": [
@@ -518,6 +624,48 @@ _VULGAR: dict[str, list[str]] = {
         "Even a dollar helps! That's less than your daily coffee, you caffeinated maniac.",
         "Your support funds new themes, more effects, and better pandas. Worth it.",
         "patreon.com/c/DeadOnTheInside – click it. Do it. Be a hero. 🐼",
+    ],
+    "sound_check": [
+        "Toggle sounds on or off. Enabled = satisfying clicks. Disabled = sad silence.",
+        "Check this box and the app makes noise. Uncheck it for quiet mode, you antisocial gremlin.",
+        "Custom sound path below if the built-in click isn't annoying enough for you.",
+        "Library mode? Uncheck it. Having fun? Leave it on. Living life? Both work.",
+        "It's a sound checkbox. You know what it does. Stop hovering and just check it.",
+    ],
+    "trail_check": [
+        "Turn on the mouse trail so your cursor leaves a glowing streak of chaos behind it.",
+        "Enable this and wiggle your mouse. It looks f**king incredible, I promise.",
+        "Trail color is set below. Trail enabled here. Two separate controls. You got this.",
+        "It's a cosmetic overlay. It doesn't interfere with clicks. Just pure visual delight.",
+        "If you don't turn on the mouse trail, you're missing out and that's on you.",
+    ],
+    "trail_color": [
+        "Pick the damn color for your trail. Click the button. Color picker appears. Simple.",
+        "Go neon green. Go bloody red. Go whatever the hell matches your soul.",
+        "The trail won't show a new color until you click Apply & Close. Just so you know.",
+        "Pair it with the matching theme for a cohesive aesthetic. Or don't. Chaos is valid.",
+        "Any hex color works. If you pick beige I will be personally disappointed.",
+    ],
+    "cursor_combo": [
+        "Change your f**king cursor. Default arrow, crosshair, pointing finger, open hand. Pick one.",
+        "Pointing Hand makes you feel like you're clicking everything on purpose. Very powerful.",
+        "Cross cursor for when you want to feel like a precision surgeon of image processing.",
+        "Open Hand is chill. Relaxed. Like you've got everything under control. Do you? Do you really?",
+        "It changes your cursor. That's it. Just pick the one that speaks to your soul.",
+    ],
+    "font_size": [
+        "Crank the font size up if you're squinting at this screen like a damn mole.",
+        "8pt is tiny as hell. 24pt is enormous. 10pt is what normal humans use.",
+        "This changes the text size everywhere in the app. Your OS is unaffected.",
+        "Go big. Go small. Find your font size soulmate. We'll wait.",
+        "Seriously though, if you need it bigger, no one's judging. Make it readable.",
+    ],
+    "click_effects_check": [
+        "Enable the particle explosions that happen every time you click something. It's glorious.",
+        "Uncheck this if you hate joy and visual delight. We still love you. Mostly.",
+        "Every click spawns themed particles. Bats fly. Blood splatters. Pandas explode. Beautiful.",
+        "Turn it off for serious batch work. Turn it back on when you remember why this app is fun.",
+        "The particles match the theme. Check the Theme tab to configure which chaos you prefer.",
     ],
 }
 
@@ -590,7 +738,8 @@ class TooltipManager(QObject):
 
         mode = self.mode()
         if mode == "Off":
-            # Suppress all tooltips
+            # Suppress all tooltips – import QToolTip lazily (needs display)
+            from PyQt6.QtWidgets import QToolTip
             QToolTip.hideText()
             return True
 
@@ -602,7 +751,8 @@ class TooltipManager(QObject):
 
         tip_text = variants[idx]
         try:
+            from PyQt6.QtWidgets import QToolTip
             QToolTip.showText(event.globalPos(), tip_text, obj)
-        except AttributeError:
+        except (AttributeError, ImportError):
             pass
         return True  # suppress the default tooltip
