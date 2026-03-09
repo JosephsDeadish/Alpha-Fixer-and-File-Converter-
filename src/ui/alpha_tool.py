@@ -488,10 +488,18 @@ class AlphaFixerTab(QWidget):
         if not self._preview_path:
             return
 
-        # Cancel previous loader if still running (500 ms matches _ThumbLoader timeout)
-        if self._preview_loader and self._preview_loader.isRunning():
-            self._preview_loader.quit()
-            self._preview_loader.wait(500)
+        # Disconnect previous loader's signals before replacing it so that a
+        # stale thread finishing late cannot overwrite the current result.
+        if self._preview_loader is not None:
+            try:
+                self._preview_loader.preview_ready.disconnect()
+                self._preview_loader.failed.disconnect()
+            except RuntimeError:
+                pass  # already disconnected
+            if self._preview_loader.isRunning():
+                # _AlphaPreviewLoader.run() does not exec() an event loop, so
+                # quit() has no effect; just wait briefly to let it wrap up.
+                self._preview_loader.wait(500)
 
         preset = None
         manual = None
