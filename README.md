@@ -42,7 +42,7 @@ Convert between image formats with optional resize and quality control.
   - **Normal** – 5 helpful variants per widget, cycles on each hover
   - **Off** – tooltips disabled
   - **Dumbed Down** – simplified tips with gentle user-roasting
-  - **Potty Mouth Pro 🤬** – extremely vulgar, profanity-filled, and *still actually helpful*
+  - **No Filter 🤬** – extremely vulgar, profanity-filled, and *still actually helpful*
 - All settings are persisted across sessions (last-used preset, format, quality, window geometry, etc.)
 - **Export / Import all settings** to a portable JSON file (Settings → Export / Import)
 - Drag-and-drop files from Explorer/Finder directly onto the file lists
@@ -125,7 +125,7 @@ src/
     settings_dialog.py   – Settings dialog (themes, effects, tooltip mode, unlock display)
     theme_engine.py      – Qt stylesheet generator + 10 theme palettes + THEME_EFFECTS map
     click_effects.py     – Per-theme click particle overlay (blood, bats, stars, skulls, otters…)
-    tooltip_manager.py   – Cycling tooltip engine: Normal / Off / Dumbed Down / Potty Mouth Pro 🤬
+    tooltip_manager.py   – Cycling tooltip engine: Normal / Off / Dumbed Down / No Filter 🤬
     drop_list.py         – DropFileList: drag-and-drop, Delete key, right-click remove
     mouse_trail.py       – Mouse trail particle overlay
     sound_engine.py      – Click sound engine (QSoundEffect + fallback)

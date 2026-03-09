@@ -6,7 +6,7 @@ Modes
   Normal        – helpful tips, cycles through 5 variants
   Off           – no tooltips
   Dumbed Down   – simplified/funny tips that gently mock the user
-  Potty Mouth Pro 🤬 – extremely vulgar, profanity-filled, still helpful
+  No Filter 🤬 – extremely vulgar, profanity-filled, still helpful
 
 Usage
 -----
@@ -166,7 +166,7 @@ _NORMAL: dict[str, list[str]] = {
         "Normal: cycles through 5 helpful tips per widget.",
         "Off: disables all tooltips.",
         "Dumbed Down: simplified tips with some light roasting.",
-        "Potty Mouth Pro 🤬: extremely vulgar, funny, and still helpful.",
+        "No Filter 🤬: extremely vulgar, funny, and still helpful.",
     ],
     "patreon_btn": [
         "Support development on Patreon!",
@@ -302,7 +302,7 @@ _DUMBED: dict[str, list[str]] = {
         "This changes how tooltips work. You're reading one right now. Meta.",
         "Pick 'Off' to stop being told things. We won't take it personally.",
         "Dumbed Down mode is this mode. How's it going? Feeling talked down to?",
-        "Potty Mouth Pro mode is the BEST mode. Trust us on this one.",
+        "No Filter 🤬 mode is the BEST mode. Trust us on this one.",
         "Normal mode has 5 helpful tips per widget. Very sensible. Boring.",
     ],
     "save_preset": [
@@ -328,7 +328,7 @@ _DUMBED: dict[str, list[str]] = {
     ],
 }
 
-# Potty Mouth Pro 🤬 – vulgar, funny, profanity, but actually still helpful
+# No Filter 🤬 – vulgar, funny, profanity, but actually still helpful
 _VULGAR: dict[str, list[str]] = {
     "add_files": [
         "Click this damn button and add your freaking images already. PNG, DDS, all that crap.",
@@ -450,7 +450,7 @@ _VULGAR: dict[str, list[str]] = {
         "Goth theme for when you're feeling angsty and want skulls everywhere.",
     ],
     "tooltip_mode_combo": [
-        "You're using Potty Mouth Pro mode. Good f**king choice. Respect.",
+        "You're using No Filter 🤬 mode. Good f**king choice. Respect.",
         "Pick 'Off' to turn all this off. Boring, but we get it.",
         "Normal mode is helpful but lacks the spice. You're above that.",
         "Dumbed Down is for when you want to be gently insulted. You're above that too.",
@@ -495,10 +495,10 @@ _FALLBACK_VULGAR = ["It's a button. Click the damn thing.",
 _MODE_TIPS = {
     "Normal":           (_NORMAL, _FALLBACK_NORMAL),
     "Dumbed Down":      (_DUMBED, _FALLBACK_DUMBED),
-    "Potty Mouth Pro 🤬": (_VULGAR, _FALLBACK_VULGAR),
+    "No Filter 🤬": (_VULGAR, _FALLBACK_VULGAR),
 }
 
-TOOLTIP_MODES = ["Normal", "Off", "Dumbed Down", "Potty Mouth Pro 🤬"]
+TOOLTIP_MODES = ["Normal", "Off", "Dumbed Down", "No Filter 🤬"]
 
 # ---------------------------------------------------------------------------
 # TooltipManager

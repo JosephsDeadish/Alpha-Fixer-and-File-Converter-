@@ -730,8 +730,8 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("Normal", TOOLTIP_MODES)
         self.assertIn("Off", TOOLTIP_MODES)
         self.assertIn("Dumbed Down", TOOLTIP_MODES)
-        # Potty Mouth Pro should be in the list
-        self.assertTrue(any("Potty Mouth" in m for m in TOOLTIP_MODES))
+        # No Filter 🤬 should be in the list
+        self.assertTrue(any("No Filter" in m for m in TOOLTIP_MODES))
 
     def test_normal_tips_cycle(self):
         from src.ui.tooltip_manager import _NORMAL
@@ -742,7 +742,7 @@ class TestTooltipManager(unittest.TestCase):
         from src.ui.tooltip_manager import _NORMAL, _VULGAR
         for key in _NORMAL:
             self.assertIn(key, _VULGAR,
-                          f"Missing Potty Mouth Pro tip for key '{key}'")
+                          f"Missing No Filter tip for key '{key}'")
 
     def test_all_tip_variants_have_exactly_five_entries(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR

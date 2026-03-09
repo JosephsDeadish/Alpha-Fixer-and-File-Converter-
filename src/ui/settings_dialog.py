@@ -188,7 +188,7 @@ class SettingsDialog(QDialog):
         self._tooltip_mode_combo.addItems(TOOLTIP_MODES)
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
-            "Potty Mouth Pro 🤬 is the best mode – trust us."
+            "No Filter 🤬 is the best mode – trust us."
         )
         gv.addWidget(self._tooltip_mode_combo, row, 1)
         row += 1

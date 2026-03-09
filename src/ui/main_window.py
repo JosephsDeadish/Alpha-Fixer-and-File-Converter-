@@ -366,7 +366,7 @@ class MainWindow(QMainWindow):
             "<li>Before/after comparison slider preview</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
             "<li>10+ themed effects: Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Goth…</li>"
-            "<li>Cycling tooltips with Normal, Dumbed Down, and Potty Mouth Pro 🤬 modes</li>"
+            "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
             "<li>Hidden unlockable themes (keep clicking to discover them!)</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"
