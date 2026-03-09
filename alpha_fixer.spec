@@ -84,7 +84,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,              # disabled: not reliably available on CI runners
     console=False,          # no console window on Windows
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -100,7 +100,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,              # disabled: not reliably available on CI runners
     upx_exclude=[],
     name="AlphaFixerConverter",
 )

@@ -1,0 +1,77 @@
+name: Build Windows Executable
+
+# ─── Triggers ────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:   # run manually from Actions tab at any time
+
+# ─── Jobs ────────────────────────────────────────────────────────────────────
+jobs:
+  build-windows:
+    name: PyInstaller – Windows x64
+    runs-on: windows-latest
+
+    steps:
+      # 1 ── Checkout source ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2 ── Python 3.11 ──────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # 3 ── Install runtime dependencies ────────────────────────────────────
+      #      wand/ImageMagick is intentionally skipped here; the app's built-in
+      #      raw DDS loader (_load_dds_raw) provides DDS support without it.
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 Pillow numpy imageio
+
+      # 4 ── Install PyInstaller ──────────────────────────────────────────────
+      - name: Install PyInstaller
+        run: pip install "pyinstaller>=5.13.0"
+
+      # 5 ── Read version for artifact naming ────────────────────────────────
+      - name: Read app version
+        id: appver
+        shell: pwsh
+        run: |
+          $ver = python -c "exec(open('src/version.py').read()); print(__version__)"
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+
+      # 6 ── Build exe ────────────────────────────────────────────────────────
+      - name: Build with PyInstaller
+        run: pyinstaller alpha_fixer.spec
+
+      # 7 ── Smoke-test: verify the exe exists ───────────────────────────────
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $exe = "dist\AlphaFixerConverter\AlphaFixerConverter.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Error "Build failed: $exe not found"
+            exit 1
+          }
+          $size = (Get-Item $exe).Length / 1MB
+          Write-Host "AlphaFixerConverter.exe  ($([math]::Round($size,1)) MB)"
+          Write-Host "Files in dist\AlphaFixerConverter\:"
+          Get-ChildItem dist\AlphaFixerConverter | Select-Object Name, Length
+
+      # 8 ── Upload artifact ──────────────────────────────────────────────────
+      #      Downloads are available on the Actions run page for 90 days.
+      #      The zip contains the full AlphaFixerConverter\ folder; extract it
+      #      and run AlphaFixerConverter.exe – no Python needed on the target PC.
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlphaFixerConverter-Windows-v${{ steps.appver.outputs.version }}
+          path: dist\AlphaFixerConverter\
+          retention-days: 90
+          if-no-files-found: error

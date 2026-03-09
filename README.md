@@ -1,5 +1,7 @@
 # 🐼 Alpha Fixer & File Converter
 
+[![Build Windows EXE](https://github.com/JosephsDeadish/Alpha-Fixer-and-File-Converter-/actions/workflows/build.yml/badge.svg)](https://github.com/JosephsDeadish/Alpha-Fixer-and-File-Converter-/actions/workflows/build.yml)
+
 A panda-themed desktop application with two powerful tools:
 
 ## Tools
@@ -102,8 +104,21 @@ python main.py
 
 ## Building a Standalone Executable
 
-You can package the app into a standalone executable (no Python installation needed on
-the target machine) using [PyInstaller](https://pyinstaller.org/).
+### ⬇️ Download a pre-built Windows release (easiest)
+
+Every push to `main` automatically builds the Windows exe via GitHub Actions.
+
+1. Go to the **[Actions tab](../../actions/workflows/build.yml)**
+2. Click the latest successful run (green ✅)
+3. Scroll to **Artifacts** at the bottom of the page
+4. Download **`AlphaFixerConverter-Windows-v1.0.0`**
+5. Extract the zip → run **`AlphaFixerConverter.exe`** — no Python needed!
+
+You can also trigger a build manually: Actions → "Build Windows Executable" → **Run workflow**.
+
+### Build it yourself
+
+You can also package the app locally using [PyInstaller](https://pyinstaller.org/).
 
 ### Quick build
 
