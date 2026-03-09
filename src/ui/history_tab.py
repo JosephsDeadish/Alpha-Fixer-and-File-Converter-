@@ -156,7 +156,6 @@ class HistoryTab(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._settings._qs.setValue("converter_history", "[]")
-            self._settings._qs.setValue("alpha_history", "[]")
-            self._settings._qs.sync()
+            self._settings.clear_converter_history()
+            self._settings.clear_alpha_history()
             self.refresh()

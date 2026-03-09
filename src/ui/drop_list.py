@@ -100,7 +100,6 @@ class DropFileList(QListWidget):
     # Override clear() so external callers also get count_changed
     def clear(self):
         if self.count() == 0:
-            super().clear()
             return
         super().clear()
         self.count_changed.emit(0)

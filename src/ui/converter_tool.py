@@ -374,9 +374,7 @@ class ConverterTab(QWidget):
     def _on_file_done(self, src: str, ok: bool, msg: str):
         icon = "✔" if ok else "✘"
         name = Path(src).name
-        self._log.append(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
-        sb = self._log.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        self._log_msg(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
@@ -384,7 +382,7 @@ class ConverterTab(QWidget):
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
-        self._log.append(f"─── Finished: {success} ok, {errors} error(s) ───")
+        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
 
         # Record in history
         entry = {
@@ -396,5 +394,10 @@ class ConverterTab(QWidget):
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
         }
         self._settings.add_converter_history(entry)
+
+    def _log_msg(self, msg: str) -> None:
+        self._log.append(msg)
+        sb = self._log.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
 

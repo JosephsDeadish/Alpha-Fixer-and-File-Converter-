@@ -97,7 +97,10 @@ class AlphaWorker(QThread):
     def _resolve_output(self, src: str) -> str:
         p = Path(src)
         name = p.stem + (self._suffix or "") + p.suffix
-        if self._output_dir and not self._overwrite:
+        # Always honour output_dir when the user has specified one, regardless
+        # of whether overwrite mode is active (overwrite = no filename suffix,
+        # not "write back to the source directory").
+        if self._output_dir:
             return str(Path(self._output_dir) / name)
         return str(p.parent / name)
 

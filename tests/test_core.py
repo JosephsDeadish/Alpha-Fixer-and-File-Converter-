@@ -261,3 +261,44 @@ class TestSaveLoad(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# AlphaWorker._resolve_output  (Bug: ignored output_dir when overwrite=True)
+# ---------------------------------------------------------------------------
+
+class TestAlphaWorkerResolveOutput(unittest.TestCase):
+    """_resolve_output must honour output_dir regardless of overwrite flag."""
+
+    def _make_worker(self, output_dir=None, suffix="", overwrite=False):
+        from src.core.worker import AlphaWorker
+        return AlphaWorker(
+            files=[],
+            output_dir=output_dir,
+            overwrite=overwrite,
+            suffix=suffix,
+        )
+
+    def test_no_output_dir_writes_beside_source(self):
+        w = self._make_worker()
+        result = w._resolve_output("/some/dir/image.png")
+        self.assertEqual(result, "/some/dir/image.png")
+
+    def test_output_dir_used_with_suffix(self):
+        w = self._make_worker(output_dir="/out", suffix="_fixed", overwrite=False)
+        result = w._resolve_output("/src/image.png")
+        self.assertEqual(result, "/out/image_fixed.png")
+
+    def test_output_dir_honoured_even_when_overwrite_true(self):
+        """The previous bug: output_dir was ignored when overwrite=True (suffix='')."""
+        w = self._make_worker(output_dir="/out", suffix="", overwrite=True)
+        result = w._resolve_output("/src/image.png")
+        # Must go to /out, NOT back to /src
+        self.assertEqual(result, "/out/image.png")
+
+    def test_no_output_dir_overwrite_writes_beside_source(self):
+        """Without output_dir, overwrite mode correctly writes beside the source."""
+        w = self._make_worker(output_dir=None, suffix="", overwrite=True)
+        result = w._resolve_output("/src/image.png")
+        self.assertEqual(result, "/src/image.png")
+

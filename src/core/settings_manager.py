@@ -37,6 +37,7 @@ class SettingsManager:
         "scrollbar_handle": "#e94560",
         "panda_white": "#f0f0f0",
         "panda_black": "#1a1a1a",
+        "_effect": "panda",
     }
 
     _DEFAULTS = {
@@ -198,6 +199,16 @@ class SettingsManager:
         history.insert(0, entry)
         history = history[:max_entries]
         self._qs.setValue("alpha_history", json.dumps(history))
+        self._qs.sync()
+
+    def clear_converter_history(self) -> None:
+        """Erase all converter history entries."""
+        self._qs.setValue("converter_history", "[]")
+        self._qs.sync()
+
+    def clear_alpha_history(self) -> None:
+        """Erase all alpha-fixer history entries."""
+        self._qs.setValue("alpha_history", "[]")
         self._qs.sync()
 
     # ------------------------------------------------------------------

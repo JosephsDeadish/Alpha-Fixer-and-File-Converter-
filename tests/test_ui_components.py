@@ -633,6 +633,46 @@ class TestSettingsDefaults(unittest.TestCase):
     def test_default_theme_has_scrollbar_handle(self):
         self.assertIn("scrollbar_handle", self._mgr._DEFAULT_THEME)
 
+    def test_default_theme_has_effect_key(self):
+        """_DEFAULT_THEME must include _effect so the settings dialog shows the
+        correct effect on first launch instead of falling back to 'Default'."""
+        self.assertIn("_effect", self._mgr._DEFAULT_THEME)
+        self.assertEqual(self._mgr._DEFAULT_THEME["_effect"], "panda")
+
+
+# ---------------------------------------------------------------------------
+# SettingsManager – clear_history public API (Bug: was using private _qs)
+# ---------------------------------------------------------------------------
+
+class TestSettingsManagerClearHistory(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_clear_converter_history_empties_list(self):
+        self._mgr.add_converter_history({"timestamp": "T", "format": "PNG",
+                                          "file_count": 1, "success": 1,
+                                          "errors": 0, "files": []})
+        self._mgr.clear_converter_history()
+        self.assertEqual(self._mgr.get_converter_history(), [])
+
+    def test_clear_alpha_history_empties_list(self):
+        self._mgr.add_alpha_history({"timestamp": "T", "preset": "PS2",
+                                      "file_count": 1, "success": 1,
+                                      "errors": 0, "files": []})
+        self._mgr.clear_alpha_history()
+        self.assertEqual(self._mgr.get_alpha_history(), [])
+
+    def test_clear_does_not_affect_other_settings(self):
+        """Clearing history must leave other settings keys intact."""
+        self._mgr.add_converter_history({"timestamp": "T", "format": "PNG",
+                                          "file_count": 1, "success": 1,
+                                          "errors": 0, "files": []})
+        self._store["font_size"] = 14
+        self._mgr.clear_converter_history()
+        self.assertEqual(self._store.get("font_size"), 14)
 
 
 

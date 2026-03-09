@@ -267,10 +267,10 @@ class MainWindow(QMainWindow):
         if self._settings.get("window_maximized", False):
             self.showMaximized()
             return
-        x = self._settings.get("window_x", 100)
-        y = self._settings.get("window_y", 100)
-        w = self._settings.get("window_w", 1100)
-        h = self._settings.get("window_h", 750)
+        x = self._settings.get("window_x")
+        y = self._settings.get("window_y")
+        w = self._settings.get("window_w")
+        h = self._settings.get("window_h")
         self.setGeometry(x, y, w, h)
 
     def _save_geometry(self):
