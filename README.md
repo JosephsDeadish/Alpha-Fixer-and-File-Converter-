@@ -31,11 +31,13 @@ Convert between image formats with optional resize and quality control.
 - Custom output folder
 
 ## UI & Customization
-- 🐼 **10 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth
-- **🔓 Hidden unlockable themes** – earn them through use (Secret Skeleton unlocks at 100 clicks, more to come)
+- 🐼 **12 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄
+- **🔓 Hidden unlockable themes** – earn them through use:
+  - **Secret Skeleton** – unlocks at 100 total clicks
+  - **Secret Sakura 🌸** – unlocks at 250 total clicks (panda effect)
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
-- **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth)
+- **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth), rising flames (Volcano 🔥), snowflakes (Arctic ❄), pandas (Panda Dark/Light/Secret Sakura 🐼), electric bolts (Neon Panda ⚡)
 - Mouse trail effect with configurable color
 - Custom cursor style (Default, Cross, Pointing Hand, Open Hand)
 - Click sound effects (built-in synthetic beep or point to your own .wav file)
@@ -51,7 +53,7 @@ Convert between image formats with optional resize and quality control.
 - Right-click or Delete key to remove items from file lists
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
-- **Conversion history tab** – all past conversion sessions recorded with timestamp, format, and file count
+- **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
 - **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
 - **Keyboard shortcuts** (F1 for full list):
   - `F5` – Run / Process / Convert

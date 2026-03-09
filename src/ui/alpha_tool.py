@@ -1,6 +1,7 @@
 """
 Alpha Fixer tab widget.
 """
+import datetime
 import os
 from pathlib import Path
 
@@ -564,6 +565,12 @@ class AlphaFixerTab(QWidget):
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()
 
+        # Remember for history recording in _on_finished
+        self._last_run_files = expanded
+        self._last_run_preset = (
+            self._preset_combo.currentText() if self._use_preset_check.isChecked() else "manual"
+        )
+
         self._log.clear()
         self._progress.setValue(0)
         self._btn_run.setEnabled(False)
@@ -614,6 +621,17 @@ class AlphaFixerTab(QWidget):
         # Refresh compare for currently selected file to show the processed result
         if self._preview_path and success > 0:
             self._update_compare()
+
+        # Record in history
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "preset": getattr(self, "_last_run_preset", "manual"),
+            "file_count": len(getattr(self, "_last_run_files", [])),
+            "success": success,
+            "errors": errors,
+            "files": [Path(f).name for f in getattr(self, "_last_run_files", [])[:10]],
+        }
+        self._settings.add_alpha_history(entry)
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

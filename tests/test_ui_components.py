@@ -562,8 +562,77 @@ class TestConverterHistory(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# SettingsManager – alpha fixer history
 # ---------------------------------------------------------------------------
+
+class TestAlphaHistory(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_empty_by_default(self):
+        history = self._mgr.get_alpha_history()
+        self.assertEqual(history, [])
+
+    def test_add_and_retrieve(self):
+        entry = {"timestamp": "2026-03-09T12:00:00", "preset": "PS2",
+                 "file_count": 2, "success": 2, "errors": 0,
+                 "files": ["a.png", "b.png"]}
+        self._mgr.add_alpha_history(entry)
+        history = self._mgr.get_alpha_history()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["preset"], "PS2")
+
+    def test_alpha_history_capped_at_max(self):
+        for i in range(60):
+            self._mgr.add_alpha_history(
+                {"timestamp": f"2026-03-09T{i:02d}:00:00", "preset": "PS2",
+                 "file_count": 1, "success": 1, "errors": 0, "files": []}
+            )
+        history = self._mgr.get_alpha_history()
+        self.assertLessEqual(len(history), 50)
+
+    def test_alpha_history_newest_first(self):
+        self._mgr.add_alpha_history({"timestamp": "A", "preset": "N64",
+                                     "file_count": 1, "success": 1,
+                                     "errors": 0, "files": []})
+        self._mgr.add_alpha_history({"timestamp": "B", "preset": "PS2",
+                                     "file_count": 1, "success": 1,
+                                     "errors": 0, "files": []})
+        history = self._mgr.get_alpha_history()
+        self.assertEqual(history[0]["timestamp"], "B")
+
+
+# ---------------------------------------------------------------------------
+# SettingsManager – unlock_sakura default + theme color keys
+# ---------------------------------------------------------------------------
+
+class TestSettingsDefaults(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+
+    def test_unlock_sakura_default_is_false(self):
+        default = self._mgr._DEFAULTS.get("unlock_sakura")
+        self.assertIs(default, False)
+
+    def test_unlock_skeleton_default_is_false(self):
+        default = self._mgr._DEFAULTS.get("unlock_skeleton")
+        self.assertIs(default, False)
+
+    def test_default_theme_has_progress_bar(self):
+        self.assertIn("progress_bar", self._mgr._DEFAULT_THEME)
+
+    def test_default_theme_has_input_bg(self):
+        self.assertIn("input_bg", self._mgr._DEFAULT_THEME)
+
+    def test_default_theme_has_scrollbar_handle(self):
+        self.assertIn("scrollbar_handle", self._mgr._DEFAULT_THEME)
+
+
+
 
 class _FakeQSettings:
     """Minimal QSettings substitute backed by a plain dict."""
