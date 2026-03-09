@@ -243,14 +243,15 @@ class TestMouseTrailOverlay(unittest.TestCase):
             overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         )
 
-    def test_transparent_background_style(self):
-        """Overlay must have a transparent background so old trail pixels
-        are not retained between frames (replaces the old WA_NoSystemBackground
-        check that caused ghosting artifacts)."""
+    def test_no_system_background(self):
+        """WA_NoSystemBackground must be set so Qt does not pre-fill the overlay
+        with the background colour (which would erase underlying child widgets)."""
         from src.ui.mouse_trail import MouseTrailOverlay
+        from PyQt6.QtCore import Qt
         overlay = MouseTrailOverlay(self._parent)
-        style = overlay.styleSheet()
-        self.assertIn("background-color: transparent", style)
+        self.assertTrue(
+            overlay.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -370,11 +370,11 @@ class ClickEffectsOverlay(QWidget):
     def __init__(self, main_window: QWidget):
         super().__init__(main_window)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        # Do NOT set WA_NoSystemBackground – without it Qt erases the widget
-        # region before paintEvent, which is required for proper transparency.
+        # WA_NoSystemBackground prevents Qt from pre-filling this widget's
+        # region with the background colour before paintEvent.  Without it
+        # the overlay would erase every child widget drawn beneath it.
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
-        # Transparent background so Qt composites parent content through it.
-        self.setStyleSheet("background-color: transparent;")
 
         self._main_window = main_window
         self._effect_key = "default"
@@ -437,6 +437,10 @@ class ClickEffectsOverlay(QWidget):
 
     def _add_particle(self, p: _Particle) -> None:
         self._particles.append(p)
+        # Restart the animation timer if it was stopped after the previous
+        # burst of particles finished (see _tick).
+        if not self._timer.isActive():
+            self._timer.start()
         if len(self._particles) > 300:
             self._particles = self._particles[-200:]
 
@@ -482,33 +486,28 @@ class ClickEffectsOverlay(QWidget):
             if p.life > 0:
                 surviving.append(p)
         self._particles = surviving
-        # Always repaint: if surviving is empty the paintEvent will clear
-        # the overlay so stale particle pixels don't ghost on screen.
-        self.update()
+        if surviving:
+            self.update()
+        else:
+            # All particles have died.  Stop the timer (performance: avoids
+            # 60-fps empty ticks until the next click) and ask the parent to
+            # repaint the overlay region.  Qt repaints child widgets
+            # bottom-to-top in Z-order: the underlying widgets overwrite the
+            # ghost particle pixels, then the overlay's no-op paintEvent runs.
+            self._timer.stop()
+            parent = self.parentWidget()
+            if parent is not None:
+                parent.update(self.geometry())
 
     # ------------------------------------------------------------------
     # Paint
     # ------------------------------------------------------------------
 
     def paintEvent(self, _event) -> None:
+        if not self._particles:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # Erase the overlay's pixel buffer each frame (CompositionMode_Source
-        # writes through the destination, replacing old pixels with transparent).
-        # This prevents stale particles from ghosting after they have died.
-        painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_Source
-        )
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
-        painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_SourceOver
-        )
-
-        if not self._particles:
-            painter.end()
-            return
-
         painter.setPen(Qt.PenStyle.NoPen)
 
         for p in self._particles:

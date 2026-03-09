@@ -28,11 +28,11 @@ class MouseTrailOverlay(QWidget):
 
         # Transparent, non-interactive overlay
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        # Do NOT set WA_NoSystemBackground – without it Qt erases the widget
-        # region before paintEvent, required for correct transparent behaviour.
+        # WA_NoSystemBackground prevents Qt from pre-filling this widget's
+        # region with the background colour before paintEvent.  Without it
+        # the overlay would erase every child widget drawn beneath it.
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
-        # Transparent background so Qt composites parent content through it.
-        self.setStyleSheet("background-color: transparent;")
 
         self._main_window = main_window
         self._color = QColor("#e94560")
@@ -111,31 +111,25 @@ class MouseTrailOverlay(QWidget):
             if a > 0.0:
                 new_trail.append([x, y, a])
         self._trail = new_trail
-        # Always repaint so the clear-frame is issued when the trail empties.
-        self.update()
+        if new_trail:
+            self.update()
+        else:
+            # Trail just emptied.  Ask the parent to repaint the overlay
+            # region so Qt redraws the underlying widgets from back to front,
+            # overwriting the last visible trail pixels with real content.
+            parent = self.parentWidget()
+            if parent is not None:
+                parent.update(self.geometry())
 
     # ------------------------------------------------------------------
     # Paint
     # ------------------------------------------------------------------
 
     def paintEvent(self, _event) -> None:
+        if not self._trail:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # Erase stale trail pixels from the previous frame so the trail fades
-        # correctly rather than leaving permanent ghost marks.
-        painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_Source
-        )
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
-        painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_SourceOver
-        )
-
-        if not self._trail:
-            painter.end()
-            return
-
         painter.setPen(Qt.PenStyle.NoPen)
 
         for x, y, alpha_frac in self._trail:
