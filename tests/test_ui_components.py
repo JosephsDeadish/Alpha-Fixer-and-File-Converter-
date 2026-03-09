@@ -588,12 +588,36 @@ class TestNewThemes(unittest.TestCase):
     def test_preset_themes_contains_new_entries(self):
         from src.ui.theme_engine import PRESET_THEMES
         for name in ("Gore", "Bat Cave", "Rainbow Chaos",
-                     "Otter Cove", "Galaxy", "Galaxy Otter", "Goth"):
+                     "Otter Cove", "Galaxy", "Galaxy Otter", "Goth",
+                     "Volcano", "Arctic"):
             self.assertIn(name, PRESET_THEMES, f"{name} should be in PRESET_THEMES")
 
     def test_hidden_themes_contains_secret_skeleton(self):
         from src.ui.theme_engine import HIDDEN_THEMES
         self.assertIn("Secret Skeleton", HIDDEN_THEMES)
+
+    def test_hidden_themes_contains_secret_sakura(self):
+        from src.ui.theme_engine import HIDDEN_THEMES
+        self.assertIn("Secret Sakura", HIDDEN_THEMES)
+        self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_effect"), "panda")
+        self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_unlock"), "sakura")
+
+    def test_panda_themes_have_panda_effect(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        self.assertEqual(PRESET_THEMES["Panda Dark"].get("_effect"), "panda")
+        self.assertEqual(PRESET_THEMES["Panda Light"].get("_effect"), "panda")
+
+    def test_volcano_uses_fire_effect(self):
+        from src.ui.theme_engine import PRESET_THEMES, THEME_EFFECTS
+        self.assertIn("Volcano", PRESET_THEMES)
+        self.assertEqual(PRESET_THEMES["Volcano"].get("_effect"), "fire")
+        self.assertEqual(THEME_EFFECTS["Volcano"], "fire")
+
+    def test_arctic_uses_ice_effect(self):
+        from src.ui.theme_engine import PRESET_THEMES, THEME_EFFECTS
+        self.assertIn("Arctic", PRESET_THEMES)
+        self.assertEqual(PRESET_THEMES["Arctic"].get("_effect"), "ice")
+        self.assertEqual(THEME_EFFECTS["Arctic"], "ice")
 
     def test_theme_effects_map_populated(self):
         from src.ui.theme_engine import THEME_EFFECTS
@@ -892,6 +916,30 @@ class TestThemeMakerEffect(unittest.TestCase):
         theme = {"name": custom_theme_name, "_effect": "otter"}
         effect_key = THEME_EFFECTS.get(theme["name"]) or theme.get("_effect", "default")
         self.assertEqual(effect_key, "otter")
+
+    def test_recursive_check_key_in_all_modes(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for mode_name, tips in [("Normal", _NORMAL),
+                                  ("Dumbed Down", _DUMBED),
+                                  ("No Filter", _VULGAR)]:
+            self.assertIn("recursive_check", tips,
+                          f"{mode_name} missing 'recursive_check' tip")
+            self.assertEqual(len(tips["recursive_check"]), 5,
+                             f"{mode_name}['recursive_check'] should have 5 variants")
+
+    def test_settings_dialog_tooltip_keys_in_all_modes(self):
+        """All 6 new settings-dialog tooltip keys must appear in every active mode."""
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        new_keys = ("sound_check", "trail_check", "trail_color",
+                    "cursor_combo", "font_size", "click_effects_check")
+        for mode_name, tips in [("Normal", _NORMAL),
+                                  ("Dumbed Down", _DUMBED),
+                                  ("No Filter", _VULGAR)]:
+            for key in new_keys:
+                self.assertIn(key, tips,
+                              f"{mode_name} missing '{key}' tip")
+                self.assertEqual(len(tips[key]), 5,
+                                 f"{mode_name}['{key}'] should have 5 variants")
 
 
 if __name__ == "__main__":

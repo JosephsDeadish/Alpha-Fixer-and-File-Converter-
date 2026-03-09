@@ -357,6 +357,12 @@ class SettingsDialog(QDialog):
         mgr.register(self._effect_combo, "effect_combo")
         mgr.register(self._emoji_input, "custom_emoji")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
+        mgr.register(self._sound_check, "sound_check")
+        mgr.register(self._trail_check, "trail_check")
+        mgr.register(self._trail_color_btn, "trail_color")
+        mgr.register(self._cursor_combo, "cursor_combo")
+        mgr.register(self._font_size_spin, "font_size")
+        mgr.register(self._click_effects_check, "click_effects_check")
 
     # ------------------------------------------------------------------
     # Color-button callback
