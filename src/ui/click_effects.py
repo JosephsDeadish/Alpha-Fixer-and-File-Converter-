@@ -451,7 +451,10 @@ class ClickEffectsOverlay(QWidget):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if not self._enabled:
             return False
-        if event.type() == QEvent.Type.MouseButtonPress:
+        if (
+            event.type() == QEvent.Type.MouseButtonPress
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
             try:
                 gp = event.globalPosition().toPoint()
                 lp = self._main_window.mapFromGlobal(gp)

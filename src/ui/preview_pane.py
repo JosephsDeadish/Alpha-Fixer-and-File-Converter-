@@ -85,6 +85,7 @@ class _ThumbLoader(QThread):
 
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
+            img.close()
 
             meta = (
                 f"{Path(self._path).name}\n"

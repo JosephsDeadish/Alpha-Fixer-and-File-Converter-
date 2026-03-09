@@ -405,6 +405,11 @@ class SettingsDialog(QDialog):
             QMessageBox.warning(self, "Save Theme",
                                 f"'{name}' is a built-in theme name. Choose a different name.")
             return
+        # Ensure the stored dict has the correct display name and the current
+        # effect key (the latter may not have been written if the user never
+        # changed the effect combo away from its pre-selected value).
+        self._theme["name"] = name
+        self._theme["_effect"] = self._effect_combo.currentData() or "default"
         self._settings.save_named_theme(name, dict(self._theme))
         self._rebuild_theme_combo(select=f"★ {name}")
         QMessageBox.information(self, "Save Theme", f"Theme '{name}' saved.")
