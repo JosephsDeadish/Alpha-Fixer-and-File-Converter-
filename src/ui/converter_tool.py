@@ -219,6 +219,22 @@ class ConverterTab(QWidget):
         QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
 
     # ------------------------------------------------------------------
+    # Tooltip registration
+    # ------------------------------------------------------------------
+
+    def register_tooltips(self, mgr) -> None:
+        """Register tab widgets with the TooltipManager for cycling tips."""
+        mgr.register(self._btn_add_files, "add_files")
+        mgr.register(self._btn_add_folder, "add_folder")
+        mgr.register(self._btn_clear, "clear_list")
+        mgr.register(self._btn_run, "convert_btn")
+        mgr.register(self._btn_stop, "stop_btn")
+        mgr.register(self._fmt_combo, "format_combo")
+        mgr.register(self._quality_spin, "quality_spin")
+        mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._file_list, "file_list")
+
+    # ------------------------------------------------------------------
     # File management
     # ------------------------------------------------------------------
 

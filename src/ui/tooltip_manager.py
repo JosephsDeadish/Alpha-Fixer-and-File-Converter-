@@ -163,9 +163,9 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "effect_combo": [
         "Choose the click particle effect style for this theme.",
-        "Each effect matches its theme — try Gore for blood, Galaxy for stars.",
+        "Each effect matches its theme — try Gore for blood, Galaxy for stars, Neon for lightning ⚡.",
         "Select 'Custom' to fire your own emoji as particles on every click.",
-        "The effect activates whenever you click anywhere in the main window.",
+        "New effects: Fire 🔥 (rising flames), Ice ❄ (snowflakes), Panda 🐼 (cute burst), Neon ⚡ (electric bolts).",
         "Mix and match: any color theme can use any effect style you like!",
     ],
     "custom_emoji": [
@@ -316,7 +316,7 @@ _DUMBED: dict[str, list[str]] = {
         "It's the sparkle chooser. Pick how things explode when you click.",
         "Yes, you can pick which particles fly out — it's the dropdown above.",
         "Select 'Custom' and then add your own emoji in the section below.",
-        "Each option makes different things shoot out. Apparently this needs explaining.",
+        "New ones: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Each one does a different thing. Apparently this needs explaining.",
         "Press Apply and Close. The sparkles change. That's it. You did it.",
     ],
     "custom_emoji": [
@@ -479,9 +479,9 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "effect_combo": [
         "Choose your f**king particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
-        "This controls what explodes out of your cursor. It's important. Choose wisely.",
+        "This controls what explodes out of your cursor. New options: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Choose wisely.",
         "Custom lets you use your own emoji. What kind of unhinged particles will you pick?",
-        "Galaxy shoots stars. Otter shoots otters. What more do you want from life?",
+        "Galaxy shoots stars. Otter shoots otters. Panda shoots… pandas. What more do you want from life?",
         "If you pick Default and complain about the sparks, that's entirely on you.",
     ],
     "custom_emoji": [

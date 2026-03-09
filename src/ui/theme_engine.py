@@ -73,6 +73,7 @@ NEON_THEME = {
     "input_bg": "#050505",
     "scrollbar": "#111111",
     "scrollbar_handle": "#00ff88",
+    "_effect": "neon",
 }
 
 GORE_THEME = {

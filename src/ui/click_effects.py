@@ -173,6 +173,102 @@ def _spawn_goth(x, y):
     return particles
 
 
+def _spawn_neon(x, y):
+    """Electric neon / lightning-bolt particles."""
+    particles = []
+    neon_colors = ["#00ff88", "#ff00ff", "#00ffff", "#ffff00", "#ff00aa", "#aa00ff"]
+    chars = ["⚡", "✦", "◆", "★", "✸", "▸"]
+    for _ in range(14):
+        vx, vy = _rand_vel(2, 8)
+        kind = "text" if random.random() < 0.55 else "circle"
+        color = QColor(random.choice(neon_colors))
+        text = random.choice(chars) if kind == "text" else ""
+        size = random.uniform(12, 20) if kind == "text" else random.uniform(4, 12)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.3, 0.8),
+                                   kind, size, color, text))
+    # A few large electric arcs
+    for _ in range(3):
+        vx, vy = _rand_vel(4, 10)
+        particles.append(_Particle(x, y, vx, vy * 0.4, random.uniform(0.2, 0.5),
+                                   "text", random.uniform(22, 32),
+                                   QColor("#00ffff"), "⚡"))
+    return particles
+
+
+def _spawn_fire(x, y):
+    """Rising flame and ember particles."""
+    particles = []
+    fire_colors = ["#ff4400", "#ff8800", "#ffcc00", "#ff2200", "#ffaa00", "#ff6600"]
+    for _ in range(16):
+        # Upward bias: angle mostly between -140° and -40°
+        angle = random.uniform(-math.pi * 0.78, -math.pi * 0.22)
+        speed = random.uniform(2, 7)
+        vx = math.cos(angle) * speed + random.uniform(-0.8, 0.8)
+        vy = math.sin(angle) * speed
+        color = QColor(random.choice(fire_colors))
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.9),
+                                   "circle", random.uniform(5, 15), color))
+    # Bright white/yellow sparks
+    for _ in range(6):
+        vx, vy = _rand_vel(3, 9)
+        particles.append(_Particle(x, y, vx, vy * 0.5, random.uniform(0.2, 0.5),
+                                   "circle", random.uniform(2, 5),
+                                   QColor(random.choice(["#ffffff", "#ffff88"]))))
+    # Emoji flames
+    for _ in range(3):
+        vx = random.uniform(-2, 2)
+        vy = random.uniform(-6, -3)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.0),
+                                   "text", random.uniform(18, 28),
+                                   QColor("#ff8800"), "🔥"))
+    return particles
+
+
+def _spawn_ice(x, y):
+    """Snowflake and frost crystal particles."""
+    particles = []
+    ice_colors = ["#aaddff", "#ffffff", "#88ccff", "#ccf0ff", "#6699cc", "#ddeeff"]
+    flakes = ["❄", "❅", "❆", "·", "✦", "•"]
+    for _ in range(14):
+        vx, vy = _rand_vel(0.8, 4)
+        # Slower fall — gravity-like drift
+        vy = abs(vy) * 0.4 + random.uniform(-1, 1)
+        kind = "text" if random.random() < 0.65 else "circle"
+        color = QColor(random.choice(ice_colors))
+        text = random.choice(flakes) if kind == "text" else ""
+        size = random.uniform(10, 20) if kind == "text" else random.uniform(4, 10)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.9, 1.6),
+                                   kind, size, color, text))
+    # A few larger snowflakes
+    for _ in range(3):
+        vx = random.uniform(-1.5, 1.5)
+        vy = random.uniform(-2, 2)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 1.8),
+                                   "text", random.uniform(24, 34),
+                                   QColor("#ffffff"), random.choice(["❄", "❅", "❆"])))
+    return particles
+
+
+def _spawn_panda(x, y):
+    """Cute panda-themed emoji and heart particles."""
+    particles = []
+    panda_emojis = ["🐼", "🎋", "🌸", "✨", "💕", "⭐", "🖤", "🤍", "🍡"]
+    panda_colors = ["#e94560", "#f0f0f0", "#1a1a1a", "#ffccdd", "#ffaacc"]
+    for _ in range(10):
+        vx, vy = _rand_vel(1, 5)
+        kind = "text" if random.random() < 0.75 else "circle"
+        color = QColor(random.choice(panda_colors))
+        text = random.choice(panda_emojis) if kind == "text" else ""
+        size = random.uniform(14, 24) if kind == "text" else random.uniform(5, 12)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.1),
+                                   kind, size, color, text))
+    # Always at least one panda
+    particles.append(_Particle(x, y, random.uniform(-2, 2),
+                               random.uniform(-6, -3), random.uniform(0.9, 1.4),
+                               "text", 30, QColor("#1a1a1a"), "🐼"))
+    return particles
+
+
 # ---------------------------------------------------------------------------
 # Custom emoji effect (user-configurable)
 # ---------------------------------------------------------------------------
@@ -211,6 +307,10 @@ _SPAWNERS = {
     "galaxy":       _spawn_galaxy,
     "galaxy_otter": _spawn_galaxy_otter,
     "goth":         _spawn_goth,
+    "neon":         _spawn_neon,
+    "fire":         _spawn_fire,
+    "ice":          _spawn_ice,
+    "panda":        _spawn_panda,
     "custom":       _spawn_custom,
 }
 

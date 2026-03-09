@@ -132,6 +132,7 @@ class MainWindow(QMainWindow):
         btn_settings = QPushButton("⚙ Settings")
         btn_settings.clicked.connect(self._open_settings)
         toolbar.addWidget(btn_settings)
+        self._btn_settings = btn_settings
         toolbar.addSeparator()
 
         self._theme_label = QLabel("  Theme: Panda Dark  ")
@@ -146,6 +147,7 @@ class MainWindow(QMainWindow):
         )
         btn_patreon.clicked.connect(self._open_patreon)
         toolbar.addWidget(btn_patreon)
+        self._btn_patreon = btn_patreon
 
         # Unlock status label (shown when a secret theme unlocks)
         self._unlock_lbl = QLabel("")
@@ -194,6 +196,17 @@ class MainWindow(QMainWindow):
         from .tooltip_manager import TooltipManager
         self._tooltip_mgr = TooltipManager(self._settings, parent=self)
         self._tooltip_mgr.install_on_app(QApplication.instance())
+        self._register_tooltips()
+
+    def _register_tooltips(self) -> None:
+        """Wire all main-window and tab widgets to the TooltipManager."""
+        mgr = self._tooltip_mgr
+        if mgr is None:
+            return
+        mgr.register(self._btn_settings, "settings_btn")
+        mgr.register(self._btn_patreon, "patreon_btn")
+        self._alpha_tab.register_tooltips(mgr)
+        self._converter_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""
@@ -284,7 +297,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _open_settings(self):
-        dlg = SettingsDialog(self._settings, self)
+        dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
         dlg.settings_changed.connect(self._on_settings_changed)
         dlg.exec()

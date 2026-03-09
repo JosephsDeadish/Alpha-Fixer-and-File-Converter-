@@ -30,6 +30,10 @@ _EFFECT_OPTIONS = [
     ("galaxy",       "Galaxy — Stars & space dust ✦"),
     ("galaxy_otter", "Galaxy Otter — Space otters 🦦✦"),
     ("goth",         "Goth — Skulls & shadows 💀"),
+    ("neon",         "Neon — Electric lightning bolts ⚡"),
+    ("fire",         "Fire — Rising flames 🔥"),
+    ("ice",          "Ice — Snowflakes & frost ❄"),
+    ("panda",        "Panda — Cute panda shower 🐼"),
     ("custom",       "Custom — Your own emoji 🎨"),
 ]
 
@@ -68,7 +72,7 @@ class SettingsDialog(QDialog):
     theme_changed = pyqtSignal(dict)
     settings_changed = pyqtSignal()
 
-    def __init__(self, settings_manager, parent=None):
+    def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
         self._settings = settings_manager
         self._theme = settings_manager.get_theme()
@@ -77,6 +81,8 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(620, 540)
         self._setup_ui()
         self._load_values()
+        if tooltip_mgr is not None:
+            self.register_tooltips(tooltip_mgr)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -340,6 +346,17 @@ class SettingsDialog(QDialog):
         mode_val = self._settings.get("tooltip_mode", "Normal")
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
+
+    # ------------------------------------------------------------------
+    # Tooltip registration
+    # ------------------------------------------------------------------
+
+    def register_tooltips(self, mgr) -> None:
+        """Register dialog widgets with the TooltipManager for cycling tips."""
+        mgr.register(self._theme_preset_combo, "theme_combo")
+        mgr.register(self._effect_combo, "effect_combo")
+        mgr.register(self._emoji_input, "custom_emoji")
+        mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
 
     # ------------------------------------------------------------------
     # Color-button callback

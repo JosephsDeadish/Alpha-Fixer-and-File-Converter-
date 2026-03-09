@@ -329,6 +329,27 @@ class AlphaFixerTab(QWidget):
         QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
 
     # ------------------------------------------------------------------
+    # Tooltip registration
+    # ------------------------------------------------------------------
+
+    def register_tooltips(self, mgr) -> None:
+        """Register tab widgets with the TooltipManager for cycling tips."""
+        mgr.register(self._btn_add_files, "add_files")
+        mgr.register(self._btn_add_folder, "add_folder")
+        mgr.register(self._btn_clear, "clear_list")
+        mgr.register(self._btn_run, "process_btn")
+        mgr.register(self._btn_stop, "stop_btn")
+        mgr.register(self._preset_combo, "preset_combo")
+        mgr.register(self._btn_save_preset, "save_preset")
+        mgr.register(self._btn_delete_preset, "delete_preset")
+        mgr.register(self._alpha_slider, "alpha_slider")
+        mgr.register(self._threshold_spin, "threshold_spin")
+        mgr.register(self._invert_check, "invert_check")
+        mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._file_list, "file_list")
+        mgr.register(self._compare, "compare_widget")
+
+    # ------------------------------------------------------------------
     # Preset management
     # ------------------------------------------------------------------
 
