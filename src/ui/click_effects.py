@@ -23,6 +23,8 @@ from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QWidget
 
+from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI as _DEFAULT_EMOJI_STR
+
 
 # ---------------------------------------------------------------------------
 # Particle data class
@@ -171,6 +173,35 @@ def _spawn_goth(x, y):
     return particles
 
 
+# ---------------------------------------------------------------------------
+# Custom emoji effect (user-configurable)
+# ---------------------------------------------------------------------------
+
+# Mutable module-level list – updated by ClickEffectsOverlay.set_custom_emoji()
+_CUSTOM_EMOJI: list[str] = _DEFAULT_EMOJI_STR.split()
+
+
+def set_custom_emoji(emoji_list: list[str]) -> None:
+    """Update the emoji used by the 'custom' effect spawner."""
+    global _CUSTOM_EMOJI
+    _CUSTOM_EMOJI = list(emoji_list) if emoji_list else _DEFAULT_EMOJI_STR.split()
+
+
+def _spawn_custom(x, y):
+    particles = []
+    emoji_list = _CUSTOM_EMOJI or ["✨"]
+    accent_colors = ["#e94560", "#00ff88", "#4477ff", "#ffcc00", "#ff88ff",
+                     "#ff8800", "#00ddaa", "#a06aff"]
+    for _ in range(10):
+        vx, vy = _rand_vel(1, 6)
+        kind = "text" if random.random() < 0.7 else "circle"
+        text = random.choice(emoji_list) if kind == "text" else ""
+        color = QColor(random.choice(accent_colors))
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.1),
+                                   kind, random.uniform(12, 22), color, text))
+    return particles
+
+
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -180,6 +211,7 @@ _SPAWNERS = {
     "galaxy":       _spawn_galaxy,
     "galaxy_otter": _spawn_galaxy_otter,
     "goth":         _spawn_goth,
+    "custom":       _spawn_custom,
 }
 
 
@@ -288,6 +320,10 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._bat_flock:
                 self._bat_flock.stop()
+
+    def set_custom_emoji(self, emoji_list: list[str]) -> None:
+        """Update the emoji list used by the 'custom' effect spawner."""
+        set_custom_emoji(emoji_list)
 
     def record_click(self) -> int:
         self._click_count += 1

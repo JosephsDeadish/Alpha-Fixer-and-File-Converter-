@@ -9,6 +9,9 @@ from PyQt6.QtCore import QSettings, QStandardPaths
 APP_NAME = "AlphaFixerConverter"
 ORG_NAME = "PandaTools"
 
+# Default custom emoji used when none have been configured yet
+DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
+
 
 class SettingsManager:
     """Central settings manager backed by QSettings."""
@@ -66,6 +69,8 @@ class SettingsManager:
         "tooltip_mode": "Normal",
         # Click effects
         "click_effects_enabled": True,
+        # Custom emoji particles
+        "custom_emoji": DEFAULT_CUSTOM_EMOJI,
         # Unlock flags
         "unlock_skeleton": False,
         "total_clicks": 0,
@@ -182,6 +187,7 @@ class SettingsManager:
         "cursor", "trail_enabled", "trail_color",
         "font_size",
         "click_effects_enabled", "tooltip_mode",
+        "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",

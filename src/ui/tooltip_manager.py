@@ -161,6 +161,20 @@ _NORMAL: dict[str, list[str]] = {
         "Try Gore, Rainbow Chaos, or Galaxy for dramatic visual effects.",
         "You can create custom color themes in the Theme tab of Settings.",
     ],
+    "effect_combo": [
+        "Choose the click particle effect style for this theme.",
+        "Each effect matches its theme — try Gore for blood, Galaxy for stars.",
+        "Select 'Custom' to fire your own emoji as particles on every click.",
+        "The effect activates whenever you click anywhere in the main window.",
+        "Mix and match: any color theme can use any effect style you like!",
+    ],
+    "custom_emoji": [
+        "Type or paste emoji here and click Add to create custom click particles.",
+        "Multiple emoji can be added at once — separate them with spaces.",
+        "Custom emoji are used when the effect is set to 'Custom' in the Theme tab.",
+        "Clear All removes all emoji from the list. Use Add to start fresh.",
+        "Try 🐼 🎉 💥 or any emoji your system supports — sky's the limit!",
+    ],
     "tooltip_mode_combo": [
         "Controls how tooltips appear throughout the application.",
         "Normal: cycles through 5 helpful tips per widget.",
@@ -297,6 +311,20 @@ _DUMBED: dict[str, list[str]] = {
         "Bat Cave makes bats fly across the screen. Because why not.",
         "Gore theme has blood splatter. It's... tasteful. Mostly.",
         "Rainbow Chaos will do things to your eyes. You've been warned.",
+    ],
+    "effect_combo": [
+        "It's the sparkle chooser. Pick how things explode when you click.",
+        "Yes, you can pick which particles fly out — it's the dropdown above.",
+        "Select 'Custom' and then add your own emoji in the section below.",
+        "Each option makes different things shoot out. Apparently this needs explaining.",
+        "Press Apply and Close. The sparkles change. That's it. You did it.",
+    ],
+    "custom_emoji": [
+        "Paste emoji in the box. Click Add. Watch them fly when you click stuff.",
+        "Yes, custom emoji. Yes, you can add your own. The box is right there.",
+        "Type emoji like 🐼 and click Add. It's literally that simple.",
+        "Clear All removes them all. Add adds new ones. That's all there is to it.",
+        "The emoji you add will shoot out when you click things. Congrats.",
     ],
     "tooltip_mode_combo": [
         "This changes how tooltips work. You're reading one right now. Meta.",
@@ -448,6 +476,20 @@ _VULGAR: dict[str, list[str]] = {
         "Galaxy theme is for when you want to feel like you're coding in space.",
         "Otter Cove is cute and cozy. Galaxy Otter is cuter AND cosmic. Best of both worlds.",
         "Goth theme for when you're feeling angsty and want skulls everywhere.",
+    ],
+    "effect_combo": [
+        "Choose your f**king particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
+        "This controls what explodes out of your cursor. It's important. Choose wisely.",
+        "Custom lets you use your own emoji. What kind of unhinged particles will you pick?",
+        "Galaxy shoots stars. Otter shoots otters. What more do you want from life?",
+        "If you pick Default and complain about the sparks, that's entirely on you.",
+    ],
+    "custom_emoji": [
+        "Type your deranged emoji and watch them blast across the screen like beautiful chaos.",
+        "Add whatever weird-ass emoji you want as click particles. No judgment. Mostly.",
+        "These fly out when you click. Choose wisely. Or chaotically. Both work.",
+        "Clear All nukes your entire emoji list. Gone. You did that. Own it.",
+        "Paste multiple emoji at once and they all join the flying circus. 🎪",
     ],
     "tooltip_mode_combo": [
         "You're using No Filter 🤬 mode. Good f**king choice. Respect.",

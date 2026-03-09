@@ -15,10 +15,23 @@ from PyQt6.QtWidgets import (
 
 from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet
 from .tooltip_manager import TOOLTIP_MODES
+from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
 _THEME_PREFIX_CHARS = "★🔓 "
 
+# Human-friendly labels for click-effect keys, in display order
+_EFFECT_OPTIONS = [
+    ("default",      "Default — Pink sparks ✨"),
+    ("gore",         "Gore — Blood splatter 🩸"),
+    ("bat",          "Bat Cave — Bats fly out 🦇"),
+    ("rainbow",      "Rainbow Chaos — Unicorns & rainbows 🌈"),
+    ("otter",        "Otter Cove — Cute otter burst 🦦"),
+    ("galaxy",       "Galaxy — Stars & space dust ✦"),
+    ("galaxy_otter", "Galaxy Otter — Space otters 🦦✦"),
+    ("goth",         "Goth — Skulls & shadows 💀"),
+    ("custom",       "Custom — Your own emoji 🎨"),
+]
 
 class ColorButton(QPushButton):
     """A button that shows a color swatch and opens a color picker."""
@@ -124,6 +137,42 @@ class SettingsDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setMaximumHeight(290)
         tv.addWidget(scroll)
+
+        # Effect style selector
+        grp_effect = QGroupBox("Click Effect Style")
+        effect_layout = QHBoxLayout(grp_effect)
+        effect_layout.addWidget(QLabel("Effect:"))
+        self._effect_combo = QComboBox()
+        self._effect_combo.setMinimumWidth(240)
+        for key, label in _EFFECT_OPTIONS:
+            self._effect_combo.addItem(label, userData=key)
+        effect_layout.addWidget(self._effect_combo, 1)
+        self._effect_combo.setToolTip(
+            "Choose the click particle effect for this theme.\n"
+            "Select 'Custom' to use your own emoji as particles."
+        )
+        tv.addWidget(grp_effect)
+
+        # Custom emoji section
+        grp_emoji = QGroupBox("Custom Emoji Particles  (used with 'Custom' effect)")
+        emoji_v = QVBoxLayout(grp_emoji)
+
+        emoji_row = QHBoxLayout()
+        self._emoji_input = QLineEdit()
+        self._emoji_input.setPlaceholderText("Type or paste emoji…  e.g.  🐼 🎉 💥  (space-separated)")
+        self._btn_emoji_add = QPushButton("Add")
+        self._btn_emoji_clear = QPushButton("Clear All")
+        emoji_row.addWidget(self._emoji_input, 1)
+        emoji_row.addWidget(self._btn_emoji_add)
+        emoji_row.addWidget(self._btn_emoji_clear)
+        emoji_v.addLayout(emoji_row)
+
+        self._emoji_display = QLabel("")
+        self._emoji_display.setWordWrap(True)
+        self._emoji_display.setObjectName("subheader")
+        emoji_v.addWidget(self._emoji_display)
+        tv.addWidget(grp_emoji)
+
         tv.addStretch(1)
         tabs.addTab(theme_tab, "🎨 Theme")
 
@@ -216,6 +265,9 @@ class SettingsDialog(QDialog):
         self._btn_cancel.clicked.connect(self.reject)
         self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._theme_preset_combo.currentTextChanged.connect(self._update_delete_btn)
+        self._effect_combo.currentIndexChanged.connect(self._on_effect_changed)
+        self._btn_emoji_add.clicked.connect(self._add_emoji)
+        self._btn_emoji_clear.clicked.connect(self._clear_emoji)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -268,6 +320,12 @@ class SettingsDialog(QDialog):
             idx if idx >= 0 else self._theme_preset_combo.count() - 1
         )
 
+        # Effect combo
+        self._set_effect_combo(t.get("_effect", "default"))
+
+        # Custom emoji
+        self._update_emoji_display()
+
         self._sound_check.setChecked(self._settings.get("sound_enabled", True))
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
@@ -309,6 +367,7 @@ class SettingsDialog(QDialog):
                 return  # "— Custom —" or separator
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
+        self._set_effect_combo(self._theme.get("_effect", "default"))
 
     def _save_custom_theme(self):
         name, ok = QInputDialog.getText(self, "Save Theme", "Theme name:")
@@ -335,6 +394,52 @@ class SettingsDialog(QDialog):
             self._rebuild_theme_combo()
 
     # ------------------------------------------------------------------
+    # Effect combo helpers
+    # ------------------------------------------------------------------
+
+    def _set_effect_combo(self, effect_key: str) -> None:
+        """Set the effect combo to the entry matching effect_key."""
+        for i in range(self._effect_combo.count()):
+            if self._effect_combo.itemData(i) == effect_key:
+                self._effect_combo.setCurrentIndex(i)
+                return
+        self._effect_combo.setCurrentIndex(0)  # fallback to Default
+
+    def _on_effect_changed(self) -> None:
+        """Sync the selected effect key back into the working theme dict."""
+        self._theme["_effect"] = self._effect_combo.currentData() or "default"
+
+    # ------------------------------------------------------------------
+    # Custom emoji helpers
+    # ------------------------------------------------------------------
+
+    def _get_emoji_list(self) -> list[str]:
+        raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
+        return raw.split() if raw.strip() else []
+
+    def _update_emoji_display(self) -> None:
+        items = self._get_emoji_list()
+        self._emoji_display.setText(
+            "  ".join(items) if items else "(none — add some emoji above)"
+        )
+
+    def _add_emoji(self) -> None:
+        text = self._emoji_input.text().strip()
+        if not text:
+            return
+        current = self._get_emoji_list()
+        for item in text.split():
+            if item and item not in current:
+                current.append(item)
+        self._settings.set("custom_emoji", " ".join(current))
+        self._update_emoji_display()
+        self._emoji_input.clear()
+
+    def _clear_emoji(self) -> None:
+        self._settings.set("custom_emoji", "")
+        self._update_emoji_display()
+
+    # ------------------------------------------------------------------
     # Sound file browser
     # ------------------------------------------------------------------
 
@@ -351,6 +456,8 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _apply_and_close(self):
+        # Ensure the chosen effect is written into the theme dict
+        self._theme["_effect"] = self._effect_combo.currentData() or "default"
         self._settings.set_theme(self._theme)
         self._settings.set("sound_enabled", self._sound_check.isChecked())
         self._settings.set("click_sound_path", self._click_sound_edit.text().strip())

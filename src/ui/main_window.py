@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFileDialog,
 )
 
-from ..core.settings_manager import SettingsManager
+from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
@@ -199,8 +199,14 @@ class MainWindow(QMainWindow):
             return
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "Panda Dark")
-        effect_key = THEME_EFFECTS.get(theme_name, "default")
+        # THEME_EFFECTS covers all preset themes; fall back to theme's own _effect
+        # key for user-saved custom themes (not in the preset registry).
+        effect_key = THEME_EFFECTS.get(theme_name) or theme.get("_effect", "default")
         self._click_effects.set_effect(effect_key)
+        # Push the user's custom emoji list to the custom spawner
+        custom_raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
+        custom_emoji = custom_raw.split() if custom_raw.strip() else DEFAULT_CUSTOM_EMOJI.split()
+        self._click_effects.set_custom_emoji(custom_emoji)
 
     # ------------------------------------------------------------------
     # Unlock hidden themes based on click count

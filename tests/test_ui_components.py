@@ -784,6 +784,116 @@ class TestPatreonLink(unittest.TestCase):
         self.assertIn("DeadOnTheInside", PATREON_URL)
 
 
+# ---------------------------------------------------------------------------
+# Custom emoji / effect selector (theme maker)
+# ---------------------------------------------------------------------------
+
+class TestCustomEmoji(unittest.TestCase):
+    """Custom emoji storage and custom spawner in click_effects."""
+
+    def test_custom_emoji_default_in_settings(self):
+        from src.core.settings_manager import SettingsManager
+        mgr = SettingsManager.__new__(SettingsManager)
+        default = mgr._DEFAULTS.get("custom_emoji", None)
+        self.assertIsNotNone(default)
+        self.assertIn("✨", default)
+
+    def test_custom_emoji_in_export_keys(self):
+        from src.core.settings_manager import SettingsManager
+        self.assertIn("custom_emoji", SettingsManager.EXPORT_KEYS)
+
+    def test_set_custom_emoji_updates_spawner(self):
+        from src.ui.click_effects import set_custom_emoji
+        set_custom_emoji(["🐼", "🎉"])
+        from src.ui.click_effects import _CUSTOM_EMOJI
+        self.assertIn("🐼", _CUSTOM_EMOJI)
+        self.assertIn("🎉", _CUSTOM_EMOJI)
+
+    def test_set_custom_emoji_empty_list_uses_fallback(self):
+        from src.ui.click_effects import set_custom_emoji
+        set_custom_emoji([])
+        from src.ui.click_effects import _CUSTOM_EMOJI
+        self.assertTrue(len(_CUSTOM_EMOJI) > 0)
+
+    def test_custom_spawner_registered(self):
+        from src.ui.click_effects import _SPAWNERS
+        self.assertIn("custom", _SPAWNERS)
+
+    def test_custom_spawner_produces_particles(self):
+        from src.ui.click_effects import _SPAWNERS, set_custom_emoji
+        set_custom_emoji(["🐼"])
+        particles = _SPAWNERS["custom"](100, 100)
+        self.assertTrue(len(particles) > 0)
+
+
+class TestThemeMakerEffect(unittest.TestCase):
+    """Effect key is preserved in user-saved custom themes."""
+
+    def test_effect_options_covers_all_spawners(self):
+        from src.ui.settings_dialog import _EFFECT_OPTIONS
+        from src.ui.click_effects import _SPAWNERS
+        option_keys = {key for key, _ in _EFFECT_OPTIONS}
+        for spawner_key in _SPAWNERS:
+            self.assertIn(spawner_key, option_keys,
+                          f"_EFFECT_OPTIONS missing key '{spawner_key}'")
+
+    def test_effect_key_written_into_theme_on_save(self):
+        """Saving a custom theme must preserve the _effect key."""
+        import json
+        from src.core.settings_manager import SettingsManager
+
+        class _FakeQSettings:
+            def __init__(self):
+                self._store = {}
+            def value(self, key, default=None):
+                return self._store.get(key, default)
+            def setValue(self, key, val):
+                self._store[key] = val
+            def sync(self):
+                pass
+
+        mgr = SettingsManager.__new__(SettingsManager)
+        mgr._qs = _FakeQSettings()
+
+        theme = {"name": "My Theme", "accent": "#ff0000", "_effect": "gore"}
+        mgr.save_named_theme("My Theme", theme)
+
+        saved = mgr.get_saved_themes()
+        self.assertIn("My Theme", saved)
+        self.assertEqual(saved["My Theme"].get("_effect"), "gore")
+
+    def test_normal_tips_have_effect_combo_key(self):
+        from src.ui.tooltip_manager import _NORMAL
+        self.assertIn("effect_combo", _NORMAL)
+        self.assertEqual(len(_NORMAL["effect_combo"]), 5)
+
+    def test_normal_tips_have_custom_emoji_key(self):
+        from src.ui.tooltip_manager import _NORMAL
+        self.assertIn("custom_emoji", _NORMAL)
+        self.assertEqual(len(_NORMAL["custom_emoji"]), 5)
+
+    def test_all_modes_have_effect_combo_key(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for mode_name, tips in [("Normal", _NORMAL),
+                                  ("Dumbed Down", _DUMBED),
+                                  ("No Filter", _VULGAR)]:
+            self.assertIn("effect_combo", tips,
+                          f"{mode_name} missing 'effect_combo' tip")
+            self.assertIn("custom_emoji", tips,
+                          f"{mode_name} missing 'custom_emoji' tip")
+
+    def test_apply_theme_effect_uses_theme_effect_key(self):
+        """_apply_theme_effect falls back to theme dict's _effect for custom themes."""
+        from src.ui.theme_engine import THEME_EFFECTS
+        # A custom saved theme is not in THEME_EFFECTS
+        custom_theme_name = "__custom_test_theme__"
+        self.assertNotIn(custom_theme_name, THEME_EFFECTS)
+        # Simulate the logic from main_window._apply_theme_effect
+        theme = {"name": custom_theme_name, "_effect": "otter"}
+        effect_key = THEME_EFFECTS.get(theme["name"]) or theme.get("_effect", "default")
+        self.assertEqual(effect_key, "otter")
+
+
 if __name__ == "__main__":
     unittest.main()
 
