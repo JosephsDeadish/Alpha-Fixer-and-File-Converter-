@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Plate -->
+  <ellipse cx="50" cy="88" rx="40" ry="10" fill="#3d2200"/>
+  <!-- Pancake stack layers (bottom to top) -->
+  <ellipse cx="50" cy="82" rx="36" ry="8" fill="#994400"/>
+  <ellipse cx="50" cy="75" rx="34" ry="7" fill="#c4600a"/>
+  <ellipse cx="50" cy="68" rx="32" ry="6.5" fill="#d4860a"/>
+  <ellipse cx="50" cy="62" rx="30" ry="6" fill="#e8a040"/>
+  <!-- Animated syrup drips -->
+  <path d="M30 62 Q28 72 27 82" stroke="#cc5500" stroke-width="4" fill="none" stroke-linecap="round">
+    <animate attributeName="d"
+      values="M30 62 Q28 68 27 72;M30 62 Q28 72 27 82;M30 62 Q28 72 27 82"
+      dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M55 62 Q57 71 59 80" stroke="#cc5500" stroke-width="3.5" fill="none" stroke-linecap="round">
+    <animate attributeName="d"
+      values="M55 62 Q57 67 59 70;M55 62 Q57 71 59 80;M55 62 Q57 71 59 80"
+      dur="2.5s" repeatCount="indefinite"/>
+  </path>
+  <path d="M70 64 Q72 72 74 80" stroke="#cc5500" stroke-width="3" fill="none" stroke-linecap="round">
+    <animate attributeName="d"
+      values="M70 64 Q72 69 74 72;M70 64 Q72 72 74 80;M70 64 Q72 72 74 80"
+      dur="1.8s" repeatCount="indefinite"/>
+  </path>
+  <!-- Butter pat on top (wobbling) -->
+  <rect x="43" y="52" width="14" height="8" rx="3" fill="#ffe066">
+    <animateTransform attributeName="transform" type="translate"
+      values="0 0;0 -2;0 0" dur="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.8;1" dur="1.5s" repeatCount="indefinite"/>
+  </rect>
+  <!-- Steam wisps -->
+  <path d="M35 50 Q33 45 35 40 Q37 35 35 30" stroke="#ffecc0" stroke-width="1.5" fill="none" opacity="0.5" stroke-linecap="round">
+    <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M50 48 Q48 43 50 38 Q52 33 50 28" stroke="#ffecc0" stroke-width="1.5" fill="none" opacity="0.5" stroke-linecap="round">
+    <animate attributeName="opacity" values="0.5;0;0.5" dur="2.3s" repeatCount="indefinite"/>
+  </path>
+  <path d="M65 50 Q67 45 65 40 Q63 35 65 30" stroke="#ffecc0" stroke-width="1.5" fill="none" opacity="0.4" stroke-linecap="round">
+    <animate attributeName="opacity" values="0.4;0;0.4" dur="1.8s" repeatCount="indefinite"/>
+  </path>
+</svg>

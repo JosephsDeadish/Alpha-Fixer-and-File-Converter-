@@ -530,6 +530,71 @@ PRESET_THEMES.update({
     "Alien": ALIEN_THEME,
 })
 
+# ---------------------------------------------------------------------------
+# Noodle theme (dangling noodle cursor, ribbon trail)
+# ---------------------------------------------------------------------------
+
+NOODLE_THEME = {
+    "name": "Noodle",
+    "background": "#1a1200",
+    "surface": "#2a1e00",
+    "primary": "#3d2d00",
+    "accent": "#ffdd44",
+    "text": "#fff8cc",
+    "text_secondary": "#ccaa44",
+    "border": "#554400",
+    "success": "#88cc44",
+    "warning": "#ff9900",
+    "error": "#ff4422",
+    "tab_selected": "#ffdd44",
+    "button_bg": "#3d2d00",
+    "button_hover": "#ffdd44",
+    "panda_white": "#fff8cc",
+    "panda_black": "#1a1200",
+    "progress_bar": "#ffdd44",
+    "input_bg": "#140e00",
+    "scrollbar": "#2a1e00",
+    "scrollbar_handle": "#ffdd44",
+    "_effect": "default",
+    "_cursor": "emoji:🍜",
+    "_trail_color": "#ffdd44",
+}
+
+# ---------------------------------------------------------------------------
+# Pancake theme (pancake cursor, syrup drip ribbon trail)
+# ---------------------------------------------------------------------------
+
+PANCAKE_THEME = {
+    "name": "Pancake",
+    "background": "#1a0e00",
+    "surface": "#2e1800",
+    "primary": "#3d2200",
+    "accent": "#d4860a",
+    "text": "#ffecc0",
+    "text_secondary": "#cc9944",
+    "border": "#663300",
+    "success": "#88bb33",
+    "warning": "#ffaa22",
+    "error": "#cc3300",
+    "tab_selected": "#d4860a",
+    "button_bg": "#3d2200",
+    "button_hover": "#d4860a",
+    "panda_white": "#ffecc0",
+    "panda_black": "#1a0e00",
+    "progress_bar": "#d4860a",
+    "input_bg": "#110900",
+    "scrollbar": "#2e1800",
+    "scrollbar_handle": "#d4860a",
+    "_effect": "default",
+    "_cursor": "emoji:🥞",
+    "_trail_color": "#d4860a",
+}
+
+PRESET_THEMES.update({
+    "Noodle": NOODLE_THEME,
+    "Pancake": PANCAKE_THEME,
+})
+
 SECRET_BLOOD_MOON_THEME = {
     "name": "Blood Moon",
     "background": "#110005",
@@ -1112,6 +1177,8 @@ THEME_SVG = {
     "Mermaid":          "mermaid.svg",
     "Shark Bait":       "shark_bait.svg",
     "Alien":            "alien.svg",
+    "Noodle":           "noodle.svg",
+    "Pancake":          "pancake.svg",
     # New hidden themes (dedicated SVGs)
     "Candy Land":        "candy_land.svg",
     "Zombie Apocalypse": "zombie_apocalypse.svg",
@@ -1170,6 +1237,8 @@ THEME_BANNER = {
     "Mermaid":         "🧜🐚  Alpha Fixer  &  File Converter  🐚🧜",
     "Shark Bait":      "🦈🩸  Alpha Fixer  &  File Converter  🩸🦈",
     "Alien":           "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
+    "Noodle":          "🍜🥢  Alpha Fixer  &  File Converter  🥢🍜",
+    "Pancake":         "🥞🍯  Alpha Fixer  &  File Converter  🍯🥞",
     # New hidden themes
     "Candy Land":        "🍭🌈  Alpha Fixer  &  File Converter  🌈🍭",
     "Zombie Apocalypse": "🧟💀  Alpha Fixer  &  File Converter  💀🧟",
@@ -1213,6 +1282,8 @@ THEME_STATUS_MESSAGES = {
     "Mermaid":         "🧜  Mermaid — Dive in, the water's divine.",
     "Shark Bait":      "🦈  Shark Bait — You're gonna need a bigger app.",
     "Alien":           "🛸  Alien — They've come for your pixels.",
+    "Noodle":          "🍜  Noodle — Slurp your images to perfection.",
+    "Pancake":         "🥞  Pancake — Stack those conversions high.",
     # New hidden themes
     "Candy Land":        "🍭  Candy Land — Everything is sweet here.",
     "Zombie Apocalypse": "🧟  Zombie Apocalypse — Brains… and bitmaps.",
@@ -1259,6 +1330,8 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
     "Mermaid":          ("🧜🖼", "🧜🔄", "🧜📋"),
     "Shark Bait":       ("🦈🖼", "🦈🔄", "🦈📋"),
     "Alien":            ("👽🖼", "👽🔄", "👽📋"),
+    "Noodle":           ("🍜🖼", "🍜🔄", "🍜📋"),
+    "Pancake":          ("🥞🖼", "🥞🔄", "🥞📋"),
     "Secret Skeleton":  ("☠🖼", "☠🔄", "☠📋"),
     "Secret Sakura":    ("🌸🖼", "🌸🔄", "🌸📋"),
     "Deep Ocean":       ("🌊🖼", "🌊🔄", "🌊📋"),
@@ -1391,6 +1464,16 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
         "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
         "👽🌌🛸  Alpha Fixer  &  File Converter  🛸🌌👽",
         "🛸⭐👽  Alpha Fixer  &  File Converter  👽⭐🛸",
+    ],
+    "Noodle": [
+        "🍜🥢  Alpha Fixer  &  File Converter  🥢🍜",
+        "🥢🍜♨  Alpha Fixer  &  File Converter  ♨🍜🥢",
+        "🍜🫕🥢  Alpha Fixer  &  File Converter  🥢🫕🍜",
+    ],
+    "Pancake": [
+        "🥞🍯  Alpha Fixer  &  File Converter  🍯🥞",
+        "🥞🧈🍯  Alpha Fixer  &  File Converter  🍯🧈🥞",
+        "🥞💛🍯  Alpha Fixer  &  File Converter  🍯💛🥞",
     ],
     # ---------------------------------------------------------------------------
     # Hidden / unlockable themes
@@ -2163,6 +2246,41 @@ QGroupBox {
     border-radius: 2px;
 }
 QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+"""
+
+    # ----------------------------------------------------------------- Noodle
+    if name == "Noodle":
+        return """
+/* Noodle: wavy organic shapes like dangling noodles */
+QPushButton {
+    border-radius: 20px 4px 20px 4px;
+    border: 2px solid #ffdd44;
+    font-weight: 600;
+}
+QPushButton:hover { border-color: #ffe77a; }
+QGroupBox { border: 1px solid #ffdd44; border-radius: 16px 4px 16px 4px; }
+QTabBar::tab { border-radius: 16px 4px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px 2px 14px 2px; }
+"""
+
+    # ----------------------------------------------------------------- Pancake
+    if name == "Pancake":
+        return """
+/* Pancake: thick round stacked shapes like a stack of pancakes */
+QPushButton {
+    border-radius: 18px;
+    border: 3px solid #d4860a;
+    border-bottom: 5px solid #994400;
+    font-weight: 700;
+}
+QPushButton:hover { border-color: #ffaa33; border-bottom-color: #cc5500; }
+QGroupBox {
+    border: 2px solid #d4860a;
+    border-bottom: 4px solid #994400;
+    border-radius: 14px;
+}
+QTabBar::tab { border-radius: 18px 18px 0px 0px; min-height: 32px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
 """
 
     return ""

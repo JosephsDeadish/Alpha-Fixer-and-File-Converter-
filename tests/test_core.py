@@ -434,8 +434,8 @@ class TestThemeEngineBannerFrames(unittest.TestCase):
 
     def test_preset_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.PRESET_THEMES), 16,
-                         f"Expected 16 preset themes, got {len(te.PRESET_THEMES)}")
+        self.assertEqual(len(te.PRESET_THEMES), 18,
+                         f"Expected 18 preset themes, got {len(te.PRESET_THEMES)}")
 
     def test_hidden_theme_count(self):
         te = self._import_theme_engine()

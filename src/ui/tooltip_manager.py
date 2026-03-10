@@ -253,6 +253,13 @@ _NORMAL: dict[str, list[str]] = {
         "Pair with a matching theme for maximum visual coherence.",
         "Hot pink and rainbow theme: chaotic perfection.",
     ],
+    "trail_style": [
+        "Choose the visual style of the mouse trail.",
+        "Ribbon/Noodle draws a smooth connected line through the mouse path.",
+        "Comet draws a tapered tail — bright head, fading end.",
+        "Fairy/Wave/Sparkle use themed emoji that float and fade along the trail.",
+        "Dots is the classic default — small fading circles.",
+    ],
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
         "Fairy Garden switches the trail to a sparkling emoji fairy-dust mode (✨💫⭐).",
@@ -287,6 +294,13 @@ _NORMAL: dict[str, list[str]] = {
         "Each theme has its own effect — bats, blood, stars, pandas, etc.",
         "Disable if particles are distracting during heavy batch work.",
         "You can also change the effect style in the Theme tab above.",
+    ],
+    "use_theme_effect": [
+        "When enabled, the click effect automatically matches the active theme.",
+        "Gore gets blood splatter, Bat Cave gets bats, Ocean gets bubbles — auto-selected.",
+        "Overrides the manual Effect Style selector below.",
+        "Disable to pick your own effect style regardless of the active theme.",
+        "Each of the 38 themes has its own default effect hard-coded to match its vibe.",
     ],
     "mode_combo": [
         "Choose how the alpha value is applied to each pixel.",
@@ -607,6 +621,13 @@ _DUMBED: dict[str, list[str]] = {
         "Go wild. Neon pink. Boring gray. Radioactive green. Sky's the limit.",
         "The color only shows if Trail is enabled. You did check that, right?",
     ],
+    "trail_style": [
+        "This lets you change what the trail looks like. Dots, ribbon, comet, emoji.",
+        "Ribbon = connected squiggle. Comet = bright head, fading tail. Dots = dots.",
+        "Fairy/Wave/Sparkle use emoji that float around. They're cute. You're welcome.",
+        "Pick whichever style you like. They all follow your mouse. That's the whole deal.",
+        "Use theme trail (below) to skip this and auto-pick the right style for your theme.",
+    ],
     "use_theme_trail": [
         "Check this and the trail changes color automatically for each theme. Smart.",
         "Fairy Garden gets sparkly emoji dust trail (✨💫⭐). Yes, really.",
@@ -641,6 +662,13 @@ _DUMBED: dict[str, list[str]] = {
         "The particles match the theme. Bats, blood, stars… all configurable.",
         "Turn it off if the constant explosions are too distracting. Fair.",
         "Each theme has different particles. See Theme tab to change which ones.",
+    ],
+    "use_theme_effect": [
+        "This makes the particles automatically match your theme. Pretty cool right?",
+        "On = particles are automatic. Off = you pick them yourself from the list.",
+        "Checked = app picks the right particles for you. Unchecked = your problem now.",
+        "Gore theme? Blood. Bat Cave? Bats. You get it. This just does it automatically.",
+        "Turn it off if you want to mix themes up. A panda theme with bat effects? Sure.",
     ],
     "mode_combo": [
         "Pick how the alpha gets applied. 'set' is probably the one you want.",
@@ -961,6 +989,13 @@ _VULGAR: dict[str, list[str]] = {
         "Pair it with the matching theme for a cohesive aesthetic. Or don't. Chaos is valid.",
         "Any hex color works. If you pick beige I will be personally disappointed.",
     ],
+    "trail_style": [
+        "Pick what your mouse trail actually looks like. Dots, comet, ribbon, emoji — your call.",
+        "Ribbon = smooth squiggly noodle following your cursor. Comet = tapered glow tail.",
+        "Fairy/Wave/Sparkle gives you floating emoji trailing your cursor. It's unhinged. We love it.",
+        "Dots is the boring default. You're better than dots. Use comet or ribbon at least.",
+        "If Use Theme Trail is checked, this setting is overridden. The theme picks for you.",
+    ],
     "use_theme_trail": [
         "Check this and your trail auto-matches the theme. Fairy Garden gets fairy f**king dust. ✨",
         "Ocean/Mermaid gets bubble emoji trail (🫧💧🌊). Ice gets crystal trail (✦❄✧). It's gorgeous.",
@@ -995,6 +1030,13 @@ _VULGAR: dict[str, list[str]] = {
         "Every click spawns themed particles. Bats fly. Blood splatters. Pandas explode. Beautiful.",
         "Turn it off for serious batch work. Turn it back on when you remember why this app is fun.",
         "The particles match the theme. Check the Theme tab to configure which chaos you prefer.",
+    ],
+    "use_theme_effect": [
+        "Let the app auto-pick the particle effect based on your theme. It knows what's best.",
+        "Check this and the app handles effects for you. Uncheck it to choose your own damn chaos.",
+        "With this on, Gore = blood, Bats = bats, Mermaid = magical sea shit. Makes sense, right?",
+        "Turn it off if you want to mix shit up — nothing stopping you using alien effects with gore.",
+        "This is just an automation toggle. On = auto. Off = manual. Not complicated, genius.",
     ],
     "mode_combo": [
         "'set' replaces all alpha values with your number. Use this one first, genius.",

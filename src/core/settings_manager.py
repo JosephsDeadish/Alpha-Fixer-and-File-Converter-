@@ -51,6 +51,7 @@ class SettingsManager:
         "use_theme_cursor": False,
         "trail_enabled": False,
         "trail_color": "#e94560",
+        "trail_style": "dots",
         "use_theme_trail": False,
         # Appearance
         "font_size": 10,
@@ -77,6 +78,7 @@ class SettingsManager:
         "tooltip_mode": "Normal",
         # Click effects
         "click_effects_enabled": True,
+        "use_theme_effect": False,
         # Custom emoji particles
         "custom_emoji": DEFAULT_CUSTOM_EMOJI,
         # Unlock flags
@@ -241,9 +243,9 @@ class SettingsManager:
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
         "sound_enabled", "click_sound_path",
-        "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "use_theme_trail",
+        "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "font_size",
-        "click_effects_enabled", "tooltip_mode",
+        "click_effects_enabled", "use_theme_effect", "tooltip_mode",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",

@@ -176,6 +176,20 @@ class SettingsDialog(QDialog):
         grp_effect = QGroupBox("Click Effect Style")
         effect_layout = QVBoxLayout(grp_effect)
         effect_layout.setSpacing(6)
+        # On/off + use-theme row (mirrors the Mouse Trail group layout)
+        self._click_effects_theme_check = QCheckBox("Enable click effects")
+        effect_layout.addWidget(self._click_effects_theme_check)
+        self._use_theme_effect_check = QCheckBox(
+            "Use theme effect  (auto-selects the matching effect for the active theme)"
+        )
+        self._use_theme_effect_check.setToolTip(
+            "When enabled the click effect is chosen automatically to match\n"
+            "the active theme — e.g. Gore gets blood splatter, Bat Cave gets bats."
+        )
+        effect_layout.addWidget(self._use_theme_effect_check)
+        self._use_theme_effect_check.toggled.connect(
+            lambda checked: self._effect_combo.setEnabled(not checked)
+        )
         effect_inner = QHBoxLayout()
         effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
@@ -226,6 +240,22 @@ class SettingsDialog(QDialog):
         trail_gl.addWidget(QLabel("Trail Color:"), 1, 0)
         self._trail_color_btn = ColorButton("#e94560")
         trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
+        trail_gl.addWidget(QLabel("Trail Style:"), 2, 0)
+        self._trail_style_combo = QComboBox()
+        self._trail_style_combo.addItems([
+            "Dots (default)",
+            "Ribbon / Noodle",
+            "Comet tail",
+            "Fairy dust ✨",
+            "Wave / Ocean 🌊",
+            "Sparkle / Ice ❄",
+        ])
+        self._trail_style_combo.setToolTip(
+            "Choose the visual style of the mouse trail.\n"
+            "Ribbon draws a connected smooth line, Comet draws a tapered tail,\n"
+            "Fairy/Wave/Sparkle use themed emoji that float and fade."
+        )
+        trail_gl.addWidget(self._trail_style_combo, 2, 1)
         self._use_theme_trail_check = QCheckBox(
             "Use theme trail  (auto-color + special style per effect)"
         )
@@ -234,9 +264,12 @@ class SettingsDialog(QDialog):
             "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
             "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
         )
-        trail_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
+        trail_gl.addWidget(self._use_theme_trail_check, 3, 0, 1, 2)
         self._use_theme_trail_check.toggled.connect(
             lambda checked: self._trail_color_btn.setEnabled(not checked)
+        )
+        self._use_theme_trail_check.toggled.connect(
+            lambda checked: self._trail_style_combo.setEnabled(not checked)
         )
         mouse_row.addWidget(grp_trail, 1)
 
@@ -359,10 +392,13 @@ class SettingsDialog(QDialog):
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
+        self._trail_style_combo.currentIndexChanged.connect(self._on_trail_style_changed)
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
         self._click_effects_check.toggled.connect(self._on_effects_enabled_changed)
+        self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
+        self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
 
     # ------------------------------------------------------------------
@@ -411,9 +447,10 @@ class SettingsDialog(QDialog):
         controls = [
             self._theme_preset_combo, self._effect_combo, self._sound_check,
             self._click_sound_edit, self._trail_check, self._trail_color_btn,
-            self._use_theme_trail_check, self._cursor_combo,
+            self._trail_style_combo, self._use_theme_trail_check, self._cursor_combo,
             self._use_theme_cursor_check, self._font_size_spin,
-            self._click_effects_check, self._tooltip_mode_combo,
+            self._click_effects_check, self._click_effects_theme_check,
+            self._use_theme_effect_check, self._tooltip_mode_combo,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -441,6 +478,13 @@ class SettingsDialog(QDialog):
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
         self._trail_color_btn.setEnabled(not use_theme_trail)
+        self._trail_style_combo.setEnabled(not use_theme_trail)
+        # Load persisted trail style into combo
+        _TRAIL_STYLE_MAP = {
+            "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5,
+        }
+        saved_style = self._settings.get("trail_style", "dots")
+        self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -451,6 +495,13 @@ class SettingsDialog(QDialog):
         self._click_effects_check.setChecked(
             self._settings.get("click_effects_enabled", True)
         )
+        # Sync Theme-tab on/off + use-theme checkboxes with persisted values
+        self._click_effects_theme_check.setChecked(
+            self._settings.get("click_effects_enabled", True)
+        )
+        use_theme_effect = self._settings.get("use_theme_effect", False)
+        self._use_theme_effect_check.setChecked(use_theme_effect)
+        self._effect_combo.setEnabled(not use_theme_effect)
         mode_val = self._settings.get("tooltip_mode", "Normal")
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
@@ -471,11 +522,14 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
+        mgr.register(self._trail_style_combo, "trail_style")
         mgr.register(self._use_theme_trail_check, "use_theme_trail")
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._click_effects_check, "click_effects_check")
+        mgr.register(self._click_effects_theme_check, "click_effects_check")
+        mgr.register(self._use_theme_effect_check, "use_theme_effect")
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply
@@ -680,6 +734,13 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
         self.settings_changed.emit()
 
+    def _on_trail_style_changed(self) -> None:
+        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle"]
+        idx = self._trail_style_combo.currentIndex()
+        style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
+        self._settings.set("trail_style", style)
+        self.settings_changed.emit()
+
     def _on_trail_color_changed(self, color: str) -> None:
         self._settings.set("trail_color", color)
         self.settings_changed.emit()
@@ -694,7 +755,27 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_effects_enabled_changed(self) -> None:
-        self._settings.set("click_effects_enabled", self._click_effects_check.isChecked())
+        # Keep both copies of the on/off toggle in sync
+        enabled = (self._click_effects_check.isChecked()
+                   or self._click_effects_theme_check.isChecked())
+        sender = self.sender()
+        if sender is self._click_effects_check:
+            enabled = self._click_effects_check.isChecked()
+            self._click_effects_theme_check.blockSignals(True)
+            self._click_effects_theme_check.setChecked(enabled)
+            self._click_effects_theme_check.blockSignals(False)
+        elif sender is self._click_effects_theme_check:
+            enabled = self._click_effects_theme_check.isChecked()
+            self._click_effects_check.blockSignals(True)
+            self._click_effects_check.setChecked(enabled)
+            self._click_effects_check.blockSignals(False)
+        self._settings.set("click_effects_enabled", enabled)
+        self.settings_changed.emit()
+
+    def _on_use_theme_effect_changed(self) -> None:
+        use_theme = self._use_theme_effect_check.isChecked()
+        self._settings.set("use_theme_effect", use_theme)
+        self._effect_combo.setEnabled(not use_theme)
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:

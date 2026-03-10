@@ -5,16 +5,18 @@ trail following the mouse cursor over the main application window.
 Works on any platform that supports Qt child widgets with transparent
 backgrounds (i.e., all modern Qt6 deployments).
 
-The overlay supports four trail styles:
+The overlay supports six trail styles:
   • "dots"    – the default: fading coloured dots (original behaviour).
   • "fairy"   – fairy-dust sparkle emoji (✨💫⭐) that float and fade gently.
   • "wave"    – ocean-themed bubbles and sea emoji (🫧💧🌊) for aquatic themes.
   • "sparkle" – icy crystal sparkle emoji (✦❄✧💎) for arctic/ice themes.
+  • "comet"   – a long tapered line-segment comet tail following the cursor.
+  • "ribbon"  – a smooth connected ribbon/noodle drawn between trail points.
 """
 from collections import deque
 
-from PyQt6.QtCore import Qt, QTimer, QEvent, QObject
-from PyQt6.QtGui import QColor, QPainter, QBrush, QFont
+from PyQt6.QtCore import Qt, QTimer, QEvent, QObject, QPoint
+from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen, QPainterPath
 from PyQt6.QtWidgets import QWidget, QApplication
 
 
@@ -29,6 +31,7 @@ _EMOJI_LISTS  = {
     "wave":    _WAVE_DUST,
     "sparkle": _SPARKLE_DUST,
 }
+_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon"}
 
 
 class MouseTrailOverlay(QWidget):
@@ -59,9 +62,9 @@ class MouseTrailOverlay(QWidget):
         self._main_window = main_window
         self._color = QColor("#e94560")
         # deque of (x, y, alpha_fraction, style_data) where 1.0 = freshest, 0.0 = invisible
-        self._trail: deque = deque(maxlen=30)
+        self._trail: deque = deque(maxlen=50)
         self._enabled = False
-        # Trail style: "dots" (default) or "fairy" (sparkle emoji)
+        # Trail style: "dots" (default), "fairy", "wave", "sparkle", "comet", "ribbon"
         self._style = "dots"
 
         self._timer = QTimer(self)
@@ -98,8 +101,8 @@ class MouseTrailOverlay(QWidget):
         self._color = QColor(color)
 
     def set_style(self, style: str) -> None:
-        """Set trail style: 'dots' (default), 'fairy', 'wave', or 'sparkle'."""
-        self._style = style if style in ("dots", "fairy", "wave", "sparkle") else "dots"
+        """Set trail style: 'dots', 'fairy', 'wave', 'sparkle', 'comet', or 'ribbon'."""
+        self._style = style if style in _ALL_STYLES else "dots"
         self._trail.clear()
 
     # ------------------------------------------------------------------
@@ -173,6 +176,10 @@ class MouseTrailOverlay(QWidget):
 
         if self._style in _EMOJI_STYLES:
             self._paint_emoji(painter)
+        elif self._style == "comet":
+            self._paint_comet(painter)
+        elif self._style == "ribbon":
+            self._paint_ribbon(painter)
         else:
             self._paint_dots(painter)
 
@@ -200,6 +207,45 @@ class MouseTrailOverlay(QWidget):
             painter.setOpacity(alpha / 255.0)
             painter.drawText(x - 8, y + 8, emoji)
         painter.setOpacity(1.0)
+
+    def _paint_comet(self, painter: QPainter) -> None:
+        """Paint a tapered comet-tail: wide bright head tapering to thin faint tail."""
+        trail_list = list(self._trail)
+        n = len(trail_list)
+        if n < 2:
+            return
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i, entry in enumerate(trail_list):
+            x, y, alpha_frac = entry[0], entry[1], entry[2]
+            # Newest entries are at the end of the deque; head = last entry
+            pos_frac = i / max(n - 1, 1)  # 0 = tail, 1 = head
+            alpha = max(0, min(255, int(alpha_frac * 230 * pos_frac)))
+            radius = max(1, int(pos_frac * 11))
+            c = QColor(self._color)
+            c.setAlpha(alpha)
+            painter.setBrush(QBrush(c))
+            painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
+
+    def _paint_ribbon(self, painter: QPainter) -> None:
+        """Paint a smooth connected ribbon/noodle through all trail points."""
+        trail_list = list(self._trail)
+        n = len(trail_list)
+        if n < 2:
+            return
+        # Draw a Bezier path through the trail points with varying width
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i in range(1, n):
+            x1, y1, a1 = trail_list[i-1][0], trail_list[i-1][1], trail_list[i-1][2]
+            x2, y2, a2 = trail_list[i][0], trail_list[i][1], trail_list[i][2]
+            alpha = max(0, min(255, int((a1 + a2) / 2 * 200)))
+            pos_frac = i / max(n - 1, 1)
+            width = max(1.0, pos_frac * 8.0)
+            c = QColor(self._color)
+            c.setAlpha(alpha)
+            pen = QPen(c, width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.drawLine(x1, y1, x2, y2)
+        painter.setPen(Qt.PenStyle.NoPen)
 
     def _paint_fairy(self, painter: QPainter) -> None:
         """Legacy alias for _paint_emoji (kept for compatibility)."""

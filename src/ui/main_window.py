@@ -300,12 +300,16 @@ class MainWindow(QMainWindow):
             return
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "Panda Dark")
-        # Prefer the theme dict's own _effect key (which the user may have
-        # customised in the settings dialog) over the hardcoded THEME_EFFECTS
-        # map.  This ensures that changing the "Click Effect Style" combo in
-        # Settings → Theme is actually respected even for preset themes.
-        # Fall back to THEME_EFFECTS only when no _effect key is stored.
-        effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme_name, "default")
+        # If "use theme effect" is enabled, always auto-select from THEME_EFFECTS map
+        if self._settings.get("use_theme_effect", False):
+            effect_key = THEME_EFFECTS.get(theme_name, "default")
+        else:
+            # Prefer the theme dict's own _effect key (which the user may have
+            # customised in the settings dialog) over the hardcoded THEME_EFFECTS
+            # map.  This ensures that changing the "Click Effect Style" combo in
+            # Settings → Theme is actually respected even for preset themes.
+            # Fall back to THEME_EFFECTS only when no _effect key is stored.
+            effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme_name, "default")
         self._click_effects.set_effect(effect_key)
         # Push the user's custom emoji list to the custom spawner
         custom_raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
@@ -593,7 +597,7 @@ class MainWindow(QMainWindow):
                 style = "dots"
         else:
             color = self._settings.get("trail_color", "#e94560")
-            style = "dots"
+            style = self._settings.get("trail_style", "dots")
         self._trail_overlay.set_color(color)
         self._trail_overlay.set_style(style)
         self._trail_overlay.set_enabled(
