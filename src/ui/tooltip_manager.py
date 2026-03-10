@@ -300,7 +300,7 @@ _NORMAL: dict[str, list[str]] = {
         "Gore gets blood splatter, Bat Cave gets bats, Ocean gets bubbles — auto-selected.",
         "Overrides the manual Effect Style selector below.",
         "Disable to pick your own effect style regardless of the active theme.",
-        "Each of the 38 themes has its own default effect hard-coded to match its vibe.",
+        "Each of the 40 themes has its own default effect hard-coded to match its vibe.",
     ],
     "mode_combo": [
         "Choose how the alpha value is applied to each pixel.",
