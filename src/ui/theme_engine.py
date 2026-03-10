@@ -80,7 +80,7 @@ NEON_THEME = {
     "scrollbar": "#111111",
     "scrollbar_handle": "#00ff88",
     "_effect": "neon",
-    "_cursor": "Cross",
+    "_cursor": "emoji:⚡",
     "_trail_color": "#00ff88",
 }
 
@@ -106,7 +106,7 @@ GORE_THEME = {
     "scrollbar": "#330000",
     "scrollbar_handle": "#cc0000",
     "_effect": "gore",
-    "_cursor": "Cross",
+    "_cursor": "emoji:💀",
     "_trail_color": "#cc0000",
 }
 
@@ -132,7 +132,7 @@ BAT_THEME = {
     "scrollbar": "#1a1a2e",
     "scrollbar_handle": "#7b2dff",
     "_effect": "bat",
-    "_cursor": "Default",
+    "_cursor": "emoji:🦇",
     "_trail_color": "#7b2dff",
 }
 
@@ -158,7 +158,7 @@ RAINBOW_THEME = {
     "scrollbar": "#ff44cc",
     "scrollbar_handle": "#ffff00",
     "_effect": "rainbow",
-    "_cursor": "Pointing Hand",
+    "_cursor": "emoji:🌈",
     "_trail_color": "#ffff00",
 }
 
@@ -210,7 +210,7 @@ GALAXY_THEME = {
     "scrollbar": "#070720",
     "scrollbar_handle": "#4477ff",
     "_effect": "galaxy",
-    "_cursor": "Cross",
+    "_cursor": "emoji:🌟",
     "_trail_color": "#4477ff",
 }
 
@@ -262,7 +262,7 @@ GOTH_THEME = {
     "scrollbar": "#111111",
     "scrollbar_handle": "#8800aa",
     "_effect": "goth",
-    "_cursor": "Default",
+    "_cursor": "emoji:💀",
     "_trail_color": "#8800aa",
 }
 
@@ -288,7 +288,7 @@ VOLCANO_THEME = {
     "scrollbar": "#2a1000",
     "scrollbar_handle": "#ff4400",
     "_effect": "fire",
-    "_cursor": "Cross",
+    "_cursor": "emoji:🌋",
     "_trail_color": "#ff4400",
 }
 
@@ -314,7 +314,7 @@ ARCTIC_THEME = {
     "scrollbar": "#071525",
     "scrollbar_handle": "#44aaff",
     "_effect": "ice",
-    "_cursor": "Cross",
+    "_cursor": "emoji:❄",
     "_trail_color": "#44aaff",
 }
 
@@ -341,7 +341,7 @@ SECRET_SKELETON_THEME = {
     "scrollbar": "#dddddd",
     "scrollbar_handle": "#1a1a1a",
     "_effect": "goth",
-    "_cursor": "Cross",
+    "_cursor": "emoji:💀",
     "_trail_color": "#1a1a1a",
     "_unlock": "skeleton",
 }
@@ -368,7 +368,7 @@ SECRET_SAKURA_THEME = {
     "scrollbar": "#2a1020",
     "scrollbar_handle": "#ff6699",
     "_effect": "sakura",
-    "_cursor": "Pointing Hand",
+    "_cursor": "emoji:🌸",
     "_trail_color": "#ff6699",
     "_unlock": "sakura",
 }
@@ -1621,75 +1621,207 @@ QLineEdit, QComboBox { border-radius: 0px; }
 """
 
     # ----------------------------------------------------------------- Mermaid
-    if name in ("Mermaid", "Deep Ocean"):
+    if name == "Mermaid":
         return """
-/* Ocean themes: wave-inspired alternating radius */
+/* Mermaid: iridescent wave-scale alternating radius */
 QPushButton {
-    border-radius: 10px 2px 10px 2px;
+    border-radius: 14px 2px 14px 2px;
     border: 1px solid #00ccaa;
+    font-weight: 600;
 }
 QPushButton:hover { border: 2px solid #00ffcc; }
-QTabBar::tab { border-radius: 10px 2px 0px 0px; }
-QGroupBox { border-radius: 10px; border: 1px solid #00aacc; }
+QTabBar::tab { border-radius: 14px 2px 0px 0px; }
+QGroupBox { border-radius: 12px; border: 1px solid #00aacc; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
 """
 
-    # ---------------------------------------------------------------- Volcano / Lava
-    if name in ("Volcano", "Lava Cave"):
+    # ----------------------------------------------------------------- Deep Ocean
+    if name == "Deep Ocean":
         return """
-/* Lava themes: fiery sharp-bottom glow buttons */
+/* Deep Ocean: smooth bioluminescent round shapes */
 QPushButton {
-    border-radius: 4px 4px 0px 0px;
-    border-bottom: 3px solid #cc3300;
-    border: 1px solid #ff4400;
+    border-radius: 18px;
+    border: 1px solid #0088cc;
+    border-bottom: 2px solid #005599;
+    font-weight: 600;
 }
-QPushButton:hover { border-bottom: 3px solid #ff8800; border: 1px solid #ff8800; }
-QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+QPushButton:hover { border-color: #00aaee; }
+QTabBar::tab { border-radius: 14px 14px 0px 0px; }
+QGroupBox { border-radius: 16px; border: 1px solid #0088cc; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
 """
 
-    # ------------------------------------------------------------------ Arctic / Ice
-    if name in ("Arctic", "Ice Cave"):
+    # ---------------------------------------------------------------- Volcano
+    if name == "Volcano":
         return """
-/* Ice themes: crisp thin borders, minimal aesthetic */
+/* Volcano: dramatic jagged fire-mouth bottom-glow shapes */
 QPushButton {
-    border-radius: 4px;
+    border-radius: 0px 8px 0px 8px;
+    border-bottom: 4px solid #cc2200;
+    border: 2px solid #ff4400;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+QPushButton:hover { border-bottom-color: #ff4400; border-color: #ff6622; }
+QTabBar::tab { border-radius: 0px 6px 0px 0px; }
+QGroupBox { border: 1px solid #ff4400; border-top: 2px solid #ff6600; border-radius: 0px; }
+QLineEdit, QComboBox { border-radius: 0px; }
+"""
+
+    # ---------------------------------------------------------------- Lava Cave
+    if name == "Lava Cave":
+        return """
+/* Lava Cave: rough volcanic rock corners, glowing seams */
+QPushButton {
+    border-radius: 4px 0px 4px 0px;
+    border-bottom: 3px solid #992200;
+    border: 1px solid #cc3300;
+    font-weight: 600;
+}
+QPushButton:hover { border-bottom-color: #ee4400; border-color: #ee4400; }
+QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+QGroupBox { border: 1px solid #cc3300; border-radius: 0px; }
+"""
+
+    # ------------------------------------------------------------------ Arctic
+    if name == "Arctic":
+        return """
+/* Arctic: clean crisp minimal ice-shelf shapes */
+QPushButton {
+    border-radius: 0px 10px 0px 10px;
     border: 1px solid #44aaff;
     letter-spacing: 0.5px;
 }
 QPushButton:hover { border: 2px solid #aaddff; }
-QGroupBox { border: 1px solid #22aaff; border-radius: 6px; }
-QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+QGroupBox { border: 1px solid #22aaff; border-radius: 0px 8px 0px 8px; }
+QTabBar::tab { border-radius: 8px 0px 0px 0px; }
+QLineEdit, QComboBox { border-radius: 0px 8px 0px 8px; }
+"""
+
+    # ------------------------------------------------------------------ Ice Cave
+    if name == "Ice Cave":
+        return """
+/* Ice Cave: crystalline stalactite-inspired angular shapes */
+QPushButton {
+    border-radius: 12px 0px 12px 0px;
+    border: 1px solid #88ddff;
+    border-top: 2px solid #aaddff;
+    letter-spacing: 0.5px;
+}
+QPushButton:hover { border-color: #bbddff; }
+QGroupBox { border: 1px solid #66ccff; border-top: 3px solid #aaddff; border-radius: 0px 12px 0px 12px; }
+QTabBar::tab { border-radius: 0px 12px 0px 0px; }
+QLineEdit, QComboBox { border-radius: 10px 0px 10px 0px; }
 """
 
     # --------------------------------------------------------------- Otter Cove
-    if name in ("Otter Cove", "Galaxy Otter"):
+    if name == "Otter Cove":
         return """
-/* Otter themes: warm rounded organic shapes */
+/* Otter Cove: warm rounded beach-rock organic shapes */
 QPushButton {
-    border-radius: 10px;
+    border-radius: 16px;
     border: 2px solid #a06030;
 }
 QPushButton:hover { border-color: #e8a040; }
-QGroupBox { border-radius: 10px; }
-QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+QGroupBox { border-radius: 12px; border: 1px solid #a06030; }
+QTabBar::tab { border-radius: 14px 14px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 12px; }
 """
 
-    # -------------------------------------------------------------- Galaxy themes
-    if name in ("Galaxy", "Nebula", "Abyssal Void"):
+    # --------------------------------------------------------------- Galaxy Otter
+    if name == "Galaxy Otter":
         return """
-/* Galaxy themes: sleek glowing borders */
+/* Galaxy Otter: playful cosmic-organic blend shapes */
 QPushButton {
-    border-radius: 6px;
-    border: 1px solid #4477ff;
-    letter-spacing: 0.5px;
+    border-radius: 12px 2px 12px 2px;
+    border: 2px solid #a06aff;
 }
-QPushButton:hover { border: 1px solid #88aaff; }
+QPushButton:hover { border-color: #cc99ff; }
+QGroupBox { border-radius: 10px 2px 10px 2px; border: 1px solid #a06aff; }
+QTabBar::tab { border-radius: 10px 2px 0px 0px; }
+"""
+
+    # -------------------------------------------------------------- Galaxy
+    if name == "Galaxy":
+        return """
+/* Galaxy: angular cosmic shapes with star-map precision */
+QPushButton {
+    border-radius: 2px;
+    border: 1px solid #4477ff;
+    border-left: 3px solid #6699ff;
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+QPushButton:hover { border-color: #88aaff; border-left-color: #aabbff; }
+QGroupBox { border: 1px solid #4477ff; border-top: 2px solid #6699ff; border-radius: 2px; }
+QTabBar::tab { border-radius: 2px 8px 0px 0px; }
+QLineEdit, QComboBox { border-radius: 2px; }
+"""
+
+    # -------------------------------------------------------------- Nebula
+    if name == "Nebula":
+        return """
+/* Nebula: soft cosmic cloud shapes with purple-magenta glow */
+QPushButton {
+    border-radius: 16px 4px 16px 4px;
+    border: 2px solid #aa44ff;
+}
+QPushButton:hover { border-color: #cc88ff; }
+QGroupBox { border: 1px solid #aa44ff; border-top: 3px solid #cc88ff; border-radius: 14px 4px 14px 4px; }
+QTabBar::tab { border-radius: 14px 14px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 12px; }
+"""
+
+    # -------------------------------------------------------------- Abyssal Void
+    if name == "Abyssal Void":
+        return """
+/* Abyssal Void: ultra-minimal zero-radius void shapes */
+QPushButton {
+    border-radius: 0px;
+    border: 1px solid #4400aa;
+    border-left: 3px solid #6600cc;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+QPushButton:hover { border-left-color: #8844ff; }
+QGroupBox { border: 1px solid #4400aa; border-top: 2px solid #6600cc; border-radius: 0px; }
+QTabBar::tab { border-radius: 0px; }
+QLineEdit, QComboBox { border-radius: 0px; }
 """
 
     # --------------------------------------------------------------- Panda themes
-    if name in ("Panda Dark", "Panda Light", "Neon Panda"):
-        extra = ""
-        if name == "Neon Panda":
-            extra = """
+    if name == "Panda Dark":
+        return """
+/* Panda Dark: bold rounded panda-style with contrast border */
+QPushButton {
+    border-radius: 10px;
+    border: 2px solid #e94560;
+    font-weight: 700;
+}
+QPushButton:hover { border-color: #ff6680; }
+QGroupBox { border: 1px solid #e94560; border-top: 2px solid #e94560; border-radius: 8px; }
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 8px; }
+"""
+
+    if name == "Panda Light":
+        return """
+/* Panda Light: soft white rounded panda shapes */
+QPushButton {
+    border-radius: 12px;
+    border: 2px solid #e94560;
+    font-weight: 600;
+}
+QPushButton:hover { border-color: #ff6680; }
+QGroupBox { border: 1px solid #e94560; border-top: 2px solid #e94560; border-radius: 10px; }
+QTabBar::tab { border-radius: 12px 12px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
+"""
+
+    if name == "Neon Panda":
+        return """
+/* Neon Panda: electric neon glow panda shapes */
 QPushButton {
     border-radius: 8px;
     border: 2px solid #ff44aa;
@@ -1699,16 +1831,6 @@ QPushButton:hover { border-color: #ff88cc; }
 QTabBar::tab { border-radius: 8px 8px 0px 0px; }
 QGroupBox { border: 1px solid #ff44aa; border-radius: 8px; }
 """
-        else:
-            extra = """
-QPushButton {
-    border-radius: 8px;
-    border: 2px solid #555555;
-}
-QPushButton:hover { border-color: #aaaaaa; }
-QTabBar::tab { border-radius: 8px 8px 0px 0px; }
-"""
-        return extra
 
     # --------------------------------------------------------------- Shark Bait
     if name == "Shark Bait":
