@@ -508,6 +508,60 @@ def get_theme_status(theme_name: str) -> str:
     return THEME_STATUS_MESSAGES.get(theme_name, "Ready  🐼")
 
 
+# Per-theme animated banner frames.  Themes listed here have a cycling banner;
+# each element in the list is displayed in turn (one frame per ~800 ms).
+# Themes not listed fall back to their single THEME_BANNER entry.
+THEME_BANNER_FRAMES: dict[str, list[str]] = {
+    "Fairy Garden": [
+        "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
+        "✨🌟🧚  Alpha Fixer  &  File Converter  🧚🌟✨",
+        "🪄💜✨  Alpha Fixer  &  File Converter  ✨💜🪄",
+        "🌸🧚🌟  Alpha Fixer  &  File Converter  🌟🧚🌸",
+    ],
+    "Bat Cave": [
+        "🦇🌙💜  Alpha Fixer  &  File Converter  💜🌙🦇",
+        "🌙🦇  Alpha Fixer  &  File Converter  🦇🌙",
+        "💜🦇🌙  Alpha Fixer  &  File Converter  🌙🦇💜",
+    ],
+    "Galaxy": [
+        "✦  Alpha Fixer  &  File Converter  ✦",
+        "⭐✦  Alpha Fixer  &  File Converter  ✦⭐",
+        "✦🌌⭐  Alpha Fixer  &  File Converter  ⭐🌌✦",
+    ],
+    "Galaxy Otter": [
+        "🦦✦  Alpha Fixer  &  File Converter  ✦🦦",
+        "✦🦦⭐  Alpha Fixer  &  File Converter  ⭐🦦✦",
+        "🦦🌌✦  Alpha Fixer  &  File Converter  ✦🌌🦦",
+    ],
+    "Neon Panda": [
+        "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
+        "🐼⚡🌟  Alpha Fixer  &  File Converter  🌟⚡🐼",
+        "⚡✦🐼  Alpha Fixer  &  File Converter  🐼✦⚡",
+    ],
+    "Volcano": [
+        "🌋  Alpha Fixer  &  File Converter  🔥",
+        "🔥🌋  Alpha Fixer  &  File Converter  🌋🔥",
+        "🌋💥🔥  Alpha Fixer  &  File Converter  🔥💥🌋",
+    ],
+    "Secret Sakura": [
+        "🌸  Alpha Fixer  &  File Converter  🌸",
+        "🌸🌺  Alpha Fixer  &  File Converter  🌺🌸",
+        "🌺🌸🌷  Alpha Fixer  &  File Converter  🌷🌸🌺",
+    ],
+}
+
+
+def get_theme_banner_frames(theme_name: str) -> list[str]:
+    """Return the animated banner frame list for *theme_name*.
+
+    Returns a single-element list (no animation) if the theme has no animation
+    frames defined, falling back to the static THEME_BANNER text.
+    """
+    if theme_name in THEME_BANNER_FRAMES:
+        return list(THEME_BANNER_FRAMES[theme_name])
+    return [get_theme_banner(theme_name)]
+
+
 def build_stylesheet(theme: Optional[dict] = None) -> str:
     """Generate a full Qt stylesheet from the given theme dictionary."""
     t = {**DEFAULT_THEME, **(theme or {})}

@@ -1629,3 +1629,67 @@ class TestClickEffectsEmojiFont(unittest.TestCase):
         self.assertIn(",", _EMOJI_FONT_FAMILIES,
                       "Should list multiple fallback font families")
 
+
+
+# ---------------------------------------------------------------------------
+# Banner animation frames
+# ---------------------------------------------------------------------------
+
+class TestBannerAnimationFrames(unittest.TestCase):
+    def test_get_theme_banner_frames_returns_list(self):
+        from src.ui.theme_engine import get_theme_banner_frames
+        frames = get_theme_banner_frames("Fairy Garden")
+        self.assertIsInstance(frames, list)
+        self.assertGreater(len(frames), 0)
+
+    def test_fairy_garden_has_multiple_frames(self):
+        from src.ui.theme_engine import get_theme_banner_frames
+        frames = get_theme_banner_frames("Fairy Garden")
+        self.assertGreater(len(frames), 1,
+                           "Fairy Garden should have animated multi-frame banner")
+
+    def test_bat_cave_has_multiple_frames(self):
+        from src.ui.theme_engine import get_theme_banner_frames
+        frames = get_theme_banner_frames("Bat Cave")
+        self.assertGreater(len(frames), 1)
+
+    def test_unknown_theme_returns_single_frame(self):
+        from src.ui.theme_engine import get_theme_banner_frames, get_theme_banner
+        frames = get_theme_banner_frames("NoSuchTheme99")
+        self.assertEqual(len(frames), 1)
+        self.assertIn("Alpha Fixer", frames[0])
+        # The single frame must be consistent with get_theme_banner fallback
+        self.assertEqual(frames[0], get_theme_banner("NoSuchTheme99"))
+
+    def test_all_frames_are_non_empty_strings(self):
+        from src.ui.theme_engine import THEME_BANNER_FRAMES
+        for theme_name, frames in THEME_BANNER_FRAMES.items():
+            for frame in frames:
+                self.assertIsInstance(frame, str, f"{theme_name} frame must be str")
+                self.assertGreater(len(frame.strip()), 0,
+                                   f"{theme_name} has empty banner frame")
+
+    def test_fairy_garden_frames_have_fairy_emojis(self):
+        from src.ui.theme_engine import THEME_BANNER_FRAMES
+        frames = THEME_BANNER_FRAMES.get("Fairy Garden", [])
+        for frame in frames:
+            self.assertTrue(
+                any(e in frame for e in ["🧚", "🪄", "✨", "🌟", "💜"]),
+                f"Fairy Garden frame has no fairy emoji: {frame}"
+            )
+
+    def test_animated_svgs_have_animate_elements(self):
+        """Key theme SVGs should contain SVG animation elements."""
+        import os
+        svg_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "src", "assets", "svg"
+        )
+        animated_themes = ["fairy_garden.svg", "bat_cave.svg", "galaxy.svg", "neon.svg", "gore.svg"]
+        for filename in animated_themes:
+            path = os.path.join(svg_dir, filename)
+            if os.path.isfile(path):
+                with open(path, encoding="utf-8") as f:
+                    content = f.read()
+                self.assertIn("<animate", content,
+                              f"{filename} should contain SVG animation elements")

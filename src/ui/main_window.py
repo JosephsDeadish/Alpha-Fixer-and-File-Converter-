@@ -3,7 +3,7 @@ Main application window.
 """
 import webbrowser
 
-from PyQt6.QtCore import Qt, QSize, QRect
+from PyQt6.QtCore import Qt, QSize, QRect, QTimer
 from PyQt6.QtGui import QAction, QCursor, QFont, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
@@ -20,6 +20,7 @@ from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
     get_theme_svg_path, get_theme_banner, get_theme_status,
+    get_theme_banner_frames,
 )
 from ..version import __version__
 
@@ -77,6 +78,9 @@ class MainWindow(QMainWindow):
         self._banner_lbl = None
         self._status_bar = None
         self._unlock_timer = None
+        self._anim_timer = None    # drives banner emoji cycling
+        self._banner_frames: list[str] = []
+        self._banner_frame_idx: int = 0
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -135,11 +139,14 @@ class MainWindow(QMainWindow):
         cv.setContentsMargins(0, 0, 0, 0)
         cv.setSpacing(0)
 
-        # Panda banner
+        # Panda banner — enable word-wrap so long animated theme banners wrap
+        # cleanly rather than being clipped on smaller windows.
         banner = QLabel("🐼  Alpha Fixer  &  File Converter")
         banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         banner.setObjectName("header")
         banner.setStyleSheet("padding: 10px; font-size: 20px;")
+        banner.setWordWrap(True)
+        banner.setMinimumHeight(44)
         cv.addWidget(banner)
         self._banner_lbl = banner
 
@@ -176,6 +183,7 @@ class MainWindow(QMainWindow):
 
         self._theme_label = QLabel("  Theme: Panda Dark  ")
         self._theme_label.setObjectName("subheader")
+        self._theme_label.setMinimumWidth(160)  # prevent squishing on long theme names
         toolbar.addWidget(self._theme_label)
 
         toolbar.addSeparator()
@@ -372,9 +380,12 @@ class MainWindow(QMainWindow):
         QApplication.instance().setStyleSheet(build_stylesheet(theme))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
-        # Update per-theme banner text
+        # Set up animated banner frames and restart animation timer
+        self._banner_frames = get_theme_banner_frames(theme_name)
+        self._banner_frame_idx = 0
         if self._banner_lbl is not None:
-            self._banner_lbl.setText(get_theme_banner(theme_name))
+            self._banner_lbl.setText(self._banner_frames[0])
+        self._restart_banner_anim()
         # Update status bar with per-theme flavor message
         if self._status_bar is not None:
             self._status_bar.showMessage(get_theme_status(theme_name))
@@ -389,6 +400,26 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
+
+    def _restart_banner_anim(self) -> None:
+        """Start (or restart) the banner animation timer based on the current theme's frames."""
+        # Stop any previous timer
+        if self._anim_timer is not None:
+            self._anim_timer.stop()
+        # Only animate when there are multiple frames
+        if len(self._banner_frames) <= 1:
+            return
+        if self._anim_timer is None:
+            self._anim_timer = QTimer(self)
+            self._anim_timer.timeout.connect(self._tick_banner_anim)
+        self._anim_timer.start(800)  # advance frame every 800 ms
+
+    def _tick_banner_anim(self) -> None:
+        """Advance to the next banner frame for the current theme."""
+        if not self._banner_frames or self._banner_lbl is None:
+            return
+        self._banner_frame_idx = (self._banner_frame_idx + 1) % len(self._banner_frames)
+        self._banner_lbl.setText(self._banner_frames[self._banner_frame_idx])
 
     def _make_svg_badge(self):
         """Create a small SVG theme badge widget.  Returns None if QtSvg unavailable."""
