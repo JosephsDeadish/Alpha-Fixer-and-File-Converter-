@@ -457,6 +457,57 @@ def get_theme_svg_path(theme_name: str) -> str:
     return path if _os.path.isfile(path) else ""
 
 
+# ---------------------------------------------------------------------------
+# Per-theme banner text and status-bar flavor messages
+# ---------------------------------------------------------------------------
+
+THEME_BANNER = {
+    "Panda Dark":      "🐼  Alpha Fixer  &  File Converter",
+    "Panda Light":     "🐼  Alpha Fixer  &  File Converter  🤍",
+    "Neon Panda":      "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
+    "Gore":            "🩸  Alpha Fixer  &  File Converter  🩸",
+    "Bat Cave":        "🦇  Alpha Fixer  &  File Converter  🦇",
+    "Rainbow Chaos":   "🌈  Alpha Fixer  &  File Converter  🌈",
+    "Otter Cove":      "🦦🤘  Alpha Fixer  &  File Converter  🤘🦦",
+    "Galaxy":          "✦  Alpha Fixer  &  File Converter  ✦",
+    "Galaxy Otter":    "🦦✦  Alpha Fixer  &  File Converter  ✦🦦",
+    "Goth":            "💀  Alpha Fixer  &  File Converter  💀",
+    "Volcano":         "🌋  Alpha Fixer  &  File Converter  🔥",
+    "Arctic":          "❄  Alpha Fixer  &  File Converter  ❄",
+    "Fairy Garden":    "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
+    "Secret Skeleton": "☠  Alpha Fixer  &  File Converter  ☠",
+    "Secret Sakura":   "🌸  Alpha Fixer  &  File Converter  🌸",
+}
+
+THEME_STATUS_MESSAGES = {
+    "Panda Dark":      "🐼  Panda Dark — Ready to chew some bamboo!",
+    "Panda Light":     "🐼  Panda Light — Squeaky clean and ready!",
+    "Neon Panda":      "⚡  Neon Panda — Electrifying and ready!",
+    "Gore":            "🩸  Gore — Proceed with caution…",
+    "Bat Cave":        "🦇  Bat Cave — Darkness welcome here.",
+    "Rainbow Chaos":   "🌈  Rainbow Chaos — Pure chromatic madness!",
+    "Otter Cove":      "🦦  Otter Cove — Chillin' by the water. 🤘",
+    "Galaxy":          "✦  Galaxy — Lost in space, found in pixels.",
+    "Galaxy Otter":    "🦦✦  Galaxy Otter — Rockin' the cosmos!",
+    "Goth":            "💀  Goth — Into the abyss we go.",
+    "Volcano":         "🌋  Volcano — Things are heating up!",
+    "Arctic":          "❄  Arctic — Stay frosty.",
+    "Fairy Garden":    "🧚✨  Fairy Garden — Sprinkle some magic!",
+    "Secret Skeleton": "☠  Secret Skeleton — The dead have awakened…",
+    "Secret Sakura":   "🌸  Secret Sakura — Petals on the wind.",
+}
+
+
+def get_theme_banner(theme_name: str) -> str:
+    """Return the header banner text for *theme_name*, falling back to default."""
+    return THEME_BANNER.get(theme_name, "🐼  Alpha Fixer  &  File Converter")
+
+
+def get_theme_status(theme_name: str) -> str:
+    """Return the status-bar flavor message for *theme_name*."""
+    return THEME_STATUS_MESSAGES.get(theme_name, "Ready  🐼")
+
+
 def build_stylesheet(theme: Optional[dict] = None) -> str:
     """Generate a full Qt stylesheet from the given theme dictionary."""
     t = {**DEFAULT_THEME, **(theme or {})}

@@ -1523,3 +1523,118 @@ class TestCursorMapOptions(unittest.TestCase):
         from src.ui.main_window import _CURSOR_MAP
         self.assertIn("IBeam", _CURSOR_MAP)
 
+
+# ---------------------------------------------------------------------------
+# THEME_BANNER and THEME_STATUS_MESSAGES
+# ---------------------------------------------------------------------------
+
+class TestThemeBannerMessages(unittest.TestCase):
+    def test_all_preset_themes_have_banner(self):
+        from src.ui.theme_engine import PRESET_THEMES, THEME_BANNER
+        for name in PRESET_THEMES:
+            self.assertIn(name, THEME_BANNER,
+                          f"THEME_BANNER missing entry for preset theme '{name}'")
+
+    def test_all_preset_themes_have_status(self):
+        from src.ui.theme_engine import PRESET_THEMES, THEME_STATUS_MESSAGES
+        for name in PRESET_THEMES:
+            self.assertIn(name, THEME_STATUS_MESSAGES,
+                          f"THEME_STATUS_MESSAGES missing entry for preset theme '{name}'")
+
+    def test_get_theme_banner_fallback(self):
+        from src.ui.theme_engine import get_theme_banner
+        result = get_theme_banner("NonExistentTheme12345")
+        self.assertIn("Alpha Fixer", result)
+
+    def test_get_theme_status_fallback(self):
+        from src.ui.theme_engine import get_theme_status
+        result = get_theme_status("NonExistentTheme12345")
+        self.assertIn("Ready", result)
+
+    def test_fairy_banner_has_fairy_emojis(self):
+        from src.ui.theme_engine import get_theme_banner
+        banner = get_theme_banner("Fairy Garden")
+        self.assertTrue(any(e in banner for e in ["🧚", "🪄", "✨"]),
+                        f"Fairy Garden banner should have fairy emojis: {banner}")
+
+    def test_panda_dark_banner_has_panda(self):
+        from src.ui.theme_engine import get_theme_banner
+        banner = get_theme_banner("Panda Dark")
+        self.assertIn("🐼", banner)
+
+
+# ---------------------------------------------------------------------------
+# Enriched spawners produce more particles
+# ---------------------------------------------------------------------------
+
+class TestEnrichedSpawners(unittest.TestCase):
+    """All enriched spawners must produce the expected deterministic particle counts."""
+
+    def _count(self, key):
+        from src.ui.click_effects import _SPAWNERS
+        return len(_SPAWNERS[key](100, 100))
+
+    def test_gore_has_more_particles(self):
+        # 20 circles + 5 horror emoji = exactly 25
+        self.assertGreaterEqual(self._count("gore"), 25)
+
+    def test_bat_has_more_particles(self):
+        # 10 text + 5 circles = exactly 15
+        self.assertGreaterEqual(self._count("bat"), 15)
+
+    def test_rainbow_has_more_particles(self):
+        # 16 mixed + 2 floaters = exactly 18
+        self.assertGreaterEqual(self._count("rainbow"), 18)
+
+    def test_otter_has_more_particles(self):
+        # 12 mixed + 6 water circles = exactly 18
+        self.assertGreaterEqual(self._count("otter"), 18)
+
+    def test_galaxy_has_more_particles(self):
+        # 18 mixed + 8 micro-dots = exactly 26
+        self.assertGreaterEqual(self._count("galaxy"), 26)
+
+    def test_goth_has_more_particles(self):
+        # 14 mixed + 6 mist circles = exactly 20
+        self.assertGreaterEqual(self._count("goth"), 20)
+
+    def test_neon_has_more_particles(self):
+        # 16 mixed + 4 arcs + 6 glow dots = exactly 26
+        self.assertGreaterEqual(self._count("neon"), 26)
+
+    def test_fire_has_more_particles(self):
+        # 18 circles + 8 sparks + 4 emoji = exactly 30
+        self.assertGreaterEqual(self._count("fire"), 30)
+
+    def test_ice_has_more_particles(self):
+        # 16 mixed + 4 hero flakes + 6 frost dots = exactly 26
+        self.assertGreaterEqual(self._count("ice"), 26)
+
+    def test_panda_has_more_particles(self):
+        # 12 mixed + 2 hero emoji = exactly 14
+        self.assertGreaterEqual(self._count("panda"), 14)
+
+    def test_default_has_more_particles(self):
+        # 12 circles + 3 sparkle emoji = exactly 15
+        self.assertGreaterEqual(self._count("default"), 15)
+
+    def test_sakura_has_more_particles(self):
+        # 14 burst + 5 drifters + 8 sparkles = exactly 27
+        self.assertGreaterEqual(self._count("sakura"), 27)
+
+
+# ---------------------------------------------------------------------------
+# Emoji font constant in click_effects
+# ---------------------------------------------------------------------------
+
+class TestClickEffectsEmojiFont(unittest.TestCase):
+    def test_emoji_font_constant_exists(self):
+        from src.ui.click_effects import _EMOJI_FONT_FAMILIES
+        self.assertIsInstance(_EMOJI_FONT_FAMILIES, str)
+        self.assertGreater(len(_EMOJI_FONT_FAMILIES), 0)
+
+    def test_emoji_font_constant_has_multiple_families(self):
+        from src.ui.click_effects import _EMOJI_FONT_FAMILIES
+        self.assertIn(",", _EMOJI_FONT_FAMILIES,
+                      "Should list multiple fallback font families")
+

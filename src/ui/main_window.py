@@ -19,7 +19,7 @@ from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
-    get_theme_svg_path,
+    get_theme_svg_path, get_theme_banner, get_theme_status,
 )
 from ..version import __version__
 
@@ -74,6 +74,9 @@ class MainWindow(QMainWindow):
         self._tooltip_mgr = None
         self._sound = None
         self._svg_badge = None
+        self._banner_lbl = None
+        self._status_bar = None
+        self._unlock_timer = None
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -138,6 +141,7 @@ class MainWindow(QMainWindow):
         banner.setObjectName("header")
         banner.setStyleSheet("padding: 10px; font-size: 20px;")
         cv.addWidget(banner)
+        self._banner_lbl = banner
 
         self._tabs = QTabWidget()
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
@@ -267,22 +271,48 @@ class MainWindow(QMainWindow):
 
     def _check_unlocks(self) -> None:
         """Check whether any hidden theme should be unlocked."""
-        total = self._settings.get("total_clicks", 0) + 1
-        self._settings.set("total_clicks", total)
+        try:
+            total = self._settings.get("total_clicks", 0) + 1
+            self._settings.set("total_clicks", total)
+        except Exception:
+            return
+
+        newly_unlocked = False
 
         # Secret Skeleton unlocks at 100 total clicks
         already_unlocked = self._settings.get("unlock_skeleton", False)
         if not already_unlocked and total >= 100:
             self._settings.set("unlock_skeleton", True)
             self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
-            QApplication.instance().beep()
+            try:
+                QApplication.instance().beep()
+            except Exception:
+                pass
+            newly_unlocked = True
 
         # Secret Sakura unlocks at 250 total clicks
         already_sakura = self._settings.get("unlock_sakura", False)
         if not already_sakura and total >= 250:
             self._settings.set("unlock_sakura", True)
             self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (Settings → Theme)")
-            QApplication.instance().beep()
+            try:
+                QApplication.instance().beep()
+            except Exception:
+                pass
+            newly_unlocked = True
+
+        # Auto-clear the unlock banner after 6 seconds
+        if newly_unlocked:
+            self._schedule_unlock_clear()
+
+    def _schedule_unlock_clear(self) -> None:
+        """Start (or restart) a one-shot timer that clears the unlock label."""
+        from PyQt6.QtCore import QTimer
+        if self._unlock_timer is None:
+            self._unlock_timer = QTimer(self)
+            self._unlock_timer.setSingleShot(True)
+            self._unlock_timer.timeout.connect(lambda: self._unlock_lbl.setText(""))
+        self._unlock_timer.start(6000)
 
     def _apply_cursor(self):
         use_theme = self._settings.get("use_theme_cursor", False)
@@ -340,7 +370,14 @@ class MainWindow(QMainWindow):
     def _apply_theme(self):
         theme = self._settings.get_theme()
         QApplication.instance().setStyleSheet(build_stylesheet(theme))
-        self._theme_label.setText(f"  Theme: {theme.get('name', 'Custom')}  ")
+        theme_name = theme.get("name", "Custom")
+        self._theme_label.setText(f"  Theme: {theme_name}  ")
+        # Update per-theme banner text
+        if self._banner_lbl is not None:
+            self._banner_lbl.setText(get_theme_banner(theme_name))
+        # Update status bar with per-theme flavor message
+        if self._status_bar is not None:
+            self._status_bar.showMessage(get_theme_status(theme_name))
         # Re-apply cursor so theme-cursor mode updates immediately on theme change
         self._apply_cursor()
         # Refresh SVG badge to match new theme
