@@ -33,10 +33,15 @@ _EFFECT_OPTIONS = [
     ("neon",         "Neon — Electric lightning bolts ⚡"),
     ("fire",         "Fire — Rising flames 🔥"),
     ("ice",          "Ice — Snowflakes & frost ❄"),
+    ("sparkle",      "Sparkle — Glittering star crystals ✨❄"),
     ("panda",        "Panda — Cute panda shower 🐼"),
     ("sakura",       "Sakura — Cherry blossom petals 🌸"),
     ("fairy",        "Fairy Garden — Glitter & magic wands 🪄✨"),
     ("ocean",        "Deep Ocean — Bubbles & sea creatures 🦑🫧"),
+    ("ripple",       "Ripple — Water splash & waves 💧🌊"),
+    ("mermaid",      "Mermaid — Magical sea creatures 🧜🐠"),
+    ("shark",        "Shark — Bite & oceanic carnage 🦈🩸"),
+    ("alien",        "Alien — UFO abduction beams 🛸👽"),
     ("custom",       "Custom — Your own emoji 🎨"),
 ]
 

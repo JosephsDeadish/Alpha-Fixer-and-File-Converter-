@@ -60,6 +60,7 @@ class _AlphaPreviewLoader(QThread):
                 load_image,
                 apply_alpha_preset,
                 apply_manual_alpha,
+                apply_rgba_adjust,
             )
             from .preview_pane import _pil_to_qimage
 
@@ -82,6 +83,16 @@ class _AlphaPreviewLoader(QThread):
                 )
             else:
                 processed = orig
+
+            # Apply optional RGB channel adjustments
+            rgb = self._manual.get("rgb") if self._manual else None
+            if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b")):
+                processed = apply_rgba_adjust(
+                    processed,
+                    red_delta=rgb.get("r", 0),
+                    green_delta=rgb.get("g", 0),
+                    blue_delta=rgb.get("b", 0),
+                )
 
             after_qi = _pil_to_qimage(processed)
             after_stats = self._alpha_stats(processed)
@@ -242,8 +253,8 @@ class AlphaFixerTab(QWidget):
         rv.addWidget(grp_preset)
 
         # Fine-tune section
-        grp_tune = QGroupBox("Fine-Tune Alpha")
-        grp_tune.setMinimumHeight(248)
+        grp_tune = QGroupBox("Fine-Tune Alpha && RGB Channels")
+        grp_tune.setMinimumHeight(360)
         gt_layout = QGridLayout(grp_tune)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
@@ -280,6 +291,41 @@ class AlphaFixerTab(QWidget):
         self._use_preset_check = QCheckBox("Use preset (ignore fine-tune)")
         self._use_preset_check.setChecked(True)
         gt_layout.addWidget(self._use_preset_check, 5, 0, 1, 2)
+
+        # --- RGB channel adjustments ---
+        rgb_sep = QLabel("─── RGB Channel Adjust (delta –255 to +255) ───")
+        rgb_sep.setObjectName("subheader")
+        rgb_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gt_layout.addWidget(rgb_sep, 6, 0, 1, 2)
+
+        gt_layout.addWidget(QLabel("Red adjust:"), 7, 0)
+        self._red_spin = QSpinBox()
+        self._red_spin.setRange(-255, 255)
+        self._red_spin.setValue(0)
+        self._red_spin.setPrefix("R ")
+        gt_layout.addWidget(self._red_spin, 7, 1)
+
+        gt_layout.addWidget(QLabel("Green adjust:"), 8, 0)
+        self._green_spin = QSpinBox()
+        self._green_spin.setRange(-255, 255)
+        self._green_spin.setValue(0)
+        self._green_spin.setPrefix("G ")
+        gt_layout.addWidget(self._green_spin, 8, 1)
+
+        gt_layout.addWidget(QLabel("Blue adjust:"), 9, 0)
+        self._blue_spin = QSpinBox()
+        self._blue_spin.setRange(-255, 255)
+        self._blue_spin.setValue(0)
+        self._blue_spin.setPrefix("B ")
+        gt_layout.addWidget(self._blue_spin, 9, 1)
+
+        self._apply_rgb_check = QCheckBox("Apply RGB adjustments")
+        self._apply_rgb_check.setChecked(False)
+        self._apply_rgb_check.setToolTip(
+            "When checked, the Red/Green/Blue deltas are applied on top of\n"
+            "the alpha fix. Useful for colour-correcting game textures."
+        )
+        gt_layout.addWidget(self._apply_rgb_check, 10, 0, 1, 2)
 
         rv.addWidget(grp_tune)
 
@@ -372,6 +418,10 @@ class AlphaFixerTab(QWidget):
         self._threshold_spin.valueChanged.connect(self._on_finetune_changed)
         self._invert_check.toggled.connect(self._on_finetune_changed)
         self._use_preset_check.toggled.connect(self._update_compare)
+        self._red_spin.valueChanged.connect(self._on_finetune_changed)
+        self._green_spin.valueChanged.connect(self._on_finetune_changed)
+        self._blue_spin.valueChanged.connect(self._on_finetune_changed)
+        self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -405,6 +455,10 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._recursive_check, "recursive_check")
         mgr.register(self._file_list, "file_list")
         mgr.register(self._compare, "compare_widget")
+        mgr.register(self._red_spin, "red_spin")
+        mgr.register(self._green_spin, "green_spin")
+        mgr.register(self._blue_spin, "blue_spin")
+        mgr.register(self._apply_rgb_check, "apply_rgb_check")
 
     # ------------------------------------------------------------------
     # Preset management
@@ -582,6 +636,20 @@ class AlphaFixerTab(QWidget):
                 "invert": self._invert_check.isChecked(),
             }
 
+        # Attach RGB adjustments when enabled
+        if self._apply_rgb_check.isChecked():
+            rgb_params = {
+                "r": self._red_spin.value(),
+                "g": self._green_spin.value(),
+                "b": self._blue_spin.value(),
+            }
+            if manual is not None:
+                manual["rgb"] = rgb_params
+            else:
+                # preset mode + RGB adjust: build a passthrough manual with rgb
+                manual = {"mode": "set", "value": 255, "threshold": 0,
+                          "invert": False, "rgb": rgb_params}
+
         self._compare.set_loading()
         self._preview_loader = _AlphaPreviewLoader(
             self._preview_path, preset=preset, manual_params=manual
@@ -647,6 +715,19 @@ class AlphaFixerTab(QWidget):
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
             }
+
+        # Attach RGB channel adjustments if the checkbox is enabled
+        if self._apply_rgb_check.isChecked():
+            rgb_params = {
+                "r": self._red_spin.value(),
+                "g": self._green_spin.value(),
+                "b": self._blue_spin.value(),
+            }
+            if manual is not None:
+                manual["rgb"] = rgb_params
+            else:
+                manual = {"mode": "set", "value": 255, "threshold": 0,
+                          "invert": False, "rgb": rgb_params}
 
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()

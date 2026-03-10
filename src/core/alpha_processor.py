@@ -221,6 +221,33 @@ def apply_manual_alpha(
 # Batch helpers
 # ---------------------------------------------------------------------------
 
+def apply_rgba_adjust(
+    img: Image.Image,
+    red_delta: int = 0,
+    green_delta: int = 0,
+    blue_delta: int = 0,
+    alpha_delta: int = 0,
+    red_clamp: tuple = (0, 255),
+    green_clamp: tuple = (0, 255),
+    blue_clamp: tuple = (0, 255),
+    alpha_clamp: tuple = (0, 255),
+) -> Image.Image:
+    """Apply per-channel R/G/B/A deltas to a PIL image.
+
+    Each delta shifts the channel value by the given signed integer offset.
+    Clamp tuples define the allowed output range for each channel.
+    Returns the modified image in RGBA mode.
+    """
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    arr = np.array(img, dtype=np.int32)
+    arr[:, :, 0] = np.clip(arr[:, :, 0] + red_delta,   *red_clamp)
+    arr[:, :, 1] = np.clip(arr[:, :, 1] + green_delta, *green_clamp)
+    arr[:, :, 2] = np.clip(arr[:, :, 2] + blue_delta,  *blue_clamp)
+    arr[:, :, 3] = np.clip(arr[:, :, 3] + alpha_delta, *alpha_clamp)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+
 def collect_files(
     paths: list[str],
     extensions: Optional[set] = None,

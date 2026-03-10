@@ -16,6 +16,7 @@ from .alpha_processor import (
     save_image,
     apply_alpha_preset,
     apply_manual_alpha,
+    apply_rgba_adjust,
     collect_files,
     SUPPORTED_READ,
 )
@@ -80,6 +81,15 @@ class AlphaWorker(QThread):
                         invert=self._manual.get("invert", False),
                         clamp_min=self._manual.get("clamp_min", 0),
                         clamp_max=self._manual.get("clamp_max", 255),
+                    )
+                # Optional per-channel RGB adjust (works with both preset and manual modes)
+                rgb = (self._manual or {}).get("rgb")
+                if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b")):
+                    img = apply_rgba_adjust(
+                        img,
+                        red_delta=rgb.get("r", 0),
+                        green_delta=rgb.get("g", 0),
+                        blue_delta=rgb.get("b", 0),
                     )
                 dest = self._resolve_output(src)
                 os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)

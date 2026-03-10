@@ -332,6 +332,102 @@ def _spawn_ocean(x, y):
     return particles
 
 
+def _spawn_sparkle(x, y):
+    """Glittering star sparkles for icy/crystalline themes."""
+    particles = []
+    sparkle_emojis = ["✨", "⭐", "💫", "🌟", "❄", "💎", "🔷", "✦"]
+    sparkle_colors = ["#aaddff", "#ffffff", "#88ccff", "#cceeFF", "#66bbff", "#eef4ff"]
+    for _ in range(7):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(1.5, 6.5)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed
+        kind = "text" if random.random() < 0.6 else "circle"
+        color = QColor(random.choice(sparkle_colors))
+        text = random.choice(sparkle_emojis) if kind == "text" else ""
+        size = random.uniform(10, 20) if kind == "text" else random.uniform(3, 8)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.3),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_ripple(x, y):
+    """Water ripple / splash for aquatic / mermaid themes."""
+    particles = []
+    ripple_emojis = ["💧", "🫧", "🌊", "🐚", "🐬", "🦈"]
+    ripple_colors = ["#33aaff", "#00ddee", "#55ccff", "#0099cc", "#77ddff", "#22bbdd"]
+    for i in range(8):
+        # Spray outward in all directions at low speed, simulating a ripple
+        angle = (i / 8) * 2 * math.pi + random.uniform(-0.3, 0.3)
+        speed = random.uniform(1.0, 5.0)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed
+        kind = "circle" if random.random() < 0.55 else "text"
+        color = QColor(random.choice(ripple_colors))
+        text = random.choice(ripple_emojis) if kind == "text" else ""
+        size = random.uniform(5, 12) if kind == "circle" else random.uniform(12, 20)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.4),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_mermaid(x, y):
+    """Mermaid-themed sparkles, fish, and ocean magic."""
+    particles = []
+    mermaid_emojis = ["🧜", "🐠", "🐟", "🦀", "🐚", "💧", "🫧", "🌊", "🪸", "✨"]
+    mermaid_colors = ["#00ccaa", "#33ddff", "#aa44ff", "#ff66cc", "#77ffee", "#ff99cc"]
+    for _ in range(8):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(1.5, 6.0)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed - random.uniform(0, 2)  # slight upward bias
+        kind = "text" if random.random() < 0.65 else "circle"
+        color = QColor(random.choice(mermaid_colors))
+        text = random.choice(mermaid_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 9)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.4),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_alien(x, y):
+    """UFO tractor beam abduction effects."""
+    particles = []
+    alien_emojis = ["🛸", "👽", "🌌", "⭐", "💫", "🔬", "☄", "🪐"]
+    alien_colors = ["#00ff88", "#88ff00", "#00ffcc", "#44ff44", "#ccff00", "#66ff66"]
+    for _ in range(8):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(1.0, 5.5)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed - random.uniform(1.5, 4)  # biased upward (abduction!)
+        kind = "text" if random.random() < 0.65 else "circle"
+        color = QColor(random.choice(alien_colors))
+        text = random.choice(alien_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 9)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_shark(x, y):
+    """Shark teeth bite and oceanic carnage effects."""
+    particles = []
+    shark_emojis = ["🦈", "🩸", "💥", "🐟", "🐠", "💦", "🫧"]
+    shark_colors = ["#1177aa", "#0055cc", "#3399cc", "#cc1133", "#aa3355", "#ff4466"]
+    for _ in range(8):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(2.0, 7.0)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed
+        kind = "text" if random.random() < 0.6 else "circle"
+        color = QColor(random.choice(shark_colors))
+        text = random.choice(shark_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 9)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
+                                   kind, size, color, text))
+    return particles
+
+
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -348,6 +444,11 @@ _SPAWNERS = {
     "sakura":       _spawn_sakura,
     "fairy":        _spawn_fairy,
     "ocean":        _spawn_ocean,
+    "sparkle":      _spawn_sparkle,
+    "ripple":       _spawn_ripple,
+    "mermaid":      _spawn_mermaid,
+    "alien":        _spawn_alien,
+    "shark":        _spawn_shark,
     "custom":       _spawn_custom,
 }
 

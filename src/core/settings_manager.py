@@ -89,6 +89,18 @@ class SettingsManager:
         "unlock_lava_cave": False,
         "unlock_sunset_beach": False,
         "unlock_midnight_forest": False,
+        "unlock_candy_land": False,
+        "unlock_zombie": False,
+        "unlock_dragon_fire": False,
+        "unlock_bubblegum": False,
+        "unlock_thunder_storm": False,
+        "unlock_rose_gold": False,
+        "unlock_space_cat": False,
+        "unlock_magic_mushroom": False,
+        "unlock_abyssal_void": False,
+        "unlock_spring_bloom": False,
+        "unlock_gold_rush": False,
+        "unlock_nebula": False,
         "total_clicks": 0,
     }
 
