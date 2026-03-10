@@ -382,6 +382,13 @@ class MainWindow(QMainWindow):
         self._apply_cursor()
         # Refresh SVG badge to match new theme
         self._refresh_svg_badge()
+        # Keep trail and click-effects in sync with the active theme.
+        # These overlays are created in _setup_effects() which runs after the
+        # first _apply_theme() call, so guard with None checks.
+        if self._trail_overlay is not None:
+            self._apply_trail()
+        if self._click_effects is not None:
+            self._apply_theme_effect()
 
     def _make_svg_badge(self):
         """Create a small SVG theme badge widget.  Returns None if QtSvg unavailable."""

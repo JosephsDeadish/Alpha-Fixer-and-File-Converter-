@@ -370,6 +370,50 @@ class _BatFlock(QObject):
             self._overlay._add_particle(bat)
 
 
+class _FairyFlock(QObject):
+    """Spawns fairies that flutter across the window for the Fairy Garden theme."""
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._launch)
+        self._timer.setInterval(random.randint(3000, 7000))
+
+    def start(self):
+        self._timer.start()
+
+    def stop(self):
+        self._timer.stop()
+
+    def _launch(self):
+        self._timer.setInterval(random.randint(3000, 8000))
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        count = random.randint(2, 5)
+        left_to_right = random.random() < 0.5
+        speed_sign = 1 if left_to_right else -1
+        fairy_emojis = ["🧚", "✨", "🪄", "⭐", "💜", "🌟"]
+        fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff", "#ffaaff"]
+        for i in range(count):
+            y_start = random.randint(40, max(41, h - 100)) + i * random.randint(-10, 20)
+            x_start = (random.randint(-30, -10) if left_to_right
+                       else w + random.randint(10, 30))
+            speed = random.uniform(1.5, 4.5) * speed_sign
+            vy = random.uniform(-0.4, 0.4)
+            life = (w + 80) / max(abs(speed), 1) / 60 + random.uniform(0.5, 2.0)
+            fairy = _Particle(
+                x_start + i * random.randint(20, 50), y_start,
+                speed, vy, life,
+                "fairy_fly", random.uniform(18, 28),
+                QColor(random.choice(fairy_colors)),
+                random.choice(fairy_emojis),
+            )
+            self._overlay._add_particle(fairy)
+
+
 # ---------------------------------------------------------------------------
 # Main overlay widget
 # ---------------------------------------------------------------------------
@@ -401,6 +445,7 @@ class ClickEffectsOverlay(QWidget):
         self._enabled = False
         self._click_count = 0
         self._bat_flock: _BatFlock | None = None
+        self._fairy_flock: _FairyFlock | None = None
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
         # Cache QFont objects per integer point-size to avoid repeated
         # mutations and implicit font-metric recalculations each frame.
@@ -439,6 +484,8 @@ class ClickEffectsOverlay(QWidget):
             self._particles.clear()
             if self._bat_flock:
                 self._bat_flock.stop()
+            if self._fairy_flock:
+                self._fairy_flock.stop()
             self.update()
 
     def set_effect(self, effect_key: str) -> None:
@@ -451,6 +498,14 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._bat_flock:
                 self._bat_flock.stop()
+        # Manage fairy flock timer
+        if effect_key == "fairy" and self._enabled:
+            if self._fairy_flock is None:
+                self._fairy_flock = _FairyFlock(self)
+            self._fairy_flock.start()
+        else:
+            if self._fairy_flock:
+                self._fairy_flock.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
@@ -526,7 +581,7 @@ class ClickEffectsOverlay(QWidget):
         for p in self._particles:
             p.x += p.vx
             p.y += p.vy
-            if p.kind != "bat_fly":
+            if p.kind not in ("bat_fly", "fairy_fly"):
                 p.vy += self._GRAVITY
             p.life -= 0.03   # faster decay → shorter burst, fewer frames rendered
             if p.life > 0:
@@ -569,7 +624,7 @@ class ClickEffectsOverlay(QWidget):
 
         for p in self._particles:
             alpha = max(0, min(255, int(p.alpha_frac * 220)))
-            if p.kind in ("text", "bat_fly"):
+            if p.kind in ("text", "bat_fly", "fairy_fly"):
                 c = QColor(p.color)
                 c.setAlpha(alpha)
                 painter.setFont(self._get_font(int(p.size)))

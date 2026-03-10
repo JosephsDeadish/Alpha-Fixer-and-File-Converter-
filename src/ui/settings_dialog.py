@@ -302,7 +302,14 @@ class SettingsDialog(QDialog):
         gv.addWidget(grp_misc)
 
         gv.addStretch(1)
-        tabs.addTab(gen_tab, "⚙ General")
+
+        # Wrap the general tab contents in a scroll area so checkboxes
+        # are always reachable regardless of screen/window size.
+        gen_scroll = QScrollArea()
+        gen_scroll.setWidget(gen_tab)
+        gen_scroll.setWidgetResizable(True)
+        gen_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        tabs.addTab(gen_scroll, "⚙ General")
 
         layout.addWidget(tabs, 1)
 

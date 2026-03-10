@@ -289,6 +289,9 @@ class ConverterTab(QWidget):
                 added += 1
         if added:
             self._file_list.count_changed.emit(self._file_list.count())
+            # Auto-select the first item so the preview pane shows immediately
+            if self._file_list.currentRow() < 0:
+                self._file_list.setCurrentRow(0)
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
