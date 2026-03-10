@@ -36,6 +36,10 @@ class MouseTrailOverlay(QWidget):
 
         # Transparent, non-interactive overlay
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        # WA_TranslucentBackground gives the widget a real alpha channel so
+        # CompositionMode_Clear produces transparent pixels, not black ones.
+        # Without this the trail overlay renders as a solid black rectangle.
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         # WA_NoSystemBackground prevents Qt from pre-filling this widget's
         # region with the background colour before paintEvent.  Without it
         # the overlay would erase every child widget drawn beneath it.

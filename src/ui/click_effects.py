@@ -453,6 +453,11 @@ class ClickEffectsOverlay(QWidget):
     def __init__(self, main_window: QWidget):
         super().__init__(main_window)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        # WA_TranslucentBackground gives the widget a real alpha channel in its
+        # backing surface so that CompositionMode_Clear produces transparent
+        # pixels rather than black ones.  Without this attribute the overlay
+        # renders as a solid black rectangle covering the whole window.
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         # WA_NoSystemBackground prevents Qt from pre-filling this widget's
         # region with the background colour before paintEvent.  Without it
         # the overlay would erase every child widget drawn beneath it.
