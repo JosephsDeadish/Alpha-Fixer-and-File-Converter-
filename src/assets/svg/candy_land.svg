@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background dark candy purple -->
+  <rect width="100" height="100" fill="#1a0020"/>
+
+  <!-- Large lollipop centre -->
+  <!-- Stick -->
+  <rect x="48" y="62" width="4" height="30" rx="2" fill="#cc0044" opacity="0.8"/>
+  <!-- Candy disc -->
+  <circle cx="50" cy="52" r="20" fill="#ff55bb" opacity="0.9">
+    <animate attributeName="fill" values="#ff55bb;#ff88dd;#ff55bb" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Swirl arms on lollipop -->
+  <path d="M50,32 Q62,32 62,52 Q62,68 50,68 Q38,68 38,52 Q38,36 50,36"
+        fill="none" stroke="#ffffff" stroke-width="3" opacity="0.35"
+        stroke-dasharray="6,4">
+    <animateTransform attributeName="transform" type="rotate" from="0 50 52" to="360 50 52" dur="4s" repeatCount="indefinite"/>
+  </path>
+  <circle cx="50" cy="52" r="6" fill="#ffddff" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.8;0.5" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="6;8;6" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Candy cane left -->
+  <path d="M18,100 L18,70 Q18,60 28,60" fill="none" stroke="#ff3366" stroke-width="4" opacity="0.75"/>
+  <path d="M18,100 L18,70 Q18,60 28,60" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.35" stroke-dasharray="4,4"/>
+
+  <!-- Candy cane right -->
+  <path d="M82,100 L82,70 Q82,60 72,60" fill="none" stroke="#ff3366" stroke-width="4" opacity="0.75"/>
+  <path d="M82,100 L82,70 Q82,60 72,60" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.35" stroke-dasharray="4,4"/>
+
+  <!-- Scattered candy dots / sweets -->
+  <circle cx="12" cy="30" r="4" fill="#ff55bb" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="88" cy="25" r="3.5" fill="#ff88dd" opacity="0.65">
+    <animate attributeName="opacity" values="0.65;0.25;0.65" dur="1.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="20" cy="55" r="3" fill="#dd33aa" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.2;0.6" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="80" cy="50" r="3.5" fill="#ff55bb" opacity="0.65">
+    <animate attributeName="opacity" values="0.65;0.25;0.65" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Sparkle stars -->
+  <circle cx="35" cy="20" r="1.2" fill="#ffddff">
+    <animate attributeName="opacity" values="1;0.1;1" dur="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="1.2;2;1.2" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="65" cy="15" r="1" fill="#ffccff">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="1;1.8;1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="22" cy="12" r="0.9" fill="#ff88dd">
+    <animate attributeName="opacity" values="0.8;0.1;0.8" dur="2.3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="78" cy="10" r="1.1" fill="#ffddff">
+    <animate attributeName="opacity" values="0.4;1;0.4" dur="1.7s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="50" cy="8" r="1" fill="#ffccff">
+    <animate attributeName="opacity" values="1;0.2;1" dur="2.8s" repeatCount="indefinite"/>
+  </circle>
+</svg>

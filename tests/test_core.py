@@ -682,6 +682,83 @@ class TestHiddenThemeSVGs(unittest.TestCase):
         self.assertIn("<animate", svg_content,
                       "ice_cave.svg should contain animation elements")
 
+    # ----- New dedicated SVGs (second batch) -----
+
+    def test_cyber_otter_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Cyber Otter")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("cyber_otter", svg_path,
+                      "Cyber Otter should use a dedicated cyber_otter.svg, not a reused file")
+
+    def test_cyber_otter_svg_contains_animations(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Cyber Otter")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "cyber_otter.svg should contain animation elements")
+
+    def test_lava_cave_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Lava Cave")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("lava_cave", svg_path,
+                      "Lava Cave should use a dedicated lava_cave.svg, not a reused file")
+
+    def test_lava_cave_svg_contains_animations(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Lava Cave")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "lava_cave.svg should contain animation elements")
+
+    def test_sunset_beach_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Sunset Beach")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("sunset_beach", svg_path,
+                      "Sunset Beach should use a dedicated sunset_beach.svg, not a reused file")
+
+    def test_sunset_beach_svg_contains_animations(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Sunset Beach")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "sunset_beach.svg should contain animation elements")
+
+    def test_midnight_forest_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Midnight Forest")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("midnight_forest", svg_path,
+                      "Midnight Forest should use a dedicated midnight_forest.svg, not a reused file")
+
+    def test_midnight_forest_svg_contains_animations(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Midnight Forest")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "midnight_forest.svg should contain animation elements")
+
+    def test_candy_land_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Candy Land")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("candy_land", svg_path,
+                      "Candy Land should use a dedicated candy_land.svg, not a reused file")
+
+    def test_candy_land_svg_contains_animations(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Candy Land")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "candy_land.svg should contain animation elements")
+
 
 # ---------------------------------------------------------------------------
 # File converter metadata tests

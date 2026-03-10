@@ -1103,17 +1103,17 @@ THEME_SVG = {
     "Deep Ocean":       "deep_ocean.svg",
     "Blood Moon":       "blood_moon.svg",
     "Ice Cave":         "ice_cave.svg",
-    "Cyber Otter":      "otter_cove.svg",
+    "Cyber Otter":      "cyber_otter.svg",
     "Toxic Neon":       "neon.svg",
-    "Lava Cave":        "volcano.svg",
-    "Sunset Beach":     "fairy_garden.svg",
-    "Midnight Forest":  "bat_cave.svg",
+    "Lava Cave":        "lava_cave.svg",
+    "Sunset Beach":     "sunset_beach.svg",
+    "Midnight Forest":  "midnight_forest.svg",
     # New preset themes (dedicated SVGs)
     "Mermaid":          "mermaid.svg",
     "Shark Bait":       "shark_bait.svg",
     "Alien":            "alien.svg",
-    # New hidden themes
-    "Candy Land":       "rainbow.svg",
+    # New hidden themes (dedicated SVGs for earlier unlocks)
+    "Candy Land":       "candy_land.svg",
     "Zombie Apocalypse": "gore.svg",
     "Dragon Fire":      "volcano.svg",
     "Bubblegum":        "fairy_garden.svg",
