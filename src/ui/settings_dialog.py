@@ -565,21 +565,25 @@ class SettingsDialog(QDialog):
         except (OSError, json.JSONDecodeError) as exc:
             QMessageBox.warning(self, "Import Failed", f"Could not read theme file:\n{exc}")
             return
-        if not isinstance(data, dict) or "background" not in data:
+        _REQUIRED_KEYS = ("background", "surface", "primary", "accent", "text")
+        if not isinstance(data, dict) or not all(k in data for k in _REQUIRED_KEYS):
             QMessageBox.warning(
                 self, "Import Failed",
                 "The selected file does not appear to be a valid theme JSON.\n"
-                "A valid theme must contain at least a 'background' color key.",
+                "A valid theme must contain at least these color keys:\n"
+                + ", ".join(_REQUIRED_KEYS),
             )
             return
+        # Work on a copy so the parsed data dict is never mutated
+        theme_data = dict(data)
         # Use filename as display name if the JSON has no "name" key
-        if "name" not in data:
-            data["name"] = os.path.splitext(os.path.basename(path))[0]
-        name = data["name"]
-        self._settings.save_named_theme(name, data)
+        if "name" not in theme_data:
+            theme_data["name"] = os.path.splitext(os.path.basename(path))[0]
+        name = theme_data["name"]
+        self._settings.save_named_theme(name, theme_data)
         self._rebuild_theme_combo(select=f"★ {name}")
         # Apply immediately
-        self._theme = dict(data)
+        self._theme = dict(theme_data)
         # Sync color buttons to the imported theme
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
