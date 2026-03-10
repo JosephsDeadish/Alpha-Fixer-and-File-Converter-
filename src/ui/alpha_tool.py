@@ -5,7 +5,7 @@ import datetime
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -88,6 +88,11 @@ class AlphaFixerTab(QWidget):
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
+        # Debounce timer so rapid fine-tune slider changes don't flood with threads
+        self._preview_debounce = QTimer(self)
+        self._preview_debounce.setSingleShot(True)
+        self._preview_debounce.setInterval(150)  # ms -- wait for user to settle
+        self._preview_debounce.timeout.connect(self._update_compare)
         self._setup_ui()
         self._setup_shortcuts()
         self._populate_presets()
@@ -498,9 +503,10 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot()
     def _on_finetune_changed(self, *args):
-        """Only refresh the compare when fine-tune mode is active."""
-        if not self._use_preset_check.isChecked():
-            self._update_compare()
+        """Refresh the compare preview via a debounce timer to avoid rapid-fire threads."""
+        # Always debounce regardless of preset/manual mode so the preview
+        # stays in sync when the user drags sliders or changes the preset.
+        self._preview_debounce.start()
 
     # ------------------------------------------------------------------
     # Compare preview
@@ -511,18 +517,17 @@ class AlphaFixerTab(QWidget):
         if not self._preview_path:
             return
 
-        # Disconnect previous loader's signals before replacing it so that a
-        # stale thread finishing late cannot overwrite the current result.
+        # Disconnect the previous loader's signals before replacing it so that
+        # a stale thread finishing late cannot overwrite the current result.
+        # Do NOT wait for the thread — waiting blocks the UI thread and causes
+        # severe lag when the user rapidly moves a slider.  The thread will
+        # finish naturally; its signals are already disconnected.
         if self._preview_loader is not None:
             try:
                 self._preview_loader.preview_ready.disconnect()
                 self._preview_loader.failed.disconnect()
             except RuntimeError:
                 pass  # already disconnected
-            if self._preview_loader.isRunning():
-                # _AlphaPreviewLoader.run() does not exec() an event loop, so
-                # quit() has no effect; just wait briefly to let it wrap up.
-                self._preview_loader.wait(500)
 
         preset = None
         manual = None

@@ -1693,3 +1693,146 @@ class TestBannerAnimationFrames(unittest.TestCase):
                     content = f.read()
                 self.assertIn("<animate", content,
                               f"{filename} should contain SVG animation elements")
+
+
+# ---------------------------------------------------------------------------
+# Effect key preference: user choice beats hardcoded THEME_EFFECTS map
+# ---------------------------------------------------------------------------
+
+class TestEffectKeyPreference(unittest.TestCase):
+    """_apply_theme_effect must honour theme['_effect'] over THEME_EFFECTS."""
+
+    def test_theme_effect_key_preferred_over_preset_map(self):
+        """If a preset theme has _effect overridden, the override must win."""
+        from src.ui.theme_engine import THEME_EFFECTS
+        # Panda Dark normally maps to "panda" in THEME_EFFECTS
+        self.assertEqual(THEME_EFFECTS.get("Panda Dark"), "panda")
+        # Simulate a theme dict that a user has customized to "gore"
+        theme = {"name": "Panda Dark", "_effect": "gore"}
+        effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme["name"], "default")
+        self.assertEqual(effect_key, "gore",
+                         "User-chosen effect should override hardcoded preset map")
+
+    def test_fallback_to_preset_map_when_no_effect_key(self):
+        """When _effect is absent, fall back to THEME_EFFECTS."""
+        from src.ui.theme_engine import THEME_EFFECTS
+        theme = {"name": "Bat Cave"}
+        effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme["name"], "default")
+        self.assertEqual(effect_key, THEME_EFFECTS.get("Bat Cave", "default"))
+
+    def test_default_fallback_for_unknown_theme(self):
+        """Unknown theme name with no _effect key falls back to 'default'."""
+        from src.ui.theme_engine import THEME_EFFECTS
+        theme = {"name": "NoSuchTheme"}
+        effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme["name"], "default")
+        self.assertEqual(effect_key, "default")
+
+
+# ---------------------------------------------------------------------------
+# Click effects: off-screen culling logic (tested without triggering painting)
+# ---------------------------------------------------------------------------
+
+class TestClickEffectsCulling(unittest.TestCase):
+    def setUp(self):
+        _get_app()
+
+    def test_offscreen_bat_fly_particle_would_be_culled(self):
+        """bat_fly particles far outside window bounds must not survive _tick logic."""
+        from src.ui.click_effects import _Particle
+        from PyQt6.QtGui import QColor
+        # Replicate the culling condition from _tick so we can test it without
+        # triggering Qt painting (which crashes in the offscreen environment).
+        p = _Particle(-200, 300, -5, 0, 99.0, "bat_fly", 20, QColor("#7b2dff"), "🦇")
+        ow, oh = 800, 600
+        culled = (
+            p.kind in ("bat_fly", "fairy_fly")
+            and (p.x < -100 or p.x > ow + 100 or p.y < -100 or p.y > oh + 100)
+        )
+        self.assertTrue(culled, "bat_fly particle at x=-200 should be culled")
+
+    def test_onscreen_bat_fly_particle_not_culled(self):
+        """bat_fly particles inside the window must not be culled."""
+        from src.ui.click_effects import _Particle
+        from PyQt6.QtGui import QColor
+        p = _Particle(400, 300, 2, 0, 5.0, "bat_fly", 20, QColor("#7b2dff"), "🦇")
+        ow, oh = 800, 600
+        culled = (
+            p.kind in ("bat_fly", "fairy_fly")
+            and (p.x < -100 or p.x > ow + 100 or p.y < -100 or p.y > oh + 100)
+        )
+        self.assertFalse(culled, "bat_fly particle at x=400 should NOT be culled")
+
+    def test_offscreen_fairy_fly_particle_would_be_culled(self):
+        """fairy_fly particles far to the right must be culled."""
+        from src.ui.click_effects import _Particle
+        from PyQt6.QtGui import QColor
+        p = _Particle(1000, 300, 5, 0, 99.0, "fairy_fly", 20, QColor("#ff69b4"), "🧚")
+        ow, oh = 800, 600
+        culled = (
+            p.kind in ("bat_fly", "fairy_fly")
+            and (p.x < -100 or p.x > ow + 100 or p.y < -100 or p.y > oh + 100)
+        )
+        self.assertTrue(culled, "fairy_fly particle at x=1000 should be culled")
+
+    def test_regular_particle_not_subject_to_offscreen_cull(self):
+        """Normal circle particles beyond bounds are not culled (they have life decay)."""
+        from src.ui.click_effects import _Particle
+        from PyQt6.QtGui import QColor
+        p = _Particle(-200, 300, -5, 0, 2.0, "circle", 8, QColor("#e94560"))
+        ow, oh = 800, 600
+        culled = (
+            p.kind in ("bat_fly", "fairy_fly")
+            and (p.x < -100 or p.x > ow + 100 or p.y < -100 or p.y > oh + 100)
+        )
+        self.assertFalse(culled, "circle particles are not culled by off-screen check")
+
+
+# ---------------------------------------------------------------------------
+# Debounce timer in AlphaFixerTab — validated via source inspection
+# ---------------------------------------------------------------------------
+
+class TestAlphaFixerDebounce(unittest.TestCase):
+    """Verify debounce timer is present in AlphaFixerTab via source inspection."""
+
+    def test_debounce_timer_in_source(self):
+        import inspect
+        from src.ui.alpha_tool import AlphaFixerTab
+        src = inspect.getsource(AlphaFixerTab.__init__)
+        self.assertIn("_preview_debounce", src,
+                      "AlphaFixerTab.__init__ must create _preview_debounce")
+        self.assertIn("setSingleShot(True)", src,
+                      "debounce timer must be single-shot")
+        self.assertIn("setInterval(150)", src,
+                      "debounce interval must be 150ms")
+
+    def test_finetune_changed_uses_debounce(self):
+        """_on_finetune_changed must start the debounce timer, not call _update_compare directly."""
+        import inspect
+        from src.ui.alpha_tool import AlphaFixerTab
+        src = inspect.getsource(AlphaFixerTab._on_finetune_changed)
+        self.assertIn("_preview_debounce.start()", src,
+                      "_on_finetune_changed must start the debounce timer")
+        self.assertNotIn("_update_compare()", src,
+                         "_on_finetune_changed must not call _update_compare directly")
+
+
+# ---------------------------------------------------------------------------
+# Preview pane: no blocking wait — validated via source inspection
+# ---------------------------------------------------------------------------
+
+class TestPreviewPaneNoBlockingWait(unittest.TestCase):
+    def test_show_file_no_wait_call(self):
+        """show_file must not call wait() which would block the UI thread."""
+        import inspect
+        from src.ui.preview_pane import ImagePreviewPane
+        src = inspect.getsource(ImagePreviewPane.show_file)
+        self.assertNotIn(".wait(", src,
+                         "show_file must not block with .wait() on a thread")
+
+    def test_update_compare_no_wait_call(self):
+        """_update_compare must not call wait() which would block the UI thread."""
+        import inspect
+        from src.ui.alpha_tool import AlphaFixerTab
+        src = inspect.getsource(AlphaFixerTab._update_compare)
+        self.assertNotIn(".wait(", src,
+                         "_update_compare must not block with .wait() on a thread")

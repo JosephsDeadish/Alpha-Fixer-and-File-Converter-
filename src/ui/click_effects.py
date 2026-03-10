@@ -558,25 +558,27 @@ class ClickEffectsOverlay(QWidget):
     _GRAVITY = 0.4
     # Margin in pixels around each particle's bounding box added to the dirty
     # rect to ensure antialiased edges are fully covered.
-    _DIRTY_MARGIN = 4
+    _DIRTY_MARGIN = 6
 
     def _particle_rect(self, p: _Particle):
         """Return the approximate bounding QRect for a single particle."""
         from PyQt6.QtCore import QRect
-        r = max(4, int(p.size + self._DIRTY_MARGIN))
+        r = max(6, int(p.size + self._DIRTY_MARGIN))
         return QRect(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
     def _tick(self) -> None:
         if not self._particles:
             return
 
-        # Compute the dirty rect that covers all current particle positions
-        # BEFORE we move them (so the old positions get erased).
+        # Compute the dirty rect covering all current particle positions
+        # BEFORE advancing them — ensures old positions are repainted (cleared).
         from PyQt6.QtCore import QRect
         dirty = QRect()
         for p in self._particles:
             dirty = dirty.united(self._particle_rect(p))
 
+        ow = self.width()
+        oh = self.height()
         surviving = []
         for p in self._particles:
             p.x += p.vx
@@ -584,6 +586,11 @@ class ClickEffectsOverlay(QWidget):
             if p.kind not in ("bat_fly", "fairy_fly"):
                 p.vy += self._GRAVITY
             p.life -= 0.03   # faster decay → shorter burst, fewer frames rendered
+            # Cull ambient (bat/fairy) particles that have completely left the
+            # window so they never accumulate off-screen indefinitely.
+            if p.kind in ("bat_fly", "fairy_fly"):
+                if p.x < -100 or p.x > ow + 100 or p.y < -100 or p.y > oh + 100:
+                    continue
             if p.life > 0:
                 surviving.append(p)
                 # Expand dirty rect to cover new position too
@@ -596,12 +603,10 @@ class ClickEffectsOverlay(QWidget):
             self.update(dirty)
         else:
             self._timer.stop()
-            # Erase leftover pixels by requesting a repaint of the last dirty area
-            if dirty.isValid():
-                self.update(dirty)
-            parent = self.parentWidget()
-            if parent is not None:
-                parent.update(self.geometry())
+            # Full repaint to clear every stale pixel left by the last frame.
+            # update(dirty) alone is not enough because WA_NoSystemBackground
+            # means Qt never pre-fills the surface, so old pixels linger.
+            self.update()
 
     # ------------------------------------------------------------------
     # Paint
@@ -615,11 +620,28 @@ class ClickEffectsOverlay(QWidget):
             self._font_cache[size] = f
         return self._font_cache[size]
 
-    def paintEvent(self, _event) -> None:
-        if not self._particles:
-            return
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Always erase the update region first.  WA_NoSystemBackground means Qt
+        # never pre-clears this overlay's surface, so without an explicit clear
+        # particle pixels from previous frames "stick" on screen after the
+        # particles have died.  CompositionMode_Clear sets every pixel in the
+        # rect to fully transparent, which erases stale paint while leaving the
+        # widgets underneath perfectly visible.
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_Clear
+        )
+        painter.fillRect(event.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_SourceOver
+        )
+
+        if not self._particles:
+            painter.end()
+            return
+
         painter.setPen(Qt.PenStyle.NoPen)
 
         for p in self._particles:

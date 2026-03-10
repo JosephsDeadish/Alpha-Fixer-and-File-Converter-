@@ -409,6 +409,13 @@ class ConverterTab(QWidget):
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
 
+        # Refresh preview for the currently selected file so the pane stays
+        # in sync after conversion (e.g. if the file was converted in-place).
+        row = self._file_list.currentRow()
+        item = self._file_list.item(row)
+        if item:
+            self._preview.show_file(item.text())
+
         # Record in history
         entry = {
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),

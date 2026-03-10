@@ -264,9 +264,12 @@ class MainWindow(QMainWindow):
             return
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "Panda Dark")
-        # THEME_EFFECTS covers all preset themes; fall back to theme's own _effect
-        # key for user-saved custom themes (not in the preset registry).
-        effect_key = THEME_EFFECTS.get(theme_name) or theme.get("_effect", "default")
+        # Prefer the theme dict's own _effect key (which the user may have
+        # customised in the settings dialog) over the hardcoded THEME_EFFECTS
+        # map.  This ensures that changing the "Click Effect Style" combo in
+        # Settings → Theme is actually respected even for preset themes.
+        # Fall back to THEME_EFFECTS only when no _effect key is stored.
+        effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme_name, "default")
         self._click_effects.set_effect(effect_key)
         # Push the user's custom emoji list to the custom spawner
         custom_raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)

@@ -375,15 +375,13 @@ class ImagePreviewPane(QWidget):
             return
         # Disconnect stale signals before replacing the loader so a slow
         # previous thread can't overwrite the current preview when it finishes.
+        # Do NOT wait for the thread to stop — waiting blocks the UI thread.
         if self._loader is not None:
             try:
                 self._loader.loaded.disconnect()
                 self._loader.failed.disconnect()
             except RuntimeError:
                 pass  # already disconnected
-            if self._loader.isRunning():
-                self._loader.quit()
-                self._loader.wait(500)
         self._meta_label.setText("Loading…")
         self._loader = _ThumbLoader(path)
         self._loader.loaded.connect(self._on_loaded)
