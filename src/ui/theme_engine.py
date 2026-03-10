@@ -1460,6 +1460,173 @@ def get_theme_banner_frames(theme_name: str) -> list[str]:
     return [get_theme_banner(theme_name)]
 
 
+def _get_theme_extra_css(t: dict) -> str:
+    """Return extra theme-specific CSS overrides that go beyond simple colour swaps.
+
+    These rules give each theme a distinct *visual shape* — rounded vs angular,
+    grim vs playful, fiery vs icy — so themes feel truly different rather than
+    just recoloured versions of the default layout.
+    """
+    name = t.get("name", "")
+
+    # ------------------------------------------------------------------ Gore
+    if name == "Gore":
+        return """
+/* Gore: sharp-edged, blood-drip buttons */
+QPushButton {
+    border-radius: 2px;
+    border-bottom: 3px solid #880000;
+    border-right: 2px solid #660000;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+QPushButton:hover { border-bottom-color: #cc0000; }
+QGroupBox {
+    border: 1px dashed #660000;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 2px; }
+"""
+
+    # ----------------------------------------------------------------- Bat Cave
+    if name == "Bat Cave":
+        return """
+/* Bat Cave: asymmetric sharp-cornered gothic widgets */
+QPushButton {
+    border-radius: 0px 8px 0px 8px;
+    border-left: 3px solid #7b2dff;
+}
+QGroupBox {
+    border: 1px solid #2a1a4a;
+    border-top: 2px solid #7b2dff;
+    border-radius: 0px;
+    font-weight: 700;
+}
+QTabBar::tab { border-radius: 8px 0px 0px 0px; }
+"""
+
+    # ---------------------------------------------------------------- Rainbow Chaos
+    if name == "Rainbow Chaos":
+        return """
+/* Rainbow Chaos: maximum rounded pill shapes */
+QPushButton {
+    border-radius: 20px;
+    border: 3px solid #ff00cc;
+    font-weight: 900;
+}
+QPushButton:hover { border-color: #00ffff; }
+QTabBar::tab {
+    border-radius: 16px 16px 0px 0px;
+    min-width: 110px;
+}
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
+QGroupBox { border-radius: 14px; }
+"""
+
+    # --------------------------------------------------------------- Fairy Garden
+    if name == "Fairy Garden":
+        return """
+/* Fairy Garden: very soft rounded magical elements */
+QPushButton {
+    border-radius: 14px;
+    border: 1px solid #cc88ff;
+    padding: 8px 20px;
+}
+QPushButton:hover { border: 2px solid #ffaaff; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
+QGroupBox { border-radius: 12px; border: 1px solid #aa44ff; }
+QTabBar::tab { border-radius: 12px 12px 0px 0px; }
+"""
+
+    # -------------------------------------------------------------------- Goth
+    if name == "Goth":
+        return """
+/* Goth: angular with double-border accent */
+QPushButton {
+    border-radius: 0px;
+    border: 2px solid #8800aa;
+    border-bottom: 4px solid #660088;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+QGroupBox {
+    border: 2px solid #8800aa;
+    border-radius: 0px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+QTabBar::tab { border-radius: 0px; }
+QLineEdit, QComboBox { border-radius: 0px; }
+"""
+
+    # ----------------------------------------------------------------- Mermaid
+    if name in ("Mermaid", "Deep Ocean"):
+        return """
+/* Ocean themes: wave-inspired alternating radius */
+QPushButton {
+    border-radius: 10px 2px 10px 2px;
+    border: 1px solid #00ccaa;
+}
+QPushButton:hover { border: 2px solid #00ffcc; }
+QTabBar::tab { border-radius: 10px 2px 0px 0px; }
+QGroupBox { border-radius: 10px; border: 1px solid #00aacc; }
+"""
+
+    # ---------------------------------------------------------------- Volcano / Lava
+    if name in ("Volcano", "Lava Cave"):
+        return """
+/* Lava themes: fiery sharp-bottom glow buttons */
+QPushButton {
+    border-radius: 4px 4px 0px 0px;
+    border-bottom: 3px solid #cc3300;
+    border: 1px solid #ff4400;
+}
+QPushButton:hover { border-bottom: 3px solid #ff8800; border: 1px solid #ff8800; }
+QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+"""
+
+    # ------------------------------------------------------------------ Arctic / Ice
+    if name in ("Arctic", "Ice Cave"):
+        return """
+/* Ice themes: crisp thin borders, minimal aesthetic */
+QPushButton {
+    border-radius: 4px;
+    border: 1px solid #44aaff;
+    letter-spacing: 0.5px;
+}
+QPushButton:hover { border: 2px solid #aaddff; }
+QGroupBox { border: 1px solid #22aaff; border-radius: 6px; }
+QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Otter Cove
+    if name in ("Otter Cove", "Galaxy Otter"):
+        return """
+/* Otter themes: warm rounded organic shapes */
+QPushButton {
+    border-radius: 10px;
+    border: 2px solid #a06030;
+}
+QPushButton:hover { border-color: #e8a040; }
+QGroupBox { border-radius: 10px; }
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+"""
+
+    # -------------------------------------------------------------- Galaxy themes
+    if name in ("Galaxy", "Nebula", "Abyssal Void"):
+        return """
+/* Galaxy themes: sleek glowing borders */
+QPushButton {
+    border-radius: 6px;
+    border: 1px solid #4477ff;
+    letter-spacing: 0.5px;
+}
+QPushButton:hover { border: 1px solid #88aaff; box-shadow: 0 0 4px #4477ff; }
+"""
+
+    return ""
+
+
 def build_stylesheet(theme: Optional[dict] = None) -> str:
     """Generate a full Qt stylesheet from the given theme dictionary."""
     t = {**DEFAULT_THEME, **(theme or {})}
@@ -1481,7 +1648,9 @@ QTabWidget {{
     background-color: {t['background']};
 }}
 QTabWidget::pane {{
-    border: 2px solid {t['border']};
+    border-left: 2px solid {t['border']};
+    border-right: 2px solid {t['border']};
+    border-bottom: 2px solid {t['border']};
     border-top: 2px solid {t['tab_selected']};
     background-color: {t['surface']};
     border-radius: 0px 4px 4px 4px;
@@ -1876,4 +2045,5 @@ QToolTip {{
     padding: 4px;
     border-radius: 4px;
 }}
+{_get_theme_extra_css(t)}
 """
