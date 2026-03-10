@@ -269,6 +269,41 @@ def _spawn_panda(x, y):
     return particles
 
 
+def _spawn_sakura(x, y):
+    """Cherry-blossom petals and glowing sparks for the Secret Sakura theme."""
+    particles = []
+    sakura_emojis = ["🌸", "🌺", "🌷", "💮", "🌼", "✨", "💖", "🎀", "💗"]
+    sakura_colors = ["#ff6699", "#ff99bb", "#ffccdd", "#ff4477", "#ffaacc",
+                     "#ff88bb", "#ffddee", "#cc4466", "#ff5577"]
+    # Petal burst – upward drift
+    for _ in range(12):
+        angle = random.uniform(-math.pi * 0.9, -math.pi * 0.1)
+        speed = random.uniform(1.5, 6)
+        vx = math.cos(angle) * speed + random.uniform(-0.5, 0.5)
+        vy = math.sin(angle) * speed
+        kind = "text" if random.random() < 0.75 else "circle"
+        color = QColor(random.choice(sakura_colors))
+        text = random.choice(sakura_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 10)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.3),
+                                   kind, size, color, text))
+    # A few drifting petals that fall gently
+    for _ in range(4):
+        vx = random.uniform(-2, 2)
+        vy = random.uniform(-5, -2)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 1.8),
+                                   "text", random.uniform(16, 28),
+                                   QColor(random.choice(sakura_colors)),
+                                   random.choice(["🌸", "🌺", "💮"])))
+    # Tiny sparkles
+    for _ in range(6):
+        vx, vy = _rand_vel(1.5, 4)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.8),
+                                   "circle", random.uniform(3, 7),
+                                   QColor(random.choice(["#ff99cc", "#ffccee", "#ffffff"]))))
+    return particles
+
+
 # ---------------------------------------------------------------------------
 # Custom emoji effect (user-configurable)
 # ---------------------------------------------------------------------------
@@ -311,6 +346,7 @@ _SPAWNERS = {
     "fire":         _spawn_fire,
     "ice":          _spawn_ice,
     "panda":        _spawn_panda,
+    "sakura":       _spawn_sakura,
     "custom":       _spawn_custom,
 }
 

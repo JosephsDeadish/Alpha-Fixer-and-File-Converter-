@@ -173,7 +173,7 @@ _NORMAL: dict[str, list[str]] = {
         "Choose the click particle effect style for this theme.",
         "Each effect matches its theme — try Gore for blood, Galaxy for stars, Neon for lightning ⚡.",
         "Select 'Custom' to fire your own emoji as particles on every click.",
-        "New effects: Fire 🔥 (rising flames), Ice ❄ (snowflakes), Panda 🐼 (cute burst), Neon ⚡ (electric bolts).",
+        "New effects: Fire 🔥 (rising flames), Ice ❄ (snowflakes), Panda 🐼, Sakura 🌸 (cherry blossoms).",
         "Mix and match: any color theme can use any effect style you like!",
     ],
     "custom_emoji": [
@@ -224,6 +224,13 @@ _NORMAL: dict[str, list[str]] = {
         "Pointing Hand looks like you're about to poke the screen.",
         "Open Hand is great for a relaxed, browsing feel.",
         "Cursor changes apply immediately when you click Apply & Close.",
+    ],
+    "use_theme_cursor": [
+        "When enabled, the cursor automatically matches the active theme.",
+        "Otter Cove + Galaxy Otter get a 🤘 rock-on emoji cursor.",
+        "Neon, Gore, Galaxy, Volcano, and Arctic use a precision crosshair.",
+        "Panda themes and Rainbow Chaos use a pointing hand.",
+        "Overrides the manual Cursor Style selector above.",
     ],
     "font_size": [
         "Adjust the global font size (in points) for all text in the app.",
@@ -373,7 +380,7 @@ _DUMBED: dict[str, list[str]] = {
         "It's the sparkle chooser. Pick how things explode when you click.",
         "Yes, you can pick which particles fly out — it's the dropdown above.",
         "Select 'Custom' and then add your own emoji in the section below.",
-        "New ones: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Each one does a different thing. Apparently this needs explaining.",
+        "New ones: Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸. Each one does a different thing. Apparently this needs explaining.",
         "Press Apply and Close. The sparkles change. That's it. You did it.",
     ],
     "custom_emoji": [
@@ -438,6 +445,13 @@ _DUMBED: dict[str, list[str]] = {
         "Pointing Hand feels very 'I'm a web developer circa 2002'.",
         "Cross cursor is great for feeling like a precise, serious person.",
         "Pick one. Click Apply. Your cursor changes. Life continues.",
+    ],
+    "use_theme_cursor": [
+        "Check this to let the theme decide your cursor. Hands off the wheel.",
+        "Otter Cove gets 🤘. Because otters rock. That's the whole reason.",
+        "When checked, the manual cursor dropdown above does literally nothing.",
+        "Uncheck it if you want your boring arrow cursor back. Fair enough.",
+        "Theme cursor = automatic. Manual cursor = your problem.",
     ],
     "font_size": [
         "Makes text bigger or smaller. Spinbox. Number. You know how this works.",
@@ -585,9 +599,9 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "effect_combo": [
         "Choose your f**king particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
-        "This controls what explodes out of your cursor. New options: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Choose wisely.",
+        "This controls what explodes out of your cursor. New options: Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸. Choose wisely.",
         "Custom lets you use your own emoji. What kind of unhinged particles will you pick?",
-        "Galaxy shoots stars. Otter shoots otters. Panda shoots… pandas. What more do you want from life?",
+        "Galaxy shoots stars. Otter shoots otters. Sakura shoots cherry blossoms. What more do you want from life?",
         "If you pick Default and complain about the sparks, that's entirely on you.",
     ],
     "custom_emoji": [
@@ -652,6 +666,13 @@ _VULGAR: dict[str, list[str]] = {
         "Cross cursor for when you want to feel like a precision surgeon of image processing.",
         "Open Hand is chill. Relaxed. Like you've got everything under control. Do you? Do you really?",
         "It changes your cursor. That's it. Just pick the one that speaks to your soul.",
+    ],
+    "use_theme_cursor": [
+        "Check this and your cursor changes automatically to match the theme. Otter Cove gets 🤘. YES, REALLY.",
+        "The app literally picks your cursor for you based on the theme. Sit back and enjoy the ride.",
+        "Otter theme. Rock emoji cursor. If that doesn't make you happy, nothing will.",
+        "Uncheck this to go back to manually choosing your boring-ass cursor. We forgive you.",
+        "Theme cursor is ON = the app has taste. Theme cursor is OFF = you're on your own.",
     ],
     "font_size": [
         "Crank the font size up if you're squinting at this screen like a damn mole.",

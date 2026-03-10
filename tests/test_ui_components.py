@@ -710,7 +710,8 @@ class TestNewThemes(unittest.TestCase):
     def test_hidden_themes_contains_secret_sakura(self):
         from src.ui.theme_engine import HIDDEN_THEMES
         self.assertIn("Secret Sakura", HIDDEN_THEMES)
-        self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_effect"), "panda")
+        # Secret Sakura now has its own dedicated 'sakura' cherry-blossom effect
+        self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_effect"), "sakura")
         self.assertEqual(HIDDEN_THEMES["Secret Sakura"].get("_unlock"), "sakura")
 
     def test_panda_themes_have_panda_effect(self):
@@ -1238,4 +1239,119 @@ class TestThumbLoaderClosesImage(unittest.TestCase):
                 img2.close()
             except Exception as exc:
                 self.fail(f"File handle not released after ThumbLoader: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Theme cursor: _cursor key on every preset theme
+# ---------------------------------------------------------------------------
+
+class TestThemeCursorKeys(unittest.TestCase):
+    """Every preset and hidden theme must carry a non-empty '_cursor' key."""
+
+    def test_all_preset_themes_have_cursor_key(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        for name, theme in PRESET_THEMES.items():
+            self.assertIn("_cursor", theme, f"PRESET_THEMES['{name}'] missing '_cursor'")
+            self.assertIsInstance(theme["_cursor"], str,
+                                  f"'{name}' _cursor must be str")
+            self.assertTrue(theme["_cursor"].strip(),
+                            f"'{name}' _cursor must not be empty")
+
+    def test_hidden_themes_have_cursor_key(self):
+        from src.ui.theme_engine import HIDDEN_THEMES
+        for name, theme in HIDDEN_THEMES.items():
+            self.assertIn("_cursor", theme, f"HIDDEN_THEMES['{name}'] missing '_cursor'")
+            self.assertTrue(theme["_cursor"].strip(),
+                            f"'{name}' _cursor must not be empty")
+
+    def test_otter_cove_has_rock_emoji_cursor(self):
+        """Otter Cove must specify the 🤘 rock-emoji cursor."""
+        from src.ui.theme_engine import OTTER_THEME
+        self.assertEqual(OTTER_THEME["_cursor"], "emoji:🤘")
+
+    def test_galaxy_otter_has_rock_emoji_cursor(self):
+        """Galaxy Otter must also specify the 🤘 rock-emoji cursor."""
+        from src.ui.theme_engine import GALAXY_OTTER_THEME
+        self.assertEqual(GALAXY_OTTER_THEME["_cursor"], "emoji:🤘")
+
+    def test_cursor_spec_values_are_known(self):
+        """All _cursor values must be either a known Qt name or 'emoji:...'."""
+        from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES
+        from src.ui.main_window import _CURSOR_MAP
+        all_themes = {**PRESET_THEMES, **HIDDEN_THEMES}
+        for name, theme in all_themes.items():
+            spec = theme.get("_cursor", "Default")
+            ok = spec in _CURSOR_MAP or spec.startswith("emoji:")
+            self.assertTrue(ok,
+                f"'{name}' has unknown _cursor value '{spec}'")
+
+
+# ---------------------------------------------------------------------------
+# Theme cursor: _make_emoji_cursor returns a QCursor
+# ---------------------------------------------------------------------------
+
+class TestMakeEmojiCursor(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+
+    def tearDown(self):
+        self._app.processEvents()
+
+    def test_returns_qcursor(self):
+        """_make_emoji_cursor must return a QCursor instance."""
+        from PyQt6.QtGui import QCursor
+        from src.ui.main_window import _make_emoji_cursor
+        cursor = _make_emoji_cursor("🤘")
+        self.assertIsInstance(cursor, QCursor)
+
+    def test_fallback_on_bad_emoji(self):
+        """_make_emoji_cursor must not raise even for unusual input."""
+        from PyQt6.QtGui import QCursor
+        from src.ui.main_window import _make_emoji_cursor
+        cursor = _make_emoji_cursor("")   # empty string – no emoji
+        self.assertIsInstance(cursor, QCursor)
+
+
+# ---------------------------------------------------------------------------
+# Sakura click effect is registered and produces particles
+# ---------------------------------------------------------------------------
+
+class TestSakuraEffect(unittest.TestCase):
+    def test_sakura_in_spawners(self):
+        """'sakura' must be a key in _SPAWNERS."""
+        from src.ui.click_effects import _SPAWNERS
+        self.assertIn("sakura", _SPAWNERS)
+
+    def test_sakura_spawner_produces_particles(self):
+        """_spawn_sakura must return at least 10 particles with full attributes."""
+        from src.ui.click_effects import _SPAWNERS
+        particles = _SPAWNERS["sakura"](100, 100)
+        self.assertGreater(len(particles), 0)
+        # All must be _Particle instances with all expected attributes
+        for p in particles:
+            for attr in ("x", "y", "vx", "vy", "life", "max_life", "kind", "size", "color"):
+                self.assertTrue(hasattr(p, attr),
+                                f"Particle missing attribute '{attr}'")
+
+    def test_secret_sakura_theme_uses_sakura_effect(self):
+        """Secret Sakura theme must use the 'sakura' effect (not 'panda')."""
+        from src.ui.theme_engine import SECRET_SAKURA_THEME
+        self.assertEqual(SECRET_SAKURA_THEME["_effect"], "sakura")
+
+
+# ---------------------------------------------------------------------------
+# use_theme_cursor default value in settings
+# ---------------------------------------------------------------------------
+
+class TestUseThemeCursorSetting(unittest.TestCase):
+    def test_default_is_false(self):
+        """use_theme_cursor must default to False."""
+        from src.core.settings_manager import SettingsManager
+        self.assertIn("use_theme_cursor", SettingsManager._DEFAULTS)
+        self.assertFalse(SettingsManager._DEFAULTS["use_theme_cursor"])
+
+    def test_in_export_keys(self):
+        """use_theme_cursor must be included in EXPORT_KEYS."""
+        from src.core.settings_manager import SettingsManager
+        self.assertIn("use_theme_cursor", SettingsManager.EXPORT_KEYS)
 

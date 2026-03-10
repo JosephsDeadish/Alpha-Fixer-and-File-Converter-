@@ -3,8 +3,8 @@ Main application window.
 """
 import webbrowser
 
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QAction, QCursor, QFont, QIcon
+from PyQt6.QtCore import Qt, QSize, QRect
+from PyQt6.QtGui import QAction, QCursor, QFont, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
     QLabel, QPushButton, QWidget, QVBoxLayout, QApplication,
@@ -28,6 +28,32 @@ _CURSOR_MAP = {
     "Pointing Hand": Qt.CursorShape.PointingHandCursor,
     "Open Hand":     Qt.CursorShape.OpenHandCursor,
 }
+
+
+def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
+    """Render *emoji* into a square pixmap and return a QCursor from it.
+
+    The hotspot is placed at the top-left corner so the cursor tip lines up
+    with the pointer position.  Falls back to the arrow cursor if pixmap
+    painting is unavailable (e.g. running headless without a display).
+    """
+    try:
+        pix = QPixmap(size, size)
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        # Use a font stack that covers Windows (Segoe UI Emoji), macOS (Apple Color Emoji),
+        # and Linux (Noto Color Emoji) so the emoji renders on every platform.
+        font = QFont("Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji", max(6, size - 6))
+        painter.setFont(font)
+        painter.drawText(
+            QRect(0, 0, size, size),
+            Qt.AlignmentFlag.AlignCenter,
+            emoji,
+        )
+        painter.end()
+        return QCursor(pix, 0, 0)
+    except Exception:
+        return QCursor(Qt.CursorShape.ArrowCursor)
 
 
 class MainWindow(QMainWindow):
@@ -247,9 +273,22 @@ class MainWindow(QMainWindow):
             QApplication.instance().beep()
 
     def _apply_cursor(self):
-        cursor_name = self._settings.get("cursor", "Default")
-        shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
-        self.setCursor(QCursor(shape))
+        use_theme = self._settings.get("use_theme_cursor", False)
+        if use_theme:
+            # Read the active theme's preferred cursor
+            theme = self._settings.get_theme()
+            cursor_spec = theme.get("_cursor", "Default")
+            if cursor_spec.startswith("emoji:"):
+                emoji = cursor_spec[len("emoji:"):]
+                self.setCursor(_make_emoji_cursor(emoji))
+                return
+            # Otherwise treat it as a named cursor key
+            shape = _CURSOR_MAP.get(cursor_spec, Qt.CursorShape.ArrowCursor)
+            self.setCursor(QCursor(shape))
+        else:
+            cursor_name = self._settings.get("cursor", "Default")
+            shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
+            self.setCursor(QCursor(shape))
 
     def _apply_font_size(self):
         size = self._settings.get("font_size", 10)
@@ -290,6 +329,8 @@ class MainWindow(QMainWindow):
         theme = self._settings.get_theme()
         QApplication.instance().setStyleSheet(build_stylesheet(theme))
         self._theme_label.setText(f"  Theme: {theme.get('name', 'Custom')}  ")
+        # Re-apply cursor so theme-cursor mode updates immediately on theme change
+        self._apply_cursor()
 
     # ------------------------------------------------------------------
     # Tabs
@@ -392,7 +433,8 @@ class MainWindow(QMainWindow):
             "<li>Before/after comparison slider preview</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
             "<li>12 preset themes + 2 hidden unlockables (keep clicking to find them!)</li>"
-            "<li>13 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥, Ice ❄, Panda 🐼, and more…</li>"
+            "<li>14 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸, and more…</li>"
+            "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"

@@ -28,6 +28,7 @@ DEFAULT_THEME = {
     "scrollbar": "#2a2a4a",
     "scrollbar_handle": "#e94560",
     "_effect": "panda",
+    "_cursor": "Pointing Hand",
 }
 
 LIGHT_THEME = {
@@ -52,6 +53,7 @@ LIGHT_THEME = {
     "scrollbar": "#c8c8d8",
     "scrollbar_handle": "#e94560",
     "_effect": "panda",
+    "_cursor": "Pointing Hand",
 }
 
 NEON_THEME = {
@@ -76,6 +78,7 @@ NEON_THEME = {
     "scrollbar": "#111111",
     "scrollbar_handle": "#00ff88",
     "_effect": "neon",
+    "_cursor": "Cross",
 }
 
 GORE_THEME = {
@@ -100,6 +103,7 @@ GORE_THEME = {
     "scrollbar": "#330000",
     "scrollbar_handle": "#cc0000",
     "_effect": "gore",
+    "_cursor": "Cross",
 }
 
 BAT_THEME = {
@@ -124,6 +128,7 @@ BAT_THEME = {
     "scrollbar": "#1a1a2e",
     "scrollbar_handle": "#7b2dff",
     "_effect": "bat",
+    "_cursor": "Default",
 }
 
 RAINBOW_THEME = {
@@ -148,6 +153,7 @@ RAINBOW_THEME = {
     "scrollbar": "#ff44cc",
     "scrollbar_handle": "#ffff00",
     "_effect": "rainbow",
+    "_cursor": "Pointing Hand",
 }
 
 OTTER_THEME = {
@@ -172,6 +178,7 @@ OTTER_THEME = {
     "scrollbar": "#2e1f09",
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
+    "_cursor": "emoji:🤘",
 }
 
 GALAXY_THEME = {
@@ -196,6 +203,7 @@ GALAXY_THEME = {
     "scrollbar": "#070720",
     "scrollbar_handle": "#4477ff",
     "_effect": "galaxy",
+    "_cursor": "Cross",
 }
 
 GALAXY_OTTER_THEME = {
@@ -220,6 +228,7 @@ GALAXY_OTTER_THEME = {
     "scrollbar": "#0f0820",
     "scrollbar_handle": "#a06aff",
     "_effect": "galaxy_otter",
+    "_cursor": "emoji:🤘",
 }
 
 GOTH_THEME = {
@@ -244,6 +253,7 @@ GOTH_THEME = {
     "scrollbar": "#111111",
     "scrollbar_handle": "#8800aa",
     "_effect": "goth",
+    "_cursor": "Default",
 }
 
 VOLCANO_THEME = {
@@ -268,6 +278,7 @@ VOLCANO_THEME = {
     "scrollbar": "#2a1000",
     "scrollbar_handle": "#ff4400",
     "_effect": "fire",
+    "_cursor": "Cross",
 }
 
 ARCTIC_THEME = {
@@ -292,6 +303,7 @@ ARCTIC_THEME = {
     "scrollbar": "#071525",
     "scrollbar_handle": "#44aaff",
     "_effect": "ice",
+    "_cursor": "Cross",
 }
 
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
@@ -317,6 +329,7 @@ SECRET_SKELETON_THEME = {
     "scrollbar": "#dddddd",
     "scrollbar_handle": "#1a1a1a",
     "_effect": "goth",
+    "_cursor": "Cross",
     "_unlock": "skeleton",
 }
 
@@ -341,7 +354,8 @@ SECRET_SAKURA_THEME = {
     "input_bg": "#120510",
     "scrollbar": "#2a1020",
     "scrollbar_handle": "#ff6699",
-    "_effect": "panda",
+    "_effect": "sakura",
+    "_cursor": "Pointing Hand",
     "_unlock": "sakura",
 }
 

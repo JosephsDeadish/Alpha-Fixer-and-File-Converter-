@@ -34,6 +34,7 @@ _EFFECT_OPTIONS = [
     ("fire",         "Fire — Rising flames 🔥"),
     ("ice",          "Ice — Snowflakes & frost ❄"),
     ("panda",        "Panda — Cute panda shower 🐼"),
+    ("sakura",       "Sakura — Cherry blossom petals 🌸"),
     ("custom",       "Custom — Your own emoji 🎨"),
 ]
 
@@ -223,6 +224,21 @@ class SettingsDialog(QDialog):
         gv.addWidget(self._cursor_combo, row, 1)
         row += 1
 
+        gv.addWidget(QLabel(""), row, 0)
+        self._use_theme_cursor_check = QCheckBox(
+            "Use theme cursor  (overrides the style above)"
+        )
+        self._use_theme_cursor_check.setToolTip(
+            "When enabled the cursor shape is chosen automatically to match the\n"
+            "active theme — e.g. Otter Cove gets the 🤘 rock-on emoji cursor."
+        )
+        gv.addWidget(self._use_theme_cursor_check, row, 1, 1, 2)
+        # Dim manual selector when theme cursor is active
+        self._use_theme_cursor_check.toggled.connect(
+            lambda checked: self._cursor_combo.setEnabled(not checked)
+        )
+        row += 1
+
         # Font size
         gv.addWidget(QLabel("Font Size (pt):"), row, 0)
         self._font_size_spin = QSpinBox()
@@ -343,6 +359,9 @@ class SettingsDialog(QDialog):
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
+        use_theme_cur = self._settings.get("use_theme_cursor", False)
+        self._use_theme_cursor_check.setChecked(use_theme_cur)
+        self._cursor_combo.setEnabled(not use_theme_cur)
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         self._click_effects_check.setChecked(
             self._settings.get("click_effects_enabled", True)
@@ -365,6 +384,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._cursor_combo, "cursor_combo")
+        mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._click_effects_check, "click_effects_check")
 
@@ -496,6 +516,7 @@ class SettingsDialog(QDialog):
         self._settings.set("trail_enabled", self._trail_check.isChecked())
         self._settings.set("trail_color", self._trail_color_btn.color())
         self._settings.set("cursor", self._cursor_combo.currentText())
+        self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
         self._settings.set("font_size", self._font_size_spin.value())
         self._settings.set("click_effects_enabled", self._click_effects_check.isChecked())
         self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())

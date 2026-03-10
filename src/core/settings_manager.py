@@ -48,6 +48,7 @@ class SettingsManager:
         "click_sound_path": "",
         # Cursor & trail
         "cursor": "Default",
+        "use_theme_cursor": False,
         "trail_enabled": False,
         "trail_color": "#e94560",
         # Appearance
@@ -218,7 +219,7 @@ class SettingsManager:
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
         "sound_enabled", "click_sound_path",
-        "cursor", "trail_enabled", "trail_color",
+        "cursor", "use_theme_cursor", "trail_enabled", "trail_color",
         "font_size",
         "click_effects_enabled", "tooltip_mode",
         "custom_emoji",
