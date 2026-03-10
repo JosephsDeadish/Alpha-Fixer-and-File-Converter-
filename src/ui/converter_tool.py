@@ -95,13 +95,20 @@ class ConverterTab(QWidget):
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
+        rv.setSpacing(8)
 
         # Output format
         grp_fmt = QGroupBox("Output Format")
         gf_layout = QGridLayout(grp_fmt)
+        gf_layout.setColumnStretch(0, 0)
+        gf_layout.setColumnStretch(1, 1)
+        gf_layout.setColumnMinimumWidth(0, 145)
+        gf_layout.setHorizontalSpacing(12)
+        gf_layout.setVerticalSpacing(8)
 
         gf_layout.addWidget(QLabel("Convert to:"), 0, 0)
         self._fmt_combo = QComboBox()
+        self._fmt_combo.setMinimumWidth(130)
         for name, ext in OUTPUT_FORMAT_LIST:
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
         gf_layout.addWidget(self._fmt_combo, 0, 1)
@@ -123,6 +130,11 @@ class ConverterTab(QWidget):
         # Resize (optional)
         grp_resize = QGroupBox("Resize (optional)")
         gr_layout = QGridLayout(grp_resize)
+        gr_layout.setColumnStretch(0, 0)
+        gr_layout.setColumnStretch(1, 1)
+        gr_layout.setColumnMinimumWidth(0, 80)
+        gr_layout.setHorizontalSpacing(12)
+        gr_layout.setVerticalSpacing(8)
 
         self._resize_check = QCheckBox("Enable resize")
         gr_layout.addWidget(self._resize_check, 0, 0, 1, 2)
@@ -145,7 +157,13 @@ class ConverterTab(QWidget):
 
         # Output folder
         grp_out = QGroupBox("Output")
+        grp_out.setMinimumHeight(80)
         go_layout = QGridLayout(grp_out)
+        go_layout.setColumnStretch(0, 0)
+        go_layout.setColumnStretch(1, 1)
+        go_layout.setColumnMinimumWidth(0, 120)
+        go_layout.setHorizontalSpacing(12)
+        go_layout.setVerticalSpacing(6)
 
         go_layout.addWidget(QLabel("Output folder:"), 0, 0)
         out_row = QHBoxLayout()
@@ -165,7 +183,7 @@ class ConverterTab(QWidget):
         run_row = QHBoxLayout()
         self._btn_run = QPushButton("▶  Convert  [F5]")
         self._btn_run.setObjectName("accent")
-        self._btn_run.setMinimumHeight(42)
+        self._btn_run.setMinimumHeight(40)
         self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
         run_row.addWidget(self._btn_run, 1)
@@ -183,11 +201,11 @@ class ConverterTab(QWidget):
         # Log
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(130)
+        self._log.setMinimumHeight(70)
+        self._log.setMaximumHeight(110)
         self._log.setPlaceholderText("Conversion log…")
-        rv.addWidget(self._log)
+        rv.addWidget(self._log, 1)
 
-        rv.addStretch(1)
         splitter.addWidget(right)
         splitter.setSizes([340, 560])
         main_layout.addWidget(splitter, 1)

@@ -187,6 +187,7 @@ class AlphaFixerTab(QWidget):
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
+        rv.setSpacing(8)
 
         # Preset section
         grp_preset = QGroupBox("Preset")
@@ -212,10 +213,17 @@ class AlphaFixerTab(QWidget):
 
         # Fine-tune section
         grp_tune = QGroupBox("Fine-Tune Alpha")
+        grp_tune.setMinimumHeight(215)
         gt_layout = QGridLayout(grp_tune)
+        gt_layout.setColumnStretch(0, 0)
+        gt_layout.setColumnStretch(1, 1)
+        gt_layout.setColumnMinimumWidth(0, 185)
+        gt_layout.setHorizontalSpacing(12)
+        gt_layout.setVerticalSpacing(6)
 
         gt_layout.addWidget(QLabel("Mode:"), 0, 0)
         self._mode_combo = QComboBox()
+        self._mode_combo.setMinimumWidth(130)
         self._mode_combo.addItems(["set", "multiply", "add", "subtract", "clamp_min", "clamp_max"])
         gt_layout.addWidget(self._mode_combo, 0, 1)
 
@@ -247,7 +255,13 @@ class AlphaFixerTab(QWidget):
 
         # Output section
         grp_out = QGroupBox("Output")
+        grp_out.setMinimumHeight(110)
         go_layout = QGridLayout(grp_out)
+        go_layout.setColumnStretch(0, 0)
+        go_layout.setColumnStretch(1, 1)
+        go_layout.setColumnMinimumWidth(0, 130)
+        go_layout.setHorizontalSpacing(12)
+        go_layout.setVerticalSpacing(6)
 
         go_layout.addWidget(QLabel("Output folder:"), 0, 0)
         out_row = QHBoxLayout()
@@ -269,7 +283,7 @@ class AlphaFixerTab(QWidget):
         run_row = QHBoxLayout()
         self._btn_run = QPushButton("▶  Process  [F5]")
         self._btn_run.setObjectName("accent")
-        self._btn_run.setMinimumHeight(42)
+        self._btn_run.setMinimumHeight(40)
         self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
         run_row.addWidget(self._btn_run, 1)
@@ -288,11 +302,11 @@ class AlphaFixerTab(QWidget):
         # Log
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(130)
+        self._log.setMinimumHeight(70)
+        self._log.setMaximumHeight(110)
         self._log.setPlaceholderText("Processing log…")
-        rv.addWidget(self._log)
+        rv.addWidget(self._log, 1)
 
-        rv.addStretch(1)
         outer_splitter.addWidget(right)
         outer_splitter.setSizes([360, 540])
         main_layout.addWidget(outer_splitter, 1)

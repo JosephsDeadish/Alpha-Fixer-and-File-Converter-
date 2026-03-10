@@ -603,20 +603,32 @@ QComboBox {{
     border: 1px solid {t['border']};
     border-radius: 5px;
     padding: 5px 8px;
+    padding-right: 28px;
     min-height: 28px;
 }}
 QComboBox:hover {{
     border-color: {t['accent']};
 }}
 QComboBox::drop-down {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
     border: none;
-    width: 24px;
+    border-left: 1px solid {t['border']};
+    width: 22px;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    background: {t['primary']};
+}}
+QComboBox::down-arrow {{
+    width: 10px;
+    height: 10px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {t['surface']};
     color: {t['text']};
     border: 1px solid {t['border']};
     selection-background-color: {t['accent']};
+    padding: 2px;
 }}
 
 /* ===== Spin Boxes ===== */
@@ -626,9 +638,33 @@ QSpinBox, QDoubleSpinBox {{
     border: 1px solid {t['border']};
     border-radius: 5px;
     padding: 5px 8px;
+    padding-right: 24px;
+    min-height: 26px;
 }}
 QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {t['accent']};
+}}
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 20px;
+    height: 14px;
+    background: {t['primary']};
+    border: 1px solid {t['border']};
+    border-top-right-radius: 4px;
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 20px;
+    height: 14px;
+    background: {t['primary']};
+    border: 1px solid {t['border']};
+    border-bottom-right-radius: 4px;
+}}
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+    background: {t['accent']};
 }}
 
 /* ===== Sliders ===== */
@@ -687,16 +723,17 @@ QLabel#section {{
 QGroupBox {{
     border: 1px solid {t['border']};
     border-radius: 6px;
-    margin-top: 12px;
-    padding: 12px 8px 8px 8px;
+    margin-top: 14px;
+    padding: 14px 10px 10px 10px;
     font-weight: 600;
     color: {t['text_secondary']};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
     left: 12px;
-    padding: 0 4px;
+    padding: 0 6px;
     color: {t['accent']};
+    font-size: 13px;
 }}
 
 /* ===== List Widget ===== */
@@ -812,8 +849,23 @@ QStatusBar {{
 QToolBar {{
     background-color: {t['surface']};
     border-bottom: 1px solid {t['border']};
-    spacing: 4px;
-    padding: 4px;
+    spacing: 6px;
+    padding: 4px 8px;
+}}
+QToolBar QPushButton {{
+    padding: 5px 12px;
+    font-size: 12px;
+    min-height: 26px;
+}}
+QToolBar QLabel {{
+    padding: 0 6px;
+    color: {t['text_secondary']};
+    font-size: 12px;
+}}
+
+/* ===== Dialog ===== */
+QDialog {{
+    background-color: {t['background']};
 }}
 
 /* ===== Menu ===== */

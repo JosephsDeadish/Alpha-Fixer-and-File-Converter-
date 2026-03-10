@@ -4,7 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -80,7 +80,7 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        self.setMinimumSize(720, 580)
+        self.setMinimumSize(800, 660)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:
@@ -88,6 +88,8 @@ class SettingsDialog(QDialog):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
         tabs = QTabWidget()
 
         # ================================================================
@@ -95,25 +97,34 @@ class SettingsDialog(QDialog):
         # ================================================================
         theme_tab = QWidget()
         tv = QVBoxLayout(theme_tab)
+        tv.setContentsMargins(8, 8, 8, 8)
+        tv.setSpacing(8)
 
-        # Preset / saved-theme row
-        preset_row = QHBoxLayout()
-        preset_row.addWidget(QLabel("Theme:"))
+        # ---- Preset GroupBox ----
+        grp_preset_select = QGroupBox("Active Theme Preset")
+        psl = QHBoxLayout(grp_preset_select)
+        psl.setSpacing(8)
+        psl.addWidget(QLabel("Theme:"))
         self._theme_preset_combo = QComboBox()
-        self._theme_preset_combo.setMinimumWidth(160)
+        self._theme_preset_combo.setMinimumWidth(200)
         self._rebuild_theme_combo()
-        preset_row.addWidget(self._theme_preset_combo, 1)
+        psl.addWidget(self._theme_preset_combo, 1)
         self._btn_apply_preset = QPushButton("Apply")
         self._btn_save_theme = QPushButton("Save as…")
         self._btn_delete_theme = QPushButton("Delete")
-        preset_row.addWidget(self._btn_apply_preset)
-        preset_row.addWidget(self._btn_save_theme)
-        preset_row.addWidget(self._btn_delete_theme)
-        tv.addLayout(preset_row)
+        self._btn_apply_preset.setMinimumWidth(68)
+        self._btn_save_theme.setMinimumWidth(75)
+        self._btn_delete_theme.setMinimumWidth(62)
+        psl.addWidget(self._btn_apply_preset)
+        psl.addWidget(self._btn_save_theme)
+        psl.addWidget(self._btn_delete_theme)
+        tv.addWidget(grp_preset_select)
 
         # Color grid
         grp_colors = QGroupBox("Theme Colors")
         color_grid = QGridLayout(grp_colors)
+        color_grid.setHorizontalSpacing(10)
+        color_grid.setVerticalSpacing(6)
         color_keys = [
             ("background", "Background"),
             ("surface", "Surface"),
@@ -143,44 +154,52 @@ class SettingsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(290)
+        scroll.setMinimumHeight(220)
+        scroll.setMaximumHeight(320)
         tv.addWidget(scroll)
 
-        # Effect style selector
+        # ---- Effect + Emoji in a single row of GroupBoxes ----
+        effect_emoji_row = QHBoxLayout()
+        effect_emoji_row.setSpacing(8)
+
         grp_effect = QGroupBox("Click Effect Style")
-        effect_layout = QHBoxLayout(grp_effect)
-        effect_layout.addWidget(QLabel("Effect:"))
+        effect_layout = QVBoxLayout(grp_effect)
+        effect_layout.setSpacing(6)
+        effect_inner = QHBoxLayout()
+        effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
-        self._effect_combo.setMinimumWidth(240)
+        self._effect_combo.setMinimumWidth(220)
         for key, label in _EFFECT_OPTIONS:
             self._effect_combo.addItem(label, userData=key)
-        effect_layout.addWidget(self._effect_combo, 1)
         self._effect_combo.setToolTip(
             "Choose the click particle effect for this theme.\n"
             "Select 'Custom' to use your own emoji as particles."
         )
-        tv.addWidget(grp_effect)
+        effect_inner.addWidget(self._effect_combo, 1)
+        effect_layout.addLayout(effect_inner)
+        effect_emoji_row.addWidget(grp_effect, 3)
 
-        # Custom emoji section
-        grp_emoji = QGroupBox("Custom Emoji Particles  (used with 'Custom' effect)")
+        grp_emoji = QGroupBox("Custom Emoji  (with 'Custom' effect)")
         emoji_v = QVBoxLayout(grp_emoji)
-
+        emoji_v.setSpacing(6)
         emoji_row = QHBoxLayout()
         self._emoji_input = QLineEdit()
-        self._emoji_input.setPlaceholderText("Type or paste emoji…  e.g.  🐼 🎉 💥  (space-separated)")
+        self._emoji_input.setPlaceholderText("e.g.  🐼 🎉 💥  (space-separated)")
         self._btn_emoji_add = QPushButton("Add")
-        self._btn_emoji_clear = QPushButton("Clear All")
+        self._btn_emoji_clear = QPushButton("Clear")
+        self._btn_emoji_add.setFixedWidth(50)
+        self._btn_emoji_clear.setFixedWidth(52)
         emoji_row.addWidget(self._emoji_input, 1)
         emoji_row.addWidget(self._btn_emoji_add)
         emoji_row.addWidget(self._btn_emoji_clear)
         emoji_v.addLayout(emoji_row)
-
         self._emoji_display = QLabel("")
         self._emoji_display.setWordWrap(True)
         self._emoji_display.setObjectName("subheader")
         emoji_v.addWidget(self._emoji_display)
-        tv.addWidget(grp_emoji)
+        effect_emoji_row.addWidget(grp_emoji, 2)
 
+        tv.addLayout(effect_emoji_row)
         tv.addStretch(1)
         tabs.addTab(theme_tab, "🎨 Theme")
 
@@ -188,37 +207,39 @@ class SettingsDialog(QDialog):
         # ---- General tab ----
         # ================================================================
         gen_tab = QWidget()
-        gv = QGridLayout(gen_tab)
-        row = 0
+        gv = QVBoxLayout(gen_tab)
+        gv.setContentsMargins(8, 8, 8, 8)
+        gv.setSpacing(8)
 
-        # Sound
-        gv.addWidget(QLabel("Sound Effects:"), row, 0)
+        # ---- Sound GroupBox ----
+        grp_sound = QGroupBox("🔊  Sound")
+        sound_gl = QGridLayout(grp_sound)
+        sound_gl.setColumnStretch(1, 1)
+        sound_gl.setHorizontalSpacing(10)
+        sound_gl.setVerticalSpacing(6)
         self._sound_check = QCheckBox("Enable click sounds")
-        gv.addWidget(self._sound_check, row, 1, 1, 2)
-        row += 1
-
-        gv.addWidget(QLabel("Custom click sound:"), row, 0)
+        sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
+        sound_gl.addWidget(QLabel("Custom .wav:"), 1, 0)
         sound_row = QHBoxLayout()
         self._click_sound_edit = QLineEdit()
-        self._click_sound_edit.setPlaceholderText("Path to .wav file (blank = built-in)")
-        self._btn_sound_browse = QPushButton("Browse")
+        self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
+        self._btn_sound_browse = QPushButton("Browse…")
         sound_row.addWidget(self._click_sound_edit, 1)
         sound_row.addWidget(self._btn_sound_browse)
-        gv.addLayout(sound_row, row, 1, 1, 2)
-        row += 1
+        sound_gl.addLayout(sound_row, 1, 1)
+        gv.addWidget(grp_sound)
 
-        # Mouse trail
-        gv.addWidget(QLabel("Mouse Trail:"), row, 0)
-        self._trail_check = QCheckBox("Enable")
-        gv.addWidget(self._trail_check, row, 1)
-        row += 1
-
-        gv.addWidget(QLabel("Trail Color:"), row, 0)
+        # ---- Mouse Trail GroupBox ----
+        grp_trail = QGroupBox("🖱  Mouse Trail")
+        trail_gl = QGridLayout(grp_trail)
+        trail_gl.setColumnStretch(1, 1)
+        trail_gl.setHorizontalSpacing(10)
+        trail_gl.setVerticalSpacing(6)
+        self._trail_check = QCheckBox("Enable mouse trail")
+        trail_gl.addWidget(self._trail_check, 0, 0, 1, 2)
+        trail_gl.addWidget(QLabel("Trail Color:"), 1, 0)
         self._trail_color_btn = ColorButton("#e94560")
-        gv.addWidget(self._trail_color_btn, row, 1)
-        row += 1
-
-        gv.addWidget(QLabel(""), row, 0)
+        trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
         self._use_theme_trail_check = QCheckBox(
             "Use theme trail  (auto-color + fairy dust on Fairy Garden)"
         )
@@ -226,23 +247,25 @@ class SettingsDialog(QDialog):
             "When enabled the trail color is chosen automatically to match\n"
             "the active theme.  Fairy Garden gets a sparkling emoji trail."
         )
-        gv.addWidget(self._use_theme_trail_check, row, 1, 1, 2)
+        trail_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
         self._use_theme_trail_check.toggled.connect(
             lambda checked: self._trail_color_btn.setEnabled(not checked)
         )
-        row += 1
+        gv.addWidget(grp_trail)
 
-        # Cursor
-        gv.addWidget(QLabel("Cursor Style:"), row, 0)
+        # ---- Cursor GroupBox ----
+        grp_cursor = QGroupBox("🖱  Cursor")
+        cursor_gl = QGridLayout(grp_cursor)
+        cursor_gl.setColumnStretch(1, 1)
+        cursor_gl.setHorizontalSpacing(10)
+        cursor_gl.setVerticalSpacing(6)
+        cursor_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
         self._cursor_combo = QComboBox()
         self._cursor_combo.addItems([
             "Default", "Cross", "Pointing Hand", "Open Hand",
             "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
         ])
-        gv.addWidget(self._cursor_combo, row, 1)
-        row += 1
-
-        gv.addWidget(QLabel(""), row, 0)
+        cursor_gl.addWidget(self._cursor_combo, 0, 1)
         self._use_theme_cursor_check = QCheckBox(
             "Use theme cursor  (overrides the style above)"
         )
@@ -250,48 +273,48 @@ class SettingsDialog(QDialog):
             "When enabled the cursor shape is chosen automatically to match the\n"
             "active theme — e.g. Otter Cove gets the 🤘 rock-on emoji cursor."
         )
-        gv.addWidget(self._use_theme_cursor_check, row, 1, 1, 2)
-        # Dim manual selector when theme cursor is active
+        cursor_gl.addWidget(self._use_theme_cursor_check, 1, 0, 1, 2)
         self._use_theme_cursor_check.toggled.connect(
             lambda checked: self._cursor_combo.setEnabled(not checked)
         )
-        row += 1
+        gv.addWidget(grp_cursor)
 
-        # Font size
-        gv.addWidget(QLabel("Font Size (pt):"), row, 0)
+        # ---- Appearance & FX GroupBox ----
+        grp_misc = QGroupBox("🎨  Appearance & Effects")
+        misc_gl = QGridLayout(grp_misc)
+        misc_gl.setColumnStretch(1, 1)
+        misc_gl.setHorizontalSpacing(10)
+        misc_gl.setVerticalSpacing(6)
+        misc_gl.addWidget(QLabel("Font Size (pt):"), 0, 0)
         self._font_size_spin = QSpinBox()
         self._font_size_spin.setRange(8, 24)
         self._font_size_spin.setValue(10)
-        gv.addWidget(self._font_size_spin, row, 1)
-        row += 1
-
-        # Click effects
-        gv.addWidget(QLabel("Click Effects:"), row, 0)
+        self._font_size_spin.setMaximumWidth(80)
+        misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
         self._click_effects_check = QCheckBox("Enable per-theme click particle effects")
-        gv.addWidget(self._click_effects_check, row, 1, 1, 2)
-        row += 1
-
-        # Tooltip mode
-        gv.addWidget(QLabel("Tooltip Mode:"), row, 0)
+        misc_gl.addWidget(self._click_effects_check, 1, 0, 1, 2)
+        misc_gl.addWidget(QLabel("Tooltip Mode:"), 2, 0)
         self._tooltip_mode_combo = QComboBox()
         self._tooltip_mode_combo.addItems(TOOLTIP_MODES)
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
             "No Filter 🤬 is the best mode – trust us."
         )
-        gv.addWidget(self._tooltip_mode_combo, row, 1)
-        row += 1
+        self._tooltip_mode_combo.setMaximumWidth(220)
+        misc_gl.addWidget(self._tooltip_mode_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        gv.addWidget(grp_misc)
 
-        gv.setRowStretch(row, 1)
+        gv.addStretch(1)
         tabs.addTab(gen_tab, "⚙ General")
 
-        layout.addWidget(tabs)
+        layout.addWidget(tabs, 1)
 
         # ---- Dialog buttons ----
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         self._btn_ok = QPushButton("Apply & Close")
         self._btn_ok.setObjectName("accent")
+        self._btn_ok.setMinimumWidth(120)
         self._btn_cancel = QPushButton("Cancel")
         btn_row.addWidget(self._btn_cancel)
         btn_row.addWidget(self._btn_ok)
