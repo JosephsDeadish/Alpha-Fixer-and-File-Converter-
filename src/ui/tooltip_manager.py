@@ -221,8 +221,8 @@ _NORMAL: dict[str, list[str]] = {
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
         "Fairy Garden switches the trail to a sparkling emoji fairy-dust mode (✨💫⭐).",
-        "Ocean and Mermaid themes get a wave emoji trail (🫧💧🌊🐠).",
-        "Ice and Sparkle themes get crystal sparkle emoji (✦❄✧💎).",
+        "Themes using ocean/mermaid/ripple effects get a wave emoji trail (🫧💧🌊🐠).",
+        "Themes using ice/sparkle effects get a crystal sparkle emoji trail (✦❄✧💎).",
         "Disable to manually control the trail color with the picker above.",
     ],
     "cursor_combo": [
@@ -533,7 +533,7 @@ _DUMBED: dict[str, list[str]] = {
     "use_theme_trail": [
         "Check this and the trail changes color automatically for each theme. Smart.",
         "Fairy Garden gets sparkly emoji dust trail (✨💫⭐). Yes, really.",
-        "Ocean/Mermaid themes get bubble trail (🫧💧🌊). Ice gets crystals (✦❄✧).",
+        "Themes with ocean/mermaid effects get bubble trail (🫧💧🌊). Ice effects get crystals (✦❄✧).",
         "Uncheck to go back to manually picking a color. Boring but valid.",
         "Theme trail = automatic colors AND styles. Manual trail = DIY. Your call.",
     ],

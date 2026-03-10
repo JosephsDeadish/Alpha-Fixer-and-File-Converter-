@@ -461,44 +461,104 @@ class TestThemeEngineBannerFrames(unittest.TestCase):
 class TestMouseTrailStyles(unittest.TestCase):
     """Verify mouse_trail.py data constants without importing Qt."""
 
-    # Inline the constants from mouse_trail.py here so we can test without Qt.
-    _WAVE_DUST    = ["🫧", "💧", "🌊", "🐠", "🐚", "🌀", "🫧"]
-    _SPARKLE_DUST = ["✦", "❄", "✧", "💎", "❆", "✸", "❅"]
-    _FAIRY_DUST   = ["✨", "⭐", "💫", "🌟", "💜", "💛", "🌸"]
-    _EMOJI_LISTS  = {
-        "fairy":   _FAIRY_DUST,
-        "wave":    _WAVE_DUST,
-        "sparkle": _SPARKLE_DUST,
-    }
+    # Expected emoji that MUST appear in their respective lists in mouse_trail.py.
+    # Using source-reading avoids duplicating the actual lists in the test.
+    _EXPECTED_IN_WAVE    = "🌊"   # ocean wave emoji
+    _EXPECTED_IN_SPARKLE = "❄"   # ice crystal emoji
+    _EXPECTED_IN_FAIRY   = "✨"   # sparkle / fairy dust emoji
     _VALID_STYLES = {"dots", "fairy", "wave", "sparkle"}
+
+    def _trail_source(self) -> str:
+        trail_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "mouse_trail.py"
+        )
+        with open(trail_path) as f:
+            return f.read()
 
     def test_all_valid_styles_defined(self):
         for style in ("dots", "fairy", "wave", "sparkle"):
             self.assertIn(style, self._VALID_STYLES)
 
-    def test_emoji_lists_nonempty(self):
-        for style, lst in self._EMOJI_LISTS.items():
-            self.assertGreater(len(lst), 0, f"Emoji list for '{style}' is empty")
+    def test_wave_emoji_appears_in_source(self):
+        self.assertIn(self._EXPECTED_IN_WAVE, self._trail_source(),
+                      f"Ocean wave emoji {self._EXPECTED_IN_WAVE!r} missing from mouse_trail.py")
 
-    def test_wave_emoji_list_has_ocean_content(self):
-        self.assertIn("🌊", self._WAVE_DUST)
+    def test_sparkle_emoji_appears_in_source(self):
+        self.assertIn(self._EXPECTED_IN_SPARKLE, self._trail_source(),
+                      f"Crystal emoji {self._EXPECTED_IN_SPARKLE!r} missing from mouse_trail.py")
 
-    def test_sparkle_emoji_list_has_crystal_content(self):
-        self.assertIn("❄", self._SPARKLE_DUST)
-
-    def test_fairy_emoji_list_has_sparkle_content(self):
-        self.assertIn("✨", self._FAIRY_DUST)
+    def test_fairy_emoji_appears_in_source(self):
+        self.assertIn(self._EXPECTED_IN_FAIRY, self._trail_source(),
+                      f"Fairy dust emoji {self._EXPECTED_IN_FAIRY!r} missing from mouse_trail.py")
 
     def test_mouse_trail_source_defines_four_styles(self):
         """Read the mouse_trail.py source and confirm all 4 styles are present."""
-        import ast
-        trail_path = os.path.join(
-            os.path.dirname(__file__), "..", "src", "ui", "mouse_trail.py"
-        )
-        with open(trail_path) as f:
-            source = f.read()
+        source = self._trail_source()
         for style in ("dots", "fairy", "wave", "sparkle"):
-            self.assertIn(repr(style), source,
-                          f"Style {style!r} not found in mouse_trail.py source")
+            # Each style name should appear as a string literal in the source
+            self.assertTrue(
+                f'"{style}"' in source or f"'{style}'" in source,
+                f"Style {style!r} not found as a string literal in mouse_trail.py"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Settings manager completeness tests (no PyQt6 required)
+# ---------------------------------------------------------------------------
+
+class TestSettingsManagerDefaults(unittest.TestCase):
+    """All hidden theme unlock keys should be in _DEFAULTS."""
+
+    def _load_defaults(self) -> dict:
+        """Parse _DEFAULTS from settings_manager.py without importing Qt."""
+        settings_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "core", "settings_manager.py"
+        )
+        with open(settings_path) as f:
+            source = f.read()
+        return source
+
+    def test_all_hidden_theme_unlock_keys_in_defaults(self):
+        """Every hidden theme's _unlock value must have an unlock_ key in _DEFAULTS."""
+        # Import theme engine (no Qt)
+        import importlib.util
+        te_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "theme_engine.py"
+        )
+        spec = importlib.util.spec_from_file_location("theme_engine", te_path)
+        te = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(te)
+
+        source = self._load_defaults()
+        for name, theme in te.HIDDEN_THEMES.items():
+            unlock_key = f"unlock_{theme.get('_unlock', '')}"
+            self.assertIn(
+                f'"{unlock_key}"',
+                source,
+                f"Unlock key '{unlock_key}' for hidden theme '{name}' missing from settings_manager._DEFAULTS"
+            )
+
+    def test_converter_keep_metadata_in_defaults(self):
+        """converter_keep_metadata should have a default value."""
+        source = self._load_defaults()
+        self.assertIn('"converter_keep_metadata"', source)
+
+    def test_converter_keep_metadata_in_export_keys(self):
+        """converter_keep_metadata should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        # It should appear after the EXPORT_KEYS definition
+        export_section = source[source.find("EXPORT_KEYS"):]
+        self.assertIn('"converter_keep_metadata"', export_section)
+
+    def test_splash_screen_uses_banner_frames(self):
+        """splash_screen.py should use get_theme_banner_frames, not just get_theme_banner."""
+        splash_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "splash_screen.py"
+        )
+        with open(splash_path) as f:
+            source = f.read()
+        self.assertIn("get_theme_banner_frames", source,
+                      "splash_screen.py should call get_theme_banner_frames for animated banner")
+
 
 

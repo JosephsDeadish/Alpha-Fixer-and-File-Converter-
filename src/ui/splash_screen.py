@@ -54,9 +54,11 @@ class ThemeSplashScreen(QSplashScreen):
         self._bar_col = QColor(theme.get("progress_bar", theme.get("accent", "#e94560")))
         self._theme_name = theme.get("name", "Panda Dark") if theme else "Panda Dark"
 
-        # Banner text for the theme
-        from .theme_engine import get_theme_banner
-        self._banner = get_theme_banner(self._theme_name)
+        # Banner text for the theme — use animated frames if available
+        from .theme_engine import get_theme_banner, get_theme_banner_frames
+        self._banner_frames = get_theme_banner_frames(self._theme_name)
+        self._banner_frame_idx = 0
+        self._banner = self._banner_frames[0]
 
         # Try to load the theme's SVG
         self._svg_widget: Optional[QSvgWidget] = None
@@ -231,6 +233,10 @@ class ThemeSplashScreen(QSplashScreen):
         # Cycle loading dots
         dots_cycle = ["", ".", "..", "..."]
         self._dots = dots_cycle[self._anim_frame % len(dots_cycle)]
+        # Cycle banner frames (advance every 4 anim ticks → ~800ms)
+        if len(self._banner_frames) > 1 and self._anim_frame % 4 == 0:
+            self._banner_frame_idx = (self._banner_frame_idx + 1) % len(self._banner_frames)
+            self._banner = self._banner_frames[self._banner_frame_idx]
         self._repaint_pixmap()
 
     # ------------------------------------------------------------------

@@ -66,6 +66,7 @@ class SettingsManager:
         "overwrite_originals": False,
         "converter_output_dir": "",
         "converter_recursive": True,
+        "converter_keep_metadata": False,
         # Window geometry
         "window_x": 100,
         "window_y": 100,
@@ -245,7 +246,7 @@ class SettingsManager:
         "click_effects_enabled", "tooltip_mode",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
-        "converter_output_dir", "converter_recursive",
+        "converter_output_dir", "converter_recursive", "converter_keep_metadata",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
         "custom_presets",
     ]
