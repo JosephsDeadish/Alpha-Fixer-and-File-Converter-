@@ -132,6 +132,16 @@ class ConverterTab(QWidget):
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
         gf_layout.addWidget(self._quality_spin, 1, 1)
 
+        self._keep_metadata_check = QCheckBox("Preserve metadata (EXIF/ICC)")
+        self._keep_metadata_check.setChecked(
+            bool(self._settings.get("converter_keep_metadata", False))
+        )
+        self._keep_metadata_check.setToolTip(
+            "Copy EXIF, ICC profile, and DPI data from the source file to the output.\n"
+            "Supported for JPEG, PNG, WEBP, and TIFF outputs."
+        )
+        gf_layout.addWidget(self._keep_metadata_check, 2, 0, 1, 2)
+
         rv.addWidget(grp_fmt)
 
         # Resize (optional)
@@ -240,6 +250,9 @@ class ConverterTab(QWidget):
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
         self._quality_spin.valueChanged.connect(self._on_quality_changed)
+        self._keep_metadata_check.toggled.connect(
+            lambda v: self._settings.set("converter_keep_metadata", v)
+        )
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Initialise quality spinbox enabled state for the default format
@@ -421,6 +434,7 @@ class ConverterTab(QWidget):
             input_root=input_root,
             quality=quality,
             resize=resize,
+            keep_metadata=self._keep_metadata_check.isChecked(),
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)

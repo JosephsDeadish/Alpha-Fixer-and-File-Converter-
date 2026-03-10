@@ -87,16 +87,33 @@ class _ThumbLoader(QThread):
             width, height = img.size
             file_size = os.path.getsize(self._path)
 
+            # Check for alpha channel
+            has_alpha = mode in ("RGBA", "LA", "PA") or (
+                mode == "P" and img.info.get("transparency") is not None
+            )
+            alpha_note = "  ·  α" if has_alpha else ""
+
+            # Check for embedded metadata
+            meta_keys = []
+            if "exif" in img.info:
+                meta_keys.append("EXIF")
+            if "icc_profile" in img.info:
+                meta_keys.append("ICC")
+            if "dpi" in img.info:
+                dpi = img.info["dpi"]
+                meta_keys.append(f"DPI {dpi[0]:.0f}×{dpi[1]:.0f}")
+            meta_note = ("  ·  " + "/".join(meta_keys)) if meta_keys else ""
+
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
             img.close()
 
-            meta = (
+            meta_text = (
                 f"{Path(self._path).name}\n"
-                f"{width} × {height}  ·  {mode}\n"
-                f"{_fmt_size(file_size)}"
+                f"{width} × {height}  ·  {mode}{alpha_note}\n"
+                f"{_fmt_size(file_size)}{meta_note}"
             )
-            self.loaded.emit(qimg, meta)
+            self.loaded.emit(qimg, meta_text)
         except Exception as exc:
             self.failed.emit(str(exc))
 

@@ -29,9 +29,11 @@ from .preview_pane import BeforeAfterWidget
 class _AlphaPreviewLoader(QThread):
     """
     Load a single image, apply the current preset/manual settings,
-    and emit both the original and processed images as QImages.
+    and emit both the original and processed images as QImages,
+    plus numeric alpha statistics (min, max, mean) for each.
     """
     preview_ready = pyqtSignal(QImage, QImage)   # (before, after)
+    stats_ready = pyqtSignal(dict, dict)          # (before_stats, after_stats)
     failed = pyqtSignal(str)
 
     def __init__(self, path: str, preset=None, manual_params: dict | None = None):
@@ -39,6 +41,18 @@ class _AlphaPreviewLoader(QThread):
         self._path = path
         self._preset = preset
         self._manual = manual_params
+
+    @staticmethod
+    def _alpha_stats(img) -> dict:
+        """Return min/max/mean alpha for a PIL RGBA image."""
+        import numpy as np
+        arr = np.array(img.convert("RGBA"), dtype=np.uint8)
+        alpha = arr[:, :, 3]
+        return {
+            "min": int(alpha.min()),
+            "max": int(alpha.max()),
+            "mean": float(alpha.mean()),
+        }
 
     def run(self):
         try:
@@ -52,6 +66,7 @@ class _AlphaPreviewLoader(QThread):
             orig = load_image(self._path)  # always RGBA PIL image
 
             before_qi = _pil_to_qimage(orig)
+            before_stats = self._alpha_stats(orig)
 
             if self._preset is not None:
                 processed = apply_alpha_preset(orig, self._preset)
@@ -69,7 +84,9 @@ class _AlphaPreviewLoader(QThread):
                 processed = orig
 
             after_qi = _pil_to_qimage(processed)
+            after_stats = self._alpha_stats(processed)
             self.preview_ready.emit(before_qi, after_qi)
+            self.stats_ready.emit(before_stats, after_stats)
         except Exception as exc:
             import traceback
             self.failed.emit(traceback.format_exc())
@@ -179,6 +196,14 @@ class AlphaFixerTab(QWidget):
         self._compare = BeforeAfterWidget()
         self._compare.setMinimumHeight(200)
         ca_layout.addWidget(self._compare, 1)
+
+        # Alpha stats bar (before | after, shown below the comparison)
+        self._alpha_stats_lbl = QLabel()
+        self._alpha_stats_lbl.setObjectName("subheader")
+        self._alpha_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._alpha_stats_lbl.setWordWrap(True)
+        self._alpha_stats_lbl.setText("Alpha stats: load a file to see before/after values")
+        ca_layout.addWidget(self._alpha_stats_lbl)
 
         left_vsplit.addWidget(compare_area)
         left_vsplit.setSizes([220, 280])
@@ -562,6 +587,7 @@ class AlphaFixerTab(QWidget):
             self._preview_path, preset=preset, manual_params=manual
         )
         self._preview_loader.preview_ready.connect(self._on_compare_ready)
+        self._preview_loader.stats_ready.connect(self._on_stats_ready)
         self._preview_loader.failed.connect(self._on_compare_failed)
         self._preview_loader.start()
 
@@ -569,6 +595,14 @@ class AlphaFixerTab(QWidget):
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
         self._compare.set_before(before_qi)
         self._compare.set_after(after_qi)
+
+    @pyqtSlot(dict, dict)
+    def _on_stats_ready(self, before: dict, after: dict):
+        def _fmt(s: dict) -> str:
+            return f"min={s['min']} max={s['max']} mean={s['mean']:.1f}"
+        self._alpha_stats_lbl.setText(
+            f"BEFORE  ·  {_fmt(before)}        │        AFTER  ·  {_fmt(after)}"
+        )
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):

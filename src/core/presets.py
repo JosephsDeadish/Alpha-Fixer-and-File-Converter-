@@ -40,42 +40,55 @@ class AlphaPreset:
 # ---------------------------------------------------------------------------
 
 BUILTIN_PRESETS: list[AlphaPreset] = [
+    # -----------------------------------------------------------------------
+    # Full opacity (alpha = 255) — used by multiple platforms
+    # -----------------------------------------------------------------------
     AlphaPreset(
-        name="PS2",
+        name="Full Opacity  (N64 · DS · Wii · Xbox 360 · PS2 BG)",
+        alpha_value=255,
+        fill_mode="set",
+        fill_value=255,
+        threshold=0,
+        invert=False,
+        description=(
+            "Forces all pixels to full opacity (255/255). "
+            "Used by N64, Nintendo DS, Wii/GameCube, Xbox 360, and PS2 background/environment textures — "
+            "all expect opaque textures with no transparency channel."
+        ),
+    ),
+    # -----------------------------------------------------------------------
+    # Half opacity (alpha = 128) — used by multiple platforms
+    # -----------------------------------------------------------------------
+    AlphaPreset(
+        name="Half Opacity  (PS2 Sprite · GBA · PSP)",
         alpha_value=128,
         fill_mode="set",
         fill_value=128,
         threshold=0,
         invert=False,
-        description="PlayStation 2 – sets all pixels to half-opacity (128/255).",
+        description=(
+            "Sets all pixels to 50% opacity (128/255). "
+            "Used by PS2 sprite/foreground textures, Game Boy Advance, and PSP blending modes."
+        ),
     ),
+    # -----------------------------------------------------------------------
+    # PS2 UI / HUD — 75% opacity (also 'Fade 75%')
+    # -----------------------------------------------------------------------
     AlphaPreset(
-        name="N64",
-        alpha_value=255,
+        name="Fade 75%  (PS2 UI / HUD)",
+        alpha_value=192,
         fill_mode="set",
-        fill_value=255,
+        fill_value=192,
         threshold=0,
         invert=False,
-        description="Nintendo 64 – forces full opacity (255/255) on all pixels.",
+        description=(
+            "Sets all alpha to 75% opacity (192/255). "
+            "Used for PS2 UI/HUD overlays and general fade effects."
+        ),
     ),
-    AlphaPreset(
-        name="No Alpha",
-        alpha_value=255,
-        fill_mode="set",
-        fill_value=255,
-        threshold=0,
-        invert=False,
-        description="Removes transparency – sets alpha to fully opaque (255).",
-    ),
-    AlphaPreset(
-        name="Max Alpha",
-        alpha_value=255,
-        fill_mode="set",
-        fill_value=255,
-        threshold=0,
-        invert=False,
-        description="Sets all alpha values to maximum (255).",
-    ),
+    # -----------------------------------------------------------------------
+    # Fully transparent
+    # -----------------------------------------------------------------------
     AlphaPreset(
         name="Transparent",
         alpha_value=0,
@@ -85,15 +98,24 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
         invert=False,
         description="Makes the entire image fully transparent (alpha = 0).",
     ),
+    # -----------------------------------------------------------------------
+    # iOS / macOS
+    # -----------------------------------------------------------------------
     AlphaPreset(
-        name="Half Transparent",
-        alpha_value=128,
+        name="iOS / macOS",
+        alpha_value=255,
         fill_mode="set",
-        fill_value=128,
-        threshold=0,
+        fill_value=255,
+        threshold=128,
         invert=False,
-        description="Sets all alpha to 50% opacity.",
+        description=(
+            "iOS/macOS assets: pixels with alpha ≥ 128 become fully opaque; "
+            "pixels below 50% opacity remain transparent."
+        ),
     ),
+    # -----------------------------------------------------------------------
+    # Invert / threshold
+    # -----------------------------------------------------------------------
     AlphaPreset(
         name="Invert Alpha",
         alpha_value=None,
@@ -110,79 +132,16 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
         fill_value=128,
         threshold=128,
         invert=False,
-        description="Converts semi-transparent pixels to fully opaque or fully transparent.",
+        description=(
+            "Hard cut at 50%: pixels ≥ 128 alpha become fully opaque (255), "
+            "pixels < 128 become fully transparent (0)."
+        ),
         clamp_min=0,
         clamp_max=255,
     ),
     # -----------------------------------------------------------------------
-    # Console / platform presets
+    # Fade levels
     # -----------------------------------------------------------------------
-    AlphaPreset(
-        name="GBA",
-        alpha_value=128,
-        fill_mode="set",
-        fill_value=128,
-        threshold=0,
-        invert=False,
-        description="Game Boy Advance – sets all pixels to 50% opacity (128/255).",
-    ),
-    AlphaPreset(
-        name="Nintendo DS",
-        alpha_value=255,
-        fill_mode="set",
-        fill_value=255,
-        threshold=0,
-        invert=False,
-        description="Nintendo DS – forces full opacity (255/255) on all pixels.",
-    ),
-    AlphaPreset(
-        name="Wii / GameCube",
-        alpha_value=255,
-        fill_mode="set",
-        fill_value=255,
-        threshold=0,
-        invert=False,
-        description="Wii / GameCube – forces full opacity; most textures use no alpha.",
-    ),
-    AlphaPreset(
-        name="PSP",
-        alpha_value=128,
-        fill_mode="set",
-        fill_value=128,
-        threshold=0,
-        invert=False,
-        description="PlayStation Portable – applies 50% alpha across all pixels.",
-    ),
-    AlphaPreset(
-        name="Xbox 360",
-        alpha_value=255,
-        fill_mode="set",
-        fill_value=255,
-        threshold=0,
-        invert=False,
-        description="Xbox 360 – most sprite textures expect full opacity.",
-    ),
-    # -----------------------------------------------------------------------
-    # Web / app presets
-    # -----------------------------------------------------------------------
-    AlphaPreset(
-        name="iOS / macOS",
-        alpha_value=255,
-        fill_mode="set",
-        fill_value=255,
-        threshold=128,
-        invert=False,
-        description="iOS/macOS assets – opaque pixels only; transparent pixels below 50% alpha stay transparent.",
-    ),
-    AlphaPreset(
-        name="Fade 75%",
-        alpha_value=192,
-        fill_mode="set",
-        fill_value=192,
-        threshold=0,
-        invert=False,
-        description="Sets all alpha to 75% opacity (192/255).",
-    ),
     AlphaPreset(
         name="Fade 25%",
         alpha_value=64,
@@ -192,6 +151,9 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
         invert=False,
         description="Sets all alpha to 25% opacity (64/255) — very faint ghost effect.",
     ),
+    # -----------------------------------------------------------------------
+    # Relative / arithmetic operations
+    # -----------------------------------------------------------------------
     AlphaPreset(
         name="Multiply 50%",
         alpha_value=None,

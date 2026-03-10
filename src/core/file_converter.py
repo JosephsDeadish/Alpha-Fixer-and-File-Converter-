@@ -85,6 +85,7 @@ def convert_file(
     target_format: str,
     quality: int = 90,
     resize: Optional[tuple[int, int]] = None,
+    keep_metadata: bool = False,
 ) -> str:
     """
     Convert a single image file.
@@ -94,21 +95,43 @@ def convert_file(
     PPM, PCX, GIF) the alpha is properly composited onto a white background
     rather than discarded.
 
-    :param input_path:    Source file path.
-    :param output_path:   Destination file path (with correct extension).
-    :param target_format: One of the keys in SUPPORTED_OUTPUT_FORMATS, e.g. "PNG".
-    :param quality:       JPEG/WEBP/AVIF quality (1-100).
-    :param resize:        Optional (width, height) tuple.
+    :param input_path:     Source file path.
+    :param output_path:    Destination file path (with correct extension).
+    :param target_format:  One of the keys in SUPPORTED_OUTPUT_FORMATS, e.g. "PNG".
+    :param quality:        JPEG/WEBP/AVIF quality (1-100).
+    :param resize:         Optional (width, height) tuple.
+    :param keep_metadata:  When True, copy EXIF/ICC/DPI metadata to the output.
     :returns: output_path on success.
     :raises:  Exception on failure.
     """
-    img = _open_image(input_path)
+    src_img = _open_image(input_path)
+    img = src_img
 
     if resize:
         img = img.resize(resize, Image.LANCZOS)
 
     ext = Path(output_path).suffix.lower()
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    # Helper: inject metadata kwargs into save calls
+    def _meta_kwargs(fmt_ext: str) -> dict:
+        if not keep_metadata:
+            return {}
+        kw: dict = {}
+        try:
+            if fmt_ext in (".jpg", ".jpeg") and "exif" in src_img.info:
+                kw["exif"] = src_img.info["exif"]
+            elif fmt_ext in (".webp",) and "exif" in src_img.info:
+                kw["exif"] = src_img.info["exif"]
+            elif fmt_ext in (".png",) and "exif" in src_img.info:
+                kw["exif"] = src_img.info["exif"]
+            elif fmt_ext in (".tiff", ".tif"):
+                for k in ("exif", "icc_profile", "dpi"):
+                    if k in src_img.info:
+                        kw[k] = src_img.info[k]
+        except Exception:
+            pass
+        return kw
 
     # --- DDS (custom writer, needs RGBA) ---
     if ext == ".dds":
@@ -118,7 +141,7 @@ def convert_file(
     # --- JPEG (no alpha, RGB or L only) ---
     if ext in (".jpg", ".jpeg"):
         img = _flatten_alpha(img)
-        img.save(output_path, quality=quality)
+        img.save(output_path, quality=quality, **_meta_kwargs(ext))
         return output_path
 
     # --- BMP (no alpha; standard viewers expect RGB or L) ---
@@ -159,7 +182,7 @@ def convert_file(
 
     # --- WEBP (supports RGB and RGBA, quality applies) ---
     if ext == ".webp":
-        img.save(output_path, quality=quality)
+        img.save(output_path, quality=quality, **_meta_kwargs(ext))
         return output_path
 
     # --- AVIF (supports RGB and RGBA, quality applies) ---
@@ -175,7 +198,7 @@ def convert_file(
         return output_path
 
     # --- Default: PNG, TIFF, TGA – all support RGBA; preserve mode ---
-    img.save(output_path)
+    img.save(output_path, **_meta_kwargs(ext))
     return output_path
 
 

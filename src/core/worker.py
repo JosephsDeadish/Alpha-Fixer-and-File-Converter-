@@ -126,6 +126,7 @@ class ConverterWorker(QThread):
         input_root: Optional[str] = None,
         quality: int = 90,
         resize: Optional[tuple[int, int]] = None,
+        keep_metadata: bool = False,
         parent=None,
     ):
         super().__init__(parent)
@@ -136,6 +137,7 @@ class ConverterWorker(QThread):
         self._input_root = input_root
         self._quality = quality
         self._resize = resize
+        self._keep_metadata = keep_metadata
         self._abort = False
 
     def stop(self):
@@ -162,6 +164,7 @@ class ConverterWorker(QThread):
                     self._target_format,
                     quality=self._quality,
                     resize=self._resize,
+                    keep_metadata=self._keep_metadata,
                 )
                 success += 1
                 self.file_done.emit(src, True, dest)
