@@ -206,6 +206,60 @@ class SettingsDialog(QDialog):
         effect_emoji_row.addWidget(grp_emoji, 2)
 
         tv.addLayout(effect_emoji_row)
+
+        # ---- Mouse Trail and Cursor GroupBoxes (belong with theme settings) ----
+        mouse_row = QHBoxLayout()
+        mouse_row.setSpacing(8)
+
+        grp_trail = QGroupBox("Mouse Trail")
+        trail_gl = QGridLayout(grp_trail)
+        trail_gl.setColumnStretch(1, 1)
+        trail_gl.setHorizontalSpacing(10)
+        trail_gl.setVerticalSpacing(6)
+        self._trail_check = QCheckBox("Enable mouse trail")
+        trail_gl.addWidget(self._trail_check, 0, 0, 1, 2)
+        trail_gl.addWidget(QLabel("Trail Color:"), 1, 0)
+        self._trail_color_btn = ColorButton("#e94560")
+        trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
+        self._use_theme_trail_check = QCheckBox(
+            "Use theme trail  (auto-color + fairy dust on Fairy Garden)"
+        )
+        self._use_theme_trail_check.setToolTip(
+            "When enabled the trail color is chosen automatically to match\n"
+            "the active theme.  Fairy Garden gets a sparkling emoji trail."
+        )
+        trail_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
+        self._use_theme_trail_check.toggled.connect(
+            lambda checked: self._trail_color_btn.setEnabled(not checked)
+        )
+        mouse_row.addWidget(grp_trail, 1)
+
+        grp_cursor = QGroupBox("Cursor")
+        cursor_gl = QGridLayout(grp_cursor)
+        cursor_gl.setColumnStretch(1, 1)
+        cursor_gl.setHorizontalSpacing(10)
+        cursor_gl.setVerticalSpacing(6)
+        cursor_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
+        self._cursor_combo = QComboBox()
+        self._cursor_combo.addItems([
+            "Default", "Cross", "Pointing Hand", "Open Hand",
+            "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
+        ])
+        cursor_gl.addWidget(self._cursor_combo, 0, 1)
+        self._use_theme_cursor_check = QCheckBox(
+            "Use theme cursor  (overrides the style above)"
+        )
+        self._use_theme_cursor_check.setToolTip(
+            "When enabled the cursor shape is chosen automatically to match the\n"
+            "active theme — e.g. Otter Cove gets the 🤘 rock-on emoji cursor."
+        )
+        cursor_gl.addWidget(self._use_theme_cursor_check, 1, 0, 1, 2)
+        self._use_theme_cursor_check.toggled.connect(
+            lambda checked: self._cursor_combo.setEnabled(not checked)
+        )
+        mouse_row.addWidget(grp_cursor, 1)
+
+        tv.addLayout(mouse_row)
         tv.addStretch(1)
         tabs.addTab(theme_tab, "🎨 Theme")
 
@@ -234,56 +288,6 @@ class SettingsDialog(QDialog):
         sound_row.addWidget(self._btn_sound_browse)
         sound_gl.addLayout(sound_row, 1, 1)
         gv.addWidget(grp_sound)
-
-        # ---- Mouse Trail GroupBox ----
-        grp_trail = QGroupBox("Mouse Trail")
-        trail_gl = QGridLayout(grp_trail)
-        trail_gl.setColumnStretch(1, 1)
-        trail_gl.setHorizontalSpacing(10)
-        trail_gl.setVerticalSpacing(6)
-        self._trail_check = QCheckBox("Enable mouse trail")
-        trail_gl.addWidget(self._trail_check, 0, 0, 1, 2)
-        trail_gl.addWidget(QLabel("Trail Color:"), 1, 0)
-        self._trail_color_btn = ColorButton("#e94560")
-        trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
-        self._use_theme_trail_check = QCheckBox(
-            "Use theme trail  (auto-color + fairy dust on Fairy Garden)"
-        )
-        self._use_theme_trail_check.setToolTip(
-            "When enabled the trail color is chosen automatically to match\n"
-            "the active theme.  Fairy Garden gets a sparkling emoji trail."
-        )
-        trail_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
-        self._use_theme_trail_check.toggled.connect(
-            lambda checked: self._trail_color_btn.setEnabled(not checked)
-        )
-        gv.addWidget(grp_trail)
-
-        # ---- Cursor GroupBox ----
-        grp_cursor = QGroupBox("Cursor")
-        cursor_gl = QGridLayout(grp_cursor)
-        cursor_gl.setColumnStretch(1, 1)
-        cursor_gl.setHorizontalSpacing(10)
-        cursor_gl.setVerticalSpacing(6)
-        cursor_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
-        self._cursor_combo = QComboBox()
-        self._cursor_combo.addItems([
-            "Default", "Cross", "Pointing Hand", "Open Hand",
-            "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
-        ])
-        cursor_gl.addWidget(self._cursor_combo, 0, 1)
-        self._use_theme_cursor_check = QCheckBox(
-            "Use theme cursor  (overrides the style above)"
-        )
-        self._use_theme_cursor_check.setToolTip(
-            "When enabled the cursor shape is chosen automatically to match the\n"
-            "active theme — e.g. Otter Cove gets the 🤘 rock-on emoji cursor."
-        )
-        cursor_gl.addWidget(self._use_theme_cursor_check, 1, 0, 1, 2)
-        self._use_theme_cursor_check.toggled.connect(
-            lambda checked: self._cursor_combo.setEnabled(not checked)
-        )
-        gv.addWidget(grp_cursor)
 
         # ---- Appearance & FX GroupBox ----
         grp_misc = QGroupBox("Appearance && Effects")

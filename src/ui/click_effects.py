@@ -269,21 +269,19 @@ def _spawn_sakura(x, y):
 
 
 def _spawn_fairy(x, y):
-    """Fairy-dust sparkles for Fairy Garden theme."""
+    """Fairy-dust sparkles for Fairy Garden theme (click burst)."""
     particles = []
-    fairy_emojis = ["✨", "⭐", "🌟", "💫", "🪄", "🧚"]
+    # Use only fairy emoji for consistency with the flying fairies overhead
     fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff", "#aa44ff"]
-    for _ in range(6):
+    for _ in range(5):
         angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(1.5, 8)
+        speed = random.uniform(1.5, 7)
         vx = math.cos(angle) * speed
         vy = math.sin(angle) * speed
-        kind = "text" if random.random() < 0.65 else "circle"
         color = QColor(random.choice(fairy_colors))
-        text = random.choice(fairy_emojis) if kind == "text" else ""
-        size = random.uniform(10, 20) if kind == "text" else random.uniform(3, 8)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.4),
-                                   kind, size, color, text))
+        size = random.uniform(12, 22)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
+                                   "text", size, color, "🧚"))
     return particles
 
 
@@ -415,21 +413,23 @@ class _FairyFlock(QObject):
         count = random.randint(2, 5)
         left_to_right = random.random() < 0.5
         speed_sign = 1 if left_to_right else -1
-        fairy_emojis = ["🧚", "✨", "🪄", "⭐", "💜", "🌟"]
+        # Fairies fly only through the top 20% of the window.
+        # Only the fairy emoji 🧚 is used — no random sparkles/wands.
         fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff", "#ffaaff"]
+        top_band = max(80, h // 5)
         for i in range(count):
-            y_start = random.randint(40, max(41, h - 100)) + i * random.randint(-10, 20)
+            y_start = random.randint(10, top_band)
             x_start = (random.randint(-30, -10) if left_to_right
                        else w + random.randint(10, 30))
             speed = random.uniform(1.5, 4.5) * speed_sign
-            vy = random.uniform(-0.4, 0.4)
+            vy = random.uniform(-0.3, 0.3)
             life = (w + 80) / max(abs(speed), 1) / 60 + random.uniform(0.5, 2.0)
             fairy = _Particle(
                 x_start + i * random.randint(20, 50), y_start,
                 speed, vy, life,
                 "fairy_fly", random.uniform(18, 28),
                 QColor(random.choice(fairy_colors)),
-                random.choice(fairy_emojis),
+                "🧚",
             )
             self._overlay._add_particle(fairy)
 

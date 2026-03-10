@@ -94,6 +94,30 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
         self.setMinimumSize(1000, 780)
+        # Set the panda SVG as the window icon (used in title bar + taskbar)
+        self._set_panda_window_icon()
+
+    def _set_panda_window_icon(self):
+        """Render panda_dark.svg to a QPixmap and use it as the window/app icon."""
+        import os
+        svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+        for candidate in ("panda_dark.svg", "panda_light.svg"):
+            svg_path = os.path.normpath(os.path.join(svg_dir, candidate))
+            if os.path.isfile(svg_path):
+                try:
+                    from PyQt6.QtSvg import QSvgRenderer
+                    renderer = QSvgRenderer(svg_path)
+                    pix = QPixmap(64, 64)
+                    pix.fill(Qt.GlobalColor.transparent)
+                    painter = QPainter(pix)
+                    renderer.render(painter)
+                    painter.end()
+                    self.setWindowIcon(QIcon(pix))
+                    QApplication.setWindowIcon(QIcon(pix))
+                    return
+                except Exception:
+                    pass
+                break
 
     def _setup_ui(self):
         # Menu bar
@@ -172,8 +196,14 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Main Toolbar")
         toolbar.setMovable(False)
         toolbar.setFloatable(False)
-        toolbar.setIconSize(QSize(20, 20))
+        toolbar.setIconSize(QSize(24, 24))
         self.addToolBar(toolbar)
+
+        # Panda icon on the far left of the toolbar
+        panda_lbl = self._make_toolbar_panda_icon()
+        if panda_lbl is not None:
+            toolbar.addWidget(panda_lbl)
+            toolbar.addSeparator()
 
         btn_settings = QPushButton("⚙ Settings")
         btn_settings.clicked.connect(self._open_settings)
@@ -435,6 +465,35 @@ class MainWindow(QMainWindow):
         self._banner_frame_idx = (self._banner_frame_idx + 1) % len(self._banner_frames)
         self._banner_lbl.setText(self._banner_frames[self._banner_frame_idx])
 
+    def _make_toolbar_panda_icon(self):
+        """Render the panda SVG to a 28×28 QLabel for the toolbar. Returns None on failure."""
+        import os
+        svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+        for candidate in ("panda_dark.svg", "panda_light.svg"):
+            svg_path = os.path.normpath(os.path.join(svg_dir, candidate))
+            if os.path.isfile(svg_path):
+                try:
+                    from PyQt6.QtSvg import QSvgRenderer
+                    renderer = QSvgRenderer(svg_path)
+                    pix = QPixmap(28, 28)
+                    pix.fill(Qt.GlobalColor.transparent)
+                    painter = QPainter(pix)
+                    renderer.render(painter)
+                    painter.end()
+                    lbl = QLabel()
+                    lbl.setPixmap(pix)
+                    lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+                    lbl.setContentsMargins(4, 0, 4, 0)
+                    return lbl
+                except Exception:
+                    pass
+                break
+        # Fallback: plain text panda emoji
+        lbl = QLabel("🐼")
+        lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+        lbl.setContentsMargins(4, 0, 4, 0)
+        return lbl
+
     def _make_svg_badge(self):
         """Create a small SVG theme badge widget.  Returns None if QtSvg unavailable."""
         try:
@@ -479,7 +538,29 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
         dlg.settings_changed.connect(self._on_settings_changed)
+
+        # Attach a click-effects overlay to the dialog so particle effects are
+        # visible while the settings window is open (the main overlay is behind
+        # the modal and therefore not visible).
+        dlg_overlay = None
+        if (self._click_effects is not None
+                and self._settings.get("click_effects_enabled", True)):
+            from .click_effects import ClickEffectsOverlay
+            dlg_overlay = ClickEffectsOverlay(dlg)
+            # Mirror the current effect setting but don't count clicks toward
+            # secret-theme unlocks (leave click_registered unconnected).
+            theme = self._settings.get_theme()
+            effect_key = (theme.get("_effect")
+                          or THEME_EFFECTS.get(theme.get("name", ""), "default"))
+            dlg_overlay.set_effect(effect_key)
+            custom_emoji = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
+            dlg_overlay.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
+            dlg_overlay.set_enabled(True)
+
         dlg.exec()
+
+        if dlg_overlay is not None:
+            dlg_overlay.set_enabled(False)
 
     def _on_settings_changed(self):
         """Re-apply all effect-related settings after the dialog closes."""
