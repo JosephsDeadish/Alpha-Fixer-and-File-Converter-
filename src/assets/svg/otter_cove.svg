@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" fill="#1a1206" rx="8"/>
+  <!-- Otter body -->
+  <ellipse cx="32" cy="40" rx="18" ry="14" fill="#8b5a2b"/>
+  <!-- Otter head -->
+  <circle cx="32" cy="22" r="14" fill="#8b5a2b"/>
+  <!-- Face patches -->
+  <ellipse cx="32" cy="26" rx="10" ry="8" fill="#c49a6c"/>
+  <!-- Eyes -->
+  <circle cx="27" cy="20" r="3" fill="#2a1200"/>
+  <circle cx="37" cy="20" r="3" fill="#2a1200"/>
+  <circle cx="27.5" cy="19.5" r="1" fill="white"/>
+  <circle cx="37.5" cy="19.5" r="1" fill="white"/>
+  <!-- Nose -->
+  <ellipse cx="32" cy="24" rx="3" ry="2" fill="#2a1200"/>
+  <!-- Rock 🤘 emoji hint -->
+  <text x="32" y="58" text-anchor="middle" font-size="14" fill="#e8a040">🤘</text>
+</svg>

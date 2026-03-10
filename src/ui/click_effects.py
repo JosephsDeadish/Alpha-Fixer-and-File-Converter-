@@ -304,6 +304,46 @@ def _spawn_sakura(x, y):
     return particles
 
 
+def _spawn_fairy(x, y):
+    """Glitter explosion with fairy-dust sparkles and wand magic for Fairy Garden theme."""
+    particles = []
+    fairy_emojis = ["✨", "⭐", "🌟", "💫", "🌙", "🦋", "🌸", "🪄", "💜", "💛",
+                    "🌈", "🎀", "💎", "🔮", "🧚", "🌺", "💞", "🌠", "🪐", "💫"]
+    fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff",
+                    "#ffddff", "#aa44ff", "#ff44cc", "#ddbbff", "#ffaaff"]
+    # Big glitter burst – radial explosion in all directions
+    for _ in range(18):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(1.5, 8)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed
+        kind = "text" if random.random() < 0.65 else "circle"
+        color = QColor(random.choice(fairy_colors))
+        text = random.choice(fairy_emojis) if kind == "text" else ""
+        size = random.uniform(10, 22) if kind == "text" else random.uniform(3, 9)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.4),
+                                   kind, size, color, text))
+    # A shower of tiny glitter dots
+    for _ in range(12):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(3, 11)
+        vx = math.cos(angle) * speed + random.uniform(-1, 1)
+        vy = math.sin(angle) * speed + random.uniform(-1, 1)
+        color_choice = random.choice(["#ffffff", "#ffccff", "#ff88ff",
+                                      "#cc44ff", "#ffddff", "#aa66ff"])
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.3, 0.7),
+                                   "circle", random.uniform(2, 5),
+                                   QColor(color_choice)))
+    # Floating fairy & wand emoji that drift upward
+    for emoji in random.sample(["🧚", "🪄", "✨", "💫", "🌟", "💎", "🔮"], 4):
+        vx = random.uniform(-2.5, 2.5)
+        vy = random.uniform(-7, -3)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(1.2, 2.0),
+                                   "text", random.uniform(18, 32),
+                                   QColor(random.choice(fairy_colors)), emoji))
+    return particles
+
+
 # ---------------------------------------------------------------------------
 # Custom emoji effect (user-configurable)
 # ---------------------------------------------------------------------------
@@ -347,6 +387,7 @@ _SPAWNERS = {
     "ice":          _spawn_ice,
     "panda":        _spawn_panda,
     "sakura":       _spawn_sakura,
+    "fairy":        _spawn_fairy,
     "custom":       _spawn_custom,
 }
 

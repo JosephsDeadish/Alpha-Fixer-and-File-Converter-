@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" fill="#04030f" rx="8"/>
+  <!-- Stars -->
+  <circle cx="10" cy="10" r="1.5" fill="#a06aff" opacity="0.9"/>
+  <circle cx="54" cy="8" r="1" fill="#ffffff" opacity="0.7"/>
+  <circle cx="24" cy="5" r="1" fill="#a06aff" opacity="0.8"/>
+  <!-- Otter in space -->
+  <circle cx="32" cy="26" r="12" fill="#8b5a2b"/>
+  <ellipse cx="32" cy="30" rx="9" ry="7" fill="#c49a6c"/>
+  <circle cx="28" cy="23" r="2.5" fill="#2a1200"/>
+  <circle cx="36" cy="23" r="2.5" fill="#2a1200"/>
+  <ellipse cx="32" cy="27" rx="2.5" ry="1.8" fill="#2a1200"/>
+  <!-- Space helmet ring -->
+  <circle cx="32" cy="26" r="14" fill="none" stroke="#a06aff" stroke-width="2" opacity="0.7"/>
+  <!-- Rock hand -->
+  <text x="32" y="56" text-anchor="middle" font-size="14" fill="#a06aff">🤘</text>
+</svg>

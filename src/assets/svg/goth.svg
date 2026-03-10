@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" fill="#0a0a0a" rx="8"/>
+  <!-- Skull -->
+  <circle cx="32" cy="26" r="16" fill="#1a001a" stroke="#8800aa" stroke-width="1.5"/>
+  <rect x="22" y="36" width="20" height="12" rx="2" fill="#1a001a" stroke="#8800aa" stroke-width="1.5"/>
+  <!-- Eye sockets -->
+  <ellipse cx="26" cy="24" rx="5" ry="6" fill="#0a0a0a"/>
+  <ellipse cx="38" cy="24" rx="5" ry="6" fill="#0a0a0a"/>
+  <!-- Purple glow in eyes -->
+  <ellipse cx="26" cy="24" rx="3" ry="4" fill="#8800aa" opacity="0.5"/>
+  <ellipse cx="38" cy="24" rx="3" ry="4" fill="#8800aa" opacity="0.5"/>
+  <!-- Teeth -->
+  <rect x="24" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
+  <rect x="30" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
+  <rect x="36" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
+  <!-- Nose -->
+  <polygon points="32,28 30,33 34,33" fill="#0a0a0a"/>
+</svg>

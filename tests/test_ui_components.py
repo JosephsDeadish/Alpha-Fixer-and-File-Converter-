@@ -1355,3 +1355,171 @@ class TestUseThemeCursorSetting(unittest.TestCase):
         from src.core.settings_manager import SettingsManager
         self.assertIn("use_theme_cursor", SettingsManager.EXPORT_KEYS)
 
+
+# ---------------------------------------------------------------------------
+# Fairy Garden theme + fairy click effect
+# ---------------------------------------------------------------------------
+
+class TestFairyTheme(unittest.TestCase):
+    def test_fairy_garden_in_preset_themes(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        self.assertIn("Fairy Garden", PRESET_THEMES)
+
+    def test_fairy_garden_has_fairy_effect(self):
+        from src.ui.theme_engine import FAIRY_THEME
+        self.assertEqual(FAIRY_THEME["_effect"], "fairy")
+
+    def test_fairy_garden_has_wand_cursor(self):
+        from src.ui.theme_engine import FAIRY_THEME
+        self.assertEqual(FAIRY_THEME["_cursor"], "emoji:🪄")
+
+    def test_fairy_garden_has_trail_color(self):
+        from src.ui.theme_engine import FAIRY_THEME
+        self.assertIn("_trail_color", FAIRY_THEME)
+        self.assertTrue(FAIRY_THEME["_trail_color"].startswith("#"))
+
+    def test_fairy_in_spawners(self):
+        from src.ui.click_effects import _SPAWNERS
+        self.assertIn("fairy", _SPAWNERS)
+
+    def test_fairy_spawner_produces_particles(self):
+        from src.ui.click_effects import _SPAWNERS
+        particles = _SPAWNERS["fairy"](100, 100)
+        self.assertGreater(len(particles), 0)
+        for p in particles:
+            for attr in ("x", "y", "vx", "vy", "life", "max_life", "kind", "size", "color"):
+                self.assertTrue(hasattr(p, attr),
+                                f"Particle missing attribute '{attr}'")
+
+    def test_fairy_is_in_effect_options(self):
+        """'fairy' must appear in the settings_dialog _EFFECT_OPTIONS list."""
+        from src.ui.settings_dialog import _EFFECT_OPTIONS
+        keys = [k for k, _ in _EFFECT_OPTIONS]
+        self.assertIn("fairy", keys)
+
+
+# ---------------------------------------------------------------------------
+# use_theme_trail setting
+# ---------------------------------------------------------------------------
+
+class TestUseThemeTrailSetting(unittest.TestCase):
+    def test_default_is_false(self):
+        from src.core.settings_manager import SettingsManager
+        self.assertIn("use_theme_trail", SettingsManager._DEFAULTS)
+        self.assertFalse(SettingsManager._DEFAULTS["use_theme_trail"])
+
+    def test_in_export_keys(self):
+        from src.core.settings_manager import SettingsManager
+        self.assertIn("use_theme_trail", SettingsManager.EXPORT_KEYS)
+
+
+# ---------------------------------------------------------------------------
+# Every theme has _trail_color key
+# ---------------------------------------------------------------------------
+
+class TestThemeTrailColorKeys(unittest.TestCase):
+    def test_all_preset_themes_have_trail_color(self):
+        from src.ui.theme_engine import PRESET_THEMES
+        for name, theme in PRESET_THEMES.items():
+            self.assertIn("_trail_color", theme,
+                          f"PRESET_THEMES['{name}'] missing '_trail_color'")
+            self.assertTrue(theme["_trail_color"].startswith("#"),
+                            f"'{name}' _trail_color must be a hex color")
+
+    def test_hidden_themes_have_trail_color(self):
+        from src.ui.theme_engine import HIDDEN_THEMES
+        for name, theme in HIDDEN_THEMES.items():
+            self.assertIn("_trail_color", theme,
+                          f"HIDDEN_THEMES['{name}'] missing '_trail_color'")
+
+
+# ---------------------------------------------------------------------------
+# SVG badge infrastructure
+# ---------------------------------------------------------------------------
+
+class TestThemeSvgPaths(unittest.TestCase):
+    def test_get_theme_svg_path_for_known_themes(self):
+        """get_theme_svg_path should return a non-empty path for all preset themes."""
+        from src.ui.theme_engine import PRESET_THEMES, get_theme_svg_path
+        import os
+        for name in PRESET_THEMES:
+            path = get_theme_svg_path(name)
+            self.assertTrue(path, f"No SVG path for preset theme '{name}'")
+            self.assertTrue(os.path.isfile(path),
+                            f"SVG file missing for '{name}': {path}")
+
+    def test_get_theme_svg_path_unknown_returns_empty(self):
+        from src.ui.theme_engine import get_theme_svg_path
+        path = get_theme_svg_path("NonExistentTheme12345")
+        self.assertEqual(path, "")
+
+    def test_hidden_themes_have_svg(self):
+        from src.ui.theme_engine import HIDDEN_THEMES, get_theme_svg_path
+        import os
+        for name in HIDDEN_THEMES:
+            path = get_theme_svg_path(name)
+            self.assertTrue(path, f"No SVG path for hidden theme '{name}'")
+            self.assertTrue(os.path.isfile(path),
+                            f"SVG file missing for hidden theme '{name}': {path}")
+
+
+# ---------------------------------------------------------------------------
+# Mouse trail: set_style API
+# ---------------------------------------------------------------------------
+
+class TestMouseTrailStyle(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(600, 400)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_set_style_dots_accepted(self):
+        from src.ui.mouse_trail import MouseTrailOverlay
+        overlay = MouseTrailOverlay(self._parent)
+        overlay.set_style("dots")
+        self.assertEqual(overlay._style, "dots")
+
+    def test_set_style_fairy_accepted(self):
+        from src.ui.mouse_trail import MouseTrailOverlay
+        overlay = MouseTrailOverlay(self._parent)
+        overlay.set_style("fairy")
+        self.assertEqual(overlay._style, "fairy")
+
+    def test_set_style_unknown_falls_back_to_dots(self):
+        from src.ui.mouse_trail import MouseTrailOverlay
+        overlay = MouseTrailOverlay(self._parent)
+        overlay.set_style("unicorns")
+        self.assertEqual(overlay._style, "dots")
+
+    def test_set_style_clears_trail(self):
+        """Changing style should clear existing trail entries."""
+        from src.ui.mouse_trail import MouseTrailOverlay
+        overlay = MouseTrailOverlay(self._parent)
+        overlay._trail.append([10, 10, 1.0, "✨"])
+        overlay.set_style("dots")
+        self.assertEqual(len(overlay._trail), 0)
+
+
+# ---------------------------------------------------------------------------
+# New cursor options in _CURSOR_MAP
+# ---------------------------------------------------------------------------
+
+class TestCursorMapOptions(unittest.TestCase):
+    def test_hourglass_in_cursor_map(self):
+        from src.ui.main_window import _CURSOR_MAP
+        self.assertIn("Hourglass", _CURSOR_MAP)
+
+    def test_forbidden_in_cursor_map(self):
+        from src.ui.main_window import _CURSOR_MAP
+        self.assertIn("Forbidden", _CURSOR_MAP)
+
+    def test_ibeam_in_cursor_map(self):
+        from src.ui.main_window import _CURSOR_MAP
+        self.assertIn("IBeam", _CURSOR_MAP)
+

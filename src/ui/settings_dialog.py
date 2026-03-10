@@ -35,6 +35,7 @@ _EFFECT_OPTIONS = [
     ("ice",          "Ice — Snowflakes & frost ❄"),
     ("panda",        "Panda — Cute panda shower 🐼"),
     ("sakura",       "Sakura — Cherry blossom petals 🌸"),
+    ("fairy",        "Fairy Garden — Glitter & magic wands 🪄✨"),
     ("custom",       "Custom — Your own emoji 🎨"),
 ]
 
@@ -217,10 +218,27 @@ class SettingsDialog(QDialog):
         gv.addWidget(self._trail_color_btn, row, 1)
         row += 1
 
+        gv.addWidget(QLabel(""), row, 0)
+        self._use_theme_trail_check = QCheckBox(
+            "Use theme trail  (auto-color + fairy dust on Fairy Garden)"
+        )
+        self._use_theme_trail_check.setToolTip(
+            "When enabled the trail color is chosen automatically to match\n"
+            "the active theme.  Fairy Garden gets a sparkling emoji trail."
+        )
+        gv.addWidget(self._use_theme_trail_check, row, 1, 1, 2)
+        self._use_theme_trail_check.toggled.connect(
+            lambda checked: self._trail_color_btn.setEnabled(not checked)
+        )
+        row += 1
+
         # Cursor
         gv.addWidget(QLabel("Cursor Style:"), row, 0)
         self._cursor_combo = QComboBox()
-        self._cursor_combo.addItems(["Default", "Cross", "Pointing Hand", "Open Hand"])
+        self._cursor_combo.addItems([
+            "Default", "Cross", "Pointing Hand", "Open Hand",
+            "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
+        ])
         gv.addWidget(self._cursor_combo, row, 1)
         row += 1
 
@@ -356,6 +374,9 @@ class SettingsDialog(QDialog):
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
+        use_theme_trail = self._settings.get("use_theme_trail", False)
+        self._use_theme_trail_check.setChecked(use_theme_trail)
+        self._trail_color_btn.setEnabled(not use_theme_trail)
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -383,6 +404,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
+        mgr.register(self._use_theme_trail_check, "use_theme_trail")
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._font_size_spin, "font_size")
@@ -515,6 +537,7 @@ class SettingsDialog(QDialog):
         self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
         self._settings.set("trail_enabled", self._trail_check.isChecked())
         self._settings.set("trail_color", self._trail_color_btn.color())
+        self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
         self._settings.set("font_size", self._font_size_spin.value())

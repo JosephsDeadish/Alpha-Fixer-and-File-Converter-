@@ -51,6 +51,7 @@ class SettingsManager:
         "use_theme_cursor": False,
         "trail_enabled": False,
         "trail_color": "#e94560",
+        "use_theme_trail": False,
         # Appearance
         "font_size": 10,
         # Last-used state
@@ -219,7 +220,7 @@ class SettingsManager:
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
         "sound_enabled", "click_sound_path",
-        "cursor", "use_theme_cursor", "trail_enabled", "trail_color",
+        "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "use_theme_trail",
         "font_size",
         "click_effects_enabled", "tooltip_mode",
         "custom_emoji",

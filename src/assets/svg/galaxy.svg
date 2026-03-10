@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" fill="#03030f" rx="8"/>
+  <!-- Stars -->
+  <circle cx="12" cy="10" r="1.5" fill="#4477ff" opacity="0.9"/>
+  <circle cx="52" cy="8" r="1" fill="#ffffff" opacity="0.7"/>
+  <circle cx="22" cy="6" r="1" fill="#4477ff" opacity="0.8"/>
+  <circle cx="45" cy="15" r="2" fill="#ffffff" opacity="0.6"/>
+  <circle cx="8" cy="40" r="1.5" fill="#4477ff" opacity="0.7"/>
+  <circle cx="56" cy="45" r="1" fill="#ffffff" opacity="0.8"/>
+  <!-- Galaxy spiral -->
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#4477ff" stroke-width="1" opacity="0.3"/>
+  <circle cx="32" cy="32" r="15" fill="none" stroke="#4477ff" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="32" cy="32" r="8" fill="#0d0d3a" stroke="#4477ff" stroke-width="2"/>
+  <circle cx="32" cy="32" r="4" fill="#4477ff" opacity="0.8"/>
+  <!-- Sparkle star points -->
+  <polygon points="32,8 34,28 32,32 30,28" fill="#4477ff" opacity="0.6"/>
+  <polygon points="56,32 36,34 32,32 36,30" fill="#4477ff" opacity="0.6"/>
+</svg>

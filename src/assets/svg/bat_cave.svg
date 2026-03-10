@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" fill="#0a0a1a" rx="8"/>
+  <!-- Bat silhouette -->
+  <path d="M32,28 C22,22 10,26 8,20 C10,30 18,34 24,30 C26,36 30,38 32,36 C34,38 38,36 40,30 C46,34 54,30 56,20 C54,26 42,22 32,28 Z" fill="#7b2dff"/>
+  <!-- Bat head -->
+  <circle cx="32" cy="30" r="5" fill="#7b2dff"/>
+  <!-- Bat ears -->
+  <polygon points="28,25 25,18 31,23" fill="#7b2dff"/>
+  <polygon points="36,25 39,18 33,23" fill="#7b2dff"/>
+  <!-- Eyes -->
+  <circle cx="30" cy="30" r="1.5" fill="#ddddf0"/>
+  <circle cx="34" cy="30" r="1.5" fill="#ddddf0"/>
+  <!-- Moon -->
+  <circle cx="50" cy="14" r="8" fill="#2a1a4a"/>
+  <circle cx="54" cy="12" r="6" fill="#0a0a1a"/>
+</svg>

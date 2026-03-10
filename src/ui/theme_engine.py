@@ -29,6 +29,7 @@ DEFAULT_THEME = {
     "scrollbar_handle": "#e94560",
     "_effect": "panda",
     "_cursor": "Pointing Hand",
+    "_trail_color": "#e94560",
 }
 
 LIGHT_THEME = {
@@ -54,6 +55,7 @@ LIGHT_THEME = {
     "scrollbar_handle": "#e94560",
     "_effect": "panda",
     "_cursor": "Pointing Hand",
+    "_trail_color": "#e94560",
 }
 
 NEON_THEME = {
@@ -79,6 +81,7 @@ NEON_THEME = {
     "scrollbar_handle": "#00ff88",
     "_effect": "neon",
     "_cursor": "Cross",
+    "_trail_color": "#00ff88",
 }
 
 GORE_THEME = {
@@ -104,6 +107,7 @@ GORE_THEME = {
     "scrollbar_handle": "#cc0000",
     "_effect": "gore",
     "_cursor": "Cross",
+    "_trail_color": "#cc0000",
 }
 
 BAT_THEME = {
@@ -129,6 +133,7 @@ BAT_THEME = {
     "scrollbar_handle": "#7b2dff",
     "_effect": "bat",
     "_cursor": "Default",
+    "_trail_color": "#7b2dff",
 }
 
 RAINBOW_THEME = {
@@ -154,6 +159,7 @@ RAINBOW_THEME = {
     "scrollbar_handle": "#ffff00",
     "_effect": "rainbow",
     "_cursor": "Pointing Hand",
+    "_trail_color": "#ffff00",
 }
 
 OTTER_THEME = {
@@ -179,6 +185,7 @@ OTTER_THEME = {
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
     "_cursor": "emoji:🤘",
+    "_trail_color": "#e8a040",
 }
 
 GALAXY_THEME = {
@@ -204,6 +211,7 @@ GALAXY_THEME = {
     "scrollbar_handle": "#4477ff",
     "_effect": "galaxy",
     "_cursor": "Cross",
+    "_trail_color": "#4477ff",
 }
 
 GALAXY_OTTER_THEME = {
@@ -229,6 +237,7 @@ GALAXY_OTTER_THEME = {
     "scrollbar_handle": "#a06aff",
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🤘",
+    "_trail_color": "#a06aff",
 }
 
 GOTH_THEME = {
@@ -254,6 +263,7 @@ GOTH_THEME = {
     "scrollbar_handle": "#8800aa",
     "_effect": "goth",
     "_cursor": "Default",
+    "_trail_color": "#8800aa",
 }
 
 VOLCANO_THEME = {
@@ -279,6 +289,7 @@ VOLCANO_THEME = {
     "scrollbar_handle": "#ff4400",
     "_effect": "fire",
     "_cursor": "Cross",
+    "_trail_color": "#ff4400",
 }
 
 ARCTIC_THEME = {
@@ -304,6 +315,7 @@ ARCTIC_THEME = {
     "scrollbar_handle": "#44aaff",
     "_effect": "ice",
     "_cursor": "Cross",
+    "_trail_color": "#44aaff",
 }
 
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
@@ -330,6 +342,7 @@ SECRET_SKELETON_THEME = {
     "scrollbar_handle": "#1a1a1a",
     "_effect": "goth",
     "_cursor": "Cross",
+    "_trail_color": "#1a1a1a",
     "_unlock": "skeleton",
 }
 
@@ -356,7 +369,34 @@ SECRET_SAKURA_THEME = {
     "scrollbar_handle": "#ff6699",
     "_effect": "sakura",
     "_cursor": "Pointing Hand",
+    "_trail_color": "#ff6699",
     "_unlock": "sakura",
+}
+
+FAIRY_THEME = {
+    "name": "Fairy Garden",
+    "background": "#0d0022",
+    "surface": "#160038",
+    "primary": "#2a0055",
+    "accent": "#dd44ff",
+    "text": "#f8e8ff",
+    "text_secondary": "#cc99ee",
+    "border": "#5500aa",
+    "success": "#88ffcc",
+    "warning": "#ffdd88",
+    "error": "#ff55aa",
+    "tab_selected": "#dd44ff",
+    "button_bg": "#2a0055",
+    "button_hover": "#dd44ff",
+    "panda_white": "#f8e8ff",
+    "panda_black": "#0d0022",
+    "progress_bar": "#dd44ff",
+    "input_bg": "#08001a",
+    "scrollbar": "#160038",
+    "scrollbar_handle": "#dd44ff",
+    "_effect": "fairy",
+    "_cursor": "emoji:🪄",
+    "_trail_color": "#ffccee",
 }
 
 PRESET_THEMES = {
@@ -372,6 +412,7 @@ PRESET_THEMES = {
     "Goth": GOTH_THEME,
     "Volcano": VOLCANO_THEME,
     "Arctic": ARCTIC_THEME,
+    "Fairy Garden": FAIRY_THEME,
 }
 
 HIDDEN_THEMES = {
@@ -383,6 +424,37 @@ HIDDEN_THEMES = {
 THEME_EFFECTS = {t["name"]: t.get("_effect", "default") for t in {
     **PRESET_THEMES, **HIDDEN_THEMES,
 }.values()}
+
+import os as _os
+_SVG_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "assets", "svg")
+
+# SVG decoration file for each theme (name → relative filename in assets/svg/)
+THEME_SVG = {
+    "Panda Dark":       "panda_dark.svg",
+    "Panda Light":      "panda_light.svg",
+    "Neon Panda":       "neon.svg",
+    "Gore":             "gore.svg",
+    "Bat Cave":         "bat_cave.svg",
+    "Rainbow Chaos":    "rainbow.svg",
+    "Otter Cove":       "otter_cove.svg",
+    "Galaxy":           "galaxy.svg",
+    "Galaxy Otter":     "galaxy_otter.svg",
+    "Goth":             "goth.svg",
+    "Volcano":          "volcano.svg",
+    "Arctic":           "arctic.svg",
+    "Fairy Garden":     "fairy_garden.svg",
+    "Secret Skeleton":  "secret_skeleton.svg",
+    "Secret Sakura":    "secret_sakura.svg",
+}
+
+
+def get_theme_svg_path(theme_name: str) -> str:
+    """Return the absolute path of the SVG decoration for *theme_name*, or ''."""
+    filename = THEME_SVG.get(theme_name, "")
+    if not filename:
+        return ""
+    path = _os.path.join(_SVG_DIR, filename)
+    return path if _os.path.isfile(path) else ""
 
 
 def build_stylesheet(theme: Optional[dict] = None) -> str:

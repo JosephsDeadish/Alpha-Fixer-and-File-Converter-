@@ -218,6 +218,13 @@ _NORMAL: dict[str, list[str]] = {
         "Pair with a matching theme for maximum visual coherence.",
         "Hot pink and rainbow theme: chaotic perfection.",
     ],
+    "use_theme_trail": [
+        "When enabled, the trail color is chosen automatically to match the active theme.",
+        "Fairy Garden switches the trail to a sparkling emoji fairy-dust mode (✨💫⭐).",
+        "Overrides the manual Trail Color picker above.",
+        "Each theme has its own accent trail color — Neon → green, Galaxy → blue, etc.",
+        "Disable to manually control the trail color with the picker above.",
+    ],
     "cursor_combo": [
         "Change the mouse cursor shape used throughout the application.",
         "Default is the standard arrow. Cross gives you a precision crosshair.",
@@ -439,6 +446,13 @@ _DUMBED: dict[str, list[str]] = {
         "Go wild. Neon pink. Boring gray. Radioactive green. Sky's the limit.",
         "The color only shows if Trail is enabled. You did check that, right?",
     ],
+    "use_theme_trail": [
+        "Check this and the trail changes color automatically for each theme. Smart.",
+        "Fairy Garden gets sparkly emoji dust trail (✨💫⭐). Yes, really.",
+        "When checked, the Trail Color picker above does nothing useful.",
+        "Uncheck to go back to manually picking a color. Boring but valid.",
+        "Theme trail = automatic colors. Manual trail = DIY. Your call.",
+    ],
     "cursor_combo": [
         "Your cursor shape. You can change it. Here. With this dropdown.",
         "Default = normal arrow. The rest are slightly fancier arrows.",
@@ -659,6 +673,13 @@ _VULGAR: dict[str, list[str]] = {
         "The trail won't show a new color until you click Apply & Close. Just so you know.",
         "Pair it with the matching theme for a cohesive aesthetic. Or don't. Chaos is valid.",
         "Any hex color works. If you pick beige I will be personally disappointed.",
+    ],
+    "use_theme_trail": [
+        "Check this and the trail auto-matches the theme. Fairy Garden gets fairy f**king dust. ✨",
+        "Fairy dust trail = ✨💫⭐ floating emoji. Regular trail = boring circles. FAIRY DUST.",
+        "The color picker above becomes useless when this is checked. Enjoy the automation.",
+        "Uncheck if you want to manually pick your trail color like a god-damn adult.",
+        "Theme trail ON = the app is fabulous. Theme trail OFF = boring person energy.",
     ],
     "cursor_combo": [
         "Change your f**king cursor. Default arrow, crosshair, pointing finger, open hand. Pick one.",

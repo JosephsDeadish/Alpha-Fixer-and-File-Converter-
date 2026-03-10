@@ -17,16 +17,24 @@ from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
-from .theme_engine import build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS
+from .theme_engine import (
+    build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
+    get_theme_svg_path,
+)
 from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
 _CURSOR_MAP = {
-    "Default":       Qt.CursorShape.ArrowCursor,
-    "Cross":         Qt.CursorShape.CrossCursor,
-    "Pointing Hand": Qt.CursorShape.PointingHandCursor,
-    "Open Hand":     Qt.CursorShape.OpenHandCursor,
+    "Default":        Qt.CursorShape.ArrowCursor,
+    "Cross":          Qt.CursorShape.CrossCursor,
+    "Pointing Hand":  Qt.CursorShape.PointingHandCursor,
+    "Open Hand":      Qt.CursorShape.OpenHandCursor,
+    "Hourglass":      Qt.CursorShape.WaitCursor,
+    "Forbidden":      Qt.CursorShape.ForbiddenCursor,
+    "IBeam":          Qt.CursorShape.IBeamCursor,
+    "Size All":       Qt.CursorShape.SizeAllCursor,
+    "Blank":          Qt.CursorShape.BlankCursor,
 }
 
 
@@ -65,6 +73,7 @@ class MainWindow(QMainWindow):
         self._click_effects = None
         self._tooltip_mgr = None
         self._sound = None
+        self._svg_badge = None
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -181,6 +190,13 @@ class MainWindow(QMainWindow):
         self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 8px;")
         toolbar.addWidget(self._unlock_lbl)
 
+        # SVG theme badge (uses QSvgWidget when QtSvg is available, else text fallback)
+        toolbar.addSeparator()
+        self._svg_badge = self._make_svg_badge()
+        if self._svg_badge is not None:
+            toolbar.addWidget(self._svg_badge)
+        self._svg_badge_toolbar = toolbar  # keep ref for badge refresh
+
     # ------------------------------------------------------------------
     # Visual / audio effects (trail, cursor, sound, click effects, tooltips)
     # ------------------------------------------------------------------
@@ -191,11 +207,7 @@ class MainWindow(QMainWindow):
         self._trail_overlay = MouseTrailOverlay(self)
         self._trail_overlay.setGeometry(self.rect())
         self._trail_overlay.raise_()
-
-        trail_enabled = self._settings.get("trail_enabled", False)
-        trail_color = self._settings.get("trail_color", "#e94560")
-        self._trail_overlay.set_color(trail_color)
-        self._trail_overlay.set_enabled(trail_enabled)
+        self._apply_trail()
 
         # Click effects overlay
         from .click_effects import ClickEffectsOverlay
@@ -331,6 +343,36 @@ class MainWindow(QMainWindow):
         self._theme_label.setText(f"  Theme: {theme.get('name', 'Custom')}  ")
         # Re-apply cursor so theme-cursor mode updates immediately on theme change
         self._apply_cursor()
+        # Refresh SVG badge to match new theme
+        self._refresh_svg_badge()
+
+    def _make_svg_badge(self):
+        """Create a small SVG theme badge widget.  Returns None if QtSvg unavailable."""
+        try:
+            from PyQt6.QtSvgWidgets import QSvgWidget
+            badge = QSvgWidget()
+            badge.setFixedSize(32, 32)
+            badge.setToolTip("Theme decoration")
+            return badge
+        except ImportError:
+            return None
+
+    def _refresh_svg_badge(self):
+        """Update the SVG badge to show the decoration for the current theme."""
+        if self._svg_badge is None:
+            return
+        try:
+            from PyQt6.QtSvgWidgets import QSvgWidget
+        except ImportError:
+            return
+        theme = self._settings.get_theme()
+        svg_path = get_theme_svg_path(theme.get("name", ""))
+        if svg_path:
+            self._svg_badge.load(svg_path)
+            self._svg_badge.setToolTip(f"{theme.get('name','?')} theme")
+            self._svg_badge.show()
+        else:
+            self._svg_badge.hide()
 
     # ------------------------------------------------------------------
     # Tabs
@@ -356,17 +398,30 @@ class MainWindow(QMainWindow):
         self._apply_cursor()
         self._apply_font_size()
         self._apply_theme_effect()
-        if self._trail_overlay is not None:
-            self._trail_overlay.set_color(
-                self._settings.get("trail_color", "#e94560")
-            )
-            self._trail_overlay.set_enabled(
-                self._settings.get("trail_enabled", False)
-            )
+        self._apply_trail()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
                 self._settings.get("click_effects_enabled", True)
             )
+
+    def _apply_trail(self):
+        """Apply trail color, style and enabled state, honouring use_theme_trail."""
+        if self._trail_overlay is None:
+            return
+        use_theme = self._settings.get("use_theme_trail", False)
+        if use_theme:
+            theme = self._settings.get_theme()
+            color = theme.get("_trail_color", "#e94560")
+            # Fairy Garden gets fairy dust emoji trail style
+            style = "fairy" if theme.get("_effect") == "fairy" else "dots"
+        else:
+            color = self._settings.get("trail_color", "#e94560")
+            style = "dots"
+        self._trail_overlay.set_color(color)
+        self._trail_overlay.set_style(style)
+        self._trail_overlay.set_enabled(
+            self._settings.get("trail_enabled", False)
+        )
 
     def _export_settings(self):
         path, _ = QFileDialog.getSaveFileName(
