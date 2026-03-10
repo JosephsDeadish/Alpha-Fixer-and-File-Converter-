@@ -1108,10 +1108,10 @@ THEME_SVG = {
     "Lava Cave":        "volcano.svg",
     "Sunset Beach":     "fairy_garden.svg",
     "Midnight Forest":  "bat_cave.svg",
-    # New preset themes
-    "Mermaid":          "deep_ocean.svg",
-    "Shark Bait":       "deep_ocean.svg",
-    "Alien":            "galaxy.svg",
+    # New preset themes (dedicated SVGs)
+    "Mermaid":          "mermaid.svg",
+    "Shark Bait":       "shark_bait.svg",
+    "Alien":            "alien.svg",
     # New hidden themes
     "Candy Land":       "rainbow.svg",
     "Zombie Apocalypse": "gore.svg",
@@ -1242,16 +1242,43 @@ def get_theme_status(theme_name: str) -> str:
 # each element in the list is displayed in turn (one frame per ~800 ms).
 # Themes not listed fall back to their single THEME_BANNER entry.
 THEME_BANNER_FRAMES: dict[str, list[str]] = {
-    "Fairy Garden": [
-        "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
-        "✨🌟🧚  Alpha Fixer  &  File Converter  🧚🌟✨",
-        "🪄💜✨  Alpha Fixer  &  File Converter  ✨💜🪄",
-        "🌸🧚🌟  Alpha Fixer  &  File Converter  🌟🧚🌸",
+    # ---------------------------------------------------------------------------
+    # Original preset themes
+    # ---------------------------------------------------------------------------
+    "Panda Dark": [
+        "🐼  Alpha Fixer  &  File Converter",
+        "🐼🎋  Alpha Fixer  &  File Converter  🎋🐼",
+        "🐼✨  Alpha Fixer  &  File Converter  ✨🐼",
+    ],
+    "Panda Light": [
+        "🐼  Alpha Fixer  &  File Converter  🤍",
+        "🤍🐼  Alpha Fixer  &  File Converter  🐼🤍",
+        "🐼🌸🤍  Alpha Fixer  &  File Converter  🤍🌸🐼",
+    ],
+    "Neon Panda": [
+        "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
+        "🐼⚡🌟  Alpha Fixer  &  File Converter  🌟⚡🐼",
+        "⚡✦🐼  Alpha Fixer  &  File Converter  🐼✦⚡",
+    ],
+    "Gore": [
+        "🩸  Alpha Fixer  &  File Converter  🩸",
+        "💀🩸  Alpha Fixer  &  File Converter  🩸💀",
+        "🩸☠💀  Alpha Fixer  &  File Converter  💀☠🩸",
     ],
     "Bat Cave": [
         "🦇🌙💜  Alpha Fixer  &  File Converter  💜🌙🦇",
         "🌙🦇  Alpha Fixer  &  File Converter  🦇🌙",
         "💜🦇🌙  Alpha Fixer  &  File Converter  🌙🦇💜",
+    ],
+    "Rainbow Chaos": [
+        "🌈  Alpha Fixer  &  File Converter  🌈",
+        "🌈🦄  Alpha Fixer  &  File Converter  🦄🌈",
+        "🌈✨🦄  Alpha Fixer  &  File Converter  🦄✨🌈",
+    ],
+    "Otter Cove": [
+        "🦦🤘  Alpha Fixer  &  File Converter  🤘🦦",
+        "🤘🦦🐟  Alpha Fixer  &  File Converter  🐟🦦🤘",
+        "🦦💧🤘  Alpha Fixer  &  File Converter  🤘💧🦦",
     ],
     "Galaxy": [
         "✦  Alpha Fixer  &  File Converter  ✦",
@@ -1263,15 +1290,53 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
         "✦🦦⭐  Alpha Fixer  &  File Converter  ⭐🦦✦",
         "🦦🌌✦  Alpha Fixer  &  File Converter  ✦🌌🦦",
     ],
-    "Neon Panda": [
-        "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
-        "🐼⚡🌟  Alpha Fixer  &  File Converter  🌟⚡🐼",
-        "⚡✦🐼  Alpha Fixer  &  File Converter  🐼✦⚡",
+    "Goth": [
+        "💀  Alpha Fixer  &  File Converter  💀",
+        "💀🕷  Alpha Fixer  &  File Converter  🕷💀",
+        "💀🖤🕷  Alpha Fixer  &  File Converter  🕷🖤💀",
     ],
     "Volcano": [
         "🌋  Alpha Fixer  &  File Converter  🔥",
         "🔥🌋  Alpha Fixer  &  File Converter  🌋🔥",
         "🌋💥🔥  Alpha Fixer  &  File Converter  🔥💥🌋",
+    ],
+    "Arctic": [
+        "❄  Alpha Fixer  &  File Converter  ❄",
+        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
+        "❄✦🧊  Alpha Fixer  &  File Converter  🧊✦❄",
+    ],
+    "Fairy Garden": [
+        "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
+        "✨🌟🧚  Alpha Fixer  &  File Converter  🧚🌟✨",
+        "🪄💜✨  Alpha Fixer  &  File Converter  ✨💜🪄",
+        "🌸🧚🌟  Alpha Fixer  &  File Converter  🌟🧚🌸",
+    ],
+    # ---------------------------------------------------------------------------
+    # New preset themes
+    # ---------------------------------------------------------------------------
+    "Mermaid": [
+        "🧜🐚  Alpha Fixer  &  File Converter  🐚🧜",
+        "🐚🌊🧜  Alpha Fixer  &  File Converter  🧜🌊🐚",
+        "🧜🐠🐚  Alpha Fixer  &  File Converter  🐚🐠🧜",
+        "🌊🧜✨  Alpha Fixer  &  File Converter  ✨🧜🌊",
+    ],
+    "Shark Bait": [
+        "🦈🩸  Alpha Fixer  &  File Converter  🩸🦈",
+        "🩸🦈💦  Alpha Fixer  &  File Converter  💦🦈🩸",
+        "🦈💥🩸  Alpha Fixer  &  File Converter  🩸💥🦈",
+    ],
+    "Alien": [
+        "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
+        "👽🌌🛸  Alpha Fixer  &  File Converter  🛸🌌👽",
+        "🛸⭐👽  Alpha Fixer  &  File Converter  👽⭐🛸",
+    ],
+    # ---------------------------------------------------------------------------
+    # Hidden / unlockable themes
+    # ---------------------------------------------------------------------------
+    "Secret Skeleton": [
+        "☠  Alpha Fixer  &  File Converter  ☠",
+        "☠💀  Alpha Fixer  &  File Converter  💀☠",
+        "💀☠🦴  Alpha Fixer  &  File Converter  🦴☠💀",
     ],
     "Secret Sakura": [
         "🌸  Alpha Fixer  &  File Converter  🌸",
@@ -1283,6 +1348,102 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
         "🦑🐙🌊  Alpha Fixer  &  File Converter  🌊🐙🦑",
         "🌊🐠🦑  Alpha Fixer  &  File Converter  🦑🐠🌊",
         "🐙🌊🐟  Alpha Fixer  &  File Converter  🐟🌊🐙",
+    ],
+    "Blood Moon": [
+        "🩸🌕  Alpha Fixer  &  File Converter  🌕🩸",
+        "🌕🩸🌑  Alpha Fixer  &  File Converter  🌑🩸🌕",
+        "🩸🌑💀  Alpha Fixer  &  File Converter  💀🌑🩸",
+    ],
+    "Ice Cave": [
+        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
+        "🧊❄💎  Alpha Fixer  &  File Converter  💎❄🧊",
+        "❄✦🧊  Alpha Fixer  &  File Converter  🧊✦❄",
+    ],
+    "Cyber Otter": [
+        "🦦💻  Alpha Fixer  &  File Converter  💻🦦",
+        "💻🦦⚡  Alpha Fixer  &  File Converter  ⚡🦦💻",
+        "🦦✦💻  Alpha Fixer  &  File Converter  💻✦🦦",
+    ],
+    "Toxic Neon": [
+        "☢⚡  Alpha Fixer  &  File Converter  ⚡☢",
+        "⚡☢💚  Alpha Fixer  &  File Converter  💚☢⚡",
+        "☢✦⚡  Alpha Fixer  &  File Converter  ⚡✦☢",
+    ],
+    "Lava Cave": [
+        "🌋🔥  Alpha Fixer  &  File Converter  🔥🌋",
+        "🔥🌋💥  Alpha Fixer  &  File Converter  💥🌋🔥",
+        "🌋🔴🔥  Alpha Fixer  &  File Converter  🔥🔴🌋",
+    ],
+    "Sunset Beach": [
+        "🌅🏖  Alpha Fixer  &  File Converter  🏖🌅",
+        "🏖🌅🌊  Alpha Fixer  &  File Converter  🌊🌅🏖",
+        "🌅🌴🏖  Alpha Fixer  &  File Converter  🏖🌴🌅",
+    ],
+    "Midnight Forest": [
+        "🌲🌙  Alpha Fixer  &  File Converter  🌙🌲",
+        "🌙🌲🦉  Alpha Fixer  &  File Converter  🦉🌲🌙",
+        "🌲✨🌙  Alpha Fixer  &  File Converter  🌙✨🌲",
+    ],
+    "Candy Land": [
+        "🍭🌈  Alpha Fixer  &  File Converter  🌈🍭",
+        "🌈🍭🍬  Alpha Fixer  &  File Converter  🍬🍭🌈",
+        "🍭✨🌈  Alpha Fixer  &  File Converter  🌈✨🍭",
+    ],
+    "Zombie Apocalypse": [
+        "🧟💀  Alpha Fixer  &  File Converter  💀🧟",
+        "💀🧟🦠  Alpha Fixer  &  File Converter  🦠🧟💀",
+        "🧟☣💀  Alpha Fixer  &  File Converter  💀☣🧟",
+    ],
+    "Dragon Fire": [
+        "🐉🔥  Alpha Fixer  &  File Converter  🔥🐉",
+        "🔥🐉💥  Alpha Fixer  &  File Converter  💥🐉🔥",
+        "🐉🔥🌋  Alpha Fixer  &  File Converter  🌋🔥🐉",
+    ],
+    "Bubblegum": [
+        "🫧🍬  Alpha Fixer  &  File Converter  🍬🫧",
+        "🍬🫧💜  Alpha Fixer  &  File Converter  💜🫧🍬",
+        "🫧✨🍬  Alpha Fixer  &  File Converter  🍬✨🫧",
+    ],
+    "Thunder Storm": [
+        "⚡🌩  Alpha Fixer  &  File Converter  🌩⚡",
+        "🌩⚡🌪  Alpha Fixer  &  File Converter  🌪⚡🌩",
+        "⚡🌑🌩  Alpha Fixer  &  File Converter  🌩🌑⚡",
+    ],
+    "Rose Gold": [
+        "🌹✨  Alpha Fixer  &  File Converter  ✨🌹",
+        "✨🌹💫  Alpha Fixer  &  File Converter  💫🌹✨",
+        "🌹🌸✨  Alpha Fixer  &  File Converter  ✨🌸🌹",
+    ],
+    "Space Cat": [
+        "🐱🚀  Alpha Fixer  &  File Converter  🚀🐱",
+        "🚀🐱⭐  Alpha Fixer  &  File Converter  ⭐🐱🚀",
+        "🐱🌌🚀  Alpha Fixer  &  File Converter  🚀🌌🐱",
+    ],
+    "Magic Mushroom": [
+        "🍄✨  Alpha Fixer  &  File Converter  ✨🍄",
+        "✨🍄🌟  Alpha Fixer  &  File Converter  🌟🍄✨",
+        "🍄🌈✨  Alpha Fixer  &  File Converter  ✨🌈🍄",
+    ],
+    "Abyssal Void": [
+        "🕳🌑  Alpha Fixer  &  File Converter  🌑🕳",
+        "🌑🕳💜  Alpha Fixer  &  File Converter  💜🕳🌑",
+        "🕳✦🌑  Alpha Fixer  &  File Converter  🌑✦🕳",
+    ],
+    "Spring Bloom": [
+        "🌷🌿  Alpha Fixer  &  File Converter  🌿🌷",
+        "🌿🌷🌸  Alpha Fixer  &  File Converter  🌸🌷🌿",
+        "🌷✨🌿  Alpha Fixer  &  File Converter  🌿✨🌷",
+    ],
+    "Gold Rush": [
+        "💰✦  Alpha Fixer  &  File Converter  ✦💰",
+        "✦💰⭐  Alpha Fixer  &  File Converter  ⭐💰✦",
+        "💰🌟✦  Alpha Fixer  &  File Converter  ✦🌟💰",
+    ],
+    "Nebula": [
+        "🌌💫  Alpha Fixer  &  File Converter  💫🌌",
+        "💫🌌✦  Alpha Fixer  &  File Converter  ✦🌌💫",
+        "🌌⭐💫  Alpha Fixer  &  File Converter  💫⭐🌌",
+        "💫🔮🌌  Alpha Fixer  &  File Converter  🌌🔮💫",
     ],
 }
 

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <radialGradient id="sharkGlow" cx="50%" cy="60%" r="55%">
+      <stop offset="0%" stop-color="#1177aa" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#003366" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bloodSplash" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#cc0033" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#aa0022" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Glow -->
+  <circle cx="100" cy="110" r="88" fill="url(#sharkGlow)"/>
+
+  <!-- Water surface (animated) -->
+  <g opacity="0.6">
+    <path fill="none" stroke="#1177aa" stroke-width="2" stroke-linecap="round"
+          d="M10,110 Q35,100 60,110 Q85,120 110,110 Q135,100 160,110 Q185,120 200,110">
+      <animate attributeName="d"
+        values="M10,110 Q35,100 60,110 Q85,120 110,110 Q135,100 160,110 Q185,120 200,110;
+                M10,110 Q35,120 60,110 Q85,100 110,110 Q135,120 160,110 Q185,100 200,110;
+                M10,110 Q35,100 60,110 Q85,120 110,110 Q135,100 160,110 Q185,120 200,110"
+        dur="2.4s" repeatCount="indefinite"/>
+    </path>
+    <path fill="none" stroke="#0055cc" stroke-width="1.5" stroke-linecap="round"
+          d="M10,125 Q35,117 60,125 Q85,133 110,125 Q135,117 160,125 Q185,133 200,125">
+      <animate attributeName="d"
+        values="M10,125 Q35,117 60,125 Q85,133 110,125 Q135,117 160,125 Q185,133 200,125;
+                M10,125 Q35,133 60,125 Q85,117 110,125 Q135,133 160,125 Q185,117 200,125;
+                M10,125 Q35,117 60,125 Q85,133 110,125 Q135,117 160,125 Q185,133 200,125"
+        dur="3s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- Shark body (swimming and surfacing) -->
+  <g>
+    <animateTransform attributeName="transform" type="translate"
+      values="0,0; -8,4; 0,0" dur="2.5s" repeatCount="indefinite" additive="sum"/>
+    <!-- Main body -->
+    <ellipse cx="100" cy="105" rx="55" ry="20" fill="#1a4a77" opacity="0.92"/>
+    <!-- Head / snout -->
+    <path d="M145,105 Q170,100 180,108 Q170,116 145,112 Z" fill="#1a4a77" opacity="0.92"/>
+    <!-- Tail -->
+    <path d="M45,105 Q25,88 18,100 Q15,105 18,110 Q25,120 45,105" fill="#155a8a" opacity="0.85">
+      <animate attributeName="d"
+        values="M45,105 Q25,88 18,100 Q15,105 18,110 Q25,120 45,105;
+                M45,105 Q22,92 16,104 Q14,110 18,115 Q26,118 45,105;
+                M45,105 Q25,88 18,100 Q15,105 18,110 Q25,120 45,105"
+        dur="0.8s" repeatCount="indefinite"/>
+    </path>
+    <!-- Dorsal fin -->
+    <path d="M85,85 Q95,60 110,80 L110,95 Q95,98 85,95 Z" fill="#1a4a77" opacity="0.9">
+      <animate attributeName="d"
+        values="M85,85 Q95,60 110,80 L110,95 Q95,98 85,95 Z;
+                M86,87 Q95,63 108,82 L109,96 Q95,99 86,96 Z;
+                M85,85 Q95,60 110,80 L110,95 Q95,98 85,95 Z"
+        dur="2.5s" repeatCount="indefinite"/>
+    </path>
+    <!-- Pectoral fin -->
+    <path d="M100,108 Q108,125 90,128 Q80,120 90,112 Z" fill="#155a8a" opacity="0.8"/>
+    <!-- Eye -->
+    <circle cx="160" cy="105" r="5" fill="#0a2a44"/>
+    <circle cx="161" cy="104" r="2.5" fill="#ffffff" opacity="0.8"/>
+    <!-- Teeth (menacing) -->
+    <path d="M155,110 L158,120 L162,110 L166,120 L170,110 L173,120 L177,110"
+          fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+  </g>
+
+  <!-- Blood drips (animated) -->
+  <g fill="#cc0033" opacity="0.85">
+    <circle cx="165" cy="120" r="4">
+      <animate attributeName="cy" values="120;160" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.85;0" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="155" cy="115" r="3">
+      <animate attributeName="cy" values="115;150" dur="1.4s" begin="0.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0" dur="1.4s" begin="0.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="172" cy="122" r="2.5">
+      <animate attributeName="cy" values="122;165" dur="2s" begin="0.3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.75;0" dur="2s" begin="0.3s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Splash bubbles -->
+  <circle cx="40" cy="90" r="4" fill="none" stroke="#3399cc" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="cy" values="90;30" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="170" cy="85" r="3" fill="none" stroke="#3399cc" stroke-width="1.2" opacity="0.45">
+    <animate attributeName="cy" values="85;25" dur="2.8s" begin="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.45;0" dur="2.8s" begin="1.2s" repeatCount="indefinite"/>
+  </circle>
+</svg>

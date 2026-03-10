@@ -5,9 +5,11 @@ trail following the mouse cursor over the main application window.
 Works on any platform that supports Qt child widgets with transparent
 backgrounds (i.e., all modern Qt6 deployments).
 
-The overlay supports two trail styles:
-  • "dots"  – the default: fading coloured dots (original behaviour).
-  • "fairy" – fairy-dust sparkle emoji (✨💫⭐) that float and fade gently.
+The overlay supports four trail styles:
+  • "dots"    – the default: fading coloured dots (original behaviour).
+  • "fairy"   – fairy-dust sparkle emoji (✨💫⭐) that float and fade gently.
+  • "wave"    – ocean-themed bubbles and sea emoji (🫧💧🌊) for aquatic themes.
+  • "sparkle" – icy crystal sparkle emoji (✦❄✧💎) for arctic/ice themes.
 """
 from collections import deque
 
@@ -16,8 +18,17 @@ from PyQt6.QtGui import QColor, QPainter, QBrush, QFont
 from PyQt6.QtWidgets import QWidget, QApplication
 
 
-_FAIRY_DUST = ["✨", "⭐", "💫", "🌟", "💜", "💛", "🌸"]
+_FAIRY_DUST   = ["✨", "⭐", "💫", "🌟", "💜", "💛", "🌸"]
+_WAVE_DUST    = ["🫧", "💧", "🌊", "🐠", "🐚", "🌀", "🫧"]
+_SPARKLE_DUST = ["✦", "❄", "✧", "💎", "❆", "✸", "❅"]
 _EMOJI_FONT_FAMILIES = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji"
+
+_EMOJI_STYLES = {"fairy", "wave", "sparkle"}
+_EMOJI_LISTS  = {
+    "fairy":   _FAIRY_DUST,
+    "wave":    _WAVE_DUST,
+    "sparkle": _SPARKLE_DUST,
+}
 
 
 class MouseTrailOverlay(QWidget):
@@ -87,8 +98,8 @@ class MouseTrailOverlay(QWidget):
         self._color = QColor(color)
 
     def set_style(self, style: str) -> None:
-        """Set trail style: 'dots' (default) or 'fairy' (sparkle emoji)."""
-        self._style = style if style in ("dots", "fairy") else "dots"
+        """Set trail style: 'dots' (default), 'fairy', 'wave', or 'sparkle'."""
+        self._style = style if style in ("dots", "fairy", "wave", "sparkle") else "dots"
         self._trail.clear()
 
     # ------------------------------------------------------------------
@@ -107,8 +118,9 @@ class MouseTrailOverlay(QWidget):
                 global_pos = event.globalPosition().toPoint()
                 local = self._main_window.mapFromGlobal(global_pos)
                 import random
-                # Store extra data for fairy style: which emoji to show
-                emoji = random.choice(_FAIRY_DUST) if self._style == "fairy" else ""
+                # Store extra data for emoji styles: which emoji to show
+                emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
+                emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
                 self._trail.append([local.x(), local.y(), 1.0, emoji])
             except AttributeError:
                 pass
@@ -127,8 +139,8 @@ class MouseTrailOverlay(QWidget):
     def _tick(self) -> None:
         if not self._trail:
             return
-        # Fairy dust fades more slowly for a lingering sparkle effect
-        decay = 0.05 if self._style == "fairy" else 0.08
+        # Fairy/wave/sparkle dust fades more slowly for a lingering sparkle effect
+        decay = 0.05 if self._style in _EMOJI_STYLES else 0.08
         new_trail = deque(maxlen=self._trail.maxlen)
         for entry in self._trail:
             x, y, a = entry[0], entry[1], entry[2]
@@ -159,8 +171,8 @@ class MouseTrailOverlay(QWidget):
 
         painter.setPen(Qt.PenStyle.NoPen)
 
-        if self._style == "fairy":
-            self._paint_fairy(painter)
+        if self._style in _EMOJI_STYLES:
+            self._paint_emoji(painter)
         else:
             self._paint_dots(painter)
 
@@ -176,7 +188,8 @@ class MouseTrailOverlay(QWidget):
             painter.setBrush(QBrush(c))
             painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
 
-    def _paint_fairy(self, painter: QPainter) -> None:
+    def _paint_emoji(self, painter: QPainter) -> None:
+        """Paint emoji-style trail particles (fairy, wave, sparkle)."""
         font = QFont(_EMOJI_FONT_FAMILIES, 14)
         painter.setFont(font)
         for entry in self._trail:
@@ -187,3 +200,7 @@ class MouseTrailOverlay(QWidget):
             painter.setOpacity(alpha / 255.0)
             painter.drawText(x - 8, y + 8, emoji)
         painter.setOpacity(1.0)
+
+    def _paint_fairy(self, painter: QPainter) -> None:
+        """Legacy alias for _paint_emoji (kept for compatibility)."""
+        self._paint_emoji(painter)

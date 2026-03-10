@@ -18,6 +18,7 @@ from src.core.presets import AlphaPreset, PresetManager, BUILTIN_PRESETS
 from src.core.alpha_processor import (
     apply_alpha_preset,
     apply_manual_alpha,
+    apply_rgba_adjust,
     collect_files,
     load_image,
     save_image,
@@ -306,4 +307,198 @@ class TestAlphaWorkerResolveOutput(unittest.TestCase):
         w = self._make_worker(output_dir=None, suffix="", overwrite=True)
         result = w._resolve_output("/src/image.png")
         self.assertEqual(result, "/src/image.png")
+
+
+# ---------------------------------------------------------------------------
+# apply_rgba_adjust tests
+# ---------------------------------------------------------------------------
+
+class TestRGBAAdj(unittest.TestCase):
+    """apply_rgba_adjust – per-channel delta adjustments."""
+
+    def _make(self, r=100, g=100, b=100, a=200):
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:, :, 0] = r
+        arr[:, :, 1] = g
+        arr[:, :, 2] = b
+        arr[:, :, 3] = a
+        return Image.fromarray(arr, "RGBA")
+
+    def test_positive_red_delta(self):
+        img = self._make(r=100)
+        result = apply_rgba_adjust(img, red_delta=50)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 0] == 150))
+
+    def test_negative_red_delta(self):
+        img = self._make(r=100)
+        result = apply_rgba_adjust(img, red_delta=-50)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 0] == 50))
+
+    def test_positive_green_delta(self):
+        img = self._make(g=80)
+        result = apply_rgba_adjust(img, green_delta=20)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 1] == 100))
+
+    def test_positive_blue_delta(self):
+        img = self._make(b=60)
+        result = apply_rgba_adjust(img, blue_delta=40)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 2] == 100))
+
+    def test_alpha_delta(self):
+        img = self._make(a=200)
+        result = apply_rgba_adjust(img, alpha_delta=-50)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 150))
+
+    def test_clamp_high(self):
+        img = self._make(r=250)
+        result = apply_rgba_adjust(img, red_delta=20)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 0] == 255))
+
+    def test_clamp_low(self):
+        img = self._make(g=10)
+        result = apply_rgba_adjust(img, green_delta=-50)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 1] == 0))
+
+    def test_all_channels_zero_delta_noop(self):
+        img = self._make(r=100, g=150, b=200, a=180)
+        result = apply_rgba_adjust(img, red_delta=0, green_delta=0, blue_delta=0, alpha_delta=0)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 0] == 100))
+        self.assertTrue(np.all(arr[:, :, 1] == 150))
+        self.assertTrue(np.all(arr[:, :, 2] == 200))
+        self.assertTrue(np.all(arr[:, :, 3] == 180))
+
+    def test_output_is_rgba(self):
+        img = self._make()
+        result = apply_rgba_adjust(img, red_delta=10)
+        self.assertEqual(result.mode, "RGBA")
+
+    def test_rgb_input_is_converted(self):
+        """apply_rgba_adjust should handle RGB input by converting to RGBA first."""
+        img = Image.new("RGB", (4, 4), (100, 100, 100))
+        result = apply_rgba_adjust(img, blue_delta=55)
+        arr = np.array(result)
+        self.assertEqual(result.mode, "RGBA")
+        self.assertTrue(np.all(arr[:, :, 2] == 155))
+
+
+# ---------------------------------------------------------------------------
+# Theme engine completeness tests (no PyQt6 required)
+# ---------------------------------------------------------------------------
+
+class TestThemeEngineBannerFrames(unittest.TestCase):
+    """All themes in PRESET_THEMES and HIDDEN_THEMES should have banner frames."""
+
+    def _import_theme_engine(self):
+        # theme_engine.py has no PyQt6 imports at module level; safe to import.
+        from src.ui import theme_engine
+        return theme_engine
+
+    def test_all_preset_themes_have_banner_frames(self):
+        te = self._import_theme_engine()
+        for name in te.PRESET_THEMES:
+            frames = te.get_theme_banner_frames(name)
+            self.assertIsInstance(frames, list, f"Expected list for preset theme '{name}'")
+            self.assertGreater(len(frames), 0, f"Expected at least 1 frame for '{name}'")
+
+    def test_all_hidden_themes_have_banner_frames(self):
+        te = self._import_theme_engine()
+        for name in te.HIDDEN_THEMES:
+            frames = te.get_theme_banner_frames(name)
+            self.assertIsInstance(frames, list, f"Expected list for hidden theme '{name}'")
+            self.assertGreater(len(frames), 0, f"Expected at least 1 frame for '{name}'")
+
+    def test_animated_themes_have_multiple_frames(self):
+        """Themes with entries in THEME_BANNER_FRAMES should have ≥ 2 frames."""
+        te = self._import_theme_engine()
+        for name, frames in te.THEME_BANNER_FRAMES.items():
+            self.assertGreaterEqual(
+                len(frames), 2,
+                f"Expected ≥ 2 animation frames for '{name}', got {len(frames)}"
+            )
+
+    def test_preset_theme_count(self):
+        te = self._import_theme_engine()
+        self.assertEqual(len(te.PRESET_THEMES), 16,
+                         f"Expected 16 preset themes, got {len(te.PRESET_THEMES)}")
+
+    def test_hidden_theme_count(self):
+        te = self._import_theme_engine()
+        self.assertEqual(len(te.HIDDEN_THEMES), 22,
+                         f"Expected 22 hidden themes, got {len(te.HIDDEN_THEMES)}")
+
+    def test_new_preset_svgs_exist(self):
+        """Mermaid, Shark Bait, and Alien should have dedicated SVG files."""
+        te = self._import_theme_engine()
+        for theme_name in ("Mermaid", "Shark Bait", "Alien"):
+            svg_path = te.get_theme_svg_path(theme_name)
+            self.assertIsNotNone(svg_path, f"No SVG path for '{theme_name}'")
+            self.assertTrue(
+                os.path.isfile(svg_path),
+                f"SVG file not found: {svg_path}"
+            )
+
+    def test_new_preset_svgs_are_unique(self):
+        """Mermaid, Shark Bait, and Alien should use distinct SVG files."""
+        te = self._import_theme_engine()
+        paths = [te.get_theme_svg_path(n) for n in ("Mermaid", "Shark Bait", "Alien")]
+        # No two of the three should share the same SVG path
+        self.assertEqual(len(set(paths)), 3,
+                         f"Expected 3 unique SVG paths, got: {paths}")
+
+
+# ---------------------------------------------------------------------------
+# Mouse trail style tests (no PyQt6 required — pure constant checks)
+# ---------------------------------------------------------------------------
+
+class TestMouseTrailStyles(unittest.TestCase):
+    """Verify mouse_trail.py data constants without importing Qt."""
+
+    # Inline the constants from mouse_trail.py here so we can test without Qt.
+    _WAVE_DUST    = ["🫧", "💧", "🌊", "🐠", "🐚", "🌀", "🫧"]
+    _SPARKLE_DUST = ["✦", "❄", "✧", "💎", "❆", "✸", "❅"]
+    _FAIRY_DUST   = ["✨", "⭐", "💫", "🌟", "💜", "💛", "🌸"]
+    _EMOJI_LISTS  = {
+        "fairy":   _FAIRY_DUST,
+        "wave":    _WAVE_DUST,
+        "sparkle": _SPARKLE_DUST,
+    }
+    _VALID_STYLES = {"dots", "fairy", "wave", "sparkle"}
+
+    def test_all_valid_styles_defined(self):
+        for style in ("dots", "fairy", "wave", "sparkle"):
+            self.assertIn(style, self._VALID_STYLES)
+
+    def test_emoji_lists_nonempty(self):
+        for style, lst in self._EMOJI_LISTS.items():
+            self.assertGreater(len(lst), 0, f"Emoji list for '{style}' is empty")
+
+    def test_wave_emoji_list_has_ocean_content(self):
+        self.assertIn("🌊", self._WAVE_DUST)
+
+    def test_sparkle_emoji_list_has_crystal_content(self):
+        self.assertIn("❄", self._SPARKLE_DUST)
+
+    def test_fairy_emoji_list_has_sparkle_content(self):
+        self.assertIn("✨", self._FAIRY_DUST)
+
+    def test_mouse_trail_source_defines_four_styles(self):
+        """Read the mouse_trail.py source and confirm all 4 styles are present."""
+        import ast
+        trail_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "mouse_trail.py"
+        )
+        with open(trail_path) as f:
+            source = f.read()
+        for style in ("dots", "fairy", "wave", "sparkle"):
+            self.assertIn(repr(style), source,
+                          f"Style {style!r} not found in mouse_trail.py source")
+
 

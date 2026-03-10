@@ -227,11 +227,12 @@ class SettingsDialog(QDialog):
         self._trail_color_btn = ColorButton("#e94560")
         trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
         self._use_theme_trail_check = QCheckBox(
-            "Use theme trail  (auto-color + fairy dust on Fairy Garden)"
+            "Use theme trail  (auto-color + special style per effect)"
         )
         self._use_theme_trail_check.setToolTip(
-            "When enabled the trail color is chosen automatically to match\n"
-            "the active theme.  Fairy Garden gets a sparkling emoji trail."
+            "When enabled the trail color and style are chosen automatically to match\n"
+            "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
+            "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
         )
         trail_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
         self._use_theme_trail_check.toggled.connect(

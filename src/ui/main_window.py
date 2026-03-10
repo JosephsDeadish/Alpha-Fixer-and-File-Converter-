@@ -584,8 +584,16 @@ class MainWindow(QMainWindow):
         if use_theme:
             theme = self._settings.get_theme()
             color = theme.get("_trail_color", "#e94560")
-            # Fairy Garden gets fairy dust emoji trail style
-            style = "fairy" if theme.get("_effect") == "fairy" else "dots"
+            effect = theme.get("_effect", "default")
+            # Map effect → trail style
+            if effect == "fairy":
+                style = "fairy"
+            elif effect in ("ocean", "mermaid", "ripple"):
+                style = "wave"
+            elif effect in ("sparkle", "ice"):
+                style = "sparkle"
+            else:
+                style = "dots"
         else:
             color = self._settings.get("trail_color", "#e94560")
             style = "dots"
@@ -655,13 +663,16 @@ class MainWindow(QMainWindow):
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
-            "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF</li>"
+            "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI and more</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
-            "<li>Before/after comparison slider preview</li>"
+            "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
-            "<li>12 preset themes + 2 hidden unlockables (keep clicking to find them!)</li>"
-            "<li>14 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸, and more…</li>"
+            "<li>16 preset themes + 22 hidden unlockables (keep clicking to find them!)</li>"
+            "<li>21 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥,"
+            " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
+            "<li>Per-channel RGB delta adjustments (R/G/B ±255) for colour-correcting game textures</li>"
             "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
+            "<li>Animated banner frames for every theme — watch the header cycle through emoji!</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"

@@ -221,8 +221,8 @@ _NORMAL: dict[str, list[str]] = {
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
         "Fairy Garden switches the trail to a sparkling emoji fairy-dust mode (✨💫⭐).",
-        "Overrides the manual Trail Color picker above.",
-        "Each theme has its own accent trail color — Neon → green, Galaxy → blue, etc.",
+        "Ocean and Mermaid themes get a wave emoji trail (🫧💧🌊🐠).",
+        "Ice and Sparkle themes get crystal sparkle emoji (✦❄✧💎).",
         "Disable to manually control the trail color with the picker above.",
     ],
     "cursor_combo": [
@@ -533,9 +533,9 @@ _DUMBED: dict[str, list[str]] = {
     "use_theme_trail": [
         "Check this and the trail changes color automatically for each theme. Smart.",
         "Fairy Garden gets sparkly emoji dust trail (✨💫⭐). Yes, really.",
-        "When checked, the Trail Color picker above does nothing useful.",
+        "Ocean/Mermaid themes get bubble trail (🫧💧🌊). Ice gets crystals (✦❄✧).",
         "Uncheck to go back to manually picking a color. Boring but valid.",
-        "Theme trail = automatic colors. Manual trail = DIY. Your call.",
+        "Theme trail = automatic colors AND styles. Manual trail = DIY. Your call.",
     ],
     "cursor_combo": [
         "Your cursor shape. You can change it. Here. With this dropdown.",
@@ -843,8 +843,8 @@ _VULGAR: dict[str, list[str]] = {
         "Any hex color works. If you pick beige I will be personally disappointed.",
     ],
     "use_theme_trail": [
-        "Check this and the trail auto-matches the theme. Fairy Garden gets fairy f**king dust. ✨",
-        "Fairy dust trail = ✨💫⭐ floating emoji. Regular trail = boring circles. FAIRY DUST.",
+        "Check this and your trail auto-matches the theme. Fairy Garden gets fairy f**king dust. ✨",
+        "Ocean/Mermaid gets bubble emoji trail (🫧💧🌊). Ice gets crystal trail (✦❄✧). It's gorgeous.",
         "The color picker above becomes useless when this is checked. Enjoy the automation.",
         "Uncheck if you want to manually pick your trail color like a god-damn adult.",
         "Theme trail ON = the app is fabulous. Theme trail OFF = boring person energy.",
