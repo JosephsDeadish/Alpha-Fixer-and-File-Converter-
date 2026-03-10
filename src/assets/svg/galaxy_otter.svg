@@ -1,17 +1,54 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <rect width="64" height="64" fill="#04030f" rx="8"/>
-  <!-- Stars -->
-  <circle cx="10" cy="10" r="1.5" fill="#a06aff" opacity="0.9"/>
-  <circle cx="54" cy="8" r="1" fill="#ffffff" opacity="0.7"/>
-  <circle cx="24" cy="5" r="1" fill="#a06aff" opacity="0.8"/>
-  <!-- Otter in space -->
-  <circle cx="32" cy="26" r="12" fill="#8b5a2b"/>
-  <ellipse cx="32" cy="30" rx="9" ry="7" fill="#c49a6c"/>
-  <circle cx="28" cy="23" r="2.5" fill="#2a1200"/>
-  <circle cx="36" cy="23" r="2.5" fill="#2a1200"/>
-  <ellipse cx="32" cy="27" rx="2.5" ry="1.8" fill="#2a1200"/>
-  <!-- Space helmet ring -->
-  <circle cx="32" cy="26" r="14" fill="none" stroke="#a06aff" stroke-width="2" opacity="0.7"/>
-  <!-- Rock hand -->
-  <text x="32" y="56" text-anchor="middle" font-size="14" fill="#a06aff">🤘</text>
+
+  <!-- Stars twinkling -->
+  <circle cx="10" cy="10" r="1.5" fill="#a06aff">
+    <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2.1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="54" cy="8" r="1" fill="#ffffff">
+    <animate attributeName="opacity" values="0.7;0.1;0.7" dur="1.7s" begin="0.3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="24" cy="5" r="1" fill="#a06aff">
+    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.5s" begin="0.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="58" cy="28" r="1.2" fill="#ffffff">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="1.9s" begin="0.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="6" cy="40" r="1" fill="#c0a0ff">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3.1s" begin="1.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Otter body with gentle float -->
+  <g>
+    <animateTransform attributeName="transform" type="translate"
+      values="0,0; 0,-2; 0,0" dur="3s" repeatCount="indefinite"/>
+    <!-- Otter head -->
+    <circle cx="32" cy="24" r="12" fill="#8b5a2b"/>
+    <ellipse cx="32" cy="28" rx="9" ry="7" fill="#c49a6c"/>
+    <!-- Eyes (blinking) -->
+    <ellipse cx="28" cy="21" rx="2.5" ry="2.5" fill="#2a1200">
+      <animate attributeName="ry" values="2.5;0.3;2.5" dur="4s" begin="1.5s" repeatCount="indefinite"/>
+    </ellipse>
+    <ellipse cx="36" cy="21" rx="2.5" ry="2.5" fill="#2a1200">
+      <animate attributeName="ry" values="2.5;0.3;2.5" dur="4s" begin="1.5s" repeatCount="indefinite"/>
+    </ellipse>
+    <circle cx="28.5" cy="20.5" r="0.8" fill="white"/>
+    <circle cx="36.5" cy="20.5" r="0.8" fill="white"/>
+    <ellipse cx="32" cy="25" rx="2.5" ry="1.8" fill="#2a1200"/>
+    <!-- Space helmet ring (pulsing) -->
+    <circle cx="32" cy="24" r="14" fill="none" stroke="#a06aff" stroke-width="2" opacity="0.7">
+      <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="14;14.5;14" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <!-- Tail wagging -->
+    <ellipse cx="32" cy="42" rx="7" ry="3.5" fill="#a06030">
+      <animateTransform attributeName="transform" type="rotate"
+        values="-20 32 42; 20 32 42; -20 32 42" dur="1.2s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <!-- Rock hand with glow -->
+  <text x="32" y="58" text-anchor="middle" font-size="12" fill="#a06aff">🤘
+    <animate attributeName="opacity" values="1;0.4;1" dur="1.8s" repeatCount="indefinite"/>
+  </text>
 </svg>

@@ -6,13 +6,35 @@
   <!-- Eye sockets -->
   <ellipse cx="26" cy="24" rx="5" ry="6" fill="#0a0a0a"/>
   <ellipse cx="38" cy="24" rx="5" ry="6" fill="#0a0a0a"/>
-  <!-- Purple glow in eyes -->
-  <ellipse cx="26" cy="24" rx="3" ry="4" fill="#8800aa" opacity="0.5"/>
-  <ellipse cx="38" cy="24" rx="3" ry="4" fill="#8800aa" opacity="0.5"/>
+  <!-- Purple glow in eyes (pulsing) -->
+  <ellipse cx="26" cy="24" rx="3" ry="4" fill="#8800aa">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="38" cy="24" rx="3" ry="4" fill="#8800aa">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" begin="0.4s" repeatCount="indefinite"/>
+  </ellipse>
   <!-- Teeth -->
   <rect x="24" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
   <rect x="30" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
   <rect x="36" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
   <!-- Nose -->
   <polygon points="32,28 30,33 34,33" fill="#0a0a0a"/>
+  <!-- Outer aura glow -->
+  <circle cx="32" cy="26" r="18" fill="none" stroke="#8800aa" stroke-width="1" opacity="0.3">
+    <animate attributeName="r" values="18;20;18" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.3;0.6;0.3" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Floating spiderwebs / particles -->
+  <circle cx="10" cy="10" r="1" fill="#8800aa" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="54" cy="14" r="1.2" fill="#cc00ff" opacity="0.4">
+    <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.8s" begin="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="8" cy="50" r="1" fill="#aa00cc" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" begin="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="56" cy="48" r="1.2" fill="#8800aa" opacity="0.4">
+    <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.5s" begin="0.3s" repeatCount="indefinite"/>
+  </circle>
 </svg>

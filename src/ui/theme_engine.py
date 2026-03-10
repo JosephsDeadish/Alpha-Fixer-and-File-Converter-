@@ -1450,13 +1450,13 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
 
 
 def get_theme_banner_frames(theme_name: str) -> list[str]:
-    """Return the animated banner frame list for *theme_name*.
+    """Return the banner frame list for *theme_name*.
 
-    Returns a single-element list (no animation) if the theme has no animation
-    frames defined, falling back to the static THEME_BANNER text.
+    Always returns a single-element list — the static themed banner text.
+    Emoji cycling was removed because the animated SVG badge in the toolbar
+    already provides visual animation, and cycling text in the header is
+    distracting rather than useful.
     """
-    if theme_name in THEME_BANNER_FRAMES:
-        return list(THEME_BANNER_FRAMES[theme_name])
     return [get_theme_banner(theme_name)]
 
 
@@ -1481,43 +1481,45 @@ QTabWidget {{
     background-color: {t['background']};
 }}
 QTabWidget::pane {{
-    border: 1px solid {t['border']};
-    border-top: none;
+    border: 2px solid {t['border']};
+    border-top: 2px solid {t['tab_selected']};
     background-color: {t['surface']};
     border-radius: 0px 4px 4px 4px;
 }}
 QTabWidget::tab-bar {{
     alignment: left;
+    top: 1px;
 }}
 QTabBar {{
     background: {t['background']};
     border: none;
-    border-bottom: 1px solid {t['border']};
-    min-height: 40px;
+    qproperty-drawBase: 0;
 }}
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
-    padding: 10px 22px;
-    min-height: 20px;
-    margin-right: 2px;
-    border: 1px solid {t['border']};
+    padding: 10px 24px;
+    min-width: 100px;
+    min-height: 24px;
+    margin-right: 3px;
+    border: 2px solid {t['border']};
     border-bottom: none;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
     font-weight: 600;
     font-size: 13px;
 }}
 QTabBar::tab:selected {{
     background: {t['tab_selected']};
     color: {t['panda_white']};
-    border-color: {t['border']};
-    border-bottom: 1px solid {t['tab_selected']};
-    margin-bottom: -1px;
+    border: 2px solid {t['tab_selected']};
+    border-bottom: none;
+    margin-bottom: -2px;
 }}
 QTabBar::tab:hover:!selected {{
     background: {t['button_hover']};
     color: {t['panda_white']};
+    border-color: {t['accent']};
 }}
 
 /* ===== Buttons ===== */

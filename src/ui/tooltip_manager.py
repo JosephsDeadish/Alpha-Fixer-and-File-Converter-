@@ -1092,6 +1092,13 @@ class TooltipManager(QObject):
         self._last_shown_key: str | None = None
         # Map QTabBar id → list of tip keys (one per tab index)
         self._tab_bar_keys: dict[int, list[str]] = {}
+        # Strong references to registered QTabBar Python wrapper objects so
+        # that id() remains stable even between re-lookups (PyQt6 may return
+        # different wrapper objects from tabBar() on each call).
+        self._tab_bar_refs: dict[int, object] = {}
+        # Map QTabWidget id → QTabBar so we can handle tooltip events that
+        # Qt dispatches to the container rather than the bar child.
+        self._tab_widget_to_bar: dict[int, object] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -1110,9 +1117,30 @@ class TooltipManager(QObject):
         """Register a QTabBar so each tab index maps to its own tip_key.
 
         *tip_keys* must be a list with one entry per tab (same order as tabs).
+
+        Also registers the parent QTabWidget (if any) so tooltip events
+        dispatched at the container level are handled correctly.
         """
-        self._tab_bar_keys[id(tab_bar)] = list(tip_keys)
+        bar_id = id(tab_bar)
+        self._tab_bar_keys[bar_id] = list(tip_keys)
+        # Keep a strong Python reference so id(tab_bar) stays stable.
+        self._tab_bar_refs[bar_id] = tab_bar
         tab_bar.setToolTip("")
+        # Also clear per-tab native tooltips
+        for i in range(len(tip_keys)):
+            try:
+                tab_bar.setTabToolTip(i, "")
+            except Exception:
+                pass
+        # Register the parent QTabWidget so events coming from that level are
+        # routed to the bar.
+        try:
+            parent_widget = tab_bar.parent()
+            if parent_widget is not None:
+                self._tab_widget_to_bar[id(parent_widget)] = tab_bar
+                parent_widget.setToolTip("")
+        except Exception:
+            pass
 
     def mode(self) -> str:
         return self._settings.get("tooltip_mode", "Normal")
@@ -1129,6 +1157,23 @@ class TooltipManager(QObject):
         tab_keys = self._tab_bar_keys.get(id(obj))
         if tab_keys is not None:
             return self._handle_tab_bar_tooltip(obj, event, tab_keys)
+
+        # Check if this is the parent QTabWidget whose tab bar is registered.
+        # Qt sometimes dispatches the ToolTip event to the QTabWidget rather
+        # than the child QTabBar, so we remap it here.
+        bar_ref = self._tab_widget_to_bar.get(id(obj))
+        if bar_ref is not None:
+            tab_keys = self._tab_bar_keys.get(id(bar_ref))
+            if tab_keys is not None:
+                # Map the event position from QTabWidget coordinates to QTabBar
+                # coordinates (the bar sits at the top of the widget).
+                try:
+                    bar_pos = bar_ref.mapFrom(obj, event.pos())
+                    tab_idx = bar_ref.tabAt(bar_pos)
+                except Exception:
+                    tab_idx = -1
+                if 0 <= tab_idx < len(tab_keys):
+                    return self._show_tip_for_key(bar_ref, event, tab_keys[tab_idx])
 
         key = self._widget_keys.get(id(obj))
         if key is None:
