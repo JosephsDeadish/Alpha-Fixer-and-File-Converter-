@@ -10,7 +10,7 @@ from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QSlider, QCheckBox, QFileDialog,
-    QProgressBar, QGroupBox,
+    QProgressBar, QGroupBox, QScrollArea,
     QGridLayout, QLineEdit, QSplitter,
     QMessageBox, QInputDialog, QTextEdit,
 )
@@ -213,7 +213,7 @@ class AlphaFixerTab(QWidget):
 
         # Fine-tune section
         grp_tune = QGroupBox("Fine-Tune Alpha")
-        grp_tune.setMinimumHeight(215)
+        grp_tune.setMinimumHeight(248)
         gt_layout = QGridLayout(grp_tune)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
@@ -307,7 +307,13 @@ class AlphaFixerTab(QWidget):
         self._log.setPlaceholderText("Processing log…")
         rv.addWidget(self._log, 1)
 
-        outer_splitter.addWidget(right)
+        # Wrap right-panel content in a scroll area so it never clips on
+        # small/tight window heights — user can scroll down to see all controls.
+        right_scroll = QScrollArea()
+        right_scroll.setWidget(right)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        outer_splitter.addWidget(right_scroll)
         outer_splitter.setSizes([360, 540])
         main_layout.addWidget(outer_splitter, 1)
 

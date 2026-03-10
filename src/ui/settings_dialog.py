@@ -109,13 +109,10 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setMinimumWidth(200)
         self._rebuild_theme_combo()
         psl.addWidget(self._theme_preset_combo, 1)
-        self._btn_apply_preset = QPushButton("Apply")
         self._btn_save_theme = QPushButton("Save as…")
         self._btn_delete_theme = QPushButton("Delete")
-        self._btn_apply_preset.setMinimumWidth(68)
         self._btn_save_theme.setMinimumWidth(75)
         self._btn_delete_theme.setMinimumWidth(62)
-        psl.addWidget(self._btn_apply_preset)
         psl.addWidget(self._btn_save_theme)
         psl.addWidget(self._btn_delete_theme)
         tv.addWidget(grp_preset_select)
@@ -212,7 +209,7 @@ class SettingsDialog(QDialog):
         gv.setSpacing(8)
 
         # ---- Sound GroupBox ----
-        grp_sound = QGroupBox("🔊  Sound")
+        grp_sound = QGroupBox("Sound")
         sound_gl = QGridLayout(grp_sound)
         sound_gl.setColumnStretch(1, 1)
         sound_gl.setHorizontalSpacing(10)
@@ -230,7 +227,7 @@ class SettingsDialog(QDialog):
         gv.addWidget(grp_sound)
 
         # ---- Mouse Trail GroupBox ----
-        grp_trail = QGroupBox("🖱  Mouse Trail")
+        grp_trail = QGroupBox("Mouse Trail")
         trail_gl = QGridLayout(grp_trail)
         trail_gl.setColumnStretch(1, 1)
         trail_gl.setHorizontalSpacing(10)
@@ -309,28 +306,36 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(tabs, 1)
 
-        # ---- Dialog buttons ----
+        # ---- Dialog button: just "Close" (settings already saved live) ----
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        self._btn_ok = QPushButton("Apply & Close")
-        self._btn_ok.setObjectName("accent")
-        self._btn_ok.setMinimumWidth(120)
-        self._btn_cancel = QPushButton("Cancel")
-        btn_row.addWidget(self._btn_cancel)
-        btn_row.addWidget(self._btn_ok)
+        self._btn_close = QPushButton("Close")
+        self._btn_close.setObjectName("accent")
+        self._btn_close.setMinimumWidth(100)
+        btn_row.addWidget(self._btn_close)
         layout.addLayout(btn_row)
 
         # Connections
-        self._btn_apply_preset.clicked.connect(self._apply_preset)
+        # Preset combo: selecting a theme immediately applies it (no Apply button needed)
+        self._theme_preset_combo.currentTextChanged.connect(self._on_preset_selected_live)
         self._btn_save_theme.clicked.connect(self._save_custom_theme)
         self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
-        self._btn_ok.clicked.connect(self._apply_and_close)
-        self._btn_cancel.clicked.connect(self.reject)
+        self._btn_close.clicked.connect(self.accept)
         self._btn_sound_browse.clicked.connect(self._browse_sound)
-        self._theme_preset_combo.currentTextChanged.connect(self._update_delete_btn)
-        self._effect_combo.currentIndexChanged.connect(self._on_effect_changed)
+        self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
         self._btn_emoji_clear.clicked.connect(self._clear_emoji)
+        # General tab: all controls save+emit live
+        self._sound_check.toggled.connect(self._on_sound_changed)
+        self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
+        self._trail_check.toggled.connect(self._on_trail_changed)
+        self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
+        self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
+        self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
+        self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
+        self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
+        self._click_effects_check.toggled.connect(self._on_effects_enabled_changed)
+        self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -360,8 +365,6 @@ class SettingsDialog(QDialog):
         self._update_delete_btn()
 
     def _update_delete_btn(self):
-        # _rebuild_theme_combo() is called during _setup_ui() before
-        # _btn_delete_theme is created; guard against that ordering.
         if not hasattr(self, "_btn_delete_theme"):
             return
         name = self._theme_preset_combo.currentText().lstrip(_THEME_PREFIX_CHARS)
@@ -373,7 +376,20 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _load_values(self):
+        """Populate all controls from persisted settings WITHOUT firing live-update signals."""
         t = self._theme
+        # Block signals for all controls so loading initial values doesn't
+        # trigger save-and-emit loops.
+        controls = [
+            self._theme_preset_combo, self._effect_combo, self._sound_check,
+            self._click_sound_edit, self._trail_check, self._trail_color_btn,
+            self._use_theme_trail_check, self._cursor_combo,
+            self._use_theme_cursor_check, self._font_size_spin,
+            self._click_effects_check, self._tooltip_mode_combo,
+        ]
+        for c in controls:
+            c.blockSignals(True)
+
         for key, btn in self._color_buttons.items():
             btn.set_color(t.get(key, "#888888"))
 
@@ -387,10 +403,7 @@ class SettingsDialog(QDialog):
             idx if idx >= 0 else self._theme_preset_combo.count() - 1
         )
 
-        # Effect combo
         self._set_effect_combo(t.get("_effect", "default"))
-
-        # Custom emoji
         self._update_emoji_display()
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", True))
@@ -414,6 +427,9 @@ class SettingsDialog(QDialog):
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
 
+        for c in controls:
+            c.blockSignals(False)
+
     # ------------------------------------------------------------------
     # Tooltip registration
     # ------------------------------------------------------------------
@@ -434,17 +450,20 @@ class SettingsDialog(QDialog):
         mgr.register(self._click_effects_check, "click_effects_check")
 
     # ------------------------------------------------------------------
-    # Color-button callback
+    # Color-button callback — live apply
     # ------------------------------------------------------------------
 
     def _on_color_changed(self, key: str, color: str):
         self._theme[key] = color
+        self._settings.set_theme(self._theme)
+        self.theme_changed.emit(self._theme)
 
     # ------------------------------------------------------------------
     # Preset & custom theme management
     # ------------------------------------------------------------------
 
-    def _apply_preset(self):
+    def _on_preset_selected_live(self, _text: str = "") -> None:
+        """Immediately load + apply the selected preset when combo changes."""
         raw_name = self._theme_preset_combo.currentText()
         name = raw_name.lstrip(_THEME_PREFIX_CHARS)
         if name in PRESET_THEMES:
@@ -456,10 +475,15 @@ class SettingsDialog(QDialog):
             if name in saved:
                 self._theme = dict(saved[name])
             else:
-                return  # "— Custom —" or separator
+                return  # "— Custom —" or separator line
+        # Update color swatches to reflect the new preset
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
         self._set_effect_combo(self._theme.get("_effect", "default"))
+        # Persist and broadcast immediately
+        self._settings.set_theme(self._theme)
+        self.theme_changed.emit(self._theme)
+        self._update_delete_btn()
 
     def _save_custom_theme(self):
         name, ok = QInputDialog.getText(self, "Save Theme", "Theme name:")
@@ -491,7 +515,7 @@ class SettingsDialog(QDialog):
             self._rebuild_theme_combo()
 
     # ------------------------------------------------------------------
-    # Effect combo helpers
+    # Effect combo helpers — live apply
     # ------------------------------------------------------------------
 
     def _set_effect_combo(self, effect_key: str) -> None:
@@ -500,11 +524,13 @@ class SettingsDialog(QDialog):
             if self._effect_combo.itemData(i) == effect_key:
                 self._effect_combo.setCurrentIndex(i)
                 return
-        self._effect_combo.setCurrentIndex(0)  # fallback to Default
+        self._effect_combo.setCurrentIndex(0)
 
-    def _on_effect_changed(self) -> None:
-        """Sync the selected effect key back into the working theme dict."""
+    def _on_effect_changed_live(self) -> None:
+        """Sync the effect key into the theme dict and persist immediately."""
         self._theme["_effect"] = self._effect_combo.currentData() or "default"
+        self._settings.set_theme(self._theme)
+        self.settings_changed.emit()
 
     # ------------------------------------------------------------------
     # Custom emoji helpers
@@ -549,23 +575,39 @@ class SettingsDialog(QDialog):
             self._click_sound_edit.setText(path)
 
     # ------------------------------------------------------------------
-    # Apply & close
+    # Live-update handlers for the General tab
     # ------------------------------------------------------------------
 
-    def _apply_and_close(self):
-        # Ensure the chosen effect is written into the theme dict
-        self._theme["_effect"] = self._effect_combo.currentData() or "default"
-        self._settings.set_theme(self._theme)
+    def _on_sound_changed(self) -> None:
         self._settings.set("sound_enabled", self._sound_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_sound_path_changed(self) -> None:
         self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
+        self.settings_changed.emit()
+
+    def _on_trail_changed(self) -> None:
         self._settings.set("trail_enabled", self._trail_check.isChecked())
-        self._settings.set("trail_color", self._trail_color_btn.color())
         self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_trail_color_changed(self, color: str) -> None:
+        self._settings.set("trail_color", color)
+        self.settings_changed.emit()
+
+    def _on_cursor_changed(self) -> None:
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
-        self._settings.set("font_size", self._font_size_spin.value())
-        self._settings.set("click_effects_enabled", self._click_effects_check.isChecked())
-        self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
-        self.theme_changed.emit(self._theme)
         self.settings_changed.emit()
-        self.accept()
+
+    def _on_font_size_changed(self, value: int) -> None:
+        self._settings.set("font_size", value)
+        self.settings_changed.emit()
+
+    def _on_effects_enabled_changed(self) -> None:
+        self._settings.set("click_effects_enabled", self._click_effects_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_tooltip_mode_changed(self) -> None:
+        self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
+        self.settings_changed.emit()

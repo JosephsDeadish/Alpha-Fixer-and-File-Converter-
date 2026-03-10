@@ -1568,63 +1568,50 @@ class TestThemeBannerMessages(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestEnrichedSpawners(unittest.TestCase):
-    """All spawners must produce a reasonable (non-trivial) number of particles."""
+    """All spawners must produce at least a few particles."""
 
     def _count(self, key):
         from src.ui.click_effects import _SPAWNERS
         return len(_SPAWNERS[key](100, 100))
 
     def test_gore_produces_particles(self):
-        # 10 circles + 3 horror emoji = 13
-        self.assertGreaterEqual(self._count("gore"), 8)
+        self.assertGreaterEqual(self._count("gore"), 4)
 
     def test_bat_produces_particles(self):
-        # 6 text + 4 circles = 10
-        self.assertGreaterEqual(self._count("bat"), 8)
+        self.assertGreaterEqual(self._count("bat"), 4)
 
     def test_rainbow_produces_particles(self):
-        # 8 mixed + 1 floater = 9
-        self.assertGreaterEqual(self._count("rainbow"), 7)
+        self.assertGreaterEqual(self._count("rainbow"), 4)
 
     def test_otter_produces_particles(self):
-        # 7 mixed + 3 water = 10
-        self.assertGreaterEqual(self._count("otter"), 8)
+        self.assertGreaterEqual(self._count("otter"), 4)
 
     def test_galaxy_produces_particles(self):
-        # 9 mixed + 4 dots = 13
-        self.assertGreaterEqual(self._count("galaxy"), 10)
+        self.assertGreaterEqual(self._count("galaxy"), 4)
 
     def test_goth_produces_particles(self):
-        # 8 mixed + 3 mist = 11
-        self.assertGreaterEqual(self._count("goth"), 8)
+        self.assertGreaterEqual(self._count("goth"), 4)
 
     def test_neon_produces_particles(self):
-        # 8 mixed + 2 arcs = 10
-        self.assertGreaterEqual(self._count("neon"), 8)
+        self.assertGreaterEqual(self._count("neon"), 4)
 
     def test_fire_produces_particles(self):
-        # 9 circles + 4 sparks + 1 emoji = 14
-        self.assertGreaterEqual(self._count("fire"), 10)
+        self.assertGreaterEqual(self._count("fire"), 4)
 
     def test_ice_produces_particles(self):
-        # 8 mixed + 2 hero flakes + 3 dots = 13
-        self.assertGreaterEqual(self._count("ice"), 10)
+        self.assertGreaterEqual(self._count("ice"), 4)
 
     def test_panda_produces_particles(self):
-        # 6 mixed + 2 hero emoji = 8
-        self.assertGreaterEqual(self._count("panda"), 6)
+        self.assertGreaterEqual(self._count("panda"), 4)
 
     def test_default_produces_particles(self):
-        # 7 circles + 2 sparkle emoji = 9
-        self.assertGreaterEqual(self._count("default"), 7)
+        self.assertGreaterEqual(self._count("default"), 4)
 
     def test_sakura_produces_particles(self):
-        # 7 burst + 2 drifters + 4 sparkles = 13
-        self.assertGreaterEqual(self._count("sakura"), 10)
+        self.assertGreaterEqual(self._count("sakura"), 4)
 
     def test_fairy_produces_particles(self):
-        # 10 burst + 6 dots + 2 floaters = 18
-        self.assertGreaterEqual(self._count("fairy"), 12)
+        self.assertGreaterEqual(self._count("fairy"), 4)
 
 
 # ---------------------------------------------------------------------------

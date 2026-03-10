@@ -10,7 +10,7 @@ from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
-    QProgressBar, QGroupBox, QGridLayout,
+    QProgressBar, QGroupBox, QGridLayout, QScrollArea,
     QLineEdit, QSplitter, QMessageBox, QTextEdit,
 )
 
@@ -206,7 +206,11 @@ class ConverterTab(QWidget):
         self._log.setPlaceholderText("Conversion log…")
         rv.addWidget(self._log, 1)
 
-        splitter.addWidget(right)
+        right_scroll = QScrollArea()
+        right_scroll.setWidget(right)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        splitter.addWidget(right_scroll)
         splitter.setSizes([340, 560])
         main_layout.addWidget(splitter, 1)
 

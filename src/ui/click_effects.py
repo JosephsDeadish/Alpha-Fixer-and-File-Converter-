@@ -67,22 +67,22 @@ def _rand_vel(speed_lo: float, speed_hi: float):
 
 def _spawn_default(x, y):
     particles = []
-    for _ in range(7):
+    for _ in range(4):
         particles.append(
             _Particle(x, y, *_rand_vel(1, 5), random.uniform(0.4, 0.8),
                       "circle", random.uniform(4, 10), QColor("#e94560"))
         )
-    for emoji in random.sample(["✨", "💥", "⭐", "💫", "🎉"], 2):
-        vx, vy = _rand_vel(1.5, 4.5)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.9),
-                                   "text", random.uniform(14, 20),
-                                   QColor("#e94560"), emoji))
+    emoji = random.choice(["✨", "💥", "⭐", "💫", "🎉"])
+    vx, vy = _rand_vel(1.5, 4.5)
+    particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.9),
+                               "text", random.uniform(14, 20),
+                               QColor("#e94560"), emoji))
     return particles
 
 
 def _spawn_gore(x, y):
     particles = []
-    for _ in range(10):
+    for _ in range(5):
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(2, 9)
         vy = random.uniform(-8, 4)
@@ -94,31 +94,23 @@ def _spawn_gore(x, y):
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
                                    kind, random.uniform(4, 14),
                                    QColor(r, g, b)))
-    horror_emojis = ["🩸", "💀", "☠", "🦴", "👁"]
-    for _ in range(3):
-        vx, vy = _rand_vel(1.5, 6)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.0),
-                                   "text", random.uniform(14, 22),
-                                   QColor(random.choice(["#cc0000", "#880000", "#ff2222"])),
-                                   random.choice(horror_emojis)))
+    particles.append(_Particle(x, y, *_rand_vel(1.5, 6), random.uniform(0.5, 1.0),
+                               "text", random.uniform(14, 22),
+                               QColor("#cc0000"), random.choice(["🩸", "💀", "☠"])))
     return particles
 
 
 def _spawn_bat(x, y):
     particles = []
-    bat_emojis = ["🦇", "🦇", "🌙", "⭐", "💜", "·"]
-    for _ in range(6):
-        vx, vy = _rand_vel(2, 7)
-        life = random.uniform(0.5, 1.2)
-        particles.append(_Particle(x, y, vx, vy, life, "text",
-                                   random.uniform(14, 24),
-                                   QColor(random.choice(["#7b2dff", "#9944ff", "#5500cc",
-                                                         "#ccaaff"])),
-                                   random.choice(bat_emojis)))
+    bat_emojis = ["🦇", "🌙", "💜", "·"]
     for _ in range(4):
-        vx, vy = _rand_vel(1, 5)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.8),
-                                   "circle", random.uniform(4, 10), QColor("#7b2dff")))
+        vx, vy = _rand_vel(2, 7)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.2), "text",
+                                   random.uniform(14, 22),
+                                   QColor(random.choice(["#7b2dff", "#9944ff", "#ccaaff"])),
+                                   random.choice(bat_emojis)))
+    particles.append(_Particle(x, y, *_rand_vel(1, 5), random.uniform(0.4, 0.8),
+                               "circle", random.uniform(4, 10), QColor("#7b2dff")))
     return particles
 
 
@@ -126,89 +118,65 @@ def _spawn_rainbow(x, y):
     particles = []
     rainbow_colors = ["#ff0000", "#ff7700", "#ffff00",
                       "#00ff00", "#0088ff", "#8800ff", "#ff00ff"]
-    emojis = ["🌈", "✨", "⭐", "🌟", "💫", "🎊", "🦄"]
-    for i in range(8):
+    emojis = ["🌈", "✨", "⭐", "🌟", "🦄"]
+    for i in range(5):
         vx, vy = _rand_vel(2, 7)
         color = QColor(rainbow_colors[i % len(rainbow_colors)])
-        kind = "text" if i % 3 == 0 else "circle"
+        kind = "text" if i % 2 == 0 else "circle"
         text = random.choice(emojis) if kind == "text" else ""
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.0),
                                    kind, random.uniform(8, 18), color, text))
-    # One rainbow/unicorn floater
-    particles.append(_Particle(x, y, random.uniform(-2, 2),
-                               random.uniform(-5, -2), 1.0,
-                               "text", 26, QColor("#ff88ff"),
-                               random.choice(["🦄", "🌈"])))
     return particles
 
 
 def _spawn_otter(x, y):
     particles = []
-    otter_emojis = ["🦦", "🐟", "💧", "🌊", "✨", "🤘"]
-    otter_colors = ["#e8a040", "#6699cc", "#88ccee", "#c8a870", "#4488aa"]
-    for _ in range(7):
+    otter_emojis = ["🦦", "🐟", "💧", "🌊", "✨"]
+    otter_colors = ["#e8a040", "#6699cc", "#88ccee", "#c8a870"]
+    for _ in range(5):
         vx, vy = _rand_vel(1, 5)
         kind = "text" if random.random() < 0.6 else "circle"
         text = random.choice(otter_emojis) if kind == "text" else ""
         color = QColor(random.choice(otter_colors))
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.1),
                                    kind, random.uniform(12, 20), color, text))
-    for _ in range(3):
-        vx, vy = _rand_vel(2, 6)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.3, 0.7),
-                                   "circle", random.uniform(4, 8),
-                                   QColor("#88ccee")))
     return particles
 
 
 def _spawn_galaxy(x, y):
     particles = []
-    star_colors = ["#4477ff", "#aabbff", "#ffffff", "#00ddaa",
-                   "#ffcc00", "#ff4477", "#88aaff"]
-    star_chars = ["✦", "✧", "★", "·", "⋆", "⭐", "💫"]
-    for _ in range(9):
+    star_colors = ["#4477ff", "#aabbff", "#ffffff", "#00ddaa", "#ffcc00"]
+    star_chars = ["✦", "✧", "★", "·", "⭐"]
+    for _ in range(5):
         vx, vy = _rand_vel(1, 6)
         color = QColor(random.choice(star_colors))
         kind = random.choice(["text", "circle"])
         text = random.choice(star_chars) if kind == "text" else ""
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.2),
                                    kind, random.uniform(6, 16), color, text))
-    for _ in range(4):
-        vx, vy = _rand_vel(3, 8)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.3, 0.6),
-                                   "circle", random.uniform(2, 5),
-                                   QColor(random.choice(["#4477ff", "#ffffff", "#aabbff"]))))
     return particles
 
 
 def _spawn_galaxy_otter(x, y):
     particles = _spawn_galaxy(x, y)
-    otter_chars = ["🦦", "⭐", "✨", "🤘", "🪐"]
-    for _ in range(3):
-        vx, vy = _rand_vel(1, 4)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.2),
-                                   "text", random.uniform(16, 22),
-                                   QColor(random.choice(["#a06aff", "#cc88ff", "#7744cc"])),
-                                   random.choice(otter_chars)))
+    particles.append(_Particle(x, y, *_rand_vel(1, 4), random.uniform(0.7, 1.2),
+                               "text", random.uniform(16, 22),
+                               QColor(random.choice(["#a06aff", "#cc88ff"])),
+                               random.choice(["🦦", "⭐", "✨"])))
     return particles
 
 
 def _spawn_goth(x, y):
     particles = []
-    goth_chars = ["💀", "🕷", "🦇", "☠", "🌑", "🖤", "🔮"]
-    goth_colors = ["#8800aa", "#330033", "#aa00cc", "#221122", "#ffffff",
-                   "#550055", "#660066"]
-    for _ in range(8):
+    goth_chars = ["💀", "🕷", "🦇", "☠", "🖤"]
+    goth_colors = ["#8800aa", "#330033", "#aa00cc", "#ffffff", "#550055"]
+    for _ in range(5):
         vx, vy = _rand_vel(1, 5)
         kind = "text" if random.random() < 0.6 else "circle"
         text = random.choice(goth_chars) if kind == "text" else ""
         color = QColor(random.choice(goth_colors))
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 1.0),
                                    kind, random.uniform(10, 18), color, text))
-    for _ in range(3):
-        vx, vy = _rand_vel(0.5, 3)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
-                                   "circle", random.uniform(8, 16), QColor("#440033")))
     return particles
 
 
@@ -217,7 +185,7 @@ def _spawn_neon(x, y):
     particles = []
     neon_colors = ["#00ff88", "#ff00ff", "#00ffff", "#ffff00", "#ff00aa", "#aa00ff"]
     chars = ["⚡", "✦", "◆", "★", "✸"]
-    for _ in range(8):
+    for _ in range(5):
         vx, vy = _rand_vel(2, 8)
         kind = "text" if random.random() < 0.55 else "circle"
         color = QColor(random.choice(neon_colors))
@@ -225,23 +193,14 @@ def _spawn_neon(x, y):
         size = random.uniform(12, 18) if kind == "text" else random.uniform(4, 10)
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.3, 0.8),
                                    kind, size, color, text))
-    # Electric arcs
-    for _ in range(2):
-        vx, vy = _rand_vel(4, 10)
-        particles.append(_Particle(x, y, vx, vy * 0.4, random.uniform(0.2, 0.5),
-                                   "text", random.uniform(20, 28),
-                                   QColor(random.choice(["#00ffff", "#ffff00", "#ff00ff"])),
-                                   "⚡"))
     return particles
 
 
 def _spawn_fire(x, y):
     """Rising flame and ember particles."""
     particles = []
-    fire_colors = ["#ff4400", "#ff8800", "#ffcc00", "#ff2200", "#ffaa00",
-                   "#ff6600", "#ff3300", "#ffdd00"]
-    fire_emojis = ["🔥", "💥", "✨"]
-    for _ in range(9):
+    fire_colors = ["#ff4400", "#ff8800", "#ffcc00", "#ff2200", "#ffaa00"]
+    for _ in range(5):
         angle = random.uniform(-math.pi * 0.78, -math.pi * 0.22)
         speed = random.uniform(2, 7)
         vx = math.cos(angle) * speed + random.uniform(-0.8, 0.8)
@@ -249,27 +208,18 @@ def _spawn_fire(x, y):
         color = QColor(random.choice(fire_colors))
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.9),
                                    "circle", random.uniform(5, 14), color))
-    # Bright sparks
-    for _ in range(4):
-        vx, vy = _rand_vel(3, 9)
-        particles.append(_Particle(x, y, vx, vy * 0.5, random.uniform(0.2, 0.5),
-                                   "circle", random.uniform(2, 5),
-                                   QColor(random.choice(["#ffffff", "#ffff88", "#ffcc44"]))))
-    # One emoji flame
-    vx = random.uniform(-2, 2)
-    vy = random.uniform(-6, -3)
-    particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.0),
-                               "text", 22, QColor("#ff8800"), random.choice(fire_emojis)))
+    particles.append(_Particle(x, y, random.uniform(-2, 2), random.uniform(-6, -3),
+                               random.uniform(0.6, 1.0), "text", 22,
+                               QColor("#ff8800"), random.choice(["🔥", "💥"])))
     return particles
 
 
 def _spawn_ice(x, y):
     """Snowflake and frost crystal particles."""
     particles = []
-    ice_colors = ["#aaddff", "#ffffff", "#88ccff", "#ccf0ff", "#6699cc",
-                  "#ddeeff", "#99ddff", "#eef8ff"]
-    flakes = ["❄", "❅", "❆", "·", "✦", "🌨", "💎"]
-    for _ in range(8):
+    ice_colors = ["#aaddff", "#ffffff", "#88ccff", "#ccf0ff", "#6699cc"]
+    flakes = ["❄", "❅", "❆", "·", "✦"]
+    for _ in range(5):
         vx, vy = _rand_vel(0.8, 4)
         vy = abs(vy) * 0.4 + random.uniform(-1, 1)
         kind = "text" if random.random() < 0.65 else "circle"
@@ -278,29 +228,15 @@ def _spawn_ice(x, y):
         size = random.uniform(10, 20) if kind == "text" else random.uniform(4, 10)
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.9, 1.6),
                                    kind, size, color, text))
-    # Two hero snowflakes
-    for _ in range(2):
-        vx = random.uniform(-1.5, 1.5)
-        vy = random.uniform(-2, 2)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 1.8),
-                                   "text", random.uniform(22, 32),
-                                   QColor("#ffffff"), random.choice(["❄", "❅"])))
-    # Frost glitter dots
-    for _ in range(3):
-        vx, vy = _rand_vel(1, 3)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.5, 0.9),
-                                   "circle", random.uniform(3, 7),
-                                   QColor(random.choice(["#aaddff", "#ffffff", "#ccf0ff"]))))
     return particles
 
 
 def _spawn_panda(x, y):
     """Cute panda-themed emoji and heart particles."""
     particles = []
-    panda_emojis = ["🐼", "🎋", "🌸", "✨", "💕", "⭐", "🖤", "🐾"]
-    panda_colors = ["#e94560", "#f0f0f0", "#1a1a1a", "#ffccdd",
-                    "#ffaacc", "#cc3355", "#88aacc"]
-    for _ in range(6):
+    panda_emojis = ["🐼", "🎋", "🌸", "✨", "💕", "⭐"]
+    panda_colors = ["#e94560", "#f0f0f0", "#1a1a1a", "#ffccdd", "#ffaacc"]
+    for _ in range(4):
         vx, vy = _rand_vel(1, 5)
         kind = "text" if random.random() < 0.75 else "circle"
         color = QColor(random.choice(panda_colors))
@@ -308,22 +244,17 @@ def _spawn_panda(x, y):
         size = random.uniform(14, 22) if kind == "text" else random.uniform(5, 12)
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.1),
                                    kind, size, color, text))
-    # One big panda and bamboo
-    for emoji, color_hex in [("🐼", "#1a1a1a"), ("🎋", "#4caf50")]:
-        particles.append(_Particle(x, y, random.uniform(-2, 2),
-                                   random.uniform(-6, -3), random.uniform(0.9, 1.4),
-                                   "text", 28, QColor(color_hex), emoji))
+    particles.append(_Particle(x, y, random.uniform(-2, 2), random.uniform(-6, -3),
+                               random.uniform(0.9, 1.4), "text", 26, QColor("#1a1a1a"), "🐼"))
     return particles
 
 
 def _spawn_sakura(x, y):
-    """Cherry-blossom petals and glowing sparks for the Secret Sakura theme."""
+    """Cherry-blossom petals for the Secret Sakura theme."""
     particles = []
-    sakura_emojis = ["🌸", "🌺", "🌷", "💮", "✨", "💖", "🎀", "💗", "🌼"]
-    sakura_colors = ["#ff6699", "#ff99bb", "#ffccdd", "#ff4477", "#ffaacc",
-                     "#ff88bb", "#ffddee", "#cc4466", "#ff5577"]
-    # Petal burst
-    for _ in range(7):
+    sakura_emojis = ["🌸", "🌺", "🌷", "💮", "✨", "💖"]
+    sakura_colors = ["#ff6699", "#ff99bb", "#ffccdd", "#ff4477", "#ffaacc"]
+    for _ in range(5):
         angle = random.uniform(-math.pi * 0.9, -math.pi * 0.1)
         speed = random.uniform(1.5, 6)
         vx = math.cos(angle) * speed + random.uniform(-0.5, 0.5)
@@ -334,31 +265,15 @@ def _spawn_sakura(x, y):
         size = random.uniform(12, 20) if kind == "text" else random.uniform(4, 10)
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.3),
                                    kind, size, color, text))
-    # Drifting petals
-    for _ in range(2):
-        vx = random.uniform(-2, 2)
-        vy = random.uniform(-5, -2)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 1.6),
-                                   "text", random.uniform(16, 26),
-                                   QColor(random.choice(sakura_colors)),
-                                   random.choice(["🌸", "🌺", "💮", "🌷"])))
-    # Sparkles
-    for _ in range(4):
-        vx, vy = _rand_vel(1.5, 4)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.4, 0.8),
-                                   "circle", random.uniform(3, 7),
-                                   QColor(random.choice(["#ff99cc", "#ffccee", "#ffffff"]))))
     return particles
 
 
 def _spawn_fairy(x, y):
-    """Glitter explosion with fairy-dust sparkles and wand magic for Fairy Garden theme."""
+    """Fairy-dust sparkles for Fairy Garden theme."""
     particles = []
-    fairy_emojis = ["✨", "⭐", "🌟", "💫", "🦋", "🌸", "🪄", "💜", "🧚"]
-    fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff",
-                    "#ffddff", "#aa44ff", "#ff44cc", "#ddbbff"]
-    # Radial glitter burst
-    for _ in range(10):
+    fairy_emojis = ["✨", "⭐", "🌟", "💫", "🪄", "🧚"]
+    fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff", "#aa44ff"]
+    for _ in range(6):
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(1.5, 8)
         vx = math.cos(angle) * speed
@@ -366,25 +281,9 @@ def _spawn_fairy(x, y):
         kind = "text" if random.random() < 0.65 else "circle"
         color = QColor(random.choice(fairy_colors))
         text = random.choice(fairy_emojis) if kind == "text" else ""
-        size = random.uniform(10, 22) if kind == "text" else random.uniform(3, 9)
+        size = random.uniform(10, 20) if kind == "text" else random.uniform(3, 8)
         particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.4),
                                    kind, size, color, text))
-    # Tiny glitter dots
-    for _ in range(6):
-        angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(3, 11)
-        vx = math.cos(angle) * speed + random.uniform(-1, 1)
-        vy = math.sin(angle) * speed + random.uniform(-1, 1)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.3, 0.7),
-                                   "circle", random.uniform(2, 5),
-                                   QColor(random.choice(["#ffffff", "#ffccff", "#ff88ff"]))))
-    # Two floating fairy emoji
-    for emoji in random.sample(["🧚", "🪄", "✨", "🌟"], 2):
-        vx = random.uniform(-2.5, 2.5)
-        vy = random.uniform(-7, -3)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 1.8),
-                                   "text", random.uniform(18, 28),
-                                   QColor(random.choice(fairy_colors)), emoji))
     return particles
 
 
@@ -405,9 +304,8 @@ def set_custom_emoji(emoji_list: list[str]) -> None:
 def _spawn_custom(x, y):
     particles = []
     emoji_list = _CUSTOM_EMOJI or ["✨"]
-    accent_colors = ["#e94560", "#00ff88", "#4477ff", "#ffcc00", "#ff88ff",
-                     "#ff8800", "#00ddaa", "#a06aff"]
-    for _ in range(10):
+    accent_colors = ["#e94560", "#00ff88", "#4477ff", "#ffcc00", "#ff88ff"]
+    for _ in range(5):
         vx, vy = _rand_vel(1, 6)
         kind = "text" if random.random() < 0.7 else "circle"
         text = random.choice(emoji_list) if kind == "text" else ""
@@ -504,9 +402,15 @@ class ClickEffectsOverlay(QWidget):
         self._click_count = 0
         self._bat_flock: _BatFlock | None = None
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
+        # Cache QFont objects per integer point-size to avoid repeated
+        # mutations and implicit font-metric recalculations each frame.
+        self._font_cache: dict[int, QFont] = {}
+        # Bounding rect from the previous frame so we can union it with the
+        # current frame and only request a repaint of the dirty region.
+        self._prev_dirty = None
 
         self._timer = QTimer(self)
-        self._timer.setInterval(22)   # ~45.5 fps — good balance of smoothness vs CPU
+        self._timer.setInterval(33)   # 30 fps — smooth enough, much less CPU than 60fps
         self._timer.timeout.connect(self._tick)
 
         self.setGeometry(main_window.rect())
@@ -597,29 +501,49 @@ class ClickEffectsOverlay(QWidget):
     # ------------------------------------------------------------------
 
     _GRAVITY = 0.4
+    # Margin in pixels around each particle's bounding box added to the dirty
+    # rect to ensure antialiased edges are fully covered.
+    _DIRTY_MARGIN = 4
+
+    def _particle_rect(self, p: _Particle):
+        """Return the approximate bounding QRect for a single particle."""
+        from PyQt6.QtCore import QRect
+        r = max(4, int(p.size + self._DIRTY_MARGIN))
+        return QRect(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
     def _tick(self) -> None:
         if not self._particles:
             return
+
+        # Compute the dirty rect that covers all current particle positions
+        # BEFORE we move them (so the old positions get erased).
+        from PyQt6.QtCore import QRect
+        dirty = QRect()
+        for p in self._particles:
+            dirty = dirty.united(self._particle_rect(p))
+
         surviving = []
         for p in self._particles:
             p.x += p.vx
             p.y += p.vy
             if p.kind != "bat_fly":
                 p.vy += self._GRAVITY
-            p.life -= 0.02
+            p.life -= 0.03   # faster decay → shorter burst, fewer frames rendered
             if p.life > 0:
                 surviving.append(p)
+                # Expand dirty rect to cover new position too
+                dirty = dirty.united(self._particle_rect(p))
+
         self._particles = surviving
+
         if surviving:
-            self.update()
+            # Only repaint the region particles actually occupy
+            self.update(dirty)
         else:
-            # All particles have died.  Stop the timer (performance: avoids
-            # 60-fps empty ticks until the next click) and ask the parent to
-            # repaint the overlay region.  Qt repaints child widgets
-            # bottom-to-top in Z-order: the underlying widgets overwrite the
-            # ghost particle pixels, then the overlay's no-op paintEvent runs.
             self._timer.stop()
+            # Erase leftover pixels by requesting a repaint of the last dirty area
+            if dirty.isValid():
+                self.update(dirty)
             parent = self.parentWidget()
             if parent is not None:
                 parent.update(self.geometry())
@@ -627,6 +551,14 @@ class ClickEffectsOverlay(QWidget):
     # ------------------------------------------------------------------
     # Paint
     # ------------------------------------------------------------------
+
+    def _get_font(self, size: int) -> QFont:
+        """Return a cached QFont for *size* points (avoids per-particle mutation)."""
+        size = max(6, size)
+        if size not in self._font_cache:
+            f = QFont(_EMOJI_FONT_FAMILIES, size)
+            self._font_cache[size] = f
+        return self._font_cache[size]
 
     def paintEvent(self, _event) -> None:
         if not self._particles:
@@ -637,11 +569,10 @@ class ClickEffectsOverlay(QWidget):
 
         for p in self._particles:
             alpha = max(0, min(255, int(p.alpha_frac * 220)))
-            if p.kind == "text" or p.kind == "bat_fly":
+            if p.kind in ("text", "bat_fly"):
                 c = QColor(p.color)
                 c.setAlpha(alpha)
-                self._font.setPointSize(max(6, int(p.size)))
-                painter.setFont(self._font)
+                painter.setFont(self._get_font(int(p.size)))
                 painter.setPen(QPen(c))
                 painter.drawText(int(p.x), int(p.y), p.text)
                 painter.setPen(Qt.PenStyle.NoPen)
