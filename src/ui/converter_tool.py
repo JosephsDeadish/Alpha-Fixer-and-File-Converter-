@@ -277,7 +277,7 @@ class ConverterTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -321,10 +321,10 @@ class ConverterTab(QWidget):
 
     @pyqtSlot(int)
     def _on_format_changed(self, _index: int):
-        """Enable quality spinbox only for formats that support it (JPEG/WEBP)."""
+        """Enable quality spinbox only for formats that support it (JPEG/WEBP/AVIF)."""
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
-        self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP"))
+        self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF"))
         self._preview_debounce.start()
 
     @pyqtSlot(int)
@@ -333,7 +333,7 @@ class ConverterTab(QWidget):
         # Only debounce the preview refresh if quality affects the output format
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
-        if fmt in ("JPEG", "WEBP"):
+        if fmt in ("JPEG", "WEBP", "AVIF"):
             self._preview_debounce.start()
 
     def _update_converted_preview(self):
