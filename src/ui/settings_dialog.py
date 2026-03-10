@@ -251,7 +251,7 @@ class SettingsDialog(QDialog):
         gv.addWidget(grp_trail)
 
         # ---- Cursor GroupBox ----
-        grp_cursor = QGroupBox("🖱  Cursor")
+        grp_cursor = QGroupBox("Cursor")
         cursor_gl = QGridLayout(grp_cursor)
         cursor_gl.setColumnStretch(1, 1)
         cursor_gl.setHorizontalSpacing(10)
@@ -277,7 +277,7 @@ class SettingsDialog(QDialog):
         gv.addWidget(grp_cursor)
 
         # ---- Appearance & FX GroupBox ----
-        grp_misc = QGroupBox("🎨  Appearance & Effects")
+        grp_misc = QGroupBox("Appearance && Effects")
         misc_gl = QGridLayout(grp_misc)
         misc_gl.setColumnStretch(1, 1)
         misc_gl.setHorizontalSpacing(10)
