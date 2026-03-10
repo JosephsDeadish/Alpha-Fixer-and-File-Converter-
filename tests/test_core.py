@@ -588,7 +588,10 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         self.assertIn("_alpha_delta_spin", source)
         self.assertIn("_on_finetune_changed", source)
         # Both should appear in the connections block
-        conn_block = source[source.find("_mode_combo.currentTextChanged"):]
+        conn_start = source.find("_mode_combo.currentTextChanged")
+        self.assertGreater(conn_start, 0,
+                           "_mode_combo.currentTextChanged not found in alpha_tool.py")
+        conn_block = source[conn_start:]
         self.assertIn("_alpha_delta_spin", conn_block,
                       "_alpha_delta_spin not connected to signal in alpha_tool.py")
 
@@ -596,7 +599,9 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         """The rgb_params dict in alpha_tool.py should include key 'a' for alpha delta."""
         source = self._alpha_tool_source()
         # Look for 'a': self._alpha_delta_spin near rgb_params
-        rgb_section = source[source.find("rgb_params"):]
+        rgb_idx = source.find("rgb_params")
+        self.assertGreater(rgb_idx, 0, "rgb_params not found in alpha_tool.py")
+        rgb_section = source[rgb_idx:]
         self.assertIn('"a"', rgb_section,
                       "rgb_params in alpha_tool.py should include key 'a' for alpha delta")
 
@@ -719,9 +724,12 @@ class TestConverterMetadata(unittest.TestCase):
     def test_avif_passes_meta_kwargs_to_save(self):
         """AVIF save should call _meta_kwargs(ext) like PNG/JPEG/WEBP."""
         source = self._converter_source()
-        avif_section = source[source.find("AVIF"):]
+        # Search specifically for the AVIF comment/section, not just the word AVIF
+        avif_comment_idx = source.find("# --- AVIF")
+        self.assertGreater(avif_comment_idx, 0, "AVIF section comment not found in converter source")
+        avif_section = source[avif_comment_idx:]
         save_line_idx = avif_section.find("img.save(output_path")
-        self.assertGreater(save_line_idx, 0)
+        self.assertGreater(save_line_idx, 0, "img.save not found in AVIF section")
         save_call = avif_section[save_line_idx: save_line_idx + 80]
         self.assertIn("_meta_kwargs", save_call,
                       "AVIF save should pass **_meta_kwargs(ext)")
