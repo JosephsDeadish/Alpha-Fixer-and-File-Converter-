@@ -485,6 +485,11 @@ class ClickEffectsOverlay(QWidget):
 
         self.setGeometry(main_window.rect())
         self.raise_()
+        # Start hidden: the overlay is only made visible when effects are
+        # actually enabled.  An invisible overlay cannot trigger the
+        # CompositionMode_Clear paintEvent that would otherwise black out the
+        # window on platforms where child widgets have no real alpha channel.
+        self.hide()
 
     # ------------------------------------------------------------------
     # Public API
@@ -511,7 +516,7 @@ class ClickEffectsOverlay(QWidget):
                 self._bat_flock.stop()
             if self._fairy_flock:
                 self._fairy_flock.stop()
-            self.update()
+            self.hide()
 
     def set_effect(self, effect_key: str) -> None:
         self._effect_key = effect_key if effect_key in _SPAWNERS else "default"

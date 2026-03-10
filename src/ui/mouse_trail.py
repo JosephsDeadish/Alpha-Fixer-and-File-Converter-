@@ -61,6 +61,11 @@ class MouseTrailOverlay(QWidget):
         # Cover the entire main window
         self.setGeometry(main_window.rect())
         self.raise_()
+        # Start hidden: the overlay is only made visible when the trail is
+        # enabled.  Without this, the CompositionMode_Clear paintEvent fires
+        # on startup and blacks out the window on platforms where child widgets
+        # don't have a real alpha channel.
+        self.hide()
 
     # ------------------------------------------------------------------
     # Public API
@@ -79,7 +84,7 @@ class MouseTrailOverlay(QWidget):
             QApplication.instance().removeEventFilter(self)
             self._timer.stop()
             self._trail.clear()
-            self.update()
+            self.hide()
 
     def set_color(self, color: str) -> None:
         self._color = QColor(color)
