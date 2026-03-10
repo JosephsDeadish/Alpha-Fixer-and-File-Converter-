@@ -12,12 +12,36 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ---------------------------------------------------------------------------
+# PyQt6 availability – used to skip widget/UI tests when PyQt6 is absent
+# ---------------------------------------------------------------------------
+
+try:
+    import PyQt6  # noqa: F401
+    _PYQT6_AVAILABLE = True
+except ImportError:
+    _PYQT6_AVAILABLE = False
+
+
+def _require_pyqt6(test_instance):
+    """Skip the calling test when PyQt6 is not installed."""
+    if not _PYQT6_AVAILABLE:
+        raise unittest.SkipTest("PyQt6 not installed — skipping widget test")
+
+# ---------------------------------------------------------------------------
 # DropFileList tests (headless via QApplication)
 # ---------------------------------------------------------------------------
 
 def _get_app():
-    """Return or create a QApplication for widget tests, flushing deferred deletions."""
-    from PyQt6.QtWidgets import QApplication
+    """Return or create a QApplication for widget tests, flushing deferred deletions.
+
+    Raises ``unittest.SkipTest`` when PyQt6 is not installed so that any test
+    class which calls this in ``setUp`` is automatically skipped rather than
+    erroring with an ImportError.
+    """
+    try:
+        from PyQt6.QtWidgets import QApplication
+    except ImportError:
+        raise unittest.SkipTest("PyQt6 not installed — skipping widget test")
     app = QApplication.instance()
     if app is None:
         app = QApplication(["test"])
@@ -156,6 +180,7 @@ class TestSettingsManagerNewKeys(unittest.TestCase):
 class TestSoundEngine(unittest.TestCase):
     def test_wav_generation(self):
         """_make_click_wav should produce a valid WAV file."""
+        _require_pyqt6(self)
         from src.ui.sound_engine import _make_click_wav
         import wave
         path = None
@@ -569,6 +594,7 @@ class TestConverterHistory(unittest.TestCase):
 
 class TestAlphaHistory(unittest.TestCase):
     def setUp(self):
+        _require_pyqt6(self)
         from src.core.settings_manager import SettingsManager
         self._mgr = SettingsManager.__new__(SettingsManager)
         self._store: dict = {}
@@ -613,6 +639,7 @@ class TestAlphaHistory(unittest.TestCase):
 
 class TestSettingsDefaults(unittest.TestCase):
     def setUp(self):
+        _require_pyqt6(self)
         from src.core.settings_manager import SettingsManager
         self._mgr = SettingsManager.__new__(SettingsManager)
 
@@ -646,6 +673,7 @@ class TestSettingsDefaults(unittest.TestCase):
 
 class TestSettingsManagerClearHistory(unittest.TestCase):
     def setUp(self):
+        _require_pyqt6(self)
         from src.core.settings_manager import SettingsManager
         self._mgr = SettingsManager.__new__(SettingsManager)
         self._store: dict = {}
@@ -913,6 +941,7 @@ class TestTooltipManager(unittest.TestCase):
 # Patreon URL constant
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestPatreonLink(unittest.TestCase):
     def test_patreon_url_correct(self):
         from src.ui.main_window import PATREON_URL
@@ -924,6 +953,7 @@ class TestPatreonLink(unittest.TestCase):
 # Custom emoji / effect selector (theme maker)
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestCustomEmoji(unittest.TestCase):
     """Custom emoji storage and custom spawner in click_effects."""
 
@@ -966,6 +996,7 @@ class TestThemeMakerEffect(unittest.TestCase):
     """Effect key is preserved in user-saved custom themes."""
 
     def test_effect_options_covers_all_spawners(self):
+        _require_pyqt6(self)
         from src.ui.settings_dialog import _EFFECT_OPTIONS
         from src.ui.click_effects import _SPAWNERS
         option_keys = {key for key, _ in _EFFECT_OPTIONS}
@@ -975,6 +1006,7 @@ class TestThemeMakerEffect(unittest.TestCase):
 
     def test_effect_key_written_into_theme_on_save(self):
         """Saving a custom theme must preserve the _effect key."""
+        _require_pyqt6(self)
         import json
         from src.core.settings_manager import SettingsManager
 
@@ -999,16 +1031,19 @@ class TestThemeMakerEffect(unittest.TestCase):
         self.assertEqual(saved["My Theme"].get("_effect"), "gore")
 
     def test_normal_tips_have_effect_combo_key(self):
+        _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("effect_combo", _NORMAL)
         self.assertEqual(len(_NORMAL["effect_combo"]), 5)
 
     def test_normal_tips_have_custom_emoji_key(self):
+        _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("custom_emoji", _NORMAL)
         self.assertEqual(len(_NORMAL["custom_emoji"]), 5)
 
     def test_all_modes_have_effect_combo_key(self):
+        _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
         for mode_name, tips in [("Normal", _NORMAL),
                                   ("Dumbed Down", _DUMBED),
@@ -1030,6 +1065,7 @@ class TestThemeMakerEffect(unittest.TestCase):
         self.assertEqual(effect_key, "otter")
 
     def test_recursive_check_key_in_all_modes(self):
+        _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
         for mode_name, tips in [("Normal", _NORMAL),
                                   ("Dumbed Down", _DUMBED),
@@ -1041,6 +1077,7 @@ class TestThemeMakerEffect(unittest.TestCase):
 
     def test_settings_dialog_tooltip_keys_in_all_modes(self):
         """All 6 new settings-dialog tooltip keys must appear in every active mode."""
+        _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
         new_keys = ("sound_check", "trail_check", "trail_color",
                     "cursor_combo", "font_size", "click_effects_check")
@@ -1062,6 +1099,7 @@ if __name__ == "__main__":
 # Bug 8: SettingsDialog._save_custom_theme must write name + _effect
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestSaveCustomThemeNameAndEffect(unittest.TestCase):
     """_save_custom_theme must persist the user-entered name and current effect."""
 
@@ -1276,6 +1314,7 @@ class TestThemeCursorKeys(unittest.TestCase):
 
     def test_cursor_spec_values_are_known(self):
         """All _cursor values must be either a known Qt name or 'emoji:...'."""
+        _require_pyqt6(self)
         from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES
         from src.ui.main_window import _CURSOR_MAP
         all_themes = {**PRESET_THEMES, **HIDDEN_THEMES}
@@ -1319,11 +1358,13 @@ class TestMakeEmojiCursor(unittest.TestCase):
 class TestSakuraEffect(unittest.TestCase):
     def test_sakura_in_spawners(self):
         """'sakura' must be a key in _SPAWNERS."""
+        _require_pyqt6(self)
         from src.ui.click_effects import _SPAWNERS
         self.assertIn("sakura", _SPAWNERS)
 
     def test_sakura_spawner_produces_particles(self):
         """_spawn_sakura must return at least 10 particles with full attributes."""
+        _require_pyqt6(self)
         from src.ui.click_effects import _SPAWNERS
         particles = _SPAWNERS["sakura"](100, 100)
         self.assertGreater(len(particles), 0)
@@ -1343,6 +1384,7 @@ class TestSakuraEffect(unittest.TestCase):
 # use_theme_cursor default value in settings
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestUseThemeCursorSetting(unittest.TestCase):
     def test_default_is_false(self):
         """use_theme_cursor must default to False."""
@@ -1379,10 +1421,12 @@ class TestFairyTheme(unittest.TestCase):
         self.assertTrue(FAIRY_THEME["_trail_color"].startswith("#"))
 
     def test_fairy_in_spawners(self):
+        _require_pyqt6(self)
         from src.ui.click_effects import _SPAWNERS
         self.assertIn("fairy", _SPAWNERS)
 
     def test_fairy_spawner_produces_particles(self):
+        _require_pyqt6(self)
         from src.ui.click_effects import _SPAWNERS
         particles = _SPAWNERS["fairy"](100, 100)
         self.assertGreater(len(particles), 0)
@@ -1393,6 +1437,7 @@ class TestFairyTheme(unittest.TestCase):
 
     def test_fairy_is_in_effect_options(self):
         """'fairy' must appear in the settings_dialog _EFFECT_OPTIONS list."""
+        _require_pyqt6(self)
         from src.ui.settings_dialog import _EFFECT_OPTIONS
         keys = [k for k, _ in _EFFECT_OPTIONS]
         self.assertIn("fairy", keys)
@@ -1402,6 +1447,7 @@ class TestFairyTheme(unittest.TestCase):
 # use_theme_trail setting
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestUseThemeTrailSetting(unittest.TestCase):
     def test_default_is_false(self):
         from src.core.settings_manager import SettingsManager
@@ -1510,6 +1556,7 @@ class TestMouseTrailStyle(unittest.TestCase):
 # New cursor options in _CURSOR_MAP
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestCursorMapOptions(unittest.TestCase):
     def test_hourglass_in_cursor_map(self):
         from src.ui.main_window import _CURSOR_MAP
@@ -1567,6 +1614,7 @@ class TestThemeBannerMessages(unittest.TestCase):
 # Enriched spawners produce more particles
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestEnrichedSpawners(unittest.TestCase):
     """All spawners must produce at least a few particles."""
 
@@ -1618,6 +1666,7 @@ class TestEnrichedSpawners(unittest.TestCase):
 # Emoji font constant in click_effects
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestClickEffectsEmojiFont(unittest.TestCase):
     def test_emoji_font_constant_exists(self):
         from src.ui.click_effects import _EMOJI_FONT_FAMILIES
@@ -1795,6 +1844,7 @@ class TestClickEffectsCulling(unittest.TestCase):
 # Debounce timer in AlphaFixerTab — validated via source inspection
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestAlphaFixerDebounce(unittest.TestCase):
     """Verify debounce timer is present in AlphaFixerTab via source inspection."""
 
@@ -1824,6 +1874,7 @@ class TestAlphaFixerDebounce(unittest.TestCase):
 # Preview pane: no blocking wait — validated via source inspection
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestPreviewPaneNoBlockingWait(unittest.TestCase):
     def test_show_file_no_wait_call(self):
         """show_file must not call wait() which would block the UI thread."""

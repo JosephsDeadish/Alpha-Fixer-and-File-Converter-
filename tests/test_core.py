@@ -273,6 +273,14 @@ if __name__ == "__main__":
 # AlphaWorker._resolve_output  (Bug: ignored output_dir when overwrite=True)
 # ---------------------------------------------------------------------------
 
+try:
+    import PyQt6  # noqa: F401
+    _PYQT6_AVAILABLE = True
+except ImportError:
+    _PYQT6_AVAILABLE = False
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed — skipping worker tests")
 class TestAlphaWorkerResolveOutput(unittest.TestCase):
     """_resolve_output must honour output_dir regardless of overwrite flag."""
 
