@@ -135,9 +135,12 @@ class AlphaFixerTab(QWidget):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
-        # Header
-        hdr = QLabel("🐼  Alpha Fixer")
+        # Header – uses the default-theme label; updated to the active theme via update_theme()
+        from .theme_engine import get_theme_tab_labels
+        _default_labels = get_theme_tab_labels("Panda Dark")
+        hdr = QLabel(_default_labels[0])
         hdr.setObjectName("header")
+        self._hdr = hdr
         main_layout.addWidget(hdr)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -471,6 +474,13 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._blue_spin, "blue_spin")
         mgr.register(self._alpha_delta_spin, "alpha_delta_spin")
         mgr.register(self._apply_rgb_check, "apply_rgb_check")
+
+    def update_theme(self, theme_name: str) -> None:
+        """Update the inner header label to match the active theme's tab emoji."""
+        from .theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels(theme_name)
+        # labels[0] is e.g. "🩸🖼  Alpha Fixer" – use it directly as the header
+        self._hdr.setText(labels[0])
 
     # ------------------------------------------------------------------
     # Preset management

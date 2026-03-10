@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
 
         self._theme_label = QLabel("  Theme: Panda Dark  ")
         self._theme_label.setObjectName("subheader")
-        self._theme_label.setMinimumWidth(160)  # prevent squishing on long theme names
+        self._theme_label.setMinimumWidth(220)  # wide enough for long hidden theme names
         toolbar.addWidget(self._theme_label)
 
         toolbar.addSeparator()
@@ -292,6 +292,7 @@ class MainWindow(QMainWindow):
         )
         self._alpha_tab.register_tooltips(mgr)
         self._converter_tab.register_tooltips(mgr)
+        self._history_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""
@@ -431,17 +432,23 @@ class MainWindow(QMainWindow):
         QApplication.instance().setStyleSheet(build_stylesheet(theme))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
-        # Set up animated banner frames and restart animation timer
+        # Set up animated banner frames – show first frame only (no cycling);
+        # constant emoji cycling was reported as distracting by users.
         self._banner_frames = get_theme_banner_frames(theme_name)
         self._banner_frame_idx = 0
         if self._banner_lbl is not None:
             self._banner_lbl.setText(self._banner_frames[0])
-        self._restart_banner_anim()
+        # Stop any previous animation timer – banner no longer cycles automatically
+        if self._anim_timer is not None:
+            self._anim_timer.stop()
         # Update tab labels to reflect the active theme's emojis
         tab_labels = get_theme_tab_labels(theme_name)
         self._tabs.setTabText(0, tab_labels[0])
         self._tabs.setTabText(1, tab_labels[1])
         self._tabs.setTabText(2, tab_labels[2])
+        # Update inner tab headers to also reflect the active theme
+        self._alpha_tab.update_theme(theme_name)
+        self._converter_tab.update_theme(theme_name)
         # Update status bar with per-theme flavor message
         if self._status_bar is not None:
             self._status_bar.showMessage(get_theme_status(theme_name))
@@ -456,26 +463,6 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
-
-    def _restart_banner_anim(self) -> None:
-        """Start (or restart) the banner animation timer based on the current theme's frames."""
-        # Stop any previous timer
-        if self._anim_timer is not None:
-            self._anim_timer.stop()
-        # Only animate when there are multiple frames
-        if len(self._banner_frames) <= 1:
-            return
-        if self._anim_timer is None:
-            self._anim_timer = QTimer(self)
-            self._anim_timer.timeout.connect(self._tick_banner_anim)
-        self._anim_timer.start(800)  # advance frame every 800 ms
-
-    def _tick_banner_anim(self) -> None:
-        """Advance to the next banner frame for the current theme."""
-        if not self._banner_frames or self._banner_lbl is None:
-            return
-        self._banner_frame_idx = (self._banner_frame_idx + 1) % len(self._banner_frames)
-        self._banner_lbl.setText(self._banner_frames[self._banner_frame_idx])
 
     def _make_toolbar_panda_icon(self):
         """Render the panda SVG to a 28×28 QLabel for the toolbar. Returns None on failure."""

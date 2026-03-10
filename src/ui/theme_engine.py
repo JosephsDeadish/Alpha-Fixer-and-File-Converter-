@@ -2076,11 +2076,11 @@ QTabWidget::pane {{
 }}
 QTabWidget::tab-bar {{
     alignment: left;
-    top: 1px;
 }}
 QTabBar {{
     background: {t['background']};
     border: none;
+    border-bottom: 2px solid {t['primary']};
     qproperty-drawBase: 0;
 }}
 QTabBar::tab {{

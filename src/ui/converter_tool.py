@@ -48,8 +48,13 @@ class ConverterTab(QWidget):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
-        hdr = QLabel("🔄  File Converter")
+        # Header – uses the default-theme label; updated to the active theme via update_theme()
+        from .theme_engine import get_theme_tab_labels
+        _default_labels = get_theme_tab_labels("Panda Dark")
+        _conv_prefix = _default_labels[1].split("  ", 1)[0] if "  " in _default_labels[1] else "🔄"
+        hdr = QLabel(f"{_conv_prefix}  File Converter")
         hdr.setObjectName("header")
+        self._hdr = hdr
         main_layout.addWidget(hdr)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -286,6 +291,16 @@ class ConverterTab(QWidget):
         mgr.register(self._btn_out_dir, "out_dir_browse")
         mgr.register(self._recursive_check, "recursive_check")
         mgr.register(self._file_list, "file_list")
+
+    def update_theme(self, theme_name: str) -> None:
+        """Update the inner header label to match the active theme's tab emoji."""
+        from .theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels(theme_name)
+        # labels[1] is e.g. "🩸🔄  Converter" – extract the emoji prefix by splitting on
+        # the first double-space separator, then rebuild with "File Converter" as the title.
+        converter_label = labels[1]
+        prefix = converter_label.split("  ", 1)[0] if "  " in converter_label else ""
+        self._hdr.setText(f"{prefix}  File Converter")
 
     # ------------------------------------------------------------------
     # File management

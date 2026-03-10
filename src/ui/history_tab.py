@@ -94,6 +94,15 @@ class HistoryTab(QWidget):
         self._btn_clear.clicked.connect(self._clear_history)
 
     # ------------------------------------------------------------------
+    # Tooltip registration
+    # ------------------------------------------------------------------
+
+    def register_tooltips(self, mgr) -> None:
+        """Register History tab widgets with the TooltipManager."""
+        mgr.register(self._btn_refresh, "history_refresh_btn")
+        mgr.register(self._btn_clear, "history_clear_btn")
+
+    # ------------------------------------------------------------------
     # Refresh
     # ------------------------------------------------------------------
 

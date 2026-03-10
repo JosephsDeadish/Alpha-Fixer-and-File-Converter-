@@ -218,6 +218,20 @@ _NORMAL: dict[str, list[str]] = {
         "Use this to verify a batch job completed without errors.",
         "History auto-refreshes each time you switch to this tab.",
     ],
+    "history_refresh_btn": [
+        "Refresh the history list to show the latest processing sessions.",
+        "Click this after a batch run to see the new entries appear.",
+        "History updates automatically when you switch tabs, but this forces a reload.",
+        "Useful if you just finished a batch and want to verify the results.",
+        "Pulls the latest session logs from settings storage.",
+    ],
+    "history_clear_btn": [
+        "Clear all history entries for both the Converter and Alpha Fixer tabs.",
+        "This permanently removes past session records — there's no undo.",
+        "Use this to clean up after testing or to reset your session log.",
+        "Only clears the history list, not any processed files on disk.",
+        "Your settings and presets are NOT affected — just the history log.",
+    ],
     "sound_check": [
         "Enable or disable click sound effects throughout the app.",
         "Sounds play on button clicks and other interactions.",
@@ -558,6 +572,20 @@ _DUMBED: dict[str, list[str]] = {
         "If something went wrong this tab might tell you what. Might.",
         "History tab: for when you can't remember what you broke.",
     ],
+    "history_refresh_btn": [
+        "Refresh. Click it. History updates. Not hard.",
+        "Reloads the history list. Just like it says on the button.",
+        "Click to reload recent sessions. It's a refresh button. Very standard.",
+        "If your new entries aren't showing, click this. Problem solved.",
+        "Refresh button. Does refreshing. You got this.",
+    ],
+    "history_clear_btn": [
+        "This erases all history. Gone. Forever. No takebacks.",
+        "Clear All History = delete everything in this list. Simple.",
+        "Clears your processing history. Doesn't delete actual files, just the records.",
+        "Warning: this permanently wipes the log. Or don't, up to you.",
+        "The nuclear option for your history tab. Use carefully.",
+    ],
     "sound_check": [
         "Check = sounds on. Uncheck = silence. Riveting decision.",
         "This enables the clickety-clack noises. You know what sounds are.",
@@ -897,6 +925,20 @@ _VULGAR: dict[str, list[str]] = {
         "Scroll through it to find that file you swear you processed but can't remember.",
         "If it's not in here, you didn't do it. Sorry. That's just facts.",
         "History. Past work. Evidence of productivity. Click it before you spiral.",
+    ],
+    "history_refresh_btn": [
+        "Refresh button. In case you forgot what you just did three seconds ago.",
+        "Hit refresh because you have zero trust in the app updating automatically. Valid.",
+        "Forces the history to reload. Because apparently you needed to ask twice.",
+        "Click refresh. See new entries. Marvel at your own productivity. Repeat.",
+        "It's a refresh button, genius. Click it if things look stale.",
+    ],
+    "history_clear_btn": [
+        "Nuke the entire history. No backup. No recovery. No regrets.",
+        "Clear All History: scorched earth mode for your processing log. You sure?",
+        "One click, your entire session history is gone forever. Fun! 🔥",
+        "Your past work, erased. Doesn't touch actual files. Just the receipts.",
+        "This is the 'pretend it never happened' button. Use wisely, you chaotic gremlin.",
     ],
     "sound_check": [
         "Toggle sounds on or off. Enabled = satisfying clicks. Disabled = sad silence.",
