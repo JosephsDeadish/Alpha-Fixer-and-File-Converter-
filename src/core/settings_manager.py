@@ -81,6 +81,7 @@ class SettingsManager:
         # Unlock flags
         "unlock_skeleton": False,
         "unlock_sakura": False,
+        "unlock_ocean": False,
         "total_clicks": 0,
     }
 

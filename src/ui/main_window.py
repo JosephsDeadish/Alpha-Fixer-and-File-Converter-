@@ -312,6 +312,17 @@ class MainWindow(QMainWindow):
                 pass
             newly_unlocked = True
 
+        # Deep Ocean unlocks at 500 total clicks
+        already_ocean = self._settings.get("unlock_ocean", False)
+        if not already_ocean and total >= 500:
+            self._settings.set("unlock_ocean", True)
+            self._unlock_lbl.setText("🌊 'Deep Ocean' theme unlocked! (Settings → Theme)")
+            try:
+                QApplication.instance().beep()
+            except Exception:
+                pass
+            newly_unlocked = True
+
         # Auto-clear the unlock banner after 6 seconds
         if newly_unlocked:
             self._schedule_unlock_clear()

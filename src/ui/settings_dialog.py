@@ -36,6 +36,7 @@ _EFFECT_OPTIONS = [
     ("panda",        "Panda — Cute panda shower 🐼"),
     ("sakura",       "Sakura — Cherry blossom petals 🌸"),
     ("fairy",        "Fairy Garden — Glitter & magic wands 🪄✨"),
+    ("ocean",        "Deep Ocean — Bubbles & sea creatures 🦑🫧"),
     ("custom",       "Custom — Your own emoji 🎨"),
 ]
 
@@ -111,10 +112,18 @@ class SettingsDialog(QDialog):
         psl.addWidget(self._theme_preset_combo, 1)
         self._btn_save_theme = QPushButton("Save as…")
         self._btn_delete_theme = QPushButton("Delete")
+        self._btn_export_theme = QPushButton("Export…")
+        self._btn_import_theme = QPushButton("Import…")
         self._btn_save_theme.setMinimumWidth(75)
         self._btn_delete_theme.setMinimumWidth(62)
+        self._btn_export_theme.setMinimumWidth(70)
+        self._btn_import_theme.setMinimumWidth(70)
+        self._btn_export_theme.setToolTip("Export the current theme settings to a JSON file.")
+        self._btn_import_theme.setToolTip("Import a theme from a JSON file.")
         psl.addWidget(self._btn_save_theme)
         psl.addWidget(self._btn_delete_theme)
+        psl.addWidget(self._btn_export_theme)
+        psl.addWidget(self._btn_import_theme)
         tv.addWidget(grp_preset_select)
 
         # Color grid
@@ -327,6 +336,8 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.currentTextChanged.connect(self._on_preset_selected_live)
         self._btn_save_theme.clicked.connect(self._save_custom_theme)
         self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
+        self._btn_export_theme.clicked.connect(self._export_theme)
+        self._btn_import_theme.clicked.connect(self._import_theme)
         self._btn_close.clicked.connect(self.accept)
         self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
@@ -520,6 +531,63 @@ class SettingsDialog(QDialog):
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.delete_named_theme(raw_name)
             self._rebuild_theme_combo()
+
+    def _export_theme(self):
+        """Export the current theme to a JSON file chosen by the user."""
+        theme_name = self._theme.get("name", "my_theme")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Theme",
+            f"{theme_name}.json",
+            "Theme Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        export_data = dict(self._theme)
+        export_data["_effect"] = self._effect_combo.currentData() or "default"
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            QMessageBox.information(self, "Export Theme", f"Theme exported to:\n{path}")
+        except OSError as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not write file:\n{exc}")
+
+    def _import_theme(self):
+        """Import a theme from a JSON file and apply it."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Theme", "",
+            "Theme Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            QMessageBox.warning(self, "Import Failed", f"Could not read theme file:\n{exc}")
+            return
+        if not isinstance(data, dict) or "background" not in data:
+            QMessageBox.warning(
+                self, "Import Failed",
+                "The selected file does not appear to be a valid theme JSON.\n"
+                "A valid theme must contain at least a 'background' color key.",
+            )
+            return
+        # Use filename as display name if the JSON has no "name" key
+        if "name" not in data:
+            data["name"] = os.path.splitext(os.path.basename(path))[0]
+        name = data["name"]
+        self._settings.save_named_theme(name, data)
+        self._rebuild_theme_combo(select=f"★ {name}")
+        # Apply immediately
+        self._theme = dict(data)
+        # Sync color buttons to the imported theme
+        for key, btn in self._color_buttons.items():
+            btn.set_color(self._theme.get(key, "#888888"))
+        self._set_effect_combo(self._theme.get("_effect", "default"))
+        self._settings.set_theme(self._theme)
+        self.theme_changed.emit(self._theme)
+        self.settings_changed.emit()
+        QMessageBox.information(self, "Import Theme", f"Theme '{name}' imported and applied.")
 
     # ------------------------------------------------------------------
     # Effect combo helpers — live apply

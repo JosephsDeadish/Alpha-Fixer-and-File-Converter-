@@ -399,6 +399,33 @@ FAIRY_THEME = {
     "_trail_color": "#ffccee",
 }
 
+SECRET_DEEP_OCEAN_THEME = {
+    "name": "Deep Ocean",
+    "background": "#020d1a",
+    "surface": "#051828",
+    "primary": "#082840",
+    "accent": "#00d4ff",
+    "text": "#b0f0ff",
+    "text_secondary": "#5aa8c0",
+    "border": "#0a3a55",
+    "success": "#00ffaa",
+    "warning": "#ffdd00",
+    "error": "#ff4488",
+    "tab_selected": "#00d4ff",
+    "button_bg": "#082840",
+    "button_hover": "#00d4ff",
+    "panda_white": "#b0f0ff",
+    "panda_black": "#020d1a",
+    "progress_bar": "#00d4ff",
+    "input_bg": "#010810",
+    "scrollbar": "#051828",
+    "scrollbar_handle": "#00d4ff",
+    "_effect": "ocean",
+    "_cursor": "emoji:🦑",
+    "_trail_color": "#00d4ff",
+    "_unlock": "ocean",
+}
+
 PRESET_THEMES = {
     "Panda Dark": DEFAULT_THEME,
     "Panda Light": LIGHT_THEME,
@@ -418,6 +445,7 @@ PRESET_THEMES = {
 HIDDEN_THEMES = {
     "Secret Skeleton": SECRET_SKELETON_THEME,
     "Secret Sakura": SECRET_SAKURA_THEME,
+    "Deep Ocean": SECRET_DEEP_OCEAN_THEME,
 }
 
 # Which effects each theme uses (name → effect key)
@@ -445,6 +473,7 @@ THEME_SVG = {
     "Fairy Garden":     "fairy_garden.svg",
     "Secret Skeleton":  "secret_skeleton.svg",
     "Secret Sakura":    "secret_sakura.svg",
+    "Deep Ocean":       "deep_ocean.svg",
 }
 
 
@@ -477,6 +506,7 @@ THEME_BANNER = {
     "Fairy Garden":    "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
     "Secret Skeleton": "☠  Alpha Fixer  &  File Converter  ☠",
     "Secret Sakura":   "🌸  Alpha Fixer  &  File Converter  🌸",
+    "Deep Ocean":      "🌊🦑  Alpha Fixer  &  File Converter  🦑🌊",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -495,6 +525,7 @@ THEME_STATUS_MESSAGES = {
     "Fairy Garden":    "🧚✨  Fairy Garden — Sprinkle some magic!",
     "Secret Skeleton": "☠  Secret Skeleton — The dead have awakened…",
     "Secret Sakura":   "🌸  Secret Sakura — Petals on the wind.",
+    "Deep Ocean":      "🌊  Deep Ocean — Something stirs in the deep…",
 }
 
 
@@ -547,6 +578,12 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
         "🌸  Alpha Fixer  &  File Converter  🌸",
         "🌸🌺  Alpha Fixer  &  File Converter  🌺🌸",
         "🌺🌸🌷  Alpha Fixer  &  File Converter  🌷🌸🌺",
+    ],
+    "Deep Ocean": [
+        "🌊🦑  Alpha Fixer  &  File Converter  🦑🌊",
+        "🦑🐙🌊  Alpha Fixer  &  File Converter  🌊🐙🦑",
+        "🌊🐠🦑  Alpha Fixer  &  File Converter  🦑🐠🌊",
+        "🐙🌊🐟  Alpha Fixer  &  File Converter  🐟🌊🐙",
     ],
 }
 

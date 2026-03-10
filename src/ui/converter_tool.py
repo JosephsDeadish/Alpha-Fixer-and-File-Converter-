@@ -261,7 +261,11 @@ class ConverterTab(QWidget):
         mgr.register(self._btn_stop, "stop_btn")
         mgr.register(self._fmt_combo, "format_combo")
         mgr.register(self._quality_spin, "quality_spin")
+        mgr.register(self._resize_check, "resize_check")
+        mgr.register(self._width_spin, "width_spin")
+        mgr.register(self._height_spin, "height_spin")
         mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._btn_out_dir, "out_dir_browse")
         mgr.register(self._recursive_check, "recursive_check")
         mgr.register(self._file_list, "file_list")
 

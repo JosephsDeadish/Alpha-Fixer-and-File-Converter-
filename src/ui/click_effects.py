@@ -315,6 +315,25 @@ def _spawn_custom(x, y):
     return particles
 
 
+def _spawn_ocean(x, y):
+    """Bubbles and sea creatures for Deep Ocean theme."""
+    particles = []
+    ocean_emojis = ["🫧", "🐠", "🐟", "🐙", "🦑", "🌊", "💧", "🫧"]
+    ocean_colors = ["#00d4ff", "#00aacc", "#0088aa", "#33ccff", "#006688", "#00ffcc"]
+    for _ in range(10):
+        angle = random.uniform(-math.pi, 0)  # mostly upward, like bubbles rising
+        speed = random.uniform(1.5, 6)
+        vx = math.cos(angle) * speed * 0.5  # gentle sideways drift
+        vy = math.sin(angle) * speed - random.uniform(1, 3)  # biased upward
+        kind = "text" if random.random() < 0.55 else "circle"
+        color = QColor(random.choice(ocean_colors))
+        text = random.choice(ocean_emojis) if kind == "text" else ""
+        size = random.uniform(10, 18) if kind == "text" else random.uniform(4, 10)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.5),
+                                   kind, size, color, text))
+    return particles
+
+
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -330,6 +349,7 @@ _SPAWNERS = {
     "panda":        _spawn_panda,
     "sakura":       _spawn_sakura,
     "fairy":        _spawn_fairy,
+    "ocean":        _spawn_ocean,
     "custom":       _spawn_custom,
 }
 

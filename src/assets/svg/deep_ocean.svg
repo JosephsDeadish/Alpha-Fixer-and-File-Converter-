@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="oceanGrad" cx="50%" cy="60%" r="60%">
+      <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#020d1a" stop-opacity="1"/>
+    </radialGradient>
+    <animate id="pulse" attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite"/>
+  </defs>
+  <!-- Background -->
+  <rect width="64" height="64" fill="url(#oceanGrad)" rx="8"/>
+  <!-- Ocean surface wave -->
+  <path d="M0 18 Q10 14 20 18 Q30 22 40 18 Q50 14 64 18 L64 0 L0 0 Z" fill="#00d4ff" opacity="0.15"/>
+  <!-- Squid tentacles -->
+  <ellipse cx="32" cy="34" rx="8" ry="6" fill="#00aacc" opacity="0.85"/>
+  <ellipse cx="32" cy="28" rx="5" ry="7" fill="#00c8ff" opacity="0.9"/>
+  <!-- Eyes -->
+  <circle cx="29" cy="27" r="2" fill="#ffffff" opacity="0.95"/>
+  <circle cx="35" cy="27" r="2" fill="#ffffff" opacity="0.95"/>
+  <circle cx="29.8" cy="27.8" r="1" fill="#020d1a"/>
+  <circle cx="35.8" cy="27.8" r="1" fill="#020d1a"/>
+  <!-- Tentacles -->
+  <path d="M26 36 Q24 44 22 50" stroke="#00aacc" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M28 37 Q27 46 26 52" stroke="#00aacc" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M32 38 Q32 47 32 53" stroke="#00aacc" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M36 37 Q37 46 38 52" stroke="#00aacc" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M38 36 Q40 44 42 50" stroke="#00aacc" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Bubbles -->
+  <circle cx="12" cy="40" r="2.5" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.7">
+    <animate attributeName="cy" values="40;10" dur="4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.7;0" dur="4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="52" cy="45" r="1.8" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.6">
+    <animate attributeName="cy" values="45;12" dur="5s" begin="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0" dur="5s" begin="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="8" cy="50" r="1.2" fill="none" stroke="#33ccff" stroke-width="0.8" opacity="0.5">
+    <animate attributeName="cy" values="50;15" dur="3.5s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0" dur="3.5s" begin="2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Glow on squid -->
+  <ellipse cx="32" cy="30" rx="11" ry="9" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.4">
+    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="2.5s" repeatCount="indefinite"/>
+  </ellipse>
+</svg>
