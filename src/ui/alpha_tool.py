@@ -170,6 +170,33 @@ class AlphaFixerTab(QWidget):
         )
         lv.addWidget(self._recursive_check)
 
+        # Output section – placed here (near input) so it's obvious where
+        # processed files will land without hunting to the far right panel.
+        grp_out = QGroupBox("Output")
+        grp_out.setMinimumHeight(100)
+        go_layout = QGridLayout(grp_out)
+        go_layout.setColumnStretch(0, 0)
+        go_layout.setColumnStretch(1, 1)
+        go_layout.setColumnMinimumWidth(0, 130)
+        go_layout.setHorizontalSpacing(12)
+        go_layout.setVerticalSpacing(6)
+
+        go_layout.addWidget(QLabel("Output folder:"), 0, 0)
+        out_row = QHBoxLayout()
+        self._out_dir_edit = QLineEdit()
+        self._out_dir_edit.setPlaceholderText("Same as source (default)")
+        self._btn_out_dir = QPushButton("Browse")
+        out_row.addWidget(self._out_dir_edit, 1)
+        out_row.addWidget(self._btn_out_dir)
+        go_layout.addLayout(out_row, 0, 1)
+
+        go_layout.addWidget(QLabel("Filename suffix:"), 1, 0)
+        self._suffix_edit = QLineEdit()
+        self._suffix_edit.setPlaceholderText("e.g. _fixed  (blank=overwrite)")
+        go_layout.addWidget(self._suffix_edit, 1, 1)
+
+        lv.addWidget(grp_out)
+
         # ---- Vertical splitter: file list (top) / compare (bottom) ----
         left_vsplit = QSplitter(Qt.Orientation.Vertical)
         left_vsplit.setChildrenCollapsible(False)
@@ -224,12 +251,33 @@ class AlphaFixerTab(QWidget):
         outer_splitter.addWidget(left)
 
         # ==============================================================
-        # Right panel: presets + fine-tune + output + run controls
+        # Right panel: run controls (top) + presets + fine-tune
         # ==============================================================
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
         rv.setSpacing(8)
+
+        # Run controls – at the very top so the Process button is always
+        # immediately visible when the tab is opened.
+        run_row = QHBoxLayout()
+        self._btn_run = QPushButton("▶  Process  [F5]")
+        self._btn_run.setObjectName("accent")
+        self._btn_run.setMinimumHeight(40)
+        self._btn_stop = QPushButton("■  Stop  [Esc]")
+        self._btn_stop.setEnabled(False)
+        run_row.addWidget(self._btn_run, 1)
+        run_row.addWidget(self._btn_stop)
+        rv.addLayout(run_row)
+
+        self._progress = QProgressBar()
+        self._progress.setTextVisible(True)
+        self._progress.setRange(0, 100)
+        rv.addWidget(self._progress)
+
+        self._status_lbl = QLabel("Ready.")
+        self._status_lbl.setObjectName("subheader")
+        rv.addWidget(self._status_lbl)
 
         # Preset section
         grp_preset = QGroupBox("Preset")
@@ -336,52 +384,6 @@ class AlphaFixerTab(QWidget):
         gt_layout.addWidget(self._apply_rgb_check, 11, 0, 1, 2)
 
         rv.addWidget(grp_tune)
-
-        # Output section
-        grp_out = QGroupBox("Output")
-        grp_out.setMinimumHeight(110)
-        go_layout = QGridLayout(grp_out)
-        go_layout.setColumnStretch(0, 0)
-        go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 130)
-        go_layout.setHorizontalSpacing(12)
-        go_layout.setVerticalSpacing(6)
-
-        go_layout.addWidget(QLabel("Output folder:"), 0, 0)
-        out_row = QHBoxLayout()
-        self._out_dir_edit = QLineEdit()
-        self._out_dir_edit.setPlaceholderText("Same as source (default)")
-        self._btn_out_dir = QPushButton("Browse")
-        out_row.addWidget(self._out_dir_edit, 1)
-        out_row.addWidget(self._btn_out_dir)
-        go_layout.addLayout(out_row, 0, 1)
-
-        go_layout.addWidget(QLabel("Filename suffix:"), 1, 0)
-        self._suffix_edit = QLineEdit()
-        self._suffix_edit.setPlaceholderText("e.g. _fixed  (blank=overwrite)")
-        go_layout.addWidget(self._suffix_edit, 1, 1)
-
-        rv.addWidget(grp_out)
-
-        # Run controls
-        run_row = QHBoxLayout()
-        self._btn_run = QPushButton("▶  Process  [F5]")
-        self._btn_run.setObjectName("accent")
-        self._btn_run.setMinimumHeight(40)
-        self._btn_stop = QPushButton("■  Stop  [Esc]")
-        self._btn_stop.setEnabled(False)
-        run_row.addWidget(self._btn_run, 1)
-        run_row.addWidget(self._btn_stop)
-        rv.addLayout(run_row)
-
-        self._progress = QProgressBar()
-        self._progress.setTextVisible(True)
-        self._progress.setRange(0, 100)
-        rv.addWidget(self._progress)
-
-        self._status_lbl = QLabel("Ready.")
-        self._status_lbl.setObjectName("subheader")
-        rv.addWidget(self._status_lbl)
 
         # Log
         self._log = QTextEdit()

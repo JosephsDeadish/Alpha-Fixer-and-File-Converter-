@@ -91,6 +91,34 @@ class ConverterTab(QWidget):
         self._file_count_lbl.setObjectName("subheader")
         lv.addWidget(self._file_count_lbl)
 
+        # Output folder – placed here (adjacent to input) so source and
+        # destination are together and the layout reads top-to-bottom.
+        grp_out = QGroupBox("Output")
+        grp_out.setMinimumHeight(70)
+        go_layout = QGridLayout(grp_out)
+        go_layout.setColumnStretch(0, 0)
+        go_layout.setColumnStretch(1, 1)
+        go_layout.setColumnMinimumWidth(0, 100)
+        go_layout.setHorizontalSpacing(12)
+        go_layout.setVerticalSpacing(6)
+
+        lbl_out = QLabel("Output folder:")
+        lbl_out.setMinimumWidth(90)
+        go_layout.addWidget(lbl_out, 0, 0)
+        out_row = QHBoxLayout()
+        self._out_dir_edit = QLineEdit()
+        self._out_dir_edit.setPlaceholderText("Same as source (default)")
+        saved_out = self._settings.get("converter_output_dir", "")
+        if saved_out:
+            self._out_dir_edit.setText(saved_out)
+        self._btn_out_dir = QPushButton("Browse…")
+        self._btn_out_dir.setMinimumWidth(80)
+        out_row.addWidget(self._out_dir_edit, 1)
+        out_row.addWidget(self._btn_out_dir)
+        go_layout.addLayout(out_row, 0, 1)
+
+        lv.addWidget(grp_out)
+
         # Preview pane
         self._preview = ImagePreviewPane()
         self._preview.setFixedHeight(260)
@@ -103,6 +131,26 @@ class ConverterTab(QWidget):
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
         rv.setSpacing(8)
+
+        # Run controls – at the very top so the Convert button is always
+        # immediately visible when the tab is opened.
+        run_row = QHBoxLayout()
+        self._btn_run = QPushButton("▶  Convert  [F5]")
+        self._btn_run.setObjectName("accent")
+        self._btn_run.setMinimumHeight(40)
+        self._btn_stop = QPushButton("■  Stop  [Esc]")
+        self._btn_stop.setEnabled(False)
+        run_row.addWidget(self._btn_run, 1)
+        run_row.addWidget(self._btn_stop)
+        rv.addLayout(run_row)
+
+        self._progress = QProgressBar()
+        self._progress.setTextVisible(True)
+        rv.addWidget(self._progress)
+
+        self._status_lbl = QLabel("Ready.")
+        self._status_lbl.setObjectName("subheader")
+        rv.addWidget(self._status_lbl)
 
         # Output format
         grp_fmt = QGroupBox("Output Format")
@@ -171,52 +219,6 @@ class ConverterTab(QWidget):
         gr_layout.addWidget(self._height_spin, 2, 1)
 
         rv.addWidget(grp_resize)
-
-        # Output folder
-        grp_out = QGroupBox("Output")
-        grp_out.setMinimumHeight(80)
-        go_layout = QGridLayout(grp_out)
-        go_layout.setColumnStretch(0, 0)
-        go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 100)
-        go_layout.setHorizontalSpacing(12)
-        go_layout.setVerticalSpacing(6)
-
-        lbl_out = QLabel("Output folder:")
-        lbl_out.setMinimumWidth(90)
-        go_layout.addWidget(lbl_out, 0, 0)
-        out_row = QHBoxLayout()
-        self._out_dir_edit = QLineEdit()
-        self._out_dir_edit.setPlaceholderText("Same as source (default)")
-        saved_out = self._settings.get("converter_output_dir", "")
-        if saved_out:
-            self._out_dir_edit.setText(saved_out)
-        self._btn_out_dir = QPushButton("Browse…")
-        self._btn_out_dir.setMinimumWidth(80)
-        out_row.addWidget(self._out_dir_edit, 1)
-        out_row.addWidget(self._btn_out_dir)
-        go_layout.addLayout(out_row, 0, 1)
-
-        rv.addWidget(grp_out)
-
-        # Run
-        run_row = QHBoxLayout()
-        self._btn_run = QPushButton("▶  Convert  [F5]")
-        self._btn_run.setObjectName("accent")
-        self._btn_run.setMinimumHeight(40)
-        self._btn_stop = QPushButton("■  Stop  [Esc]")
-        self._btn_stop.setEnabled(False)
-        run_row.addWidget(self._btn_run, 1)
-        run_row.addWidget(self._btn_stop)
-        rv.addLayout(run_row)
-
-        self._progress = QProgressBar()
-        self._progress.setTextVisible(True)
-        rv.addWidget(self._progress)
-
-        self._status_lbl = QLabel("Ready.")
-        self._status_lbl.setObjectName("subheader")
-        rv.addWidget(self._status_lbl)
 
         # Log
         self._log = QTextEdit()
