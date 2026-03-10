@@ -285,6 +285,11 @@ class MainWindow(QMainWindow):
             return
         mgr.register(self._btn_settings, "settings_btn")
         mgr.register(self._btn_patreon, "patreon_btn")
+        # Register per-tab tooltips on the QTabBar
+        mgr.register_tab_bar(
+            self._tabs.tabBar(),
+            ["alpha_fixer_tab", "converter_tab", "history_tab"],
+        )
         self._alpha_tab.register_tooltips(mgr)
         self._converter_tab.register_tooltips(mgr)
 

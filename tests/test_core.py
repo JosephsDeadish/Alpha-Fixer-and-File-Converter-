@@ -638,6 +638,26 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         self.assertGreaterEqual(count, 3,
                                 f"Expected alpha_delta_spin in all 3 tooltip dicts, found {count} occurrences")
 
+    def test_tab_tooltip_keys_in_all_modes(self):
+        """alpha_fixer_tab, converter_tab, history_tab must appear in all 3 tooltip dicts."""
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
+            source = f.read()
+        for key in ("alpha_fixer_tab", "converter_tab", "history_tab"):
+            count = source.count(f'"{key}"')
+            self.assertGreaterEqual(
+                count, 3,
+                f"Expected '{key}' in all 3 tooltip dicts, found {count} occurrence(s)"
+            )
+
+    def test_register_tab_bar_method_exists(self):
+        """TooltipManager should expose a register_tab_bar method."""
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
+            source = f.read()
+        self.assertIn("def register_tab_bar", source,
+                      "TooltipManager should have a register_tab_bar method")
+
 
 # ---------------------------------------------------------------------------
 # Dedicated hidden-theme SVG tests
@@ -758,6 +778,63 @@ class TestHiddenThemeSVGs(unittest.TestCase):
             svg_content = f.read()
         self.assertIn("<animate", svg_content,
                       "candy_land.svg should contain animation elements")
+
+    # ----- Third batch: 12 remaining hidden themes now with dedicated SVGs -----
+
+    _THIRD_BATCH_THEMES = [
+        ("Zombie Apocalypse", "zombie_apocalypse"),
+        ("Dragon Fire",       "dragon_fire"),
+        ("Bubblegum",         "bubblegum"),
+        ("Thunder Storm",     "thunder_storm"),
+        ("Rose Gold",         "rose_gold"),
+        ("Space Cat",         "space_cat"),
+        ("Magic Mushroom",    "magic_mushroom"),
+        ("Abyssal Void",      "abyssal_void"),
+        ("Spring Bloom",      "spring_bloom"),
+        ("Gold Rush",         "gold_rush"),
+        ("Nebula",            "nebula"),
+        ("Toxic Neon",        "toxic_neon"),
+    ]
+
+    def test_third_batch_svgs_exist(self):
+        """All 12 newly-dedicated hidden-theme SVG files must exist on disk."""
+        te = self._import_theme_engine()
+        for theme_name, expected_stem in self._THIRD_BATCH_THEMES:
+            with self.subTest(theme=theme_name):
+                svg_path = te.get_theme_svg_path(theme_name)
+                self.assertTrue(
+                    os.path.isfile(svg_path),
+                    f"SVG file not found for '{theme_name}': {svg_path}"
+                )
+                self.assertIn(
+                    expected_stem, svg_path,
+                    f"'{theme_name}' should use a dedicated {expected_stem}.svg"
+                )
+
+    def test_third_batch_svgs_contain_animations(self):
+        """Each new dedicated SVG must contain at least one <animate> element."""
+        te = self._import_theme_engine()
+        for theme_name, _ in self._THIRD_BATCH_THEMES:
+            with self.subTest(theme=theme_name):
+                svg_path = te.get_theme_svg_path(theme_name)
+                with open(svg_path) as f:
+                    svg_content = f.read()
+                self.assertIn(
+                    "<animate", svg_content,
+                    f"SVG for '{theme_name}' should contain animation elements"
+                )
+
+    def test_third_batch_svgs_are_unique(self):
+        """No two third-batch themes should share the same SVG path."""
+        te = self._import_theme_engine()
+        paths = [
+            te.get_theme_svg_path(theme_name)
+            for theme_name, _ in self._THIRD_BATCH_THEMES
+        ]
+        self.assertEqual(
+            len(set(paths)), len(paths),
+            f"Expected all {len(paths)} SVG paths to be unique; got duplicates: {paths}"
+        )
 
 
 # ---------------------------------------------------------------------------

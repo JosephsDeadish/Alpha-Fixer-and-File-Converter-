@@ -197,6 +197,27 @@ _NORMAL: dict[str, list[str]] = {
         "Even $1/month helps keep the panda well-fed 🐼",
         "Visit patreon.com/c/DeadOnTheInside",
     ],
+    "alpha_fixer_tab": [
+        "The Alpha Fixer tab — fix and adjust transparency in image files.",
+        "Add files, pick a preset or manual mode, then hit Process.",
+        "Live preview shows you the before/after side by side.",
+        "Presets include PS2, GameCube, N64, and PSP alpha corrections.",
+        "You can also fine-tune R/G/B/A channel deltas individually.",
+    ],
+    "converter_tab": [
+        "The Converter tab — convert images between different file formats.",
+        "Supports AVIF, BMP, DDS, GIF, ICO, JPEG, PCX, PNG, PPM, QOI, TGA, TIFF, WEBP.",
+        "Set quality and whether to keep original metadata.",
+        "Batch convert whole folders at once with the Add Folder button.",
+        "Resize and suffix options let you process files without overwriting originals.",
+    ],
+    "history_tab": [
+        "The History tab — browse your recently processed files.",
+        "Click any entry to see what was processed and where the output went.",
+        "History is saved between sessions so you can track past work.",
+        "Use this to verify a batch job completed without errors.",
+        "History auto-refreshes each time you switch to this tab.",
+    ],
     "sound_check": [
         "Enable or disable click sound effects throughout the app.",
         "Sounds play on button clicks and other interactions.",
@@ -515,6 +536,27 @@ _DUMBED: dict[str, list[str]] = {
         "Think of it as a tip jar. For software. For a panda.",
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
+    ],
+    "alpha_fixer_tab": [
+        "This is the Alpha Fixer tab. You click on it. You were already on it.",
+        "Alpha Fixer: fixing transparency since whenever this app was made.",
+        "The tab with the picture frame icon. Pretty self-explanatory, no?",
+        "Presets, sliders, batch processing — all the exciting alpha-fixing action lives here.",
+        "If you needed a tooltip to find the Alpha Fixer tab you might be in trouble.",
+    ],
+    "converter_tab": [
+        "The Converter tab converts files. Mind-blowing, I know.",
+        "You put files in, you pick a format, and… it converts them. Shocker.",
+        "For when Alpha Fixer is too exciting and you just want boring format changes.",
+        "Supports like a dozen formats. PNG, JPEG, WEBP, etc. Click it already.",
+        "Converter. Con-vert-er. Files go in one format, come out another. There you go.",
+    ],
+    "history_tab": [
+        "History. Like browser history but for files. And we judge you less.",
+        "Shows what you've processed recently. In case you forgot. Which you did.",
+        "Click it to see recent processing logs. Exciting stuff.",
+        "If something went wrong this tab might tell you what. Might.",
+        "History tab: for when you can't remember what you broke.",
     ],
     "sound_check": [
         "Check = sounds on. Uncheck = silence. Riveting decision.",
@@ -835,6 +877,27 @@ _VULGAR: dict[str, list[str]] = {
         "Your support funds new themes, more effects, and better pandas. Worth it.",
         "patreon.com/c/DeadOnTheInside – click it. Do it. Be a hero. 🐼",
     ],
+    "alpha_fixer_tab": [
+        "Alpha Fixer tab: where broken-ass alpha channels go to get fixed. Click it.",
+        "This is the tab that actually does the real work, unlike you apparently.",
+        "Alpha channels, presets, batch processing — stop reading tooltips and use it.",
+        "If your textures look like sh*t, THIS is where you fix that. You're welcome.",
+        "The image frame icon. The main tab. The whole damn point of the app. Click it.",
+    ],
+    "converter_tab": [
+        "Converter tab: turn your PNG into a WEBP or whatever the f**k you need.",
+        "File goes in, different format comes out. It's conversion. It's not complicated.",
+        "Supports a ridiculous number of formats. Stop asking, just click it.",
+        "Need to batch convert 500 files? This is your tab, you file-hoarding maniac.",
+        "It's the converter. For converting. Stop hovering and do the conversion already.",
+    ],
+    "history_tab": [
+        "History tab: proof you actually did something today. Rare.",
+        "Shows your recent processing history. Unlike your therapist, we don't judge.",
+        "Scroll through it to find that file you swear you processed but can't remember.",
+        "If it's not in here, you didn't do it. Sorry. That's just facts.",
+        "History. Past work. Evidence of productivity. Click it before you spiral.",
+    ],
     "sound_check": [
         "Toggle sounds on or off. Enabled = satisfying clicks. Disabled = sad silence.",
         "Check this box and the app makes noise. Uncheck it for quiet mode, you antisocial gremlin.",
@@ -1027,6 +1090,8 @@ class TooltipManager(QObject):
         # Track the last widget key shown so we only advance when user moves
         # to a different widget and comes back, not on every tiny mouse move.
         self._last_shown_key: str | None = None
+        # Map QTabBar id → list of tip keys (one per tab index)
+        self._tab_bar_keys: dict[int, list[str]] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -1041,6 +1106,14 @@ class TooltipManager(QObject):
         # Ensure native tooltip is cleared so we control it fully
         widget.setToolTip("")
 
+    def register_tab_bar(self, tab_bar, tip_keys: list) -> None:
+        """Register a QTabBar so each tab index maps to its own tip_key.
+
+        *tip_keys* must be a list with one entry per tab (same order as tabs).
+        """
+        self._tab_bar_keys[id(tab_bar)] = list(tip_keys)
+        tab_bar.setToolTip("")
+
     def mode(self) -> str:
         return self._settings.get("tooltip_mode", "Normal")
 
@@ -1052,13 +1125,37 @@ class TooltipManager(QObject):
         if event.type() != QEvent.Type.ToolTip:
             return False
 
+        # Check if this is a registered QTabBar with per-tab keys
+        tab_keys = self._tab_bar_keys.get(id(obj))
+        if tab_keys is not None:
+            return self._handle_tab_bar_tooltip(obj, event, tab_keys)
+
         key = self._widget_keys.get(id(obj))
         if key is None:
             return False
 
+        return self._show_tip_for_key(obj, event, key)
+
+    def _handle_tab_bar_tooltip(self, tab_bar, event, tab_keys: list) -> bool:
+        """Show a per-tab tooltip based on which tab is under the cursor."""
         mode = self.mode()
         if mode == "Off":
-            # Suppress all tooltips – import QToolTip lazily (needs display)
+            from PyQt6.QtWidgets import QToolTip
+            QToolTip.hideText()
+            return True
+        try:
+            tab_idx = tab_bar.tabAt(event.pos())
+        except Exception:
+            tab_idx = -1
+        if tab_idx < 0 or tab_idx >= len(tab_keys):
+            return False
+        key = tab_keys[tab_idx]
+        return self._show_tip_for_key(tab_bar, event, key)
+
+    def _show_tip_for_key(self, obj, event, key: str) -> bool:
+        """Resolve the cycling tip for *key* and show it."""
+        mode = self.mode()
+        if mode == "Off":
             from PyQt6.QtWidgets import QToolTip
             QToolTip.hideText()
             return True

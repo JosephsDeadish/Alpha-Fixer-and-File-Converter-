@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" width="400" height="220">
+  <!-- Nebula: deep space, colorful gas clouds, stars, star formation -->
+  <defs>
+    <radialGradient id="bg_nb" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#050218"/>
+      <stop offset="100%" stop-color="#010008"/>
+    </radialGradient>
+    <radialGradient id="cloud1_nb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6600cc" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#220055" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cloud2_nb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#cc0077" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#550022" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cloud3_nb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0044cc" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#001155" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cloud4_nb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00aacc" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#002233" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="220" fill="url(#bg_nb)"/>
+
+  <!-- Nebula gas clouds (overlapping ellipses) -->
+  <ellipse cx="130" cy="100" rx="130" ry="90" fill="url(#cloud1_nb)">
+    <animate attributeName="rx" values="130;145;130" dur="8s" repeatCount="indefinite"/>
+    <animate attributeName="ry" values="90;100;90" dur="8s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="280" cy="115" rx="120" ry="85" fill="url(#cloud2_nb)">
+    <animate attributeName="rx" values="120;135;120" dur="10s" repeatCount="indefinite"/>
+    <animate attributeName="ry" values="85;95;85" dur="10s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="180" cy="140" rx="140" ry="70" fill="url(#cloud3_nb)">
+    <animate attributeName="rx" values="140;155;140" dur="9s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="300" cy="60"  rx="100" ry="65" fill="url(#cloud4_nb)">
+    <animate attributeName="ry" values="65;75;65" dur="7s" repeatCount="indefinite"/>
+  </ellipse>
+  <!-- Additional pink cloud -->
+  <ellipse cx="80"  cy="165" rx="90"  ry="55" fill="url(#cloud2_nb)" opacity="0.6"/>
+
+  <!-- Stars (static background) -->
+  <circle cx="15"  cy="10"  r="1.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="45"  cy="30"  r="1"   fill="#ddddff" opacity="0.8"/>
+  <circle cx="85"  cy="12"  r="1.5" fill="#ffffff" opacity="0.85"/>
+  <circle cx="140" cy="25"  r="1"   fill="#ffffff" opacity="0.7"/>
+  <circle cx="190" cy="8"   r="2"   fill="#ffffff" opacity="0.9"/>
+  <circle cx="255" cy="20"  r="1"   fill="#ddddff" opacity="0.8"/>
+  <circle cx="305" cy="10"  r="1.5" fill="#ffffff" opacity="0.85"/>
+  <circle cx="350" cy="32"  r="1"   fill="#ffffff" opacity="0.75"/>
+  <circle cx="388" cy="14"  r="1.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="25"  cy="70"  r="1"   fill="#ddddff" opacity="0.7"/>
+  <circle cx="375" cy="80"  r="1"   fill="#ffffff" opacity="0.75"/>
+  <circle cx="175" cy="55"  r="1"   fill="#ffffff" opacity="0.65"/>
+  <circle cx="325" cy="60"  r="1.5" fill="#ccccff" opacity="0.8"/>
+  <circle cx="60"  cy="150" r="1"   fill="#ffffff" opacity="0.7"/>
+  <circle cx="380" cy="160" r="1"   fill="#ddddff" opacity="0.7"/>
+  <circle cx="220" cy="170" r="1"   fill="#ffffff" opacity="0.65"/>
+  <circle cx="100" cy="200" r="1.5" fill="#ffffff" opacity="0.6"/>
+  <circle cx="290" cy="195" r="1"   fill="#ddddff" opacity="0.65"/>
+
+  <!-- Brighter stars (twinkling) -->
+  <circle cx="200" cy="50" r="2.5" fill="#ffffff">
+    <animate attributeName="opacity" values="1;0.3;1" dur="2s"   repeatCount="indefinite"/>
+  </circle>
+  <circle cx="120" cy="170" r="2" fill="#ffccff">
+    <animate attributeName="opacity" values="1;0.2;1" dur="3s"   repeatCount="indefinite"/>
+  </circle>
+  <circle cx="310" cy="140" r="2" fill="#ccddff">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="60"  cy="90"  r="1.5" fill="#aaffff">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="350" cy="120" r="2" fill="#ffaaff">
+    <animate attributeName="opacity" values="1;0.2;1" dur="4s"   repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Star formation / proto-star (bright center) -->
+  <circle cx="200" cy="110" r="6" fill="#ffffff" opacity="0.9">
+    <animate attributeName="r" values="5;8;5" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Protostar halo -->
+  <circle cx="200" cy="110" r="18" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.3">
+    <animate attributeName="r" values="16;22;16" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.3;0.1;0.3" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Rays / spikes from protostar -->
+  <line x1="200" y1="90"  x2="200" y2="84"  stroke="#ffffff" stroke-width="1.5" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite"/>
+  </line>
+  <line x1="216" y1="94"  x2="221" y2="89"  stroke="#ffffff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.5s" repeatCount="indefinite"/>
+  </line>
+  <line x1="220" y1="110" x2="226" y2="110" stroke="#ffffff" stroke-width="1.5" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2.2s" repeatCount="indefinite"/>
+  </line>
+  <line x1="216" y1="126" x2="221" y2="131" stroke="#ffffff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.8s" repeatCount="indefinite"/>
+  </line>
+  <line x1="200" y1="130" x2="200" y2="136" stroke="#ffffff" stroke-width="1.5" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2.4s" repeatCount="indefinite"/>
+  </line>
+  <line x1="184" y1="126" x2="179" y2="131" stroke="#ffffff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.6s" repeatCount="indefinite"/>
+  </line>
+  <line x1="180" y1="110" x2="174" y2="110" stroke="#ffffff" stroke-width="1.5" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite"/>
+  </line>
+  <line x1="184" y1="94"  x2="179" y2="89"  stroke="#ffffff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- Cosmic dust particles -->
+  <circle cx="140" cy="80"  r="1.5" fill="#aa88ff" opacity="0">
+    <animate attributeName="opacity" values="0;0.7;0" dur="3s"   repeatCount="indefinite"/>
+    <animate attributeName="cx" values="140;150;140" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="260" cy="135" r="1.5" fill="#ff88cc" opacity="0">
+    <animate attributeName="opacity" values="0;0.6;0" dur="4s"   repeatCount="indefinite"/>
+    <animate attributeName="cx" values="260;270;260" dur="4s" repeatCount="indefinite"/>
+  </circle>
+</svg>

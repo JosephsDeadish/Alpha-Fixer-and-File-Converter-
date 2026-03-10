@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" width="400" height="220">
+  <!-- Spring Bloom: soft pastel sky, cherry blossoms, butterflies, green hills -->
+  <defs>
+    <linearGradient id="sky_sb" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#88ccff"/>
+      <stop offset="100%" stop-color="#ffeeff"/>
+    </linearGradient>
+    <radialGradient id="sun_sb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fffacc"/>
+      <stop offset="100%" stop-color="#ffee88" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Sky -->
+  <rect width="400" height="220" fill="url(#sky_sb)"/>
+
+  <!-- Sun -->
+  <circle cx="60" cy="40" r="28" fill="#fff8aa" opacity="0.9"/>
+  <ellipse cx="60" cy="40" rx="45" ry="45" fill="url(#sun_sb)" opacity="0.5">
+    <animate attributeName="rx" values="45;55;45" dur="4s" repeatCount="indefinite"/>
+    <animate attributeName="ry" values="45;55;45" dur="4s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Soft clouds -->
+  <g opacity="0.8">
+    <ellipse cx="200" cy="45" rx="55" ry="25" fill="#ffffff"/>
+    <ellipse cx="170" cy="52" rx="35" ry="22" fill="#ffffff"/>
+    <ellipse cx="235" cy="52" rx="38" ry="20" fill="#ffffff"/>
+    <ellipse cx="200" cy="58" rx="60" ry="20" fill="#ffffff"/>
+  </g>
+  <g opacity="0.7">
+    <ellipse cx="330" cy="35" rx="40" ry="18" fill="#ffffff"/>
+    <ellipse cx="308" cy="42" rx="28" ry="16" fill="#ffffff"/>
+    <ellipse cx="355" cy="42" rx="28" ry="15" fill="#ffffff"/>
+  </g>
+
+  <!-- Green hills -->
+  <path d="M 0,175 Q 80,130 160,165 Q 240,200 320,155 Q 370,135 400,165 L 400,220 L 0,220 Z" fill="#66cc44"/>
+  <path d="M 0,190 Q 60,170 130,185 Q 200,200 270,180 Q 330,165 400,185 L 400,220 L 0,220 Z" fill="#55bb33"/>
+
+  <!-- Cherry blossom tree trunk (left) -->
+  <line x1="80" y1="220" x2="80" y2="130" stroke="#7a4a2a" stroke-width="8"/>
+  <line x1="80" y1="155" x2="50"  y2="120" stroke="#7a4a2a" stroke-width="5"/>
+  <line x1="80" y1="155" x2="115" y2="118" stroke="#7a4a2a" stroke-width="5"/>
+  <line x1="80" y1="140" x2="80"  y2="112" stroke="#7a4a2a" stroke-width="4"/>
+
+  <!-- Cherry blossom clusters -->
+  <g>
+    <circle cx="80"  cy="108" r="28" fill="#ffb8cc" opacity="0.85"/>
+    <circle cx="55"  cy="116" r="22" fill="#ffaacc" opacity="0.8"/>
+    <circle cx="108" cy="113" r="24" fill="#ffb8d8" opacity="0.8"/>
+    <circle cx="78"  cy="90"  r="20" fill="#ffccdd" opacity="0.75"/>
+    <circle cx="95"  cy="96"  r="18" fill="#ffb8cc" opacity="0.8"/>
+  </g>
+
+  <!-- Individual blossoms on tree -->
+  <circle cx="65"  cy="100" r="4" fill="#ffffff" opacity="0.9"/>
+  <circle cx="92"  cy="92"  r="4" fill="#ffffff" opacity="0.85"/>
+  <circle cx="54"  cy="118" r="3" fill="#ffe0ee" opacity="0.9"/>
+  <circle cx="113" cy="106" r="3" fill="#ffe0ee" opacity="0.85"/>
+  <circle cx="78"  cy="84"  r="3" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Tree right (smaller) -->
+  <line x1="330" y1="220" x2="330" y2="148" stroke="#7a4a2a" stroke-width="7"/>
+  <line x1="330" y1="165" x2="308" y2="138" stroke="#7a4a2a" stroke-width="4"/>
+  <line x1="330" y1="165" x2="355" y2="135" stroke="#7a4a2a" stroke-width="4"/>
+  <circle cx="330" cy="134" r="22" fill="#ffaabb" opacity="0.8"/>
+  <circle cx="310" cy="132" r="18" fill="#ffb8cc" opacity="0.75"/>
+  <circle cx="350" cy="128" r="20" fill="#ffaacc" opacity="0.8"/>
+
+  <!-- Falling petals (animated) -->
+  <g opacity="0.85">
+    <ellipse cx="140" cy="80"  rx="4" ry="6" fill="#ffbbdd" transform="rotate(-20,140,80)">
+      <animate attributeName="cy" values="80;220" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="140;155" dur="4s" repeatCount="indefinite"/>
+      <animateTransform attributeName="transform" type="rotate" values="-20,140,80;30,155,220" dur="4s" repeatCount="indefinite" additive="sum"/>
+    </ellipse>
+    <ellipse cx="200" cy="50"  rx="3" ry="5" fill="#ffccee" transform="rotate(15,200,50)">
+      <animate attributeName="cy" values="50;220" dur="5s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="200;215" dur="5s" repeatCount="indefinite"/>
+    </ellipse>
+    <ellipse cx="260" cy="70"  rx="4" ry="6" fill="#ffbbdd" transform="rotate(-10,260,70)">
+      <animate attributeName="cy" values="70;220" dur="3.5s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="260;248" dur="3.5s" repeatCount="indefinite"/>
+    </ellipse>
+    <ellipse cx="170" cy="110" rx="3" ry="5" fill="#ffccee">
+      <animate attributeName="cy" values="110;220" dur="4.5s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="170;182" dur="4.5s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <!-- Butterfly (simple) -->
+  <g transform="translate(220,95)">
+    <ellipse cx="-14" cy="-8"  rx="14" ry="9"  fill="#ffdd66" opacity="0.85" transform="rotate(20,-14,-8)"/>
+    <ellipse cx="-10" cy="4"   rx="9"  ry="6"  fill="#ffee88" opacity="0.8"  transform="rotate(-15,-10,4)"/>
+    <ellipse cx="14"  cy="-8"  rx="14" ry="9"  fill="#ffdd66" opacity="0.85" transform="rotate(-20,14,-8)"/>
+    <ellipse cx="10"  cy="4"   rx="9"  ry="6"  fill="#ffee88" opacity="0.8"  transform="rotate(15,10,4)"/>
+    <ellipse cx="0"   cy="-2"  rx="3"  ry="8"  fill="#775533"/>
+    <!-- Antennae -->
+    <line x1="0" y1="-10" x2="-6" y2="-20" stroke="#775533" stroke-width="1"/>
+    <circle cx="-6" cy="-20" r="1.5" fill="#775533"/>
+    <line x1="0" y1="-10" x2="6"  y2="-20" stroke="#775533" stroke-width="1"/>
+    <circle cx="6"  cy="-20" r="1.5" fill="#775533"/>
+    <animateTransform attributeName="transform" type="translate" values="220,95;228,88;220,95" dur="2s" repeatCount="indefinite"/>
+  </g>
+</svg>

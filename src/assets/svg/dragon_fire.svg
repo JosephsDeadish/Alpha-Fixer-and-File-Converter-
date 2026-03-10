@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" width="400" height="220">
+  <!-- Dragon Fire: dark volcanic background, dragon silhouette, flame breath -->
+  <defs>
+    <radialGradient id="sky_d" cx="50%" cy="80%" r="80%">
+      <stop offset="0%" stop-color="#3a0800"/>
+      <stop offset="100%" stop-color="#1a0400"/>
+    </radialGradient>
+    <radialGradient id="fire_d" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffcc00"/>
+      <stop offset="60%" stop-color="#ff6600"/>
+      <stop offset="100%" stop-color="#cc2200" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="220" fill="url(#sky_d)"/>
+
+  <!-- Lava glow at bottom -->
+  <ellipse cx="200" cy="230" rx="200" ry="60" fill="#ff4400" opacity="0.3">
+    <animate attributeName="opacity" values="0.2;0.4;0.2" dur="2s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Dragon silhouette (simplified) -->
+  <!-- Body -->
+  <ellipse cx="220" cy="120" rx="80" ry="40" fill="#2a0800" stroke="#882200" stroke-width="1.5"/>
+  <!-- Neck -->
+  <path d="M 155,105 Q 130,70 110,55" stroke="#2a0800" stroke-width="22" fill="none" stroke-linecap="round"/>
+  <path d="M 155,105 Q 130,70 110,55" stroke="#3a1000" stroke-width="18" fill="none" stroke-linecap="round"/>
+  <!-- Head -->
+  <ellipse cx="108" cy="50" rx="28" ry="18" fill="#2a0800" stroke="#882200" stroke-width="1.5"/>
+  <!-- Eye -->
+  <circle cx="98" cy="46" r="5" fill="#ff6600"/>
+  <circle cx="98" cy="46" r="2.5" fill="#ffcc00">
+    <animate attributeName="r" values="2.5;3.5;2.5" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Snout -->
+  <ellipse cx="84" cy="54" rx="10" ry="7" fill="#2a0800"/>
+  <!-- Horn -->
+  <polygon points="110,32 118,48 102,46" fill="#442200"/>
+  <polygon points="122,30 130,46 114,44" fill="#442200"/>
+  <!-- Wing left -->
+  <path d="M 210,105 L 250,50 L 290,90 L 270,110 Z" fill="#220800" stroke="#662200" stroke-width="1" opacity="0.85">
+    <animateTransform attributeName="transform" type="rotate" values="-3,250,90;3,250,90;-3,250,90" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <!-- Wing membrane lines -->
+  <line x1="250" y1="50" x2="215" y2="108" stroke="#441100" stroke-width="1" opacity="0.6"/>
+  <line x1="270" y1="62" x2="220" y2="107" stroke="#441100" stroke-width="1" opacity="0.6"/>
+  <!-- Tail -->
+  <path d="M 295,130 Q 340,150 370,130 Q 390,120 380,145" stroke="#2a0800" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <path d="M 295,130 Q 340,150 370,130 Q 390,120 380,145" stroke="#3a1000" stroke-width="10" fill="none" stroke-linecap="round"/>
+
+  <!-- Flame breath from mouth -->
+  <ellipse cx="55" cy="62" rx="35" ry="16" fill="url(#fire_d)" opacity="0.9">
+    <animate attributeName="rx" values="30;42;30" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="ry" values="14;20;14" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.7;1;0.7" dur="0.6s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="42" cy="62" rx="22" ry="11" fill="#ffdd44" opacity="0.8">
+    <animate attributeName="rx" values="18;28;18" dur="0.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0.9;0.6" dur="0.5s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="32" cy="62" rx="12" ry="7" fill="#ffffff" opacity="0.7">
+    <animate attributeName="rx" values="10;16;10" dur="0.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0.8;0.5" dur="0.4s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Embers floating up -->
+  <circle cx="160" cy="160" r="2" fill="#ff8800">
+    <animate attributeName="cy" values="180;120;80" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.5;0" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="160;168;155" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="240" cy="170" r="1.5" fill="#ffcc00">
+    <animate attributeName="cy" values="190;130;90" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.5;0" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="240;248;235" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="310" cy="155" r="2" fill="#ff6600">
+    <animate attributeName="cy" values="175;110;70" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.4;0" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Ground cracks with lava glow -->
+  <path d="M 0,195 L 50,190 L 80,210 L 120,188 L 180,205 L 240,190 L 290,208 L 340,192 L 400,200 L 400,220 L 0,220 Z" fill="#1a0400"/>
+  <path d="M 100,210 L 115,195 L 130,210" fill="none" stroke="#ff4400" stroke-width="1.5" opacity="0.7"/>
+  <path d="M 230,205 L 248,192 L 262,207" fill="none" stroke="#ff4400" stroke-width="1.5" opacity="0.7"/>
+</svg>

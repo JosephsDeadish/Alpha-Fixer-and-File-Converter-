@@ -1112,19 +1112,20 @@ THEME_SVG = {
     "Mermaid":          "mermaid.svg",
     "Shark Bait":       "shark_bait.svg",
     "Alien":            "alien.svg",
-    # New hidden themes (dedicated SVGs for earlier unlocks)
-    "Candy Land":       "candy_land.svg",
-    "Zombie Apocalypse": "gore.svg",
-    "Dragon Fire":      "volcano.svg",
-    "Bubblegum":        "fairy_garden.svg",
-    "Thunder Storm":    "neon.svg",
-    "Rose Gold":        "secret_sakura.svg",
-    "Space Cat":        "galaxy_otter.svg",
-    "Magic Mushroom":   "fairy_garden.svg",
-    "Abyssal Void":     "bat_cave.svg",
-    "Spring Bloom":     "fairy_garden.svg",
-    "Gold Rush":        "galaxy.svg",
-    "Nebula":           "galaxy.svg",
+    # New hidden themes (dedicated SVGs)
+    "Candy Land":        "candy_land.svg",
+    "Zombie Apocalypse": "zombie_apocalypse.svg",
+    "Dragon Fire":       "dragon_fire.svg",
+    "Bubblegum":         "bubblegum.svg",
+    "Thunder Storm":     "thunder_storm.svg",
+    "Rose Gold":         "rose_gold.svg",
+    "Space Cat":         "space_cat.svg",
+    "Magic Mushroom":    "magic_mushroom.svg",
+    "Abyssal Void":      "abyssal_void.svg",
+    "Spring Bloom":      "spring_bloom.svg",
+    "Gold Rush":         "gold_rush.svg",
+    "Nebula":            "nebula.svg",
+    "Toxic Neon":        "toxic_neon.svg",
 }
 
 
@@ -1476,20 +1477,32 @@ QMainWindow, QDialog {{
 }}
 
 /* ===== Tabs ===== */
+QTabWidget {{
+    background-color: {t['background']};
+}}
 QTabWidget::pane {{
     border: 1px solid {t['border']};
+    border-top: none;
     background-color: {t['surface']};
-    border-radius: 4px;
+    border-radius: 0px 4px 4px 4px;
+}}
+QTabWidget::tab-bar {{
+    alignment: left;
 }}
 QTabBar {{
-    background: {t['primary']};
+    background: {t['background']};
     border: none;
+    border-bottom: 1px solid {t['border']};
+    min-height: 40px;
 }}
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
     padding: 10px 22px;
+    min-height: 20px;
     margin-right: 2px;
+    border: 1px solid {t['border']};
+    border-bottom: none;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
     font-weight: 600;
@@ -1498,6 +1511,9 @@ QTabBar::tab {{
 QTabBar::tab:selected {{
     background: {t['tab_selected']};
     color: {t['panda_white']};
+    border-color: {t['border']};
+    border-bottom: 1px solid {t['tab_selected']};
+    margin-bottom: -1px;
 }}
 QTabBar::tab:hover:!selected {{
     background: {t['button_hover']};
