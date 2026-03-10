@@ -131,22 +131,36 @@ class MouseTrailOverlay(QWidget):
             if a > 0.0:
                 new_trail.append([x, y, a, emoji])
         self._trail = new_trail
-        if new_trail:
-            self.update()
-        else:
-            parent = self.parentWidget()
-            if parent is not None:
-                parent.update(self.geometry())
+        # Always request a full repaint so that CompositionMode_Clear in
+        # paintEvent can wipe any pixels that belong to dots that just faded.
+        self.update()
 
     # ------------------------------------------------------------------
     # Paint
     # ------------------------------------------------------------------
 
-    def paintEvent(self, _event) -> None:
-        if not self._trail:
-            return
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Always erase the update region first.  WA_NoSystemBackground prevents
+        # Qt from pre-clearing this overlay's surface, so without an explicit
+        # clear, trail pixels from previous frames linger on screen after the
+        # dots have faded out.  CompositionMode_Clear sets every pixel in the
+        # update rect to fully transparent, which erases stale paint while
+        # leaving the widgets underneath perfectly visible.
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_Clear
+        )
+        painter.fillRect(event.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_SourceOver
+        )
+
+        if not self._trail:
+            painter.end()
+            return
+
         painter.setPen(Qt.PenStyle.NoPen)
 
         if self._style == "fairy":

@@ -401,15 +401,26 @@ class AlphaFixerTab(QWidget):
             return
         self._settings.set("last_alpha_preset", name)
         self._preset_desc.setText(preset.description)
+        # Block signals on fine-tune controls while we populate them so each
+        # value change doesn't restart the debounce timer individually.
+        finetune_controls = [
+            self._mode_combo, self._alpha_spin, self._alpha_slider,
+            self._threshold_spin, self._invert_check,
+        ]
+        for c in finetune_controls:
+            c.blockSignals(True)
         self._mode_combo.setCurrentText(preset.fill_mode)
         val = preset.alpha_value if preset.alpha_value is not None else preset.fill_value
         self._alpha_spin.setValue(int(val))
         self._alpha_slider.setValue(int(val))
         self._threshold_spin.setValue(int(preset.threshold))
         self._invert_check.setChecked(bool(preset.invert))
+        for c in finetune_controls:
+            c.blockSignals(False)
         self._btn_delete_preset.setEnabled(not preset.builtin)
-        # Refresh compare preview with the new preset
-        self._update_compare()
+        # Refresh compare preview (via debounce so rapid preset changes don't
+        # stack up many simultaneous background threads).
+        self._preview_debounce.start()
 
     def _save_preset(self):
         name, ok = QInputDialog.getText(self, "Save Preset", "Preset name:")
@@ -496,7 +507,7 @@ class AlphaFixerTab(QWidget):
         item = self._file_list.item(row)
         if item and os.path.isfile(item.text()):
             self._preview_path = item.text()
-            self._update_compare()
+            self._preview_debounce.start()
         else:
             self._preview_path = None
             self._compare.clear()
