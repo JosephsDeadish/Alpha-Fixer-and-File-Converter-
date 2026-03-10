@@ -21,11 +21,29 @@ try:
 except ImportError:
     _PYQT6_AVAILABLE = False
 
+# A stricter check: can we actually load Qt's GUI/Widgets stack?
+# On headless CI runners libEGL.so.1 may be absent even when PyQt6 is
+# installed, causing ImportError on QtGui/QtWidgets at import time.
+try:
+    from PyQt6.QtGui import QCursor  # noqa: F401
+    _QT_GUI_AVAILABLE = True
+except (ImportError, OSError, RuntimeError):
+    # ImportError: PyQt6.QtGui not installed.
+    # OSError/RuntimeError: system library (e.g. libEGL.so.1) is absent on
+    # headless CI runners even when the PyQt6 Python package is installed.
+    _QT_GUI_AVAILABLE = False
+
 
 def _require_pyqt6(test_instance):
     """Skip the calling test when PyQt6 is not installed."""
     if not _PYQT6_AVAILABLE:
         raise unittest.SkipTest("PyQt6 not installed — skipping widget test")
+
+
+def _require_qt_gui(test_instance):
+    """Skip the calling test when the Qt GUI stack (libEGL etc.) is unavailable."""
+    if not _QT_GUI_AVAILABLE:
+        raise unittest.SkipTest("Qt GUI stack unavailable — skipping widget test")
 
 # ---------------------------------------------------------------------------
 # DropFileList tests (headless via QApplication)
@@ -180,7 +198,7 @@ class TestSettingsManagerNewKeys(unittest.TestCase):
 class TestSoundEngine(unittest.TestCase):
     def test_wav_generation(self):
         """_make_click_wav should produce a valid WAV file."""
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.sound_engine import _make_click_wav
         import wave
         path = None
@@ -941,7 +959,7 @@ class TestTooltipManager(unittest.TestCase):
 # Patreon URL constant
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+@unittest.skipUnless(_QT_GUI_AVAILABLE, "Qt GUI stack unavailable")
 class TestPatreonLink(unittest.TestCase):
     def test_patreon_url_correct(self):
         from src.ui.main_window import PATREON_URL
@@ -969,6 +987,7 @@ class TestCustomEmoji(unittest.TestCase):
         self.assertIn("custom_emoji", SettingsManager.EXPORT_KEYS)
 
     def test_set_custom_emoji_updates_spawner(self):
+        _require_qt_gui(self)
         from src.ui.click_effects import set_custom_emoji
         set_custom_emoji(["🐼", "🎉"])
         from src.ui.click_effects import _CUSTOM_EMOJI
@@ -976,16 +995,19 @@ class TestCustomEmoji(unittest.TestCase):
         self.assertIn("🎉", _CUSTOM_EMOJI)
 
     def test_set_custom_emoji_empty_list_uses_fallback(self):
+        _require_qt_gui(self)
         from src.ui.click_effects import set_custom_emoji
         set_custom_emoji([])
         from src.ui.click_effects import _CUSTOM_EMOJI
         self.assertTrue(len(_CUSTOM_EMOJI) > 0)
 
     def test_custom_spawner_registered(self):
+        _require_qt_gui(self)
         from src.ui.click_effects import _SPAWNERS
         self.assertIn("custom", _SPAWNERS)
 
     def test_custom_spawner_produces_particles(self):
+        _require_qt_gui(self)
         from src.ui.click_effects import _SPAWNERS, set_custom_emoji
         set_custom_emoji(["🐼"])
         particles = _SPAWNERS["custom"](100, 100)
@@ -996,7 +1018,7 @@ class TestThemeMakerEffect(unittest.TestCase):
     """Effect key is preserved in user-saved custom themes."""
 
     def test_effect_options_covers_all_spawners(self):
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.settings_dialog import _EFFECT_OPTIONS
         from src.ui.click_effects import _SPAWNERS
         option_keys = {key for key, _ in _EFFECT_OPTIONS}
@@ -1314,7 +1336,7 @@ class TestThemeCursorKeys(unittest.TestCase):
 
     def test_cursor_spec_values_are_known(self):
         """All _cursor values must be either a known Qt name or 'emoji:...'."""
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES
         from src.ui.main_window import _CURSOR_MAP
         all_themes = {**PRESET_THEMES, **HIDDEN_THEMES}
@@ -1358,13 +1380,13 @@ class TestMakeEmojiCursor(unittest.TestCase):
 class TestSakuraEffect(unittest.TestCase):
     def test_sakura_in_spawners(self):
         """'sakura' must be a key in _SPAWNERS."""
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.click_effects import _SPAWNERS
         self.assertIn("sakura", _SPAWNERS)
 
     def test_sakura_spawner_produces_particles(self):
         """_spawn_sakura must return at least 10 particles with full attributes."""
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.click_effects import _SPAWNERS
         particles = _SPAWNERS["sakura"](100, 100)
         self.assertGreater(len(particles), 0)
@@ -1421,12 +1443,12 @@ class TestFairyTheme(unittest.TestCase):
         self.assertTrue(FAIRY_THEME["_trail_color"].startswith("#"))
 
     def test_fairy_in_spawners(self):
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.click_effects import _SPAWNERS
         self.assertIn("fairy", _SPAWNERS)
 
     def test_fairy_spawner_produces_particles(self):
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.click_effects import _SPAWNERS
         particles = _SPAWNERS["fairy"](100, 100)
         self.assertGreater(len(particles), 0)
@@ -1437,7 +1459,7 @@ class TestFairyTheme(unittest.TestCase):
 
     def test_fairy_is_in_effect_options(self):
         """'fairy' must appear in the settings_dialog _EFFECT_OPTIONS list."""
-        _require_pyqt6(self)
+        _require_qt_gui(self)
         from src.ui.settings_dialog import _EFFECT_OPTIONS
         keys = [k for k, _ in _EFFECT_OPTIONS]
         self.assertIn("fairy", keys)
@@ -1556,7 +1578,7 @@ class TestMouseTrailStyle(unittest.TestCase):
 # New cursor options in _CURSOR_MAP
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+@unittest.skipUnless(_QT_GUI_AVAILABLE, "Qt GUI stack unavailable")
 class TestCursorMapOptions(unittest.TestCase):
     def test_hourglass_in_cursor_map(self):
         from src.ui.main_window import _CURSOR_MAP
@@ -1614,7 +1636,7 @@ class TestThemeBannerMessages(unittest.TestCase):
 # Enriched spawners produce more particles
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+@unittest.skipUnless(_QT_GUI_AVAILABLE, "Qt GUI stack unavailable")
 class TestEnrichedSpawners(unittest.TestCase):
     """All spawners must produce at least a few particles."""
 
@@ -1666,7 +1688,7 @@ class TestEnrichedSpawners(unittest.TestCase):
 # Emoji font constant in click_effects
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+@unittest.skipUnless(_QT_GUI_AVAILABLE, "Qt GUI stack unavailable")
 class TestClickEffectsEmojiFont(unittest.TestCase):
     def test_emoji_font_constant_exists(self):
         from src.ui.click_effects import _EMOJI_FONT_FAMILIES
@@ -1848,10 +1870,13 @@ class TestClickEffectsCulling(unittest.TestCase):
 class TestAlphaFixerDebounce(unittest.TestCase):
     """Verify debounce timer is present in AlphaFixerTab via source inspection."""
 
+    @staticmethod
+    def _alpha_tool_src():
+        import pathlib
+        return (pathlib.Path(__file__).parent.parent / "src" / "ui" / "alpha_tool.py").read_text()
+
     def test_debounce_timer_in_source(self):
-        import inspect
-        from src.ui.alpha_tool import AlphaFixerTab
-        src = inspect.getsource(AlphaFixerTab.__init__)
+        src = self._alpha_tool_src()
         self.assertIn("_preview_debounce", src,
                       "AlphaFixerTab.__init__ must create _preview_debounce")
         self.assertIn("setSingleShot(True)", src,
@@ -1861,12 +1886,16 @@ class TestAlphaFixerDebounce(unittest.TestCase):
 
     def test_finetune_changed_uses_debounce(self):
         """_on_finetune_changed must start the debounce timer, not call _update_compare directly."""
-        import inspect
-        from src.ui.alpha_tool import AlphaFixerTab
-        src = inspect.getsource(AlphaFixerTab._on_finetune_changed)
-        self.assertIn("_preview_debounce.start()", src,
+        import re
+        src = self._alpha_tool_src()
+        # Extract the body of _on_finetune_changed up to the next method or class.
+        # The pattern matches 4-space method indentation used throughout this file.
+        m = re.search(r'def _on_finetune_changed\b(.*?)(?=\n    def |\nclass |\Z)', src, re.DOTALL)
+        self.assertIsNotNone(m, "_on_finetune_changed not found in alpha_tool.py")
+        method_src = m.group(0)
+        self.assertIn("_preview_debounce.start()", method_src,
                       "_on_finetune_changed must start the debounce timer")
-        self.assertNotIn("_update_compare()", src,
+        self.assertNotIn("_update_compare()", method_src,
                          "_on_finetune_changed must not call _update_compare directly")
 
 
@@ -1874,21 +1903,18 @@ class TestAlphaFixerDebounce(unittest.TestCase):
 # Preview pane: no blocking wait — validated via source inspection
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
 class TestPreviewPaneNoBlockingWait(unittest.TestCase):
     def test_show_file_no_wait_call(self):
         """show_file must not call wait() which would block the UI thread."""
-        import inspect
-        from src.ui.preview_pane import ImagePreviewPane
-        src = inspect.getsource(ImagePreviewPane.show_file)
+        import pathlib
+        src = (pathlib.Path(__file__).parent.parent / "src" / "ui" / "preview_pane.py").read_text()
         self.assertNotIn(".wait(", src,
                          "show_file must not block with .wait() on a thread")
 
     def test_update_compare_no_wait_call(self):
         """_update_compare must not call wait() which would block the UI thread."""
-        import inspect
-        from src.ui.alpha_tool import AlphaFixerTab
-        src = inspect.getsource(AlphaFixerTab._update_compare)
+        import pathlib
+        src = (pathlib.Path(__file__).parent.parent / "src" / "ui" / "alpha_tool.py").read_text()
         self.assertNotIn(".wait(", src,
                          "_update_compare must not block with .wait() on a thread")
 
