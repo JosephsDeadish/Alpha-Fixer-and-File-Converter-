@@ -5,7 +5,7 @@ import datetime
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -29,6 +29,13 @@ class ConverterTab(QWidget):
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
+        # Debounce timer: waits 150 ms after the last format/quality change
+        # before refreshing the preview so rapid spin-box steps don't each
+        # kick off a separate background conversion.
+        self._preview_debounce = QTimer(self)
+        self._preview_debounce.setSingleShot(True)
+        self._preview_debounce.setInterval(150)
+        self._preview_debounce.timeout.connect(self._update_converted_preview)
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -226,13 +233,14 @@ class ConverterTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
-        # Persist format/quality on change
+        # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
-        self._quality_spin.valueChanged.connect(
-            lambda v: self._settings.set("last_converter_quality", v)
-        )
+        self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
+        self._quality_spin.valueChanged.connect(self._on_quality_changed)
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
+        # Initialise quality spinbox enabled state for the default format
+        self._on_format_changed(self._fmt_combo.currentIndex())
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -303,9 +311,41 @@ class ConverterTab(QWidget):
     def _on_selection_changed(self, row: int):
         item = self._file_list.item(row)
         if item:
-            self._preview.show_file(item.text())
+            self._refresh_preview(item.text())
         else:
             self._preview.clear()
+
+    @pyqtSlot(int)
+    def _on_format_changed(self, _index: int):
+        """Enable quality spinbox only for formats that support it (JPEG/WEBP)."""
+        fmt_data = self._fmt_combo.currentData()
+        fmt = fmt_data[0] if fmt_data else ""
+        self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP"))
+        self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_quality_changed(self, value: int):
+        self._settings.set("last_converter_quality", value)
+        # Only debounce the preview refresh if quality affects the output format
+        fmt_data = self._fmt_combo.currentData()
+        fmt = fmt_data[0] if fmt_data else ""
+        if fmt in ("JPEG", "WEBP"):
+            self._preview_debounce.start()
+
+    def _update_converted_preview(self):
+        """Refresh the preview pane to reflect the current format and quality."""
+        row = self._file_list.currentRow()
+        item = self._file_list.item(row)
+        if item:
+            self._refresh_preview(item.text())
+
+    def _refresh_preview(self, path: str) -> None:
+        """Show *path* in the preview pane using the current format and quality."""
+        fmt_data = self._fmt_combo.currentData()
+        if fmt_data:
+            self._preview.show_converted(path, fmt_data[0], self._quality_spin.value())
+        else:
+            self._preview.show_file(path)
 
     def _browse_out_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")
@@ -414,7 +454,7 @@ class ConverterTab(QWidget):
         row = self._file_list.currentRow()
         item = self._file_list.item(row)
         if item:
-            self._preview.show_file(item.text())
+            self._refresh_preview(item.text())
 
         # Record in history
         entry = {
