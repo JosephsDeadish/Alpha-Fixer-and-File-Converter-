@@ -320,7 +320,7 @@ def _spawn_ocean(x, y):
     particles = []
     ocean_emojis = ["🫧", "🐠", "🐟", "🐙", "🦑", "🌊", "💧", "🫧"]
     ocean_colors = ["#00d4ff", "#00aacc", "#0088aa", "#33ccff", "#006688", "#00ffcc"]
-    for _ in range(10):
+    for _ in range(6):  # reduced from 10 to cut CPU
         angle = random.uniform(-math.pi, 0)  # mostly upward, like bubbles rising
         speed = random.uniform(1.5, 6)
         vx = math.cos(angle) * speed * 0.5  # gentle sideways drift
@@ -481,7 +481,7 @@ class ClickEffectsOverlay(QWidget):
         self._prev_dirty = None
 
         self._timer = QTimer(self)
-        self._timer.setInterval(33)   # 30 fps — smooth enough, much less CPU than 60fps
+        self._timer.setInterval(50)   # 20 fps – reduces CPU load, still smooth enough
         self._timer.timeout.connect(self._tick)
 
         self.setGeometry(main_window.rect())
@@ -551,8 +551,8 @@ class ClickEffectsOverlay(QWidget):
         if not self._timer.isActive():
             self._timer.start()
         # Hard cap to prevent unbounded growth during rapid clicking
-        if len(self._particles) > 150:
-            self._particles = self._particles[-80:]
+        if len(self._particles) > 80:
+            self._particles = self._particles[-50:]
 
     # ------------------------------------------------------------------
     # Event filter

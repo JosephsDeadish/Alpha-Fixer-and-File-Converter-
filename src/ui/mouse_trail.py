@@ -54,7 +54,7 @@ class MouseTrailOverlay(QWidget):
         self._style = "dots"
 
         self._timer = QTimer(self)
-        self._timer.setInterval(16)  # ~60 fps
+        self._timer.setInterval(33)  # ~30 fps – smoother trail fade without hogging CPU
         self._timer.timeout.connect(self._tick)
 
         # Cover the entire main window

@@ -915,8 +915,13 @@ class TooltipManager(QObject):
         self._settings = settings
         # Map widget id → tip key
         self._widget_keys: dict[int, str] = {}
-        # Per-key cycle counter
+        # Per-key: next index to show (advances only on widget change)
         self._cycle: dict[str, int] = {}
+        # Per-key: index most recently displayed (used to re-show same tip)
+        self._shown_idx: dict[str, int] = {}
+        # Track the last widget key shown so we only advance when user moves
+        # to a different widget and comes back, not on every tiny mouse move.
+        self._last_shown_key: str | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -955,9 +960,19 @@ class TooltipManager(QObject):
 
         tips_dict, fallback = _MODE_TIPS.get(mode, _MODE_TIPS["Normal"])
         variants = tips_dict.get(key, fallback)
+        n = len(variants)
 
-        idx = self._cycle.get(key, 0) % len(variants)
-        self._cycle[key] = (idx + 1) % len(variants)
+        # Only advance the cycle counter when the user moves to a different
+        # widget.  Tiny mouse moves within the same widget fire multiple
+        # ToolTip events; advancing on each one makes the tip spin too fast.
+        if key != self._last_shown_key:
+            idx = self._cycle.get(key, 0) % n
+            self._cycle[key] = (idx + 1) % n
+            self._shown_idx[key] = idx
+            self._last_shown_key = key
+        else:
+            # Re-show the same tip that was last displayed for this widget.
+            idx = self._shown_idx.get(key, 0)
 
         tip_text = variants[idx]
         try:

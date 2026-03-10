@@ -621,6 +621,10 @@ QTabWidget::pane {{
     background-color: {t['surface']};
     border-radius: 4px;
 }}
+QTabBar {{
+    background: {t['primary']};
+    border: none;
+}}
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
