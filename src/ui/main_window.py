@@ -670,7 +670,7 @@ class MainWindow(QMainWindow):
             "<li>16 preset themes + 22 hidden unlockables (keep clicking to find them!)</li>"
             "<li>21 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥,"
             " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
-            "<li>Per-channel RGB delta adjustments (R/G/B ±255) for colour-correcting game textures</li>"
+            "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"
             "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
             "<li>Animated banner frames for every theme — watch the header cycle through emoji!</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"

@@ -561,4 +561,196 @@ class TestSettingsManagerDefaults(unittest.TestCase):
                       "splash_screen.py should call get_theme_banner_frames for animated banner")
 
 
+# ---------------------------------------------------------------------------
+# Alpha-delta spinbox wiring tests (no PyQt6 required — source inspection)
+# ---------------------------------------------------------------------------
+
+class TestAlphaDeltaSpinbox(unittest.TestCase):
+    """alpha_tool.py must expose an alpha-delta spinbox wired to apply_rgba_adjust."""
+
+    def _alpha_tool_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
+        with open(path) as f:
+            return f.read()
+
+    def _worker_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "core", "worker.py")
+        with open(path) as f:
+            return f.read()
+
+    def test_alpha_delta_spin_attribute_defined(self):
+        """alpha_tool.py should define self._alpha_delta_spin."""
+        self.assertIn("_alpha_delta_spin", self._alpha_tool_source())
+
+    def test_alpha_delta_spin_connected_to_finetune_changed(self):
+        """alpha_delta_spin must be connected to _on_finetune_changed."""
+        source = self._alpha_tool_source()
+        self.assertIn("_alpha_delta_spin", source)
+        self.assertIn("_on_finetune_changed", source)
+        # Both should appear in the connections block
+        conn_block = source[source.find("_mode_combo.currentTextChanged"):]
+        self.assertIn("_alpha_delta_spin", conn_block,
+                      "_alpha_delta_spin not connected to signal in alpha_tool.py")
+
+    def test_alpha_delta_included_in_rgb_params(self):
+        """The rgb_params dict in alpha_tool.py should include key 'a' for alpha delta."""
+        source = self._alpha_tool_source()
+        # Look for 'a': self._alpha_delta_spin near rgb_params
+        rgb_section = source[source.find("rgb_params"):]
+        self.assertIn('"a"', rgb_section,
+                      "rgb_params in alpha_tool.py should include key 'a' for alpha delta")
+
+    def test_worker_passes_alpha_delta(self):
+        """worker.py should forward alpha_delta from the rgb dict to apply_rgba_adjust."""
+        source = self._worker_source()
+        self.assertIn("alpha_delta=rgb.get(\"a\", 0)", source,
+                      "worker.py should pass alpha_delta to apply_rgba_adjust")
+
+    def test_alpha_delta_condition_in_worker(self):
+        """worker.py condition should check rgb.get('a') before skipping the call."""
+        source = self._worker_source()
+        self.assertIn('rgb.get("a")', source,
+                      "worker.py must check rgb.get('a') in the condition that guards apply_rgba_adjust")
+
+    def test_apply_rgba_check_label_updated(self):
+        """The RGBA adjustments checkbox should say 'RGBA', not just 'RGB'."""
+        source = self._alpha_tool_source()
+        self.assertIn("Apply RGBA adjustments", source,
+                      "Checkbox text should be 'Apply RGBA adjustments'")
+
+    def test_alpha_delta_tooltip_key_registered(self):
+        """alpha_tool.py should register 'alpha_delta_spin' with the tooltip manager."""
+        source = self._alpha_tool_source()
+        self.assertIn('"alpha_delta_spin"', source,
+                      "alpha_delta_spin should be registered with tooltip manager")
+
+    def test_alpha_delta_tooltip_tips_in_tooltip_manager(self):
+        """tooltip_manager.py should contain 'alpha_delta_spin' tips in all 3 dicts."""
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
+            source = f.read()
+        count = source.count('"alpha_delta_spin"')
+        self.assertGreaterEqual(count, 3,
+                                f"Expected alpha_delta_spin in all 3 tooltip dicts, found {count} occurrences")
+
+
+# ---------------------------------------------------------------------------
+# Dedicated hidden-theme SVG tests
+# ---------------------------------------------------------------------------
+
+class TestHiddenThemeSVGs(unittest.TestCase):
+    """Blood Moon and Ice Cave should now have dedicated (non-reused) SVG files."""
+
+    def _import_theme_engine(self):
+        from src.ui import theme_engine
+        return theme_engine
+
+    def test_blood_moon_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Blood Moon")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("blood_moon", svg_path,
+                      "Blood Moon should use a dedicated blood_moon.svg, not a reused file")
+
+    def test_ice_cave_has_dedicated_svg(self):
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Ice Cave")
+        self.assertTrue(os.path.isfile(svg_path), f"SVG file not found: {svg_path}")
+        self.assertIn("ice_cave", svg_path,
+                      "Ice Cave should use a dedicated ice_cave.svg, not a reused file")
+
+    def test_blood_moon_svg_contains_animations(self):
+        """blood_moon.svg should contain SVG animate elements."""
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Blood Moon")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "blood_moon.svg should contain animation elements")
+
+    def test_ice_cave_svg_contains_animations(self):
+        """ice_cave.svg should contain SVG animate elements."""
+        te = self._import_theme_engine()
+        svg_path = te.get_theme_svg_path("Ice Cave")
+        with open(svg_path) as f:
+            svg_content = f.read()
+        self.assertIn("<animate", svg_content,
+                      "ice_cave.svg should contain animation elements")
+
+
+# ---------------------------------------------------------------------------
+# File converter metadata tests
+# ---------------------------------------------------------------------------
+
+class TestConverterMetadata(unittest.TestCase):
+    """_meta_kwargs should now include ICC profile for PNG and WEBP."""
+
+    def _converter_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "core", "file_converter.py")
+        with open(path) as f:
+            return f.read()
+
+    def test_png_icc_profile_in_meta_kwargs(self):
+        """PNG branch of _meta_kwargs should copy icc_profile."""
+        source = self._converter_source()
+        # Find the _meta_kwargs function body
+        meta_idx = source.find("def _meta_kwargs")
+        self.assertGreater(meta_idx, 0, "_meta_kwargs function not found in converter source")
+        meta_body = source[meta_idx: meta_idx + 800]
+        # Find the PNG-specific branch within the function
+        png_idx = meta_body.find('".png"')
+        self.assertGreater(png_idx, 0, "PNG case not found inside _meta_kwargs")
+        local = meta_body[png_idx: png_idx + 200]
+        self.assertIn("icc_profile", local,
+                      "PNG branch of _meta_kwargs should copy icc_profile")
+
+    def test_webp_icc_profile_in_meta_kwargs(self):
+        """WEBP branch of _meta_kwargs should copy icc_profile."""
+        source = self._converter_source()
+        meta_idx = source.find("def _meta_kwargs")
+        self.assertGreater(meta_idx, 0, "_meta_kwargs function not found in converter source")
+        meta_body = source[meta_idx: meta_idx + 800]
+        webp_idx = meta_body.find('".webp"')
+        self.assertGreater(webp_idx, 0, "WEBP case not found inside _meta_kwargs")
+        local = meta_body[webp_idx: webp_idx + 200]
+        self.assertIn("icc_profile", local,
+                      "WEBP branch of _meta_kwargs should copy icc_profile")
+
+    def test_avif_passes_meta_kwargs_to_save(self):
+        """AVIF save should call _meta_kwargs(ext) like PNG/JPEG/WEBP."""
+        source = self._converter_source()
+        avif_section = source[source.find("AVIF"):]
+        save_line_idx = avif_section.find("img.save(output_path")
+        self.assertGreater(save_line_idx, 0)
+        save_call = avif_section[save_line_idx: save_line_idx + 80]
+        self.assertIn("_meta_kwargs", save_call,
+                      "AVIF save should pass **_meta_kwargs(ext)")
+
+    def test_keep_metadata_false_returns_empty_dict(self):
+        """_meta_kwargs should return {} when keep_metadata=False."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from src.core.file_converter import convert_file
+            src = os.path.join(tmpdir, "in.png")
+            dst = os.path.join(tmpdir, "out.png")
+            # Build a simple PNG
+            img = Image.new("RGBA", (4, 4), (100, 200, 50, 180))
+            img.save(src)
+            # Should succeed with keep_metadata=False (default)
+            convert_file(src, dst, "PNG", keep_metadata=False)
+            self.assertTrue(os.path.isfile(dst))
+
+    def test_keep_metadata_true_png_roundtrip(self):
+        """Converting PNG→PNG with keep_metadata=True should produce a valid PNG."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from src.core.file_converter import convert_file
+            src = os.path.join(tmpdir, "in.png")
+            dst = os.path.join(tmpdir, "out.png")
+            img = Image.new("RGBA", (4, 4), (100, 200, 50, 180))
+            img.save(src)
+            convert_file(src, dst, "PNG", keep_metadata=True)
+            result = Image.open(dst)
+            self.assertEqual(result.mode, "RGBA")
+            self.assertEqual(result.size, (4, 4))
 

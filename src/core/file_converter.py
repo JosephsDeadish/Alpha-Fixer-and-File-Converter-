@@ -119,16 +119,25 @@ def convert_file(
             return {}
         kw: dict = {}
         try:
-            if fmt_ext in (".jpg", ".jpeg") and "exif" in src_img.info:
-                kw["exif"] = src_img.info["exif"]
-            elif fmt_ext in (".webp",) and "exif" in src_img.info:
-                kw["exif"] = src_img.info["exif"]
-            elif fmt_ext in (".png",) and "exif" in src_img.info:
-                kw["exif"] = src_img.info["exif"]
+            if fmt_ext in (".jpg", ".jpeg"):
+                for k in ("exif", "icc_profile", "dpi"):
+                    if k in src_img.info:
+                        kw[k] = src_img.info[k]
+            elif fmt_ext in (".webp",):
+                for k in ("exif", "icc_profile"):
+                    if k in src_img.info:
+                        kw[k] = src_img.info[k]
+            elif fmt_ext in (".png",):
+                for k in ("exif", "icc_profile", "dpi"):
+                    if k in src_img.info:
+                        kw[k] = src_img.info[k]
             elif fmt_ext in (".tiff", ".tif"):
                 for k in ("exif", "icc_profile", "dpi"):
                     if k in src_img.info:
                         kw[k] = src_img.info[k]
+            elif fmt_ext in (".avif",):
+                if "exif" in src_img.info:
+                    kw["exif"] = src_img.info["exif"]
         except Exception:
             pass
         return kw
@@ -187,7 +196,7 @@ def convert_file(
 
     # --- AVIF (supports RGB and RGBA, quality applies) ---
     if ext == ".avif":
-        img.save(output_path, quality=quality)
+        img.save(output_path, quality=quality, **_meta_kwargs(ext))
         return output_path
 
     # --- QOI (supports RGB and RGBA) ---

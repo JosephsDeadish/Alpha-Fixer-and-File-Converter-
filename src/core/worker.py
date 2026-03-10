@@ -82,14 +82,15 @@ class AlphaWorker(QThread):
                         clamp_min=self._manual.get("clamp_min", 0),
                         clamp_max=self._manual.get("clamp_max", 255),
                     )
-                # Optional per-channel RGB adjust (works with both preset and manual modes)
+                # Optional per-channel RGBA adjust (works with both preset and manual modes)
                 rgb = (self._manual or {}).get("rgb")
-                if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b")):
+                if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b") or rgb.get("a")):
                     img = apply_rgba_adjust(
                         img,
                         red_delta=rgb.get("r", 0),
                         green_delta=rgb.get("g", 0),
                         blue_delta=rgb.get("b", 0),
+                        alpha_delta=rgb.get("a", 0),
                     )
                 dest = self._resolve_output(src)
                 os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
