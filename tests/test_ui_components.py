@@ -1642,15 +1642,19 @@ class TestBannerAnimationFrames(unittest.TestCase):
         self.assertIsInstance(frames, list)
         self.assertGreater(len(frames), 0)
 
-    def test_fairy_garden_has_multiple_frames(self):
-        from src.ui.theme_engine import get_theme_banner_frames
-        frames = get_theme_banner_frames("Fairy Garden")
+    def test_fairy_garden_has_multiple_frames_in_data(self):
+        # get_theme_banner_frames intentionally returns a single frame for
+        # display (emoji cycling in the title was removed per user feedback).
+        # Verify that the raw THEME_BANNER_FRAMES data still contains multiple
+        # frames for Fairy Garden so the data is preserved.
+        from src.ui.theme_engine import THEME_BANNER_FRAMES
+        frames = THEME_BANNER_FRAMES.get("Fairy Garden", [])
         self.assertGreater(len(frames), 1,
-                           "Fairy Garden should have animated multi-frame banner")
+                           "Fairy Garden THEME_BANNER_FRAMES data should have multiple entries")
 
-    def test_bat_cave_has_multiple_frames(self):
-        from src.ui.theme_engine import get_theme_banner_frames
-        frames = get_theme_banner_frames("Bat Cave")
+    def test_bat_cave_has_multiple_frames_in_data(self):
+        from src.ui.theme_engine import THEME_BANNER_FRAMES
+        frames = THEME_BANNER_FRAMES.get("Bat Cave", [])
         self.assertGreater(len(frames), 1)
 
     def test_unknown_theme_returns_single_frame(self):
@@ -1836,3 +1840,44 @@ class TestPreviewPaneNoBlockingWait(unittest.TestCase):
         src = inspect.getsource(AlphaFixerTab._update_compare)
         self.assertNotIn(".wait(", src,
                          "_update_compare must not block with .wait() on a thread")
+
+
+# ---------------------------------------------------------------------------
+# Theme tab labels: get_theme_tab_labels returns themed emoji prefixes
+# ---------------------------------------------------------------------------
+
+class TestThemeTabLabels(unittest.TestCase):
+    def test_returns_three_labels(self):
+        from src.ui.theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels("Panda Dark")
+        self.assertIsInstance(labels, tuple)
+        self.assertEqual(len(labels), 3)
+
+    def test_labels_contain_tab_names(self):
+        from src.ui.theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels("Bat Cave")
+        self.assertIn("Alpha Fixer", labels[0])
+        self.assertIn("Converter", labels[1])
+        self.assertIn("History", labels[2])
+
+    def test_bat_cave_has_bat_emoji(self):
+        from src.ui.theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels("Bat Cave")
+        self.assertTrue(any("🦇" in lbl for lbl in labels),
+                        "Bat Cave tab labels should contain bat emoji")
+
+    def test_unknown_theme_has_default_emojis(self):
+        from src.ui.theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels("NonExistentThemeXYZ")
+        self.assertIn("🖼", labels[0])
+        self.assertIn("🔄", labels[1])
+        self.assertIn("📋", labels[2])
+
+    def test_all_known_themes_return_non_empty_labels(self):
+        from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, get_theme_tab_labels
+        all_themes = list(PRESET_THEMES.keys()) + list(HIDDEN_THEMES.keys())
+        for theme_name in all_themes:
+            labels = get_theme_tab_labels(theme_name)
+            for lbl in labels:
+                self.assertGreater(len(lbl.strip()), 0,
+                                   f"Empty tab label for theme {theme_name!r}")

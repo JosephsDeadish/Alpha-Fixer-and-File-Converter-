@@ -1239,6 +1239,67 @@ def get_theme_status(theme_name: str) -> str:
     return THEME_STATUS_MESSAGES.get(theme_name, "Ready  🐼")
 
 
+# Per-theme tab label emojis.  Each entry is a 3-tuple:
+#   (alpha_fixer_emoji, converter_emoji, history_emoji)
+# Themes not listed use the default panda/gear/scroll emojis.
+_THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
+    "Panda Dark":       ("🖼🐼", "🔄🐼", "📋🐼"),
+    "Panda Light":      ("🖼🐼", "🔄🤍", "📋🐼"),
+    "Neon Panda":       ("🖼⚡", "🔄⚡", "📋⚡"),
+    "Gore":             ("🩸🖼", "🩸🔄", "🩸📋"),
+    "Bat Cave":         ("🦇🖼", "🦇🔄", "🦇📋"),
+    "Rainbow Chaos":    ("🌈🖼", "🌈🔄", "🌈📋"),
+    "Otter Cove":       ("🦦🖼", "🦦🔄", "🦦📋"),
+    "Galaxy":           ("✦🖼", "✦🔄", "✦📋"),
+    "Galaxy Otter":     ("🦦✦🖼", "🦦✦🔄", "🦦✦📋"),
+    "Goth":             ("💀🖼", "💀🔄", "💀📋"),
+    "Volcano":          ("🌋🖼", "🌋🔄", "🌋📋"),
+    "Arctic":           ("❄🖼", "❄🔄", "❄📋"),
+    "Fairy Garden":     ("🧚🖼", "🧚🔄", "🧚📋"),
+    "Mermaid":          ("🧜🖼", "🧜🔄", "🧜📋"),
+    "Shark Bait":       ("🦈🖼", "🦈🔄", "🦈📋"),
+    "Alien":            ("👽🖼", "👽🔄", "👽📋"),
+    "Secret Skeleton":  ("☠🖼", "☠🔄", "☠📋"),
+    "Secret Sakura":    ("🌸🖼", "🌸🔄", "🌸📋"),
+    "Deep Ocean":       ("🌊🖼", "🌊🔄", "🌊📋"),
+    "Blood Moon":       ("🌕🖼", "🌕🔄", "🌕📋"),
+    "Ice Cave":         ("🧊🖼", "🧊🔄", "🧊📋"),
+    "Cyber Otter":      ("🦦💻", "💻🔄", "💻📋"),
+    "Toxic Neon":       ("☢🖼", "☢🔄", "☢📋"),
+    "Lava Cave":        ("🔥🖼", "🔥🔄", "🔥📋"),
+    "Sunset Beach":     ("🌅🖼", "🌅🔄", "🌅📋"),
+    "Midnight Forest":  ("🌙🖼", "🌙🔄", "🌙📋"),
+    "Candy Land":       ("🍭🖼", "🍭🔄", "🍭📋"),
+    "Zombie Apocalypse":("🧟🖼", "🧟🔄", "🧟📋"),
+    "Dragon Fire":      ("🐉🖼", "🐉🔄", "🐉📋"),
+    "Bubblegum":        ("🫧🖼", "🫧🔄", "🫧📋"),
+    "Thunder Storm":    ("⚡🖼", "⚡🔄", "⚡📋"),
+    "Rose Gold":        ("🌹🖼", "🌹🔄", "🌹📋"),
+    "Space Cat":        ("🐱🖼", "🐱🔄", "🐱📋"),
+    "Magic Mushroom":   ("🍄🖼", "🍄🔄", "🍄📋"),
+    "Abyssal Void":     ("🕳🖼", "🕳🔄", "🕳📋"),
+    "Spring Bloom":     ("🌷🖼", "🌷🔄", "🌷📋"),
+    "Gold Rush":        ("💰🖼", "💰🔄", "💰📋"),
+    "Nebula":           ("🌌🖼", "🌌🔄", "🌌📋"),
+}
+
+_DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
+
+
+def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
+    """Return (alpha_fixer_label, converter_label, history_label) for *theme_name*.
+
+    Each label is an emoji prefix suitable for use as a QTabWidget tab title.
+    """
+    emojis = _THEME_TAB_EMOJIS.get(theme_name, _DEFAULT_TAB_EMOJIS)
+    labels = (
+        f"{emojis[0]}  Alpha Fixer",
+        f"{emojis[1]}  Converter",
+        f"{emojis[2]}  History",
+    )
+    return labels
+
+
 # Per-theme animated banner frames.  Themes listed here have a cycling banner;
 # each element in the list is displayed in turn (one frame per ~800 ms).
 # Themes not listed fall back to their single THEME_BANNER entry.
@@ -1621,7 +1682,365 @@ QPushButton {
     border: 1px solid #4477ff;
     letter-spacing: 0.5px;
 }
-QPushButton:hover { border: 1px solid #88aaff; box-shadow: 0 0 4px #4477ff; }
+QPushButton:hover { border: 1px solid #88aaff; }
+"""
+
+    # --------------------------------------------------------------- Panda themes
+    if name in ("Panda Dark", "Panda Light", "Neon Panda"):
+        extra = ""
+        if name == "Neon Panda":
+            extra = """
+QPushButton {
+    border-radius: 8px;
+    border: 2px solid #ff44aa;
+    letter-spacing: 0.5px;
+}
+QPushButton:hover { border-color: #ff88cc; }
+QTabBar::tab { border-radius: 8px 8px 0px 0px; }
+QGroupBox { border: 1px solid #ff44aa; border-radius: 8px; }
+"""
+        else:
+            extra = """
+QPushButton {
+    border-radius: 8px;
+    border: 2px solid #555555;
+}
+QPushButton:hover { border-color: #aaaaaa; }
+QTabBar::tab { border-radius: 8px 8px 0px 0px; }
+"""
+        return extra
+
+    # --------------------------------------------------------------- Shark Bait
+    if name == "Shark Bait":
+        return """
+/* Shark Bait: jagged bitten edges, ocean-predator style */
+QPushButton {
+    border-radius: 2px 10px 2px 10px;
+    border-top: 2px solid #1177aa;
+    border-bottom: 3px solid #cc0033;
+}
+QPushButton:hover { border-bottom-color: #ff0044; border-top-color: #44aadd; }
+QGroupBox {
+    border: 1px solid #1177aa;
+    border-top: 2px solid #cc0033;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 6px 2px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Alien
+    if name == "Alien":
+        return """
+/* Alien: hexagonal/tech shapes with green glow */
+QPushButton {
+    border-radius: 0px 8px 0px 8px;
+    border: 1px solid #00cc44;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+QPushButton:hover { border: 2px solid #00ff66; }
+QGroupBox {
+    border: 1px solid #00cc44;
+    border-top: 2px solid #00ff66;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 0px 8px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 0px; border: 1px solid #00cc44; }
+"""
+
+    # --------------------------------------------------------------- Secret Skeleton
+    if name == "Secret Skeleton":
+        return """
+/* Skeleton: stark angular bone-white on black */
+QPushButton {
+    border-radius: 0px;
+    border: 2px solid #888888;
+    border-bottom: 4px solid #444444;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+QPushButton:hover { border-color: #ffffff; border-bottom-color: #aaaaaa; }
+QGroupBox {
+    border: 1px dashed #666666;
+    border-radius: 0px;
+    font-weight: 700;
+}
+QTabBar::tab { border-radius: 0px; }
+QLineEdit, QComboBox { border-radius: 0px; border: 1px solid #666666; }
+"""
+
+    # --------------------------------------------------------------- Secret Sakura
+    if name == "Secret Sakura":
+        return """
+/* Sakura: delicate soft pink petals, very rounded */
+QPushButton {
+    border-radius: 16px;
+    border: 1px solid #ffaacc;
+    padding: 8px 18px;
+}
+QPushButton:hover { border: 2px solid #ff77aa; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 12px; border: 1px solid #ffaacc; }
+QGroupBox { border-radius: 14px; border: 1px solid #ffaacc; }
+QTabBar::tab { border-radius: 14px 14px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Blood Moon
+    if name == "Blood Moon":
+        return """
+/* Blood Moon: dramatic dark crimson with sharp glowing base */
+QPushButton {
+    border-radius: 4px 4px 0px 0px;
+    border: 1px solid #880000;
+    border-bottom: 3px solid #cc0000;
+    letter-spacing: 1px;
+}
+QPushButton:hover { border-bottom-color: #ff2200; border-color: #cc0000; }
+QGroupBox {
+    border: 1px solid #660000;
+    border-top: 2px solid #cc0000;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Cyber Otter
+    if name == "Cyber Otter":
+        return """
+/* Cyber Otter: warm organic rounded shapes with digital accent */
+QPushButton {
+    border-radius: 10px;
+    border: 2px solid #4488ff;
+    letter-spacing: 0.5px;
+}
+QPushButton:hover { border-color: #88aaff; }
+QGroupBox { border-radius: 10px; border: 1px solid #4488ff; }
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Toxic Neon
+    if name == "Toxic Neon":
+        return """
+/* Toxic Neon: radioactive sharp edges with green/yellow glow */
+QPushButton {
+    border-radius: 2px;
+    border: 2px solid #44ff00;
+    border-bottom: 3px solid #88ff00;
+    letter-spacing: 1px;
+}
+QPushButton:hover { border-color: #aaff44; }
+QGroupBox {
+    border: 1px solid #44ff00;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 2px 2px 0px 0px; }
+QLineEdit, QComboBox { border-radius: 0px; border: 1px solid #44ff00; }
+"""
+
+    # --------------------------------------------------------------- Sunset Beach
+    if name == "Sunset Beach":
+        return """
+/* Sunset Beach: warm organic rounded with beach vibes */
+QPushButton {
+    border-radius: 12px;
+    border: 1px solid #ff8844;
+    padding: 8px 18px;
+}
+QPushButton:hover { border: 2px solid #ffaa66; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 10px; }
+QGroupBox { border-radius: 12px; border: 1px solid #ff8844; }
+QTabBar::tab { border-radius: 12px 12px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Midnight Forest
+    if name == "Midnight Forest":
+        return """
+/* Midnight Forest: organic mossy rounded dark shapes */
+QPushButton {
+    border-radius: 8px;
+    border: 1px solid #336622;
+    border-bottom: 2px solid #224411;
+}
+QPushButton:hover { border-color: #559933; }
+QGroupBox {
+    border: 1px solid #336622;
+    border-top: 2px solid #559933;
+    border-radius: 6px;
+}
+QTabBar::tab { border-radius: 8px 8px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Candy Land
+    if name == "Candy Land":
+        return """
+/* Candy Land: bright pill shapes, super rounded candy style */
+QPushButton {
+    border-radius: 22px;
+    border: 3px solid #ff44aa;
+    font-weight: 900;
+    padding: 6px 20px;
+}
+QPushButton:hover { border-color: #ff88cc; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 16px; }
+QGroupBox { border-radius: 16px; border: 2px solid #ff44aa; }
+QTabBar::tab { border-radius: 16px 16px 0px 0px; min-width: 110px; }
+"""
+
+    # --------------------------------------------------------------- Zombie Apocalypse
+    if name == "Zombie Apocalypse":
+        return """
+/* Zombie Apocalypse: decayed rough cracked UI */
+QPushButton {
+    border-radius: 2px;
+    border: 2px dashed #446633;
+    border-bottom: 3px solid #223322;
+    letter-spacing: 1px;
+}
+QPushButton:hover { border-style: solid; border-color: #55aa44; }
+QGroupBox {
+    border: 1px dashed #446633;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 2px; }
+QLineEdit, QComboBox { border-radius: 0px; border: 1px dashed #446633; }
+"""
+
+    # --------------------------------------------------------------- Dragon Fire
+    if name == "Dragon Fire":
+        return """
+/* Dragon Fire: fierce angular with bottom-glow fire */
+QPushButton {
+    border-radius: 4px 4px 0px 0px;
+    border: 1px solid #cc4400;
+    border-bottom: 4px solid #ff6600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+QPushButton:hover { border-bottom-color: #ff9900; border-color: #ff6600; }
+QGroupBox {
+    border: 1px solid #cc4400;
+    border-top: 2px solid #ff6600;
+    border-radius: 2px;
+}
+QTabBar::tab { border-radius: 4px 4px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Bubblegum
+    if name == "Bubblegum":
+        return """
+/* Bubblegum: bubble-soft very rounded pink shapes */
+QPushButton {
+    border-radius: 18px;
+    border: 2px solid #ff66bb;
+    padding: 7px 20px;
+}
+QPushButton:hover { border: 3px solid #ff99dd; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 14px; }
+QGroupBox { border-radius: 16px; border: 2px solid #ff66bb; }
+QTabBar::tab { border-radius: 14px 14px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Thunder Storm
+    if name == "Thunder Storm":
+        return """
+/* Thunder Storm: lightning-bolt jagged edges */
+QPushButton {
+    border-radius: 0px 8px 0px 8px;
+    border: 2px solid #6644cc;
+    border-left: 3px solid #9966ff;
+    letter-spacing: 1px;
+}
+QPushButton:hover { border-left-color: #bbaaff; border-color: #9966ff; }
+QGroupBox {
+    border: 1px solid #6644cc;
+    border-top: 3px solid #9966ff;
+    border-radius: 0px;
+}
+QTabBar::tab { border-radius: 0px 8px 0px 0px; }
+QLineEdit, QComboBox { border-radius: 2px; }
+"""
+
+    # --------------------------------------------------------------- Rose Gold
+    if name == "Rose Gold":
+        return """
+/* Rose Gold: elegant soft gold-pink rounded */
+QPushButton {
+    border-radius: 10px;
+    border: 1px solid #cc8866;
+    letter-spacing: 0.5px;
+}
+QPushButton:hover { border: 2px solid #ffaa88; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 8px; border: 1px solid #cc8866; }
+QGroupBox { border-radius: 10px; border: 1px solid #cc8866; }
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Space Cat
+    if name == "Space Cat":
+        return """
+/* Space Cat: cosmic rounded with orbit-ring accents */
+QPushButton {
+    border-radius: 10px;
+    border: 1px solid #5533cc;
+    border-top: 2px solid #8866ff;
+}
+QPushButton:hover { border-top-color: #aaaaff; border-color: #8866ff; }
+QGroupBox {
+    border: 1px solid #5533cc;
+    border-top: 2px solid #8866ff;
+    border-radius: 8px;
+}
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Magic Mushroom
+    if name == "Magic Mushroom":
+        return """
+/* Magic Mushroom: psychedelic caps, mushroom-dome rounded */
+QPushButton {
+    border-radius: 16px 16px 4px 4px;
+    border: 2px solid #aa44cc;
+    padding: 8px 18px;
+}
+QPushButton:hover { border-color: #cc66ee; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 12px; }
+QGroupBox { border-radius: 14px 14px 4px 4px; border: 1px solid #aa44cc; }
+QTabBar::tab { border-radius: 14px 14px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Spring Bloom
+    if name == "Spring Bloom":
+        return """
+/* Spring Bloom: fresh floral soft rounded shapes */
+QPushButton {
+    border-radius: 14px;
+    border: 1px solid #66aa44;
+    padding: 8px 18px;
+}
+QPushButton:hover { border: 2px solid #88cc66; }
+QLineEdit, QComboBox, QSpinBox { border-radius: 10px; }
+QGroupBox { border-radius: 12px; border: 1px solid #66aa44; }
+QTabBar::tab { border-radius: 12px 12px 0px 0px; }
+"""
+
+    # --------------------------------------------------------------- Gold Rush
+    if name == "Gold Rush":
+        return """
+/* Gold Rush: bold sharp western-style with gold bottom accent */
+QPushButton {
+    border-radius: 4px;
+    border: 1px solid #cc8800;
+    border-bottom: 3px solid #ffaa00;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+QPushButton:hover { border-bottom-color: #ffcc00; border-color: #ffaa00; }
+QGroupBox {
+    border: 1px solid #cc8800;
+    border-top: 2px solid #ffaa00;
+    border-radius: 2px;
+}
+QTabBar::tab { border-radius: 4px 4px 0px 0px; }
 """
 
     return ""
@@ -1667,9 +2086,9 @@ QTabBar {{
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
-    padding: 10px 24px;
-    min-width: 100px;
-    min-height: 24px;
+    padding: 8px 20px;
+    min-width: 90px;
+    min-height: 28px;
     margin-right: 3px;
     border: 2px solid {t['border']};
     border-bottom: none;
@@ -1689,6 +2108,22 @@ QTabBar::tab:hover:!selected {{
     background: {t['button_hover']};
     color: {t['panda_white']};
     border-color: {t['accent']};
+}}
+/* Fill the space to the right of the last tab with the background colour */
+QTabBar::tear {{
+    background: {t['background']};
+    border: none;
+    width: 8px;
+}}
+QTabBar::scroller {{
+    background: {t['background']};
+    border: none;
+    width: 20px;
+}}
+QTabBar QToolButton {{
+    background: {t['background']};
+    border: 1px solid {t['border']};
+    border-radius: 4px;
 }}
 
 /* ===== Buttons ===== */

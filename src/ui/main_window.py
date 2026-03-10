@@ -20,7 +20,7 @@ from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
     get_theme_svg_path, get_theme_banner, get_theme_status,
-    get_theme_banner_frames,
+    get_theme_banner_frames, get_theme_tab_labels,
 )
 from ..version import __version__
 
@@ -437,6 +437,11 @@ class MainWindow(QMainWindow):
         if self._banner_lbl is not None:
             self._banner_lbl.setText(self._banner_frames[0])
         self._restart_banner_anim()
+        # Update tab labels to reflect the active theme's emojis
+        tab_labels = get_theme_tab_labels(theme_name)
+        self._tabs.setTabText(0, tab_labels[0])
+        self._tabs.setTabText(1, tab_labels[1])
+        self._tabs.setTabText(2, tab_labels[2])
         # Update status bar with per-theme flavor message
         if self._status_bar is not None:
             self._status_bar.showMessage(get_theme_status(theme_name))
