@@ -50,20 +50,25 @@ class TestPresets(unittest.TestCase):
 
     def test_builtin_presets_present(self):
         names = [p.name for p in self._mgr.all_presets()]
-        self.assertIn("PS2", names)
-        self.assertIn("N64", names)
-        self.assertIn("No Alpha", names)
-        self.assertIn("Max Alpha", names)
+        # Deduplicated preset names (combined platform presets)
+        self.assertTrue(any("N64" in n or "Full Opacity" in n for n in names),
+                        "Expected a full-opacity / N64 preset")
+        self.assertTrue(any("PS2" in n or "Half Opacity" in n for n in names),
+                        "Expected a half-opacity / PS2 preset")
         self.assertIn("Transparent", names)
 
+    # Use the deduplicated merged preset names
+    _FULL_OPACITY_NAME = "Full Opacity  (N64 · DS · Wii · Xbox 360 · PS2 BG)"
+    _HALF_OPACITY_NAME = "Half Opacity  (PS2 Sprite · GBA · PSP)"
+
     def test_ps2_preset_values(self):
-        p = self._mgr.get_preset("PS2")
+        p = self._mgr.get_preset(self._HALF_OPACITY_NAME)
         self.assertIsNotNone(p)
         self.assertEqual(p.alpha_value, 128)
         self.assertEqual(p.fill_mode, "set")
 
     def test_n64_preset_values(self):
-        p = self._mgr.get_preset("N64")
+        p = self._mgr.get_preset(self._FULL_OPACITY_NAME)
         self.assertIsNotNone(p)
         self.assertEqual(p.alpha_value, 255)
 
@@ -71,7 +76,7 @@ class TestPresets(unittest.TestCase):
         self.assertIsNone(self._mgr.get_preset("DoesNotExist"))
 
     def test_cannot_overwrite_builtin(self):
-        custom = AlphaPreset("PS2", 0, "set", 0, 0, False, "test")
+        custom = AlphaPreset(self._HALF_OPACITY_NAME, 0, "set", 0, 0, False, "test")
         result = self._mgr.save_custom_preset(custom)
         self.assertFalse(result)
 
@@ -91,9 +96,9 @@ class TestPresets(unittest.TestCase):
         self.assertIsNone(self._mgr.get_preset("ToDelete"))
 
     def test_cannot_delete_builtin(self):
-        result = self._mgr.delete_custom_preset("PS2")
+        result = self._mgr.delete_custom_preset(self._HALF_OPACITY_NAME)
         self.assertFalse(result)
-        self.assertIsNotNone(self._mgr.get_preset("PS2"))
+        self.assertIsNotNone(self._mgr.get_preset(self._HALF_OPACITY_NAME))
 
 
 # ---------------------------------------------------------------------------

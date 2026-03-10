@@ -318,40 +318,30 @@ class MainWindow(QMainWindow):
         except Exception:
             return
 
+        # (threshold, settings_key, banner_message) — ordered ascending by threshold
+        _UNLOCK_TABLE = [
+            (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
+            (150,  "unlock_ice_cave",         "❄ 'Ice Cave' theme unlocked! (Settings → Theme)"),
+            (200,  "unlock_cyber_otter",      "🦦 'Cyber Otter' theme unlocked! (Settings → Theme)"),
+            (250,  "unlock_sakura",           "🌸 'Secret Sakura' theme unlocked! (Settings → Theme)"),
+            (350,  "unlock_toxic_neon",       "☢ 'Toxic Neon' theme unlocked! (Settings → Theme)"),
+            (400,  "unlock_sunset_beach",     "🌅 'Sunset Beach' theme unlocked! (Settings → Theme)"),
+            (500,  "unlock_ocean",            "🌊 'Deep Ocean' theme unlocked! (Settings → Theme)"),
+            (600,  "unlock_lava_cave",        "🌋 'Lava Cave' theme unlocked! (Settings → Theme)"),
+            (750,  "unlock_blood_moon",       "🩸 'Blood Moon' theme unlocked! (Settings → Theme)"),
+            (1000, "unlock_midnight_forest",  "🌲 'Midnight Forest' theme unlocked! (Settings → Theme)"),
+        ]
+
         newly_unlocked = False
-
-        # Secret Skeleton unlocks at 100 total clicks
-        already_unlocked = self._settings.get("unlock_skeleton", False)
-        if not already_unlocked and total >= 100:
-            self._settings.set("unlock_skeleton", True)
-            self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
-            try:
-                QApplication.instance().beep()
-            except Exception:
-                pass
-            newly_unlocked = True
-
-        # Secret Sakura unlocks at 250 total clicks
-        already_sakura = self._settings.get("unlock_sakura", False)
-        if not already_sakura and total >= 250:
-            self._settings.set("unlock_sakura", True)
-            self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (Settings → Theme)")
-            try:
-                QApplication.instance().beep()
-            except Exception:
-                pass
-            newly_unlocked = True
-
-        # Deep Ocean unlocks at 500 total clicks
-        already_ocean = self._settings.get("unlock_ocean", False)
-        if not already_ocean and total >= 500:
-            self._settings.set("unlock_ocean", True)
-            self._unlock_lbl.setText("🌊 'Deep Ocean' theme unlocked! (Settings → Theme)")
-            try:
-                QApplication.instance().beep()
-            except Exception:
-                pass
-            newly_unlocked = True
+        for threshold, key, message in _UNLOCK_TABLE:
+            if not self._settings.get(key, False) and total >= threshold:
+                self._settings.set(key, True)
+                self._unlock_lbl.setText(message)
+                try:
+                    QApplication.instance().beep()
+                except Exception:
+                    pass
+                newly_unlocked = True
 
         # Auto-clear the unlock banner after 6 seconds
         if newly_unlocked:

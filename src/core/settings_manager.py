@@ -82,6 +82,13 @@ class SettingsManager:
         "unlock_skeleton": False,
         "unlock_sakura": False,
         "unlock_ocean": False,
+        "unlock_blood_moon": False,
+        "unlock_ice_cave": False,
+        "unlock_cyber_otter": False,
+        "unlock_toxic_neon": False,
+        "unlock_lava_cave": False,
+        "unlock_sunset_beach": False,
+        "unlock_midnight_forest": False,
         "total_clicks": 0,
     }
 

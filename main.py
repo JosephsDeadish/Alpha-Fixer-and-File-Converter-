@@ -227,9 +227,21 @@ def main():
 
     from src.core.settings_manager import SettingsManager
     from src.ui.main_window import MainWindow
+    from src.ui.splash_screen import ThemeSplashScreen
 
     settings = SettingsManager()
+
+    # Show animated themed splash screen
+    splash = ThemeSplashScreen(settings)
+    splash.show()
+    app.processEvents()
+
     window = MainWindow(settings)
+
+    # Close splash and reveal main window after the splash duration
+    from PyQt6.QtCore import QTimer
+    QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
+
     window.show()
 
     logger.info("Main window shown.")
