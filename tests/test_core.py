@@ -610,10 +610,10 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         source = self._alpha_tool_source()
         self.assertIn("_alpha_delta_spin", source)
         self.assertIn("_on_finetune_changed", source)
-        # Both should appear in the connections block
-        conn_start = source.find("_mode_combo.currentTextChanged")
+        # The alpha_spin (primary alpha control) should be connected to finetune
+        conn_start = source.find("_alpha_spin.valueChanged")
         self.assertGreater(conn_start, 0,
-                           "_mode_combo.currentTextChanged not found in alpha_tool.py")
+                           "_alpha_spin.valueChanged not found in alpha_tool.py")
         conn_block = source[conn_start:]
         self.assertIn("_alpha_delta_spin", conn_block,
                       "_alpha_delta_spin not connected to signal in alpha_tool.py")

@@ -4,10 +4,10 @@ Main application window.
 import webbrowser
 
 from PyQt6.QtCore import Qt, QSize, QRect, QTimer
-from PyQt6.QtGui import QAction, QCursor, QFont, QIcon, QPixmap, QPainter
+from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
-    QLabel, QPushButton, QWidget, QVBoxLayout, QApplication,
+    QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
     QMessageBox, QFileDialog,
 )
 
@@ -20,7 +20,7 @@ from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
     get_theme_svg_path, get_theme_banner, get_theme_status,
-    get_theme_banner_frames, get_theme_tab_labels,
+    get_theme_banner_frames, get_theme_tab_labels, get_theme_icon,
 )
 from ..version import __version__
 
@@ -65,6 +65,62 @@ def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
         return QCursor(Qt.CursorShape.ArrowCursor)
 
 
+class _SpinningEmojiLabel(QWidget):
+    """Renders a single emoji character and rotates it continuously.
+
+    This provides the per-theme "animated banner" effect: each theme's
+    representative emoji (🐼, 🩸, 🦇, etc.) appears to spin like a gear,
+    giving a genuine visual animation without cycling through different emojis.
+    """
+
+    _DEGREES_PER_FRAME = 2.0   # rotation speed per ~33 ms tick ≈ 1 full turn / ~6 s
+    _INTERVAL_MS = 33           # ~30 fps
+
+    def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
+        super().__init__(parent)
+        self._emoji = emoji
+        self._font_size = font_size
+        self._angle = 0.0
+        sz = font_size + 16
+        self.setFixedSize(sz, sz)
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._INTERVAL_MS)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def set_emoji(self, emoji: str) -> None:
+        """Change the displayed emoji; takes effect on the next paint."""
+        self._emoji = emoji
+        self.update()
+
+    def set_font_size(self, size: int) -> None:
+        self._font_size = size
+        sz = size + 16
+        self.setFixedSize(sz, sz)
+        self.update()
+
+    def _tick(self) -> None:
+        self._angle = (self._angle + self._DEGREES_PER_FRAME) % 360.0
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+        w, h = self.width(), self.height()
+        painter.translate(w / 2.0, h / 2.0)
+        painter.rotate(self._angle)
+
+        font = QFont("Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji", self._font_size)
+        painter.setFont(font)
+        fm = QFontMetrics(font)
+        tw = fm.horizontalAdvance(self._emoji)
+        th = fm.height()
+        painter.drawText(-tw // 2, th // 4, self._emoji)
+        painter.end()
+
+
 class MainWindow(QMainWindow):
     # Spinner frames used to create a "turning gear" animation on the tab labels.
     # Each character represents a quarter-turn of a circle, cycling gives a smooth spin.
@@ -82,9 +138,11 @@ class MainWindow(QMainWindow):
         self._sound = None
         self._svg_badge = None
         self._banner_lbl = None
+        self._banner_emoji_left: "_SpinningEmojiLabel | None" = None
+        self._banner_emoji_right: "_SpinningEmojiLabel | None" = None
         self._status_bar = None
         self._unlock_timer = None
-        self._anim_timer = None    # drives banner emoji cycling
+        self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
         self._tab_anim_timer = None   # drives tab-label spinning animation
@@ -172,16 +230,30 @@ class MainWindow(QMainWindow):
         cv.setContentsMargins(0, 0, 0, 0)
         cv.setSpacing(0)
 
-        # Panda banner — enable word-wrap so long animated theme banners wrap
-        # cleanly rather than being clipped on smaller windows.
-        banner = QLabel("🐼  Alpha Fixer  &  File Converter")
-        banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        banner.setObjectName("header")
-        banner.setStyleSheet("padding: 10px; font-size: 20px;")
-        banner.setWordWrap(True)
-        banner.setMinimumHeight(44)
-        cv.addWidget(banner)
-        self._banner_lbl = banner
+        # Animated banner: a left+right spinning emoji flanks the static title text.
+        # The emoji rotates continuously (like a turning gear) using _SpinningEmojiLabel.
+        # The emoji changes to reflect the active theme without cycling between emojis.
+        banner_container = QWidget()
+        banner_container.setObjectName("header")
+        banner_layout = QHBoxLayout(banner_container)
+        banner_layout.setContentsMargins(8, 6, 8, 6)
+        banner_layout.setSpacing(8)
+
+        self._banner_emoji_left = _SpinningEmojiLabel("🐼", font_size=20)
+        banner_layout.addWidget(self._banner_emoji_left)
+
+        banner_text = QLabel("Alpha Fixer  &  File Converter")
+        banner_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        banner_text.setObjectName("header")
+        banner_text.setStyleSheet("padding: 0; font-size: 20px; background: transparent; border: none;")
+        banner_text.setMinimumHeight(36)
+        banner_layout.addWidget(banner_text, 1)
+
+        self._banner_emoji_right = _SpinningEmojiLabel("🐼", font_size=20)
+        banner_layout.addWidget(self._banner_emoji_right)
+
+        cv.addWidget(banner_container)
+        self._banner_lbl = banner_text  # kept for theme update compatibility
 
         self._tabs = QTabWidget()
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
@@ -445,13 +517,17 @@ class MainWindow(QMainWindow):
         QApplication.instance().setStyleSheet(build_stylesheet(theme))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
-        # Set up animated banner frames – show first frame only (no cycling);
-        # constant emoji cycling was reported as distracting by users.
-        self._banner_frames = get_theme_banner_frames(theme_name)
-        self._banner_frame_idx = 0
+        # Update the spinning banner emoji to the theme's representative icon.
+        # The emoji rotates continuously — no cycling between different emojis.
+        icon = get_theme_icon(theme_name)
+        if self._banner_emoji_left is not None:
+            self._banner_emoji_left.set_emoji(icon)
+        if self._banner_emoji_right is not None:
+            self._banner_emoji_right.set_emoji(icon)
+        # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
-            self._banner_lbl.setText(self._banner_frames[0])
-        # Stop any previous animation timer – banner no longer cycles automatically
+            self._banner_lbl.setText("Alpha Fixer  &  File Converter")
+        # Stop any legacy animation timer (banner no longer cycles emojis)
         if self._anim_timer is not None:
             self._anim_timer.stop()
         # Store theme-specific tab labels; the spinner timer will animate them.

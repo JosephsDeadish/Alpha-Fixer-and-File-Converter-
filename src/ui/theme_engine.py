@@ -1304,6 +1304,56 @@ def get_theme_banner(theme_name: str) -> str:
     return THEME_BANNER.get(theme_name, "🐼  Alpha Fixer  &  File Converter")
 
 
+# Single representative emoji for each theme — used for the animated banner icon.
+THEME_ICON: dict[str, str] = {
+    "Panda Dark":        "🐼",
+    "Panda Light":       "🐼",
+    "Neon Panda":        "🐼",
+    "Gore":              "🩸",
+    "Bat Cave":          "🦇",
+    "Rainbow Chaos":     "🌈",
+    "Otter Cove":        "🦦",
+    "Galaxy":            "✦",
+    "Galaxy Otter":      "🦦",
+    "Goth":              "💀",
+    "Volcano":           "🌋",
+    "Arctic":            "❄",
+    "Fairy Garden":      "🧚",
+    "Secret Skeleton":   "☠",
+    "Secret Sakura":     "🌸",
+    "Deep Ocean":        "🌊",
+    "Blood Moon":        "🌕",
+    "Ice Cave":          "🧊",
+    "Cyber Otter":       "🦦",
+    "Toxic Neon":        "☢",
+    "Lava Cave":         "🌋",
+    "Sunset Beach":      "🌅",
+    "Midnight Forest":   "🌲",
+    "Mermaid":           "🧜",
+    "Shark Bait":        "🦈",
+    "Alien":             "🛸",
+    "Noodle":            "🍜",
+    "Pancake":           "🥞",
+    "Candy Land":        "🍭",
+    "Zombie Apocalypse": "🧟",
+    "Dragon Fire":       "🐉",
+    "Bubblegum":         "🫧",
+    "Thunder Storm":     "⚡",
+    "Rose Gold":         "🌹",
+    "Space Cat":         "🐱",
+    "Magic Mushroom":    "🍄",
+    "Abyssal Void":      "🕳",
+    "Spring Bloom":      "🌷",
+    "Gold Rush":         "💰",
+    "Nebula":            "🌌",
+}
+
+
+def get_theme_icon(theme_name: str) -> str:
+    """Return the single representative emoji for *theme_name* (used for the animated banner)."""
+    return THEME_ICON.get(theme_name, "🐼")
+
+
 def get_theme_status(theme_name: str) -> str:
     """Return the status-bar flavor message for *theme_name*."""
     return THEME_STATUS_MESSAGES.get(theme_name, "Ready  🐼")

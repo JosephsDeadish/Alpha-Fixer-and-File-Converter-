@@ -189,7 +189,7 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
     elif preset.fill_mode == "clamp_max":
         alpha = np.clip(alpha, 0, preset.clamp_max)
 
-    arr[:, :, 3] = np.clip(alpha, 0, 255).astype(np.uint8)
+    arr[:, :, 3] = np.clip(alpha, preset.clamp_min, preset.clamp_max).astype(np.uint8)
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 

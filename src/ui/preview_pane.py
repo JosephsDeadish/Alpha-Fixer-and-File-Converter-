@@ -233,7 +233,7 @@ class BeforeAfterWidget(QWidget):
         self._loading: bool = False
         self._checker: QPixmap | None = None  # lazily built / invalidated
 
-        self.setMinimumSize(180, 180)
+        self.setMinimumSize(180, 120)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
