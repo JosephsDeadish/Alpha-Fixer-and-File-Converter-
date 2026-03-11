@@ -8,7 +8,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
+    QComboBox, QCompleter, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
 )
@@ -357,17 +357,26 @@ class SettingsDialog(QDialog):
         emoji_row = QHBoxLayout()
         self._emoji_combo = QComboBox()
         self._emoji_combo.setMinimumWidth(160)
+        self._emoji_combo.setEditable(True)
+        self._emoji_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._emoji_combo.lineEdit().setPlaceholderText("Search emoji…")
         self._emoji_combo.setToolTip(
-            "Select an emoji from the list and click Add to include it in your "
+            "Type to search emoji by name, then click Add to include it in your "
             "custom click-effect pool.\nSet the Click Effect dropdown to "
             "'Custom' to fire these emoji as particles on every click."
         )
         for emoji_char, label in _EMOJI_PALETTE:
             self._emoji_combo.addItem(label, userData=emoji_char)
+        # Configure the auto-created completer for contains-mode filtering so
+        # the user can search by any part of the label (e.g. "heart", "fire").
+        emoji_completer = self._emoji_combo.completer()
+        if emoji_completer is not None:
+            emoji_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+            emoji_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._btn_emoji_add = QPushButton("Add")
         self._btn_emoji_clear = QPushButton("Clear All")
-        self._btn_emoji_add.setFixedWidth(50)
-        self._btn_emoji_clear.setFixedWidth(65)
+        self._btn_emoji_add.setMinimumWidth(60)
+        self._btn_emoji_clear.setMinimumWidth(80)
         emoji_row.addWidget(self._emoji_combo, 1)
         emoji_row.addWidget(self._btn_emoji_add)
         emoji_row.addWidget(self._btn_emoji_clear)
@@ -1051,8 +1060,7 @@ class SettingsDialog(QDialog):
         if not emoji_char:
             return
         current = self._get_emoji_list()
-        if emoji_char not in current:
-            current.append(emoji_char)
+        current.append(emoji_char)
         self._settings.set("custom_emoji", " ".join(current))
         self._update_emoji_display()
 
