@@ -144,6 +144,9 @@ class AlphaFixerTab(QWidget):
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
+        # When True the next stats_ready signal should auto-fill Clamp Min/Max
+        # from the image's actual alpha range (set on every new file selection).
+        self._autofill_clamp_on_next_stats: bool = False
         # Debounce timer so rapid fine-tune slider changes don't flood with threads
         self._preview_debounce = QTimer(self)
         self._preview_debounce.setSingleShot(True)
@@ -877,9 +880,15 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
+        # Always reset the flag so stale threads never autofill for a different
+        # file than the one currently selected.
+        self._autofill_clamp_on_next_stats = False
         item = self._file_list.item(row)
         if item and os.path.isfile(item.text()):
             self._preview_path = item.text()
+            # Request autofill of Clamp Min/Max from the image's actual alpha
+            # range once the background loader returns the BEFORE stats.
+            self._autofill_clamp_on_next_stats = True
             self._preview_debounce.start()
         else:
             self._preview_path = None
@@ -1030,6 +1039,24 @@ class AlphaFixerTab(QWidget):
     # Compare preview
     # ------------------------------------------------------------------
 
+    def _build_manual_params(self) -> dict:
+        """Return a manual-params dict from the current fine-tune UI controls.
+
+        Clamp Min/Max are swapped if the user left them inverted so
+        numpy.clip always receives a valid (min ≤ max) range.
+        """
+        raw_cmin = self._clamp_min_spin.value()
+        raw_cmax = self._clamp_max_spin.value()
+        return {
+            "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
+            "mode": self._mode_combo.currentData() or "set",
+            "threshold": self._threshold_spin.value(),
+            "invert": self._invert_check.isChecked(),
+            "clamp_min": min(raw_cmin, raw_cmax),
+            "clamp_max": max(raw_cmin, raw_cmax),
+            "binary_cut": self._binary_cut_check.isChecked(),
+        }
+
     def _update_compare(self, *args):
         """Start a background load+process to update the before/after comparison."""
         if not self._preview_path:
@@ -1052,19 +1079,7 @@ class AlphaFixerTab(QWidget):
         if self._use_preset_check.isChecked():
             preset = self._presets.get_preset(self._preset_combo.currentText())
         else:
-            # Swap clamp values if the user left them inverted so numpy.clip
-            # always receives a valid (min <= max) range.
-            raw_cmin = self._clamp_min_spin.value()
-            raw_cmax = self._clamp_max_spin.value()
-            manual = {
-                "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
-                "mode": self._mode_combo.currentData() or "set",
-                "threshold": self._threshold_spin.value(),
-                "invert": self._invert_check.isChecked(),
-                "clamp_min": min(raw_cmin, raw_cmax),
-                "clamp_max": max(raw_cmin, raw_cmax),
-                "binary_cut": self._binary_cut_check.isChecked(),
-            }
+            manual = self._build_manual_params()
 
         # Attach RGBA adjustments when enabled
         if self._apply_rgb_check.isChecked():
@@ -1120,6 +1135,34 @@ class AlphaFixerTab(QWidget):
         self._before_stats_lbl.setText(_panel_text("BEFORE", before))
         self._after_stats_lbl.setText(_panel_text("AFTER", after))
 
+        # Auto-fill Clamp Min/Max from the image's actual alpha range when a
+        # new file was just selected and the user is in manual (not preset) mode.
+        # This lets the user see "where the image currently sits" before typing
+        # in their desired target values.
+        if self._autofill_clamp_on_next_stats and before and not self._use_preset_check.isChecked():
+            self._autofill_clamp_on_next_stats = False
+            self._autofill_clamp_from_stats(before)
+
+    def _autofill_clamp_from_stats(self, before_stats: dict) -> None:
+        """Populate Clamp Min/Max spinboxes from the image's actual alpha range.
+
+        Signals are blocked while setting the spinbox values so the change
+        handlers do not re-trigger the preview debounce (the caller is already
+        inside a stats_ready callback — a fresh preview will start automatically
+        once the debounce fires for the changed values).
+        """
+        img_min = before_stats.get("min", 0)
+        img_max = before_stats.get("max", 255)
+        for spin, val in ((self._clamp_min_spin, img_min), (self._clamp_max_spin, img_max)):
+            spin.blockSignals(True)
+            spin.setValue(val)
+            spin.blockSignals(False)
+        self._refresh_finetune_label()
+        # Kick off a fresh preview so AFTER stats reflect the newly-set clamp
+        # values (clamping to [actual_min, actual_max] is a no-op, so AFTER
+        # will match BEFORE — giving the user a clean baseline to edit from).
+        self._preview_debounce.start()
+
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):
@@ -1160,19 +1203,7 @@ class AlphaFixerTab(QWidget):
         if self._use_preset_check.isChecked():
             preset = self._presets.get_preset(self._preset_combo.currentText())
         else:
-            # Swap clamp values if the user left them inverted so numpy.clip
-            # always receives a valid (min <= max) range.
-            raw_cmin = self._clamp_min_spin.value()
-            raw_cmax = self._clamp_max_spin.value()
-            manual = {
-                "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
-                "mode": self._mode_combo.currentData() or "set",
-                "threshold": self._threshold_spin.value(),
-                "invert": self._invert_check.isChecked(),
-                "clamp_min": min(raw_cmin, raw_cmax),
-                "clamp_max": max(raw_cmin, raw_cmax),
-                "binary_cut": self._binary_cut_check.isChecked(),
-            }
+            manual = self._build_manual_params()
         if self._apply_rgb_check.isChecked():
             rgb_params = {
                 "r": self._red_spin.value(),
