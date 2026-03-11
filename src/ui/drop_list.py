@@ -312,6 +312,9 @@ class DropFileList(QListWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:
             self._remove_selected()
+        elif (event.key() == Qt.Key.Key_A and
+              event.modifiers() == Qt.KeyboardModifier.ControlModifier):
+            self.selectAll()
         else:
             super().keyPressEvent(event)
 
