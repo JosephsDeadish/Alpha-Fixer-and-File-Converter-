@@ -316,24 +316,18 @@ class SettingsDialog(QDialog):
         mouse_row.addWidget(grp_cursor, 1)
 
         tv.addLayout(mouse_row)
-        tv.addStretch(1)
-        tabs.addTab(theme_tab, "🎨 Theme")
 
-        # ================================================================
-        # ---- General tab ----
-        # ================================================================
-        gen_tab = QWidget()
-        gv = QVBoxLayout(gen_tab)
-        gv.setContentsMargins(8, 8, 8, 8)
-        gv.setSpacing(8)
-
-        # ---- Sound GroupBox ----
+        # ---- Sound GroupBox (theme-related — click sounds follow the theme) ----
         grp_sound = QGroupBox("Sound")
         sound_gl = QGridLayout(grp_sound)
         sound_gl.setColumnStretch(1, 1)
         sound_gl.setHorizontalSpacing(10)
         sound_gl.setVerticalSpacing(6)
-        self._sound_check = QCheckBox("Enable click sounds")
+        self._sound_check = QCheckBox("Enable click sounds (off by default)")
+        self._sound_check.setToolTip(
+            "Play a sound on each click. Off by default.\n"
+            "Your choice is remembered between sessions."
+        )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
         sound_gl.addWidget(QLabel("Custom .wav:"), 1, 0)
         sound_row = QHBoxLayout()
@@ -343,7 +337,25 @@ class SettingsDialog(QDialog):
         sound_row.addWidget(self._click_sound_edit, 1)
         sound_row.addWidget(self._btn_sound_browse)
         sound_gl.addLayout(sound_row, 1, 1)
-        gv.addWidget(grp_sound)
+        tv.addWidget(grp_sound)
+
+        tv.addStretch(1)
+
+        # Wrap the theme tab contents in a scroll area so all controls are always
+        # reachable regardless of screen/window size.
+        theme_scroll = QScrollArea()
+        theme_scroll.setWidget(theme_tab)
+        theme_scroll.setWidgetResizable(True)
+        theme_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        tabs.addTab(theme_scroll, "🎨 Theme")
+
+        # ================================================================
+        # ---- General tab ----
+        # ================================================================
+        gen_tab = QWidget()
+        gv = QVBoxLayout(gen_tab)
+        gv.setContentsMargins(8, 8, 8, 8)
+        gv.setSpacing(8)
 
         # ---- Appearance & FX GroupBox ----
         grp_misc = QGroupBox("Appearance && Effects")
@@ -404,7 +416,7 @@ class SettingsDialog(QDialog):
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
         self._btn_emoji_clear.clicked.connect(self._clear_emoji)
-        # General tab: all controls save+emit live
+        # All controls save+emit live
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)

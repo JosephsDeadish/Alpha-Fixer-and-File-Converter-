@@ -449,7 +449,7 @@ class ImagePreviewPane(QWidget):
 
         self._img_label = QLabel()
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setMinimumSize(200, 200)
+        self._img_label.setMinimumSize(10, 10)
         self._img_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding,
         )

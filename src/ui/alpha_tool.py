@@ -788,7 +788,23 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot()
     def _on_finetune_changed(self, *args):
-        """Refresh live params label and debounce the compare preview update."""
+        """Refresh live params label and debounce the compare preview update.
+
+        If the user directly edits a fine-tune control we automatically switch
+        to manual mode (uncheck 'Use preset') so their new values are actually
+        used for processing and the preview reflects what they typed.
+        """
+        sender = self.sender()
+        if (
+            sender is not None
+            and sender is not self._use_preset_check
+            and not self._preset_combo.signalsBlocked()
+            and self._use_preset_check.isChecked()
+        ):
+            # Silently uncheck "Use preset" so fine-tune values take effect.
+            was_blocked = self._use_preset_check.blockSignals(True)
+            self._use_preset_check.setChecked(False)
+            self._use_preset_check.blockSignals(was_blocked)
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
