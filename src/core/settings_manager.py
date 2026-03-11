@@ -69,7 +69,7 @@ class SettingsManager:
         "theme": "Panda Dark",
         "theme_data": json.dumps(_DEFAULT_THEME),
         # Sound
-        "sound_enabled": True,
+        "sound_enabled": False,
         "click_sound_path": "",
         # Cursor & trail
         "cursor": "Default",
@@ -102,7 +102,7 @@ class SettingsManager:
         # Tooltip
         "tooltip_mode": "No Filter 🤬",
         # Click effects
-        "click_effects_enabled": True,
+        "click_effects_enabled": False,
         "use_theme_effect": False,
         # Custom emoji particles
         "custom_emoji": DEFAULT_CUSTOM_EMOJI,

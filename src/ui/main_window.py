@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
         self._click_effects = ClickEffectsOverlay(self)
         self._click_effects.setGeometry(self.rect())
         self._click_effects.raise_()
-        effects_enabled = self._settings.get("click_effects_enabled", True)
+        effects_enabled = self._settings.get("click_effects_enabled", False)
         self._click_effects.set_enabled(effects_enabled)
         self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
@@ -695,7 +695,7 @@ class MainWindow(QMainWindow):
         # the modal and therefore not visible).
         dlg_overlay = None
         if (self._click_effects is not None
-                and self._settings.get("click_effects_enabled", True)):
+                and self._settings.get("click_effects_enabled", False)):
             from .click_effects import ClickEffectsOverlay
             dlg_overlay = ClickEffectsOverlay(dlg)
             # Mirror the current effect setting but don't count clicks toward
@@ -722,7 +722,7 @@ class MainWindow(QMainWindow):
         self._apply_trail()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
-                self._settings.get("click_effects_enabled", True)
+                self._settings.get("click_effects_enabled", False)
             )
 
     def _apply_trail(self):

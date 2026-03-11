@@ -429,8 +429,8 @@ class SettingsDialog(QDialog):
         self._rebuild_theme_combo(select=current, filter_text=text)
 
     def _current_filter_text(self) -> str:
-        """Return the current theme search filter text (empty string if not yet created)."""
-        return getattr(self._theme_search, "text", lambda: "")()
+        """Return the current theme search filter text."""
+        return self._theme_search.text()
 
     def _rebuild_theme_combo(self, select: str = "", filter_text: str = ""):
         self._theme_preset_combo.blockSignals(True)
@@ -506,7 +506,7 @@ class SettingsDialog(QDialog):
         self._set_effect_combo(t.get("_effect", "default"))
         self._update_emoji_display()
 
-        self._sound_check.setChecked(self._settings.get("sound_enabled", True))
+        self._sound_check.setChecked(self._settings.get("sound_enabled", False))
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
@@ -528,11 +528,11 @@ class SettingsDialog(QDialog):
         self._cursor_combo.setEnabled(not use_theme_cur)
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         self._click_effects_check.setChecked(
-            self._settings.get("click_effects_enabled", True)
+            self._settings.get("click_effects_enabled", False)
         )
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         self._click_effects_theme_check.setChecked(
-            self._settings.get("click_effects_enabled", True)
+            self._settings.get("click_effects_enabled", False)
         )
         use_theme_effect = self._settings.get("use_theme_effect", False)
         self._use_theme_effect_check.setChecked(use_theme_effect)

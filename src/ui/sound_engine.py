@@ -122,7 +122,7 @@ class SoundEngine(QObject):
 
     def play_click(self) -> None:
         """Play the click sound (respects the sound_enabled setting)."""
-        if not self._settings.get("sound_enabled", True):
+        if not self._settings.get("sound_enabled", False):
             return
 
         # Use a custom user-supplied WAV if configured
