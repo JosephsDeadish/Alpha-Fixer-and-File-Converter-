@@ -947,6 +947,11 @@ class AlphaFixerTab(QWidget):
         preventing the automatic "Use preset → manual" switch from firing.
         This helper performs that switch explicitly so clamp edits always take
         effect regardless of how the handler was invoked.
+
+        The ``signalsBlocked()`` guard ensures this method is a no-op when a
+        preset is being loaded programmatically (all finetune-control signals
+        are blocked during _on_preset_changed → _load_preset_values), so
+        programmatic preset loads never accidentally switch to manual mode.
         """
         if not self._preset_combo.signalsBlocked() and self._use_preset_check.isChecked():
             was_blocked = self._use_preset_check.blockSignals(True)
