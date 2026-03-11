@@ -940,7 +940,12 @@ class AlphaFixerTab(QWidget):
         else:
             parts.append("clamp only")
         if cmin > 0 or cmax < 255:
-            parts.append(f"clamp={cmin}–{cmax}")
+            if cmin > cmax:
+                # Values will be swapped at processing time; flag so the user
+                # can see the inverted state and correct it if desired.
+                parts.append(f"clamp={cmin}–{cmax} ⚠ inverted (will swap)")
+            else:
+                parts.append(f"clamp={cmin}–{cmax}")
         if thresh:
             parts.append(f"thresh={thresh}")
         if self._invert_check.isChecked():
@@ -979,25 +984,22 @@ class AlphaFixerTab(QWidget):
             self._use_preset_check.blockSignals(was_blocked)
 
     @pyqtSlot(int)
-    def _on_clamp_min_changed(self, value: int) -> None:
-        """Ensure clamp_max >= clamp_min, then trigger the normal finetune update."""
-        # Prevent clamp_max from falling below the new minimum without preventing
-        # the user from typing an independent value into clamp_max later.
-        if self._clamp_max_spin.value() < value:
-            was_blocked = self._clamp_max_spin.blockSignals(True)
-            self._clamp_max_spin.setValue(value)
-            self._clamp_max_spin.blockSignals(was_blocked)
+    def _on_clamp_min_changed(self, value: int) -> None:  # noqa: ARG002  # value unused; spinbox read directly
+        """Trigger the normal fine-tune update when Clamp Min changes.
+
+        The two clamp spinboxes are intentionally kept independent so the user
+        can type any value into either field without the other being dragged to
+        match.  If the spinboxes are left in an inverted state (min > max) the
+        values are swapped automatically at the point of use (see
+        _update_compare / _run) so numpy.clip always receives a valid range.
+        """
         self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
     @pyqtSlot(int)
-    def _on_clamp_max_changed(self, value: int) -> None:
-        """Ensure clamp_min <= clamp_max, then trigger the normal finetune update."""
-        if self._clamp_min_spin.value() > value:
-            was_blocked = self._clamp_min_spin.blockSignals(True)
-            self._clamp_min_spin.setValue(value)
-            self._clamp_min_spin.blockSignals(was_blocked)
+    def _on_clamp_max_changed(self, value: int) -> None:  # noqa: ARG002  # value unused; spinbox read directly
+        """Trigger the normal fine-tune update when Clamp Max changes."""
         self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
@@ -1050,13 +1052,17 @@ class AlphaFixerTab(QWidget):
         if self._use_preset_check.isChecked():
             preset = self._presets.get_preset(self._preset_combo.currentText())
         else:
+            # Swap clamp values if the user left them inverted so numpy.clip
+            # always receives a valid (min <= max) range.
+            raw_cmin = self._clamp_min_spin.value()
+            raw_cmax = self._clamp_max_spin.value()
             manual = {
                 "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
                 "mode": self._mode_combo.currentData() or "set",
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
-                "clamp_min": self._clamp_min_spin.value(),
-                "clamp_max": self._clamp_max_spin.value(),
+                "clamp_min": min(raw_cmin, raw_cmax),
+                "clamp_max": max(raw_cmin, raw_cmax),
                 "binary_cut": self._binary_cut_check.isChecked(),
             }
 
@@ -1154,17 +1160,19 @@ class AlphaFixerTab(QWidget):
         if self._use_preset_check.isChecked():
             preset = self._presets.get_preset(self._preset_combo.currentText())
         else:
+            # Swap clamp values if the user left them inverted so numpy.clip
+            # always receives a valid (min <= max) range.
+            raw_cmin = self._clamp_min_spin.value()
+            raw_cmax = self._clamp_max_spin.value()
             manual = {
                 "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
                 "mode": self._mode_combo.currentData() or "set",
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
-                "clamp_min": self._clamp_min_spin.value(),
-                "clamp_max": self._clamp_max_spin.value(),
+                "clamp_min": min(raw_cmin, raw_cmax),
+                "clamp_max": max(raw_cmin, raw_cmax),
                 "binary_cut": self._binary_cut_check.isChecked(),
             }
-
-        # Attach RGB channel adjustments if the checkbox is enabled
         if self._apply_rgb_check.isChecked():
             rgb_params = {
                 "r": self._red_spin.value(),
