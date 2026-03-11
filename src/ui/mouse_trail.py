@@ -67,6 +67,9 @@ class MouseTrailOverlay(QWidget):
         self._enabled = False
         # Trail style: "dots" (default), "fairy", "wave", "sparkle", "comet", "ribbon"
         self._style = "dots"
+        # Configurable trail parameters
+        self._fade_speed: int = 5    # 1=slowest … 10=fastest; maps to decay per tick
+        self._intensity: int = 100   # 10–100 %  max rendered alpha (220 × intensity/100)
 
         self._timer = QTimer(self)
         self._timer.setInterval(33)  # ~30 fps – smoother trail fade without hogging CPU
@@ -105,6 +108,22 @@ class MouseTrailOverlay(QWidget):
         """Set trail style: 'dots', 'fairy', 'wave', 'sparkle', 'comet', or 'ribbon'."""
         self._style = style if style in _ALL_STYLES else "dots"
         self._trail.clear()
+
+    def set_length(self, length: int) -> None:
+        """Set trail length (number of trail points kept, 10–200)."""
+        length = max(10, min(200, int(length)))
+        if length != self._trail.maxlen:
+            # Rebuild deque with new maxlen, preserving as many existing points as possible
+            old = list(self._trail)
+            self._trail = deque(old[-length:] if len(old) > length else old, maxlen=length)
+
+    def set_fade_speed(self, speed: int) -> None:
+        """Set fade speed (1=very slow, 10=very fast)."""
+        self._fade_speed = max(1, min(10, int(speed)))
+
+    def set_intensity(self, intensity: int) -> None:
+        """Set maximum trail opacity (10–100 %)."""
+        self._intensity = max(10, min(100, int(intensity)))
 
     # ------------------------------------------------------------------
     # Event filter – catches global MouseMove for the trail positions
@@ -146,13 +165,17 @@ class MouseTrailOverlay(QWidget):
         # on emoji font shaping for pixels that are never shown.
         if self._main_window.isMinimized() or not self._main_window.isVisible():
             return
-        # Fairy/wave/sparkle dust fades more slowly for a lingering sparkle effect
-        decay = 0.05 if self._style in _EMOJI_STYLES else 0.08
+        # Compute per-tick decay from fade speed (1=slow, 10=fast)
+        # Speed 1 → ~0.02/tick, speed 5 → ~0.05/tick, speed 10 → ~0.12/tick
+        base_decay = 0.015 + (self._fade_speed - 1) * 0.012
+        # Emoji styles get slightly slower base fade for a lingering sparkle feel
+        if self._style in _EMOJI_STYLES:
+            base_decay *= 0.7
         new_trail = deque(maxlen=self._trail.maxlen)
         for entry in self._trail:
             x, y, a = entry[0], entry[1], entry[2]
             emoji = entry[3] if len(entry) > 3 else ""
-            a -= decay
+            a -= base_decay
             if a > 0.0:
                 new_trail.append([x, y, a, emoji])
         self._trail = new_trail
@@ -190,9 +213,10 @@ class MouseTrailOverlay(QWidget):
         painter.end()
 
     def _paint_dots(self, painter: QPainter) -> None:
+        max_alpha = int(220 * self._intensity / 100)
         for entry in self._trail:
             x, y, alpha_frac = entry[0], entry[1], entry[2]
-            alpha = max(0, min(255, int(alpha_frac * 220)))
+            alpha = max(0, min(255, int(alpha_frac * max_alpha)))
             radius = max(2, int(alpha_frac * 9))
             c = QColor(self._color)
             c.setAlpha(alpha)
@@ -207,12 +231,13 @@ class MouseTrailOverlay(QWidget):
         # font-rendering storms when moving the mouse quickly over a long trail.
         max_emit = 12
         emitted = 0
+        max_opacity = self._intensity / 100.0
         for entry in self._trail:
             if emitted >= max_emit:
                 break
             x, y, alpha_frac = entry[0], entry[1], entry[2]
             emoji = entry[3] if len(entry) > 3 and entry[3] else "✨"
-            alpha = max(0, min(255, int(alpha_frac * 210)))
+            alpha = max(0, min(255, int(alpha_frac * 210 * max_opacity)))
             # Tint text using alpha via composition
             painter.setOpacity(alpha / 255.0)
             painter.drawText(x - 8, y + 8, emoji)
@@ -225,12 +250,13 @@ class MouseTrailOverlay(QWidget):
         n = len(trail_list)
         if n < 2:
             return
+        max_alpha = int(230 * self._intensity / 100)
         painter.setPen(Qt.PenStyle.NoPen)
         for i, entry in enumerate(trail_list):
             x, y, alpha_frac = entry[0], entry[1], entry[2]
             # Newest entries are at the end of the deque; head = last entry
             pos_frac = i / max(n - 1, 1)  # 0 = tail, 1 = head
-            alpha = max(0, min(255, int(alpha_frac * 230 * pos_frac)))
+            alpha = max(0, min(255, int(alpha_frac * max_alpha * pos_frac)))
             radius = max(1, int(pos_frac * 11))
             c = QColor(self._color)
             c.setAlpha(alpha)
@@ -243,12 +269,13 @@ class MouseTrailOverlay(QWidget):
         n = len(trail_list)
         if n < 2:
             return
+        max_alpha = int(200 * self._intensity / 100)
         # Draw a Bezier path through the trail points with varying width
         painter.setPen(Qt.PenStyle.NoPen)
         for i in range(1, n):
             x1, y1, a1 = trail_list[i-1][0], trail_list[i-1][1], trail_list[i-1][2]
             x2, y2, a2 = trail_list[i][0], trail_list[i][1], trail_list[i][2]
-            alpha = max(0, min(255, int((a1 + a2) / 2 * 200)))
+            alpha = max(0, min(255, int((a1 + a2) / 2 * max_alpha)))
             pos_frac = i / max(n - 1, 1)
             width = max(1.0, pos_frac * 8.0)
             c = QColor(self._color)

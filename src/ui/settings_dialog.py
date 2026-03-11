@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
-    QMessageBox, QInputDialog, QSpinBox, QFileDialog,
+    QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
 )
 
 from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet, THEME_DESCRIPTIONS
@@ -292,6 +292,66 @@ class SettingsDialog(QDialog):
         self._use_theme_trail_check.toggled.connect(
             lambda checked: self._trail_style_combo.setEnabled(not checked)
         )
+
+        # Trail Length slider (10–200 points)
+        trail_gl.addWidget(QLabel("Trail Length:"), 4, 0)
+        self._trail_length_slider = QSlider(Qt.Orientation.Horizontal)
+        self._trail_length_slider.setRange(10, 200)
+        self._trail_length_slider.setValue(50)
+        self._trail_length_slider.setToolTip(
+            "Controls how many trail points are kept.\n"
+            "Short = snappy; Long = lingering ghost trail."
+        )
+        self._trail_length_val_lbl = QLabel("50")
+        self._trail_length_val_lbl.setFixedWidth(30)
+        length_row = QHBoxLayout()
+        length_row.addWidget(self._trail_length_slider)
+        length_row.addWidget(self._trail_length_val_lbl)
+        trail_gl.addLayout(length_row, 4, 1)
+        self._trail_length_slider.valueChanged.connect(
+            lambda v: self._trail_length_val_lbl.setText(str(v))
+        )
+        self._trail_length_slider.valueChanged.connect(self._on_trail_length_changed)
+
+        # Trail Fade Speed slider (1 slow … 10 fast)
+        trail_gl.addWidget(QLabel("Fade Speed:"), 5, 0)
+        self._trail_fade_slider = QSlider(Qt.Orientation.Horizontal)
+        self._trail_fade_slider.setRange(1, 10)
+        self._trail_fade_slider.setValue(5)
+        self._trail_fade_slider.setToolTip(
+            "How quickly the trail fades out.\n"
+            "1 = very slow (long ghost), 10 = very fast (sharp snap)."
+        )
+        self._trail_fade_val_lbl = QLabel("5")
+        self._trail_fade_val_lbl.setFixedWidth(30)
+        fade_row = QHBoxLayout()
+        fade_row.addWidget(self._trail_fade_slider)
+        fade_row.addWidget(self._trail_fade_val_lbl)
+        trail_gl.addLayout(fade_row, 5, 1)
+        self._trail_fade_slider.valueChanged.connect(
+            lambda v: self._trail_fade_val_lbl.setText(str(v))
+        )
+        self._trail_fade_slider.valueChanged.connect(self._on_trail_fade_changed)
+
+        # Trail Intensity slider (10–100 %)
+        trail_gl.addWidget(QLabel("Intensity:"), 6, 0)
+        self._trail_intensity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._trail_intensity_slider.setRange(10, 100)
+        self._trail_intensity_slider.setValue(100)
+        self._trail_intensity_slider.setToolTip(
+            "Maximum opacity of the trail (10 % = very faint, 100 % = fully bright)."
+        )
+        self._trail_intensity_val_lbl = QLabel("100%")
+        self._trail_intensity_val_lbl.setFixedWidth(40)
+        intensity_row = QHBoxLayout()
+        intensity_row.addWidget(self._trail_intensity_slider)
+        intensity_row.addWidget(self._trail_intensity_val_lbl)
+        trail_gl.addLayout(intensity_row, 6, 1)
+        self._trail_intensity_slider.valueChanged.connect(
+            lambda v: self._trail_intensity_val_lbl.setText(f"{v}%")
+        )
+        self._trail_intensity_slider.valueChanged.connect(self._on_trail_intensity_changed)
+
         mouse_row.addWidget(grp_trail, 1)
 
         grp_cursor = QGroupBox("Cursor")
@@ -583,6 +643,16 @@ class SettingsDialog(QDialog):
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
+        # Load trail sliders
+        saved_length = int(self._settings.get("trail_length", 50))
+        self._trail_length_slider.setValue(max(10, min(200, saved_length)))
+        self._trail_length_val_lbl.setText(str(self._trail_length_slider.value()))
+        saved_fade = int(self._settings.get("trail_fade_speed", 5))
+        self._trail_fade_slider.setValue(max(1, min(10, saved_fade)))
+        self._trail_fade_val_lbl.setText(str(self._trail_fade_slider.value()))
+        saved_intensity = int(self._settings.get("trail_intensity", 100))
+        self._trail_intensity_slider.setValue(max(10, min(100, saved_intensity)))
+        self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -625,6 +695,9 @@ class SettingsDialog(QDialog):
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
         mgr.register(self._use_theme_trail_check, "use_theme_trail")
+        mgr.register(self._trail_length_slider, "trail_length_slider")
+        mgr.register(self._trail_fade_slider, "trail_fade_slider")
+        mgr.register(self._trail_intensity_slider, "trail_intensity_slider")
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._font_size_spin, "font_size")
@@ -887,6 +960,18 @@ class SettingsDialog(QDialog):
 
     def _on_trail_color_changed(self, color: str) -> None:
         self._settings.set("trail_color", color)
+        self.settings_changed.emit()
+
+    def _on_trail_length_changed(self, value: int) -> None:
+        self._settings.set("trail_length", value)
+        self.settings_changed.emit()
+
+    def _on_trail_fade_changed(self, value: int) -> None:
+        self._settings.set("trail_fade_speed", value)
+        self.settings_changed.emit()
+
+    def _on_trail_intensity_changed(self, value: int) -> None:
+        self._settings.set("trail_intensity", value)
         self.settings_changed.emit()
 
     def _on_cursor_changed(self) -> None:

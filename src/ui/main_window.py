@@ -39,14 +39,20 @@ _CURSOR_MAP = {
 }
 
 
-def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
+def _make_emoji_cursor(emoji: str, size: int = 40) -> QCursor:
     """Render *emoji* into a square pixmap and return a QCursor from it.
 
-    The hotspot is placed at the top-left corner so the cursor tip lines up
-    with the pointer position.  Falls back to the arrow cursor if pixmap
-    painting is unavailable (e.g. running headless without a display).
+    The emoji is drawn centred in the pixmap and the hotspot is placed at
+    the centre so that interactions (clicks, hover) register at the visual
+    centre of the emoji character rather than at the invisible top-left
+    corner of the bounding box.
+
+    Falls back to the arrow cursor if pixmap painting is unavailable
+    (e.g. running headless without a display).
     """
     try:
+        # Use a slightly larger pixmap than the rendered font size to ensure
+        # the full glyph is visible without clipping.
         pix = QPixmap(size, size)
         pix.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pix)
@@ -54,7 +60,7 @@ def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
         # and Linux (Noto Color Emoji) so the emoji renders on every platform.
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
-        font.setPointSize(max(6, size - 6))
+        font.setPointSize(max(6, size - 10))
         painter.setFont(font)
         painter.drawText(
             QRect(0, 0, size, size),
@@ -62,7 +68,9 @@ def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
             emoji,
         )
         painter.end()
-        return QCursor(pix, 0, 0)
+        # Hotspot at centre of the pixmap so the click-point matches the
+        # visual centre of the emoji (avoids the top-left offset problem).
+        return QCursor(pix, size // 2, size // 2)
     except Exception:
         return QCursor(Qt.CursorShape.ArrowCursor)
 
@@ -807,7 +815,7 @@ class MainWindow(QMainWindow):
             self._schedule_unlock_clear()
 
     def _apply_trail(self):
-        """Apply trail color, style and enabled state, honouring use_theme_trail."""
+        """Apply trail color, style, length, fade speed, intensity and enabled state."""
         if self._trail_overlay is None:
             return
         use_theme = self._settings.get("use_theme_trail", False)
@@ -829,6 +837,10 @@ class MainWindow(QMainWindow):
             style = self._settings.get("trail_style", "dots")
         self._trail_overlay.set_color(color)
         self._trail_overlay.set_style(style)
+        # Apply length/fade/intensity — always from user settings regardless of theme trail
+        self._trail_overlay.set_length(int(self._settings.get("trail_length", 50)))
+        self._trail_overlay.set_fade_speed(int(self._settings.get("trail_fade_speed", 5)))
+        self._trail_overlay.set_intensity(int(self._settings.get("trail_intensity", 100)))
         self._trail_overlay.set_enabled(
             self._settings.get("trail_enabled", False)
         )

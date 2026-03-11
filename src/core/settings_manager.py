@@ -79,6 +79,9 @@ class SettingsManager:
         "trail_color": "#e94560",
         "trail_style": "dots",
         "use_theme_trail": False,
+        "trail_length": 50,       # number of trail points kept (deque maxlen)
+        "trail_fade_speed": 5,    # 1=slowest fade … 10=fastest fade
+        "trail_intensity": 100,   # 10–100 % max trail opacity
         # Appearance
         "font_size": 10,
         # Last-used state
@@ -296,6 +299,7 @@ class SettingsManager:
         "theme", "theme_data", "saved_themes",
         "sound_enabled", "click_sound_path",
         "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
+        "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
         "custom_emoji",
