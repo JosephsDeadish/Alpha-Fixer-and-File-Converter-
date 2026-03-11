@@ -19,7 +19,7 @@ import math
 import random
 from collections import deque
 
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -273,15 +273,20 @@ def _spawn_fairy(x, y):
     particles = []
     # Use only fairy emoji for consistency with the flying fairies overhead
     fairy_colors = ["#dd44ff", "#ff88ff", "#ffccee", "#cc88ff", "#ffffff", "#aa44ff"]
-    for _ in range(5):
+    for i in range(5):
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(1.5, 7)
         vx = math.cos(angle) * speed
         vy = math.sin(angle) * speed
         color = QColor(random.choice(fairy_colors))
         size = random.uniform(12, 22)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
-                                   "text", size, color, "🧚"))
+        # Alternate between emoji and circles to reduce font-rendering cost
+        if i < 3:
+            particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
+                                       "text", size, color, "🧚"))
+        else:
+            particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
+                                       "circle", random.uniform(4, 10), color))
     return particles
 
 
@@ -476,15 +481,18 @@ class _BatFlock(QObject):
     def _launch(self):
         self._timer.setInterval(random.randint(4000, 9000))
         w = self._overlay.width()
-        count = random.randint(3, 7)
+        count = random.randint(2, 5)  # was 3–7; fewer bats = less emoji rendering cost
         for i in range(count):
             y_start = random.randint(10, 60)
             x_start = random.randint(-20, 20)
             speed = random.uniform(3, 7)
-            life = (w + 60) / max(speed, 1) / 60 + random.uniform(0.5, 1.5)
+            # life is in units consumed by _tick (which decrements by 0.05 per frame
+            # at 20fps = 50ms interval).  Crossing window at speed px/frame takes
+            # roughly (w + 60) / speed frames.
+            life = (w + 60) / max(speed, 1) * 0.05 + random.uniform(0.3, 1.0)
             bat = _Particle(x_start + i * 25, y_start,
                             speed, random.uniform(-0.5, 0.5), life,
-                            "bat_fly", random.uniform(18, 28),
+                            "bat_fly", random.uniform(18, 26),
                             QColor("#7b2dff"), "🦇")
             self._overlay._add_particle(bat)
 
@@ -511,7 +519,7 @@ class _FairyFlock(QObject):
         h = self._overlay.height()
         if w <= 0 or h <= 0:
             return
-        count = random.randint(2, 5)
+        count = random.randint(1, 3)  # was 2–5; fewer fairies = less emoji rendering cost
         left_to_right = random.random() < 0.5
         speed_sign = 1 if left_to_right else -1
         # Fairies fly only through the top 20% of the window.
@@ -524,11 +532,14 @@ class _FairyFlock(QObject):
                        else w + random.randint(10, 30))
             speed = random.uniform(1.5, 4.5) * speed_sign
             vy = random.uniform(-0.3, 0.3)
-            life = (w + 80) / max(abs(speed), 1) / 60 + random.uniform(0.5, 2.0)
+            # life is in units consumed by _tick (which decrements by 0.05 per frame
+            # at 20fps = 50ms interval).  Crossing window at speed px/frame takes
+            # roughly (w + 80) / abs(speed) frames.
+            life = (w + 80) / max(abs(speed), 1) * 0.05 + random.uniform(0.3, 1.0)
             fairy = _Particle(
                 x_start + i * random.randint(20, 50), y_start,
                 speed, vy, life,
-                "fairy_fly", random.uniform(18, 28),
+                "fairy_fly", random.uniform(18, 26),
                 QColor(random.choice(fairy_colors)),
                 "🧚",
             )
@@ -658,8 +669,8 @@ class ClickEffectsOverlay(QWidget):
         # Hard cap to prevent unbounded growth during rapid clicking.
         # Keep the most recent particles (newest burst) so the effect feels
         # responsive, and cull the oldest ones first.
-        if len(self._particles) > 50:
-            self._particles = self._particles[-35:]
+        if len(self._particles) > 40:
+            self._particles = self._particles[-25:]
 
     # ------------------------------------------------------------------
     # Event filter
@@ -695,10 +706,14 @@ class ClickEffectsOverlay(QWidget):
     # Margin in pixels around each particle's bounding box added to the dirty
     # rect to ensure antialiased edges are fully covered.
     _DIRTY_MARGIN = 6
+    # Maximum number of text/emoji particles rendered per frame.
+    # Emoji font shaping is expensive; beyond this limit additional text
+    # particles are skipped for the frame (they are still tracked and will
+    # render in the next frame once earlier ones have faded).
+    _MAX_TEXT_PER_FRAME = 8
 
     def _particle_rect(self, p: _Particle):
         """Return the approximate bounding QRect for a single particle."""
-        from PyQt6.QtCore import QRect
         r = max(6, int(p.size + self._DIRTY_MARGIN))
         return QRect(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
@@ -706,9 +721,14 @@ class ClickEffectsOverlay(QWidget):
         if not self._particles:
             return
 
+        # Skip animation while the window is minimised — no visible pixels
+        # are produced and we waste CPU driving font rendering for nothing.
+        mw = self._main_window
+        if mw.isMinimized() or not mw.isVisible():
+            return
+
         # Compute the dirty rect covering all current particle positions
         # BEFORE advancing them — ensures old positions are repainted (cleared).
-        from PyQt6.QtCore import QRect
         dirty = QRect()
         for p in self._particles:
             dirty = dirty.united(self._particle_rect(p))
@@ -721,7 +741,7 @@ class ClickEffectsOverlay(QWidget):
             p.y += p.vy
             if p.kind not in ("bat_fly", "fairy_fly"):
                 p.vy += self._GRAVITY
-            p.life -= 0.04   # faster decay → shorter burst, fewer frames rendered
+            p.life -= 0.05   # slightly faster decay → shorter burst, fewer frames rendered
             # Cull ambient (bat/fairy) particles that have completely left the
             # window so they never accumulate off-screen indefinitely.
             if p.kind in ("bat_fly", "fairy_fly"):
@@ -770,11 +790,19 @@ class ClickEffectsOverlay(QWidget):
 
         painter.setPen(Qt.PenStyle.NoPen)
 
+        # Track how many text/emoji particles have been drawn this frame.
+        # Emoji font rendering is expensive; cap it per frame to bound CPU
+        # cost when many text particles pile up during rapid clicking.
+        text_drawn = 0
+
         for p in self._particles:
             alpha = max(0, min(255, int(p.alpha_frac * 220)))
             if alpha < self._MIN_VISIBLE_ALPHA:
                 continue  # skip nearly transparent particles — not visible, free CPU
             if p.kind in ("text", "bat_fly", "fairy_fly"):
+                if text_drawn >= self._MAX_TEXT_PER_FRAME:
+                    continue  # defer this emoji particle to the next frame
+                text_drawn += 1
                 c = QColor(p.color)
                 c.setAlpha(alpha)
                 painter.setFont(self._get_font(int(p.size)))

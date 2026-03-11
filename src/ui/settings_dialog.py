@@ -310,6 +310,14 @@ class SettingsDialog(QDialog):
             "🧜 Mermaid Trident", "🛸 UFO", "🦇 Bat",
             "🌊 Wave", "🔥 Fire", "❄ Snowflake", "⚡ Lightning",
             "💀 Skull", "🌸 Sakura", "✨ Sparkle",
+            # Extended emoji cursors
+            "🐉 Dragon", "🌈 Rainbow", "🧚 Fairy", "👽 Alien",
+            "🌙 Moon", "🍭 Candy", "🌿 Leaf", "🎯 Target",
+            "🔮 Crystal Ball", "🦋 Butterfly", "🐙 Octopus",
+            "🪄 Magic Wand", "🌺 Flower", "💎 Diamond",
+            "🍄 Mushroom", "🤠 Cowboy", "☠ Crossbones",
+            "🐠 Fish", "🍀 Clover", "🌟 Star", "🦴 Bone",
+            "🎃 Pumpkin", "🧿 Evil Eye", "⚗ Flask", "🪸 Coral",
         ])
         cursor_gl.addWidget(self._cursor_combo, 0, 1)
         self._use_theme_cursor_check = QCheckBox(

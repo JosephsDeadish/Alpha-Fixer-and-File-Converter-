@@ -14,6 +14,7 @@ The overlay supports six trail styles:
   • "ribbon"  – a smooth connected ribbon/noodle drawn between trail points.
 """
 from collections import deque
+import random
 
 from PyQt6.QtCore import Qt, QTimer, QEvent, QObject, QPoint
 from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen, QPainterPath
@@ -120,7 +121,6 @@ class MouseTrailOverlay(QWidget):
             try:
                 global_pos = event.globalPosition().toPoint()
                 local = self._main_window.mapFromGlobal(global_pos)
-                import random
                 # Store extra data for emoji styles: which emoji to show
                 emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
                 emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
@@ -141,6 +141,10 @@ class MouseTrailOverlay(QWidget):
 
     def _tick(self) -> None:
         if not self._trail:
+            return
+        # Skip rendering while the window is minimised to avoid wasting CPU
+        # on emoji font shaping for pixels that are never shown.
+        if self._main_window.isMinimized() or not self._main_window.isVisible():
             return
         # Fairy/wave/sparkle dust fades more slowly for a lingering sparkle effect
         decay = 0.05 if self._style in _EMOJI_STYLES else 0.08
@@ -199,13 +203,20 @@ class MouseTrailOverlay(QWidget):
         """Paint emoji-style trail particles (fairy, wave, sparkle)."""
         font = QFont(_EMOJI_FONT_FAMILIES, 14)
         painter.setFont(font)
+        # Limit the number of emoji drawText calls per frame to prevent
+        # font-rendering storms when moving the mouse quickly over a long trail.
+        max_emit = 12
+        emitted = 0
         for entry in self._trail:
+            if emitted >= max_emit:
+                break
             x, y, alpha_frac = entry[0], entry[1], entry[2]
             emoji = entry[3] if len(entry) > 3 and entry[3] else "✨"
             alpha = max(0, min(255, int(alpha_frac * 210)))
             # Tint text using alpha via composition
             painter.setOpacity(alpha / 255.0)
             painter.drawText(x - 8, y + 8, emoji)
+            emitted += 1
         painter.setOpacity(1.0)
 
     def _paint_comet(self, painter: QPainter) -> None:
