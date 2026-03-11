@@ -20,6 +20,17 @@ from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
 _THEME_PREFIX_CHARS = "★🔓 "
 
+# Trail slider range constants
+_TRAIL_LENGTH_MIN = 10
+_TRAIL_LENGTH_MAX = 200
+_TRAIL_LENGTH_DEFAULT = 50
+_TRAIL_FADE_MIN = 1
+_TRAIL_FADE_MAX = 10
+_TRAIL_FADE_DEFAULT = 5
+_TRAIL_INTENSITY_MIN = 10
+_TRAIL_INTENSITY_MAX = 100
+_TRAIL_INTENSITY_DEFAULT = 100
+
 # Human-friendly labels for click-effect keys, in display order
 _EFFECT_OPTIONS = [
     ("default",      "Default — Pink sparks ✨"),
@@ -296,13 +307,13 @@ class SettingsDialog(QDialog):
         # Trail Length slider (10–200 points)
         trail_gl.addWidget(QLabel("Trail Length:"), 4, 0)
         self._trail_length_slider = QSlider(Qt.Orientation.Horizontal)
-        self._trail_length_slider.setRange(10, 200)
-        self._trail_length_slider.setValue(50)
+        self._trail_length_slider.setRange(_TRAIL_LENGTH_MIN, _TRAIL_LENGTH_MAX)
+        self._trail_length_slider.setValue(_TRAIL_LENGTH_DEFAULT)
         self._trail_length_slider.setToolTip(
             "Controls how many trail points are kept.\n"
             "Short = snappy; Long = lingering ghost trail."
         )
-        self._trail_length_val_lbl = QLabel("50")
+        self._trail_length_val_lbl = QLabel(str(_TRAIL_LENGTH_DEFAULT))
         self._trail_length_val_lbl.setFixedWidth(30)
         length_row = QHBoxLayout()
         length_row.addWidget(self._trail_length_slider)
@@ -316,13 +327,13 @@ class SettingsDialog(QDialog):
         # Trail Fade Speed slider (1 slow … 10 fast)
         trail_gl.addWidget(QLabel("Fade Speed:"), 5, 0)
         self._trail_fade_slider = QSlider(Qt.Orientation.Horizontal)
-        self._trail_fade_slider.setRange(1, 10)
-        self._trail_fade_slider.setValue(5)
+        self._trail_fade_slider.setRange(_TRAIL_FADE_MIN, _TRAIL_FADE_MAX)
+        self._trail_fade_slider.setValue(_TRAIL_FADE_DEFAULT)
         self._trail_fade_slider.setToolTip(
             "How quickly the trail fades out.\n"
             "1 = very slow (long ghost), 10 = very fast (sharp snap)."
         )
-        self._trail_fade_val_lbl = QLabel("5")
+        self._trail_fade_val_lbl = QLabel(str(_TRAIL_FADE_DEFAULT))
         self._trail_fade_val_lbl.setFixedWidth(30)
         fade_row = QHBoxLayout()
         fade_row.addWidget(self._trail_fade_slider)
@@ -336,12 +347,12 @@ class SettingsDialog(QDialog):
         # Trail Intensity slider (10–100 %)
         trail_gl.addWidget(QLabel("Intensity:"), 6, 0)
         self._trail_intensity_slider = QSlider(Qt.Orientation.Horizontal)
-        self._trail_intensity_slider.setRange(10, 100)
-        self._trail_intensity_slider.setValue(100)
+        self._trail_intensity_slider.setRange(_TRAIL_INTENSITY_MIN, _TRAIL_INTENSITY_MAX)
+        self._trail_intensity_slider.setValue(_TRAIL_INTENSITY_DEFAULT)
         self._trail_intensity_slider.setToolTip(
             "Maximum opacity of the trail (10 % = very faint, 100 % = fully bright)."
         )
-        self._trail_intensity_val_lbl = QLabel("100%")
+        self._trail_intensity_val_lbl = QLabel(f"{_TRAIL_INTENSITY_DEFAULT}%")
         self._trail_intensity_val_lbl.setFixedWidth(40)
         intensity_row = QHBoxLayout()
         intensity_row.addWidget(self._trail_intensity_slider)
@@ -644,14 +655,14 @@ class SettingsDialog(QDialog):
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
         # Load trail sliders
-        saved_length = int(self._settings.get("trail_length", 50))
-        self._trail_length_slider.setValue(max(10, min(200, saved_length)))
+        saved_length = int(self._settings.get("trail_length", _TRAIL_LENGTH_DEFAULT))
+        self._trail_length_slider.setValue(max(_TRAIL_LENGTH_MIN, min(_TRAIL_LENGTH_MAX, saved_length)))
         self._trail_length_val_lbl.setText(str(self._trail_length_slider.value()))
-        saved_fade = int(self._settings.get("trail_fade_speed", 5))
-        self._trail_fade_slider.setValue(max(1, min(10, saved_fade)))
+        saved_fade = int(self._settings.get("trail_fade_speed", _TRAIL_FADE_DEFAULT))
+        self._trail_fade_slider.setValue(max(_TRAIL_FADE_MIN, min(_TRAIL_FADE_MAX, saved_fade)))
         self._trail_fade_val_lbl.setText(str(self._trail_fade_slider.value()))
-        saved_intensity = int(self._settings.get("trail_intensity", 100))
-        self._trail_intensity_slider.setValue(max(10, min(100, saved_intensity)))
+        saved_intensity = int(self._settings.get("trail_intensity", _TRAIL_INTENSITY_DEFAULT))
+        self._trail_intensity_slider.setValue(max(_TRAIL_INTENSITY_MIN, min(_TRAIL_INTENSITY_MAX, saved_intensity)))
         self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)

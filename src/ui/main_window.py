@@ -1,6 +1,7 @@
 """
 Main application window.
 """
+import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt, QSize, QRect, QTimer
@@ -25,6 +26,37 @@ from .theme_engine import (
 from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
+
+
+def _apply_dwm_title_bar_color(hwnd: int, hex_color: str) -> bool:
+    """Attempt to set the Windows 11+ title bar color via DWM.
+
+    Uses DwmSetWindowAttribute (DWMWA_CAPTION_COLOR = 35) which is only
+    supported on Windows 11 build 22000+.  Silently returns False on older
+    Windows versions or non-Windows platforms.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        import ctypes.wintypes
+        # Parse "#rrggbb" → COLORREF (0x00bbggrr)
+        h = hex_color.lstrip("#")
+        if len(h) != 6:
+            return False
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        colorref = ctypes.c_uint32(b << 16 | g << 8 | r)
+        DWMWA_CAPTION_COLOR = 35
+        dwmapi = ctypes.windll.dwmapi
+        dwmapi.DwmSetWindowAttribute(
+            ctypes.wintypes.HWND(hwnd),
+            ctypes.c_uint32(DWMWA_CAPTION_COLOR),
+            ctypes.byref(colorref),
+            ctypes.c_uint32(ctypes.sizeof(colorref)),
+        )
+        return True
+    except Exception:
+        return False
 
 _CURSOR_MAP = {
     "Default":        Qt.CursorShape.ArrowCursor,
@@ -631,6 +663,20 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
+        # On Windows 11+, colour the native title bar to match the theme's
+        # primary/surface colour so the window chrome integrates with the theme.
+        try:
+            hwnd = int(self.winId())
+            # Use the theme's 'primary' colour for the title bar background.
+            # Fallback to surface, then a dark default.
+            title_color = (
+                theme.get("primary")
+                or theme.get("surface")
+                or "#1a1a2e"
+            )
+            _apply_dwm_title_bar_color(hwnd, title_color)
+        except Exception:
+            pass
 
     def _update_tab_labels(self):
         """Write the theme-specific label to every tab (no animation prefix)."""

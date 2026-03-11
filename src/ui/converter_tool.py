@@ -44,6 +44,9 @@ class ConverterTab(QWidget):
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
+        # Cached aspect ratio (w, h) of the currently selected file
+        # to avoid re-opening the image on every width spinbox tick.
+        self._cached_aspect: tuple[int, int] | None = None
         # Debounce timer: waits 150 ms after the last format/quality change
         # before refreshing the preview so rapid spin-box steps don't each
         # kick off a separate background conversion.
@@ -404,6 +407,8 @@ class ConverterTab(QWidget):
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
         item = self._file_list.item(row)
+        # Invalidate cached aspect ratio whenever the selection changes
+        self._cached_aspect = None
         if item:
             self._refresh_preview(item.text())
         else:
@@ -432,22 +437,26 @@ class ConverterTab(QWidget):
         if not (self._lock_aspect_check.isChecked() and
                 self._resize_check.isChecked()):
             return
-        # Use the currently selected file's image dimensions for the ratio
-        row = self._file_list.currentRow()
-        item = self._file_list.item(row)
-        if item:
-            try:
-                from PIL import Image
-                with Image.open(item.text()) as im:
-                    orig_w, orig_h = im.size
-                if orig_w > 0:
-                    new_h = max(1, round(width * orig_h / orig_w))
-                    # Block signals to avoid recursive update
-                    self._height_spin.blockSignals(True)
-                    self._height_spin.setValue(new_h)
-                    self._height_spin.blockSignals(False)
-            except Exception:
-                pass
+        # Use cached aspect ratio to avoid re-opening the file on every tick
+        if self._cached_aspect is None:
+            row = self._file_list.currentRow()
+            item = self._file_list.item(row)
+            if item:
+                try:
+                    from PIL import Image
+                    with Image.open(item.text()) as im:
+                        self._cached_aspect = im.size
+                except Exception:
+                    return
+        if self._cached_aspect is None:
+            return
+        orig_w, orig_h = self._cached_aspect
+        if orig_w > 0:
+            new_h = max(1, round(width * orig_h / orig_w))
+            # Block signals to avoid recursive update
+            self._height_spin.blockSignals(True)
+            self._height_spin.setValue(new_h)
+            self._height_spin.blockSignals(False)
 
     def _update_converted_preview(self):
         """Refresh the preview pane to reflect the current format and quality."""
