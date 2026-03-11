@@ -263,17 +263,112 @@ class SettingsDialog(QDialog):
         effect_layout.addLayout(effect_inner)
         effect_emoji_row.addWidget(grp_effect, 3)
 
-        grp_emoji = QGroupBox("Custom Emoji  (with 'Custom' effect)")
+        # Curated emoji palette for the custom click-effect picker.
+        # Each entry is (emoji_char, display_label).  The label is shown in the
+        # dropdown so users know exactly what they're selecting without needing
+        # an emoji keyboard.
+        _EMOJI_PALETTE = [
+            # ── Sparkles & Stars ────────────────────────────────────────────
+            ("✨", "✨  Sparkle"),
+            ("⭐", "⭐  Star"),
+            ("💫", "💫  Dizzy Star"),
+            ("🌟", "🌟  Glowing Star"),
+            ("🌠", "🌠  Shooting Star"),
+            # ── Fire & Elements ─────────────────────────────────────────────
+            ("🔥", "🔥  Fire"),
+            ("❄", "❄  Snowflake"),
+            ("💧", "💧  Water Drop"),
+            ("⚡", "⚡  Lightning"),
+            ("💥", "💥  Explosion"),
+            ("💨", "💨  Wind"),
+            # ── Hearts & Gems ────────────────────────────────────────────────
+            ("❤️", "❤️  Red Heart"),
+            ("💜", "💜  Purple Heart"),
+            ("💙", "💙  Blue Heart"),
+            ("💚", "💚  Green Heart"),
+            ("💛", "💛  Yellow Heart"),
+            ("🧡", "🧡  Orange Heart"),
+            ("🖤", "🖤  Black Heart"),
+            ("💎", "💎  Diamond"),
+            # ── Celebration ─────────────────────────────────────────────────
+            ("🎉", "🎉  Party Popper"),
+            ("🎊", "🎊  Confetti Ball"),
+            ("🎈", "🎈  Balloon"),
+            ("🎀", "🎀  Ribbon"),
+            ("🌈", "🌈  Rainbow"),
+            # ── Nature & Flowers ────────────────────────────────────────────
+            ("🌸", "🌸  Cherry Blossom"),
+            ("🌺", "🌺  Hibiscus"),
+            ("🌼", "🌼  Blossom"),
+            ("🌻", "🌻  Sunflower"),
+            ("🍀", "🍀  Four Leaf Clover"),
+            ("🍁", "🍁  Maple Leaf"),
+            # ── Animals ──────────────────────────────────────────────────────
+            ("🐼", "🐼  Panda"),
+            ("🦦", "🦦  Otter"),
+            ("🦋", "🦋  Butterfly"),
+            ("🐱", "🐱  Cat"),
+            ("🐸", "🐸  Frog"),
+            ("🦊", "🦊  Fox"),
+            ("🦄", "🦄  Unicorn"),
+            ("🐝", "🐝  Bee"),
+            # ── Sea Creatures ────────────────────────────────────────────────
+            ("🐟", "🐟  Fish"),
+            ("🦈", "🦈  Shark"),
+            ("🐙", "🐙  Octopus"),
+            ("🦑", "🦑  Squid"),
+            ("🐬", "🐬  Dolphin"),
+            ("🦀", "🦀  Crab"),
+            # ── Space & Sci-Fi ───────────────────────────────────────────────
+            ("🌙", "🌙  Crescent Moon"),
+            ("🪐", "🪐  Planet"),
+            ("🛸", "🛸  UFO"),
+            ("👽", "👽  Alien"),
+            ("🤖", "🤖  Robot"),
+            # ── Spooky ───────────────────────────────────────────────────────
+            ("💀", "💀  Skull"),
+            ("👻", "👻  Ghost"),
+            ("🦇", "🦇  Bat"),
+            ("🕷️", "🕷️  Spider"),
+            ("👾", "👾  Alien Monster"),
+            ("😈", "😈  Smiling Devil"),
+            # ── Fun & Misc ────────────────────────────────────────────────────
+            ("🎮", "🎮  Game Controller"),
+            ("🍕", "🍕  Pizza"),
+            ("🍩", "🍩  Donut"),
+            ("🍭", "🍭  Lollipop"),
+            ("🩸", "🩸  Blood Drop"),
+            ("💩", "💩  Poop"),
+            ("🤡", "🤡  Clown"),
+            ("🥳", "🥳  Partying Face"),
+            ("🤓", "🤓  Nerd Face"),
+        ]
+
+        grp_emoji = QGroupBox("Custom Click Emoji  ·  used when effect = 'Custom'")
         emoji_v = QVBoxLayout(grp_emoji)
         emoji_v.setSpacing(6)
+        _emoji_hint = QLabel(
+            "Pick an emoji, click Add.  "
+            "Set the Click Effect to 'Custom' (above) to fire these on every click."
+        )
+        _emoji_hint.setWordWrap(True)
+        _emoji_hint.setObjectName("subheader")
+        emoji_v.addWidget(_emoji_hint)
         emoji_row = QHBoxLayout()
-        self._emoji_input = QLineEdit()
-        self._emoji_input.setPlaceholderText("e.g.  🐼 🎉 💥  (space-separated)")
+        self._emoji_combo = QComboBox()
+        self._emoji_combo.setMinimumWidth(160)
+        self._emoji_combo.setToolTip(
+            "Select an emoji from the list and click Add to include it in your "
+            "custom click-effect pool.\nSet the Click Effect dropdown to "
+            "'Custom' to fire these emoji as particles on every click."
+        )
+        for emoji_char, label in _EMOJI_PALETTE:
+            self._emoji_combo.addItem(label, userData=emoji_char)
         self._btn_emoji_add = QPushButton("Add")
-        self._btn_emoji_clear = QPushButton("Clear")
+        self._btn_emoji_clear = QPushButton("Clear All")
         self._btn_emoji_add.setFixedWidth(50)
-        self._btn_emoji_clear.setFixedWidth(52)
-        emoji_row.addWidget(self._emoji_input, 1)
+        self._btn_emoji_clear.setFixedWidth(65)
+        emoji_row.addWidget(self._emoji_combo, 1)
         emoji_row.addWidget(self._btn_emoji_add)
         emoji_row.addWidget(self._btn_emoji_clear)
         emoji_v.addLayout(emoji_row)
@@ -282,6 +377,7 @@ class SettingsDialog(QDialog):
         self._emoji_display.setObjectName("subheader")
         emoji_v.addWidget(self._emoji_display)
         effect_emoji_row.addWidget(grp_emoji, 2)
+
 
         tv.addLayout(effect_emoji_row)
 
@@ -757,7 +853,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._theme_search, "theme_search")
         mgr.register(self._theme_preset_combo, "theme_combo")
         mgr.register(self._effect_combo, "effect_combo")
-        mgr.register(self._emoji_input, "custom_emoji")
+        mgr.register(self._emoji_combo, "custom_emoji")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
@@ -951,16 +1047,14 @@ class SettingsDialog(QDialog):
         )
 
     def _add_emoji(self) -> None:
-        text = self._emoji_input.text().strip()
-        if not text:
+        emoji_char = self._emoji_combo.currentData()
+        if not emoji_char:
             return
         current = self._get_emoji_list()
-        for item in text.split():
-            if item and item not in current:
-                current.append(item)
+        if emoji_char not in current:
+            current.append(emoji_char)
         self._settings.set("custom_emoji", " ".join(current))
         self._update_emoji_display()
-        self._emoji_input.clear()
 
     def _clear_emoji(self) -> None:
         self._settings.set("custom_emoji", "")

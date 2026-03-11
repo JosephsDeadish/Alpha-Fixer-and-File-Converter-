@@ -197,30 +197,62 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
         self.setMinimumSize(1000, 780)
-        # Set the panda SVG as the window icon (used in title bar + taskbar)
+        # Set the panda SVG as the window / taskbar icon (initial default).
+        # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
+        # which contains all shell sizes (16 → 256 px) for crisp display at
+        # every zoom level.  Falls back to rendering the SVG directly when the
+        # ICO is not present (e.g. running from source without running
+        # scripts/make_icon.py first).
         self._set_panda_window_icon()
 
+    @staticmethod
+    def _render_svg_to_icon(svg_path: str) -> "QIcon | None":
+        """Render *svg_path* at multiple resolutions and return a QIcon.
+
+        Provides 16, 24, 32, 48, 64, 128 and 256 px variants so Qt always has
+        a sharp pixmap for the title bar (16 px), taskbar (32/40/48 px) and
+        the jump-list thumbnail (256 px) on every platform and DPI setting.
+        Returns *None* if QtSvg is not available.
+        """
+        try:
+            from PyQt6.QtSvg import QSvgRenderer
+            renderer = QSvgRenderer(svg_path)
+            icon = QIcon()
+            for size in (16, 24, 32, 40, 48, 64, 128, 256):
+                pix = QPixmap(size, size)
+                pix.fill(Qt.GlobalColor.transparent)
+                p = QPainter(pix)
+                renderer.render(p)
+                p.end()
+                icon.addPixmap(pix)
+            return icon
+        except (ImportError, Exception):
+            return None
+
     def _set_panda_window_icon(self):
-        """Render panda_dark.svg to a QPixmap and use it as the window/app icon."""
+        """Set the initial window / taskbar icon to the panda theme graphic."""
         import os
-        svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+        assets_dir = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "assets")
+        )
+        # 1. Prefer the pre-generated multi-size ICO (ships with the repo).
+        ico_path = os.path.join(assets_dir, "icon.ico")
+        if os.path.isfile(ico_path):
+            icon = QIcon(ico_path)
+            if not icon.isNull():
+                self.setWindowIcon(icon)
+                QApplication.setWindowIcon(icon)
+                return
+        # 2. Fall back to rendering the panda SVG at multiple sizes.
+        svg_dir = os.path.join(assets_dir, "svg")
         for candidate in ("panda_dark.svg", "panda_light.svg"):
             svg_path = os.path.normpath(os.path.join(svg_dir, candidate))
             if os.path.isfile(svg_path):
-                try:
-                    from PyQt6.QtSvg import QSvgRenderer
-                    renderer = QSvgRenderer(svg_path)
-                    pix = QPixmap(64, 64)
-                    pix.fill(Qt.GlobalColor.transparent)
-                    painter = QPainter(pix)
-                    renderer.render(painter)
-                    painter.end()
-                    self.setWindowIcon(QIcon(pix))
-                    QApplication.setWindowIcon(QIcon(pix))
-                    return
-                except Exception:
-                    pass
-                break
+                icon = self._render_svg_to_icon(svg_path)
+                if icon is not None:
+                    self.setWindowIcon(icon)
+                    QApplication.setWindowIcon(icon)
+                return
 
     def _setup_ui(self):
         # Menu bar
@@ -743,8 +775,9 @@ class MainWindow(QMainWindow):
     def _refresh_window_icon(self, theme_name: str):
         """Update the window / taskbar icon to the theme-specific SVG.
 
-        Falls back to the panda icon when no theme SVG is available or when
-        the SVG renderer is not installed.
+        Renders the theme SVG at multiple resolutions (16 → 256 px) so Qt can
+        pick the sharpest pixmap for each use-case (title bar, taskbar, etc.).
+        Falls back to the panda default when no theme SVG is available.
         """
         import os
         svg_path = get_theme_svg_path(theme_name)
@@ -759,18 +792,13 @@ class MainWindow(QMainWindow):
         if not svg_path:
             return
         try:
-            from PyQt6.QtSvg import QSvgRenderer
-            renderer = QSvgRenderer(svg_path)
-            pix = QPixmap(64, 64)
-            pix.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pix)
-            renderer.render(painter)
-            painter.end()
-            icon = QIcon(pix)
+            icon = self._render_svg_to_icon(svg_path)
+            if icon is None:
+                return
             self.setWindowIcon(icon)
             QApplication.setWindowIcon(icon)
-        except (ImportError, RuntimeError):
-            # QtSvg unavailable or widget destroyed – silently skip icon update.
+        except RuntimeError:
+            # Widget destroyed – silently skip.
             pass
 
     # ------------------------------------------------------------------

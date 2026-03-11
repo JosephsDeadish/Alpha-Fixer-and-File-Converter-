@@ -236,11 +236,7 @@ class AlphaFixerTab(QWidget):
 
         lv.addWidget(grp_out)
 
-        # ---- Vertical splitter: file list (top) / compare (bottom) ----
-        left_vsplit = QSplitter(Qt.Orientation.Vertical)
-        left_vsplit.setChildrenCollapsible(False)
-
-        # Top: file list (with thumbnails, handles 50 000+ files via lazy loading)
+        # ---- File list area (inside the scrollable controls panel) ----
         list_area = QWidget()
         la_layout = QVBoxLayout(list_area)
         la_layout.setContentsMargins(0, 0, 0, 0)
@@ -267,9 +263,18 @@ class AlphaFixerTab(QWidget):
         self._rom_banner.hide()
         la_layout.addWidget(self._rom_banner)
 
-        left_vsplit.addWidget(list_area)
+        lv.addWidget(list_area, 1)
 
-        # Bottom: before/after compare widget with side alpha-stat panels
+        # Wrap controls + file-list in a scroll area so they remain accessible
+        # on smaller windows.  The compare widget lives OUTSIDE this scroll area
+        # so it is never clipped by layout size constraints.
+        left.setMinimumHeight(300)
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        # ---- Before/after compare panel (outside scroll area, always visible) ----
         compare_area = QWidget()
         ca_layout = QVBoxLayout(compare_area)
         ca_layout.setContentsMargins(0, 0, 0, 0)
@@ -299,28 +304,22 @@ class AlphaFixerTab(QWidget):
         self._after_stats_lbl = _make_stats_panel()
 
         self._compare = BeforeAfterWidget()
-        self._compare.setMinimumHeight(240)
+        self._compare.setMinimumHeight(180)
 
         compare_row.addWidget(self._before_stats_lbl, 0)
         compare_row.addWidget(self._compare, 1)
         compare_row.addWidget(self._after_stats_lbl, 0)
         ca_layout.addLayout(compare_row, 1)
 
+        # Left column: vertical splitter – controls/file-list panel on top
+        # (scrollable), compare panel on the bottom (always fully visible).
+        left_vsplit = QSplitter(Qt.Orientation.Vertical)
+        left_vsplit.setChildrenCollapsible(False)
+        left_vsplit.setMinimumWidth(320)
+        left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([220, 420])
-
-        lv.addWidget(left_vsplit, 1)
-
-        # Wrap the left panel in a scroll area (mirrors the right panel) so that
-        # users can scroll vertically on smaller windows, giving the compare
-        # widget room to be as large as possible.
-        left.setMinimumHeight(580)   # below this height, scrollbar appears
-        left_scroll = QScrollArea()
-        left_scroll.setWidget(left)
-        left_scroll.setWidgetResizable(True)
-        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        left_scroll.setMinimumWidth(320)
-        outer_splitter.addWidget(left_scroll)
+        left_vsplit.setSizes([300, 380])
+        outer_splitter.addWidget(left_vsplit)
 
         # ==============================================================
         # Right panel: run controls (top) + presets + fine-tune
