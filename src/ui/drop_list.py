@@ -1,7 +1,7 @@
 """
 DropFileList – a QListWidget subclass that:
   • Accepts drag-and-drop of files / folders from the OS
-  • Supports Delete key and right-click → Remove Selected
+  • Supports Delete key and right-click → Remove Selected / Select All / Open Containing Folder
   • Emits paths_dropped(list[str]) so the parent can do dedup/counting
   • Emits count_changed(int) whenever the item count changes
   • Shows 56×56 thumbnails lazily (only for visible rows) via a background
@@ -279,10 +279,32 @@ class DropFileList(QListWidget):
 
         menu.addSeparator()
 
+        # Select-all / Deselect-all
+        act_select_all = QAction("Select All", self)
+        act_select_all.setShortcut("Ctrl+A")
+        act_select_all.setEnabled(self.count() > 0)
+        act_select_all.triggered.connect(self.selectAll)
+        menu.addAction(act_select_all)
+
+        act_deselect = QAction("Deselect All", self)
+        act_deselect.setEnabled(bool(self.selectedItems()))
+        act_deselect.triggered.connect(self.clearSelection)
+        menu.addAction(act_deselect)
+
+        menu.addSeparator()
+
         act_clear = QAction("Clear All", self)
         act_clear.setEnabled(self.count() > 0)
         act_clear.triggered.connect(self._clear_all)
         menu.addAction(act_clear)
+
+        # Open containing folder for single selection
+        selected = self.selectedItems()
+        if len(selected) == 1:
+            menu.addSeparator()
+            act_open = QAction("📂  Open Containing Folder", self)
+            act_open.triggered.connect(lambda: self._open_containing_folder(selected[0].text()))
+            menu.addAction(act_open)
 
         menu.addSeparator()
 
@@ -311,6 +333,22 @@ class DropFileList(QListWidget):
     # ------------------------------------------------------------------
     # Remove helpers (can also be called externally)
     # ------------------------------------------------------------------
+
+    def _open_containing_folder(self, path: str) -> None:
+        """Open the folder containing *path* in the OS file manager."""
+        import subprocess
+        import sys
+        folder = os.path.dirname(os.path.abspath(path))
+        try:
+            if sys.platform == "win32":
+                # Highlight the file itself in Explorer
+                subprocess.Popen(["explorer", "/select,", os.path.abspath(path)])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", path])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception:
+            pass
 
     def _remove_selected(self):
         items = self.selectedItems()

@@ -161,7 +161,8 @@ class HistoryTab(QWidget):
         total = len(history)
         self._conv_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
-            + ("  (most recent first)" if total > 0 else "")
+            + ("  (most recent first)" if total > 0 else
+               " — run the Converter to see history here.")
         )
 
     def _refresh_alpha(self):
@@ -182,7 +183,8 @@ class HistoryTab(QWidget):
         total = len(history)
         self._alpha_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
-            + ("  (most recent first)" if total > 0 else "")
+            + ("  (most recent first)" if total > 0 else
+               " — run the Alpha Fixer to see history here.")
         )
 
     # ------------------------------------------------------------------
