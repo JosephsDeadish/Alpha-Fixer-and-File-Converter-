@@ -19,10 +19,10 @@ import struct
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT   = os.path.dirname(SCRIPT_DIR)
-SVG_PATH    = os.path.join(REPO_ROOT, "src", "assets", "svg", "panda_dark.svg")
-OUT_PATH    = os.path.join(REPO_ROOT, "src", "assets", "icon.ico")
-SIZES       = [16, 24, 32, 40, 48, 64, 128, 256]
+REPO_ROOT  = os.path.dirname(SCRIPT_DIR)
+SVG_PATH   = os.path.join(REPO_ROOT, "src", "assets", "svg", "panda_dark.svg")
+OUT_PATH   = os.path.join(REPO_ROOT, "src", "assets", "icon.ico")
+SIZES      = [16, 24, 32, 40, 48, 64, 128, 256]
 
 
 def _render_pngs(svg_path: str, sizes: list) -> list:

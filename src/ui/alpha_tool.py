@@ -924,6 +924,20 @@ class AlphaFixerTab(QWidget):
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
+    def _switch_to_manual_if_preset_active(self) -> None:
+        """Uncheck 'Use preset' if it is currently active.
+
+        Called from clamp-bound handlers that invoke _on_finetune_changed() as a
+        plain Python function call (not via a Qt signal).  In that call path
+        self.sender() returns None inside _on_finetune_changed, so the automatic
+        "Use preset → manual" switch never fires.  This helper replicates that
+        logic explicitly so the user's clamp changes always take effect.
+        """
+        if not self._preset_combo.signalsBlocked() and self._use_preset_check.isChecked():
+            was_blocked = self._use_preset_check.blockSignals(True)
+            self._use_preset_check.setChecked(False)
+            self._use_preset_check.blockSignals(was_blocked)
+
     @pyqtSlot(int)
     def _on_clamp_min_changed(self, value: int) -> None:
         """Ensure clamp_max >= clamp_min, then trigger the normal finetune update."""
@@ -933,7 +947,9 @@ class AlphaFixerTab(QWidget):
             self._clamp_max_spin.blockSignals(True)
             self._clamp_max_spin.setValue(value)
             self._clamp_max_spin.blockSignals(False)
-        self._on_finetune_changed()
+        self._switch_to_manual_if_preset_active()
+        self._refresh_finetune_label()
+        self._preview_debounce.start()
 
     @pyqtSlot(int)
     def _on_clamp_max_changed(self, value: int) -> None:
@@ -942,7 +958,9 @@ class AlphaFixerTab(QWidget):
             self._clamp_min_spin.blockSignals(True)
             self._clamp_min_spin.setValue(value)
             self._clamp_min_spin.blockSignals(False)
-        self._on_finetune_changed()
+        self._switch_to_manual_if_preset_active()
+        self._refresh_finetune_label()
+        self._preview_debounce.start()
 
     @pyqtSlot()
     def _on_finetune_changed(self, *args):
