@@ -960,6 +960,31 @@ class TestTooltipManager(unittest.TestCase):
         self.assertEqual(default, "No Filter 🤬")
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestTooltipManagerFirstRun(unittest.TestCase):
+    """Logic-only tests that do not require a display / Qt GUI stack."""
+
+    def test_mode_returns_no_filter_when_key_absent_on_first_run(self):
+        """Regression: mode() must return 'No Filter 🤬' on first run when the
+        key has never been written to the INI file.  Previously, a hardcoded
+        'Normal' fallback in mode() overrode _DEFAULTS and caused Normal tips
+        to be displayed even though the Settings dialog showed No Filter selected."""
+        from src.ui.tooltip_manager import TooltipManager
+        from src.core.settings_manager import SettingsManager
+
+        # Simulate first-run: store is empty, _DEFAULTS supplies the real default.
+        class _FirstRunSettings:
+            _DEFAULTS = SettingsManager._DEFAULTS
+
+            def get(self, key, fallback=None):
+                default = fallback if fallback is not None else self._DEFAULTS.get(key)
+                # Nothing is stored yet – return the default as QSettings would.
+                return default
+
+        mgr = TooltipManager(_FirstRunSettings())
+        self.assertEqual(mgr.mode(), "No Filter 🤬")
+
+
 # ---------------------------------------------------------------------------
 # Patreon URL constant
 # ---------------------------------------------------------------------------
