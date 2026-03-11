@@ -48,14 +48,17 @@ class _AlphaPreviewLoader(QThread):
 
     @staticmethod
     def _alpha_stats(img) -> dict:
-        """Return min/max/mean alpha for a PIL RGBA image."""
+        """Return min/max/mean/percent_nonzero alpha for a PIL RGBA image."""
         import numpy as np
         arr = np.array(img.convert("RGBA"), dtype=np.uint8)
         alpha = arr[:, :, 3]
+        total_pixels = alpha.size
+        nonzero = int(np.count_nonzero(alpha))
         return {
             "min": int(alpha.min()),
             "max": int(alpha.max()),
             "mean": float(alpha.mean()),
+            "percent_nonzero": round(nonzero / max(total_pixels, 1) * 100, 1),
         }
 
     def run(self):
@@ -1003,11 +1006,14 @@ class AlphaFixerTab(QWidget):
         def _panel_text(label: str, s: dict) -> str:
             if not s:
                 return ""
+            pct = s.get("percent_nonzero", None)
+            pct_line = f"vis%<br><b>{pct}%</b><br>" if pct is not None else ""
             return (
                 f"<b>{label}</b><br>"
                 f"min<br><b>{s['min']}</b><br>"
                 f"max<br><b>{s['max']}</b><br>"
-                f"mean<br><b>{s['mean']:.1f}</b>"
+                f"mean<br><b>{s['mean']:.1f}</b><br>"
+                f"{pct_line}"
             )
         self._before_stats_lbl.setText(_panel_text("BEFORE", before))
         self._after_stats_lbl.setText(_panel_text("AFTER", after))
