@@ -282,7 +282,8 @@ def _extract_ps2_id(d: Path) -> tuple[str, str]:
         return "", ""
     try:
         text = cnf.read_text(encoding="ascii", errors="ignore")
-        # BOOT2 = cdrom0:\SLUS_206.26;1  (some older discs use cdrom: without the 0)
+        # BOOT2 = cdrom0:\SLUS_206.26;1  (cdrom0: is standard; cdrom: without
+        # the trailing 0 appears on some older pressed discs — both are matched)
         m = re.search(r"BOOT2\s*=\s*cdrom0?:\\([^;]+)", text, re.IGNORECASE)
         if m:
             raw = m.group(1).strip().replace("\\", "/").split("/")[-1]

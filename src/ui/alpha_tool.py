@@ -2,9 +2,12 @@
 Alpha Fixer tab widget.
 """
 import datetime
+import logging
 import os
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
@@ -823,7 +826,13 @@ class AlphaFixerTab(QWidget):
     def _run_rom_detection(self, paths: list[str]) -> None:
         try:
             from ..core.rom_detector import detect_from_paths
-            result = detect_from_paths(paths[:self._ROM_SCAN_LIMIT])
+            scan_paths = paths[:self._ROM_SCAN_LIMIT]
+            if len(paths) > self._ROM_SCAN_LIMIT:
+                logger.debug(
+                    "ROM detection limited to first %d of %d paths for performance",
+                    self._ROM_SCAN_LIMIT, len(paths),
+                )
+            result = detect_from_paths(scan_paths)
             if result.detected:
                 text = result.description()
                 if result.cover_art_hint:

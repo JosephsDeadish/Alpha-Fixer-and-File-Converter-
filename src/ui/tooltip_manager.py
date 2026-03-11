@@ -164,10 +164,10 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "format_combo": [
         "Choose the target image format for conversion.",
-        "PNG is lossless and supports transparency.",
-        "DDS is used in game engines (DirectX surface format).",
-        "JPEG is lossy but small; does not support transparency.",
-        "WEBP offers smaller file sizes with optional losslessness.",
+        "Hover over each item in the dropdown to see a description of that format.",
+        "PNG: lossless with alpha.  JPEG: lossy, no alpha, small file.  WEBP: modern, small.",
+        "DDS: DirectX GPU textures.  TGA: classic game/3D format with alpha.",
+        "AVIF: cutting-edge, excellent compression.  QOI: fast lossless with alpha.",
     ],
     "quality_spin": [
         "Quality percentage for lossy formats (JPEG, WEBP).",
@@ -680,7 +680,7 @@ _DUMBED: dict[str, list[str]] = {
     "format_combo": [
         "PNG is usually the right answer. Just pick PNG.",
         "These are image formats. PNG = good. JPEG = compressed. DDS = games.",
-        "Pick the format you need. If you don't know, ask Google.",
+        "Hover over each format in the list to see what it actually does. Helpful!",
         "They're just containers. Like choosing between a bag and a box.",
         "WEBP is like PNG but smaller. Try it. Live on the edge.",
     ],
@@ -1280,7 +1280,7 @@ _VULGAR: dict[str, list[str]] = {
     "format_combo": [
         "PNG or go home. DDS if it's for games. WEBP if you want to feel modern.",
         "PNG = lossless perfection. JPEG = lossy garbage (but small).",
-        "DDS is for game engines. If you don't know what that is, pick PNG.",
+        "Hover each format in the dropdown for a real description. We wrote them.",
         "WEBP is like PNG had a baby with JPEG and the baby turned out pretty good.",
         "TGA is old-school. ICO is for Windows icons. GIF makes it animate (kinda).",
         "AVIF is the new hotness. Smaller than WEBP, better quality than JPEG.",
@@ -1887,7 +1887,7 @@ class TooltipManager(QObject):
             pass
 
     def mode(self) -> str:
-        return self._settings.get("tooltip_mode", "Normal 💬")
+        return self._settings.get("tooltip_mode", "No Filter 🤬")
 
     # ------------------------------------------------------------------
     # Event filter

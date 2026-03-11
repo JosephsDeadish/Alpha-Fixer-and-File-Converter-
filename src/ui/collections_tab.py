@@ -228,9 +228,9 @@ class CollectionsTab(QWidget):
         row = 0
         col = 0
         for key, display_name, unlock_cond, hint in _EFFECT_DATA:
-            if display_name in seen:
+            if key in seen:
                 continue
-            seen.add(display_name)
+            seen.add(key)
             if unlock_cond is True:
                 unlocked = True
                 hint_text = ""

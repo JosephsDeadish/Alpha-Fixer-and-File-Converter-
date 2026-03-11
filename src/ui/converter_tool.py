@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.alpha_processor import collect_files
-from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST
+from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
 from .preview_pane import ImagePreviewPane
@@ -201,8 +201,11 @@ class ConverterTab(QWidget):
         self._fmt_combo = QComboBox()
         self._fmt_combo.setMinimumWidth(140)
         self._fmt_combo.setMinimumHeight(28)
-        for name, ext in OUTPUT_FORMAT_LIST:
+        for i, (name, ext) in enumerate(OUTPUT_FORMAT_LIST):
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
+            desc = FORMAT_DESCRIPTIONS.get(name, "")
+            if desc:
+                self._fmt_combo.setItemData(i, desc, Qt.ItemDataRole.ToolTipRole)
         gf_layout.addWidget(self._fmt_combo, 0, 1)
 
         # Restore last-used format
