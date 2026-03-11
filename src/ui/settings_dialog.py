@@ -876,9 +876,12 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:
-        # Track first-ever tooltip mode change to trigger the Secret Skeleton unlock
-        if not self._settings.get("tooltip_mode_changed_once", False):
+        # Track first-ever tooltip mode change to trigger the Secret Skeleton unlock.
+        # Emit the signal AFTER saving the flag so the unlock only fires on success.
+        should_unlock = not self._settings.get("tooltip_mode_changed_once", False)
+        if should_unlock:
             self._settings.set("tooltip_mode_changed_once", True)
-            self.first_tooltip_mode_change.emit()
         self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
         self.settings_changed.emit()
+        if should_unlock:
+            self.first_tooltip_mode_change.emit()

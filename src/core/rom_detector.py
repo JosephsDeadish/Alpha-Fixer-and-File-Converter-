@@ -24,11 +24,14 @@ Supported console heuristics
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +235,7 @@ def _detect_dir(d: Path) -> RomDetectionResult:
     try:
         names_lower = {n.lower() for n in os.listdir(d)}
     except PermissionError:
+        logger.debug("ROM detection: skipping '%s' — permission denied", d)
         return RomDetectionResult()
 
     # 1) Check file/folder signatures

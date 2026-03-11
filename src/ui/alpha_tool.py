@@ -831,6 +831,9 @@ class AlphaFixerTab(QWidget):
     def _run_rom_detection(self, paths: list[str]) -> None:
         try:
             from ..core.rom_detector import detect_from_paths
+            # Limit the scan for performance when users drop thousands of files.
+            # _ROM_SCAN_LIMIT paths are enough to fingerprint any single-game
+            # folder while keeping the detection latency below ~50 ms.
             scan_paths = paths[:self._ROM_SCAN_LIMIT]
             if len(paths) > self._ROM_SCAN_LIMIT:
                 logger.debug(

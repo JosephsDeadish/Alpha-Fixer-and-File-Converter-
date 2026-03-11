@@ -223,6 +223,9 @@ class CollectionsTab(QWidget):
 
     def _build_effects(self):
         self._clear_layout(self._effects_grid)
+        # Deduplicate by key so that if _EFFECT_DATA ever gains duplicate keys
+        # (e.g. two entries share the same effect key but different display names)
+        # only the first occurrence is shown.
         seen = set()
         cols = 3
         row = 0

@@ -1887,7 +1887,9 @@ class TooltipManager(QObject):
             pass
 
     def mode(self) -> str:
-        return self._settings.get("tooltip_mode", "No Filter 🤬")
+        from ..core.settings_manager import SettingsManager
+        default = SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
+        return self._settings.get("tooltip_mode", default)
 
     # ------------------------------------------------------------------
     # Event filter
