@@ -145,6 +145,9 @@ class ConverterTab(QWidget):
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
         self._suffix_edit.setMinimumHeight(28)
+        saved_suffix = self._settings.get("output_suffix", "")
+        if saved_suffix:
+            self._suffix_edit.setText(saved_suffix)
         go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
@@ -340,8 +343,11 @@ class ConverterTab(QWidget):
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
         self._resize_check.toggled.connect(self._height_spin.setEnabled)
         self._resize_check.toggled.connect(self._lock_aspect_check.setEnabled)
-        # When width changes and lock is on, update height proportionally
+        # When width or height changes and lock is on, update the other dimension
+        # proportionally.  Both directions must be handled so the user can type
+        # in either field and have the other update automatically.
         self._width_spin.valueChanged.connect(self._on_width_changed)
+        self._height_spin.valueChanged.connect(self._on_height_changed)
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
@@ -351,6 +357,13 @@ class ConverterTab(QWidget):
         self._quality_spin.valueChanged.connect(self._on_quality_changed)
         self._keep_metadata_check.toggled.connect(
             lambda v: self._settings.set("converter_keep_metadata", v)
+        )
+        # Persist recursive checkbox and suffix on change
+        self._recursive_check.toggled.connect(
+            lambda v: self._settings.set("converter_recursive", v)
+        )
+        self._suffix_edit.textChanged.connect(
+            lambda t: self._settings.set("output_suffix", t)
         )
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
@@ -498,6 +511,32 @@ class ConverterTab(QWidget):
             self._height_spin.blockSignals(True)
             self._height_spin.setValue(new_h)
             self._height_spin.blockSignals(False)
+
+    def _on_height_changed(self, height: int) -> None:
+        """Update width proportionally when lock aspect ratio is checked."""
+        if not (self._lock_aspect_check.isChecked() and
+                self._resize_check.isChecked()):
+            return
+        # Use cached aspect ratio to avoid re-opening the file on every tick
+        if self._cached_aspect is None:
+            row = self._file_list.currentRow()
+            item = self._file_list.item(row)
+            if item:
+                try:
+                    from PIL import Image
+                    with Image.open(item.text()) as im:
+                        self._cached_aspect = im.size
+                except Exception:
+                    return
+        if self._cached_aspect is None:
+            return
+        orig_w, orig_h = self._cached_aspect
+        if orig_h > 0:
+            new_w = max(1, round(height * orig_w / orig_h))
+            # Block signals to avoid recursive update
+            self._width_spin.blockSignals(True)
+            self._width_spin.setValue(new_w)
+            self._width_spin.blockSignals(False)
 
     def _update_converted_preview(self):
         """Refresh the preview pane to reflect the current format and quality."""

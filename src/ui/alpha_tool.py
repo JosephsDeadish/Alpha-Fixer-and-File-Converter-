@@ -238,6 +238,9 @@ class AlphaFixerTab(QWidget):
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _fixed  (blank = overwrite source)")
         self._suffix_edit.setMinimumHeight(28)
+        saved_suffix = self._settings.get("output_suffix", "")
+        if saved_suffix:
+            self._suffix_edit.setText(saved_suffix)
         go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
@@ -635,6 +638,13 @@ class AlphaFixerTab(QWidget):
         self._blue_spin.valueChanged.connect(self._on_finetune_changed)
         self._alpha_delta_spin.valueChanged.connect(self._on_finetune_changed)
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
+        # Persist batch options so they survive app restarts
+        self._recursive_check.toggled.connect(
+            lambda v: self._settings.set("batch_recursive", v)
+        )
+        self._suffix_edit.textChanged.connect(
+            lambda t: self._settings.set("output_suffix", t)
+        )
         # Initialise the live params label
         self._refresh_finetune_label()
 
