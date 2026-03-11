@@ -445,7 +445,8 @@ class MainWindow(QMainWindow):
         # Stop any previous animation timer – banner no longer cycles automatically
         if self._anim_timer is not None:
             self._anim_timer.stop()
-        # Update tab labels to reflect the active theme's emojis
+        # Tab labels are static so they never change (changing emojis was reported
+        # as distracting).  Only set them once on first apply.
         tab_labels = get_theme_tab_labels(theme_name)
         self._tabs.setTabText(0, tab_labels[0])
         self._tabs.setTabText(1, tab_labels[1])
@@ -458,6 +459,8 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(get_theme_status(theme_name))
         # Re-apply cursor so theme-cursor mode updates immediately on theme change
         self._apply_cursor()
+        # Update window icon and taskbar icon to match the current theme SVG
+        self._refresh_window_icon(theme_name)
         # Refresh SVG badge to match new theme
         self._refresh_svg_badge()
         # Keep trail and click-effects in sync with the active theme.
@@ -502,7 +505,7 @@ class MainWindow(QMainWindow):
         try:
             from PyQt6.QtSvgWidgets import QSvgWidget
             badge = QSvgWidget()
-            badge.setFixedSize(32, 32)
+            badge.setFixedSize(48, 48)
             badge.setToolTip("Theme decoration")
             return badge
         except ImportError:
@@ -524,6 +527,39 @@ class MainWindow(QMainWindow):
             self._svg_badge.show()
         else:
             self._svg_badge.hide()
+
+    def _refresh_window_icon(self, theme_name: str):
+        """Update the window / taskbar icon to the theme-specific SVG.
+
+        Falls back to the panda icon when no theme SVG is available or when
+        the SVG renderer is not installed.
+        """
+        import os
+        svg_path = get_theme_svg_path(theme_name)
+        if not svg_path:
+            # No theme SVG – use the panda default
+            svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+            for candidate in ("panda_dark.svg", "panda_light.svg"):
+                candidate_path = os.path.normpath(os.path.join(svg_dir, candidate))
+                if os.path.isfile(candidate_path):
+                    svg_path = candidate_path
+                    break
+        if not svg_path:
+            return
+        try:
+            from PyQt6.QtSvg import QSvgRenderer
+            renderer = QSvgRenderer(svg_path)
+            pix = QPixmap(64, 64)
+            pix.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pix)
+            renderer.render(painter)
+            painter.end()
+            icon = QIcon(pix)
+            self.setWindowIcon(icon)
+            QApplication.setWindowIcon(icon)
+        except (ImportError, RuntimeError):
+            # QtSvg unavailable or widget destroyed – silently skip icon update.
+            pass
 
     # ------------------------------------------------------------------
     # Tabs

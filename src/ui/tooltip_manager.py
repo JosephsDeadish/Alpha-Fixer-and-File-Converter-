@@ -1279,8 +1279,24 @@ class TooltipManager(QObject):
         if event.type() != QEvent.Type.ToolTip:
             return False
 
+        obj_id = id(obj)
+
         # Check if this is a registered QTabBar with per-tab keys
-        tab_keys = self._tab_bar_keys.get(id(obj))
+        tab_keys = self._tab_bar_keys.get(obj_id)
+        if tab_keys is None:
+            # Fallback: scan registered bar refs for identity match.
+            # PyQt6 sometimes creates a new Python wrapper for the same C++
+            # QTabBar object, giving a different id().  Comparing with `is`
+            # will still catch the case when we happen to have the same wrapper.
+            for bar_id, bar_ref in self._tab_bar_refs.items():
+                try:
+                    if bar_ref is obj:
+                        tab_keys = self._tab_bar_keys.get(bar_id)
+                        obj_id = bar_id  # update so key lookup below is consistent
+                        break
+                except RuntimeError:
+                    # Wrapped C++ object may have been deleted; skip safely.
+                    pass
         if tab_keys is not None:
             return self._handle_tab_bar_tooltip(obj, event, tab_keys)
 
@@ -1289,14 +1305,25 @@ class TooltipManager(QObject):
         # than the child QTabBar, so we remap it here.
         bar_ref = self._tab_widget_to_bar.get(id(obj))
         if bar_ref is not None:
-            tab_keys = self._tab_bar_keys.get(id(bar_ref))
+            bar_id = id(bar_ref)
+            # Try stable bar_id first, then scan refs for identity match
+            tab_keys = self._tab_bar_keys.get(bar_id)
+            if tab_keys is None:
+                for _bid, _bref in self._tab_bar_refs.items():
+                    try:
+                        if _bref is bar_ref:
+                            tab_keys = self._tab_bar_keys.get(_bid)
+                            break
+                    except RuntimeError:
+                        # Wrapped C++ object may have been deleted; skip safely.
+                        pass
             if tab_keys is not None:
                 # Map the event position from QTabWidget coordinates to QTabBar
                 # coordinates (the bar sits at the top of the widget).
                 try:
                     bar_pos = bar_ref.mapFrom(obj, event.pos())
                     tab_idx = bar_ref.tabAt(bar_pos)
-                except Exception:
+                except (RuntimeError, AttributeError):
                     tab_idx = -1
                 if 0 <= tab_idx < len(tab_keys):
                     return self._show_tip_for_key(bar_ref, event, tab_keys[tab_idx])

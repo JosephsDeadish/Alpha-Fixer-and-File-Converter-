@@ -1169,7 +1169,6 @@ THEME_SVG = {
     "Blood Moon":       "blood_moon.svg",
     "Ice Cave":         "ice_cave.svg",
     "Cyber Otter":      "cyber_otter.svg",
-    "Toxic Neon":       "neon.svg",
     "Lava Cave":        "lava_cave.svg",
     "Sunset Beach":     "sunset_beach.svg",
     "Midnight Forest":  "midnight_forest.svg",
@@ -1360,17 +1359,12 @@ _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
 
 
 def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
-    """Return (alpha_fixer_label, converter_label, history_label) for *theme_name*.
+    """Return static (alpha_fixer_label, converter_label, history_label).
 
-    Each label is an emoji prefix suitable for use as a QTabWidget tab title.
+    Tab labels are kept static so they don't change when the user switches
+    themes — changing tab emojis was reported as distracting and annoying.
     """
-    emojis = _THEME_TAB_EMOJIS.get(theme_name, _DEFAULT_TAB_EMOJIS)
-    labels = (
-        f"{emojis[0]}  Alpha Fixer",
-        f"{emojis[1]}  Converter",
-        f"{emojis[2]}  History",
-    )
-    return labels
+    return ("🖼  Alpha Fixer", "🔄  Converter", "📋  History")
 
 
 # Per-theme animated banner frames.  Themes listed here have a cycling banner;
@@ -2318,10 +2312,15 @@ QTabWidget::tab-bar {{
     alignment: left;
 }}
 QTabBar {{
+    background-color: {t['background']};
     background: {t['background']};
     border: none;
     border-bottom: 2px solid {t['primary']};
     qproperty-drawBase: 0;
+}}
+/* Named QTabBar child so Qt renders the full strip in the theme background */
+QTabBar[objectName="qt_tabwidget_tabbar"] {{
+    background-color: {t['background']};
 }}
 QTabBar::tab {{
     background: {t['primary']};

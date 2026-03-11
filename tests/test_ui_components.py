@@ -1920,7 +1920,9 @@ class TestPreviewPaneNoBlockingWait(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Theme tab labels: get_theme_tab_labels returns themed emoji prefixes
+# Theme tab labels: get_theme_tab_labels returns static labels for all themes
+# (Per-theme emoji changes were intentionally removed as users found them
+#  distracting — see issue #2 comment "i hate the emojis ... always changing".)
 # ---------------------------------------------------------------------------
 
 class TestThemeTabLabels(unittest.TestCase):
@@ -1937,13 +1939,17 @@ class TestThemeTabLabels(unittest.TestCase):
         self.assertIn("Converter", labels[1])
         self.assertIn("History", labels[2])
 
-    def test_bat_cave_has_bat_emoji(self):
+    def test_labels_are_static_regardless_of_theme(self):
+        """Tab labels must NOT change when the theme changes (was reported as annoying)."""
         from src.ui.theme_engine import get_theme_tab_labels
-        labels = get_theme_tab_labels("Bat Cave")
-        self.assertTrue(any("🦇" in lbl for lbl in labels),
-                        "Bat Cave tab labels should contain bat emoji")
+        expected = ("🖼  Alpha Fixer", "🔄  Converter", "📋  History")
+        for theme_name in ("Bat Cave", "Gore", "Panda Dark", "Mermaid", "Alien"):
+            labels = get_theme_tab_labels(theme_name)
+            self.assertEqual(labels, expected,
+                             f"Tab labels must be static but changed for theme {theme_name!r}")
 
-    def test_unknown_theme_has_default_emojis(self):
+    def test_static_labels_use_standard_emojis(self):
+        """Static labels use the default emoji set."""
         from src.ui.theme_engine import get_theme_tab_labels
         labels = get_theme_tab_labels("NonExistentThemeXYZ")
         self.assertIn("🖼", labels[0])
