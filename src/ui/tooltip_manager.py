@@ -414,6 +414,13 @@ _NORMAL: dict[str, list[str]] = {
         "A suffix in the filename field helps avoid overwriting originals.",
         "The selected path is remembered between sessions.",
     ],
+    "keep_metadata_check": [
+        "Preserve metadata (EXIF/ICC profiles) in the converted output file.",
+        "EXIF data includes camera info, GPS tags, and other image properties.",
+        "ICC profiles control how colors are displayed across different devices.",
+        "Useful when converting photos that need to retain color accuracy.",
+        "Leave unchecked when processing game textures that don't need metadata.",
+    ],
 }
 
 # Dumbed Down – mocking the user for needing tooltips, but still informative
@@ -802,6 +809,13 @@ _DUMBED: dict[str, list[str]] = {
         "You can type the path too. But clicking is more fun apparently.",
         "Pick a folder. Files go there. Revolutionary concept.",
         "This stores where your output files end up. Important button, honestly.",
+    ],
+    "keep_metadata_check": [
+        "Check this to keep EXIF and ICC stuff in your converted files. Important for photo people.",
+        "Metadata = camera settings, GPS, color profiles. Check if you need them, uncheck if not.",
+        "Game textures? Don't care about EXIF. Photos? Probably check this.",
+        "ICC profiles are what keep colors looking correct. Leave checked if you care about accuracy.",
+        "Unchecked = smaller files, no extra info. Checked = full metadata intact. Simple.",
     ],
 }
 
@@ -1356,6 +1370,16 @@ _VULGAR: dict[str, list[str]] = {
         "The developer spent months building this app. patreon.com/c/DeadOnTheInside - show some love.",
         "Patreon support = more features, more themes, more everything. Good karma too.",
         "Link opens to DeadOnTheInside on Patreon. No payment required to follow. Just click.",
+    ],
+    "keep_metadata_check": [
+        "Keep metadata checked = EXIF, GPS, camera info, ICC profiles all survive the conversion. Congrats.",
+        "EXIF contains all the nerdy camera data. ICC profiles keep your colors from looking like ass.",
+        "If you're converting photos and want GPS/camera data to survive, check this. Otherwise whatever.",
+        "Uncheck this for game textures — they don't give a single fuck about EXIF. Less clutter.",
+        "ICC profiles are color management data. Check this or your colors might look slightly off. Your call.",
+        "Checked = metadata preserved. Unchecked = stripped out. Simple binary choice. Make it.",
+        "Your EXIF data contains your life story (camera model, date, GPS). Check this to keep that story intact.",
+        "For photographers: check this always. For game devs: don't bother. Now you know.",
     ],
 }
 

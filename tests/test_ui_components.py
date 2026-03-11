@@ -928,10 +928,15 @@ class TestTooltipManager(unittest.TestCase):
 
     def test_all_tip_variants_have_exactly_five_entries(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
-        for mode_name, tips_dict in [("Normal", _NORMAL), ("Dumbed", _DUMBED), ("Vulgar", _VULGAR)]:
+        # Normal and Dumbed Down keep exactly 5 variants per key for readability.
+        for mode_name, tips_dict in [("Normal", _NORMAL), ("Dumbed", _DUMBED)]:
             for key, variants in tips_dict.items():
                 self.assertEqual(len(variants), 5,
                                  f"{mode_name}['{key}'] should have 5 variants, got {len(variants)}")
+        # No Filter 🤬 mode has at least 5 variants per key (usually 8 for extra variety).
+        for key, variants in _VULGAR.items():
+            self.assertGreaterEqual(len(variants), 5,
+                                    f"Vulgar['{key}'] should have at least 5 variants, got {len(variants)}")
 
     def test_dumbed_down_tips_exist_for_all_normal_keys(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED
@@ -952,7 +957,7 @@ class TestTooltipManager(unittest.TestCase):
         from src.core.settings_manager import SettingsManager
         mgr = SettingsManager.__new__(SettingsManager)
         default = mgr._DEFAULTS.get("tooltip_mode", None)
-        self.assertEqual(default, "Normal")
+        self.assertEqual(default, "No Filter 🤬")
 
 
 # ---------------------------------------------------------------------------

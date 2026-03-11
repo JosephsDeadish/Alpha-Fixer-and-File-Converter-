@@ -502,7 +502,7 @@ class SettingsDialog(QDialog):
         use_theme_effect = self._settings.get("use_theme_effect", False)
         self._use_theme_effect_check.setChecked(use_theme_effect)
         self._effect_combo.setEnabled(not use_theme_effect)
-        mode_val = self._settings.get("tooltip_mode", "Normal")
+        mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
 
