@@ -178,6 +178,7 @@ class MainWindow(QMainWindow):
         self._banner_lbl = None
         self._banner_emoji_left: "_SpinningEmojiLabel | None" = None
         self._banner_emoji_right: "_SpinningEmojiLabel | None" = None
+        self._toolbar_panda_lbl: "QLabel | None" = None
         self._status_bar = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
@@ -356,6 +357,7 @@ class MainWindow(QMainWindow):
 
         # Panda icon on the far left of the toolbar
         panda_lbl = self._make_toolbar_panda_icon()
+        self._toolbar_panda_lbl = panda_lbl
         if panda_lbl is not None:
             toolbar.addWidget(panda_lbl)
             toolbar.addSeparator()
@@ -687,6 +689,8 @@ class MainWindow(QMainWindow):
         self._apply_cursor()
         # Update window icon and taskbar icon to match the current theme SVG
         self._refresh_window_icon(theme_name)
+        # Update toolbar icon to match the current theme
+        self._refresh_toolbar_icon(theme_name)
         # Refresh SVG badge to match new theme
         self._refresh_svg_badge()
         # Keep trail and click-effects in sync with the active theme.
@@ -801,6 +805,37 @@ class MainWindow(QMainWindow):
         except RuntimeError:
             # Widget destroyed – silently skip.
             pass
+
+    def _refresh_toolbar_icon(self, theme_name: str) -> None:
+        """Update the toolbar icon label to show the active theme's graphic.
+
+        Tries to render the theme's SVG at 28×28 first; falls back to the
+        theme's representative emoji when SVG rendering is unavailable.
+        """
+        if self._toolbar_panda_lbl is None:
+            return
+        svg_path = get_theme_svg_path(theme_name)
+        if svg_path:
+            try:
+                from PyQt6.QtSvg import QSvgRenderer
+                renderer = QSvgRenderer(svg_path)
+                pix = QPixmap(28, 28)
+                pix.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pix)
+                if painter.isActive():
+                    renderer.render(painter)
+                    painter.end()
+                    self._toolbar_panda_lbl.setPixmap(pix)
+                    self._toolbar_panda_lbl.setText("")
+                    self._toolbar_panda_lbl.setToolTip(f"{theme_name} theme")
+                    return
+            except Exception:
+                pass
+        # Fallback: plain emoji text
+        icon = get_theme_icon(theme_name)
+        self._toolbar_panda_lbl.setPixmap(QPixmap())
+        self._toolbar_panda_lbl.setText(icon)
+        self._toolbar_panda_lbl.setToolTip(f"{theme_name} theme")
 
     # ------------------------------------------------------------------
     # Tabs

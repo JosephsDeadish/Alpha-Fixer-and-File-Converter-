@@ -184,6 +184,7 @@ class AlphaFixerTab(QWidget):
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
+        self._lbl_files = lbl_files
         lv.addWidget(lbl_files)
 
         btn_row = QHBoxLayout()
@@ -204,6 +205,7 @@ class AlphaFixerTab(QWidget):
         # Output section – placed here (near input) so it's obvious where
         # processed files will land without hunting to the far right panel.
         grp_out = QGroupBox("Output")
+        self._grp_out = grp_out
         go_layout = QGridLayout(grp_out)
         go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
@@ -211,6 +213,10 @@ class AlphaFixerTab(QWidget):
         go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
+        # Explicit row minimum heights prevent the nested QHBoxLayout in row 0
+        # from causing the two rows to visually overlap on some platforms.
+        go_layout.setRowMinimumHeight(0, 36)
+        go_layout.setRowMinimumHeight(1, 36)
 
         lbl_out_folder = QLabel("Output folder:")
         lbl_out_folder.setMinimumHeight(24)
@@ -353,6 +359,7 @@ class AlphaFixerTab(QWidget):
 
         # Preset section
         grp_preset = QGroupBox("Preset")
+        self._grp_preset = grp_preset
         gp_layout = QVBoxLayout(grp_preset)
         gp_layout.setSpacing(8)
 
@@ -380,6 +387,7 @@ class AlphaFixerTab(QWidget):
 
         # Fine-tune section
         grp_tune = QGroupBox("Fine-Tune Alpha && RGBA Channels")
+        self._grp_tune = grp_tune
         gt_layout = QGridLayout(grp_tune)
         gt_layout.setContentsMargins(10, 14, 10, 12)
         gt_layout.setColumnStretch(0, 0)
@@ -677,11 +685,17 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._status_lbl, "alpha_status_lbl")
 
     def update_theme(self, theme_name: str) -> None:
-        """Update the inner header label to match the active theme's tab emoji."""
-        from .theme_engine import get_theme_tab_labels
+        """Update inner header, section labels and group-box titles to match the active theme."""
+        from .theme_engine import get_theme_tab_labels, get_theme_icon
         labels = get_theme_tab_labels(theme_name)
         # labels[0] is e.g. "🩸🖼  Alpha Fixer" – use it directly as the header
         self._hdr.setText(labels[0])
+        # Decorate section labels and group-box titles with the theme's representative icon.
+        icon = get_theme_icon(theme_name)
+        self._lbl_files.setText(f"{icon}  Input Files / Folders  (drag & drop supported)")
+        self._grp_out.setTitle(f"{icon}  Output")
+        self._grp_preset.setTitle(f"{icon}  Preset")
+        self._grp_tune.setTitle(f"{icon}  Fine-Tune Alpha && RGBA Channels")
 
     # ------------------------------------------------------------------
     # Preset management
@@ -927,11 +941,12 @@ class AlphaFixerTab(QWidget):
     def _switch_to_manual_if_preset_active(self) -> None:
         """Uncheck 'Use preset' if it is currently active.
 
-        Called from clamp-bound handlers that invoke _on_finetune_changed() as a
-        plain Python function call (not via a Qt signal).  In that call path
-        self.sender() returns None inside _on_finetune_changed, so the automatic
-        "Use preset → manual" switch never fires.  This helper replicates that
-        logic explicitly so the user's clamp changes always take effect.
+        Called from clamp-bound handlers before they directly call
+        _refresh_finetune_label() and _preview_debounce.start().  Those
+        handlers bypass _on_finetune_changed() so self.sender() would be None,
+        preventing the automatic "Use preset → manual" switch from firing.
+        This helper performs that switch explicitly so clamp edits always take
+        effect regardless of how the handler was invoked.
         """
         if not self._preset_combo.signalsBlocked() and self._use_preset_check.isChecked():
             was_blocked = self._use_preset_check.blockSignals(True)

@@ -86,6 +86,7 @@ class ConverterTab(QWidget):
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
+        self._lbl_files = lbl_files
         lv.addWidget(lbl_files)
 
         btn_row = QHBoxLayout()
@@ -120,6 +121,7 @@ class ConverterTab(QWidget):
         # Output folder – placed here (adjacent to input) so source and
         # destination are together and the layout reads top-to-bottom.
         grp_out = QGroupBox("Output")
+        self._grp_out = grp_out
         go_layout = QGridLayout(grp_out)
         go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
@@ -127,6 +129,10 @@ class ConverterTab(QWidget):
         go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
+        # Explicit row minimum heights prevent the nested QHBoxLayout in row 0
+        # from causing the two rows to visually overlap on some platforms.
+        go_layout.setRowMinimumHeight(0, 36)
+        go_layout.setRowMinimumHeight(1, 36)
 
         lbl_out = QLabel("Output folder:")
         lbl_out.setMinimumWidth(100)
@@ -192,6 +198,7 @@ class ConverterTab(QWidget):
 
         # Output format
         grp_fmt = QGroupBox("Output Format")
+        self._grp_fmt = grp_fmt
         gf_layout = QGridLayout(grp_fmt)
         gf_layout.setContentsMargins(10, 14, 10, 12)
         gf_layout.setColumnStretch(0, 0)
@@ -242,6 +249,7 @@ class ConverterTab(QWidget):
 
         # Resize (optional)
         grp_resize = QGroupBox("Resize (optional)")
+        self._grp_resize = grp_resize
         gr_layout = QGridLayout(grp_resize)
         gr_layout.setContentsMargins(10, 14, 10, 12)
         gr_layout.setColumnStretch(0, 0)
@@ -358,14 +366,20 @@ class ConverterTab(QWidget):
         mgr.register(self._lock_aspect_check, "lock_aspect_check")
 
     def update_theme(self, theme_name: str) -> None:
-        """Update the inner header label to match the active theme's tab emoji."""
-        from .theme_engine import get_theme_tab_labels
+        """Update inner header, section labels and group-box titles to match the active theme."""
+        from .theme_engine import get_theme_tab_labels, get_theme_icon
         labels = get_theme_tab_labels(theme_name)
         # labels[1] is e.g. "🩸🔄  Converter" – extract the emoji prefix by splitting on
         # the first double-space separator, then rebuild with "File Converter" as the title.
         converter_label = labels[1]
         prefix = converter_label.split("  ", 1)[0] if "  " in converter_label else ""
         self._hdr.setText(f"{prefix}  File Converter")
+        # Decorate section labels and group-box titles with the theme's representative icon.
+        icon = get_theme_icon(theme_name)
+        self._lbl_files.setText(f"{icon}  Input Files / Folders  (drag & drop supported)")
+        self._grp_out.setTitle(f"{icon}  Output")
+        self._grp_fmt.setTitle(f"{icon}  Output Format")
+        self._grp_resize.setTitle(f"{icon}  Resize (optional)")
 
     # ------------------------------------------------------------------
     # File management
