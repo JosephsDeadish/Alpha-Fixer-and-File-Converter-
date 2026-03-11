@@ -166,6 +166,43 @@ class _SpinningEmojiLabel(QWidget):
 
 
 class MainWindow(QMainWindow):
+    # Unlock table: (click_threshold, settings_key, banner_message).
+    # Stored at class level so it is built once, not rebuilt on every click.
+    _UNLOCK_TABLE = [
+        (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
+        (150,  "unlock_ice_cave",         "❄ 'Ice Cave' theme unlocked! (Settings → Theme)"),
+        (200,  "unlock_cyber_otter",      "🦦 'Cyber Otter' theme unlocked! (Settings → Theme)"),
+        (250,  "unlock_sakura",           "🌸 'Secret Sakura' theme unlocked! (Settings → Theme)"),
+        (350,  "unlock_toxic_neon",       "☢ 'Toxic Neon' theme unlocked! (Settings → Theme)"),
+        (400,  "unlock_sunset_beach",     "🌅 'Sunset Beach' theme unlocked! (Settings → Theme)"),
+        (500,  "unlock_ocean",            "🌊 'Deep Ocean' theme unlocked! (Settings → Theme)"),
+        (600,  "unlock_lava_cave",        "🌋 'Lava Cave' theme unlocked! (Settings → Theme)"),
+        (750,  "unlock_blood_moon",       "🩸 'Blood Moon' theme unlocked! (Settings → Theme)"),
+        (1000, "unlock_midnight_forest",  "🌲 'Midnight Forest' theme unlocked! (Settings → Theme)"),
+        (1250, "unlock_candy_land",       "🍭 'Candy Land' theme unlocked! (Settings → Theme)"),
+        (1500, "unlock_zombie",           "🧟 'Zombie Apocalypse' theme unlocked! (Settings → Theme)"),
+        (1750, "unlock_dragon_fire",      "🐉 'Dragon Fire' theme unlocked! (Settings → Theme)"),
+        (2000, "unlock_bubblegum",        "🫧 'Bubblegum' theme unlocked! (Settings → Theme)"),
+        (2250, "unlock_thunder_storm",    "⚡ 'Thunder Storm' theme unlocked! (Settings → Theme)"),
+        (2500, "unlock_rose_gold",        "🌹 'Rose Gold' theme unlocked! (Settings → Theme)"),
+        (2750, "unlock_space_cat",        "🐱 'Space Cat' theme unlocked! (Settings → Theme)"),
+        (3000, "unlock_magic_mushroom",   "🍄 'Magic Mushroom' theme unlocked! (Settings → Theme)"),
+        (3500, "unlock_abyssal_void",     "🕳 'Abyssal Void' theme unlocked! (Settings → Theme)"),
+        (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
+        (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
+        (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
+        (5500, "unlock_crystal_cave",     "💎 'Crystal Cave' theme unlocked! (Settings → Theme)"),
+        (6000, "unlock_glitch",           "📡 'Glitch' theme unlocked! (Settings → Theme)"),
+        (6500, "unlock_wild_west",        "🤠 'Wild West' theme unlocked! (Settings → Theme)"),
+        (7000, "unlock_pirate",           "🏴‍☠️ 'Pirate' theme unlocked! (Settings → Theme)"),
+        (7500, "unlock_deep_space",       "🛸 'Deep Space' theme unlocked! (Settings → Theme)"),
+        (8000, "unlock_witchs_brew",      "🧙 'Witch's Brew' theme unlocked! (Settings → Theme)"),
+        (8500, "unlock_lava_lamp",        "🪔 'Lava Lamp' theme unlocked! (Settings → Theme)"),
+        (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
+        (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
+        (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
+    ]
+
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
@@ -192,6 +229,14 @@ class MainWindow(QMainWindow):
         self._settings_apply_timer.setSingleShot(True)
         self._settings_apply_timer.setInterval(200)
         self._settings_apply_timer.timeout.connect(self._apply_settings_now)
+        # Resize debounce timer: window resize fires very rapidly during an
+        # interactive drag.  Repositioning the overlays on every pixel update
+        # is wasteful; coalesce them into a single update 50ms after the last
+        # resize event to keep the UI responsive during dragging.
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(50)
+        self._resize_timer.timeout.connect(self._reposition_overlays)
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -505,45 +550,18 @@ class MainWindow(QMainWindow):
 
     def _run_unlock_checks(self, total: int) -> None:
         """Evaluate the unlock table against *total* and fire any new unlocks."""
-        # (threshold, settings_key, banner_message) — ordered ascending by threshold
-        _UNLOCK_TABLE = [
-            (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
-            (150,  "unlock_ice_cave",         "❄ 'Ice Cave' theme unlocked! (Settings → Theme)"),
-            (200,  "unlock_cyber_otter",      "🦦 'Cyber Otter' theme unlocked! (Settings → Theme)"),
-            (250,  "unlock_sakura",           "🌸 'Secret Sakura' theme unlocked! (Settings → Theme)"),
-            (350,  "unlock_toxic_neon",       "☢ 'Toxic Neon' theme unlocked! (Settings → Theme)"),
-            (400,  "unlock_sunset_beach",     "🌅 'Sunset Beach' theme unlocked! (Settings → Theme)"),
-            (500,  "unlock_ocean",            "🌊 'Deep Ocean' theme unlocked! (Settings → Theme)"),
-            (600,  "unlock_lava_cave",        "🌋 'Lava Cave' theme unlocked! (Settings → Theme)"),
-            (750,  "unlock_blood_moon",       "🩸 'Blood Moon' theme unlocked! (Settings → Theme)"),
-            (1000, "unlock_midnight_forest",  "🌲 'Midnight Forest' theme unlocked! (Settings → Theme)"),
-            (1250, "unlock_candy_land",       "🍭 'Candy Land' theme unlocked! (Settings → Theme)"),
-            (1500, "unlock_zombie",           "🧟 'Zombie Apocalypse' theme unlocked! (Settings → Theme)"),
-            (1750, "unlock_dragon_fire",      "🐉 'Dragon Fire' theme unlocked! (Settings → Theme)"),
-            (2000, "unlock_bubblegum",        "🫧 'Bubblegum' theme unlocked! (Settings → Theme)"),
-            (2250, "unlock_thunder_storm",    "⚡ 'Thunder Storm' theme unlocked! (Settings → Theme)"),
-            (2500, "unlock_rose_gold",        "🌹 'Rose Gold' theme unlocked! (Settings → Theme)"),
-            (2750, "unlock_space_cat",        "🐱 'Space Cat' theme unlocked! (Settings → Theme)"),
-            (3000, "unlock_magic_mushroom",   "🍄 'Magic Mushroom' theme unlocked! (Settings → Theme)"),
-            (3500, "unlock_abyssal_void",     "🕳 'Abyssal Void' theme unlocked! (Settings → Theme)"),
-            (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
-            (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
-            (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
-            (5500, "unlock_crystal_cave",     "💎 'Crystal Cave' theme unlocked! (Settings → Theme)"),
-            (6000, "unlock_glitch",           "📡 'Glitch' theme unlocked! (Settings → Theme)"),
-            (6500, "unlock_wild_west",        "🤠 'Wild West' theme unlocked! (Settings → Theme)"),
-            (7000, "unlock_pirate",           "🏴‍☠️ 'Pirate' theme unlocked! (Settings → Theme)"),
-            (7500, "unlock_deep_space",       "🛸 'Deep Space' theme unlocked! (Settings → Theme)"),
-            (8000, "unlock_witchs_brew",      "🧙 'Witch's Brew' theme unlocked! (Settings → Theme)"),
-            (8500, "unlock_lava_lamp",        "🪔 'Lava Lamp' theme unlocked! (Settings → Theme)"),
-            (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
-            (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
-            (10000,"unlock_golden_hour",      "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
-        ]
-
+        # _UNLOCK_TABLE is a class constant (sorted ascending by threshold).
+        # The break condition `threshold > total` is equivalent to the original
+        # `total >= threshold` guard, with the addition that we skip the rest of
+        # the table once no further entry can fire — avoiding iterating all 33
+        # entries on every click for users who have not yet reached many thresholds.
         newly_unlocked = False
-        for threshold, key, message in _UNLOCK_TABLE:
-            if not self._settings.get(key, False) and total >= threshold:
+        for threshold, key, message in self._UNLOCK_TABLE:
+            if threshold > total:
+                # Remaining entries all have higher thresholds; none can fire.
+                break
+            if not self._settings.get(key, False):
+                # Threshold reached and not yet unlocked.
                 self._settings.set(key, True)
                 self._unlock_lbl.setText(message)
                 # Play unlock fanfare via SoundEngine (falls back to beep)
@@ -1059,6 +1077,18 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # Debounce overlay repositioning: during an interactive window drag,
+        # Qt fires resizeEvent on every pixel of movement.  Repositioning
+        # overlays immediately each time spends unnecessary GPU/CPU on geometry
+        # recalculations.  Schedule a single coalesced update 50ms after the
+        # last resize event instead.  The overlays also self-correct via their
+        # own eventFilter (QEvent.Type.Resize on the main window), which provides
+        # the immediate fine-grained correction; the timer fires for any cases
+        # where the eventFilter is not installed (e.g., effects disabled).
+        self._resize_timer.start()
+
+    def _reposition_overlays(self) -> None:
+        """Reposition both overlays to fill the window after a resize burst."""
         if self._trail_overlay is not None:
             self._trail_overlay.setGeometry(self.rect())
             self._trail_overlay.raise_()

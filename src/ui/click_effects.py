@@ -618,13 +618,16 @@ class ClickEffectsOverlay(QWidget):
         if self._enabled == enabled:
             return
         self._enabled = enabled
+        app = QApplication.instance()
         if enabled:
-            QApplication.instance().installEventFilter(self)
+            if app is not None:
+                app.installEventFilter(self)
             self._timer.start()
             self.raise_()
             self.show()
         else:
-            QApplication.instance().removeEventFilter(self)
+            if app is not None:
+                app.removeEventFilter(self)
             self._timer.stop()
             self._particles.clear()
             if self._bat_flock:

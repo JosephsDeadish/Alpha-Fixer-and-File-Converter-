@@ -787,6 +787,9 @@ class SettingsDialog(QDialog):
             self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
+            # Sliders must also be signal-blocked during load; their valueChanged
+            # is connected to _on_trail_*_changed which emits settings_changed.
+            self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
         ]
         for c in controls:
             c.blockSignals(True)
