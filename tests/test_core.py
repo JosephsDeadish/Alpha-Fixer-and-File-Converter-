@@ -686,6 +686,94 @@ class TestSettingsManagerDefaults(unittest.TestCase):
                 f"settings_dialog.py uses True as fallback for '{pattern}' – must be False",
             )
 
+    def test_reset_unlocks_only_method_exists(self):
+        """SettingsManager must have a reset_unlocks_only method."""
+        settings_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "core", "settings_manager.py"
+        )
+        with open(settings_path) as f:
+            source = f.read()
+        self.assertIn("def reset_unlocks_only", source,
+                      "settings_manager.py must define reset_unlocks_only()")
+
+    def test_reset_unlocks_only_does_not_use_qs_clear(self):
+        """reset_unlocks_only must NOT call _qs.clear() which would wipe all settings."""
+        settings_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "core", "settings_manager.py"
+        )
+        with open(settings_path) as f:
+            source = f.read()
+        method_start = source.find("def reset_unlocks_only")
+        method_body = source[method_start:method_start + 600]
+        self.assertNotIn("self._qs.clear()", method_body,
+                         "reset_unlocks_only must NOT call _qs.clear() – that wipes all settings")
+        # Verify it handles unlock_ keys and total_clicks
+        self.assertIn("unlock_", method_body,
+                      "reset_unlocks_only should reference unlock_ keys")
+        self.assertIn("total_clicks", method_body,
+                      "reset_unlocks_only should reset total_clicks")
+
+    def test_reset_unlocks_only_functional(self):
+        """reset_unlocks_only resets unlock flags but preserves other settings."""
+        try:
+            from PyQt6.QtCore import QSettings  # noqa: F401
+        except (ImportError, OSError):
+            raise unittest.SkipTest("PyQt6 not available — skipping functional test")
+        import tempfile
+        from unittest.mock import patch
+        tf = tempfile.NamedTemporaryFile(suffix=".ini", delete=False)
+        tf.close()
+        try:
+            with patch("src.core.settings_manager._settings_ini_path", return_value=tf.name):
+                from src.core.settings_manager import SettingsManager
+                sm = SettingsManager()
+                sm.set("unlock_skeleton", True)
+                sm.set("total_clicks", 500)
+                sm.set("alpha_fix_done_once", True)
+                sm.set("conversion_done_once", True)
+                sm.set("theme", "Goth")
+                sm.set("sound_enabled", True)
+
+                sm.reset_unlocks_only()
+
+                self.assertFalse(sm.get("unlock_skeleton"),
+                                 "unlock_skeleton should be False after reset_unlocks_only")
+                self.assertEqual(sm.get("total_clicks"), 0,
+                                 "total_clicks should be 0 after reset_unlocks_only")
+                self.assertFalse(sm.get("alpha_fix_done_once", True),
+                                 "alpha_fix_done_once should be False after reset_unlocks_only")
+                self.assertFalse(sm.get("conversion_done_once"),
+                                 "conversion_done_once should be False after reset_unlocks_only")
+                self.assertEqual(sm.get("theme"), "Goth",
+                                 "theme should be preserved by reset_unlocks_only")
+                self.assertTrue(sm.get("sound_enabled"),
+                                "sound_enabled should be preserved by reset_unlocks_only")
+        finally:
+            os.unlink(tf.name)
+
+    def test_reset_unlocks_btn_registered_in_settings_dialog(self):
+        """settings_dialog.py must register _btn_reset_unlocks with the tooltip manager."""
+        dlg_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "settings_dialog.py"
+        )
+        with open(dlg_path) as f:
+            source = f.read()
+        self.assertIn("_btn_reset_unlocks", source,
+                      "settings_dialog.py must define _btn_reset_unlocks button")
+        self.assertIn('"reset_unlocks_btn"', source,
+                      "settings_dialog.py must register reset_unlocks_btn with tooltip manager")
+
+    def test_reset_unlocks_btn_tooltip_in_all_modes(self):
+        """tooltip_manager.py must have reset_unlocks_btn in all 3 tip modes."""
+        tm_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py"
+        )
+        with open(tm_path) as f:
+            source = f.read()
+        count = source.count('"reset_unlocks_btn"')
+        self.assertEqual(count, 3,
+                         f"reset_unlocks_btn must appear in all 3 tip dicts (_NORMAL, _DUMBED, _VULGAR); found {count}")
+
 
 # ---------------------------------------------------------------------------
 # Alpha-delta spinbox wiring tests (no PyQt6 required — source inspection)
