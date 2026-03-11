@@ -75,7 +75,7 @@ class SettingsManager:
         "window_h": 720,
         "window_maximized": False,
         # Tooltip
-        "tooltip_mode": "Normal",
+        "tooltip_mode": "No Filter 🤬",
         # Click effects
         "click_effects_enabled": True,
         "use_theme_effect": False,
