@@ -77,12 +77,13 @@ class _ThumbRunnable(QRunnable):
             out = QPixmap(_THUMB_SIZE, _THUMB_SIZE)
             out.fill(Qt.GlobalColor.transparent)
             painter = QPainter(out)
-            painter.drawPixmap(
-                (_THUMB_SIZE - scaled.width()) // 2,
-                (_THUMB_SIZE - scaled.height()) // 2,
-                scaled,
-            )
-            painter.end()
+            if painter.isActive():
+                painter.drawPixmap(
+                    (_THUMB_SIZE - scaled.width()) // 2,
+                    (_THUMB_SIZE - scaled.height()) // 2,
+                    scaled,
+                )
+                painter.end()
             icon = QIcon(out)
             self._signals.loaded.emit(self._path, icon)
         except Exception:

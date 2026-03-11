@@ -38,12 +38,15 @@ def _render_pngs(svg_path: str, sizes: list) -> list:
 
     pngs = []
     for size in sizes:
-        png_data = cairosvg.svg2png(url=svg_path, output_width=size, output_height=size)
-        img = Image.open(io.BytesIO(png_data)).convert("RGBA")
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        pngs.append(buf.getvalue())
-        print(f"  rendered {size}x{size}  ({len(pngs[-1])} bytes)")
+        try:
+            png_data = cairosvg.svg2png(url=svg_path, output_width=size, output_height=size)
+            img = Image.open(io.BytesIO(png_data)).convert("RGBA")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            pngs.append(buf.getvalue())
+            print(f"  rendered {size}x{size}  ({len(pngs[-1])} bytes)")
+        except Exception as exc:
+            sys.exit(f"ERROR: failed to render {size}x{size} from {svg_path}: {exc}")
     return pngs
 
 

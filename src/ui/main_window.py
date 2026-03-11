@@ -222,10 +222,11 @@ class MainWindow(QMainWindow):
                 pix = QPixmap(size, size)
                 pix.fill(Qt.GlobalColor.transparent)
                 p = QPainter(pix)
-                renderer.render(p)
-                p.end()
-                icon.addPixmap(pix)
-            return icon
+                if p.isActive():
+                    renderer.render(p)
+                    p.end()
+                    icon.addPixmap(pix)
+            return icon if not icon.isNull() else None
         except (ImportError, Exception):
             return None
 
