@@ -78,11 +78,12 @@ class ConverterTab(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
 
-        # ---- Left: input files + preview ----
+        # ---- Left: input files (scrollable) + preview (always visible) ----
         left = QWidget()
         left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
+        lv.setSpacing(6)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
@@ -103,20 +104,6 @@ class ConverterTab(QWidget):
             self._settings.get("converter_recursive", True)
         )
         lv.addWidget(self._recursive_check)
-
-        self._file_list = DropFileList()
-        self._file_list.setMinimumHeight(180)
-        self._file_list.setToolTip(
-            "Files queued for conversion.\n"
-            "• Drag files/folders here from Explorer/Finder\n"
-            "• Delete key or right-click → Remove Selected\n"
-            "• Right-click → Thumbnails to toggle image previews"
-        )
-        lv.addWidget(self._file_list, 1)
-
-        self._file_count_lbl = QLabel("0 files  |  F5 to convert  |  Esc to stop")
-        self._file_count_lbl.setObjectName("subheader")
-        lv.addWidget(self._file_count_lbl)
 
         # Output folder – placed here (adjacent to input) so source and
         # destination are together and the layout reads top-to-bottom.
@@ -162,12 +149,51 @@ class ConverterTab(QWidget):
 
         lv.addWidget(grp_out)
 
-        # Preview pane
+        # ---- File list area (inside the scrollable controls panel) ----
+        list_area = QWidget()
+        la_layout = QVBoxLayout(list_area)
+        la_layout.setContentsMargins(0, 0, 0, 0)
+        la_layout.setSpacing(4)
+
+        self._file_list = DropFileList()
+        self._file_list.setMinimumHeight(120)
+        self._file_list.setToolTip(
+            "Files queued for conversion.\n"
+            "• Drag files/folders here from Explorer/Finder\n"
+            "• Delete key or right-click → Remove Selected\n"
+            "• Right-click → Thumbnails to toggle image previews"
+        )
+        la_layout.addWidget(self._file_list, 1)
+
+        self._file_count_lbl = QLabel("0 files  |  F5 to convert  |  Esc to stop")
+        self._file_count_lbl.setObjectName("subheader")
+        la_layout.addWidget(self._file_count_lbl)
+
+        lv.addWidget(list_area, 1)
+
+        # Wrap controls + file-list in a scroll area so they remain
+        # accessible on smaller windows.  The preview pane lives OUTSIDE
+        # this scroll area so it is never hidden by a layout size constraint.
+        left.setMinimumHeight(300)
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        # ---- Preview pane (outside scroll area, always visible) ----
         self._preview = ImagePreviewPane()
         self._preview.setMinimumHeight(220)
-        lv.addWidget(self._preview, 1)
 
-        splitter.addWidget(left)
+        # Left column: vertical splitter – controls/file-list on top
+        # (scrollable), preview on the bottom (always fully visible).
+        # This matches the layout structure used by the Alpha Fixer tab.
+        left_vsplit = QSplitter(Qt.Orientation.Vertical)
+        left_vsplit.setChildrenCollapsible(False)
+        left_vsplit.setMinimumWidth(320)
+        left_vsplit.addWidget(left_scroll)
+        left_vsplit.addWidget(self._preview)
+        left_vsplit.setSizes([300, 280])
+        splitter.addWidget(left_vsplit)
 
         # ---- Right: options ----
         right = QWidget()
