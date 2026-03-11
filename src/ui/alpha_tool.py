@@ -249,13 +249,26 @@ class AlphaFixerTab(QWidget):
         self._compare.setMinimumHeight(160)
         ca_layout.addWidget(self._compare, 1)
 
-        # Alpha stats bar (before | after, shown below the comparison)
-        self._alpha_stats_lbl = QLabel()
-        self._alpha_stats_lbl.setObjectName("subheader")
-        self._alpha_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._alpha_stats_lbl.setWordWrap(True)
-        self._alpha_stats_lbl.setText("Alpha stats: load a file to see before/after values")
-        ca_layout.addWidget(self._alpha_stats_lbl)
+        # Alpha stats: before on the left, after on the right (side-by-side)
+        stats_row = QHBoxLayout()
+        stats_row.setContentsMargins(0, 2, 0, 0)
+        stats_row.setSpacing(4)
+
+        self._before_stats_lbl = QLabel("BEFORE\n—")
+        self._before_stats_lbl.setObjectName("subheader")
+        self._before_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._before_stats_lbl.setWordWrap(True)
+        self._before_stats_lbl.setToolTip("Alpha channel statistics for the original (before) image")
+
+        self._after_stats_lbl = QLabel("AFTER\n—")
+        self._after_stats_lbl.setObjectName("subheader")
+        self._after_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._after_stats_lbl.setWordWrap(True)
+        self._after_stats_lbl.setToolTip("Alpha channel statistics for the processed (after) image")
+
+        stats_row.addWidget(self._before_stats_lbl, 1)
+        stats_row.addWidget(self._after_stats_lbl, 1)
+        ca_layout.addLayout(stats_row)
 
         left_vsplit.addWidget(compare_area)
         left_vsplit.setSizes([280, 320])
@@ -831,10 +844,9 @@ class AlphaFixerTab(QWidget):
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
         def _fmt(s: dict) -> str:
-            return f"min={s['min']} max={s['max']} mean={s['mean']:.1f}"
-        self._alpha_stats_lbl.setText(
-            f"BEFORE  ·  {_fmt(before)}        │        AFTER  ·  {_fmt(after)}"
-        )
+            return f"min={s['min']}  max={s['max']}  mean={s['mean']:.1f}"
+        self._before_stats_lbl.setText(f"BEFORE\n{_fmt(before)}")
+        self._after_stats_lbl.setText(f"AFTER\n{_fmt(after)}")
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):
