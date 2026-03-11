@@ -185,6 +185,13 @@ class MainWindow(QMainWindow):
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
         self._tab_base_labels: tuple = ()   # set during first _apply_theme()
+        # Debounce timer: collapses rapid settings_changed signals into a
+        # single re-apply call so slider drags / spinbox scrolling don't
+        # trigger dozens of expensive setStyleSheet() calls per second.
+        self._settings_apply_timer = QTimer(self)
+        self._settings_apply_timer.setSingleShot(True)
+        self._settings_apply_timer.setInterval(200)
+        self._settings_apply_timer.timeout.connect(self._apply_settings_now)
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -852,7 +859,7 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
-        dlg.theme_changed.connect(lambda t: self._apply_theme())
+        dlg.theme_changed.connect(lambda t: self._on_settings_changed())
         dlg.settings_changed.connect(self._on_settings_changed)
         # First tooltip mode change unlocks Secret Skeleton (independent of click count)
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
@@ -881,7 +888,17 @@ class MainWindow(QMainWindow):
             dlg_overlay.set_enabled(False)
 
     def _on_settings_changed(self):
-        """Re-apply all effect-related settings after the dialog closes."""
+        """Schedule a deferred re-apply of all effect-related settings.
+
+        The signal can fire very rapidly (e.g. every step of a spinbox or
+        slider drag).  Restarting a 200 ms single-shot timer each time
+        collapses bursts of signals into a single apply call, eliminating
+        the per-change setStyleSheet / icon-refresh lag.
+        """
+        self._settings_apply_timer.start()
+
+    def _apply_settings_now(self):
+        """Re-apply all effect-related settings (called via debounce timer)."""
         self._apply_theme()
         self._apply_cursor()
         self._apply_font_size()
@@ -1063,5 +1080,12 @@ class MainWindow(QMainWindow):
         if self._sound is not None:
             self._sound.cleanup()
         self._save_geometry()
+        # Flush any buffered QSettings writes to disk before closing.
+        # This is the one place we explicitly sync since set() no longer
+        # calls sync() after every write (which caused per-click disk I/O).
+        try:
+            self._settings.sync()
+        except Exception:
+            pass
         super().closeEvent(event)
 

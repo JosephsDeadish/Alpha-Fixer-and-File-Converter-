@@ -595,7 +595,7 @@ class SettingsDialog(QDialog):
         misc_gl.setColumnStretch(1, 1)
         misc_gl.setHorizontalSpacing(10)
         misc_gl.setVerticalSpacing(6)
-        misc_gl.addWidget(QLabel("Font Size (pt):"), 0, 0)
+        misc_gl.addWidget(QLabel("Tooltip Font Size (pt):"), 0, 0)
         self._font_size_spin = QSpinBox()
         self._font_size_spin.setRange(8, 24)
         self._font_size_spin.setValue(10)
@@ -621,7 +621,7 @@ class SettingsDialog(QDialog):
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
-        misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
+        misc_gl.addWidget(QLabel("Tooltip Popups Style:"), 2, 0)
         self._tooltip_style_combo = QComboBox()
         _TOOLTIP_STYLE_ENTRIES = [
             ("Auto (follow theme)",  "Tooltip style follows the active theme automatically."),

@@ -177,6 +177,20 @@ class SettingsManager:
 
     def set(self, key, value):
         self._qs.setValue(key, value)
+        # Intentionally do not call _qs.sync() here: syncing after every
+        # individual write causes disk I/O on every click and every settings
+        # widget interaction, producing severe lag and crash-like
+        # unresponsiveness.  QSettings syncs automatically when the
+        # application exits and can also be called explicitly on quit.
+
+    def sync(self) -> None:
+        """Flush all pending settings writes to disk.
+
+        Call this on clean exit (e.g. closeEvent) so that changes made
+        during the session are persisted even if QSettings has not yet
+        auto-synced.  This is the only place that should call _qs.sync()
+        so that the disk-I/O cost is predictable and bounded.
+        """
         self._qs.sync()
 
     # ------------------------------------------------------------------
