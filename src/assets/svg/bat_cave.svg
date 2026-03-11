@@ -34,13 +34,13 @@
     <!-- Bat ears -->
     <polygon points="28,22 25,15 31,20" fill="#7b2dff"/>
     <polygon points="36,22 39,15 33,20" fill="#7b2dff"/>
-    <!-- Eyes glow -->
-    <circle cx="30" cy="25" r="1.5" fill="#ddddf0">
-      <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite"/>
-    </circle>
-    <circle cx="34" cy="25" r="1.5" fill="#ddddf0">
-      <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite"/>
-    </circle>
+    <!-- Eyes glow with blink -->
+    <ellipse cx="30" cy="25" rx="1.5" ry="1.5" fill="#ddddf0">
+      <animate attributeName="ry" values="1.5;1.5;0;1.5;1.5" keyTimes="0;0.75;0.82;0.9;1" dur="4s" begin="0.8s" repeatCount="indefinite"/>
+    </ellipse>
+    <ellipse cx="34" cy="25" rx="1.5" ry="1.5" fill="#ddddf0">
+      <animate attributeName="ry" values="1.5;1.5;0;1.5;1.5" keyTimes="0;0.75;0.82;0.9;1" dur="4s" begin="0.8s" repeatCount="indefinite"/>
+    </ellipse>
   </g>
 
   <!-- Small bats flying in background -->

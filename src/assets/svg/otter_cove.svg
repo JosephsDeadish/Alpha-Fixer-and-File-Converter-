@@ -1,52 +1,74 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" fill="#1a1206" rx="8"/>
+  <rect width="64" height="64" fill="#152a1f" rx="8"/>
 
   <!-- Water ripple in background -->
-  <ellipse cx="32" cy="56" rx="22" ry="5" fill="none" stroke="#4a8fa0" stroke-width="1.2" opacity="0.5">
+  <ellipse cx="32" cy="59" rx="22" ry="4" fill="none" stroke="#4a8fa0" stroke-width="1.2" opacity="0.5">
     <animate attributeName="rx" values="22;26;22" dur="2s" repeatCount="indefinite"/>
     <animate attributeName="opacity" values="0.5;0.2;0.5" dur="2s" repeatCount="indefinite"/>
   </ellipse>
-  <ellipse cx="32" cy="56" rx="14" ry="3" fill="none" stroke="#6bb5cc" stroke-width="1" opacity="0.4">
-    <animate attributeName="rx" values="14;18;14" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
+  <ellipse cx="32" cy="59" rx="13" ry="2.5" fill="none" stroke="#6bb5cc" stroke-width="1" opacity="0.4">
+    <animate attributeName="rx" values="13;17;13" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
     <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
   </ellipse>
 
-  <!-- Otter body -->
-  <ellipse cx="32" cy="42" rx="16" ry="11" fill="#8b5a2b"/>
+  <!-- TAIL drawn FIRST so body covers the attachment point.
+       Elongated teardrop below the body, wagging side-to-side. -->
+  <ellipse cx="32" cy="53" rx="5" ry="9" fill="#7a4820">
+    <animateTransform attributeName="transform" type="rotate"
+      values="-22 32 44; 22 32 44; -22 32 44"
+      dur="1.2s" repeatCount="indefinite"/>
+  </ellipse>
 
-  <!-- Otter tail (wagging animation) -->
-  <g transform-origin="32 50">
-    <ellipse cx="32" cy="52" rx="8" ry="4" fill="#a06030">
-      <animateTransform attributeName="transform" type="rotate"
-        values="-15 32 50; 15 32 50; -15 32 50"
-        dur="1.2s" repeatCount="indefinite"/>
-    </ellipse>
-  </g>
+  <!-- Otter body (drawn over tail base so attachment looks clean) -->
+  <ellipse cx="32" cy="37" rx="13" ry="11" fill="#8b5a2b"/>
+  <!-- Lighter belly patch -->
+  <ellipse cx="32" cy="40" rx="8" ry="7" fill="#c49a6c" opacity="0.5"/>
+
+  <!-- Front paws/flippers at body sides -->
+  <ellipse cx="18" cy="42" rx="6" ry="3" fill="#7a4820" transform="rotate(-22 18 42)"/>
+  <ellipse cx="46" cy="42" rx="6" ry="3" fill="#7a4820" transform="rotate(22 46 42)"/>
+
+  <!-- Ears (drawn before head so head covers the base) -->
+  <circle cx="21" cy="14" r="5" fill="#7a4820"/>
+  <circle cx="43" cy="14" r="5" fill="#7a4820"/>
 
   <!-- Otter head -->
-  <circle cx="32" cy="22" r="13" fill="#8b5a2b"/>
-  <!-- Face patches -->
-  <ellipse cx="32" cy="26" rx="9" ry="7" fill="#c49a6c"/>
-  <!-- Eyes -->
-  <ellipse cx="27" cy="20" rx="3" ry="3" fill="#2a1200">
-    <!-- Blink animation -->
-    <animate attributeName="ry" values="3;0.3;3" dur="3.5s" begin="1s" repeatCount="indefinite"/>
+  <circle cx="32" cy="22" r="12" fill="#8b5a2b"/>
+
+  <!-- Inner ear highlight -->
+  <circle cx="21" cy="14" r="2.5" fill="#c49a6c" opacity="0.55"/>
+  <circle cx="43" cy="14" r="2.5" fill="#c49a6c" opacity="0.55"/>
+
+  <!-- Muzzle / face patch -->
+  <ellipse cx="32" cy="26" rx="8" ry="6.5" fill="#c49a6c"/>
+
+  <!-- Eyes with blink animation -->
+  <ellipse cx="27.5" cy="21" rx="2.8" ry="2.8" fill="#1a0800">
+    <animate attributeName="ry" values="2.8;2.8;0.2;2.8;2.8" keyTimes="0;0.7;0.78;0.87;1" dur="4s" begin="1s" repeatCount="indefinite"/>
   </ellipse>
-  <ellipse cx="37" cy="20" rx="3" ry="3" fill="#2a1200">
-    <animate attributeName="ry" values="3;0.3;3" dur="3.5s" begin="1s" repeatCount="indefinite"/>
+  <ellipse cx="36.5" cy="21" rx="2.8" ry="2.8" fill="#1a0800">
+    <animate attributeName="ry" values="2.8;2.8;0.2;2.8;2.8" keyTimes="0;0.7;0.78;0.87;1" dur="4s" begin="1s" repeatCount="indefinite"/>
   </ellipse>
-  <circle cx="27.5" cy="19.5" r="1" fill="white"/>
-  <circle cx="37.5" cy="19.5" r="1" fill="white"/>
+  <!-- Eye shines -->
+  <circle cx="28.5" cy="20" r="1" fill="white" opacity="0.9"/>
+  <circle cx="37.5" cy="20" r="1" fill="white" opacity="0.9"/>
+
   <!-- Nose -->
-  <ellipse cx="32" cy="24" rx="3" ry="2" fill="#2a1200"/>
+  <ellipse cx="32" cy="25" rx="2.8" ry="2" fill="#1a0800"/>
+  <!-- Nose highlight -->
+  <circle cx="31.2" cy="24.3" r="0.6" fill="white" opacity="0.5"/>
+
+  <!-- Mouth (small smile) -->
+  <path d="M29,28 Q32,30 35,28" stroke="#7a4820" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+
   <!-- Whiskers -->
-  <line x1="20" y1="25" x2="28" y2="26" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
-  <line x1="20" y1="27" x2="28" y2="27" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
-  <line x1="36" y1="26" x2="44" y2="25" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
-  <line x1="36" y1="27" x2="44" y2="27" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
+  <line x1="21" y1="26" x2="29" y2="27" stroke="#d4aa7a" stroke-width="0.7" opacity="0.8"/>
+  <line x1="21" y1="28" x2="29" y2="28.5" stroke="#d4aa7a" stroke-width="0.7" opacity="0.8"/>
+  <line x1="35" y1="27" x2="43" y2="26" stroke="#d4aa7a" stroke-width="0.7" opacity="0.8"/>
+  <line x1="35" y1="28.5" x2="43" y2="28" stroke="#d4aa7a" stroke-width="0.7" opacity="0.8"/>
 
   <!-- Rock 🤘 emoji hint -->
-  <text x="32" y="62" text-anchor="middle" font-size="11" fill="#e8a040">🤘
+  <text x="32" y="63" text-anchor="middle" font-size="10" fill="#e8a040">🤘
     <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite"/>
   </text>
 </svg>

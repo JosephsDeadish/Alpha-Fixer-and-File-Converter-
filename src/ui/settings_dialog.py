@@ -371,8 +371,11 @@ class SettingsDialog(QDialog):
         # the user can search by any part of the label (e.g. "heart", "fire").
         emoji_completer = self._emoji_combo.completer()
         if emoji_completer is not None:
-            emoji_completer.setFilterMode(Qt.MatchFlag.MatchContains)
-            emoji_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            try:
+                emoji_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+                emoji_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            except AttributeError:
+                pass
         self._btn_emoji_add = QPushButton("Add")
         self._btn_emoji_clear = QPushButton("Clear All")
         self._btn_emoji_add.setMinimumWidth(60)

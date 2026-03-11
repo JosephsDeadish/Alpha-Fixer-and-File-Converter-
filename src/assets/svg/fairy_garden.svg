@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Fairy Garden – fairy with flapping wings and sparkling wand -->
+  <!-- Fairy Garden – feminine fairy with 4-lobe wings, dress, flowing hair -->
   <rect width="64" height="64" fill="#0d0022" rx="8"/>
 
   <!-- Twinkling background stars -->
@@ -15,45 +15,103 @@
   <circle cx="10" cy="50" r="0.8" fill="#cc66ff" opacity="0.6">
     <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" begin="0.8s" repeatCount="indefinite"/>
   </circle>
+  <circle cx="44" cy="6" r="0.9" fill="#ffaaff" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" begin="0.3s" repeatCount="indefinite"/>
+  </circle>
 
   <!-- Fairy figure floating up and down -->
   <g>
     <animateTransform attributeName="transform" type="translate"
-      values="0,0; 0,-3; 0,0" dur="2.5s" repeatCount="indefinite"/>
+      values="0,0; 0,-4; 0,0" dur="2.8s" repeatCount="indefinite"/>
 
-    <!-- LEFT WING (flapping) -->
-    <path d="M28,28 C20,22 14,26 16,32 C18,36 24,34 28,30" fill="#ff88ff" opacity="0.7">
+    <!-- === WINGS (4-lobe butterfly-style, flapping) === -->
+    <!-- Upper-left wing -->
+    <path d="M28,30 C18,20 10,24 12,32 C14,38 23,37 28,33" fill="#ff88ff" opacity="0.8">
       <animate attributeName="d"
-        values="M28,28 C20,22 14,26 16,32 C18,36 24,34 28,30;
-                M28,28 C22,20 16,22 17,28 C18,32 24,30 28,27;
-                M28,28 C18,24 10,28 13,34 C16,38 24,36 28,31;
-                M28,28 C20,22 14,26 16,32 C18,36 24,34 28,30"
-        dur="0.6s" repeatCount="indefinite"/>
+        values="M28,30 C18,20 10,24 12,32 C14,38 23,37 28,33;
+                M28,30 C20,18 12,20 13,28 C14,34 23,33 28,29;
+                M28,30 C16,22 8,26 11,34 C14,40 23,39 28,34;
+                M28,30 C18,20 10,24 12,32 C14,38 23,37 28,33"
+        dur="0.55s" repeatCount="indefinite"/>
     </path>
-    <!-- RIGHT WING (flapping) -->
-    <path d="M36,28 C44,22 50,26 48,32 C46,36 40,34 36,30" fill="#ff88ff" opacity="0.7">
+    <!-- Lower-left wing (smaller lobe below upper wing) -->
+    <path d="M28,34 C18,34 14,40 16,44 C18,47 24,44 28,40" fill="#ffaaff" opacity="0.65">
       <animate attributeName="d"
-        values="M36,28 C44,22 50,26 48,32 C46,36 40,34 36,30;
-                M36,28 C42,20 48,22 47,28 C46,32 40,30 36,27;
-                M36,28 C46,24 54,28 51,34 C48,38 40,36 36,31;
-                M36,28 C44,22 50,26 48,32 C46,36 40,34 36,30"
-        dur="0.6s" repeatCount="indefinite"/>
+        values="M28,34 C18,34 14,40 16,44 C18,47 24,44 28,40;
+                M28,34 C20,32 16,38 17,42 C18,45 24,42 28,38;
+                M28,34 C16,35 12,41 15,45 C18,48 24,45 28,41;
+                M28,34 C18,34 14,40 16,44 C18,47 24,44 28,40"
+        dur="0.55s" repeatCount="indefinite"/>
+    </path>
+    <!-- Upper-right wing -->
+    <path d="M36,30 C46,20 54,24 52,32 C50,38 41,37 36,33" fill="#ff88ff" opacity="0.8">
+      <animate attributeName="d"
+        values="M36,30 C46,20 54,24 52,32 C50,38 41,37 36,33;
+                M36,30 C44,18 52,20 51,28 C50,34 41,33 36,29;
+                M36,30 C48,22 56,26 53,34 C50,40 41,39 36,34;
+                M36,30 C46,20 54,24 52,32 C50,38 41,37 36,33"
+        dur="0.55s" repeatCount="indefinite"/>
+    </path>
+    <!-- Lower-right wing (smaller lobe) -->
+    <path d="M36,34 C46,34 50,40 48,44 C46,47 40,44 36,40" fill="#ffaaff" opacity="0.65">
+      <animate attributeName="d"
+        values="M36,34 C46,34 50,40 48,44 C46,47 40,44 36,40;
+                M36,34 C44,32 48,38 47,42 C46,45 40,42 36,38;
+                M36,34 C48,35 52,41 49,45 C46,48 40,45 36,41;
+                M36,34 C46,34 50,40 48,44 C46,47 40,44 36,40"
+        dur="0.55s" repeatCount="indefinite"/>
     </path>
 
-    <!-- Fairy body -->
-    <ellipse cx="32" cy="34" rx="5" ry="8" fill="#dd44ff" opacity="0.9"/>
+    <!-- === DRESS / SKIRT (A-line below torso) === -->
+    <path d="M27,36 Q32,50 37,36 Z" fill="#cc22ee" opacity="0.9"/>
+    <!-- Skirt highlight -->
+    <path d="M28,37 Q32,47 36,37" stroke="#ee66ff" stroke-width="0.7" fill="none" opacity="0.5"/>
+
+    <!-- Fairy torso -->
+    <ellipse cx="32" cy="33" rx="5" ry="6" fill="#dd44ff" opacity="0.95"/>
+    <!-- Belt / waist ribbon -->
+    <ellipse cx="32" cy="37" rx="5" ry="1.5" fill="#cc00ff" opacity="0.7"/>
+
+    <!-- Flowing hair (behind head, drawn before head) -->
+    <path d="M25.5,23 Q23,32 25,38" stroke="#cc44cc" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+    <path d="M38.5,23 Q41,32 39,38" stroke="#cc44cc" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+
     <!-- Fairy head -->
-    <circle cx="32" cy="24" r="6" fill="#ffddee"/>
-    <!-- Hair -->
-    <path d="M26,22 Q32,16 38,22 Q36,19 32,18 Q28,19 26,22" fill="#cc44cc"/>
+    <circle cx="32" cy="23" r="7" fill="#ffddee"/>
+
+    <!-- Top hair (crown) -->
+    <path d="M25,23 Q32,14 39,23 Q36,18 32,17 Q28,18 25,23" fill="#cc44cc"/>
+    <!-- Side curls -->
+    <path d="M25,25 Q22,28 24,31" stroke="#cc44cc" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M39,25 Q42,28 40,31" stroke="#cc44cc" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
     <!-- Eyes -->
-    <circle cx="30" cy="24" r="1" fill="#330044"/>
-    <circle cx="34" cy="24" r="1" fill="#330044"/>
-    <!-- Smile -->
-    <path d="M30,27 Q32,29 34,27" stroke="#cc44cc" stroke-width="0.8" fill="none" stroke-linecap="round"/>
+    <ellipse cx="29.5" cy="23" rx="1.5" ry="1.6" fill="#330044"/>
+    <ellipse cx="34.5" cy="23" rx="1.5" ry="1.6" fill="#330044"/>
+    <!-- Eye shines -->
+    <circle cx="30" cy="22.4" r="0.45" fill="white"/>
+    <circle cx="35" cy="22.4" r="0.45" fill="white"/>
+    <!-- Eyelashes (left eye) -->
+    <line x1="27.5" y1="21.2" x2="28.2" y2="20.5" stroke="#330044" stroke-width="0.6"/>
+    <line x1="29"   y1="20.8" x2="29.5" y2="20"   stroke="#330044" stroke-width="0.6"/>
+    <line x1="30.5" y1="20.6" x2="30.8" y2="19.7" stroke="#330044" stroke-width="0.6"/>
+    <!-- Eyelashes (right eye) -->
+    <line x1="32.8" y1="20.6" x2="33.2" y2="19.7" stroke="#330044" stroke-width="0.6"/>
+    <line x1="34.5" y1="20.8" x2="35"   y2="20"   stroke="#330044" stroke-width="0.6"/>
+    <line x1="36"   y1="21.2" x2="36.8" y2="20.5" stroke="#330044" stroke-width="0.6"/>
+
+    <!-- Rosy cheeks -->
+    <circle cx="26.5" cy="25.5" r="2.2" fill="#ff9999" opacity="0.35"/>
+    <circle cx="37.5" cy="25.5" r="2.2" fill="#ff9999" opacity="0.35"/>
+
+    <!-- Tiny nose -->
+    <circle cx="32" cy="25" r="0.7" fill="#cc9999" opacity="0.7"/>
+
+    <!-- Mouth (sweet smile) -->
+    <path d="M30,27 Q32,29 34,27" stroke="#cc44cc" stroke-width="0.9" fill="none" stroke-linecap="round"/>
 
     <!-- Wand arm -->
-    <line x1="37" y1="30" x2="48" y2="18" stroke="#cc88ff" stroke-width="2" stroke-linecap="round"/>
+    <line x1="37" y1="31" x2="48" y2="18" stroke="#cc88ff" stroke-width="1.5" stroke-linecap="round"/>
     <!-- Wand star (pulsing) -->
     <polygon points="48,14 49.5,18 54,18 50.5,21 52,25 48,22 44,25 45.5,21 42,18 46.5,18" fill="#ffaaff">
       <animate attributeName="opacity" values="1;0.4;1" dur="0.9s" repeatCount="indefinite"/>
