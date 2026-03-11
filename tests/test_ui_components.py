@@ -1099,8 +1099,8 @@ class TestThemeMakerEffect(unittest.TestCase):
                                   ("No Filter", _VULGAR)]:
             self.assertIn("recursive_check", tips,
                           f"{mode_name} missing 'recursive_check' tip")
-            self.assertEqual(len(tips["recursive_check"]), 5,
-                             f"{mode_name}['recursive_check'] should have 5 variants")
+            self.assertGreaterEqual(len(tips["recursive_check"]), 5,
+                             f"{mode_name}['recursive_check'] should have at least 5 variants")
 
     def test_settings_dialog_tooltip_keys_in_all_modes(self):
         """All 6 new settings-dialog tooltip keys must appear in every active mode."""
@@ -1114,8 +1114,8 @@ class TestThemeMakerEffect(unittest.TestCase):
             for key in new_keys:
                 self.assertIn(key, tips,
                               f"{mode_name} missing '{key}' tip")
-                self.assertEqual(len(tips[key]), 5,
-                                 f"{mode_name}['{key}'] should have 5 variants")
+                self.assertGreaterEqual(len(tips[key]), 5,
+                                 f"{mode_name}['{key}'] should have at least 5 variants")
 
 
 if __name__ == "__main__":

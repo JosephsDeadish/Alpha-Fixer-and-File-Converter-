@@ -1,9 +1,15 @@
 """
 Settings manager – persists all application settings using QSettings.
+
+Settings are stored in an INI file next to the executable so they are easy
+to find, back-up, and delete when testing.  When running from source the INI
+file lands next to main.py; when frozen by PyInstaller it lands next to the
+.exe.
 """
 import json
 import os
-from PyQt6.QtCore import QSettings, QStandardPaths
+import sys
+from PyQt6.QtCore import QSettings
 
 
 APP_NAME = "AlphaFixerConverter"
@@ -11,6 +17,25 @@ ORG_NAME = "PandaTools"
 
 # Default custom emoji used when none have been configured yet
 DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
+
+
+def _settings_ini_path() -> str:
+    """Return the absolute path to the INI file that stores all settings.
+
+    Priority:
+    1. Next to the frozen executable (sys.frozen / PyInstaller).
+    2. Next to main.py when running from source (three levels up from this
+       file: src/core/settings_manager.py → src/core → src → project root).
+    """
+    if getattr(sys, "frozen", False):
+        # Running as a PyInstaller bundle – place the INI next to the .exe
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        # Running from source – project root is three directories above this file
+        exe_dir = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
+        )
+    return os.path.join(exe_dir, f"{APP_NAME}.ini")
 
 
 class SettingsManager:
@@ -108,7 +133,7 @@ class SettingsManager:
     }
 
     def __init__(self):
-        self._qs = QSettings(ORG_NAME, APP_NAME)
+        self._qs = QSettings(_settings_ini_path(), QSettings.Format.IniFormat)
 
     # ------------------------------------------------------------------
     # Generic helpers

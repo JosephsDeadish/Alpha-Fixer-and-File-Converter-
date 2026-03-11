@@ -101,6 +101,8 @@ class HistoryTab(QWidget):
         """Register History tab widgets with the TooltipManager."""
         mgr.register(self._btn_refresh, "history_refresh_btn")
         mgr.register(self._btn_clear, "history_clear_btn")
+        mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
+        mgr.register(self._sub_tabs.widget(1), "history_alpha_sub")
 
     # ------------------------------------------------------------------
     # Refresh

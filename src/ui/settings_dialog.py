@@ -108,7 +108,23 @@ class SettingsDialog(QDialog):
 
         # ---- Preset GroupBox ----
         grp_preset_select = QGroupBox("Active Theme Preset")
-        psl = QHBoxLayout(grp_preset_select)
+        ps_vl = QVBoxLayout(grp_preset_select)
+        ps_vl.setSpacing(6)
+
+        # Search/filter row
+        search_row = QHBoxLayout()
+        search_row.addWidget(QLabel("🔍 Filter:"))
+        self._theme_search = QLineEdit()
+        self._theme_search.setPlaceholderText("Type to filter themes…")
+        self._theme_search.setClearButtonEnabled(True)
+        self._theme_search.setToolTip(
+            "Type part of a theme name to filter the list below."
+        )
+        search_row.addWidget(self._theme_search, 1)
+        ps_vl.addLayout(search_row)
+
+        # Preset selection row
+        psl = QHBoxLayout()
         psl.setSpacing(8)
         psl.addWidget(QLabel("Theme:"))
         self._theme_preset_combo = QComboBox()
@@ -129,6 +145,7 @@ class SettingsDialog(QDialog):
         psl.addWidget(self._btn_delete_theme)
         psl.addWidget(self._btn_export_theme)
         psl.addWidget(self._btn_import_theme)
+        ps_vl.addLayout(psl)
         tv.addWidget(grp_preset_select)
 
         # Color grid
@@ -377,6 +394,7 @@ class SettingsDialog(QDialog):
         # Connections
         # Preset combo: selecting a theme immediately applies it (no Apply button needed)
         self._theme_preset_combo.currentTextChanged.connect(self._on_preset_selected_live)
+        self._theme_search.textChanged.connect(self._on_theme_search_changed)
         self._btn_save_theme.clicked.connect(self._save_custom_theme)
         self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
         self._btn_export_theme.clicked.connect(self._export_theme)
@@ -405,22 +423,39 @@ class SettingsDialog(QDialog):
     # Theme combo helpers
     # ------------------------------------------------------------------
 
-    def _rebuild_theme_combo(self, select: str = ""):
+    def _on_theme_search_changed(self, text: str) -> None:
+        """Filter the theme combo to show only themes matching *text*."""
+        current = self._theme_preset_combo.currentText()
+        self._rebuild_theme_combo(select=current, filter_text=text)
+
+    def _current_filter_text(self) -> str:
+        """Return the current theme search filter text (empty string if not yet created)."""
+        return getattr(self._theme_search, "text", lambda: "")()
+
+    def _rebuild_theme_combo(self, select: str = "", filter_text: str = ""):
         self._theme_preset_combo.blockSignals(True)
         self._theme_preset_combo.clear()
+        needle = filter_text.lower().strip()
+
+        def _matches(name: str) -> bool:
+            return not needle or needle in name.lower()
+
         for name in PRESET_THEMES:
-            self._theme_preset_combo.addItem(name)
+            if _matches(name):
+                self._theme_preset_combo.addItem(name)
         # Show hidden themes that have been unlocked
         for name, t in HIDDEN_THEMES.items():
             unlock_key = f"unlock_{t.get('_unlock', '')}"
-            if self._settings.get(unlock_key, False):
+            if self._settings.get(unlock_key, False) and _matches(name):
                 self._theme_preset_combo.addItem(f"🔓 {name}")
         saved = self._settings.get_saved_themes()
-        if saved:
+        filtered_saved = [n for n in sorted(saved) if _matches(n)]
+        if filtered_saved:
             self._theme_preset_combo.insertSeparator(self._theme_preset_combo.count())
-            for name in sorted(saved):
+            for name in filtered_saved:
                 self._theme_preset_combo.addItem(f"★ {name}")
-        self._theme_preset_combo.addItem("— Custom —")
+        if not needle:
+            self._theme_preset_combo.addItem("— Custom —")
         if select:
             idx = self._theme_preset_combo.findText(select)
             if idx >= 0:
@@ -515,6 +550,7 @@ class SettingsDialog(QDialog):
 
     def register_tooltips(self, mgr) -> None:
         """Register dialog widgets with the TooltipManager for cycling tips."""
+        mgr.register(self._theme_search, "theme_search")
         mgr.register(self._theme_preset_combo, "theme_combo")
         mgr.register(self._effect_combo, "effect_combo")
         mgr.register(self._emoji_input, "custom_emoji")
@@ -582,7 +618,7 @@ class SettingsDialog(QDialog):
         self._theme["name"] = name
         self._theme["_effect"] = self._effect_combo.currentData() or "default"
         self._settings.save_named_theme(name, dict(self._theme))
-        self._rebuild_theme_combo(select=f"★ {name}")
+        self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
         QMessageBox.information(self, "Save Theme", f"Theme '{name}' saved.")
 
     def _delete_custom_theme(self):
@@ -594,7 +630,7 @@ class SettingsDialog(QDialog):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.delete_named_theme(raw_name)
-            self._rebuild_theme_combo()
+            self._rebuild_theme_combo(filter_text=self._current_filter_text())
 
     def _export_theme(self):
         """Export the current theme to a JSON file chosen by the user."""
@@ -645,7 +681,7 @@ class SettingsDialog(QDialog):
             theme_data["name"] = os.path.splitext(os.path.basename(path))[0]
         name = theme_data["name"]
         self._settings.save_named_theme(name, theme_data)
-        self._rebuild_theme_combo(select=f"★ {name}")
+        self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
         # Apply immediately
         self._theme = dict(theme_data)
         # Sync color buttons to the imported theme
