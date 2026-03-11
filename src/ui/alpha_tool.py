@@ -247,7 +247,7 @@ class AlphaFixerTab(QWidget):
         ca_layout.addWidget(compare_lbl)
 
         self._compare = BeforeAfterWidget()
-        self._compare.setMinimumHeight(160)
+        self._compare.setMinimumHeight(200)
         ca_layout.addWidget(self._compare, 1)
 
         # Alpha stats: before on the left, after on the right (side-by-side)
@@ -272,7 +272,7 @@ class AlphaFixerTab(QWidget):
         ca_layout.addLayout(stats_row)
 
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([280, 320])
+        left_vsplit.setSizes([260, 360])
 
         lv.addWidget(left_vsplit, 1)
         outer_splitter.addWidget(left)
@@ -539,8 +539,10 @@ class AlphaFixerTab(QWidget):
         # Fine-tune controls → refresh compare preview AND live params label
         self._alpha_spin.valueChanged.connect(self._on_finetune_changed)
         self._threshold_spin.valueChanged.connect(self._on_finetune_changed)
-        self._clamp_min_spin.valueChanged.connect(self._on_finetune_changed)
-        self._clamp_max_spin.valueChanged.connect(self._on_finetune_changed)
+        # Cross-validate clamp min/max to enforce min ≤ max and prevent
+        # invalid bounds being passed to np.clip().
+        self._clamp_min_spin.valueChanged.connect(self._on_clamp_min_changed)
+        self._clamp_max_spin.valueChanged.connect(self._on_clamp_max_changed)
         self._invert_check.toggled.connect(self._on_finetune_changed)
         self._binary_cut_check.toggled.connect(self._on_finetune_changed)
         self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
@@ -785,6 +787,26 @@ class AlphaFixerTab(QWidget):
         self._alpha_slider.setEnabled(checked)
         self._refresh_finetune_label()
         self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_clamp_min_changed(self, value: int) -> None:
+        """Ensure clamp_max >= clamp_min, then trigger the normal finetune update."""
+        # Prevent clamp_max from falling below the new minimum without preventing
+        # the user from typing an independent value into clamp_max later.
+        if self._clamp_max_spin.value() < value:
+            self._clamp_max_spin.blockSignals(True)
+            self._clamp_max_spin.setValue(value)
+            self._clamp_max_spin.blockSignals(False)
+        self._on_finetune_changed()
+
+    @pyqtSlot(int)
+    def _on_clamp_max_changed(self, value: int) -> None:
+        """Ensure clamp_min <= clamp_max, then trigger the normal finetune update."""
+        if self._clamp_min_spin.value() > value:
+            self._clamp_min_spin.blockSignals(True)
+            self._clamp_min_spin.setValue(value)
+            self._clamp_min_spin.blockSignals(False)
+        self._on_finetune_changed()
 
     @pyqtSlot()
     def _on_finetune_changed(self, *args):

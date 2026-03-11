@@ -140,7 +140,7 @@ class ConverterTab(QWidget):
 
         # Preview pane
         self._preview = ImagePreviewPane()
-        self._preview.setMinimumHeight(160)
+        self._preview.setMinimumHeight(220)
         lv.addWidget(self._preview, 1)
 
         splitter.addWidget(left)

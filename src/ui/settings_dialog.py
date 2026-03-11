@@ -339,8 +339,6 @@ class SettingsDialog(QDialog):
         sound_gl.addLayout(sound_row, 1, 1)
         tv.addWidget(grp_sound)
 
-        tv.addStretch(1)
-
         # Wrap the theme tab contents in a scroll area so all controls are always
         # reachable regardless of screen/window size.
         theme_scroll = QScrollArea()
@@ -381,8 +379,6 @@ class SettingsDialog(QDialog):
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
         gv.addWidget(grp_misc)
-
-        gv.addStretch(1)
 
         # Wrap the general tab contents in a scroll area so checkboxes
         # are always reachable regardless of screen/window size.

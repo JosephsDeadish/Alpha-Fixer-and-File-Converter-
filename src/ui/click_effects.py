@@ -337,7 +337,7 @@ def _spawn_sparkle(x, y):
     particles = []
     sparkle_emojis = ["✨", "⭐", "💫", "🌟", "❄", "💎", "🔷", "✦"]
     sparkle_colors = ["#aaddff", "#ffffff", "#88ccff", "#cceeFF", "#66bbff", "#eef4ff"]
-    for _ in range(7):
+    for _ in range(5):  # reduced from 7 to cut CPU
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(1.5, 6.5)
         vx = math.cos(angle) * speed
@@ -356,9 +356,9 @@ def _spawn_ripple(x, y):
     particles = []
     ripple_emojis = ["💧", "🫧", "🌊", "🐚", "🐬", "🦈"]
     ripple_colors = ["#33aaff", "#00ddee", "#55ccff", "#0099cc", "#77ddff", "#22bbdd"]
-    for i in range(8):
+    for i in range(5):  # reduced from 8 to cut CPU
         # Spray outward in all directions at low speed, simulating a ripple
-        angle = (i / 8) * 2 * math.pi + random.uniform(-0.3, 0.3)
+        angle = (i / 5) * 2 * math.pi + random.uniform(-0.3, 0.3)
         speed = random.uniform(1.0, 5.0)
         vx = math.cos(angle) * speed
         vy = math.sin(angle) * speed
@@ -376,7 +376,7 @@ def _spawn_mermaid(x, y):
     particles = []
     mermaid_emojis = ["🧜", "🐠", "🐟", "🦀", "🐚", "💧", "🫧", "🌊", "🪸", "✨"]
     mermaid_colors = ["#00ccaa", "#33ddff", "#aa44ff", "#ff66cc", "#77ffee", "#ff99cc"]
-    for _ in range(8):
+    for _ in range(5):  # reduced from 8 to cut CPU
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(1.5, 6.0)
         vx = math.cos(angle) * speed
@@ -395,7 +395,7 @@ def _spawn_alien(x, y):
     particles = []
     alien_emojis = ["🛸", "👽", "🌌", "⭐", "💫", "🔬", "☄", "🪐"]
     alien_colors = ["#00ff88", "#88ff00", "#00ffcc", "#44ff44", "#ccff00", "#66ff66"]
-    for _ in range(8):
+    for _ in range(5):  # reduced from 8 to cut CPU
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(1.0, 5.5)
         vx = math.cos(angle) * speed
@@ -414,7 +414,7 @@ def _spawn_shark(x, y):
     particles = []
     shark_emojis = ["🦈", "🩸", "💥", "🐟", "🐠", "💦", "🫧"]
     shark_colors = ["#1177aa", "#0055cc", "#3399cc", "#cc1133", "#aa3355", "#ff4466"]
-    for _ in range(8):
+    for _ in range(5):  # reduced from 8 to cut CPU
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(2.0, 7.0)
         vx = math.cos(angle) * speed
@@ -652,8 +652,8 @@ class ClickEffectsOverlay(QWidget):
         if not self._timer.isActive():
             self._timer.start()
         # Hard cap to prevent unbounded growth during rapid clicking
-        if len(self._particles) > 80:
-            self._particles = self._particles[-50:]
+        if len(self._particles) > 60:
+            self._particles = self._particles[-40:]
 
     # ------------------------------------------------------------------
     # Event filter

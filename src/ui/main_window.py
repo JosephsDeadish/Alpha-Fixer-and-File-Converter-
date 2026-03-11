@@ -126,12 +126,6 @@ class _SpinningEmojiLabel(QWidget):
 
 
 class MainWindow(QMainWindow):
-    # Spinner frames used to create a "turning gear" animation on the tab labels.
-    # Each character represents a quarter-turn of a circle, cycling gives a smooth spin.
-    _TAB_SPINNER_FRAMES = ("◐", "◑", "◒", "◓")
-    # Animation interval in milliseconds (150 ms/frame ≈ 600 ms per full rotation).
-    _TAB_SPINNER_INTERVAL_MS = 150
-
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
@@ -149,8 +143,6 @@ class MainWindow(QMainWindow):
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
-        self._tab_anim_timer = None   # drives tab-label spinning animation
-        self._tab_spinner_idx: int = 0
         self._tab_base_labels: tuple = ()   # set during first _apply_theme()
         self._setup_window()
         self._setup_ui()
@@ -534,19 +526,9 @@ class MainWindow(QMainWindow):
         # Stop any legacy animation timer (banner no longer cycles emojis)
         if self._anim_timer is not None:
             self._anim_timer.stop()
-        # Store theme-specific tab labels; the spinner timer will animate them.
-        # Themes produce distinct emoji prefixes via get_theme_tab_labels() so the
-        # tabs visually reflect the active theme.
+        # Store theme-specific tab labels; update tab text directly (no spinner).
         self._tab_base_labels = get_theme_tab_labels(theme_name)
-        # Show the current spinner frame immediately so the tab text updates on
-        # theme change without waiting for the next timer tick.
-        self._update_tabs_with_spinner()
-        # Ensure the tab spinner animation timer is running.
-        if self._tab_anim_timer is None:
-            self._tab_anim_timer = QTimer(self)
-            self._tab_anim_timer.setInterval(self._TAB_SPINNER_INTERVAL_MS)
-            self._tab_anim_timer.timeout.connect(self._tick_tab_spinner)
-            self._tab_anim_timer.start()
+        self._update_tab_labels()
         # Update inner tab headers to also reflect the active theme
         self._alpha_tab.update_theme(theme_name)
         self._converter_tab.update_theme(theme_name)
@@ -567,21 +549,10 @@ class MainWindow(QMainWindow):
         if self._click_effects is not None:
             self._apply_theme_effect()
 
-    def _update_tabs_with_spinner(self):
-        """Write the current spinner frame + theme label to every tab."""
-        s = self._TAB_SPINNER_FRAMES[self._tab_spinner_idx]
+    def _update_tab_labels(self):
+        """Write the theme-specific label to every tab (no animation prefix)."""
         for i, base in enumerate(self._tab_base_labels):
-            self._tabs.setTabText(i, f"{s} {base}")
-
-    def _tick_tab_spinner(self):
-        """Advance the tab-label spinner by one frame.
-
-        This creates a continuous "turning gear" animation on the tab labels:
-        the rotating quarter-circle prefix (◐ → ◑ → ◒ → ◓ → …) gives a smooth
-        spinning visual without cycling between different theme emojis.
-        """
-        self._tab_spinner_idx = (self._tab_spinner_idx + 1) % len(self._TAB_SPINNER_FRAMES)
-        self._update_tabs_with_spinner()
+            self._tabs.setTabText(i, base)
 
     def _make_toolbar_panda_icon(self):
         """Render the panda SVG to a 28×28 QLabel for the toolbar. Returns None on failure."""

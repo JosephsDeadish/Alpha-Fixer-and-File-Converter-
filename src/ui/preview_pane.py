@@ -10,7 +10,7 @@ All image loading is done in background QThreads so the UI is never blocked.
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, QRect, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QFont, QFontMetrics,
     QPixmap, QImage, QColor,
@@ -449,7 +449,7 @@ class ImagePreviewPane(QWidget):
 
         self._img_label = QLabel()
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setMinimumSize(10, 10)
+        self._img_label.setMinimumSize(160, 140)
         self._img_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding,
         )
@@ -520,8 +520,9 @@ class ImagePreviewPane(QWidget):
         available = self._img_label.size()
         # Guard against a zero/tiny label size when the widget hasn't been
         # laid out yet (the thread may finish before the first layout pass).
-        if available.width() < 10 or available.height() < 10:
-            available = pix.size()
+        if available.width() < 20 or available.height() < 20:
+            # Use a sensible fallback so the image is still visible.
+            available = QSize(max(pix.width(), 200), max(pix.height(), 180))
         if not available.isEmpty():
             scaled = pix.scaled(
                 available,
