@@ -52,7 +52,9 @@ def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
         painter = QPainter(pix)
         # Use a font stack that covers Windows (Segoe UI Emoji), macOS (Apple Color Emoji),
         # and Linux (Noto Color Emoji) so the emoji renders on every platform.
-        font = QFont("Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji", max(6, size - 6))
+        font = QFont()
+        font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+        font.setPointSize(max(6, size - 6))
         painter.setFont(font)
         painter.drawText(
             QRect(0, 0, size, size),
@@ -112,7 +114,9 @@ class _SpinningEmojiLabel(QWidget):
         painter.translate(w / 2.0, h / 2.0)
         painter.rotate(self._angle)
 
-        font = QFont("Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji", self._font_size)
+        font = QFont()
+        font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+        font.setPointSize(self._font_size)
         painter.setFont(font)
         fm = QFontMetrics(font)
         tw = fm.horizontalAdvance(self._emoji)
