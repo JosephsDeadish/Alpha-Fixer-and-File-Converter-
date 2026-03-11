@@ -215,8 +215,10 @@ class AlphaFixerTab(QWidget):
         go_layout.setVerticalSpacing(10)
         # Explicit row minimum heights prevent the nested QHBoxLayout in row 0
         # from causing the two rows to visually overlap on some platforms.
-        go_layout.setRowMinimumHeight(0, 36)
-        go_layout.setRowMinimumHeight(1, 36)
+        # 40 px gives comfortable clearance for 28 px widgets plus any
+        # platform-default margins the nested QHBoxLayout may add.
+        go_layout.setRowMinimumHeight(0, 40)
+        go_layout.setRowMinimumHeight(1, 40)
 
         lbl_out_folder = QLabel("Output folder:")
         lbl_out_folder.setMinimumHeight(24)
@@ -277,7 +279,12 @@ class AlphaFixerTab(QWidget):
         # Wrap controls + file-list in a scroll area so they remain accessible
         # on smaller windows.  The compare widget lives OUTSIDE this scroll area
         # so it is never clipped by layout size constraints.
-        left.setMinimumHeight(300)
+        # Do NOT set an explicit minimum height here: the QVBoxLayout already
+        # computes a natural minimum (~370 px) from its children, and the
+        # scroll area respects that value.  An explicit override smaller than
+        # the natural minimum (e.g. 300 px) would allow the scroll area to
+        # squish the widget below its natural minimum, causing rows in the
+        # Output group-box and the file list to visually overlap.
         left_scroll = QScrollArea()
         left_scroll.setWidget(left)
         left_scroll.setWidgetResizable(True)
@@ -328,7 +335,7 @@ class AlphaFixerTab(QWidget):
         left_vsplit.setMinimumWidth(320)
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([300, 380])
+        left_vsplit.setSizes([420, 380])
         outer_splitter.addWidget(left_vsplit)
 
         # ==============================================================
