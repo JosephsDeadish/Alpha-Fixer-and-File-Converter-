@@ -74,8 +74,7 @@ class _AlphaPreviewLoader(QThread):
             elif self._manual is not None:
                 processed = apply_manual_alpha(
                     orig,
-                    mode=self._manual.get("mode", "set"),
-                    value=self._manual.get("value", 255),
+                    value=self._manual.get("value"),  # None = clamp only
                     threshold=self._manual.get("threshold", 0),
                     invert=self._manual.get("invert", False),
                     clamp_min=self._manual.get("clamp_min", 0),
@@ -331,23 +330,35 @@ class AlphaFixerTab(QWidget):
         gt_layout.setHorizontalSpacing(12)
         gt_layout.setVerticalSpacing(8)
 
+        # "Apply fixed alpha value" checkbox — controls whether the alpha spinbox value
+        # is applied to pixels.  Unchecked = clamp-only mode (alpha values are preserved,
+        # only clamping is applied).  Checked = set alpha to the specified value first.
+        self._apply_alpha_check = QCheckBox("Apply fixed alpha value")
+        self._apply_alpha_check.setChecked(True)
+        self._apply_alpha_check.setToolTip(
+            "When checked, all pixels (or pixels below threshold) are set to the value above.\n"
+            "When unchecked, pixel alpha values are preserved — only Clamp Min/Max are applied."
+        )
+        gt_layout.addWidget(self._apply_alpha_check, 0, 0, 1, 2)
+
         lbl_alpha_val = QLabel("Set alpha to (0–255):")
         lbl_alpha_val.setMinimumHeight(24)
         lbl_alpha_val.setToolTip(
             "Target alpha value applied to all pixels (or to pixels below the threshold).\n"
-            "0 = fully transparent · 255 = fully opaque"
+            "0 = fully transparent · 255 = fully opaque\n"
+            "Only active when 'Apply fixed alpha value' is checked."
         )
-        gt_layout.addWidget(lbl_alpha_val, 0, 0)
+        gt_layout.addWidget(lbl_alpha_val, 1, 0)
         self._alpha_spin = QSpinBox()
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(255)
         self._alpha_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._alpha_spin, 0, 1)
+        gt_layout.addWidget(self._alpha_spin, 1, 1)
 
         self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
         self._alpha_slider.setRange(0, 255)
         self._alpha_slider.setValue(255)
-        gt_layout.addWidget(self._alpha_slider, 1, 0, 1, 2)
+        gt_layout.addWidget(self._alpha_slider, 2, 0, 1, 2)
 
         lbl_thresh = QLabel("Threshold (0 = all pixels):")
         lbl_thresh.setMinimumHeight(24)
@@ -355,46 +366,46 @@ class AlphaFixerTab(QWidget):
             "Only pixels with alpha BELOW this value are affected by the 'Set alpha to' value.\n"
             "0 means every pixel is affected regardless of its current alpha."
         )
-        gt_layout.addWidget(lbl_thresh, 2, 0)
+        gt_layout.addWidget(lbl_thresh, 3, 0)
         self._threshold_spin = QSpinBox()
         self._threshold_spin.setRange(0, 255)
         self._threshold_spin.setValue(0)
         self._threshold_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._threshold_spin, 2, 1)
+        gt_layout.addWidget(self._threshold_spin, 3, 1)
 
         lbl_cmin = QLabel("Clamp Min (floor, 0–255):")
         lbl_cmin.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_cmin, 3, 0)
+        gt_layout.addWidget(lbl_cmin, 4, 0)
         self._clamp_min_spin = QSpinBox()
         self._clamp_min_spin.setRange(0, 255)
         self._clamp_min_spin.setValue(0)
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Output floor: any pixel alpha below this value is raised to this value.\n"
-            "0 = no floor (default). Applied after the alpha value is set."
+            "0 = no floor (default). Applied after any fixed alpha value is set."
         )
-        gt_layout.addWidget(self._clamp_min_spin, 3, 1)
+        gt_layout.addWidget(self._clamp_min_spin, 4, 1)
 
         lbl_cmax = QLabel("Clamp Max (ceiling, 0–255):")
         lbl_cmax.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_cmax, 4, 0)
+        gt_layout.addWidget(lbl_cmax, 5, 0)
         self._clamp_max_spin = QSpinBox()
         self._clamp_max_spin.setRange(0, 255)
         self._clamp_max_spin.setValue(255)
         self._clamp_max_spin.setMinimumHeight(26)
         self._clamp_max_spin.setToolTip(
             "Output ceiling: any pixel alpha above this value is capped to this value.\n"
-            "255 = no ceiling (default). Applied after the alpha value is set.\n"
+            "255 = no ceiling (default). Applied after any fixed alpha value is set.\n"
             "Example: set max=128 to replicate PS2's 0–128 alpha range."
         )
-        gt_layout.addWidget(self._clamp_max_spin, 4, 1)
+        gt_layout.addWidget(self._clamp_max_spin, 5, 1)
 
         self._invert_check = QCheckBox("Invert Alpha")
-        gt_layout.addWidget(self._invert_check, 5, 0, 1, 2)
+        gt_layout.addWidget(self._invert_check, 6, 0, 1, 2)
 
         self._use_preset_check = QCheckBox("Use preset (ignore fine-tune)")
         self._use_preset_check.setChecked(True)
-        gt_layout.addWidget(self._use_preset_check, 6, 0, 1, 2)
+        gt_layout.addWidget(self._use_preset_check, 7, 0, 1, 2)
 
         # Live "Current Params" display — updates whenever any fine-tune control changes.
         # Populated by _refresh_finetune_label() at the end of _setup_ui.
@@ -406,7 +417,7 @@ class AlphaFixerTab(QWidget):
             "Live summary of the current fine-tune parameters.\n"
             "Updates instantly as you change any control above."
         )
-        gt_layout.addWidget(self._finetune_params_lbl, 7, 0, 1, 2)
+        gt_layout.addWidget(self._finetune_params_lbl, 8, 0, 1, 2)
 
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
@@ -507,6 +518,7 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.valueChanged.connect(self._on_finetune_changed)
         self._clamp_max_spin.valueChanged.connect(self._on_finetune_changed)
         self._invert_check.toggled.connect(self._on_finetune_changed)
+        self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
         self._use_preset_check.toggled.connect(self._update_compare)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
         self._green_spin.valueChanged.connect(self._on_finetune_changed)
@@ -590,18 +602,23 @@ class AlphaFixerTab(QWidget):
         # Block signals on fine-tune controls while we populate them so each
         # value change doesn't restart the debounce timer individually.
         finetune_controls = [
+            self._apply_alpha_check,
             self._alpha_spin, self._alpha_slider,
             self._threshold_spin, self._clamp_min_spin, self._clamp_max_spin,
             self._invert_check,
         ]
         for c in finetune_controls:
             c.blockSignals(True)
-        # Show the relevant alpha value from the preset in the fine-tune controls.
-        # For multiply/add/subtract presets the fill_value is more meaningful;
-        # for set/clamp presets alpha_value or clamp values are used directly.
-        val = preset.alpha_value if preset.alpha_value is not None else preset.fill_value
+        # If the preset has a fixed alpha_value, enable the "Apply fixed alpha" checkbox
+        # and show that value.  If alpha_value is None (clamp-only presets), uncheck it
+        # so the fine-tune shows the correct "clamp only" intent.
+        has_value = preset.alpha_value is not None
+        self._apply_alpha_check.setChecked(has_value)
+        val = preset.alpha_value if has_value else 255
         self._alpha_spin.setValue(int(val))
         self._alpha_slider.setValue(int(val))
+        self._alpha_spin.setEnabled(has_value)
+        self._alpha_slider.setEnabled(has_value)
         self._threshold_spin.setValue(int(preset.threshold))
         self._clamp_min_spin.setValue(int(preset.clamp_min))
         self._clamp_max_spin.setValue(int(preset.clamp_max))
@@ -620,18 +637,22 @@ class AlphaFixerTab(QWidget):
         if not ok or not name.strip():
             return
         name = name.strip()
+        apply_val = self._apply_alpha_check.isChecked()
+        alpha_val = self._alpha_spin.value() if apply_val else None
+        desc_parts = []
+        if alpha_val is not None:
+            desc_parts.append(f"value={alpha_val}")
+        desc_parts.append(
+            f"threshold={self._threshold_spin.value()}  "
+            f"clamp={self._clamp_min_spin.value()}–{self._clamp_max_spin.value()}"
+        )
         preset = AlphaPreset(
             name=name,
-            alpha_value=self._alpha_spin.value(),
-            fill_mode="set",
-            fill_value=self._alpha_spin.value(),
+            alpha_value=alpha_val,
             threshold=self._threshold_spin.value(),
             invert=self._invert_check.isChecked(),
             description=(
-                f"Custom preset '{name}'  "
-                f"[set value={self._alpha_spin.value()}  "
-                f"threshold={self._threshold_spin.value()}  "
-                f"clamp={self._clamp_min_spin.value()}–{self._clamp_max_spin.value()}]"
+                f"Custom preset '{name}'  " + "  ".join(desc_parts)
             ),
             builtin=False,
             clamp_min=self._clamp_min_spin.value(),
@@ -708,11 +729,14 @@ class AlphaFixerTab(QWidget):
 
     def _refresh_finetune_label(self) -> None:
         """Update the live fine-tune params summary label."""
-        val    = self._alpha_spin.value()
         cmin   = self._clamp_min_spin.value()
         cmax   = self._clamp_max_spin.value()
         thresh = self._threshold_spin.value()
-        parts  = [f"set={val}"]
+        parts  = []
+        if self._apply_alpha_check.isChecked():
+            parts.append(f"set={self._alpha_spin.value()}")
+        else:
+            parts.append("clamp only")
         if cmin > 0 or cmax < 255:
             parts.append(f"clamp={cmin}–{cmax}")
         if thresh:
@@ -720,6 +744,14 @@ class AlphaFixerTab(QWidget):
         if self._invert_check.isChecked():
             parts.append("invert=yes")
         self._finetune_params_lbl.setText("  ·  ".join(parts))
+
+    @pyqtSlot(bool)
+    def _on_apply_alpha_toggled(self, checked: bool) -> None:
+        """Enable/disable alpha value controls based on the 'Apply fixed alpha value' checkbox."""
+        self._alpha_spin.setEnabled(checked)
+        self._alpha_slider.setEnabled(checked)
+        self._refresh_finetune_label()
+        self._preview_debounce.start()
 
     @pyqtSlot()
     def _on_finetune_changed(self, *args):
@@ -754,8 +786,7 @@ class AlphaFixerTab(QWidget):
             preset = self._presets.get_preset(self._preset_combo.currentText())
         else:
             manual = {
-                "mode": "set",
-                "value": self._alpha_spin.value(),
+                "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
@@ -774,9 +805,14 @@ class AlphaFixerTab(QWidget):
                 manual["rgb"] = rgb_params
             else:
                 # preset mode + RGBA adjust: build a passthrough manual with rgb
-                manual = {"mode": "set", "value": 255, "threshold": 0,
-                          "invert": False, "clamp_min": 0, "clamp_max": 255,
-                          "rgb": rgb_params}
+                manual = {
+                    "value": None,
+                    "threshold": 0,
+                    "invert": False,
+                    "clamp_min": 0,
+                    "clamp_max": 255,
+                    "rgb": rgb_params,
+                }
 
         self._compare.set_loading()
         self._preview_loader = _AlphaPreviewLoader(
@@ -838,8 +874,7 @@ class AlphaFixerTab(QWidget):
             preset = self._presets.get_preset(self._preset_combo.currentText())
         else:
             manual = {
-                "mode": "set",
-                "value": self._alpha_spin.value(),
+                "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
@@ -857,9 +892,14 @@ class AlphaFixerTab(QWidget):
             if manual is not None:
                 manual["rgb"] = rgb_params
             else:
-                manual = {"mode": "set", "value": 255, "threshold": 0,
-                          "invert": False, "clamp_min": 0, "clamp_max": 255,
-                          "rgb": rgb_params}
+                manual = {
+                    "value": None,
+                    "threshold": 0,
+                    "invert": False,
+                    "clamp_min": 0,
+                    "clamp_max": 255,
+                    "rgb": rgb_params,
+                }
 
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()

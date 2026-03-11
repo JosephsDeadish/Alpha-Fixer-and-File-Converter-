@@ -92,8 +92,7 @@ class AlphaWorker(QThread):
                 elif self._manual is not None:
                     img = apply_manual_alpha(
                         img,
-                        mode=self._manual.get("mode", "set"),
-                        value=self._manual.get("value", 255),
+                        value=self._manual.get("value"),  # None = clamp only, no fixed value
                         threshold=self._manual.get("threshold", 0),
                         invert=self._manual.get("invert", False),
                         clamp_min=self._manual.get("clamp_min", 0),

@@ -61,20 +61,12 @@ class TestPresets(unittest.TestCase):
 
     # Use the current preset names
     _FULL_OPACITY_NAME = "Full Opacity  (N64 · DS · Wii · Xbox 360 · PS2 BG)"
-    _PS2_NORMALIZE_NAME = "PS2 Normalize α×2  (0–128 → 0–255)"
     _PS2_FULL_OPAQUE_NAME = "PS2 Set Full Opaque  (fill α=128)"
 
     def test_ps2_preset_values(self):
         p = self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME)
         self.assertIsNotNone(p)
         self.assertEqual(p.alpha_value, 128)
-        self.assertEqual(p.fill_mode, "set")
-
-    def test_ps2_normalize_preset(self):
-        p = self._mgr.get_preset(self._PS2_NORMALIZE_NAME)
-        self.assertIsNotNone(p)
-        self.assertEqual(p.fill_mode, "multiply")
-        self.assertEqual(p.fill_value, 200)
 
     def test_ps2_clamp_presets(self):
         for cap in (128, 145, 150):
@@ -83,6 +75,9 @@ class TestPresets(unittest.TestCase):
             self.assertTrue(matched, f"Expected a PS2 clamp-max-{cap} preset")
             p = matched[0]
             self.assertEqual(p.clamp_max, cap)
+            # Clamp-only presets should have alpha_value=None
+            self.assertIsNone(p.alpha_value)
+
     def test_n64_preset_values(self):
         p = self._mgr.get_preset(self._FULL_OPACITY_NAME)
         self.assertIsNotNone(p)
@@ -92,12 +87,12 @@ class TestPresets(unittest.TestCase):
         self.assertIsNone(self._mgr.get_preset("DoesNotExist"))
 
     def test_cannot_overwrite_builtin(self):
-        custom = AlphaPreset(self._PS2_FULL_OPAQUE_NAME, 0, "set", 0, 0, False, "test")
+        custom = AlphaPreset(self._PS2_FULL_OPAQUE_NAME, 0, 0, False, "test")
         result = self._mgr.save_custom_preset(custom)
         self.assertFalse(result)
 
     def test_save_and_retrieve_custom_preset(self):
-        custom = AlphaPreset("My Custom", 200, "set", 200, 0, False, "desc", builtin=False)
+        custom = AlphaPreset("My Custom", 200, 0, False, "desc", builtin=False)
         result = self._mgr.save_custom_preset(custom)
         self.assertTrue(result)
         retrieved = self._mgr.get_preset("My Custom")
@@ -105,7 +100,7 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(retrieved.alpha_value, 200)
 
     def test_delete_custom_preset(self):
-        custom = AlphaPreset("ToDelete", 100, "set", 100, 0, False, "desc", builtin=False)
+        custom = AlphaPreset("ToDelete", 100, 0, False, "desc", builtin=False)
         self._mgr.save_custom_preset(custom)
         result = self._mgr.delete_custom_preset("ToDelete")
         self.assertTrue(result)
@@ -125,85 +120,118 @@ class TestAlphaProcessor(unittest.TestCase):
 
     def test_set_alpha_to_255(self):
         img = make_rgba_image(alpha=128)
-        preset = AlphaPreset("test", 255, "set", 255, 0, False, "")
+        preset = AlphaPreset("test", 255, 0, False, "")
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 255))
 
     def test_set_alpha_to_0(self):
         img = make_rgba_image(alpha=200)
-        preset = AlphaPreset("test", 0, "set", 0, 0, False, "")
+        preset = AlphaPreset("test", 0, 0, False, "")
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 0))
 
     def test_ps2_preset(self):
         img = make_rgba_image(alpha=200)
-        preset = AlphaPreset("PS2", 128, "set", 128, 0, False, "")
+        preset = AlphaPreset("PS2", 128, 0, False, "")
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_invert_alpha(self):
         img = make_rgba_image(alpha=100)
-        preset = AlphaPreset("inv", None, "set", 0, 0, True, "")
+        preset = AlphaPreset("inv", None, 0, True, "")
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 155))  # 255 - 100 = 155
 
-    def test_add_alpha(self):
+    def test_add_alpha_via_rgba_adjust(self):
+        """add mode removed; use apply_rgba_adjust for alpha delta."""
         img = make_rgba_image(alpha=100)
-        preset = AlphaPreset("add", 50, "add", 50, 0, False, "")
-        result = apply_alpha_preset(img, preset)
+        result = apply_rgba_adjust(img, alpha_delta=50)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 150))
 
-    def test_subtract_alpha(self):
+    def test_subtract_alpha_via_rgba_adjust(self):
+        """subtract mode removed; use apply_rgba_adjust for alpha delta."""
         img = make_rgba_image(alpha=100)
-        preset = AlphaPreset("sub", 30, "subtract", 30, 0, False, "")
-        result = apply_alpha_preset(img, preset)
+        result = apply_rgba_adjust(img, alpha_delta=-30)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 70))
 
     def test_clamp_alpha_no_negative(self):
+        """apply_rgba_adjust clamps subtract below 0."""
         img = make_rgba_image(alpha=10)
-        preset = AlphaPreset("sub", 50, "subtract", 50, 0, False, "")
-        result = apply_alpha_preset(img, preset)
+        result = apply_rgba_adjust(img, alpha_delta=-50)
         arr = np.array(result)
         # 10 - 50 = -40 -> clamped to 0
         self.assertTrue(np.all(arr[:, :, 3] == 0))
 
     def test_clamp_alpha_no_overflow(self):
+        """apply_rgba_adjust clamps add above 255."""
         img = make_rgba_image(alpha=250)
-        preset = AlphaPreset("add", 20, "add", 20, 0, False, "")
-        result = apply_alpha_preset(img, preset)
+        result = apply_rgba_adjust(img, alpha_delta=20)
         arr = np.array(result)
         # 250 + 20 = 270 -> clamped to 255
         self.assertTrue(np.all(arr[:, :, 3] == 255))
 
     def test_manual_alpha(self):
         img = make_rgba_image(alpha=100)
-        result = apply_manual_alpha(img, mode="set", value=200)
+        result = apply_manual_alpha(img, value=200)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 200))
 
-    def test_multiply_mode(self):
+    def test_manual_alpha_clamp_only(self):
+        """value=None should only apply clamping, not change pixel alpha."""
         img = make_rgba_image(alpha=200)
-        preset = AlphaPreset("mul", None, "multiply", 50, 0, False, "")
+        result = apply_manual_alpha(img, value=None, clamp_max=128)
+        arr = np.array(result)
+        # 200 clamped to 128
+        self.assertTrue(np.all(arr[:, :, 3] == 128))
+
+    def test_clamp_min_preset(self):
+        """Clamp-only preset with alpha_value=None should only clamp."""
+        img = make_rgba_image(alpha=50)
+        preset = AlphaPreset("clamp", None, 0, False, "", clamp_min=100, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        expected = int(200 * 0.50)
-        self.assertTrue(np.all(arr[:, :, 3] == expected))
+        # 50 raised to 100
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
+
+    def test_clamp_max_preset(self):
+        """Clamp-only preset with alpha_value=None should only clamp."""
+        img = make_rgba_image(alpha=200)
+        preset = AlphaPreset("clamp", None, 0, False, "", clamp_min=0, clamp_max=128)
+        result = apply_alpha_preset(img, preset)
+        arr = np.array(result)
+        # 200 capped to 128
+        self.assertTrue(np.all(arr[:, :, 3] == 128))
+
+    def test_binary_cut_preset(self):
+        """binary_cut=True should give hard 0/255 split at threshold."""
+        # alpha=50 → below 128 → should become 0
+        img_low = make_rgba_image(alpha=50)
+        preset = AlphaPreset("cut", None, 128, False, "", binary_cut=True)
+        result_low = apply_alpha_preset(img_low, preset)
+        arr_low = np.array(result_low)
+        self.assertTrue(np.all(arr_low[:, :, 3] == 0))
+
+        # alpha=200 → above 128 → should become 255
+        img_high = make_rgba_image(alpha=200)
+        result_high = apply_alpha_preset(img_high, preset)
+        arr_high = np.array(result_high)
+        self.assertTrue(np.all(arr_high[:, :, 3] == 255))
 
     def test_output_is_rgba(self):
         img = make_rgba_image(alpha=100)
-        preset = AlphaPreset("test", 200, "set", 200, 0, False, "")
+        preset = AlphaPreset("test", 200, 0, False, "")
         result = apply_alpha_preset(img, preset)
         self.assertEqual(result.mode, "RGBA")
 
     def test_rgb_input_converted(self):
         img = Image.new("RGB", (4, 4), (200, 200, 200))
-        preset = AlphaPreset("test", 128, "set", 128, 0, False, "")
+        preset = AlphaPreset("test", 128, 0, False, "")
         result = apply_alpha_preset(img, preset)
         self.assertEqual(result.mode, "RGBA")
         arr = np.array(result)
