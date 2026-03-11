@@ -36,6 +36,9 @@ class ConverterTab(QWidget):
         super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
+        # ETA tracking for large batch runs
+        self._batch_start_time: float = 0.0
+        self._batch_total: int = 0
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
@@ -477,7 +480,7 @@ class ConverterTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Converting…")
-        self._batch_start_time: float = time.monotonic()
+        self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
 
         self._worker = ConverterWorker(
@@ -510,7 +513,7 @@ class ConverterTab(QWidget):
         pct = int(current / max(total, 1) * 100)
         self._progress.setValue(pct)
         # Show ETA for large batches (>= 500 files)
-        elapsed = time.monotonic() - getattr(self, "_batch_start_time", 0)
+        elapsed = time.monotonic() - self._batch_start_time
         if total >= 500 and current > 0 and elapsed > 1.0:
             rate = current / elapsed
             remaining = max(0, total - current)

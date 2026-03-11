@@ -592,6 +592,14 @@ class SettingsDialog(QDialog):
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
+        # Additional widget registrations
+        mgr.register(self._btn_save_theme, "save_custom_theme")
+        mgr.register(self._btn_delete_theme, "delete_custom_theme")
+        mgr.register(self._btn_export_theme, "export_custom_theme")
+        mgr.register(self._btn_import_theme, "import_custom_theme")
+        mgr.register(self._click_sound_edit, "sound_path")
+        mgr.register(self._btn_sound_browse, "sound_browse")
+        mgr.register(self._btn_reset, "reset_all_settings")
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply

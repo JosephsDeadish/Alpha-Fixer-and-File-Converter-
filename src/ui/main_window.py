@@ -16,6 +16,7 @@ from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
+from .collections_tab import CollectionsTab
 from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
@@ -255,9 +256,11 @@ class MainWindow(QMainWindow):
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
+        self._collections_tab = CollectionsTab(self._settings)
         self._tabs.addTab(self._alpha_tab, "🖼  Alpha Fixer")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
         self._tabs.addTab(self._history_tab, "📋  History")
+        self._tabs.addTab(self._collections_tab, "🏆  Collections")
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
@@ -372,11 +375,12 @@ class MainWindow(QMainWindow):
         # Register per-tab tooltips on the QTabBar
         mgr.register_tab_bar(
             self._tabs.tabBar(),
-            ["alpha_fixer_tab", "converter_tab", "history_tab"],
+            ["alpha_fixer_tab", "converter_tab", "history_tab", "collections_tab"],
         )
         self._alpha_tab.register_tooltips(mgr)
         self._converter_tab.register_tooltips(mgr)
         self._history_tab.register_tooltips(mgr)
+        self._collections_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""
@@ -459,6 +463,11 @@ class MainWindow(QMainWindow):
         # Auto-clear the unlock banner after 6 seconds
         if newly_unlocked:
             self._schedule_unlock_clear()
+            # Refresh collections tab so newly unlocked items update immediately
+            try:
+                self._collections_tab.refresh()
+            except Exception:
+                pass
 
     def _on_processing_done(self, file_count: int) -> None:
         """Called when a batch of files is processed (alpha-fix or convert).
@@ -700,6 +709,8 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, index: int):
         if self._tabs.widget(index) is self._history_tab:
             self._history_tab.refresh()
+        elif self._tabs.widget(index) is self._collections_tab:
+            self._collections_tab.refresh()
 
     # ------------------------------------------------------------------
     # Settings

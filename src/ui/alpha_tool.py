@@ -129,6 +129,9 @@ class AlphaFixerTab(QWidget):
         self._presets = preset_manager
         self._settings = settings_manager
         self._worker = None
+        # ETA tracking for large batch runs
+        self._batch_start_time: float = 0.0
+        self._batch_total: int = 0
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
@@ -1071,7 +1074,7 @@ class AlphaFixerTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Processing…")
-        self._batch_start_time: float = time.monotonic()
+        self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
 
         self._worker = AlphaWorker(
@@ -1101,7 +1104,7 @@ class AlphaFixerTab(QWidget):
         pct = int(current / max(total, 1) * 100)
         self._progress.setValue(pct)
         # Show ETA for large batches (>= 500 files) so the user knows how long to wait
-        elapsed = time.monotonic() - getattr(self, "_batch_start_time", 0)
+        elapsed = time.monotonic() - self._batch_start_time
         if total >= 500 and current > 0 and elapsed > 1.0:
             rate = current / elapsed          # files/sec
             remaining = max(0, total - current)

@@ -38,8 +38,9 @@ def _write_wav(samples: list, sample_rate: int = 22050) -> str:
     """
     if not samples:
         logger.warning("_write_wav called with empty samples list — writing silent frame")
-        samples = [0]
-    samples = [max(-32768, min(32767, s)) for s in samples]
+        data = [0]
+    else:
+        data = [max(-32768, min(32767, s)) for s in samples]
     tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     path = tf.name
     tf.close()
@@ -47,7 +48,7 @@ def _write_wav(samples: list, sample_rate: int = 22050) -> str:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
-        wf.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+        wf.writeframes(struct.pack(f"<{len(data)}h", *data))
     return path
 
 

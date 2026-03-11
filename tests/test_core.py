@@ -308,6 +308,58 @@ class TestSaveLoad(unittest.TestCase):
             os.unlink(path)
 
 
+class TestCollectionsData(unittest.TestCase):
+    """Tests for the collections tab data consistency."""
+
+    def _import_collections(self):
+        """Import collections tab, skipping the test if PyQt6 is not available."""
+        try:
+            from src.ui.collections_tab import (
+                _HIDDEN_THEME_DATA, _EFFECT_DATA, _TRAIL_DATA,
+            )
+            return _HIDDEN_THEME_DATA, _EFFECT_DATA, _TRAIL_DATA
+        except ImportError:
+            self.skipTest("PyQt6 not available — skipping collections UI tests")
+
+    def test_all_hidden_theme_data_have_matching_settings_key(self):
+        """Every unlock key in _HIDDEN_THEME_DATA must be in settings _DEFAULTS."""
+        data = self._import_collections()
+        if data is None:
+            return
+        hidden_theme_data = data[0]
+        from src.core.settings_manager import SettingsManager
+        defaults = SettingsManager._DEFAULTS
+        for key, display_name, hint, emoji in hidden_theme_data:
+            self.assertIn(
+                key, defaults,
+                f"Settings default missing for unlock key '{key}' ({display_name})",
+            )
+
+    def test_collections_tab_data_no_empty_hints_for_locked_items(self):
+        """Locked items in _HIDDEN_THEME_DATA must have non-empty hint strings."""
+        data = self._import_collections()
+        if data is None:
+            return
+        hidden_theme_data = data[0]
+        for key, display_name, hint, emoji in hidden_theme_data:
+            self.assertTrue(
+                len(hint) > 0,
+                f"Empty unlock hint for '{display_name}' (key={key})",
+            )
+
+    def test_collections_tab_data_all_have_emoji(self):
+        """Every entry in _HIDDEN_THEME_DATA must have a non-empty emoji."""
+        data = self._import_collections()
+        if data is None:
+            return
+        hidden_theme_data = data[0]
+        for key, display_name, hint, emoji in hidden_theme_data:
+            self.assertTrue(
+                len(emoji) > 0,
+                f"Missing emoji for '{display_name}'",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
 
