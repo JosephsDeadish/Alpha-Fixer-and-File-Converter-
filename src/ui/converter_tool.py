@@ -99,35 +99,46 @@ class ConverterTab(QWidget):
         # Output folder – placed here (adjacent to input) so source and
         # destination are together and the layout reads top-to-bottom.
         grp_out = QGroupBox("Output")
-        grp_out.setMinimumHeight(70)
         go_layout = QGridLayout(grp_out)
+        go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 100)
+        go_layout.setColumnMinimumWidth(0, 110)
         go_layout.setHorizontalSpacing(12)
-        go_layout.setVerticalSpacing(6)
+        go_layout.setVerticalSpacing(10)
 
         lbl_out = QLabel("Output folder:")
-        lbl_out.setMinimumWidth(90)
+        lbl_out.setMinimumWidth(100)
+        lbl_out.setMinimumHeight(24)
         go_layout.addWidget(lbl_out, 0, 0)
         out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
+        self._out_dir_edit.setMinimumHeight(26)
         saved_out = self._settings.get("converter_output_dir", "")
         if saved_out:
             self._out_dir_edit.setText(saved_out)
         self._btn_out_dir = QPushButton("Browse…")
         self._btn_out_dir.setMinimumWidth(80)
+        self._btn_out_dir.setMinimumHeight(26)
         out_row.addWidget(self._out_dir_edit, 1)
         out_row.addWidget(self._btn_out_dir)
         go_layout.addLayout(out_row, 0, 1)
+
+        lbl_suffix = QLabel("Filename suffix:")
+        lbl_suffix.setMinimumHeight(24)
+        go_layout.addWidget(lbl_suffix, 1, 0)
+        self._suffix_edit = QLineEdit()
+        self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
+        self._suffix_edit.setMinimumHeight(26)
+        go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
 
         # Preview pane
         self._preview = ImagePreviewPane()
-        self._preview.setFixedHeight(260)
-        lv.addWidget(self._preview)
+        self._preview.setMinimumHeight(160)
+        lv.addWidget(self._preview, 1)
 
         splitter.addWidget(left)
 
@@ -160,15 +171,19 @@ class ConverterTab(QWidget):
         # Output format
         grp_fmt = QGroupBox("Output Format")
         gf_layout = QGridLayout(grp_fmt)
+        gf_layout.setContentsMargins(10, 14, 10, 12)
         gf_layout.setColumnStretch(0, 0)
         gf_layout.setColumnStretch(1, 1)
-        gf_layout.setColumnMinimumWidth(0, 145)
+        gf_layout.setColumnMinimumWidth(0, 130)
         gf_layout.setHorizontalSpacing(12)
-        gf_layout.setVerticalSpacing(8)
+        gf_layout.setVerticalSpacing(10)
 
-        gf_layout.addWidget(QLabel("Convert to:"), 0, 0)
+        lbl_fmt = QLabel("Convert to:")
+        lbl_fmt.setMinimumHeight(24)
+        gf_layout.addWidget(lbl_fmt, 0, 0)
         self._fmt_combo = QComboBox()
         self._fmt_combo.setMinimumWidth(130)
+        self._fmt_combo.setMinimumHeight(26)
         for name, ext in OUTPUT_FORMAT_LIST:
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
         gf_layout.addWidget(self._fmt_combo, 0, 1)
@@ -179,9 +194,12 @@ class ConverterTab(QWidget):
         if idx >= 0:
             self._fmt_combo.setCurrentIndex(idx)
 
-        gf_layout.addWidget(QLabel("JPEG/WEBP quality:"), 1, 0)
+        lbl_quality = QLabel("JPEG/WEBP quality:")
+        lbl_quality.setMinimumHeight(24)
+        gf_layout.addWidget(lbl_quality, 1, 0)
         self._quality_spin = QSpinBox()
         self._quality_spin.setRange(1, 100)
+        self._quality_spin.setMinimumHeight(26)
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
         gf_layout.addWidget(self._quality_spin, 1, 1)
 
@@ -200,26 +218,33 @@ class ConverterTab(QWidget):
         # Resize (optional)
         grp_resize = QGroupBox("Resize (optional)")
         gr_layout = QGridLayout(grp_resize)
+        gr_layout.setContentsMargins(10, 14, 10, 12)
         gr_layout.setColumnStretch(0, 0)
         gr_layout.setColumnStretch(1, 1)
         gr_layout.setColumnMinimumWidth(0, 80)
         gr_layout.setHorizontalSpacing(12)
-        gr_layout.setVerticalSpacing(8)
+        gr_layout.setVerticalSpacing(10)
 
         self._resize_check = QCheckBox("Enable resize")
         gr_layout.addWidget(self._resize_check, 0, 0, 1, 2)
 
-        gr_layout.addWidget(QLabel("Width:"), 1, 0)
+        lbl_w = QLabel("Width:")
+        lbl_w.setMinimumHeight(24)
+        gr_layout.addWidget(lbl_w, 1, 0)
         self._width_spin = QSpinBox()
         self._width_spin.setRange(1, 32768)
         self._width_spin.setValue(1024)
+        self._width_spin.setMinimumHeight(26)
         self._width_spin.setEnabled(False)
         gr_layout.addWidget(self._width_spin, 1, 1)
 
-        gr_layout.addWidget(QLabel("Height:"), 2, 0)
+        lbl_h = QLabel("Height:")
+        lbl_h.setMinimumHeight(24)
+        gr_layout.addWidget(lbl_h, 2, 0)
         self._height_spin = QSpinBox()
         self._height_spin.setRange(1, 32768)
         self._height_spin.setValue(1024)
+        self._height_spin.setMinimumHeight(26)
         self._height_spin.setEnabled(False)
         gr_layout.addWidget(self._height_spin, 2, 1)
 
@@ -228,8 +253,7 @@ class ConverterTab(QWidget):
         # Log
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMinimumHeight(70)
-        self._log.setMaximumHeight(110)
+        self._log.setMinimumHeight(80)
         self._log.setPlaceholderText("Conversion log…")
         rv.addWidget(self._log, 1)
 
@@ -238,7 +262,7 @@ class ConverterTab(QWidget):
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         splitter.addWidget(right_scroll)
-        splitter.setSizes([340, 560])
+        splitter.setSizes([420, 580])
         main_layout.addWidget(splitter, 1)
 
         # ---- Connections ----
@@ -419,6 +443,7 @@ class ConverterTab(QWidget):
         target_format, target_ext = fmt_data
 
         out_dir = self._out_dir_edit.text().strip() or None
+        suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
         resize = None
         if self._resize_check.isChecked():
@@ -452,6 +477,7 @@ class ConverterTab(QWidget):
             quality=quality,
             resize=resize,
             keep_metadata=self._keep_metadata_check.isChecked(),
+            suffix=suffix,
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)

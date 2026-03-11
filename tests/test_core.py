@@ -56,18 +56,33 @@ class TestPresets(unittest.TestCase):
                         "Expected a full-opacity / N64 preset")
         self.assertTrue(any("PS2" in n or "Half Opacity" in n for n in names),
                         "Expected a half-opacity / PS2 preset")
-        self.assertIn("Transparent", names)
+        self.assertTrue(any("Transparent" in n for n in names),
+                        "Expected a transparent preset")
 
-    # Use the deduplicated merged preset names
+    # Use the current preset names
     _FULL_OPACITY_NAME = "Full Opacity  (N64 · DS · Wii · Xbox 360 · PS2 BG)"
-    _HALF_OPACITY_NAME = "Half Opacity  (PS2 Sprite · GBA · PSP)"
+    _PS2_NORMALIZE_NAME = "PS2 Normalize α×2  (0–128 → 0–255)"
+    _PS2_FULL_OPAQUE_NAME = "PS2 Set Full Opaque  (fill α=128)"
 
     def test_ps2_preset_values(self):
-        p = self._mgr.get_preset(self._HALF_OPACITY_NAME)
+        p = self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME)
         self.assertIsNotNone(p)
         self.assertEqual(p.alpha_value, 128)
         self.assertEqual(p.fill_mode, "set")
 
+    def test_ps2_normalize_preset(self):
+        p = self._mgr.get_preset(self._PS2_NORMALIZE_NAME)
+        self.assertIsNotNone(p)
+        self.assertEqual(p.fill_mode, "multiply")
+        self.assertEqual(p.fill_value, 200)
+
+    def test_ps2_clamp_presets(self):
+        for cap in (128, 145, 150):
+            matched = [p for p in self._mgr.all_presets()
+                       if f"Clamp Max {cap}" in p.name and "PS2" in p.name]
+            self.assertTrue(matched, f"Expected a PS2 clamp-max-{cap} preset")
+            p = matched[0]
+            self.assertEqual(p.clamp_max, cap)
     def test_n64_preset_values(self):
         p = self._mgr.get_preset(self._FULL_OPACITY_NAME)
         self.assertIsNotNone(p)
@@ -77,7 +92,7 @@ class TestPresets(unittest.TestCase):
         self.assertIsNone(self._mgr.get_preset("DoesNotExist"))
 
     def test_cannot_overwrite_builtin(self):
-        custom = AlphaPreset(self._HALF_OPACITY_NAME, 0, "set", 0, 0, False, "test")
+        custom = AlphaPreset(self._PS2_FULL_OPAQUE_NAME, 0, "set", 0, 0, False, "test")
         result = self._mgr.save_custom_preset(custom)
         self.assertFalse(result)
 
@@ -97,9 +112,9 @@ class TestPresets(unittest.TestCase):
         self.assertIsNone(self._mgr.get_preset("ToDelete"))
 
     def test_cannot_delete_builtin(self):
-        result = self._mgr.delete_custom_preset(self._HALF_OPACITY_NAME)
+        result = self._mgr.delete_custom_preset(self._PS2_FULL_OPAQUE_NAME)
         self.assertFalse(result)
-        self.assertIsNotNone(self._mgr.get_preset(self._HALF_OPACITY_NAME))
+        self.assertIsNotNone(self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME))
 
 
 # ---------------------------------------------------------------------------

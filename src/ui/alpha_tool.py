@@ -176,26 +176,33 @@ class AlphaFixerTab(QWidget):
         # Output section – placed here (near input) so it's obvious where
         # processed files will land without hunting to the far right panel.
         grp_out = QGroupBox("Output")
-        grp_out.setMinimumHeight(100)
         go_layout = QGridLayout(grp_out)
+        go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 130)
+        go_layout.setColumnMinimumWidth(0, 110)
         go_layout.setHorizontalSpacing(12)
-        go_layout.setVerticalSpacing(6)
+        go_layout.setVerticalSpacing(10)
 
-        go_layout.addWidget(QLabel("Output folder:"), 0, 0)
+        lbl_out_folder = QLabel("Output folder:")
+        lbl_out_folder.setMinimumHeight(24)
+        go_layout.addWidget(lbl_out_folder, 0, 0)
         out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
-        self._btn_out_dir = QPushButton("Browse")
+        self._out_dir_edit.setMinimumHeight(26)
+        self._btn_out_dir = QPushButton("Browse…")
+        self._btn_out_dir.setMinimumHeight(26)
         out_row.addWidget(self._out_dir_edit, 1)
         out_row.addWidget(self._btn_out_dir)
         go_layout.addLayout(out_row, 0, 1)
 
-        go_layout.addWidget(QLabel("Filename suffix:"), 1, 0)
+        lbl_suffix = QLabel("Filename suffix:")
+        lbl_suffix.setMinimumHeight(24)
+        go_layout.addWidget(lbl_suffix, 1, 0)
         self._suffix_edit = QLineEdit()
-        self._suffix_edit.setPlaceholderText("e.g. _fixed  (blank=overwrite)")
+        self._suffix_edit.setPlaceholderText("e.g. _fixed  (blank = overwrite source)")
+        self._suffix_edit.setMinimumHeight(26)
         go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
@@ -248,7 +255,7 @@ class AlphaFixerTab(QWidget):
         ca_layout.addWidget(self._alpha_stats_lbl)
 
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([220, 280])
+        left_vsplit.setSizes([300, 300])
 
         lv.addWidget(left_vsplit, 1)
         outer_splitter.addWidget(left)
@@ -306,24 +313,30 @@ class AlphaFixerTab(QWidget):
 
         # Fine-tune section
         grp_tune = QGroupBox("Fine-Tune Alpha && RGBA Channels")
-        grp_tune.setMinimumHeight(385)
         gt_layout = QGridLayout(grp_tune)
+        gt_layout.setContentsMargins(10, 14, 10, 12)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
-        gt_layout.setColumnMinimumWidth(0, 185)
+        gt_layout.setColumnMinimumWidth(0, 155)
         gt_layout.setHorizontalSpacing(12)
-        gt_layout.setVerticalSpacing(6)
+        gt_layout.setVerticalSpacing(8)
 
-        gt_layout.addWidget(QLabel("Mode:"), 0, 0)
+        lbl_mode = QLabel("Mode:")
+        lbl_mode.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_mode, 0, 0)
         self._mode_combo = QComboBox()
         self._mode_combo.setMinimumWidth(130)
+        self._mode_combo.setMinimumHeight(26)
         self._mode_combo.addItems(["set", "multiply", "add", "subtract", "clamp_min", "clamp_max"])
         gt_layout.addWidget(self._mode_combo, 0, 1)
 
-        gt_layout.addWidget(QLabel("Alpha Value (0–255):"), 1, 0)
+        lbl_alpha_val = QLabel("Alpha Value (0–255):")
+        lbl_alpha_val.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_alpha_val, 1, 0)
         self._alpha_spin = QSpinBox()
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(255)
+        self._alpha_spin.setMinimumHeight(26)
         gt_layout.addWidget(self._alpha_spin, 1, 1)
 
         self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
@@ -331,52 +344,93 @@ class AlphaFixerTab(QWidget):
         self._alpha_slider.setValue(255)
         gt_layout.addWidget(self._alpha_slider, 2, 0, 1, 2)
 
-        gt_layout.addWidget(QLabel("Threshold (0=all pixels):"), 3, 0)
+        lbl_thresh = QLabel("Threshold (0 = all pixels):")
+        lbl_thresh.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_thresh, 3, 0)
         self._threshold_spin = QSpinBox()
         self._threshold_spin.setRange(0, 255)
         self._threshold_spin.setValue(0)
+        self._threshold_spin.setMinimumHeight(26)
         gt_layout.addWidget(self._threshold_spin, 3, 1)
 
+        lbl_cmin = QLabel("Clamp Min (0–255):")
+        lbl_cmin.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_cmin, 4, 0)
+        self._clamp_min_spin = QSpinBox()
+        self._clamp_min_spin.setRange(0, 255)
+        self._clamp_min_spin.setValue(0)
+        self._clamp_min_spin.setMinimumHeight(26)
+        self._clamp_min_spin.setToolTip(
+            "Lower bound for clamp_min/clamp_max mode.\n"
+            "Pixels below this value are raised to this value."
+        )
+        gt_layout.addWidget(self._clamp_min_spin, 4, 1)
+
+        lbl_cmax = QLabel("Clamp Max (0–255):")
+        lbl_cmax.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_cmax, 5, 0)
+        self._clamp_max_spin = QSpinBox()
+        self._clamp_max_spin.setRange(0, 255)
+        self._clamp_max_spin.setValue(255)
+        self._clamp_max_spin.setMinimumHeight(26)
+        self._clamp_max_spin.setToolTip(
+            "Upper bound for clamp_min/clamp_max mode.\n"
+            "Pixels above this value are lowered to this value."
+        )
+        gt_layout.addWidget(self._clamp_max_spin, 5, 1)
+
         self._invert_check = QCheckBox("Invert Alpha")
-        gt_layout.addWidget(self._invert_check, 4, 0, 1, 2)
+        gt_layout.addWidget(self._invert_check, 6, 0, 1, 2)
 
         self._use_preset_check = QCheckBox("Use preset (ignore fine-tune)")
         self._use_preset_check.setChecked(True)
-        gt_layout.addWidget(self._use_preset_check, 5, 0, 1, 2)
+        gt_layout.addWidget(self._use_preset_check, 7, 0, 1, 2)
 
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
         rgb_sep.setObjectName("subheader")
         rgb_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        gt_layout.addWidget(rgb_sep, 6, 0, 1, 2)
+        gt_layout.addWidget(rgb_sep, 8, 0, 1, 2)
 
-        gt_layout.addWidget(QLabel("Red adjust:"), 7, 0)
+        lbl_red = QLabel("Red adjust:")
+        lbl_red.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_red, 9, 0)
         self._red_spin = QSpinBox()
         self._red_spin.setRange(-255, 255)
         self._red_spin.setValue(0)
         self._red_spin.setPrefix("R ")
-        gt_layout.addWidget(self._red_spin, 7, 1)
+        self._red_spin.setMinimumHeight(26)
+        gt_layout.addWidget(self._red_spin, 9, 1)
 
-        gt_layout.addWidget(QLabel("Green adjust:"), 8, 0)
+        lbl_green = QLabel("Green adjust:")
+        lbl_green.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_green, 10, 0)
         self._green_spin = QSpinBox()
         self._green_spin.setRange(-255, 255)
         self._green_spin.setValue(0)
         self._green_spin.setPrefix("G ")
-        gt_layout.addWidget(self._green_spin, 8, 1)
+        self._green_spin.setMinimumHeight(26)
+        gt_layout.addWidget(self._green_spin, 10, 1)
 
-        gt_layout.addWidget(QLabel("Blue adjust:"), 9, 0)
+        lbl_blue = QLabel("Blue adjust:")
+        lbl_blue.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_blue, 11, 0)
         self._blue_spin = QSpinBox()
         self._blue_spin.setRange(-255, 255)
         self._blue_spin.setValue(0)
         self._blue_spin.setPrefix("B ")
-        gt_layout.addWidget(self._blue_spin, 9, 1)
+        self._blue_spin.setMinimumHeight(26)
+        gt_layout.addWidget(self._blue_spin, 11, 1)
 
-        gt_layout.addWidget(QLabel("Alpha adjust:"), 10, 0)
+        lbl_alpha_adj = QLabel("Alpha adjust:")
+        lbl_alpha_adj.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_alpha_adj, 12, 0)
         self._alpha_delta_spin = QSpinBox()
         self._alpha_delta_spin.setRange(-255, 255)
         self._alpha_delta_spin.setValue(0)
         self._alpha_delta_spin.setPrefix("A\u25b3 ")
-        gt_layout.addWidget(self._alpha_delta_spin, 10, 1)
+        self._alpha_delta_spin.setMinimumHeight(26)
+        gt_layout.addWidget(self._alpha_delta_spin, 12, 1)
 
         self._apply_rgb_check = QCheckBox("Apply RGBA adjustments")
         self._apply_rgb_check.setChecked(False)
@@ -384,15 +438,14 @@ class AlphaFixerTab(QWidget):
             "When checked, the Red/Green/Blue/Alpha deltas are applied on top of\n"
             "the alpha fix. Useful for colour-correcting game textures."
         )
-        gt_layout.addWidget(self._apply_rgb_check, 11, 0, 1, 2)
+        gt_layout.addWidget(self._apply_rgb_check, 13, 0, 1, 2)
 
         rv.addWidget(grp_tune)
 
         # Log
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMinimumHeight(70)
-        self._log.setMaximumHeight(110)
+        self._log.setMinimumHeight(80)
         self._log.setPlaceholderText("Processing log…")
         rv.addWidget(self._log, 1)
 
@@ -403,7 +456,7 @@ class AlphaFixerTab(QWidget):
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         outer_splitter.addWidget(right_scroll)
-        outer_splitter.setSizes([360, 540])
+        outer_splitter.setSizes([440, 560])
         main_layout.addWidget(outer_splitter, 1)
 
         # ==============================================================
@@ -429,6 +482,8 @@ class AlphaFixerTab(QWidget):
         self._mode_combo.currentTextChanged.connect(self._on_finetune_changed)
         self._alpha_spin.valueChanged.connect(self._on_finetune_changed)
         self._threshold_spin.valueChanged.connect(self._on_finetune_changed)
+        self._clamp_min_spin.valueChanged.connect(self._on_finetune_changed)
+        self._clamp_max_spin.valueChanged.connect(self._on_finetune_changed)
         self._invert_check.toggled.connect(self._on_finetune_changed)
         self._use_preset_check.toggled.connect(self._update_compare)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
@@ -461,6 +516,8 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._alpha_spin, "alpha_spin")
         mgr.register(self._mode_combo, "mode_combo")
         mgr.register(self._threshold_spin, "threshold_spin")
+        mgr.register(self._clamp_min_spin, "clamp_min_spin")
+        mgr.register(self._clamp_max_spin, "clamp_max_spin")
         mgr.register(self._invert_check, "invert_check")
         mgr.register(self._use_preset_check, "use_preset_check")
         mgr.register(self._out_dir_edit, "out_dir")
@@ -511,7 +568,8 @@ class AlphaFixerTab(QWidget):
         # value change doesn't restart the debounce timer individually.
         finetune_controls = [
             self._mode_combo, self._alpha_spin, self._alpha_slider,
-            self._threshold_spin, self._invert_check,
+            self._threshold_spin, self._clamp_min_spin, self._clamp_max_spin,
+            self._invert_check,
         ]
         for c in finetune_controls:
             c.blockSignals(True)
@@ -520,6 +578,8 @@ class AlphaFixerTab(QWidget):
         self._alpha_spin.setValue(int(val))
         self._alpha_slider.setValue(int(val))
         self._threshold_spin.setValue(int(preset.threshold))
+        self._clamp_min_spin.setValue(int(preset.clamp_min))
+        self._clamp_max_spin.setValue(int(preset.clamp_max))
         self._invert_check.setChecked(bool(preset.invert))
         for c in finetune_controls:
             c.blockSignals(False)
@@ -540,8 +600,16 @@ class AlphaFixerTab(QWidget):
             fill_value=self._alpha_spin.value(),
             threshold=self._threshold_spin.value(),
             invert=self._invert_check.isChecked(),
-            description=f"Custom preset '{name}'",
+            description=(
+                f"Custom preset '{name}'  "
+                f"[mode={self._mode_combo.currentText()}  "
+                f"value={self._alpha_spin.value()}  "
+                f"threshold={self._threshold_spin.value()}  "
+                f"clamp={self._clamp_min_spin.value()}–{self._clamp_max_spin.value()}]"
+            ),
             builtin=False,
+            clamp_min=self._clamp_min_spin.value(),
+            clamp_max=self._clamp_max_spin.value(),
         )
         saved = self._presets.save_custom_preset(preset)
         if not saved:
@@ -656,6 +724,8 @@ class AlphaFixerTab(QWidget):
                 "value": self._alpha_spin.value(),
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
+                "clamp_min": self._clamp_min_spin.value(),
+                "clamp_max": self._clamp_max_spin.value(),
             }
 
         # Attach RGBA adjustments when enabled
@@ -671,7 +741,8 @@ class AlphaFixerTab(QWidget):
             else:
                 # preset mode + RGBA adjust: build a passthrough manual with rgb
                 manual = {"mode": "set", "value": 255, "threshold": 0,
-                          "invert": False, "rgb": rgb_params}
+                          "invert": False, "clamp_min": 0, "clamp_max": 255,
+                          "rgb": rgb_params}
 
         self._compare.set_loading()
         self._preview_loader = _AlphaPreviewLoader(
@@ -737,6 +808,8 @@ class AlphaFixerTab(QWidget):
                 "value": self._alpha_spin.value(),
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
+                "clamp_min": self._clamp_min_spin.value(),
+                "clamp_max": self._clamp_max_spin.value(),
             }
 
         # Attach RGB channel adjustments if the checkbox is enabled
@@ -750,7 +823,8 @@ class AlphaFixerTab(QWidget):
                 manual["rgb"] = rgb_params
             else:
                 manual = {"mode": "set", "value": 255, "threshold": 0,
-                          "invert": False, "rgb": rgb_params}
+                          "invert": False, "clamp_min": 0, "clamp_max": 255,
+                          "rgb": rgb_params}
 
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()

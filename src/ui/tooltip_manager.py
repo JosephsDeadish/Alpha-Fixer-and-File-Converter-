@@ -99,6 +99,20 @@ _NORMAL: dict[str, list[str]] = {
         "128 = only adjust pixels less than 50% opaque.",
         "255 = process only fully transparent pixels.",
     ],
+    "clamp_min_spin": [
+        "Clamp Min: pixels with alpha below this value are raised to this value.",
+        "Used with clamp_min/clamp_max modes to enforce a minimum alpha floor.",
+        "Example: set to 128 to ensure no pixel is more than 50% transparent.",
+        "0 = no lower clamp (default). Increase to raise transparency floor.",
+        "PS2 textures: set to 0 to preserve full transparency range.",
+    ],
+    "clamp_max_spin": [
+        "Clamp Max: pixels with alpha above this value are lowered to this value.",
+        "Used with clamp_max mode to cap the maximum alpha of the image.",
+        "Example: set to 128 to replicate PS2's 0–128 alpha scale.",
+        "255 = no upper clamp (default). Decrease to cap opacity.",
+        "PS2 Normalize: set max to 128 if targeting PS2-accurate renderers.",
+    ],
     "invert_check": [
         "Invert the alpha channel after applying the other operations.",
         "Flips opaque ↔ transparent across all processed pixels.",
@@ -452,6 +466,20 @@ _DUMBED: dict[str, list[str]] = {
         "Threshold means 'the line you draw'. Pixels above it are ignored.",
         "If you're confused, just leave it at 0. It works fine.",
         "Yes, you can type a number in there. No, it won't break anything.",
+    ],
+    "clamp_min_spin": [
+        "Pixels below this alpha get raised to it. Like a floor for transparency.",
+        "Set to 0 and it does nothing. Set higher and no pixel goes below that.",
+        "Pair with clamp_max to squeeze the alpha into a specific range.",
+        "128 = nothing gets more transparent than 50%. Useful for some PS2 stuff.",
+        "Leave at 0 if you don't need a floor. Most people do.",
+    ],
+    "clamp_max_spin": [
+        "Pixels above this alpha get lowered to it. It's a ceiling for opacity.",
+        "Set to 255 and it does nothing. Lower it and nothing exceeds that value.",
+        "128 = nothing gets more opaque than 50%. That's the PS2 range.",
+        "Pair with clamp_min for tight alpha range control.",
+        "Leave at 255 if you don't need a cap. Easy default.",
     ],
     "invert_check": [
         "Check this to flip transparent ↔ opaque. It's like turning inside out.",
@@ -820,6 +848,20 @@ _VULGAR: dict[str, list[str]] = {
         "Leave it at 0 if you want every pixel touched. That's usually what you want.",
         "It's a filter. Below the threshold: processed. Above: left the f**k alone.",
         "128 = only touch the semi-transparent half. Advanced stuff for fancy people.",
+    ],
+    "clamp_min_spin": [
+        "Clamp Min: no pixel's alpha can go BELOW this. 0 = no floor. Very f**king simple.",
+        "Raise it above 0 and you're saying 'nothing gets more transparent than this'. Power move.",
+        "Set to 128 and no pixel is more than 50% see-through. Good for PS2 stuff.",
+        "Leave at 0 unless you're specifically trying to clamp the transparency floor.",
+        "Works with clamp_min/clamp_max mode. Useless otherwise. Read the mode label.",
+    ],
+    "clamp_max_spin": [
+        "Clamp Max: no pixel's alpha can go ABOVE this. 255 = no cap. Default. Boring but correct.",
+        "Lower it and you're saying 'nothing gets more opaque than this'. That's the PS2 range.",
+        "128 = mimics the PS2 GS alpha ceiling. Useful for targeting old-ass hardware.",
+        "Leave at 255 unless you specifically need an opacity ceiling. Most don't.",
+        "Works with clamp_max mode. Pair it with clamp_min for a tight alpha sandwich.",
     ],
     "invert_check": [
         "Invert flips transparent ↔ opaque. It's the 'f**k it, reverse everything' option.",

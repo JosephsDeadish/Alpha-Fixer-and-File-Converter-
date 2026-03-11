@@ -216,16 +216,18 @@ def build_output_path(
     target_ext: str,
     output_dir: Optional[str] = None,
     input_root: Optional[str] = None,
+    suffix: str = "",
 ) -> str:
     """
     Derive an output file path for a converted file.
 
     If output_dir is given, the file is placed inside it (mirroring subdirectory
     structure when input_root is provided).  Otherwise the file is placed next
-    to the original.
+    to the original.  ``suffix`` is appended to the stem before the extension
+    (e.g. suffix="_converted" → "photo_converted.png").
     """
     p = Path(input_path)
-    new_name = p.stem + target_ext
+    new_name = p.stem + (suffix or "") + target_ext
 
     if output_dir:
         if input_root:
