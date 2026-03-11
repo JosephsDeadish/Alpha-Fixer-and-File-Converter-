@@ -570,6 +570,13 @@ _NORMAL: dict[str, list[str]] = {
         "Leave unchecked to convert without changing dimensions.",
         "Width and height define the exact output resolution.",
     ],
+    "lock_aspect_check": [
+        "Lock the aspect ratio when resizing — change width and height auto-adjusts.",
+        "Uses the selected file's original dimensions to compute the correct height.",
+        "Uncheck to set width and height independently (may distort the image).",
+        "Works per-file: the ratio is read from whichever file is selected at run time.",
+        "Checked by default — most images look best with their original proportions preserved.",
+    ],
     "width_spin": [
         "Target output width in pixels when resize is enabled.",
         "Set to 0 to preserve the original image width.",
@@ -1162,6 +1169,13 @@ _DUMBED: dict[str, list[str]] = {
         "Resizing changes the dimensions. You probably knew that.",
         "This does not resize your brain. Just the images.",
     ],
+    "lock_aspect_check": [
+        "Lock aspect ratio. So when you change width, height updates automatically.",
+        "Checked = proportional scaling. Unchecked = stretch mode. Your call.",
+        "This reads the selected file's dimensions to compute the correct height.",
+        "Checked by default because squishing images is usually bad.",
+        "Lock = smart resize. Unlock = manual resize. Both are valid options.",
+    ],
     "width_spin": [
         "Type the width you want. In pixels. Not centimetres. Pixels.",
         "0 means 'keep the original width'. Useful if you only want to change height.",
@@ -1730,6 +1744,16 @@ _VULGAR: dict[str, list[str]] = {
         "Batch resizing while converting. Check this to enable the resize fields.",
         "Power feature: convert format AND resize in one pass. Check this box.",
         "Most conversions don't need resizing. Only check when you need different dimensions.",
+    ],
+    "lock_aspect_check": [
+        "Lock aspect ratio. Change width, height follows. Like a decent resize should.",
+        "Unchecked = manual width/height. Your image might end up a cursed squish. Your call.",
+        "Checked by default because nobody wants their otter stretched into a hotdog shape.",
+        "Uses the selected file's real dimensions to calculate the locked height.",
+        "Locked = proportional. Unlocked = chaotic. Both technically valid. One looks better.",
+        "Lock aspect ratio. Keep it checked unless you specifically want distorted output.",
+        "Width changes → height auto-updates to match the original ratio. Smart.",
+        "Uncheck if you intentionally want a non-square or weirdly-proportioned output.",
     ],
     "width_spin": [
         "Output width in pixels. Zero means keep the original. Type a number.",

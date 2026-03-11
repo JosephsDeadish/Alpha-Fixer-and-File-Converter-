@@ -268,6 +268,11 @@ class ConverterTab(QWidget):
         self._height_spin.setEnabled(False)
         gr_layout.addWidget(self._height_spin, 2, 1)
 
+        self._lock_aspect_check = QCheckBox("Lock aspect ratio")
+        self._lock_aspect_check.setEnabled(False)
+        self._lock_aspect_check.setChecked(True)
+        gr_layout.addWidget(self._lock_aspect_check, 3, 0, 1, 2)
+
         rv.addWidget(grp_resize)
 
         # Log
@@ -295,6 +300,9 @@ class ConverterTab(QWidget):
         self._btn_out_dir.clicked.connect(self._browse_out_dir)
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
         self._resize_check.toggled.connect(self._height_spin.setEnabled)
+        self._resize_check.toggled.connect(self._lock_aspect_check.setEnabled)
+        # When width changes and lock is on, update height proportionally
+        self._width_spin.valueChanged.connect(self._on_width_changed)
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
@@ -342,6 +350,7 @@ class ConverterTab(QWidget):
         mgr.register(self._log, "processing_log")
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "conv_status_lbl")
+        mgr.register(self._lock_aspect_check, "lock_aspect_check")
 
     def update_theme(self, theme_name: str) -> None:
         """Update the inner header label to match the active theme's tab emoji."""
@@ -412,6 +421,29 @@ class ConverterTab(QWidget):
         fmt = fmt_data[0] if fmt_data else ""
         if fmt in ("JPEG", "WEBP", "AVIF"):
             self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_width_changed(self, width: int) -> None:
+        """Update height proportionally when lock aspect ratio is checked."""
+        if not (self._lock_aspect_check.isChecked() and
+                self._resize_check.isChecked()):
+            return
+        # Use the currently selected file's image dimensions for the ratio
+        row = self._file_list.currentRow()
+        item = self._file_list.item(row)
+        if item:
+            try:
+                from PIL import Image
+                with Image.open(item.text()) as im:
+                    orig_w, orig_h = im.size
+                if orig_w > 0:
+                    new_h = max(1, round(width * orig_h / orig_w))
+                    # Block signals to avoid recursive update
+                    self._height_spin.blockSignals(True)
+                    self._height_spin.setValue(new_h)
+                    self._height_spin.blockSignals(False)
+            except Exception:
+                pass
 
     def _update_converted_preview(self):
         """Refresh the preview pane to reflect the current format and quality."""
