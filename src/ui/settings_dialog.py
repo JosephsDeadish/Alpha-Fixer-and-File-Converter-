@@ -20,6 +20,11 @@ from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
 _THEME_PREFIX_CHARS = "★🔓 "
 
+# Maximum character length accepted as a directly-typed custom emoji.
+# Emoji can be multi-codepoint sequences (e.g. 🏴‍☠️ = 7 code units) but are
+# never longer than ~8 chars; this guards against adding entire search strings.
+_MAX_CUSTOM_EMOJI_LEN = 8
+
 # Trail slider range constants
 _TRAIL_LENGTH_MIN = 10
 _TRAIL_LENGTH_MAX = 200
@@ -1062,17 +1067,30 @@ class SettingsDialog(QDialog):
         )
 
     def _add_emoji(self) -> None:
+        # Prefer the userData (emoji char) of the currently selected palette item.
+        # Fall back to the raw text in the line edit so that the user can type a
+        # custom emoji (not in the palette) directly into the search box and click
+        # Add to include it.
         emoji_char = self._emoji_combo.currentData()
+        if not emoji_char:
+            typed = self._emoji_combo.currentText().strip()
+            # Only accept the fallback text if it looks like an emoji / short symbol
+            # (≤_MAX_CUSTOM_EMOJI_LEN chars) to avoid accidentally adding search
+            # strings like "fire".
+            if typed and len(typed) <= _MAX_CUSTOM_EMOJI_LEN:
+                emoji_char = typed
         if not emoji_char:
             return
         current = self._get_emoji_list()
         current.append(emoji_char)
         self._settings.set("custom_emoji", " ".join(current))
         self._update_emoji_display()
+        self.settings_changed.emit()
 
     def _clear_emoji(self) -> None:
         self._settings.set("custom_emoji", "")
         self._update_emoji_display()
+        self.settings_changed.emit()
 
     # ------------------------------------------------------------------
     # Sound file browser

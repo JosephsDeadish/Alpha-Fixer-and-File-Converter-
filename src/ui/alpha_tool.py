@@ -1170,6 +1170,18 @@ class AlphaFixerTab(QWidget):
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()
 
+        # Determine a common root directory for relative path preservation.
+        # When an output_dir is set and files come from multiple subdirectories,
+        # this allows AlphaWorker to mirror the source tree so that same-named
+        # files from different subdirs never overwrite each other.
+        input_root = None
+        if len(expanded) > 1:
+            try:
+                dirs = [os.path.dirname(f) for f in expanded]
+                input_root = os.path.commonpath(dirs)
+            except ValueError:
+                pass
+
         # Remember for history recording in _on_finished
         self._last_run_files = expanded
         self._last_run_preset = (
@@ -1189,6 +1201,7 @@ class AlphaFixerTab(QWidget):
             preset=preset,
             manual_params=manual,
             output_dir=out_dir,
+            input_root=input_root,
             overwrite=(suffix == ""),
             suffix=suffix,
         )

@@ -325,7 +325,7 @@ class SettingsManager:
 
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
-        "sound_enabled", "click_sound_path",
+        "sound_enabled", "click_sound_path", "use_theme_sound",
         "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
