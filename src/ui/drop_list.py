@@ -15,7 +15,7 @@ from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
-from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage
+from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont
 from PyQt6.QtWidgets import QListWidget, QMenu, QApplication
 
 
@@ -124,6 +124,40 @@ class DropFileList(QListWidget):
 
         # Set icon size
         self.setIconSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
+
+    # ------------------------------------------------------------------
+    # Empty-state hint overlay
+    # ------------------------------------------------------------------
+
+    def paintEvent(self, event):  # noqa: N802
+        super().paintEvent(event)
+        if self.count() == 0:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            rect = self.viewport().rect()
+
+            # Big icon
+            icon_font = QFont(painter.font())
+            icon_font.setPointSize(28)
+            painter.setFont(icon_font)
+            painter.setPen(QColor(128, 128, 128, 80))
+            painter.drawText(
+                rect.adjusted(0, 0, 0, -30),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                "📂",
+            )
+
+            # Hint line 1
+            hint_font = QFont(painter.font())
+            hint_font.setPointSize(9)
+            painter.setFont(hint_font)
+            painter.setPen(QColor(128, 128, 128, 120))
+            painter.drawText(
+                rect.adjusted(0, 40, 0, 0),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                "Drop files or folders here\nor use the Add Files button",
+            )
+            painter.end()
 
     # ------------------------------------------------------------------
     # Thumbnail helpers
