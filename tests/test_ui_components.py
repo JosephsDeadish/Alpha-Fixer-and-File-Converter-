@@ -1939,17 +1939,26 @@ class TestThemeTabLabels(unittest.TestCase):
         self.assertIn("Converter", labels[1])
         self.assertIn("History", labels[2])
 
-    def test_labels_are_static_regardless_of_theme(self):
-        """Tab labels must NOT change when the theme changes (was reported as annoying)."""
+    def test_labels_change_with_theme(self):
+        """Tab labels must reflect the active theme — different themes produce different labels."""
         from src.ui.theme_engine import get_theme_tab_labels
-        expected = ("🖼  Alpha Fixer", "🔄  Converter", "📋  History")
-        for theme_name in ("Bat Cave", "Gore", "Panda Dark", "Mermaid", "Alien"):
-            labels = get_theme_tab_labels(theme_name)
-            self.assertEqual(labels, expected,
-                             f"Tab labels must be static but changed for theme {theme_name!r}")
+        bat   = get_theme_tab_labels("Bat Cave")
+        gore  = get_theme_tab_labels("Gore")
+        panda = get_theme_tab_labels("Panda Dark")
+        self.assertNotEqual(bat, gore,
+                            "Bat Cave and Gore should produce distinct tab labels")
+        self.assertNotEqual(bat, panda,
+                            "Bat Cave and Panda Dark should produce distinct tab labels")
 
-    def test_static_labels_use_standard_emojis(self):
-        """Static labels use the default emoji set."""
+    def test_same_theme_is_deterministic(self):
+        """Calling get_theme_tab_labels twice for the same theme returns the same result."""
+        from src.ui.theme_engine import get_theme_tab_labels
+        for name in ("Gore", "Mermaid", "Alien", "Thunder Storm"):
+            self.assertEqual(get_theme_tab_labels(name), get_theme_tab_labels(name),
+                             f"Labels for {name!r} must be deterministic (no cycling)")
+
+    def test_fallback_uses_default_emojis(self):
+        """Unknown theme names fall back to the default emoji set."""
         from src.ui.theme_engine import get_theme_tab_labels
         labels = get_theme_tab_labels("NonExistentThemeXYZ")
         self.assertIn("🖼", labels[0])

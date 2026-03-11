@@ -1359,12 +1359,19 @@ _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
 
 
 def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
-    """Return static (alpha_fixer_label, converter_label, history_label).
+    """Return theme-specific (alpha_fixer_label, converter_label, history_label).
 
-    Tab labels are kept static so they don't change when the user switches
-    themes — changing tab emojis was reported as distracting and annoying.
+    Each theme has its own emoji prefix from ``_THEME_TAB_EMOJIS``, so the
+    tabs visually reflect the active theme.  The labels are *static* per theme
+    (no cycling) — only the emoji prefix changes when a different theme is
+    selected.
     """
-    return ("🖼  Alpha Fixer", "🔄  Converter", "📋  History")
+    e = _THEME_TAB_EMOJIS.get(theme_name, _DEFAULT_TAB_EMOJIS)
+    return (
+        f"{e[0]}  Alpha Fixer",
+        f"{e[1]}  Converter",
+        f"{e[2]}  History",
+    )
 
 
 # Per-theme animated banner frames.  Themes listed here have a cycling banner;
