@@ -618,6 +618,9 @@ class SettingsDialog(QDialog):
             self._settings_tabs.tabBar(),
             ["settings_theme_tab", "settings_general_tab"],
         )
+        # Register all color swatch buttons with the same generic key
+        for btn in self._color_buttons.values():
+            mgr.register(btn, "theme_color_btn")
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply

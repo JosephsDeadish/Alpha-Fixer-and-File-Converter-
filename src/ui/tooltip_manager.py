@@ -192,6 +192,13 @@ _NORMAL: dict[str, list[str]] = {
         "Locked hidden themes show 🔓 when unlocked — earn them by clicking and processing files.",
         "You can create custom color themes using the color pickers in the Theme tab.",
     ],
+    "theme_color_btn": [
+        "Click this color swatch to change that part of the theme's color palette.",
+        "The color picker opens — choose any color and it applies to the app immediately.",
+        "Changes apply live so you can see exactly how the color looks in context.",
+        "Save your custom color scheme using the Save Theme button below.",
+        "Any of the 15 palette roles can be independently customised.",
+    ],
     "effect_combo": [
         "Choose the click particle effect style for this theme.",
         "Each effect matches its theme — try Gore for blood, Galaxy for stars, Neon for lightning ⚡.",
@@ -755,6 +762,13 @@ _DUMBED: dict[str, list[str]] = {
         "Bat Cave makes bats fly across the screen. Because why not.",
         "Gore theme has blood splatter. It's... tasteful. Mostly.",
         "Rainbow Chaos will do things to your eyes. You've been warned.",
+    ],
+    "theme_color_btn": [
+        "Color swatch. Click it. Color picker opens. Pick a color. App changes. Wow.",
+        "This button IS the color. Click it to change the color it represents.",
+        "Changes apply instantly. If it looks bad, click again and pick a better color.",
+        "Save your changes with the Save Theme button. Or don't. Live dangerously.",
+        "15 different colors you can customize. Yes, all of them. One at a time.",
     ],
     "effect_combo": [
         "It's the sparkle chooser. Pick how things explode when you click.",
@@ -1416,6 +1430,13 @@ _VULGAR: dict[str, list[str]] = {
         "Mermaid theme: teal and more teal. Trident cursor. Ripple clicks. Underwater vibes.",
         "Alien theme: grey-green and eerie. UFO cursor. Tractor beam effects.",
         "Some themes are hidden until you unlock them. Keep clicking and converting. Secrets await.",
+    ],
+    "theme_color_btn": [
+        "Color swatch button. You click it, a color picker opens, you pick a color, the app changes. Simple fucking concept.",
+        "Change any of the 15 color roles. Background, text, accent, buttons — all editable.",
+        "Changes apply live. If it looks horrible, that's on you. Click again and fix it.",
+        "The color YOU choose is the color the app becomes. Cause and effect. Very powerful.",
+        "Save the result with Save Theme. Or keep tweaking forever. We've seen it happen.",
     ],
     "effect_combo": [
         "Choose your fucking particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
