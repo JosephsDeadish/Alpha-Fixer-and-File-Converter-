@@ -74,8 +74,9 @@ _NORMAL: dict[str, list[str]] = {
         "Custom presets you save also appear here and have their description as a tooltip.",
     ],
     "save_preset": [
-        "Save the current fine-tune settings as a named preset.",
+        "Save the current fine-tune settings (alpha value, clamp min & max) as a named preset.",
         "Custom presets are stored in the app settings and persist between sessions.",
+        "If you've edited a custom preset, clicking Save pre-fills the name — just press Enter to update it in-place.",
         "Name it something descriptive so you remember what it does.",
         "You can have as many custom presets as you want.",
         "Custom presets appear in the preset dropdown above.",
@@ -853,7 +854,8 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "save_preset": [
         "Click Save, type a name. Wow, technology.",
-        "Save your settings as a preset. It'll be there next time. Magic.",
+        "Save your settings (alpha value, clamp min & max) as a preset. It'll be there next time. Magic.",
+        "If you've tweaked a custom preset, Save pre-fills the name. Just press Enter to update it.",
         "Name it something memorable. 'aaa' works but you'll regret it.",
         "Saved presets show in the dropdown. Very useful. Very exciting.",
         "You can have as many presets as you want. Go nuts.",
@@ -1365,7 +1367,9 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "save_preset": [
         "Save your damn preset so you don't have to redo this every time.",
+        "Saves alpha value + clamp min/max. All the important numbers. Right here.",
         "Name it something useful, not 'aaaa'. Future you will be grateful.",
+        "If you've changed a custom preset, Save pre-fills the name — just hit Enter to overwrite it.",
         "It saves the current settings as a named preset. Click it, genius.",
         "This button literally saves your work. Use it.",
         "Saved presets live in the dropdown. Useful as hell.",

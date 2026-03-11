@@ -785,7 +785,18 @@ class AlphaFixerTab(QWidget):
         self._preview_debounce.start()
 
     def _save_preset(self):
-        name, ok = QInputDialog.getText(self, "Save Preset", "Preset name:")
+        # If the currently-selected preset is already a custom preset, pre-fill
+        # the name so the user can overwrite it in-place with a single Enter
+        # press instead of having to re-type the full name.
+        current_name = self._preset_combo.currentText()
+        current_obj = self._presets.get_preset(current_name)
+        initial_name = current_name if (current_obj and not current_obj.builtin) else ""
+
+        name, ok = QInputDialog.getText(
+            self, "Save Preset",
+            "Preset name  (saves current alpha value, clamp min & max settings):",
+            text=initial_name,
+        )
         if not ok or not name.strip():
             return
         name = name.strip()
