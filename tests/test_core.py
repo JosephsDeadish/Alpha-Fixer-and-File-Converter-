@@ -190,6 +190,78 @@ class TestAlphaProcessor(unittest.TestCase):
         # 200 clamped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
+    def test_manual_alpha_mode_multiply(self):
+        """multiply mode: new = old × (value / 255), using floor division to avoid float rounding."""
+        img = make_rgba_image(alpha=200)
+        # value=128 → 200 * 128 // 255 = 100 (floor division matches implementation)
+        result = apply_manual_alpha(img, value=128, mode="multiply")
+        arr = np.array(result)
+        expected = 200 * 128 // 255  # floor division mirrors the implementation
+        self.assertTrue(np.all(arr[:, :, 3] == expected),
+                        f"Expected {expected}, got {arr[0, 0, 3]}")
+
+    def test_manual_alpha_mode_multiply_255_no_change(self):
+        """multiply mode with value=255 should not change alpha."""
+        img = make_rgba_image(alpha=200)
+        result = apply_manual_alpha(img, value=255, mode="multiply")
+        arr = np.array(result)
+        expected = 200 * 255 // 255
+        self.assertTrue(np.all(arr[:, :, 3] == expected))
+
+    def test_manual_alpha_mode_add(self):
+        """add mode: new = old + value, clamped at 255."""
+        img = make_rgba_image(alpha=100)
+        result = apply_manual_alpha(img, value=50, mode="add")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 150))
+
+    def test_manual_alpha_mode_add_clamps_at_255(self):
+        """add mode should clamp result at 255."""
+        img = make_rgba_image(alpha=200)
+        result = apply_manual_alpha(img, value=100, mode="add")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 255))
+
+    def test_manual_alpha_mode_subtract(self):
+        """subtract mode: new = old - value, clamped at 0."""
+        img = make_rgba_image(alpha=150)
+        result = apply_manual_alpha(img, value=50, mode="subtract")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
+
+    def test_manual_alpha_mode_subtract_clamps_at_0(self):
+        """subtract mode should clamp result at 0."""
+        img = make_rgba_image(alpha=30)
+        result = apply_manual_alpha(img, value=100, mode="subtract")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 0))
+
+    def test_manual_alpha_mode_set_default(self):
+        """Default mode is 'set' (backward-compatible)."""
+        img = make_rgba_image(alpha=100)
+        result = apply_manual_alpha(img, value=200)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 200))
+
+    def test_manual_alpha_mode_multiply_with_threshold(self):
+        """multiply mode respects threshold: only pixels below threshold are affected."""
+        # Create an image with two different alpha values
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:2, :, :3] = 200  # grey
+        arr[2:, :, :3] = 200
+        arr[:2, :, 3] = 50   # below threshold=100 → will be multiplied
+        arr[2:, :, 3] = 150  # above threshold=100 → unchanged
+        from PIL import Image as _Image
+        img = _Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=128, threshold=100, mode="multiply")
+        out = np.array(result)
+        # pixels with old alpha 50 (< 100): 50 * 128 // 255 = 25
+        self.assertTrue(np.all(out[:2, :, 3] == 50 * 128 // 255),
+                        f"Below-threshold pixels should be multiplied, got {out[0, 0, 3]}")
+        # pixels with old alpha 150 (>= 100): unchanged
+        self.assertTrue(np.all(out[2:, :, 3] == 150),
+                        f"Above-threshold pixels should be unchanged, got {out[2, 0, 3]}")
+
     def test_clamp_min_preset(self):
         """Clamp-only preset with alpha_value=None should only clamp."""
         img = make_rgba_image(alpha=50)

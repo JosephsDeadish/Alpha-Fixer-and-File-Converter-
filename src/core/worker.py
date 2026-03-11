@@ -98,6 +98,7 @@ class AlphaWorker(QThread):
                         clamp_min=self._manual.get("clamp_min", 0),
                         clamp_max=self._manual.get("clamp_max", 255),
                         binary_cut=self._manual.get("binary_cut", False),
+                        mode=self._manual.get("mode", "set"),
                     )
                 # Optional per-channel RGBA adjust (works with both preset and manual modes)
                 rgb = (self._manual or {}).get("rgb")

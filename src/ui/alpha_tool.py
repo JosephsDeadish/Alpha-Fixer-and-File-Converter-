@@ -87,6 +87,7 @@ class _AlphaPreviewLoader(QThread):
                     clamp_min=self._manual.get("clamp_min", 0),
                     clamp_max=self._manual.get("clamp_max", 255),
                     binary_cut=self._manual.get("binary_cut", False),
+                    mode=self._manual.get("mode", "set"),
                 )
             else:
                 processed = orig
@@ -399,24 +400,52 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(self._apply_alpha_check, 0, 0, 1, 2)
 
-        lbl_alpha_val = QLabel("Set alpha to (0–255):")
+        lbl_mode = QLabel("Apply mode:")
+        lbl_mode.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_mode, 1, 0)
+        self._mode_combo = QComboBox()
+        _MODE_OPTIONS = [
+            ("set",      "set — replace each pixel's alpha with the value below"),
+            ("multiply", "multiply — scale: new = old × (value ÷ 255)"),
+            ("add",      "add — shift: new = old + value  (max 255)"),
+            ("subtract", "subtract — shift: new = old − value  (min 0)"),
+        ]
+        _MODE_TIPS = {
+            "set":      "Replace every pixel's alpha with the exact value you set below. The most common mode.",
+            "multiply": "Scale existing alpha. new = old × (value ÷ 255). Value=128 gives 50% of original. Classic PS2 fix.",
+            "add":      "Add the value to each pixel's existing alpha, clamped at 255. Brightens transparency.",
+            "subtract": "Subtract the value from each pixel's existing alpha, clamped at 0. Deepens transparency.",
+        }
+        for key, label in _MODE_OPTIONS:
+            self._mode_combo.addItem(label, userData=key)
+            idx = self._mode_combo.count() - 1
+            self._mode_combo.setItemData(idx, _MODE_TIPS[key], Qt.ItemDataRole.ToolTipRole)
+        self._mode_combo.setToolTip(
+            "How the alpha value below is applied to each pixel.\n"
+            "'set' replaces alpha; 'multiply' scales it; 'add'/'subtract' shift it."
+        )
+        self._mode_combo.setMinimumHeight(26)
+        gt_layout.addWidget(self._mode_combo, 1, 1)
+
+        lbl_alpha_val = QLabel("Alpha value (0–255):")
         lbl_alpha_val.setMinimumHeight(24)
         lbl_alpha_val.setToolTip(
-            "Target alpha value applied to all pixels (or to pixels below the threshold).\n"
-            "0 = fully transparent · 255 = fully opaque\n"
+            "Value used by the apply mode above.\n"
+            "set: target alpha for all pixels.  multiply: factor (255 = no change).\n"
+            "add/subtract: amount to shift each pixel's alpha.\n"
             "Only active when 'Apply fixed alpha value' is checked."
         )
-        gt_layout.addWidget(lbl_alpha_val, 1, 0)
+        gt_layout.addWidget(lbl_alpha_val, 2, 0)
         self._alpha_spin = QSpinBox()
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(255)
         self._alpha_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._alpha_spin, 1, 1)
+        gt_layout.addWidget(self._alpha_spin, 2, 1)
 
         self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
         self._alpha_slider.setRange(0, 255)
         self._alpha_slider.setValue(255)
-        gt_layout.addWidget(self._alpha_slider, 2, 0, 1, 2)
+        gt_layout.addWidget(self._alpha_slider, 3, 0, 1, 2)
 
         lbl_thresh = QLabel("Threshold (0 = all pixels):")
         lbl_thresh.setMinimumHeight(24)
@@ -424,16 +453,16 @@ class AlphaFixerTab(QWidget):
             "Only pixels with alpha BELOW this value are affected by the 'Set alpha to' value.\n"
             "0 means every pixel is affected regardless of its current alpha."
         )
-        gt_layout.addWidget(lbl_thresh, 3, 0)
+        gt_layout.addWidget(lbl_thresh, 4, 0)
         self._threshold_spin = QSpinBox()
         self._threshold_spin.setRange(0, 255)
         self._threshold_spin.setValue(0)
         self._threshold_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._threshold_spin, 3, 1)
+        gt_layout.addWidget(self._threshold_spin, 4, 1)
 
         lbl_cmin = QLabel("Clamp Min (floor, 0–255):")
         lbl_cmin.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_cmin, 4, 0)
+        gt_layout.addWidget(lbl_cmin, 5, 0)
         self._clamp_min_spin = QSpinBox()
         self._clamp_min_spin.setRange(0, 255)
         self._clamp_min_spin.setValue(0)
@@ -442,11 +471,11 @@ class AlphaFixerTab(QWidget):
             "Output floor: any pixel alpha below this value is raised to this value.\n"
             "0 = no floor (default). Applied after any fixed alpha value is set."
         )
-        gt_layout.addWidget(self._clamp_min_spin, 4, 1)
+        gt_layout.addWidget(self._clamp_min_spin, 5, 1)
 
         lbl_cmax = QLabel("Clamp Max (ceiling, 0–255):")
         lbl_cmax.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_cmax, 5, 0)
+        gt_layout.addWidget(lbl_cmax, 6, 0)
         self._clamp_max_spin = QSpinBox()
         self._clamp_max_spin.setRange(0, 255)
         self._clamp_max_spin.setValue(255)
@@ -456,10 +485,10 @@ class AlphaFixerTab(QWidget):
             "255 = no ceiling (default). Applied after any fixed alpha value is set.\n"
             "Example: set max=128 to replicate PS2's 0–128 alpha range."
         )
-        gt_layout.addWidget(self._clamp_max_spin, 5, 1)
+        gt_layout.addWidget(self._clamp_max_spin, 6, 1)
 
         self._invert_check = QCheckBox("Invert Alpha")
-        gt_layout.addWidget(self._invert_check, 6, 0, 1, 2)
+        gt_layout.addWidget(self._invert_check, 7, 0, 1, 2)
 
         self._binary_cut_check = QCheckBox("Binary cut (\u2265 threshold \u2192 255, else \u2192 0)")
         self._binary_cut_check.setToolTip(
@@ -469,11 +498,11 @@ class AlphaFixerTab(QWidget):
             "This overrides the 'Set alpha to' value for a strict cutout mask.\n"
             "Used by N64 1-bit alpha textures and similar hard-edge formats."
         )
-        gt_layout.addWidget(self._binary_cut_check, 7, 0, 1, 2)
+        gt_layout.addWidget(self._binary_cut_check, 8, 0, 1, 2)
 
         self._use_preset_check = QCheckBox("Use preset (ignore fine-tune)")
         self._use_preset_check.setChecked(True)
-        gt_layout.addWidget(self._use_preset_check, 8, 0, 1, 2)
+        gt_layout.addWidget(self._use_preset_check, 9, 0, 1, 2)
 
         # Live "Current Params" display — updates whenever any fine-tune control changes.
         # Populated by _refresh_finetune_label() at the end of _setup_ui.
@@ -485,7 +514,7 @@ class AlphaFixerTab(QWidget):
             "Live summary of the current fine-tune parameters.\n"
             "Updates instantly as you change any control above."
         )
-        gt_layout.addWidget(self._finetune_params_lbl, 9, 0, 1, 2)
+        gt_layout.addWidget(self._finetune_params_lbl, 10, 0, 1, 2)
 
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
@@ -590,6 +619,7 @@ class AlphaFixerTab(QWidget):
         self._invert_check.toggled.connect(self._on_finetune_changed)
         self._binary_cut_check.toggled.connect(self._on_finetune_changed)
         self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
+        self._mode_combo.currentIndexChanged.connect(self._on_finetune_changed)
         self._use_preset_check.toggled.connect(self._update_compare)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
         self._green_spin.valueChanged.connect(self._on_finetune_changed)
@@ -621,6 +651,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._btn_delete_preset, "delete_preset")
         mgr.register(self._alpha_slider, "alpha_slider")
         mgr.register(self._alpha_spin, "alpha_spin")
+        mgr.register(self._mode_combo, "mode_combo")
         mgr.register(self._threshold_spin, "threshold_spin")
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
         mgr.register(self._clamp_max_spin, "clamp_max_spin")
@@ -871,7 +902,8 @@ class AlphaFixerTab(QWidget):
         thresh = self._threshold_spin.value()
         parts  = []
         if self._apply_alpha_check.isChecked():
-            parts.append(f"set={self._alpha_spin.value()}")
+            mode = self._mode_combo.currentData() or "set"
+            parts.append(f"{mode}={self._alpha_spin.value()}")
         else:
             parts.append("clamp only")
         if cmin > 0 or cmax < 255:
@@ -889,6 +921,7 @@ class AlphaFixerTab(QWidget):
         """Enable/disable alpha value controls based on the 'Apply fixed alpha value' checkbox."""
         self._alpha_spin.setEnabled(checked)
         self._alpha_slider.setEnabled(checked)
+        self._mode_combo.setEnabled(checked)
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
@@ -962,6 +995,7 @@ class AlphaFixerTab(QWidget):
         else:
             manual = {
                 "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
+                "mode": self._mode_combo.currentData() or "set",
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
@@ -1065,6 +1099,7 @@ class AlphaFixerTab(QWidget):
         else:
             manual = {
                 "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
+                "mode": self._mode_combo.currentData() or "set",
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
