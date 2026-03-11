@@ -5,7 +5,7 @@ import datetime
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -22,6 +22,11 @@ from .preview_pane import ImagePreviewPane
 
 
 class ConverterTab(QWidget):
+    """Tab widget for batch file-format conversion."""
+
+    # Emitted after every successful batch: carries the count of files converted.
+    # MainWindow connects this to check for processing-based theme unlocks.
+    processing_done = pyqtSignal(int)
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
         self._settings = settings_manager
@@ -530,6 +535,9 @@ class ConverterTab(QWidget):
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
         }
         self._settings.add_converter_history(entry)
+        # Notify main window so processing-based theme unlocks can fire
+        if success > 0:
+            self.processing_done.emit(success)
 
     def _log_msg(self, msg: str) -> None:
         self._log.append(msg)

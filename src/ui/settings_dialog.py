@@ -367,9 +367,7 @@ class SettingsDialog(QDialog):
         self._font_size_spin.setValue(10)
         self._font_size_spin.setMaximumWidth(80)
         misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
-        self._click_effects_check = QCheckBox("Enable per-theme click particle effects")
-        misc_gl.addWidget(self._click_effects_check, 1, 0, 1, 2)
-        misc_gl.addWidget(QLabel("Tooltip Mode:"), 2, 0)
+        misc_gl.addWidget(QLabel("Tooltip Mode:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
         self._tooltip_mode_combo.addItems(TOOLTIP_MODES)
         self._tooltip_mode_combo.setToolTip(
@@ -377,7 +375,7 @@ class SettingsDialog(QDialog):
             "No Filter 🤬 is the best mode – trust us."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
-        misc_gl.addWidget(self._tooltip_mode_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
         gv.addWidget(grp_misc)
 
         # Wrap the general tab contents in a scroll area so checkboxes
@@ -422,7 +420,6 @@ class SettingsDialog(QDialog):
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
-        self._click_effects_check.toggled.connect(self._on_effects_enabled_changed)
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
@@ -492,7 +489,7 @@ class SettingsDialog(QDialog):
             self._click_sound_edit, self._trail_check, self._trail_color_btn,
             self._trail_style_combo, self._use_theme_trail_check, self._cursor_combo,
             self._use_theme_cursor_check, self._font_size_spin,
-            self._click_effects_check, self._click_effects_theme_check,
+            self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo,
         ]
         for c in controls:
@@ -535,9 +532,6 @@ class SettingsDialog(QDialog):
         self._use_theme_cursor_check.setChecked(use_theme_cur)
         self._cursor_combo.setEnabled(not use_theme_cur)
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
-        self._click_effects_check.setChecked(
-            self._settings.get("click_effects_enabled", False)
-        )
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         self._click_effects_theme_check.setChecked(
             self._settings.get("click_effects_enabled", False)
@@ -571,7 +565,6 @@ class SettingsDialog(QDialog):
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._font_size_spin, "font_size")
-        mgr.register(self._click_effects_check, "click_effects_check")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
 
@@ -799,20 +792,7 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_effects_enabled_changed(self) -> None:
-        # Keep both copies of the on/off toggle in sync
-        enabled = (self._click_effects_check.isChecked()
-                   or self._click_effects_theme_check.isChecked())
-        sender = self.sender()
-        if sender is self._click_effects_check:
-            enabled = self._click_effects_check.isChecked()
-            self._click_effects_theme_check.blockSignals(True)
-            self._click_effects_theme_check.setChecked(enabled)
-            self._click_effects_theme_check.blockSignals(False)
-        elif sender is self._click_effects_theme_check:
-            enabled = self._click_effects_theme_check.isChecked()
-            self._click_effects_check.blockSignals(True)
-            self._click_effects_check.setChecked(enabled)
-            self._click_effects_check.blockSignals(False)
+        enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("click_effects_enabled", enabled)
         self.settings_changed.emit()
 

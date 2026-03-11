@@ -1655,6 +1655,101 @@ def get_theme_banner_frames(theme_name: str) -> list[str]:
     return [get_theme_banner(theme_name)]
 
 
+def _get_tooltip_css(t: dict) -> str:
+    """Return a per-theme QToolTip CSS rule that matches each theme's visual style.
+
+    Themes are grouped by their visual identity so that tooltips look like a
+    natural extension of the rest of the UI rather than a generic black box.
+    """
+    name    = t.get("name",    "")
+    accent  = t.get("accent",  "#e94560")
+    surface = t.get("surface", "#16213e")
+    text    = t.get("text",    "#eaeaea")
+
+    # ── Angular/grim themes – zero radius, left-accent bar, bold text ──────
+    _ANGULAR = {
+        "Gore", "Goth", "Galaxy", "Abyssal Void", "Alien", "Zombie Apocalypse",
+        "Thunder Storm", "Blood Moon", "Toxic Neon", "Lava Cave", "Volcano",
+        "Dragon Fire", "Secret Skeleton", "Gold Rush", "Bat Cave",
+    }
+    if name in _ANGULAR:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-left: 3px solid {accent};
+    border-radius: 0px;
+    padding: 4px 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}}"""
+
+    # ── Very rounded/playful themes – large radius, prominent border ────────
+    _BUBBLY = {
+        "Candy Land", "Bubblegum", "Fairy Garden", "Rainbow Chaos",
+        "Pancake", "Secret Sakura", "Magic Mushroom", "Spring Bloom",
+        "Sunset Beach", "Midnight Forest",
+    }
+    if name in _BUBBLY:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 2px solid {accent};
+    border-radius: 14px;
+    padding: 5px 12px;
+}}"""
+
+    # ── Wavy/organic themes – alternating corner radius ─────────────────────
+    _WAVY = {
+        "Noodle", "Nebula", "Galaxy Otter", "Mermaid",
+    }
+    if name in _WAVY:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 2px solid {accent};
+    border-radius: 12px 2px 12px 2px;
+    padding: 4px 10px;
+}}"""
+
+    # ── Ice/Crystal themes – top & right accent, angled corners ────────────
+    _ICE = {
+        "Ice Cave", "Arctic", "Cyber Otter", "Deep Ocean",
+    }
+    if name in _ICE:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-top: 2px solid {accent};
+    border-radius: 0px 10px 0px 10px;
+    padding: 4px 10px;
+}}"""
+
+    # ── Ocean/water themes – smooth bubbles ─────────────────────────────────
+    _OCEAN = {
+        "Otter Cove", "Shark Bait",
+    }
+    if name in _OCEAN:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-bottom: 3px solid {accent};
+    border-radius: 10px;
+    padding: 4px 10px;
+}}"""
+
+    # ── Default – slightly more padding than the base stylesheet ────────────
+    return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-radius: 6px;
+    padding: 5px 10px;
+}}"""
+
+
 def _get_theme_extra_css(t: dict) -> str:
     """Return extra theme-specific CSS overrides that go beyond simple colour swaps.
 
@@ -2769,12 +2864,6 @@ QFrame#card {{
 }}
 
 /* ===== Tooltip ===== */
-QToolTip {{
-    background-color: {t['surface']};
-    color: {t['text']};
-    border: 1px solid {t['accent']};
-    padding: 4px;
-    border-radius: 4px;
-}}
+{_get_tooltip_css(t)}
 {_get_theme_extra_css(t)}
 """

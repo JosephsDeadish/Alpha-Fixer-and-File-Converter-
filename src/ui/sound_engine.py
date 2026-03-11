@@ -26,8 +26,22 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# WAV generator
+# WAV generator helpers
 # ---------------------------------------------------------------------------
+
+def _write_wav(samples: list, sample_rate: int = 22050) -> str:
+    """Write a list of 16-bit PCM samples to a temp WAV file and return the path."""
+    samples = [max(-32768, min(32767, s)) for s in samples]
+    tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    path = tf.name
+    tf.close()
+    with wave.open(path, "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+    return path
+
 
 def _make_click_wav(freq: int = 880, duration: float = 0.06,
                     sample_rate: int = 22050) -> str:
@@ -38,20 +52,45 @@ def _make_click_wav(freq: int = 880, duration: float = 0.06,
             * math.exp(-i / sample_rate * 45))
         for i in range(n)
     ]
-    # Clamp
-    samples = [max(-32768, min(32767, s)) for s in samples]
+    return _write_wav(samples, sample_rate)
 
-    tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    path = tf.name
-    tf.close()
 
-    with wave.open(path, "w") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(struct.pack(f"<{n}h", *samples))
+def _make_success_wav(sample_rate: int = 22050) -> str:
+    """Cheerful two-note chime: C5 → E5 (ascending major third)."""
+    notes = [(523, 0.08), (659, 0.12)]   # C5, E5
+    samples: list = []
+    for freq, dur in notes:
+        n = int(sample_rate * dur)
+        for i in range(n):
+            env = math.exp(-i / sample_rate * 20)
+            samples.append(int(22000 * math.sin(2 * math.pi * freq * i / sample_rate) * env))
+    return _write_wav(samples, sample_rate)
 
-    return path
+
+def _make_error_wav(sample_rate: int = 22050) -> str:
+    """Low descending buzz (E3 → C3)."""
+    notes = [(165, 0.06), (131, 0.10)]   # E3, C3
+    samples: list = []
+    for freq, dur in notes:
+        n = int(sample_rate * dur)
+        for i in range(n):
+            env = math.exp(-i / sample_rate * 18)
+            val = int(24000 * math.sin(2 * math.pi * freq * i / sample_rate) * env)
+            samples.append(val)
+    return _write_wav(samples, sample_rate)
+
+
+def _make_unlock_wav(sample_rate: int = 22050) -> str:
+    """Short ascending arpeggio fanfare: C4–E4–G4–C5."""
+    notes = [(262, 0.07), (330, 0.07), (392, 0.07), (523, 0.18)]
+    samples: list = []
+    for freq, dur in notes:
+        n = int(sample_rate * dur)
+        for i in range(n):
+            env = math.exp(-i / sample_rate * 12)
+            samples.append(int(26000 * math.sin(2 * math.pi * freq * i / sample_rate) * env))
+    return _write_wav(samples, sample_rate)
+
 
 
 # ---------------------------------------------------------------------------
@@ -78,13 +117,23 @@ class _ButtonClickFilter(QObject):
 # ---------------------------------------------------------------------------
 
 class SoundEngine(QObject):
-    """Manages click-sound playback with optional Qt Multimedia backend."""
+    """Manages sound playback with optional Qt Multimedia backend.
+
+    Provides four synthetic sounds generated at startup (no external assets):
+      click   – short blip played on every button press
+      success – cheerful two-note chime, played after a successful batch
+      error   – descending buzz, played after a batch with errors
+      unlock  – ascending arpeggio fanfare, played when a theme unlocks
+    """
 
     def __init__(self, settings, parent: QObject = None):
         super().__init__(parent)
         self._settings = settings
-        self._effect = None          # QSoundEffect instance (may be None)
-        self._click_wav: str = ""    # path to default generated WAV
+        self._effect = None          # QSoundEffect for click (may be None)
+        self._click_wav: str = ""
+        self._success_wav: str = ""
+        self._error_wav: str = ""
+        self._unlock_wav: str = ""
         self._filter: _ButtonClickFilter | None = None
         self._setup()
 
@@ -94,9 +143,12 @@ class SoundEngine(QObject):
 
     def _setup(self) -> None:
         try:
-            self._click_wav = _make_click_wav()
+            self._click_wav   = _make_click_wav()
+            self._success_wav = _make_success_wav()
+            self._error_wav   = _make_error_wav()
+            self._unlock_wav  = _make_unlock_wav()
         except Exception as exc:
-            logger.warning("Could not generate click WAV: %s", exc)
+            logger.warning("Could not generate sound WAVs: %s", exc)
             return
 
         # Try Qt Multimedia first
@@ -124,16 +176,39 @@ class SoundEngine(QObject):
         """Play the click sound (respects the sound_enabled setting)."""
         if not self._settings.get("sound_enabled", False):
             return
-
-        # Use a custom user-supplied WAV if configured
         custom = self._settings.get("click_sound_path", "").strip()
         wav_path = custom if (custom and os.path.isfile(custom)) else self._click_wav
-
         if not wav_path:
             return
+        self._play(wav_path)
 
+    def play_success(self) -> None:
+        """Play the success chime after a batch completes cleanly."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if self._success_wav:
+            self._play(self._success_wav)
+
+    def play_error(self) -> None:
+        """Play the error buzz when a batch finishes with failures."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if self._error_wav:
+            self._play(self._error_wav)
+
+    def play_unlock(self) -> None:
+        """Play the unlock fanfare when a hidden theme is revealed."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if self._unlock_wav:
+            self._play(self._unlock_wav)
+
+    # ------------------------------------------------------------------
+    # Internal playback
+    # ------------------------------------------------------------------
+
+    def _play(self, wav_path: str) -> None:
         if self._effect is not None:
-            # Update source if it changed (custom sound)
             try:
                 from PyQt6.QtCore import QUrl
                 current_src = self._effect.source().toLocalFile()
@@ -177,9 +252,11 @@ class SoundEngine(QObject):
     # ------------------------------------------------------------------
 
     def cleanup(self) -> None:
-        """Remove temp WAV file on application exit."""
-        if self._click_wav and os.path.isfile(self._click_wav):
-            try:
-                os.unlink(self._click_wav)
-            except OSError:
-                pass
+        """Remove temp WAV files on application exit."""
+        for attr in ("_click_wav", "_success_wav", "_error_wav", "_unlock_wav"):
+            path = getattr(self, attr, "")
+            if path and os.path.isfile(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass

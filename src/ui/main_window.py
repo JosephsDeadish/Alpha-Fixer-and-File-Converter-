@@ -338,6 +338,10 @@ class MainWindow(QMainWindow):
         self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
 
+        # Connect processing-done signals so file processing can unlock themes
+        self._alpha_tab.processing_done.connect(self._on_processing_done)
+        self._converter_tab.processing_done.connect(self._on_processing_done)
+
         # Cursor
         self._apply_cursor()
 
@@ -398,13 +402,16 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _check_unlocks(self) -> None:
-        """Check whether any hidden theme should be unlocked."""
+        """Check whether any hidden theme should be unlocked (click path)."""
         try:
             total = self._settings.get("total_clicks", 0) + 1
             self._settings.set("total_clicks", total)
         except Exception:
             return
+        self._run_unlock_checks(total)
 
+    def _run_unlock_checks(self, total: int) -> None:
+        """Evaluate the unlock table against *total* and fire any new unlocks."""
         # (threshold, settings_key, banner_message) — ordered ascending by threshold
         _UNLOCK_TABLE = [
             (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
@@ -436,15 +443,42 @@ class MainWindow(QMainWindow):
             if not self._settings.get(key, False) and total >= threshold:
                 self._settings.set(key, True)
                 self._unlock_lbl.setText(message)
+                # Play unlock fanfare via SoundEngine (falls back to beep)
                 try:
-                    QApplication.instance().beep()
+                    self._sound.play_unlock()
                 except Exception:
-                    pass
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
                 newly_unlocked = True
 
         # Auto-clear the unlock banner after 6 seconds
         if newly_unlocked:
             self._schedule_unlock_clear()
+
+    def _on_processing_done(self, file_count: int) -> None:
+        """Called when a batch of files is processed (alpha-fix or convert).
+
+        Each file successfully processed is counted as a 'bonus click' so
+        that heavy users who batch-process files naturally unlock themes
+        without having to manually click thousands of times.  Also plays
+        the success chime if sound is enabled.
+        """
+        if file_count <= 0:
+            return
+        try:
+            self._sound.play_success()
+        except Exception:
+            pass
+        try:
+            total = self._settings.get("total_clicks", 0) + file_count
+            self._settings.set("total_clicks", total)
+        except Exception:
+            return
+        # Re-use the click-based unlock table but driven by total_clicks
+        # (which now includes processing bonuses).
+        self._run_unlock_checks(total)
 
     def _schedule_unlock_clear(self) -> None:
         """Start (or restart) a one-shot timer that clears the unlock label."""
