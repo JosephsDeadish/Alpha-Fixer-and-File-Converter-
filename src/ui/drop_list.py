@@ -237,6 +237,9 @@ class DropFileList(QListWidget):
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
+            self.setProperty("drag_active", True)
+            self.style().unpolish(self)
+            self.style().polish(self)
             event.acceptProposedAction()
         else:
             event.ignore()
@@ -247,7 +250,16 @@ class DropFileList(QListWidget):
         else:
             event.ignore()
 
+    def dragLeaveEvent(self, event):
+        self.setProperty("drag_active", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event):
+        self.setProperty("drag_active", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
         if event.mimeData().hasUrls():
             paths = [u.toLocalFile() for u in event.mimeData().urls() if u.toLocalFile()]
             if paths:

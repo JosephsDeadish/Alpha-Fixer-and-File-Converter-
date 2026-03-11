@@ -2833,6 +2833,10 @@ QListWidget {{
     border: 1px solid {t['border']};
     border-radius: 5px;
 }}
+QListWidget[drag_active="true"] {{
+    border: 2px dashed {t['accent']};
+    background-color: {t['primary']};
+}}
 QListWidget::item:selected {{
     background-color: {t['accent']};
     color: {t['panda_white']};
