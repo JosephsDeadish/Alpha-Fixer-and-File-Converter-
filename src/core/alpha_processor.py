@@ -199,12 +199,15 @@ def apply_manual_alpha(
     invert: bool = False,
     clamp_min: int = 0,
     clamp_max: int = 255,
+    binary_cut: bool = False,
 ) -> Image.Image:
     """Apply alpha changes without a preset.
 
     Args:
         value: Target alpha value (0-255) to set on affected pixels.
                Pass None to skip the set step and only apply clamping.
+        binary_cut: When True, apply a hard 0/255 split at the threshold
+                    (pixels >= threshold → 255, else → 0).
     """
     pseudo = AlphaPreset(
         name="_manual",
@@ -214,6 +217,7 @@ def apply_manual_alpha(
         description="",
         clamp_min=clamp_min,
         clamp_max=clamp_max,
+        binary_cut=binary_cut,
     )
     return apply_alpha_preset(img, pseudo)
 

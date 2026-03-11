@@ -79,6 +79,7 @@ class _AlphaPreviewLoader(QThread):
                     invert=self._manual.get("invert", False),
                     clamp_min=self._manual.get("clamp_min", 0),
                     clamp_max=self._manual.get("clamp_max", 255),
+                    binary_cut=self._manual.get("binary_cut", False),
                 )
             else:
                 processed = orig
@@ -416,9 +417,19 @@ class AlphaFixerTab(QWidget):
         self._invert_check = QCheckBox("Invert Alpha")
         gt_layout.addWidget(self._invert_check, 6, 0, 1, 2)
 
+        self._binary_cut_check = QCheckBox("Binary cut (\u2265 threshold \u2192 255, else \u2192 0)")
+        self._binary_cut_check.setToolTip(
+            "When checked, a hard 0/255 split is applied at the threshold:\n"
+            "  \u2022 pixels with alpha \u2265 threshold become fully opaque (255)\n"
+            "  \u2022 pixels with alpha < threshold become fully transparent (0)\n"
+            "This overrides the 'Set alpha to' value for a strict cutout mask.\n"
+            "Used by N64 1-bit alpha textures and similar hard-edge formats."
+        )
+        gt_layout.addWidget(self._binary_cut_check, 7, 0, 1, 2)
+
         self._use_preset_check = QCheckBox("Use preset (ignore fine-tune)")
         self._use_preset_check.setChecked(True)
-        gt_layout.addWidget(self._use_preset_check, 7, 0, 1, 2)
+        gt_layout.addWidget(self._use_preset_check, 8, 0, 1, 2)
 
         # Live "Current Params" display — updates whenever any fine-tune control changes.
         # Populated by _refresh_finetune_label() at the end of _setup_ui.
@@ -430,53 +441,53 @@ class AlphaFixerTab(QWidget):
             "Live summary of the current fine-tune parameters.\n"
             "Updates instantly as you change any control above."
         )
-        gt_layout.addWidget(self._finetune_params_lbl, 8, 0, 1, 2)
+        gt_layout.addWidget(self._finetune_params_lbl, 9, 0, 1, 2)
 
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
         rgb_sep.setObjectName("subheader")
         rgb_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        gt_layout.addWidget(rgb_sep, 9, 0, 1, 2)
+        gt_layout.addWidget(rgb_sep, 10, 0, 1, 2)
 
         lbl_red = QLabel("Red adjust:")
         lbl_red.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_red, 10, 0)
+        gt_layout.addWidget(lbl_red, 11, 0)
         self._red_spin = QSpinBox()
         self._red_spin.setRange(-255, 255)
         self._red_spin.setValue(0)
         self._red_spin.setPrefix("R ")
         self._red_spin.setMinimumHeight(28)
-        gt_layout.addWidget(self._red_spin, 10, 1)
+        gt_layout.addWidget(self._red_spin, 11, 1)
 
         lbl_green = QLabel("Green adjust:")
         lbl_green.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_green, 11, 0)
+        gt_layout.addWidget(lbl_green, 12, 0)
         self._green_spin = QSpinBox()
         self._green_spin.setRange(-255, 255)
         self._green_spin.setValue(0)
         self._green_spin.setPrefix("G ")
         self._green_spin.setMinimumHeight(28)
-        gt_layout.addWidget(self._green_spin, 11, 1)
+        gt_layout.addWidget(self._green_spin, 12, 1)
 
         lbl_blue = QLabel("Blue adjust:")
         lbl_blue.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_blue, 12, 0)
+        gt_layout.addWidget(lbl_blue, 13, 0)
         self._blue_spin = QSpinBox()
         self._blue_spin.setRange(-255, 255)
         self._blue_spin.setValue(0)
         self._blue_spin.setPrefix("B ")
         self._blue_spin.setMinimumHeight(28)
-        gt_layout.addWidget(self._blue_spin, 12, 1)
+        gt_layout.addWidget(self._blue_spin, 13, 1)
 
         lbl_alpha_adj = QLabel("Alpha adjust:")
         lbl_alpha_adj.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_alpha_adj, 13, 0)
+        gt_layout.addWidget(lbl_alpha_adj, 14, 0)
         self._alpha_delta_spin = QSpinBox()
         self._alpha_delta_spin.setRange(-255, 255)
         self._alpha_delta_spin.setValue(0)
         self._alpha_delta_spin.setPrefix("A\u25b3 ")
         self._alpha_delta_spin.setMinimumHeight(28)
-        gt_layout.addWidget(self._alpha_delta_spin, 13, 1)
+        gt_layout.addWidget(self._alpha_delta_spin, 14, 1)
 
         self._apply_rgb_check = QCheckBox("Apply RGBA adjustments")
         self._apply_rgb_check.setChecked(False)
@@ -484,7 +495,7 @@ class AlphaFixerTab(QWidget):
             "When checked, the Red/Green/Blue/Alpha deltas are applied on top of\n"
             "the alpha fix. Useful for colour-correcting game textures."
         )
-        gt_layout.addWidget(self._apply_rgb_check, 14, 0, 1, 2)
+        gt_layout.addWidget(self._apply_rgb_check, 15, 0, 1, 2)
 
         rv.addWidget(grp_tune)
 
@@ -531,6 +542,7 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.valueChanged.connect(self._on_finetune_changed)
         self._clamp_max_spin.valueChanged.connect(self._on_finetune_changed)
         self._invert_check.toggled.connect(self._on_finetune_changed)
+        self._binary_cut_check.toggled.connect(self._on_finetune_changed)
         self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
         self._use_preset_check.toggled.connect(self._update_compare)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
@@ -567,6 +579,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
         mgr.register(self._clamp_max_spin, "clamp_max_spin")
         mgr.register(self._invert_check, "invert_check")
+        mgr.register(self._binary_cut_check, "binary_cut_check")
         mgr.register(self._use_preset_check, "use_preset_check")
         mgr.register(self._out_dir_edit, "out_dir")
         mgr.register(self._btn_out_dir, "out_dir_browse")
@@ -618,7 +631,7 @@ class AlphaFixerTab(QWidget):
             self._apply_alpha_check,
             self._alpha_spin, self._alpha_slider,
             self._threshold_spin, self._clamp_min_spin, self._clamp_max_spin,
-            self._invert_check,
+            self._invert_check, self._binary_cut_check,
         ]
         for c in finetune_controls:
             c.blockSignals(True)
@@ -636,6 +649,7 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setValue(int(preset.clamp_min))
         self._clamp_max_spin.setValue(int(preset.clamp_max))
         self._invert_check.setChecked(bool(preset.invert))
+        self._binary_cut_check.setChecked(bool(preset.binary_cut))
         for c in finetune_controls:
             c.blockSignals(False)
         self._btn_delete_preset.setEnabled(not preset.builtin)
@@ -652,6 +666,7 @@ class AlphaFixerTab(QWidget):
         name = name.strip()
         apply_val = self._apply_alpha_check.isChecked()
         alpha_val = self._alpha_spin.value() if apply_val else None
+        binary_cut = self._binary_cut_check.isChecked()
         desc_parts = []
         if alpha_val is not None:
             desc_parts.append(f"value={alpha_val}")
@@ -659,6 +674,8 @@ class AlphaFixerTab(QWidget):
             f"threshold={self._threshold_spin.value()}  "
             f"clamp={self._clamp_min_spin.value()}–{self._clamp_max_spin.value()}"
         )
+        if binary_cut:
+            desc_parts.append("binary_cut=yes")
         preset = AlphaPreset(
             name=name,
             alpha_value=alpha_val,
@@ -670,6 +687,7 @@ class AlphaFixerTab(QWidget):
             builtin=False,
             clamp_min=self._clamp_min_spin.value(),
             clamp_max=self._clamp_max_spin.value(),
+            binary_cut=binary_cut,
         )
         saved = self._presets.save_custom_preset(preset)
         if not saved:
@@ -756,6 +774,8 @@ class AlphaFixerTab(QWidget):
             parts.append(f"thresh={thresh}")
         if self._invert_check.isChecked():
             parts.append("invert=yes")
+        if self._binary_cut_check.isChecked():
+            parts.append("binary_cut=yes")
         self._finetune_params_lbl.setText("  ·  ".join(parts))
 
     @pyqtSlot(bool)
@@ -804,6 +824,7 @@ class AlphaFixerTab(QWidget):
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
                 "clamp_max": self._clamp_max_spin.value(),
+                "binary_cut": self._binary_cut_check.isChecked(),
             }
 
         # Attach RGBA adjustments when enabled
@@ -891,6 +912,7 @@ class AlphaFixerTab(QWidget):
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
                 "clamp_max": self._clamp_max_spin.value(),
+                "binary_cut": self._binary_cut_check.isChecked(),
             }
 
         # Attach RGB channel adjustments if the checkbox is enabled
