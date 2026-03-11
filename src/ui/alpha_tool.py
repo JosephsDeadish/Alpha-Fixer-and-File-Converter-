@@ -652,8 +652,13 @@ class AlphaFixerTab(QWidget):
         self._preset_combo.blockSignals(True)
         current = self._preset_combo.currentText()
         self._preset_combo.clear()
-        for p in self._presets.all_presets():
+        for i, p in enumerate(self._presets.all_presets()):
             self._preset_combo.addItem(p.name)
+            # Show the preset description as a hover tooltip on each item
+            if p.description:
+                self._preset_combo.setItemData(
+                    i, p.description, Qt.ItemDataRole.ToolTipRole
+                )
 
         last = self._settings.get("last_alpha_preset", "")
         target = last if last else current

@@ -66,10 +66,10 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "preset_combo": [
         "Choose a preset alpha profile for common platforms.",
-        "PS2: alpha × 0.502 (half intensity for PlayStation 2).",
-        "N64: alpha set to 255 (fully opaque for Nintendo 64).",
-        "No Alpha: removes transparency entirely.",
-        "Max Alpha: sets all pixels to full opacity.",
+        "Hover over each preset in the dropdown to see a detailed description.",
+        "PS2 Full Opaque: uses alpha=128 (PS2 GS max).  Full Opacity: alpha=255 for PC.",
+        "N64 / GameCube / Wii / PSP all expect fully opaque textures (alpha=255).",
+        "Custom presets you save also appear here and have their description as a tooltip.",
     ],
     "save_preset": [
         "Save the current fine-tune settings as a named preset.",
@@ -595,8 +595,8 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "preset_combo": [
         "A preset is a saved recipe. You pick one. It applies. Simple.",
-        "PS2, N64, etc. – they're just names for how the alpha gets changed.",
-        "PS2 makes it half transparent. N64 makes it fully opaque. There ya go.",
+        "Hover each item in the dropdown to see exactly what it does. We wrote descriptions.",
+        "PS2 makes it half transparent (128). N64 makes it fully opaque (255). There ya go.",
         "If you don't know which to pick, PS2 is usually a safe bet.",
         "You can also make your own. Click 'Save'. Mind blown, I know.",
     ],
@@ -1140,7 +1140,7 @@ _VULGAR: dict[str, list[str]] = {
     "preset_combo": [
         "Pick a damn preset. PS2 = alpha times 0.5 for PlayStation 2 textures. Classic.",
         "N64 sets alpha to 255 (fully fucking opaque). Old-school Nintendo vibes.",
-        "No Alpha removes transparency entirely. Bye-bye see-through. Hello solid block.",
+        "Hover each item to see the full description. They're detailed. Written by someone who cared.",
         "Max Alpha makes everything opaque but keeps the channel. Subtle difference.",
         "Make your own preset with the fine-tune controls below. Save it. Name it creatively.",
         "PS2 Half Alpha is literally just multiplying by 0.502. Someone calculated this shit carefully.",

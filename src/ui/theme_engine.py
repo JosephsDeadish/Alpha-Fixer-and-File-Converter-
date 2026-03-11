@@ -2432,6 +2432,65 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
     return ""
 
 
+def _get_theme_gradient_css(t: dict) -> str:
+    """Return a QMainWindow background gradient for themes that benefit from it.
+
+    Using CSS ``qlineargradient`` on QMainWindow gives themes a subtle depth
+    that makes them look far more designed than a flat solid colour.  Only
+    applied where it genuinely improves the look; returns "" for flat themes.
+    """
+    name = t.get("name", "")
+    bg   = t.get("background", "#1a1a2e")
+    surf = t.get("surface",    "#16213e")
+    acc  = t.get("accent",     "#e94560")
+
+    # ── Deep, dark themes — subtle top→bottom gradient ──────────────────
+    if name in {"Abyssal Void", "Galaxy", "Nebula", "Blood Moon"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {bg}, stop:1 {surf});
+}}"""
+
+    # ── Watery themes — soft diagonal ocean-depth gradient ──────────────
+    if name in {"Deep Ocean", "Mermaid", "Otter Cove", "Shark Bait"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:0.3, y2:1,
+        stop:0 {bg}, stop:0.6 {surf}, stop:1 {bg});
+}}"""
+
+    # ── Fire / lava themes — bottom glow effect ──────────────────────────
+    if name in {"Volcano", "Lava Cave", "Dragon Fire", "Gore"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 {acc}22, stop:0.4 {bg}, stop:1 {surf});
+}}"""
+
+    # ── Ice / crystal themes — top light, bottom dark ────────────────────
+    if name in {"Ice Cave", "Arctic", "Cyber Otter"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {surf}, stop:0.5 {bg}, stop:1 {bg});
+}}"""
+
+    # ── Candy / pastel themes — diagonal pastel wash ─────────────────────
+    if name in {"Candy Land", "Fairy Garden", "Secret Sakura", "Spring Bloom",
+                "Rainbow Chaos", "Bubblegum"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 {bg}, stop:0.5 {surf}, stop:1 {bg});
+}}"""
+
+    # ── Night / space themes — radial depth glow ─────────────────────────
+    if name in {"Midnight Forest", "Alien", "Magic Mushroom", "Toxic Neon"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0.5, y1:0, x2:0.5, y2:1,
+        stop:0 {surf}, stop:0.4 {bg}, stop:1 {bg});
+}}"""
+
+    # Flat themes: no gradient needed
+    return ""
+
+
 def build_stylesheet(theme: Optional[dict] = None) -> str:
     """Generate a full Qt stylesheet from the given theme dictionary."""
     t = {**DEFAULT_THEME, **(theme or {})}
@@ -2904,5 +2963,6 @@ QFrame#card {{
 
 /* ===== Tooltip ===== */
 {_get_tooltip_css(t)}
+{_get_theme_gradient_css(t)}
 {_get_theme_extra_css(t)}
 """
