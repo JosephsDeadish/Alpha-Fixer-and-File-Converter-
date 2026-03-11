@@ -636,6 +636,10 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._before_stats_lbl, "before_stats_panel")
         mgr.register(self._after_stats_lbl, "after_stats_panel")
         mgr.register(self._rom_banner, "rom_banner")
+        mgr.register(self._file_count_lbl, "alpha_file_count_lbl")
+        mgr.register(self._log, "processing_log")
+        mgr.register(self._progress, "processing_progress")
+        mgr.register(self._status_lbl, "alpha_status_lbl")
 
     def update_theme(self, theme_name: str) -> None:
         """Update the inner header label to match the active theme's tab emoji."""

@@ -338,6 +338,10 @@ class ConverterTab(QWidget):
         mgr.register(self._file_list, "file_list")
         mgr.register(self._suffix_edit, "suffix_edit")
         mgr.register(self._keep_metadata_check, "keep_metadata_check")
+        mgr.register(self._file_count_lbl, "conv_file_count_lbl")
+        mgr.register(self._log, "processing_log")
+        mgr.register(self._progress, "processing_progress")
+        mgr.register(self._status_lbl, "conv_status_lbl")
 
     def update_theme(self, theme_name: str) -> None:
         """Update the inner header label to match the active theme's tab emoji."""
