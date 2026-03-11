@@ -3,6 +3,7 @@ File Converter tab widget.
 """
 import datetime
 import os
+import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
@@ -476,6 +477,8 @@ class ConverterTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Converting…")
+        self._batch_start_time: float = time.monotonic()
+        self._batch_total = len(expanded)
 
         self._worker = ConverterWorker(
             files=expanded,
@@ -506,7 +509,21 @@ class ConverterTab(QWidget):
     def _on_progress(self, current: int, total: int, path: str):
         pct = int(current / max(total, 1) * 100)
         self._progress.setValue(pct)
-        self._status_lbl.setText(f"Converting {current + 1}/{total}: {Path(path).name}")
+        # Show ETA for large batches (>= 500 files)
+        elapsed = time.monotonic() - getattr(self, "_batch_start_time", 0)
+        if total >= 500 and current > 0 and elapsed > 1.0:
+            rate = current / elapsed
+            remaining = max(0, total - current)
+            eta_secs = int(remaining / rate) if rate > 0 else 0
+            if eta_secs >= 60:
+                eta_str = f"  ETA ~{eta_secs // 60}m {eta_secs % 60:02d}s"
+            else:
+                eta_str = f"  ETA ~{eta_secs}s"
+            self._status_lbl.setText(
+                f"Converting {current + 1}/{total}: {Path(path).name}{eta_str}"
+            )
+        else:
+            self._status_lbl.setText(f"Converting {current + 1}/{total}: {Path(path).name}")
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):

@@ -185,7 +185,7 @@ class ThemeSplashScreen(QSplashScreen):
         p.setPen(patreon_col)
         p.drawText(QRect(30, H - 78, W - 60, 16),
                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   "❤ patreon.com/c/DeadOnTheInside  (click to support free)")
+                   "❤ patreon.com/c/DeadOnTheInside  (click to support for free)")
 
         # Loading dots label
         msg_font = QFont("Segoe UI", 10)

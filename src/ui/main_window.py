@@ -507,8 +507,20 @@ class MainWindow(QMainWindow):
             self.setCursor(QCursor(shape))
         else:
             cursor_name = self._settings.get("cursor", "Default")
-            shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
-            self.setCursor(QCursor(shape))
+            # Check if it's a system cursor name
+            if cursor_name in _CURSOR_MAP:
+                self.setCursor(QCursor(_CURSOR_MAP[cursor_name]))
+            elif cursor_name.startswith("emoji:"):
+                # Stored as "emoji:<char>" from theme profiles
+                self.setCursor(_make_emoji_cursor(cursor_name[len("emoji:"):]))
+            else:
+                # Combo items like "🐼 Panda" – extract the emoji (first char/cluster)
+                # by taking everything before the first space
+                parts = cursor_name.split(" ", 1)
+                if parts:
+                    self.setCursor(_make_emoji_cursor(parts[0]))
+                else:
+                    self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def _apply_font_size(self):
         size = self._settings.get("font_size", 10)

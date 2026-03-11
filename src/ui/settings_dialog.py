@@ -301,8 +301,14 @@ class SettingsDialog(QDialog):
         cursor_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
         self._cursor_combo = QComboBox()
         self._cursor_combo.addItems([
+            # Standard system cursors
             "Default", "Cross", "Pointing Hand", "Open Hand",
             "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
+            # Emoji text cursors (drawn via mouse event override in main window)
+            "🐼 Panda", "🦦 Otter", "🐱 Cat", "🦈 Shark",
+            "🧜 Mermaid Trident", "🛸 UFO", "🦇 Bat",
+            "🌊 Wave", "🔥 Fire", "❄ Snowflake", "⚡ Lightning",
+            "💀 Skull", "🌸 Sakura", "✨ Sparkle",
         ])
         cursor_gl.addWidget(self._cursor_combo, 0, 1)
         self._use_theme_cursor_check = QCheckBox(
