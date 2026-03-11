@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Neon lightning bolt with glow pulse -->
+  <rect width="64" height="64" fill="#0d0d0d" rx="8"/>
+  <polygon points="36,4 18,36 30,36 26,60 46,28 34,28" fill="#00ff88" stroke="#00ff88" stroke-width="1">
+    <animate attributeName="opacity" values="1;0.5;1" dur="0.6s" repeatCount="indefinite"/>
+  </polygon>
+  <!-- Glow circles pulsing -->
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#00ff88" stroke-width="1.5" opacity="0.4">
+    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="24;28;24" dur="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="32" cy="32" r="20" fill="none" stroke="#00ff88" stroke-width="1" opacity="0.2">
+    <animate attributeName="opacity" values="0.2;0.5;0.2" dur="0.6s" begin="0.15s" repeatCount="indefinite"/>
+  </circle>
+  <text x="32" y="56" text-anchor="middle" font-size="10" fill="#00ff88" font-family="monospace">NEON</text>
+</svg>
+

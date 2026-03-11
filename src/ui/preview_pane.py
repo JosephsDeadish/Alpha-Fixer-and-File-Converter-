@@ -10,7 +10,7 @@ All image loading is done in background QThreads so the UI is never blocked.
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, QRect, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QFont, QFontMetrics,
     QPixmap, QImage, QColor,
@@ -65,6 +65,10 @@ def _fmt_size(n: int) -> str:
 # Background loader – thumbnail only (used by ImagePreviewPane)
 # ---------------------------------------------------------------------------
 
+#: Formats that use the ``quality`` parameter when saving.
+_QUALITY_FORMATS = {"JPEG", "WEBP"}
+
+
 class _ThumbLoader(QThread):
     """Load + scale an image to a thumbnail in a worker thread."""
     loaded = pyqtSignal(QImage, str)   # (thumbnail_qimage, metadata_text)
@@ -83,13 +87,115 @@ class _ThumbLoader(QThread):
             width, height = img.size
             file_size = os.path.getsize(self._path)
 
+            # Check for alpha channel
+            has_alpha = mode in ("RGBA", "LA", "PA") or (
+                mode == "P" and img.info.get("transparency") is not None
+            )
+            alpha_note = "  ·  α" if has_alpha else ""
+
+            # Check for embedded metadata
+            meta_keys = []
+            if "exif" in img.info:
+                meta_keys.append("EXIF")
+            if "icc_profile" in img.info:
+                meta_keys.append("ICC")
+            if "dpi" in img.info:
+                dpi = img.info["dpi"]
+                meta_keys.append(f"DPI {dpi[0]:.0f}×{dpi[1]:.0f}")
+            meta_note = ("  ·  " + "/".join(meta_keys)) if meta_keys else ""
+
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
+            img.close()
 
+            meta_text = (
+                f"{Path(self._path).name}\n"
+                f"{width} × {height}  ·  {mode}{alpha_note}\n"
+                f"{_fmt_size(file_size)}{meta_note}"
+            )
+            self.loaded.emit(qimg, meta_text)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
+class _ConvertedThumbLoader(QThread):
+    """Load, convert in-memory to *target_fmt*, then scale to thumbnail.
+
+    Used by :meth:`ImagePreviewPane.show_converted` to give a live preview
+    of what the output file will look like after conversion (especially
+    useful for lossy formats like JPEG/WEBP where quality matters).
+    """
+    loaded = pyqtSignal(QImage, str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, path: str, target_fmt: str, quality: int,
+                 max_size: int = 260):
+        super().__init__()
+        self._path = path
+        self._target_fmt = target_fmt.upper()
+        self._quality = quality
+        self._max_size = max_size
+
+    def run(self):
+        try:
+            import io
+            from PIL import Image
+
+            img = Image.open(self._path)
+            orig_mode = img.mode
+            orig_w, orig_h = img.size
+
+            # Convert to target format in-memory so the preview reflects
+            # actual encoding artefacts (e.g. JPEG chroma subsampling).
+            buf = io.BytesIO()
+            save_img = img
+            fmt = self._target_fmt
+            if fmt == "JPEG":
+                # JPEG does not support alpha; flatten to RGB.
+                if save_img.mode != "RGB":
+                    save_img = save_img.convert("RGB")
+            elif fmt == "BMP":
+                if save_img.mode == "RGBA":
+                    save_img = save_img.convert("RGB")
+            elif fmt == "GIF":
+                save_img = save_img.convert("P")
+            elif fmt == "ICO":
+                save_img = save_img.convert("RGBA")
+
+            save_kwargs: dict = {}
+            if fmt in _QUALITY_FORMATS:
+                save_kwargs["quality"] = self._quality
+
+            try:
+                save_img.save(buf, format=fmt, **save_kwargs)
+                converted_size = buf.tell()
+                buf.seek(0)
+                preview_img = Image.open(buf)
+                preview_img.load()  # fully decode before buf goes out of scope
+            except Exception:
+                # Fallback: show the source image if in-memory conversion fails
+                # (e.g. unsupported format like DDS which requires wand).
+                img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+                qimg = _pil_to_qimage(img)
+                img.close()
+                meta = (
+                    f"{Path(self._path).name}\n"
+                    f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
+                    f"Preview as {fmt}  (source shown)"
+                )
+                self.loaded.emit(qimg, meta)
+                return
+
+            img.close()
+            preview_img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+            qimg = _pil_to_qimage(preview_img)
+            preview_img.close()
+
+            quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
             meta = (
                 f"{Path(self._path).name}\n"
-                f"{width} × {height}  ·  {mode}\n"
-                f"{_fmt_size(file_size)}"
+                f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
+                f"Preview as {fmt}{quality_note}  ·  ~{_fmt_size(converted_size)}"
             )
             self.loaded.emit(qimg, meta)
         except Exception as exc:
@@ -127,7 +233,7 @@ class BeforeAfterWidget(QWidget):
         self._loading: bool = False
         self._checker: QPixmap | None = None  # lazily built / invalidated
 
-        self.setMinimumSize(180, 180)
+        self.setMinimumSize(180, 120)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
@@ -343,7 +449,7 @@ class ImagePreviewPane(QWidget):
 
         self._img_label = QLabel()
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setMinimumSize(200, 200)
+        self._img_label.setMinimumSize(160, 140)
         self._img_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding,
         )
@@ -372,11 +478,31 @@ class ImagePreviewPane(QWidget):
         if not path or not os.path.isfile(path):
             self.clear()
             return
-        if self._loader and self._loader.isRunning():
-            self._loader.quit()
-            self._loader.wait(500)
+        self._start_loader(_ThumbLoader(path))
+
+    def show_converted(self, path: str, target_fmt: str, quality: int):
+        """Show a live preview of *path* as it would appear after conversion.
+
+        Converts the image in-memory to *target_fmt* (with *quality* for
+        JPEG/WEBP) so the user sees any encoding artefacts before committing
+        to the conversion.  Falls back to the source thumbnail if the
+        in-memory conversion fails (e.g. for DDS).
+        """
+        if not path or not os.path.isfile(path):
+            self.clear()
+            return
+        self._start_loader(_ConvertedThumbLoader(path, target_fmt, quality))
+
+    def _start_loader(self, loader):
+        """Disconnect any stale loader and start *loader*."""
+        if self._loader is not None:
+            try:
+                self._loader.loaded.disconnect()
+                self._loader.failed.disconnect()
+            except RuntimeError:
+                pass  # already disconnected
         self._meta_label.setText("Loading…")
-        self._loader = _ThumbLoader(path)
+        self._loader = loader
         self._loader.loaded.connect(self._on_loaded)
         self._loader.failed.connect(self._on_failed)
         self._loader.start()
@@ -392,12 +518,20 @@ class ImagePreviewPane(QWidget):
     def _on_loaded(self, qimg: QImage, meta: str):
         pix = QPixmap.fromImage(qimg)
         available = self._img_label.size()
-        scaled = pix.scaled(
-            available,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._img_label.setPixmap(scaled)
+        # Guard against a zero/tiny label size when the widget hasn't been
+        # laid out yet (the thread may finish before the first layout pass).
+        if available.width() < 20 or available.height() < 20:
+            # Use a sensible fallback so the image is still visible.
+            available = QSize(max(pix.width(), 200), max(pix.height(), 180))
+        if not available.isEmpty():
+            scaled = pix.scaled(
+                available,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._img_label.setPixmap(scaled)
+        else:
+            self._img_label.setPixmap(pix)
         self._meta_label.setText(meta)
 
     def _on_failed(self, err: str):

@@ -1,7 +1,8 @@
 """
 Alpha channel processor.
 
-Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick).
+Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick),
+          PPM, PCX, AVIF, QOI.
 """
 import os
 import io
@@ -25,6 +26,7 @@ CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp"}
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
     ".gif", ".webp", ".tga", ".ico", ".dds",
+    ".ppm", ".pcx", ".avif", ".qoi",
 }
 
 SUPPORTED_WRITE = SUPPORTED_READ
@@ -156,61 +158,66 @@ def save_image(img: Image.Image, path: str, original_ext: str):
 
 
 def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
-    """Apply an AlphaPreset to a PIL RGBA image and return the result."""
+    """Apply an AlphaPreset to a PIL RGBA image and return the result.
+
+    Processing pipeline (in order):
+      1. Invert alpha (if preset.invert is True)
+      2. Set fixed alpha value (if preset.alpha_value is not None), respecting threshold
+      3. Binary threshold cut (if preset.binary_cut is True): pixels >= threshold → 255, else → 0
+      4. Clamp to [clamp_min, clamp_max]
+    """
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     arr = np.array(img, dtype=np.int32)
     alpha = arr[:, :, 3].copy()
 
+    # Step 1: Invert
     if preset.invert:
         alpha = 255 - alpha
 
-    if preset.fill_mode == "set":
-        if preset.alpha_value is not None:
-            if preset.threshold > 0:
-                mask = alpha < preset.threshold
-                alpha[mask] = preset.alpha_value
-            else:
-                alpha[:] = preset.alpha_value
-    elif preset.fill_mode == "multiply":
-        factor = preset.fill_value / 100.0
-        alpha = (alpha * factor).astype(np.int32)
-    elif preset.fill_mode == "add":
-        alpha = alpha + preset.fill_value
-    elif preset.fill_mode == "subtract":
-        alpha = alpha - preset.fill_value
-    elif preset.fill_mode == "clamp_min":
-        alpha = np.clip(alpha, preset.clamp_min, 255)
-        # Threshold cut: pixels below threshold become 0, above become 255
+    # Step 2: Set fixed value (only if alpha_value is specified)
+    if preset.alpha_value is not None:
         if preset.threshold > 0:
-            alpha = np.where(alpha >= preset.threshold, 255, 0)
-    elif preset.fill_mode == "clamp_max":
-        alpha = np.clip(alpha, 0, preset.clamp_max)
+            mask = alpha < preset.threshold
+            alpha[mask] = preset.alpha_value
+        else:
+            alpha[:] = preset.alpha_value
 
-    arr[:, :, 3] = np.clip(alpha, 0, 255).astype(np.uint8)
+    # Step 3: Binary threshold cut (hard 0/255 split)
+    if preset.binary_cut and preset.threshold > 0:
+        alpha = np.where(alpha >= preset.threshold, 255, 0)
+
+    # Step 4: Clamp
+    arr[:, :, 3] = np.clip(alpha, preset.clamp_min, preset.clamp_max).astype(np.uint8)
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
 def apply_manual_alpha(
     img: Image.Image,
-    mode: str,
-    value: int,
+    value: Optional[int],
     threshold: int = 0,
     invert: bool = False,
     clamp_min: int = 0,
     clamp_max: int = 255,
+    binary_cut: bool = False,
 ) -> Image.Image:
-    """Apply alpha changes without a preset."""
+    """Apply alpha changes without a preset.
+
+    Args:
+        value: Target alpha value (0-255) to set on affected pixels.
+               Pass None to skip the set step and only apply clamping.
+        binary_cut: When True, apply a hard 0/255 split at the threshold
+                    (pixels >= threshold → 255, else → 0).
+    """
     pseudo = AlphaPreset(
         name="_manual",
         alpha_value=value,
-        fill_mode=mode,
-        fill_value=value,
         threshold=threshold,
         invert=invert,
         description="",
         clamp_min=clamp_min,
         clamp_max=clamp_max,
+        binary_cut=binary_cut,
     )
     return apply_alpha_preset(img, pseudo)
 
@@ -218,6 +225,33 @@ def apply_manual_alpha(
 # ---------------------------------------------------------------------------
 # Batch helpers
 # ---------------------------------------------------------------------------
+
+def apply_rgba_adjust(
+    img: Image.Image,
+    red_delta: int = 0,
+    green_delta: int = 0,
+    blue_delta: int = 0,
+    alpha_delta: int = 0,
+    red_clamp: tuple = (0, 255),
+    green_clamp: tuple = (0, 255),
+    blue_clamp: tuple = (0, 255),
+    alpha_clamp: tuple = (0, 255),
+) -> Image.Image:
+    """Apply per-channel R/G/B/A deltas to a PIL image.
+
+    Each delta shifts the channel value by the given signed integer offset.
+    Clamp tuples define the allowed output range for each channel.
+    Returns the modified image in RGBA mode.
+    """
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    arr = np.array(img, dtype=np.int32)
+    arr[:, :, 0] = np.clip(arr[:, :, 0] + red_delta,   *red_clamp)
+    arr[:, :, 1] = np.clip(arr[:, :, 1] + green_delta, *green_clamp)
+    arr[:, :, 2] = np.clip(arr[:, :, 2] + blue_delta,  *blue_clamp)
+    arr[:, :, 3] = np.clip(arr[:, :, 3] + alpha_delta, *alpha_clamp)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
 
 def collect_files(
     paths: list[str],

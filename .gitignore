@@ -52,3 +52,6 @@ Thumbs.db
 
 # PyInstaller build artefacts
 *.spec.bak
+
+# Application settings (stored next to exe/main.py at runtime)
+AlphaFixerConverter.ini

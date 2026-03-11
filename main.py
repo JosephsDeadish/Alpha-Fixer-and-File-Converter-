@@ -207,11 +207,12 @@ def main():
         sys.path.insert(0, parent_dir)
 
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtCore import Qt, QCoreApplication
+    from PyQt6.QtCore import QCoreApplication
 
     QCoreApplication.setApplicationName("AlphaFixerConverter")
     QCoreApplication.setOrganizationName("PandaTools")
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    # AA_UseHighDpiPixmaps was removed in Qt6; high-DPI pixmaps are always
+    # enabled by default in Qt6/PyQt6 so no setAttribute call is needed.
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # Consistent baseline across all platforms
@@ -226,9 +227,21 @@ def main():
 
     from src.core.settings_manager import SettingsManager
     from src.ui.main_window import MainWindow
+    from src.ui.splash_screen import ThemeSplashScreen
 
     settings = SettingsManager()
+
+    # Show animated themed splash screen
+    splash = ThemeSplashScreen(settings)
+    splash.show()
+    app.processEvents()
+
     window = MainWindow(settings)
+
+    # Close splash and reveal main window after the splash duration
+    from PyQt6.QtCore import QTimer
+    QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
+
     window.show()
 
     logger.info("Main window shown.")

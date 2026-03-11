@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background very dark cave -->
+  <rect width="100" height="100" fill="#0f0400"/>
+
+  <!-- Lava pool at bottom with glow -->
+  <ellipse cx="50" cy="95" rx="55" ry="18" fill="#cc3300" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.85;0.6" dur="2s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="50" cy="96" rx="42" ry="12" fill="#ff5500" opacity="0.55">
+    <animate attributeName="opacity" values="0.55;0.75;0.55" dur="1.5s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="50" cy="97" rx="30" ry="7" fill="#ff8800" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.7;0.5" dur="1.8s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Cave stalagmites from floor -->
+  <polygon points="18,100 24,72 30,100" fill="#1e0800"/>
+  <polygon points="42,100 46,80 50,100" fill="#220900"/>
+  <polygon points="62,100 67,75 72,100" fill="#1e0800"/>
+  <polygon points="82,100 86,83 90,100" fill="#220900"/>
+
+  <!-- Cave stalactites from ceiling -->
+  <polygon points="8,0 12,30 16,0" fill="#1a0600"/>
+  <polygon points="28,0 32,22 36,0" fill="#1e0700"/>
+  <polygon points="52,0 55,18 58,0" fill="#1a0600"/>
+  <polygon points="70,0 74,25 78,0" fill="#1e0700"/>
+  <polygon points="88,0 91,20 94,0" fill="#1a0600"/>
+
+  <!-- Lava cracks on walls -->
+  <polyline points="5,30 10,45 8,60 15,75" fill="none" stroke="#ff4400" stroke-width="1" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.2;0.6" dur="2.5s" repeatCount="indefinite"/>
+  </polyline>
+  <polyline points="92,20 88,38 94,55 90,70" fill="none" stroke="#ff6600" stroke-width="0.8" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.15;0.5" dur="3s" repeatCount="indefinite"/>
+  </polyline>
+  <polyline points="40,8 38,25 42,40" fill="none" stroke="#ff4400" stroke-width="0.7" opacity="0.45">
+    <animate attributeName="opacity" values="0.45;0.1;0.45" dur="2s" repeatCount="indefinite"/>
+  </polyline>
+
+  <!-- Glowing lava bubbles -->
+  <circle cx="30" cy="92" r="4" fill="#ff6600" opacity="0.8">
+    <animate attributeName="r" values="4;5.5;4" dur="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="60" cy="93" r="3" fill="#ff8800" opacity="0.75">
+    <animate attributeName="r" values="3;4.5;3" dur="1.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.75;0.25;0.75" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="78" cy="91" r="3.5" fill="#ff5500" opacity="0.7">
+    <animate attributeName="r" values="3.5;5;3.5" dur="0.9s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.7;0.2;0.7" dur="0.9s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Ember sparks rising -->
+  <circle cx="45" cy="78" r="1.2" fill="#ff8800" opacity="0.9">
+    <animate attributeName="cy" values="78;40;78" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;0;0.9" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="55" cy="82" r="0.9" fill="#ffcc00" opacity="0.85">
+    <animate attributeName="cy" values="82;50;82" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.85;0;0.85" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="35" cy="76" r="1" fill="#ff6600" opacity="0.8">
+    <animate attributeName="cy" values="76;35;76" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0;0.8" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="65" cy="80" r="0.8" fill="#ff9900" opacity="0.75">
+    <animate attributeName="cy" values="80;45;80" dur="2.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.75;0;0.75" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+</svg>

@@ -99,12 +99,33 @@ _NORMAL: dict[str, list[str]] = {
         "128 = only adjust pixels less than 50% opaque.",
         "255 = process only fully transparent pixels.",
     ],
+    "clamp_min_spin": [
+        "Clamp Min: pixels with alpha below this value are raised to this value.",
+        "Used with clamp_min/clamp_max modes to enforce a minimum alpha floor.",
+        "Example: set to 128 to ensure no pixel is more than 50% transparent.",
+        "0 = no lower clamp (default). Increase to raise transparency floor.",
+        "PS2 textures: set to 0 to preserve full transparency range.",
+    ],
+    "clamp_max_spin": [
+        "Clamp Max: pixels with alpha above this value are lowered to this value.",
+        "Used with clamp_max mode to cap the maximum alpha of the image.",
+        "Example: set to 128 to replicate PS2's 0–128 alpha scale.",
+        "255 = no upper clamp (default). Decrease to cap opacity.",
+        "PS2 Normalize: set max to 128 if targeting PS2-accurate renderers.",
+    ],
     "invert_check": [
         "Invert the alpha channel after applying the other operations.",
         "Flips opaque ↔ transparent across all processed pixels.",
         "Combine with threshold for creative masking effects.",
         "Useful for converting 'transparency maps' to 'opacity maps'.",
         "The result is: new_alpha = 255 − computed_alpha.",
+    ],
+    "binary_cut_check": [
+        "Binary cut: pixels at or above the threshold become 255 (fully opaque); below become 0 (fully transparent).",
+        "Produces hard-edge transparency with no soft gradients or anti-aliasing.",
+        "The threshold spinbox above determines the cut point for binary mode.",
+        "Useful for sprite textures that require crisp, clean alpha edges.",
+        "Result: every pixel's alpha is either 0 or 255 — nothing in between.",
     ],
     "out_dir": [
         "Specify a custom output folder for processed files.",
@@ -173,7 +194,7 @@ _NORMAL: dict[str, list[str]] = {
         "Choose the click particle effect style for this theme.",
         "Each effect matches its theme — try Gore for blood, Galaxy for stars, Neon for lightning ⚡.",
         "Select 'Custom' to fire your own emoji as particles on every click.",
-        "New effects: Fire 🔥 (rising flames), Ice ❄ (snowflakes), Panda 🐼 (cute burst), Neon ⚡ (electric bolts).",
+        "New effects: Fire 🔥 (rising flames), Ice ❄ (snowflakes), Panda 🐼, Sakura 🌸 (cherry blossoms).",
         "Mix and match: any color theme can use any effect style you like!",
     ],
     "custom_emoji": [
@@ -197,6 +218,62 @@ _NORMAL: dict[str, list[str]] = {
         "Even $1/month helps keep the panda well-fed 🐼",
         "Visit patreon.com/c/DeadOnTheInside",
     ],
+    "alpha_fixer_tab": [
+        "The Alpha Fixer tab — fix and adjust transparency in image files.",
+        "Add files, pick a preset or manual mode, then hit Process.",
+        "Live preview shows you the before/after side by side.",
+        "Presets include PS2, GameCube, N64, and PSP alpha corrections.",
+        "You can also fine-tune R/G/B/A channel deltas individually.",
+    ],
+    "converter_tab": [
+        "The Converter tab — convert images between different file formats.",
+        "Supports AVIF, BMP, DDS, GIF, ICO, JPEG, PCX, PNG, PPM, QOI, TGA, TIFF, WEBP.",
+        "Set quality and whether to keep original metadata.",
+        "Batch convert whole folders at once with the Add Folder button.",
+        "Resize and suffix options let you process files without overwriting originals.",
+    ],
+    "history_tab": [
+        "The History tab — browse your recently processed files.",
+        "Click any entry to see what was processed and where the output went.",
+        "History is saved between sessions so you can track past work.",
+        "Use this to verify a batch job completed without errors.",
+        "History auto-refreshes each time you switch to this tab.",
+    ],
+    "history_refresh_btn": [
+        "Refresh the history list to show the latest processing sessions.",
+        "Click this after a batch run to see the new entries appear.",
+        "History updates automatically when you switch tabs, but this forces a reload.",
+        "Useful if you just finished a batch and want to verify the results.",
+        "Pulls the latest session logs from settings storage.",
+    ],
+    "history_clear_btn": [
+        "Clear all history entries for both the Converter and Alpha Fixer tabs.",
+        "This permanently removes past session records — there's no undo.",
+        "Use this to clean up after testing or to reset your session log.",
+        "Only clears the history list, not any processed files on disk.",
+        "Your settings and presets are NOT affected — just the history log.",
+    ],
+    "history_conv_sub": [
+        "The Converter sub-tab lists every batch conversion session you have run.",
+        "Each row shows the time, output format, total file count, successes, and errors.",
+        "The last column shows the first 10 file names processed in that session.",
+        "Rows with errors are highlighted in yellow so they stand out.",
+        "History entries are kept for the last 50 sessions.",
+    ],
+    "history_alpha_sub": [
+        "The Alpha Fixer sub-tab lists every alpha-fixing batch session you have run.",
+        "Each row shows the timestamp, preset or mode used, file count, and error count.",
+        "Rows with errors are highlighted in yellow — click to review what went wrong.",
+        "The first 10 file names are shown for quick reference.",
+        "History is saved automatically at the end of every batch run.",
+    ],
+    "theme_search": [
+        "Type part of a theme name here to instantly filter the theme dropdown.",
+        "Useful when you have many saved custom themes and want to find one quickly.",
+        "Clears back to the full list as soon as you delete your search text.",
+        "Press the × button on the right of the field to clear the filter.",
+        "Search is case-insensitive — 'ocean' will match 'Deep Ocean' and 'Ocean Blue'.",
+    ],
     "sound_check": [
         "Enable or disable click sound effects throughout the app.",
         "Sounds play on button clicks and other interactions.",
@@ -218,12 +295,33 @@ _NORMAL: dict[str, list[str]] = {
         "Pair with a matching theme for maximum visual coherence.",
         "Hot pink and rainbow theme: chaotic perfection.",
     ],
+    "trail_style": [
+        "Choose the visual style of the mouse trail.",
+        "Ribbon/Noodle draws a smooth connected line through the mouse path.",
+        "Comet draws a tapered tail — bright head, fading end.",
+        "Fairy/Wave/Sparkle use themed emoji that float and fade along the trail.",
+        "Dots is the classic default — small fading circles.",
+    ],
+    "use_theme_trail": [
+        "When enabled, the trail color is chosen automatically to match the active theme.",
+        "Fairy Garden switches the trail to a sparkling emoji fairy-dust mode (✨💫⭐).",
+        "Themes using ocean/mermaid/ripple effects get a wave emoji trail (🫧💧🌊🐠).",
+        "Themes using ice/sparkle effects get a crystal sparkle emoji trail (✦❄✧💎).",
+        "Disable to manually control the trail color with the picker above.",
+    ],
     "cursor_combo": [
         "Change the mouse cursor shape used throughout the application.",
         "Default is the standard arrow. Cross gives you a precision crosshair.",
         "Pointing Hand looks like you're about to poke the screen.",
         "Open Hand is great for a relaxed, browsing feel.",
         "Cursor changes apply immediately when you click Apply & Close.",
+    ],
+    "use_theme_cursor": [
+        "When enabled, the cursor automatically matches the active theme.",
+        "Otter Cove + Galaxy Otter get a 🤘 rock-on emoji cursor.",
+        "Neon, Gore, Galaxy, Volcano, and Arctic use a precision crosshair.",
+        "Panda themes and Rainbow Chaos use a pointing hand.",
+        "Overrides the manual Cursor Style selector above.",
     ],
     "font_size": [
         "Adjust the global font size (in points) for all text in the app.",
@@ -238,6 +336,111 @@ _NORMAL: dict[str, list[str]] = {
         "Each theme has its own effect — bats, blood, stars, pandas, etc.",
         "Disable if particles are distracting during heavy batch work.",
         "You can also change the effect style in the Theme tab above.",
+    ],
+    "use_theme_effect": [
+        "When enabled, the click effect automatically matches the active theme.",
+        "Gore gets blood splatter, Bat Cave gets bats, Ocean gets bubbles — auto-selected.",
+        "Overrides the manual Effect Style selector below.",
+        "Disable to pick your own effect style regardless of the active theme.",
+        "Each of the 40 themes has its own default effect hard-coded to match its vibe.",
+    ],
+    "mode_combo": [
+        "Choose how the alpha value is applied to each pixel.",
+        "'set' replaces every pixel's alpha with the exact value specified.",
+        "'multiply' scales existing alpha: new = old × (value / 255).",
+        "'add' increases alpha by the value, clamping at 255.",
+        "'subtract' decreases alpha by the value, clamping at 0.",
+    ],
+    "alpha_spin": [
+        "Set the alpha value (0 = fully transparent, 255 = fully opaque).",
+        "This box and the slider below are linked — they always stay in sync.",
+        "In 'set' mode, all pixels get this exact alpha value.",
+        "In 'multiply' mode, 255 = no change; lower values dim transparency.",
+        "In 'add'/'subtract' mode, this amount is added to or removed from each pixel's alpha.",
+    ],
+    "use_preset_check": [
+        "When checked, the preset settings override the manual fine-tune controls.",
+        "Uncheck to fine-tune alpha manually using the mode, value, and threshold controls.",
+        "Useful for quick platform-specific targets like PS2 or N64.",
+        "The preset and fine-tune controls are mutually exclusive — only one applies at a time.",
+        "Custom presets can be saved from the fine-tune settings using the Save button.",
+    ],
+    "red_spin": [
+        "Adjust the Red channel of every pixel by this delta (\u2013255 to +255).",
+        "Positive values make the image redder; negative values reduce red.",
+        "Requires 'Apply RGBA adjustments' checkbox to be ticked.",
+        "Combined with Green, Blue, and Alpha deltas for full RGBA correction.",
+        "Useful for warming or cooling game textures, e.g. PS2 palette fixes.",
+    ],
+    "green_spin": [
+        "Adjust the Green channel of every pixel by this delta (\u2013255 to +255).",
+        "Positive values push pixels toward green; negative values reduce green.",
+        "Requires 'Apply RGBA adjustments' checkbox to be ticked.",
+        "Handy for fixing tinted textures from consoles like PSP or GameCube.",
+        "Works together with Red, Blue, and Alpha adjustments for full RGBA control.",
+    ],
+    "blue_spin": [
+        "Adjust the Blue channel of every pixel by this delta (\u2013255 to +255).",
+        "Positive values increase blue; negative values decrease it.",
+        "Requires 'Apply RGBA adjustments' checkbox to be ticked.",
+        "Cool-tone correction: add Blue to shift warm textures into cooler hues.",
+        "Combine all four RGBA deltas to achieve precise colour-matching.",
+    ],
+    "alpha_delta_spin": [
+        "Shift the Alpha channel of every pixel by this delta (\u2013255 to +255).",
+        "Positive values increase transparency; negative values decrease it.",
+        "Requires 'Apply RGBA adjustments' checkbox to be ticked.",
+        "Use this to globally brighten or darken transparency across a texture.",
+        "Works alongside R/G/B deltas — all four channels adjust in one pass.",
+    ],
+    "apply_rgb_check": [
+        "Enable RGBA channel adjustments in addition to the alpha processing.",
+        "When unchecked, the Red/Green/Blue/Alpha delta spinboxes have no effect.",
+        "Tick this to colour-correct textures while also fine-tuning their alpha.",
+        "Alpha preset runs first, then the RGBA deltas are applied on top.",
+        "Leave unchecked if you only need to fix transparency, not colours.",
+    ],
+    "suffix_edit": [
+        "Append a suffix to output filenames to avoid overwriting originals.",
+        "Example: '_fixed' → 'image.png' becomes 'image_fixed.png'.",
+        "Leave blank to overwrite the source files in-place (use carefully!).",
+        "Suffix is inserted before the file extension.",
+        "Tip: use a unique suffix per batch to track which settings were applied.",
+    ],
+    "resize_check": [
+        "Enable image resizing during conversion.",
+        "When checked, the width and height fields below become active.",
+        "Images are resized before format conversion.",
+        "Leave unchecked to convert without changing dimensions.",
+        "Width and height define the exact output resolution.",
+    ],
+    "width_spin": [
+        "Target output width in pixels when resize is enabled.",
+        "Set to 0 to preserve the original image width.",
+        "Images wider than this value will be scaled down.",
+        "Images narrower than this value will be scaled up.",
+        "Best results when aspect ratio is kept consistent with the original.",
+    ],
+    "height_spin": [
+        "Target output height in pixels when resize is enabled.",
+        "Set to 0 to preserve the original image height.",
+        "Images taller than this value will be scaled down.",
+        "Images shorter than this value will be scaled up.",
+        "Best results when aspect ratio is kept consistent with the original.",
+    ],
+    "out_dir_browse": [
+        "Click to choose the output directory using a folder browser.",
+        "You can also type the path directly into the text field.",
+        "Leave blank to save output files next to each source file.",
+        "A suffix in the filename field helps avoid overwriting originals.",
+        "The selected path is remembered between sessions.",
+    ],
+    "keep_metadata_check": [
+        "Preserve metadata (EXIF/ICC profiles) in the converted output file.",
+        "EXIF data includes camera info, GPS tags, and other image properties.",
+        "ICC profiles control how colors are displayed across different devices.",
+        "Useful when converting photos that need to retain color accuracy.",
+        "Leave unchecked when processing game textures that don't need metadata.",
     ],
 }
 
@@ -299,12 +502,33 @@ _DUMBED: dict[str, list[str]] = {
         "If you're confused, just leave it at 0. It works fine.",
         "Yes, you can type a number in there. No, it won't break anything.",
     ],
+    "clamp_min_spin": [
+        "Pixels below this alpha get raised to it. Like a floor for transparency.",
+        "Set to 0 and it does nothing. Set higher and no pixel goes below that.",
+        "Pair with clamp_max to squeeze the alpha into a specific range.",
+        "128 = nothing gets more transparent than 50%. Useful for some PS2 stuff.",
+        "Leave at 0 if you don't need a floor. Most people do.",
+    ],
+    "clamp_max_spin": [
+        "Pixels above this alpha get lowered to it. It's a ceiling for opacity.",
+        "Set to 255 and it does nothing. Lower it and nothing exceeds that value.",
+        "128 = nothing gets more opaque than 50%. That's the PS2 range.",
+        "Pair with clamp_min for tight alpha range control.",
+        "Leave at 255 if you don't need a cap. Easy default.",
+    ],
     "invert_check": [
         "Check this to flip transparent ↔ opaque. It's like turning inside out.",
         "Invert = opposite. What was transparent is now opaque. Simple.",
         "This one's a bit advanced. You sure you need it? No pressure.",
         "Unchecked = normal. Checked = opposite. There you go.",
         "Use with threshold for fancy effects you can pretend you intended.",
+    ],
+    "binary_cut_check": [
+        "Binary cut: pixels above the threshold get set to 255 (solid). Below get set to 0 (invisible).",
+        "Check this when you need hard edges with no soft transparent bits in between.",
+        "The threshold value above determines who lives (255) and who dies (0).",
+        "Great for retro sprites and game textures that need clean crisp edges.",
+        "On = binary mode. Off = soft gradients allowed. Pick based on your texture needs.",
     ],
     "out_dir": [
         "Where do you want the fixed files to go? Type or browse. Simple.",
@@ -373,7 +597,7 @@ _DUMBED: dict[str, list[str]] = {
         "It's the sparkle chooser. Pick how things explode when you click.",
         "Yes, you can pick which particles fly out — it's the dropdown above.",
         "Select 'Custom' and then add your own emoji in the section below.",
-        "New ones: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Each one does a different thing. Apparently this needs explaining.",
+        "New ones: Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸. Each one does a different thing. Apparently this needs explaining.",
         "Press Apply and Close. The sparkles change. That's it. You did it.",
     ],
     "custom_emoji": [
@@ -411,6 +635,62 @@ _DUMBED: dict[str, list[str]] = {
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
     ],
+    "alpha_fixer_tab": [
+        "This is the Alpha Fixer tab. You click on it. You were already on it.",
+        "Alpha Fixer: fixing transparency since whenever this app was made.",
+        "The tab with the picture frame icon. Pretty self-explanatory, no?",
+        "Presets, sliders, batch processing — all the exciting alpha-fixing action lives here.",
+        "If you needed a tooltip to find the Alpha Fixer tab you might be in trouble.",
+    ],
+    "converter_tab": [
+        "The Converter tab converts files. Mind-blowing, I know.",
+        "You put files in, you pick a format, and… it converts them. Shocker.",
+        "For when Alpha Fixer is too exciting and you just want boring format changes.",
+        "Supports like a dozen formats. PNG, JPEG, WEBP, etc. Click it already.",
+        "Converter. Con-vert-er. Files go in one format, come out another. There you go.",
+    ],
+    "history_tab": [
+        "History. Like browser history but for files. And we judge you less.",
+        "Shows what you've processed recently. In case you forgot. Which you did.",
+        "Click it to see recent processing logs. Exciting stuff.",
+        "If something went wrong this tab might tell you what. Might.",
+        "History tab: for when you can't remember what you broke.",
+    ],
+    "history_refresh_btn": [
+        "Refresh. Click it. History updates. Not hard.",
+        "Reloads the history list. Just like it says on the button.",
+        "Click to reload recent sessions. It's a refresh button. Very standard.",
+        "If your new entries aren't showing, click this. Problem solved.",
+        "Refresh button. Does refreshing. You got this.",
+    ],
+    "history_clear_btn": [
+        "This erases all history. Gone. Forever. No takebacks.",
+        "Clear All History = delete everything in this list. Simple.",
+        "Clears your processing history. Doesn't delete actual files, just the records.",
+        "Warning: this permanently wipes the log. Or don't, up to you.",
+        "The nuclear option for your history tab. Use carefully.",
+    ],
+    "history_conv_sub": [
+        "Converter history sub-tab. Lists your file conversion sessions. You convert files, it logs it.",
+        "Each row = one conversion session. Time, format, files processed, errors. Simple.",
+        "Yellow rows have errors in them. That's your hint something didn't go perfectly.",
+        "You can see up to 50 sessions here. After that, old ones fall off the list.",
+        "Converter sub-tab. Conversion logs. That's it.",
+    ],
+    "history_alpha_sub": [
+        "Alpha Fixer history sub-tab. Lists your alpha-fixing sessions. Very niche, very useful.",
+        "Shows what preset was used, how many files, how many errors. Pretty handy.",
+        "If it's yellow, there were errors. Click Refresh to make sure it's up to date.",
+        "Up to 50 sessions are logged. After 50, the oldest ones are removed.",
+        "Alpha fix logs. For checking what you broke and when.",
+    ],
+    "theme_search": [
+        "Type a theme name here to filter the dropdown. Like searching but for themes.",
+        "Type letters, the list gets shorter. Delete them, the list comes back.",
+        "It's a search box. For themes. Not complicated.",
+        "Can't find your custom theme? Type its name here. There it is.",
+        "Filter themes. Type. Done. Very high-tech.",
+    ],
     "sound_check": [
         "Check = sounds on. Uncheck = silence. Riveting decision.",
         "This enables the clickety-clack noises. You know what sounds are.",
@@ -432,12 +712,33 @@ _DUMBED: dict[str, list[str]] = {
         "Go wild. Neon pink. Boring gray. Radioactive green. Sky's the limit.",
         "The color only shows if Trail is enabled. You did check that, right?",
     ],
+    "trail_style": [
+        "This lets you change what the trail looks like. Dots, ribbon, comet, emoji.",
+        "Ribbon = connected squiggle. Comet = bright head, fading tail. Dots = dots.",
+        "Fairy/Wave/Sparkle use emoji that float around. They're cute. You're welcome.",
+        "Pick whichever style you like. They all follow your mouse. That's the whole deal.",
+        "Use theme trail (below) to skip this and auto-pick the right style for your theme.",
+    ],
+    "use_theme_trail": [
+        "Check this and the trail changes color automatically for each theme. Smart.",
+        "Fairy Garden gets sparkly emoji dust trail (✨💫⭐). Yes, really.",
+        "Themes with ocean/mermaid effects get bubble trail (🫧💧🌊). Ice effects get crystals (✦❄✧).",
+        "Uncheck to go back to manually picking a color. Boring but valid.",
+        "Theme trail = automatic colors AND styles. Manual trail = DIY. Your call.",
+    ],
     "cursor_combo": [
         "Your cursor shape. You can change it. Here. With this dropdown.",
         "Default = normal arrow. The rest are slightly fancier arrows.",
         "Pointing Hand feels very 'I'm a web developer circa 2002'.",
         "Cross cursor is great for feeling like a precise, serious person.",
         "Pick one. Click Apply. Your cursor changes. Life continues.",
+    ],
+    "use_theme_cursor": [
+        "Check this to let the theme decide your cursor. Hands off the wheel.",
+        "Otter Cove gets 🤘. Because otters rock. That's the whole reason.",
+        "When checked, the manual cursor dropdown above does literally nothing.",
+        "Uncheck it if you want your boring arrow cursor back. Fair enough.",
+        "Theme cursor = automatic. Manual cursor = your problem.",
     ],
     "font_size": [
         "Makes text bigger or smaller. Spinbox. Number. You know how this works.",
@@ -453,37 +754,154 @@ _DUMBED: dict[str, list[str]] = {
         "Turn it off if the constant explosions are too distracting. Fair.",
         "Each theme has different particles. See Theme tab to change which ones.",
     ],
+    "use_theme_effect": [
+        "This makes the particles automatically match your theme. Pretty cool right?",
+        "On = particles are automatic. Off = you pick them yourself from the list.",
+        "Checked = app picks the right particles for you. Unchecked = your problem now.",
+        "Gore theme? Blood. Bat Cave? Bats. You get it. This just does it automatically.",
+        "Turn it off if you want to mix themes up. A panda theme with bat effects? Sure.",
+    ],
+    "mode_combo": [
+        "Pick how the alpha gets applied. 'set' is probably the one you want.",
+        "Alpha mode. It changes how alpha is calculated. Science!",
+        "You have: set, multiply, add, subtract, clamp_min, clamp_max. Fun times.",
+        "'set' = everyone gets the same alpha. Very democratic.",
+        "'multiply' = math happens. Less democratic. Still useful.",
+    ],
+    "alpha_spin": [
+        "Type a number here. 0 = invisible. 255 = visible. Easy math!",
+        "Alpha value. You know what alpha means? Great. Type it here.",
+        "0 = you can't see it. 255 = you can see it perfectly. In between = somewhere.",
+        "The slider below does the same thing. Use whichever one your hand can reach.",
+        "This number applies to every pixel in the image. That's a lot of pixels.",
+    ],
+    "use_preset_check": [
+        "Check this to use the preset above. Uncheck to do it manually. Wow.",
+        "Preset = someone already did the thinking for you. Lucky you.",
+        "Unchecked = you're in charge of the alpha. No pressure.",
+        "If you checked this and nothing changed, try clicking Process first.",
+        "This just decides which settings win: the preset up top or the sliders below.",
+    ],
+    "red_spin": [
+        "This makes the image more red (positive) or less red (negative). Colors!",
+        "Change the red channel. Add red: positive. Remove red: negative. Simple.",
+        "Nothing happens unless you also check 'Apply RGBA adjustments'. Gotcha.",
+        "Works together with green, blue, and alpha sliders for full RGBA control.",
+        "Use it to fix weirdly-tinted game textures. Or make everything red. You do you.",
+    ],
+    "green_spin": [
+        "This makes the image more green (positive) or less green (negative). Yep.",
+        "Adjust green channel. Positive = more green. Negative = less green. Science!",
+        "Nothing happens unless you also check 'Apply RGBA adjustments'.",
+        "Works with red, blue, and alpha for complete color correction.",
+        "Great for making everything look like it's in a forest. Or not.",
+    ],
+    "blue_spin": [
+        "This makes the image more blue (positive) or less blue (negative). Cool.",
+        "Adjust blue channel. Positive = more blue. Negative = less blue. Cold!",
+        "Nothing happens unless you also check 'Apply RGBA adjustments'.",
+        "Works with red and green for full color adjustment.",
+        "Add blue to make things look colder. Remove blue for warm tones.",
+    ],
+    "alpha_delta_spin": [
+        "Shift the alpha (transparency) of every pixel up or down. Simple!",
+        "Positive = more opaque. Negative = more transparent. That's it.",
+        "Nothing happens unless you also check 'Apply RGBA adjustments'.",
+        "Works alongside R/G/B so you can fix color AND transparency in one go.",
+        "Use this when every pixel needs a little more or less see-through-ness.",
+    ],
+    "apply_rgb_check": [
+        "Check this to make the Red/Green/Blue/Alpha adjustments actually do something.",
+        "Without this checked those RGBA spinboxes are just decoration.",
+        "Enables color AND alpha correction on top of the alpha fix. Double the fun.",
+        "Alpha preset runs first, then the RGBA deltas kick in. Order matters.",
+        "If nothing looks different, check this box first. Yeah, that's why.",
+    ],
+    "suffix_edit": [
+        "Type a word here to add it to the output filename. Or don't. Up to you.",
+        "Example: '_fixed' turns 'pic.png' into 'pic_fixed.png'. Neat trick.",
+        "Leave it blank and it'll overwrite your original. Hope you have backups.",
+        "You probably want something here. '_fixed' or '_out' works great.",
+        "It goes before the file extension. Like a name tag for your file.",
+    ],
+    "resize_check": [
+        "Check this if you want the images to come out a different size.",
+        "It enables the width and height boxes below, which were just sitting there.",
+        "Unchecked = same size as the original. Checked = you're in control. Maybe.",
+        "Resizing changes the dimensions. You probably knew that.",
+        "This does not resize your brain. Just the images.",
+    ],
+    "width_spin": [
+        "Type the width you want. In pixels. Not centimetres. Pixels.",
+        "0 means 'keep the original width'. Useful if you only want to change height.",
+        "Width in pixels. Goes sideways. You know this.",
+        "Put a number here if you want the image to be that many pixels wide.",
+        "Big number = wide image. Small number = narrow image. Physics!",
+    ],
+    "height_spin": [
+        "Type the height you want. In pixels. Up and down. You know how height works.",
+        "0 means 'keep the original height'. Smart shortcut!",
+        "Height in pixels. Goes up-down. The other direction from width.",
+        "Put a number here for how tall you want the output image to be.",
+        "Big number = tall image. Small number = short image. You've got this.",
+    ],
+    "out_dir_browse": [
+        "Click this to find a folder. You know how to use a folder browser, right?",
+        "Browse = look through folders. Click one. That's where your files go.",
+        "You can type the path too. But clicking is more fun apparently.",
+        "Pick a folder. Files go there. Revolutionary concept.",
+        "This stores where your output files end up. Important button, honestly.",
+    ],
+    "keep_metadata_check": [
+        "Check this to keep EXIF and ICC stuff in your converted files. Important for photo people.",
+        "Metadata = camera settings, GPS, color profiles. Check if you need them, uncheck if not.",
+        "Game textures? Don't care about EXIF. Photos? Probably check this.",
+        "ICC profiles are what keep colors looking correct. Leave checked if you care about accuracy.",
+        "Unchecked = smaller files, no extra info. Checked = full metadata intact. Simple.",
+    ],
 }
 
 # No Filter 🤬 – vulgar, funny, profanity, but actually still helpful
 _VULGAR: dict[str, list[str]] = {
     "add_files": [
         "Click this damn button and add your freaking images already. PNG, DDS, all that crap.",
-        "Oh for f**k's sake, just click it. It adds files. What the hell were you waiting for?",
+        "Oh for fuck's sake, just click it. It adds files. What the hell were you waiting for?",
         "Drag your ass-backwards images in here or click 'Add Files'. Either works, genius.",
-        "This bastard button opens a file dialog. Pick your sh*t and let's get processing.",
+        "This bastard button opens a file dialog. Pick your shit and let's get processing.",
         "Ctrl+O also works, in case you're too damn lazy to click. Love you. 🐼",
+        "Supports PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF — basically every format you forgot existed.",
+        "Holy shit you found the Add Files button! First try! Give yourself a medal, champ.",
+        "It's literally just a file picker. Click. Select. Done. Why are you hovering here for so long?",
     ],
     "add_folder": [
-        "Add a whole f**king folder at once. Because clicking one file at a time is for suckers.",
+        "Add a whole fucking folder at once. Because clicking one file at a time is for suckers.",
         "Got a billion images? Shove the whole damn folder in here. That's what this is for.",
         "Ctrl+Shift+O works too, smartass. One folder. All the images. Let's go.",
         "Enable subfolders if you've got a nested hellscape of directories. It handles it.",
-        "It scans the entire f**king folder for supported images. Sit back and let it work.",
+        "It scans the entire fucking folder for supported images. Sit back and let it work.",
+        "You have ONE folder with 10,000 images and you're adding them ONE AT A TIME? God help you. Use this.",
+        "Recursive folder scanning. Goes deeper than your last relationship. Check the subfolder option too.",
+        "Press this, pick your chaotic mess of a folder, and watch the app sort it all out. You're welcome.",
     ],
     "clear_list": [
-        "Clear this sh*t out and start over. Your files on disk are FINE, calm the f**k down.",
+        "Clear this shit out and start over. Your files on disk are FINE, calm the fuck down.",
         "Panic? Don't. This only clears the list, not your actual damn files.",
         "Starting fresh? Just nuke the list. It's not that serious.",
         "Delete key removes one item. This button removes all of it. Pick your chaos.",
         "It's FINE. Press it. Everything on disk stays. Go nuts.",
+        "Oh no, wrong files! Hit this button and pretend it never happened. We won't tell anyone.",
+        "The nuclear option for your file queue. Everything disappears. Nothing on disk changes. Deep breath.",
+        "Clear the list, start fresh, add the right files this time. We believe in you. Sort of.",
     ],
     "process_btn": [
         "Hit this big-ass green button and make the magic happen. F5 also works, lazy.",
         "CLICK THE DAMN PROCESS BUTTON. This is literally what we've been building toward.",
         "Every file in that list is about to get its alpha fixed. Hell yeah. Let's GO.",
         "It'll process everything. The progress bar will fill up like a beautiful river of results.",
-        "F5, motherf**ker. Keyboard shortcuts exist for a reason.",
+        "F5, motherfucker. Keyboard shortcuts exist for a reason.",
+        "You've added the files, set the settings, and now you're HOVERING instead of clicking. Just press it!",
+        "This is the big moment. All that setup. One click to become a legend. DO IT.",
+        "All those files in the queue waiting to get their alpha fixed. One click. That's it.",
     ],
     "stop_btn": [
         "Changed your mind, chickenshit? Click Stop. The current file finishes first.",
@@ -491,118 +909,19 @@ _VULGAR: dict[str, list[str]] = {
         "Esc also works. It stops without your cursor having to move an inch.",
         "The current file won't be half-processed. It finishes. Then everything stops.",
         "Stop is for cowards. Kidding. Stop whenever the hell you want.",
+        "OH SHIT wrong settings! Mash this button! Current file finishes but the rest are saved.",
+        "Esc key is faster than reaching for the mouse. Just saying. Also this button exists.",
+        "Changed your mind halfway through? Valid. This button exists for chaotic decision-makers.",
     ],
     "preset_combo": [
-        "Pick a damn preset. PS2 = alpha × 0.5 for PlayStation 2 textures. Classic.",
-        "N64 sets alpha to 255 (fully f**king opaque). Old-school Nintendo vibes.",
+        "Pick a damn preset. PS2 = alpha times 0.5 for PlayStation 2 textures. Classic.",
+        "N64 sets alpha to 255 (fully fucking opaque). Old-school Nintendo vibes.",
         "No Alpha removes transparency entirely. Bye-bye see-through. Hello solid block.",
-        "Max Alpha makes everything opaque too but keeps the channel. Subtle difference.",
-        "Make your own preset with the fine-tune controls below. Save it. Name it cursively.",
-    ],
-    "alpha_slider": [
-        "Drag this slider, goddamnit. 0 = invisible ghost. 255 = solid-ass opaque.",
-        "The slider and the number box are the same f**king thing. Use whichever.",
-        "Mode 'set' replaces everything with this value. Mode 'multiply' scales it. Simple.",
-        "Alpha is just how see-through a pixel is. 0 = glass. 255 = brick wall.",
-        "Only matters when 'Use preset' is UNCHECKED. Check that first, genius.",
-    ],
-    "threshold_spin": [
-        "Threshold: only process pixels with alpha BELOW this number. 0 = process all the sh*t.",
-        "Set to 255 and you'll process almost nothing. Set to 0 and everything gets the treatment.",
-        "Leave it at 0 if you want every pixel touched. That's usually what you want.",
-        "It's a filter. Below the threshold: processed. Above: left the f**k alone.",
-        "128 = only touch the semi-transparent half. Advanced stuff for fancy people.",
-    ],
-    "invert_check": [
-        "Invert flips transparent ↔ opaque. It's the 'f**k it, reverse everything' option.",
-        "Checking this makes what was solid go invisible and vice versa. Wild chaos.",
-        "Combine with threshold for effects you can pretend were intentional.",
-        "The math: new alpha = 255 minus the computed alpha. That's it. Not rocket science.",
-        "Leave unchecked unless you really know what you're doing. Or don't. We're not your mom.",
-    ],
-    "out_dir": [
-        "Where do you want your freshly f**ked-with files to go? Pick a damn folder.",
-        "Leave it blank and files save next to the originals. Easy mode.",
-        "Pro move: make an 'output' folder first so your organized ass can find things.",
-        "Browse button works. Typing a path works too if you remember where the hell your stuff is.",
-        "The folder gets CREATED if it doesn't exist. The app has your back, you messy bastard.",
-    ],
-    "recursive_check": [
-        "Check this to dig through ALL your subfolders like the organized bastard you are.",
-        "Recursive = it goes deeper than your last therapy session. Check it or don't.",
-        "Subfolders, sub-subfolders, sub-sub-subfolders. It finds ALL of them. Insane.",
-        "Leave it on and the app will hunt down every image in every nested folder. Thorough as hell.",
-        "Uncheck it if you only want the top folder. Sometimes shallow is fine.",
-    ],
-    "compare_widget": [
-        "Drag the red handle and see what the f**k you just did to your image.",
-        "Left = original. Right = fixed. Drag to compare. This is literally the point.",
-        "The handle dragging is satisfying as hell. You'll do it way more than necessary.",
-        "Select a file from the list above first, dumbass. Nothing to show without a file.",
-        "Changes settings and watch the right side update automatically. Beautiful chaos.",
-    ],
-    "file_list": [
-        "Drop your damn files here or use the buttons. Either way, fill this list up.",
-        "Click a file to see the before/after comparison below. That's why we made it.",
-        "Right-click to remove one file. Delete key works too. Power is yours.",
-        "Empty list = nothing to process, you absolute walnut. Add something first.",
-        "Drag folders right in here. The app sorts out which files are images. Magic.",
-    ],
-    "convert_btn": [
-        "Convert this pile of images to your format of choice. F5 also works, keyboard warrior.",
-        "Hit it. Watch the progress bar. Revel in the format changing.",
-        "Every file gets converted. The old format stays put unless you specifically set overwrite.",
-        "Quality matters for JPEG/WEBP. For PNG, quality is a meaningless concept.",
-        "F5, baby. The keyboard shortcut of champions.",
-    ],
-    "format_combo": [
-        "PNG or go home. No wait, DDS if it's for games. WEBP if you want to feel modern.",
-        "These are image formats. PNG = lossless perfection. JPEG = lossy garbage (but small).",
-        "DDS is for game engines. If you don't know what that is, pick PNG.",
-        "WEBP is like PNG had a baby with JPEG and the baby turned out pretty good actually.",
-        "TGA is old-school. ICO is for Windows icons. GIF makes it animate (kinda).",
-    ],
-    "quality_spin": [
-        "Higher quality = better image, bigger file. Lower = potato, but tiny.",
-        "Leave it at 90 and move on. It's fine. I promise it's f**king fine.",
-        "Only JPEG and WEBP care about this number. PNG laughs at your quality setting.",
-        "100 = best quality. 1 = garbage pile. 85-95 is the sweet spot for normal people.",
-        "Move this number and absolutely nothing visible will change. You'll do it anyway.",
-    ],
-    "settings_btn": [
-        "Open settings and make this app look less like a corporate hellscape.",
-        "Themes! Gore! Bats! Rainbows! It's all in here. Go nuts.",
-        "Ctrl+, also works. Settings: where you waste 20 minutes choosing a theme.",
-        "Mouse trail is in here. Turn it on. It looks rad as hell.",
-        "You can also break nothing in here. Except maybe your color taste.",
-    ],
-    "theme_combo": [
-        "Choose a theme. Gore has blood splatter. Bat Cave has literal f**king bats. You're welcome.",
-        "Rainbow Chaos will assault your retinas. You'll love it or hate it. No in-between.",
-        "Galaxy theme is for when you want to feel like you're coding in space.",
-        "Otter Cove is cute and cozy. Galaxy Otter is cuter AND cosmic. Best of both worlds.",
-        "Goth theme for when you're feeling angsty and want skulls everywhere.",
-    ],
-    "effect_combo": [
-        "Choose your f**king particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
-        "This controls what explodes out of your cursor. New options: Fire 🔥, Ice ❄, Panda 🐼, Neon ⚡. Choose wisely.",
-        "Custom lets you use your own emoji. What kind of unhinged particles will you pick?",
-        "Galaxy shoots stars. Otter shoots otters. Panda shoots… pandas. What more do you want from life?",
-        "If you pick Default and complain about the sparks, that's entirely on you.",
-    ],
-    "custom_emoji": [
-        "Type your deranged emoji and watch them blast across the screen like beautiful chaos.",
-        "Add whatever weird-ass emoji you want as click particles. No judgment. Mostly.",
-        "These fly out when you click. Choose wisely. Or chaotically. Both work.",
-        "Clear All nukes your entire emoji list. Gone. You did that. Own it.",
-        "Paste multiple emoji at once and they all join the flying circus. 🎪",
-    ],
-    "tooltip_mode_combo": [
-        "You're using No Filter 🤬 mode. Good f**king choice. Respect.",
-        "Pick 'Off' to turn all this off. Boring, but we get it.",
-        "Normal mode is helpful but lacks the spice. You're above that.",
-        "Dumbed Down is for when you want to be gently insulted. You're above that too.",
-        "This right here? This mode? Best mode. You chose correctly. 🤬",
+        "Max Alpha makes everything opaque but keeps the channel. Subtle difference.",
+        "Make your own preset with the fine-tune controls below. Save it. Name it creatively.",
+        "PS2 Half Alpha is literally just multiplying by 0.502. Someone calculated this shit carefully.",
+        "These presets were made by someone who reverse-engineered game consoles. Show some respect.",
+        "Picking a preset is faster than figuring out PS2 alpha math yourself. Trust the preset.",
     ],
     "save_preset": [
         "Save your damn preset so you don't have to redo this every time.",
@@ -610,34 +929,219 @@ _VULGAR: dict[str, list[str]] = {
         "It saves the current settings as a named preset. Click it, genius.",
         "This button literally saves your work. Use it.",
         "Saved presets live in the dropdown. Useful as hell.",
+        "You spent 20 minutes tweaking. SAVE THEM. Right now. Before you close the app.",
+        "Custom preset name tip: 'PS2_texture_fix' is useful. 'asdfgh' is not. Future you will curse you.",
+        "One click, your settings are saved forever. Or until you delete them. Either way, click it.",
     ],
     "delete_preset": [
-        "Deletes the preset. It's gone. The built-ins can't be deleted. Don't even try.",
-        "Click delete, confirm the dialog, and that preset is f**king dead.",
+        "Deletes the preset. It's gone. Built-ins can't be deleted. Don't even try.",
+        "Click delete, confirm the dialog, and that preset is fucking dead.",
         "You can recreate it in 30 seconds. It's not that serious.",
         "Gone. Poof. It's done. The app continues. You continue. Life goes on.",
         "Built-ins survive everything. Your custom ones? Gone with a click.",
+        "Deleting a preset feels weirdly satisfying, doesn't it? Gone. Forever. No takebacks.",
+        "If you're deleting a preset you made, I hope you wrote those settings down. You didn't, did you?",
+        "Built-in presets are immortal. Your custom ones are mortal. Choose who dies wisely.",
     ],
-    "patreon_btn": [
-        "Give the dev your money! They made this beautiful sh*t and they deserve it.",
-        "Patreon: because software doesn't write itself and developers need to eat.",
-        "Even a dollar helps! That's less than your daily coffee, you caffeinated maniac.",
-        "Your support funds new themes, more effects, and better pandas. Worth it.",
-        "patreon.com/c/DeadOnTheInside – click it. Do it. Be a hero. 🐼",
+    "alpha_slider": [
+        "Drag this slider, goddamnit. 0 = invisible ghost. 255 = solid-ass opaque.",
+        "The slider and the number box are the same fucking thing. Use whichever.",
+        "Mode 'set' replaces everything with this value. Mode 'multiply' scales it. Simple.",
+        "Alpha is just how see-through a pixel is. 0 = glass. 255 = brick wall.",
+        "Only matters when 'Use preset' is UNCHECKED. Check that first, genius.",
+        "Sliding to 128 = 50% transparent. Sliding to 0 = completely gone. 255 = solid.",
+        "This slider controls alpha, which is the fancy word for 'how see-through is this pixel'. Drag it.",
+        "Linked to the number box. Change one, they both change. Not two separate things, smartass.",
+    ],
+    "threshold_spin": [
+        "Threshold: only process pixels with alpha BELOW this number. 0 = process all the shit.",
+        "Set to 255 and you'll process almost nothing. Set to 0 and everything gets the treatment.",
+        "Leave it at 0 if you want every pixel touched. That's usually what you want.",
+        "It's a filter. Below the threshold: processed. Above: left the fuck alone.",
+        "128 = only touch the semi-transparent half. Advanced stuff for fancy people.",
+        "Think of threshold as a bouncer. Only alphas below this value get processed.",
+        "0 = everyone gets in, every pixel processed. 255 = basically nobody processed. You decide.",
+        "Useful when you only want to fix semi-transparent parts without touching solid ones.",
+    ],
+    "clamp_min_spin": [
+        "Clamp Min: no pixel's alpha can go BELOW this. 0 = no floor. Very fucking simple.",
+        "Raise it above 0 and you're saying 'nothing gets more transparent than this'. Power move.",
+        "Set to 128 and no pixel is more than 50% see-through. Good for PS2 stuff.",
+        "Leave at 0 unless you're specifically trying to clamp the transparency floor.",
+        "Works with clamp mode. Useless in other modes. Read the mode label.",
+        "Minimum alpha value enforced across all pixels. Like a speed limit for transparency.",
+        "If your texture keeps going to zero alpha where it shouldn't, bump this up. Fixes it.",
+        "Setting a floor for alpha values. No pixel will be more transparent than this. Transparency budget.",
+    ],
+    "clamp_max_spin": [
+        "Clamp Max: no pixel's alpha can go ABOVE this. 255 = no cap. Default. Boring but correct.",
+        "Lower it and you're saying 'nothing gets more opaque than this'. That's the PS2 range.",
+        "128 = mimics PS2 GS alpha ceiling. Useful for targeting old-ass hardware.",
+        "Leave at 255 unless you need an opacity ceiling. Most don't.",
+        "Works with clamp_max mode. Pair it with clamp_min for a tight alpha sandwich.",
+        "Setting a ceiling for opacity. No pixel will be more opaque than this number.",
+        "PS2 GS hardware maxes out around 128 for alpha. Set this to 128 and you're golden.",
+        "The maximum alpha value enforced across all pixels. A speed limit for opacity.",
+    ],
+    "invert_check": [
+        "Invert flips transparent to opaque and back. It's the 'fuck it, reverse everything' option.",
+        "Checking this makes solid stuff invisible and invisible stuff solid. Wild chaos.",
+        "Combine with threshold for effects you can pretend were intentional.",
+        "The math: new alpha = 255 minus computed alpha. Not rocket science.",
+        "Leave unchecked unless you really know what you're doing. Or don't. Not your mom.",
+        "Invert: the 'what if I made everything backwards' checkbox. Sometimes actually useful.",
+        "Inverts masks and alpha channels for specific effects. Used wrong: makes everything invisible.",
+        "255 becomes 0. 0 becomes 255. 128 stays 128. Everything flips. It's art.",
+    ],
+    "binary_cut_check": [
+        "Binary cut: pixels above threshold go to 255 (solid). Below go to 0 (invisible). No in-between.",
+        "Check this for hard-edge transparency. Every pixel is either fully opaque or completely gone.",
+        "Threshold value above determines the cut point. Binary cut enforces it with extreme prejudice.",
+        "Great for sprites that need crisp, no-aliasing alpha edges. Retro game shit.",
+        "The nuclear option for alpha values. No soft edges. Pure binary. Pixels choose a side.",
+        "This turns your smooth alpha gradient into hard yes/no transparency. Old-school game vibes.",
+        "Above threshold = 255, fully solid. Below = 0, completely invisible. Nothing in between. Brutal.",
+        "Use binary cut for crisp sprite edges. Discard the soft fuzzy gradient. Choose violence.",
+    ],
+    "out_dir": [
+        "Where do you want your freshly fucked-with files to go? Pick a damn folder.",
+        "Leave it blank and files save next to the originals. Easy mode.",
+        "Pro move: make an 'output' folder so your organized ass can find things.",
+        "Browse button works. Typing a path works too if you know where your stuff is.",
+        "The folder gets CREATED if it doesn't exist. The app has your back, you messy bastard.",
+        "Output directory. Where processed files land. Empty = saves next to source files.",
+        "Set this to a dedicated folder so you don't have to dig through source files for results.",
+        "Type a path or use the browse button. The app creates the folder if needed. Magic.",
+    ],
+    "recursive_check": [
+        "Check this to dig through ALL your subfolders like the organized bastard you are.",
+        "Recursive = it goes deeper than your last therapy session. Check it or don't.",
+        "Subfolders, sub-subfolders, sub-sub-subfolders. It finds ALL of them. Insane.",
+        "Leave it on and the app will hunt down every image in every nested folder.",
+        "Uncheck it if you only want the top folder. Sometimes shallow is fine.",
+        "If your folder structure looks like a corporate org chart, enable this. Goes all the way down.",
+        "Recursive folder scanning finds every supported image file, no matter how deep it goes.",
+        "Deep dive mode. On = scan everything in every folder. Off = surface level only.",
+    ],
+    "compare_widget": [
+        "Drag the red handle and see what the fuck you just did to your image.",
+        "Left = original. Right = fixed. Drag to compare. This is literally the point.",
+        "The handle dragging is satisfying as hell. You'll do it way more than necessary.",
+        "Select a file from the list above first, dumbass. Nothing to show without a file.",
+        "Change settings and watch the right side update automatically. Beautiful chaos.",
+        "Before/after comparison. Drag the divider. Cry or celebrate based on what you see.",
+        "If the right side looks like garbage, your settings are garbage. Adjust them.",
+        "Live preview updates as you change settings. Watch the alpha change in real time like a god.",
+    ],
+    "file_list": [
+        "Drop your damn files here or use the buttons. Either way, fill this list up.",
+        "Click a file to see the before/after comparison below. That's why we made it.",
+        "Right-click to remove one file. Delete key works too. Power is yours.",
+        "Empty list = nothing to process, you absolute walnut. Add something first.",
+        "Drag folders right in here. The app sorts out which files are images. Magic.",
+        "This list is your batch queue. Fill it up. The more the merrier. Process them all.",
+        "Click any file to instantly preview the before/after in the compare widget below.",
+        "You can add thousands of files. The app handles it. Batch processing is the whole point.",
+    ],
+    "convert_btn": [
+        "Convert this pile of images to your format of choice. F5 also works, keyboard warrior.",
+        "Hit it. Watch the progress bar. Revel in the format changing.",
+        "Every file gets converted. Old format stays unless you set overwrite.",
+        "Quality matters for JPEG/WEBP. For PNG, quality is a meaningless concept.",
+        "F5, baby. The keyboard shortcut of champions.",
+        "You've selected the format, set the quality, added the files. NOW CLICK THIS.",
+        "All those PNG files about to become WEBP files. Or whatever format you chose. Hit it.",
+        "The big convert button. All the files, all the format changes, one click. Let's go.",
+    ],
+    "format_combo": [
+        "PNG or go home. DDS if it's for games. WEBP if you want to feel modern.",
+        "PNG = lossless perfection. JPEG = lossy garbage (but small).",
+        "DDS is for game engines. If you don't know what that is, pick PNG.",
+        "WEBP is like PNG had a baby with JPEG and the baby turned out pretty good.",
+        "TGA is old-school. ICO is for Windows icons. GIF makes it animate (kinda).",
+        "AVIF is the new hotness. Smaller than WEBP, better quality than JPEG.",
+        "QOI is a meme format that's actually decent. Fast as hell. Few people use it.",
+        "DDS, TGA, BMP — retro game formats. For everything modern, use PNG or WEBP.",
+    ],
+    "quality_spin": [
+        "Higher quality = better image, bigger file. Lower = potato, but tiny.",
+        "Leave it at 90 and move on. It's fine. I promise it's fucking fine.",
+        "Only JPEG and WEBP care about this number. PNG laughs at your quality setting.",
+        "100 = best quality. 1 = garbage pile. 85-95 is the sweet spot for normal people.",
+        "Move this number and absolutely nothing visible will change at 90+. You'll do it anyway.",
+        "Quality 85 is basically indistinguishable from 100 at half the file size. Math is wild.",
+        "JPEG at 95 still has artifacts. PNG doesn't care about quality. Use PNG if it matters.",
+        "For web images, 75-85 is fine. For game textures, use lossless formats.",
+    ],
+    "settings_btn": [
+        "Open settings and make this app look less like a corporate hellscape.",
+        "Themes! Gore! Bats! Rainbows! It's all in here. Go nuts.",
+        "Ctrl+, also works. Settings: where you waste 20 minutes choosing a theme.",
+        "Mouse trail is in here. Turn it on. It looks rad as hell.",
+        "You can break nothing in here. Except maybe your color taste.",
+        "Settings button. Gateway to every cool cosmetic thing this app offers.",
+        "Hidden themes unlock when you do certain things. Settings shows what's unlocked.",
+        "Themes, click effects, cursor styles, mouse trails — all in settings. Enjoy.",
+    ],
+    "theme_combo": [
+        "Choose a theme. Gore has blood splatter. Bat Cave has literal fucking bats. You're welcome.",
+        "Rainbow Chaos will assault your retinas. You'll love it or hate it. No in-between.",
+        "Galaxy theme is for when you want to feel like you're coding in space.",
+        "Otter Cove is cute and cozy. Galaxy Otter is cuter AND cosmic. Best of both worlds.",
+        "Goth theme for when you're feeling angsty and want skulls everywhere.",
+        "Mermaid theme: teal and more teal. Trident cursor. Ripple clicks. Underwater vibes.",
+        "Alien theme: grey-green and eerie. UFO cursor. Tractor beam effects.",
+        "Some themes are hidden until you unlock them. Keep clicking and converting. Secrets await.",
+    ],
+    "effect_combo": [
+        "Choose your fucking particle style. Gore shoots blood. Rainbow shoots unicorns. Pick one.",
+        "This controls what explodes out of your cursor. Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸.",
+        "Custom lets you use your own emoji. What kind of unhinged particles will you pick?",
+        "Galaxy shoots stars. Otter shoots otters. Sakura shoots cherry blossoms. Life is good.",
+        "If you pick Default and complain about the sparks, that's entirely on you.",
+        "Mermaid effect has bubble and sea creature particles. It's adorable and you will love it.",
+        "Shark effect summons sharks from your cursor. This is a real thing that exists in this app.",
+        "Custom emoji effect: whatever the hell you want flying off your cursor. Pure chaos.",
+    ],
+    "custom_emoji": [
+        "Type your deranged emoji and watch them blast across the screen like beautiful chaos.",
+        "Add whatever weird-ass emoji you want as click particles. No judgment. Mostly.",
+        "These fly out when you click. Choose wisely. Or chaotically. Both work.",
+        "Clear All nukes your entire emoji list. Gone. You did that. Own it.",
+        "Paste multiple emoji at once and they all join the flying circus. 🎪",
+        "Your personal click effect particles. Customize your chaos.",
+        "Someone typed 💀💀💀 here and now skulls fly out every time they click. You can do that.",
+        "Mix and match emoji for maximum personality. 🔥❄️💀🌸🐼 all at once? Valid.",
+    ],
+    "tooltip_mode_combo": [
+        "You're using No Filter 🤬 mode. Outstanding fucking choice. This is the way.",
+        "Pick 'Off' to turn all this off. Boring, but we get it.",
+        "Normal mode is helpful but lacks the spice. You're clearly above that.",
+        "Dumbed Down is for when you want to be gently insulted. You're above that too.",
+        "This right here? This mode? Best mode. You chose correctly. 🤬",
+        "No Filter mode: helpful tips, real profanity, actual jokes. The default for a reason.",
+        "Switching to Normal would be a step backwards. You've tasted the forbidden fruit. Stay.",
+        "The tooltip mode selector. Currently set to the objectively correct option. Don't touch it.",
     ],
     "sound_check": [
         "Toggle sounds on or off. Enabled = satisfying clicks. Disabled = sad silence.",
         "Check this box and the app makes noise. Uncheck it for quiet mode, you antisocial gremlin.",
         "Custom sound path below if the built-in click isn't annoying enough for you.",
         "Library mode? Uncheck it. Having fun? Leave it on. Living life? Both work.",
-        "It's a sound checkbox. You know what it does. Stop hovering and just check it.",
+        "It's a sound checkbox. Stop hovering and just check it.",
+        "Sounds make the app feel alive. Uncheck only if you're in a meeting. We get it.",
+        "The click sounds are satisfying. Give them a chance before you turn them off.",
+        "Custom sound support means you could make every click play a fart sound. We don't judge.",
     ],
     "trail_check": [
         "Turn on the mouse trail so your cursor leaves a glowing streak of chaos behind it.",
-        "Enable this and wiggle your mouse. It looks f**king incredible, I promise.",
+        "Enable this and wiggle your mouse. It looks fucking incredible, I promise.",
         "Trail color is set below. Trail enabled here. Two separate controls. You got this.",
-        "It's a cosmetic overlay. It doesn't interfere with clicks. Just pure visual delight.",
+        "It's a cosmetic overlay. Doesn't interfere with clicks. Just pure visual delight.",
         "If you don't turn on the mouse trail, you're missing out and that's on you.",
+        "Mouse trail: the feature that makes everyone who walks by ask 'wait, what is that?'",
+        "Enable the trail, set a neon color, match it to your theme. Then be unproductive for 10 minutes.",
+        "Trail enabled = every mouse movement is art. Trail disabled = boring cursor doing boring things.",
     ],
     "trail_color": [
         "Pick the damn color for your trail. Click the button. Color picker appears. Simple.",
@@ -645,27 +1149,309 @@ _VULGAR: dict[str, list[str]] = {
         "The trail won't show a new color until you click Apply & Close. Just so you know.",
         "Pair it with the matching theme for a cohesive aesthetic. Or don't. Chaos is valid.",
         "Any hex color works. If you pick beige I will be personally disappointed.",
+        "Neon colors look best for mouse trails. Hot pink, electric blue, screaming green. Go bold.",
+        "The color picker has a hex input. Type #FF00FF for maximum chaos.",
+        "Trail color + matching theme + emoji trail style = most visually unhinged setup possible.",
+    ],
+    "trail_style": [
+        "Pick what your mouse trail looks like. Dots, comet, ribbon, emoji — your call.",
+        "Ribbon = smooth squiggly noodle following your cursor. Comet = tapered glow tail.",
+        "Fairy/Wave/Sparkle gives you floating emoji trailing your cursor. It's unhinged. We love it.",
+        "Dots is the boring default. You're better than dots. Use comet or ribbon at least.",
+        "If Use Theme Trail is checked, this setting is overridden. The theme picks for you.",
+        "Wave trail: ocean-themed emoji floating behind your cursor. 🫧💧🌊🐠 Perfection.",
+        "Sparkle trail: ✦❄✧💎 trailing behind you. Ice cave theme + sparkle = aesthetic af.",
+        "Fairy trail: ✨💫⭐ following your cursor. Fairy Garden theme + fairy trail = magical bullshit.",
+    ],
+    "use_theme_trail": [
+        "Check this and your trail auto-matches the theme. Fairy Garden gets fairy fucking dust. ✨",
+        "Ocean/Mermaid gets bubble emoji trail (🫧💧🌊). Ice gets crystal trail (✦❄✧). Gorgeous.",
+        "The color picker above becomes useless when this is checked. Enjoy the automation.",
+        "Uncheck if you want to manually pick your trail color like a goddamn adult.",
+        "Theme trail ON = the app is fabulous. Theme trail OFF = boring person energy.",
+        "Auto-matching trail to theme is the lazy genius move. Recommended.",
+        "Each theme has a hand-picked trail style that just works. Trust the system. Check this.",
+        "With this on, switching themes also switches your trail. Cohesive chaos on demand.",
     ],
     "cursor_combo": [
-        "Change your f**king cursor. Default arrow, crosshair, pointing finger, open hand. Pick one.",
+        "Change your fucking cursor. Default arrow, crosshair, pointing finger, open hand. Pick one.",
         "Pointing Hand makes you feel like you're clicking everything on purpose. Very powerful.",
-        "Cross cursor for when you want to feel like a precision surgeon of image processing.",
-        "Open Hand is chill. Relaxed. Like you've got everything under control. Do you? Do you really?",
-        "It changes your cursor. That's it. Just pick the one that speaks to your soul.",
+        "Cross cursor for when you want to feel like a precision surgeon.",
+        "Open Hand is chill. Relaxed. Like you've got everything under control. Do you really?",
+        "It changes your cursor. Just pick the one that speaks to your soul.",
+        "Some themes have special cursors. Enable 'Use Theme Cursor' to let the theme decide.",
+        "Crosshair = precision vibes. Pointing finger = clickbait vibes. Arrow = coward vibes.",
+        "The cursor you pick reflects your entire personality. Choose accordingly.",
+    ],
+    "use_theme_cursor": [
+        "Check this and your cursor changes automatically to match the theme. Otter Cove gets 🤘. YES, REALLY.",
+        "The app literally picks your cursor for you based on the theme. Sit back and enjoy.",
+        "Otter theme. Rock emoji cursor. If that doesn't make you happy, nothing will.",
+        "Uncheck this to go back to manually choosing your boring-ass cursor. We forgive you.",
+        "Theme cursor is ON = the app has taste. Theme cursor is OFF = you're on your own.",
+        "Each theme has a custom cursor that fits its vibe. Enable this for the full experience.",
+        "Mermaid theme + theme cursor = trident. Because of course it is. Enable this.",
+        "Auto-cursor is the move. Match cursor to theme automatically. One less decision.",
     ],
     "font_size": [
         "Crank the font size up if you're squinting at this screen like a damn mole.",
         "8pt is tiny as hell. 24pt is enormous. 10pt is what normal humans use.",
         "This changes the text size everywhere in the app. Your OS is unaffected.",
         "Go big. Go small. Find your font size soulmate. We'll wait.",
-        "Seriously though, if you need it bigger, no one's judging. Make it readable.",
+        "If you need it bigger, no one's judging. Make it readable.",
+        "Font size too small? Increase it. Too large? Decrease it. Not a hard problem.",
+        "If you're reading this without squinting, your font size is probably fine.",
+        "12pt is comfortable for most. 14pt on a big monitor. 24pt if you're dramatic.",
     ],
     "click_effects_check": [
-        "Enable the particle explosions that happen every time you click something. It's glorious.",
+        "Enable the particle explosions that happen every time you click. It's glorious.",
         "Uncheck this if you hate joy and visual delight. We still love you. Mostly.",
-        "Every click spawns themed particles. Bats fly. Blood splatters. Pandas explode. Beautiful.",
-        "Turn it off for serious batch work. Turn it back on when you remember why this app is fun.",
+        "Every click spawns themed particles. Bats fly. Blood splatters. Pandas explode.",
+        "Turn it off for serious batch work. Turn it back on when you remember why this is fun.",
         "The particles match the theme. Check the Theme tab to configure which chaos you prefer.",
+        "Click effects make every button interaction feel like a tiny celebration. Highly recommended.",
+        "Enabling this is possibly the best decision you'll make today. Everything explodes.",
+        "Gore theme + click effects = blood splatters every time you press Process. Incredible.",
+    ],
+    "use_theme_effect": [
+        "Let the app auto-pick the particle effect based on your theme. It knows what's best.",
+        "Check this and the app handles effects for you. Uncheck to choose your own chaos.",
+        "With this on, Gore = blood, Bats = bats, Mermaid = magical sea shit. Makes sense.",
+        "Turn it off if you want to mix shit up — alien effects with gore theme? Why not.",
+        "This is just an automation toggle. On = auto. Off = manual. Not complicated.",
+        "Each theme has a hand-picked matching effect. Auto-mode uses those. Trust it.",
+        "Mixing effects and themes manually is fun but chaotic. Auto-mode keeps it cohesive.",
+        "Galaxy auto-picks galaxy particles. Shark auto-picks shark effects. Clean.",
+    ],
+    "mode_combo": [
+        "'set' replaces all alpha values with your number. Use this one first, genius.",
+        "'multiply' does math on your alpha. Useful if you want to scale transparency.",
+        "'add'/'subtract' bumps the alpha up or down. Like turning a dial.",
+        "Pick your alpha mode here. They all do different things.",
+        "Six options: set, multiply, add, subtract, clamp_min, clamp_max. 'set' is safe.",
+        "'multiply' at 128 = 50% of original alpha. The classic PS2 trick.",
+        "clamp_min/clamp_max enforce a floor or ceiling on alpha values. Advanced shit.",
+        "Start with 'set' mode. Get comfortable. Then experiment with the others.",
+    ],
+    "alpha_spin": [
+        "Type your goddamn alpha value here. 0 = invisible, 255 = fully opaque. Simple.",
+        "0 to 255. Your image's transparency depends on this number. Don't type 256.",
+        "This and the slider below are linked. Move one, the other follows.",
+        "In 'multiply' mode, 255 = no change. Less = dimmer. More math = more misery.",
+        "Set the alpha you want applied. Just type a number.",
+        "128 = 50% opacity. 64 = 25% opacity. 255 = solid. 0 = ghost. Pick your level.",
+        "PS2 textures often need around 128-130. N64 wants 255. Type accordingly.",
+        "This number directly controls how transparent or opaque the output alpha will be.",
+    ],
+    "use_preset_check": [
+        "Check this to use the preset instead of the manual crap below. Quick and easy.",
+        "Uncheck this if you think you know better than the preset. Maybe you do.",
+        "The preset and fine-tune controls don't play nice together. Pick one.",
+        "When checked, the sliders below are grayed out. They just sit there, useless.",
+        "Presets are pre-configured by someone who already figured this out. Use them.",
+        "Preset mode: fast, easy, reliable. Manual mode: more control, more responsibility.",
+        "Checking this tells the app to use the dropdown preset and ignore fine-tuning.",
+        "Toggle between preset and manual based on how much control you need.",
+    ],
+    "red_spin": [
+        "Crank up the red channel, you deranged pixel artist. Or drop it. Your call.",
+        "Positive = more red, like blood. Negative = less red, less blood. Science.",
+        "Doesn't do jack shit unless you tick 'Apply RGBA adjustments'. Rookie mistake.",
+        "Pairs with green, blue, and alpha for full RGBA surgery on your textures.",
+        "PS2 textures look weird? Crank this and see.",
+        "+50 makes things warmer and more intense. -50 makes them cooler and sadder.",
+        "Combined R/G/B adjustments let you fix tinted textures from game consoles.",
+        "Red adjustment range: -255 to +255. You have full control. Don't break anything.",
+    ],
+    "green_spin": [
+        "Adjust green. Positive = Shrek mode. Negative = anti-Shrek mode.",
+        "This changes the green channel on every pixel. Big deal.",
+        "Won't do anything unless 'Apply RGBA adjustments' is checked. Read the UI.",
+        "Works with red, blue, and alpha. It's called RGBA for a reason.",
+        "GameCube textures turning everything into a salad? Maybe fix that here.",
+        "Green channel adjustment. Sometimes textures are too green. You decide.",
+        "+255 green makes everything look like the Matrix. Cool. Accidental.",
+        "GameCube and N64 sometimes have green tinting artifacts. This channel helps.",
+    ],
+    "blue_spin": [
+        "More blue = underwater. Less blue = warm and toasty.",
+        "Blue channel adjustment. Positive = cold. Negative = less cold. Basic.",
+        "Still needs 'Apply RGBA adjustments' checked. That checkbox exists for a reason.",
+        "Works with red and green to complete your unholy color correction trinity.",
+        "Make everything look like a sad indie film. Or fix busted console textures.",
+        "PSP textures often have blue tinting issues. This channel is your fix.",
+        "+255 blue makes everything look underwater. Accidentally beautiful sometimes.",
+        "Blue adjustment for the cold-cool-frozen look. Or just fixing tinted game textures.",
+    ],
+    "alpha_delta_spin": [
+        "Nudge every pixel's alpha up or down. Positive = opaquer. Negative = more see-through.",
+        "Alpha delta. Add transparency or remove it globally. Not complicated.",
+        "Does jack squat unless 'Apply RGBA adjustments' is ticked. Same as the others.",
+        "Use this to globally darken or brighten the alpha layer. Power move.",
+        "Four channels: R, G, B, and now A. Full RGBA control. You're welcome.",
+        "Positive alpha delta = everything gets more opaque. Negative = everything fades.",
+        "Global alpha adjustment on top of whatever alpha processing you've set up.",
+        "Think of this as a fine-tuning knob for alpha after the main processing is done.",
+    ],
+    "apply_rgb_check": [
+        "Flip this on or the RGBA spinboxes do absolutely nothing. Not a bug.",
+        "Enable RGBA adjustments. Without this, all four channel changes = void.",
+        "Check it. Apply it. Watch colors AND alpha shift. Feel the power.",
+        "Alpha preset runs first, then the RGBA fuckery. Order of operations.",
+        "Turn this off if you just want alpha fixed and don't need channels messed with.",
+        "This checkbox activates the entire R/G/B/A delta system. Off = none of those sliders do anything.",
+        "For color correction along with alpha fixing, check this box.",
+        "The master switch for RGBA adjustments. Flip it on, and your spinboxes wake up.",
+    ],
+    "suffix_edit": [
+        "Add a suffix so you don't overwrite the originals, you reckless bastard.",
+        "Example: '_fixed' makes 'image.png' become 'image_fixed.png'. Easy.",
+        "Leave blank to overwrite source files. Pray you have backups, hero.",
+        "Type something here. '_out', '_processed', '_done', whatever floats your boat.",
+        "This goes before the file extension. Not after. Before. Got it?",
+        "Without a suffix, you're overwriting originals. That's brave. Or stupid.",
+        "Good suffix ideas: '_fixed', '_ps2', '_alpha'. Bad idea: nothing. Don't do nothing.",
+        "Suffix = safety net. Use it. Your future self will thank your current self.",
+    ],
+    "resize_check": [
+        "Enable this to change the output image dimensions. Shocking feature.",
+        "Check it if you want the images to come out a different size. Uncheck to not.",
+        "When checked, the width and height boxes below actually do something.",
+        "Resizing images. It's a thing apps do. This one included.",
+        "If you need a different size, check this. If you don't, don't.",
+        "Batch resizing while converting. Check this to enable the resize fields.",
+        "Power feature: convert format AND resize in one pass. Check this box.",
+        "Most conversions don't need resizing. Only check when you need different dimensions.",
+    ],
+    "width_spin": [
+        "Output width in pixels. Zero means keep the original. Type a number.",
+        "How wide do you want the image? Type that number. In pixels.",
+        "Wider = bigger number. Narrower = smaller number.",
+        "0 = original width. Non-zero = you've overridden the width. Congrats.",
+        "Resize only works when the checkbox above is checked. In case you forgot.",
+        "1920 for full HD. 2048 for textures. 512 for retro game vibes.",
+        "Set to 0 to only control the height. The app figures out the other dimension.",
+        "Target output width. Set it, enable resize, convert. Simple.",
+    ],
+    "height_spin": [
+        "Output height in pixels. Zero means keep the original. Vertical this time.",
+        "How tall do you want the image? Shove that number in here.",
+        "Taller = bigger number. Shorter = smaller. Up is up. Down is down.",
+        "0 = original height preserved. Works alongside the width field.",
+        "Resize is only active when the checkbox above is enabled. Still true.",
+        "1080 for full HD. 2048 for square textures.",
+        "Set to 0 to only control the width. The app handles proportional scaling.",
+        "Target output height. Works together with width. Both at 0 = no resize.",
+    ],
+    "out_dir_browse": [
+        "Click to pick a folder for your output files. Literally just a folder picker.",
+        "Browse for a directory. Click one. Done. Your files will go there.",
+        "You can also type the path directly. But this button exists for a reason.",
+        "Choose your output folder wisely. Or don't. It's reversible.",
+        "Leave the path empty to save next to the source files.",
+        "Folder picker button. Click it. Navigate. Select. Done.",
+        "Pro tip: create the output folder first so you know where things are going.",
+        "The browse button exists so you don't have to type long paths. Use it.",
+    ],
+    "alpha_fixer_tab": [
+        "Alpha Fixer tab: where broken-ass alpha channels go to get fixed. Click it.",
+        "This is the tab that actually does the real work, unlike you apparently.",
+        "Alpha channels, presets, batch processing — stop reading tooltips and use it.",
+        "If your textures look like shit, THIS is where you fix that. You're welcome.",
+        "The image frame icon. The main tab. The whole damn point of the app.",
+        "Alpha Fixer: the reason this app exists. The main event. The big kahuna.",
+        "Broken transparency in your game textures? This tab fixes it. That's the whole thing.",
+        "Hovering on the Alpha Fixer tab instead of being IN the Alpha Fixer tab. Interesting life choice.",
+    ],
+    "converter_tab": [
+        "Converter tab: turn your PNG into a WEBP or whatever the fuck you need.",
+        "File goes in, different format comes out. It's conversion. Not complicated.",
+        "Supports a ridiculous number of formats. Stop asking, just click it.",
+        "Need to batch convert 500 files? This is your tab, you file-hoarding maniac.",
+        "It's the converter. For converting. Stop hovering and do the conversion already.",
+        "13 output formats supported. If your format isn't there, you have exotic taste.",
+        "Batch format conversion. Add files, pick format, hit convert. Three steps to glory.",
+        "From PNG to DDS to AVIF to TGA — this tab handles all your format conversion needs.",
+    ],
+    "history_tab": [
+        "History tab: proof you actually did something today. Rare.",
+        "Shows your recent processing history. Unlike your therapist, we don't judge.",
+        "Scroll through it to find that file you swear you processed but can't remember.",
+        "If it's not in here, you didn't do it. Sorry. That's just facts.",
+        "History. Past work. Evidence of productivity. Click it before you spiral.",
+        "Processing history lives here. Every alpha fix, every conversion. Archived.",
+        "Can't remember if you processed that folder? Check history. It remembers everything.",
+        "History tab: your receipts. Proof of work. Digital paper trail of your image adventures.",
+    ],
+    "history_refresh_btn": [
+        "Refresh button. In case you forgot what you did three seconds ago.",
+        "Hit refresh because you have zero trust in the app updating automatically. Valid.",
+        "Forces the history to reload. Because apparently you needed to ask twice.",
+        "Click refresh. See new entries. Marvel at your own productivity. Repeat.",
+        "It's a refresh button. Click it if things look stale.",
+        "Paranoid the history didn't update? Hit refresh. It updates. Trust issues are valid.",
+        "New entries appear after processing. Refresh if you need to convince yourself.",
+        "The history auto-refreshes on tab switch, but this button forces an immediate reload.",
+    ],
+    "history_clear_btn": [
+        "Nuke the entire history. No backup. No recovery. No regrets.",
+        "Clear All History: scorched earth mode for your processing log. You sure?",
+        "One click, your entire session history is gone forever. Fun! 🔥",
+        "Your past work, erased. Doesn't touch actual files. Just the receipts.",
+        "This is the 'pretend it never happened' button. Use wisely, you chaotic gremlin.",
+        "Gone. All of it. Every entry. Vanished. Your files are fine. The history is gone.",
+        "Clearing history is a fresh start vibe. No records. Clean slate. Very liberating.",
+        "Once cleared, history cannot be recovered. So, you know, be sure about this.",
+    ],
+    "history_conv_sub": [
+        "Converter history. Every single batch conversion you ran, logged here like a digital crime scene.",
+        "Yellow rows mean errors. Because red would've been too on the nose.",
+        "Time, format, file count, successes, failures — all logged so you can't deny what happened.",
+        "50 sessions max. After that the oldest ones fall off. Like memories but with more WEBP files.",
+        "Batch convert a folder, come here, feel proud or ashamed depending on the error count.",
+        "Each row is a conversion session. A moment in your file-processing history. Precious.",
+        "The first 10 filenames show in the last column. The other 490 are implied.",
+        "Converter history. For when you need receipts on your format crimes.",
+    ],
+    "history_alpha_sub": [
+        "Alpha Fixer history. Every session where you attempted to unfuck your alpha channels. Logged.",
+        "Preset name, file count, errors — all here so you know exactly what broke and when.",
+        "Yellow rows have errors. The universe is telling you something. Listen to it.",
+        "Up to 50 sessions logged. Like your own personal hall of alpha-fixing shame and glory.",
+        "If it's in here, you ran it. Can't blame the app. Can't blame the files. Just you.",
+        "Alpha fix logs: the evidence trail of every transparency you've ever massacred.",
+        "Useful for catching which preset caused problems. Spoiler: it's always the manual one.",
+        "Your alpha-processing receipts. Organized. Merciless. Completely honest.",
+    ],
+    "theme_search": [
+        "Search for a theme. Type letters, list shrinks. Delete letters, list grows. Profound.",
+        "If you have 40 custom themes and can't find the right one, maybe lay off the theme hoarding.",
+        "Type part of a theme name. The combo filters in real time. It's 2026, this is expected.",
+        "Theme filter. For when scrolling through the whole dropdown feels like cardio.",
+        "Type 'panda' and only panda themes show up. That's how search works. Mind-blowing.",
+        "Case-insensitive. 'OCEAN', 'ocean', 'OcEaN' — all find the same damn themes.",
+        "Filter box: because nobody wants to scroll through 50 themes manually. Work smarter.",
+        "Hit the × button to clear the filter and bring back all themes in their chaotic glory.",
+    ],
+    "patreon_btn": [
+        "Give the dev your money! They made this beautiful shit and they deserve it.",
+        "Patreon: because software doesn't write itself and developers need to eat.",
+        "Even a dollar helps! That's less than your daily coffee, you caffeinated maniac.",
+        "Your support funds new themes, more effects, and better pandas. Worth it.",
+        "patreon.com/c/DeadOnTheInside — click it. Do it. Be a hero. 🐼",
+        "The developer spent months building this app. patreon.com/c/DeadOnTheInside - show some love.",
+        "Patreon support = more features, more themes, more everything. Good karma too.",
+        "Link opens to DeadOnTheInside on Patreon. No payment required to follow. Just click.",
+    ],
+    "keep_metadata_check": [
+        "Keep metadata checked = EXIF, GPS, camera info, ICC profiles all survive the conversion. Congrats.",
+        "EXIF contains all the nerdy camera data. ICC profiles keep your colors from looking like ass.",
+        "If you're converting photos and want GPS/camera data to survive, check this. Otherwise whatever.",
+        "Uncheck this for game textures — they don't give a single fuck about EXIF. Less clutter.",
+        "ICC profiles are color management data. Check this or your colors might look slightly off. Your call.",
+        "Checked = metadata preserved. Unchecked = stripped out. Simple binary choice. Make it.",
+        "Your EXIF data contains your life story (camera model, date, GPS). Check this to keep that story intact.",
+        "For photographers: check this always. For game devs: don't bother. Now you know.",
     ],
 }
 
@@ -705,8 +1491,22 @@ class TooltipManager(QObject):
         self._settings = settings
         # Map widget id → tip key
         self._widget_keys: dict[int, str] = {}
-        # Per-key cycle counter
+        # Per-key: next index to show (advances only on widget change)
         self._cycle: dict[str, int] = {}
+        # Per-key: index most recently displayed (used to re-show same tip)
+        self._shown_idx: dict[str, int] = {}
+        # Track the last widget key shown so we only advance when user moves
+        # to a different widget and comes back, not on every tiny mouse move.
+        self._last_shown_key: str | None = None
+        # Map QTabBar id → list of tip keys (one per tab index)
+        self._tab_bar_keys: dict[int, list[str]] = {}
+        # Strong references to registered QTabBar Python wrapper objects so
+        # that id() remains stable even between re-lookups (PyQt6 may return
+        # different wrapper objects from tabBar() on each call).
+        self._tab_bar_refs: dict[int, object] = {}
+        # Map QTabWidget id → QTabBar so we can handle tooltip events that
+        # Qt dispatches to the container rather than the bar child.
+        self._tab_widget_to_bar: dict[int, object] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -721,6 +1521,35 @@ class TooltipManager(QObject):
         # Ensure native tooltip is cleared so we control it fully
         widget.setToolTip("")
 
+    def register_tab_bar(self, tab_bar, tip_keys: list) -> None:
+        """Register a QTabBar so each tab index maps to its own tip_key.
+
+        *tip_keys* must be a list with one entry per tab (same order as tabs).
+
+        Also registers the parent QTabWidget (if any) so tooltip events
+        dispatched at the container level are handled correctly.
+        """
+        bar_id = id(tab_bar)
+        self._tab_bar_keys[bar_id] = list(tip_keys)
+        # Keep a strong Python reference so id(tab_bar) stays stable.
+        self._tab_bar_refs[bar_id] = tab_bar
+        tab_bar.setToolTip("")
+        # Also clear per-tab native tooltips
+        for i in range(len(tip_keys)):
+            try:
+                tab_bar.setTabToolTip(i, "")
+            except Exception:
+                pass
+        # Register the parent QTabWidget so events coming from that level are
+        # routed to the bar.
+        try:
+            parent_widget = tab_bar.parent()
+            if parent_widget is not None:
+                self._tab_widget_to_bar[id(parent_widget)] = tab_bar
+                parent_widget.setToolTip("")
+        except Exception:
+            pass
+
     def mode(self) -> str:
         return self._settings.get("tooltip_mode", "Normal")
 
@@ -732,22 +1561,100 @@ class TooltipManager(QObject):
         if event.type() != QEvent.Type.ToolTip:
             return False
 
+        obj_id = id(obj)
+
+        # Check if this is a registered QTabBar with per-tab keys
+        tab_keys = self._tab_bar_keys.get(obj_id)
+        if tab_keys is None:
+            # Fallback: scan registered bar refs for identity match.
+            # PyQt6 sometimes creates a new Python wrapper for the same C++
+            # QTabBar object, giving a different id().  Comparing with `is`
+            # will still catch the case when we happen to have the same wrapper.
+            for bar_id, bar_ref in self._tab_bar_refs.items():
+                try:
+                    if bar_ref is obj:
+                        tab_keys = self._tab_bar_keys.get(bar_id)
+                        obj_id = bar_id  # update so key lookup below is consistent
+                        break
+                except RuntimeError:
+                    # Wrapped C++ object may have been deleted; skip safely.
+                    pass
+        if tab_keys is not None:
+            return self._handle_tab_bar_tooltip(obj, event, tab_keys)
+
+        # Check if this is the parent QTabWidget whose tab bar is registered.
+        # Qt sometimes dispatches the ToolTip event to the QTabWidget rather
+        # than the child QTabBar, so we remap it here.
+        bar_ref = self._tab_widget_to_bar.get(id(obj))
+        if bar_ref is not None:
+            bar_id = id(bar_ref)
+            # Try stable bar_id first, then scan refs for identity match
+            tab_keys = self._tab_bar_keys.get(bar_id)
+            if tab_keys is None:
+                for _bid, _bref in self._tab_bar_refs.items():
+                    try:
+                        if _bref is bar_ref:
+                            tab_keys = self._tab_bar_keys.get(_bid)
+                            break
+                    except RuntimeError:
+                        # Wrapped C++ object may have been deleted; skip safely.
+                        pass
+            if tab_keys is not None:
+                # Map the event position from QTabWidget coordinates to QTabBar
+                # coordinates (the bar sits at the top of the widget).
+                try:
+                    bar_pos = bar_ref.mapFrom(obj, event.pos())
+                    tab_idx = bar_ref.tabAt(bar_pos)
+                except (RuntimeError, AttributeError):
+                    tab_idx = -1
+                if 0 <= tab_idx < len(tab_keys):
+                    return self._show_tip_for_key(bar_ref, event, tab_keys[tab_idx])
+
         key = self._widget_keys.get(id(obj))
         if key is None:
             return False
 
+        return self._show_tip_for_key(obj, event, key)
+
+    def _handle_tab_bar_tooltip(self, tab_bar, event, tab_keys: list) -> bool:
+        """Show a per-tab tooltip based on which tab is under the cursor."""
         mode = self.mode()
         if mode == "Off":
-            # Suppress all tooltips – import QToolTip lazily (needs display)
+            from PyQt6.QtWidgets import QToolTip
+            QToolTip.hideText()
+            return True
+        try:
+            tab_idx = tab_bar.tabAt(event.pos())
+        except Exception:
+            tab_idx = -1
+        if tab_idx < 0 or tab_idx >= len(tab_keys):
+            return False
+        key = tab_keys[tab_idx]
+        return self._show_tip_for_key(tab_bar, event, key)
+
+    def _show_tip_for_key(self, obj, event, key: str) -> bool:
+        """Resolve the cycling tip for *key* and show it."""
+        mode = self.mode()
+        if mode == "Off":
             from PyQt6.QtWidgets import QToolTip
             QToolTip.hideText()
             return True
 
         tips_dict, fallback = _MODE_TIPS.get(mode, _MODE_TIPS["Normal"])
         variants = tips_dict.get(key, fallback)
+        n = len(variants)
 
-        idx = self._cycle.get(key, 0) % len(variants)
-        self._cycle[key] = (idx + 1) % len(variants)
+        # Only advance the cycle counter when the user moves to a different
+        # widget.  Tiny mouse moves within the same widget fire multiple
+        # ToolTip events; advancing on each one makes the tip spin too fast.
+        if key != self._last_shown_key:
+            idx = self._cycle.get(key, 0) % n
+            self._cycle[key] = (idx + 1) % n
+            self._shown_idx[key] = idx
+            self._last_shown_key = key
+        else:
+            # Re-show the same tip that was last displayed for this widget.
+            idx = self._shown_idx.get(key, 0)
 
         tip_text = variants[idx]
         try:

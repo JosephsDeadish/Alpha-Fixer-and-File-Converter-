@@ -19,7 +19,7 @@ import sys
 import tempfile
 import wave
 
-from PyQt6.QtCore import QEvent, QObject
+from PyQt6.QtCore import QEvent, QObject, Qt
 from PyQt6.QtWidgets import QAbstractButton
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ class _ButtonClickFilter(QObject):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if (
             event.type() == QEvent.Type.MouseButtonPress
+            and event.button() == Qt.MouseButton.LeftButton
             and isinstance(obj, QAbstractButton)
         ):
             self._engine.play_click()
@@ -121,7 +122,7 @@ class SoundEngine(QObject):
 
     def play_click(self) -> None:
         """Play the click sound (respects the sound_enabled setting)."""
-        if not self._settings.get("sound_enabled", True):
+        if not self._settings.get("sound_enabled", False):
             return
 
         # Use a custom user-supplied WAV if configured

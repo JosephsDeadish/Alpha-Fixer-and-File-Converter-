@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Ocean background gradient -->
+  <defs>
+    <radialGradient id="seaGlow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#00ffee" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#00ccaa" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00ccaa" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#003344" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Glow circle -->
+  <circle cx="100" cy="100" r="90" fill="url(#seaGlow)"/>
+
+  <!-- Animated waves (3 layers) -->
+  <g opacity="0.7">
+    <path fill="none" stroke="#00ccaa" stroke-width="2.5" stroke-linecap="round"
+          d="M10,120 Q35,108 60,120 Q85,132 110,120 Q135,108 160,120 Q185,132 200,120">
+      <animate attributeName="d"
+        values="M10,120 Q35,108 60,120 Q85,132 110,120 Q135,108 160,120 Q185,132 200,120;
+                M10,120 Q35,132 60,120 Q85,108 110,120 Q135,132 160,120 Q185,108 200,120;
+                M10,120 Q35,108 60,120 Q85,132 110,120 Q135,108 160,120 Q185,132 200,120"
+        dur="2.5s" repeatCount="indefinite"/>
+    </path>
+    <path fill="none" stroke="#33ddff" stroke-width="1.8" stroke-linecap="round"
+          d="M10,135 Q35,123 60,135 Q85,147 110,135 Q135,123 160,135 Q185,147 200,135">
+      <animate attributeName="d"
+        values="M10,135 Q35,123 60,135 Q85,147 110,135 Q135,123 160,135 Q185,147 200,135;
+                M10,135 Q35,147 60,135 Q85,123 110,135 Q135,147 160,135 Q185,123 200,135;
+                M10,135 Q35,123 60,135 Q85,147 110,135 Q135,123 160,135 Q185,147 200,135"
+        dur="3.2s" repeatCount="indefinite"/>
+    </path>
+    <path fill="none" stroke="#006688" stroke-width="1.2" stroke-linecap="round"
+          d="M10,148 Q35,140 60,148 Q85,156 110,148 Q135,140 160,148 Q185,156 200,148">
+      <animate attributeName="d"
+        values="M10,148 Q35,140 60,148 Q85,156 110,148 Q135,140 160,148 Q185,156 200,148;
+                M10,148 Q35,156 60,148 Q85,140 110,148 Q135,156 160,148 Q185,140 200,148;
+                M10,148 Q35,140 60,148 Q85,156 110,148 Q135,140 160,148 Q185,156 200,148"
+        dur="2.0s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- Mermaid silhouette (stylised) -->
+  <g transform="translate(60, 20)">
+    <!-- Body -->
+    <ellipse cx="40" cy="42" rx="18" ry="24" fill="#00ccaa" opacity="0.9">
+      <animate attributeName="opacity" values="0.9;0.7;0.9" dur="3s" repeatCount="indefinite"/>
+    </ellipse>
+    <!-- Head -->
+    <circle cx="40" cy="18" r="14" fill="#00ccaa" opacity="0.9"/>
+    <!-- Hair flowing right -->
+    <path d="M50,15 Q75,8 80,25 Q75,30 55,28" fill="#00ffcc" opacity="0.7">
+      <animateTransform attributeName="transform" type="translate"
+        values="0,0; 3,2; 0,0" dur="2.8s" repeatCount="indefinite"/>
+    </path>
+    <!-- Tail (fish) -->
+    <path d="M22,64 Q40,90 58,64 Q48,76 40,80 Q32,76 22,64" fill="#00ddbb" opacity="0.85">
+      <animate attributeName="d"
+        values="M22,64 Q40,90 58,64 Q48,76 40,80 Q32,76 22,64;
+                M22,64 Q40,86 58,64 Q50,74 40,78 Q30,74 22,64;
+                M22,64 Q40,90 58,64 Q48,76 40,80 Q32,76 22,64"
+        dur="1.8s" repeatCount="indefinite"/>
+    </path>
+    <!-- Arm holding trident -->
+    <line x1="52" y1="40" x2="68" y2="30" stroke="#00ffcc" stroke-width="3" stroke-linecap="round"/>
+    <!-- Trident -->
+    <line x1="68" y1="30" x2="68" y2="12" stroke="#00ffcc" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="62" y1="16" x2="62" y2="10" stroke="#00ffcc" stroke-width="2" stroke-linecap="round"/>
+    <line x1="68" y1="12" x2="68" y2="6"  stroke="#00ffcc" stroke-width="2" stroke-linecap="round"/>
+    <line x1="74" y1="16" x2="74" y2="10" stroke="#00ffcc" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Bubbles -->
+  <circle cx="30" cy="80" r="5" fill="none" stroke="#00ccaa" stroke-width="1.5" opacity="0.6">
+    <animate attributeName="cy" values="80;10" dur="4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0" dur="4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="160" cy="90" r="3.5" fill="none" stroke="#33ddff" stroke-width="1.2" opacity="0.5">
+    <animate attributeName="cy" values="90;20" dur="3.2s" begin="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0" dur="3.2s" begin="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="100" cy="100" r="4" fill="none" stroke="#00ffcc" stroke-width="1.3" opacity="0.55">
+    <animate attributeName="cy" values="100;30" dur="3.7s" begin="0.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.55;0" dur="3.7s" begin="0.5s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Sparkles -->
+  <g fill="#00ffee" opacity="0.8">
+    <polygon points="170,40 172,46 178,46 173,50 175,56 170,52 165,56 167,50 162,46 168,46" transform="scale(0.7)">
+      <animateTransform attributeName="transform" type="rotate"
+        values="0 170 48; 360 170 48" dur="6s" repeatCount="indefinite"/>
+    </polygon>
+    <circle cx="25" cy="50" r="3" opacity="0.7">
+      <animate attributeName="opacity" values="0.7;0.2;0.7" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

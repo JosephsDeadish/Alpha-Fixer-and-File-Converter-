@@ -3,11 +3,11 @@ Main application window.
 """
 import webbrowser
 
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QAction, QCursor, QFont, QIcon
+from PyQt6.QtCore import Qt, QSize, QRect, QTimer
+from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
-    QLabel, QPushButton, QWidget, QVBoxLayout, QApplication,
+    QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
     QMessageBox, QFileDialog,
 )
 
@@ -17,17 +17,112 @@ from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
 from .settings_dialog import SettingsDialog
-from .theme_engine import build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS
+from .theme_engine import (
+    build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
+    get_theme_svg_path, get_theme_banner, get_theme_status,
+    get_theme_banner_frames, get_theme_tab_labels, get_theme_icon,
+)
 from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
 _CURSOR_MAP = {
-    "Default":       Qt.CursorShape.ArrowCursor,
-    "Cross":         Qt.CursorShape.CrossCursor,
-    "Pointing Hand": Qt.CursorShape.PointingHandCursor,
-    "Open Hand":     Qt.CursorShape.OpenHandCursor,
+    "Default":        Qt.CursorShape.ArrowCursor,
+    "Cross":          Qt.CursorShape.CrossCursor,
+    "Pointing Hand":  Qt.CursorShape.PointingHandCursor,
+    "Open Hand":      Qt.CursorShape.OpenHandCursor,
+    "Hourglass":      Qt.CursorShape.WaitCursor,
+    "Forbidden":      Qt.CursorShape.ForbiddenCursor,
+    "IBeam":          Qt.CursorShape.IBeamCursor,
+    "Size All":       Qt.CursorShape.SizeAllCursor,
+    "Blank":          Qt.CursorShape.BlankCursor,
 }
+
+
+def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
+    """Render *emoji* into a square pixmap and return a QCursor from it.
+
+    The hotspot is placed at the top-left corner so the cursor tip lines up
+    with the pointer position.  Falls back to the arrow cursor if pixmap
+    painting is unavailable (e.g. running headless without a display).
+    """
+    try:
+        pix = QPixmap(size, size)
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        # Use a font stack that covers Windows (Segoe UI Emoji), macOS (Apple Color Emoji),
+        # and Linux (Noto Color Emoji) so the emoji renders on every platform.
+        font = QFont()
+        font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+        font.setPointSize(max(6, size - 6))
+        painter.setFont(font)
+        painter.drawText(
+            QRect(0, 0, size, size),
+            Qt.AlignmentFlag.AlignCenter,
+            emoji,
+        )
+        painter.end()
+        return QCursor(pix, 0, 0)
+    except Exception:
+        return QCursor(Qt.CursorShape.ArrowCursor)
+
+
+class _SpinningEmojiLabel(QWidget):
+    """Renders a single emoji character and rotates it continuously.
+
+    This provides the per-theme "animated banner" effect: each theme's
+    representative emoji (🐼, 🩸, 🦇, etc.) appears to spin like a gear,
+    giving a genuine visual animation without cycling through different emojis.
+    """
+
+    _DEGREES_PER_FRAME = 2.0   # rotation speed per ~33 ms tick ≈ 1 full turn / ~6 s
+    _INTERVAL_MS = 33           # ~30 fps
+
+    def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
+        super().__init__(parent)
+        self._emoji = emoji
+        self._font_size = font_size
+        self._angle = 0.0
+        sz = font_size + 16
+        self.setFixedSize(sz, sz)
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._INTERVAL_MS)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def set_emoji(self, emoji: str) -> None:
+        """Change the displayed emoji; takes effect on the next paint."""
+        self._emoji = emoji
+        self.update()
+
+    def set_font_size(self, size: int) -> None:
+        self._font_size = size
+        sz = size + 16
+        self.setFixedSize(sz, sz)
+        self.update()
+
+    def _tick(self) -> None:
+        self._angle = (self._angle + self._DEGREES_PER_FRAME) % 360.0
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+        w, h = self.width(), self.height()
+        painter.translate(w / 2.0, h / 2.0)
+        painter.rotate(self._angle)
+
+        font = QFont()
+        font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+        font.setPointSize(self._font_size)
+        painter.setFont(font)
+        fm = QFontMetrics(font)
+        tw = fm.horizontalAdvance(self._emoji)
+        th = fm.height()
+        painter.drawText(-tw // 2, th // 4, self._emoji)
+        painter.end()
 
 
 class MainWindow(QMainWindow):
@@ -39,6 +134,16 @@ class MainWindow(QMainWindow):
         self._click_effects = None
         self._tooltip_mgr = None
         self._sound = None
+        self._svg_badge = None
+        self._banner_lbl = None
+        self._banner_emoji_left: "_SpinningEmojiLabel | None" = None
+        self._banner_emoji_right: "_SpinningEmojiLabel | None" = None
+        self._status_bar = None
+        self._unlock_timer = None
+        self._anim_timer = None    # kept for compatibility (no longer used for cycling)
+        self._banner_frames: list[str] = []
+        self._banner_frame_idx: int = 0
+        self._tab_base_labels: tuple = ()   # set during first _apply_theme()
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -51,7 +156,31 @@ class MainWindow(QMainWindow):
 
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1000, 780)
+        # Set the panda SVG as the window icon (used in title bar + taskbar)
+        self._set_panda_window_icon()
+
+    def _set_panda_window_icon(self):
+        """Render panda_dark.svg to a QPixmap and use it as the window/app icon."""
+        import os
+        svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+        for candidate in ("panda_dark.svg", "panda_light.svg"):
+            svg_path = os.path.normpath(os.path.join(svg_dir, candidate))
+            if os.path.isfile(svg_path):
+                try:
+                    from PyQt6.QtSvg import QSvgRenderer
+                    renderer = QSvgRenderer(svg_path)
+                    pix = QPixmap(64, 64)
+                    pix.fill(Qt.GlobalColor.transparent)
+                    painter = QPainter(pix)
+                    renderer.render(painter)
+                    painter.end()
+                    self.setWindowIcon(QIcon(pix))
+                    QApplication.setWindowIcon(QIcon(pix))
+                    return
+                except Exception:
+                    pass
+                break
 
     def _setup_ui(self):
         # Menu bar
@@ -97,12 +226,30 @@ class MainWindow(QMainWindow):
         cv.setContentsMargins(0, 0, 0, 0)
         cv.setSpacing(0)
 
-        # Panda banner
-        banner = QLabel("🐼  Alpha Fixer  &  File Converter")
-        banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        banner.setObjectName("header")
-        banner.setStyleSheet("padding: 10px; font-size: 20px;")
-        cv.addWidget(banner)
+        # Animated banner: a left+right spinning emoji flanks the static title text.
+        # The emoji rotates continuously (like a turning gear) using _SpinningEmojiLabel.
+        # The emoji changes to reflect the active theme without cycling between emojis.
+        banner_container = QWidget()
+        banner_container.setObjectName("header")
+        banner_layout = QHBoxLayout(banner_container)
+        banner_layout.setContentsMargins(8, 6, 8, 6)
+        banner_layout.setSpacing(8)
+
+        self._banner_emoji_left = _SpinningEmojiLabel("🐼", font_size=20)
+        banner_layout.addWidget(self._banner_emoji_left)
+
+        banner_text = QLabel("Alpha Fixer  &  File Converter")
+        banner_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        banner_text.setObjectName("header")
+        banner_text.setStyleSheet("padding: 0; font-size: 20px; background: transparent; border: none;")
+        banner_text.setMinimumHeight(36)
+        banner_layout.addWidget(banner_text, 1)
+
+        self._banner_emoji_right = _SpinningEmojiLabel("🐼", font_size=20)
+        banner_layout.addWidget(self._banner_emoji_right)
+
+        cv.addWidget(banner_container)
+        self._banner_lbl = banner_text  # kept for theme update compatibility
 
         self._tabs = QTabWidget()
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
@@ -126,8 +273,14 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Main Toolbar")
         toolbar.setMovable(False)
         toolbar.setFloatable(False)
-        toolbar.setIconSize(QSize(20, 20))
+        toolbar.setIconSize(QSize(24, 24))
         self.addToolBar(toolbar)
+
+        # Panda icon on the far left of the toolbar
+        panda_lbl = self._make_toolbar_panda_icon()
+        if panda_lbl is not None:
+            toolbar.addWidget(panda_lbl)
+            toolbar.addSeparator()
 
         btn_settings = QPushButton("⚙ Settings")
         btn_settings.clicked.connect(self._open_settings)
@@ -137,6 +290,7 @@ class MainWindow(QMainWindow):
 
         self._theme_label = QLabel("  Theme: Panda Dark  ")
         self._theme_label.setObjectName("subheader")
+        self._theme_label.setMinimumWidth(220)  # wide enough for long hidden theme names
         toolbar.addWidget(self._theme_label)
 
         toolbar.addSeparator()
@@ -155,6 +309,13 @@ class MainWindow(QMainWindow):
         self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 8px;")
         toolbar.addWidget(self._unlock_lbl)
 
+        # SVG theme badge (uses QSvgWidget when QtSvg is available, else text fallback)
+        toolbar.addSeparator()
+        self._svg_badge = self._make_svg_badge()
+        if self._svg_badge is not None:
+            toolbar.addWidget(self._svg_badge)
+        self._svg_badge_toolbar = toolbar  # keep ref for badge refresh
+
     # ------------------------------------------------------------------
     # Visual / audio effects (trail, cursor, sound, click effects, tooltips)
     # ------------------------------------------------------------------
@@ -165,18 +326,14 @@ class MainWindow(QMainWindow):
         self._trail_overlay = MouseTrailOverlay(self)
         self._trail_overlay.setGeometry(self.rect())
         self._trail_overlay.raise_()
-
-        trail_enabled = self._settings.get("trail_enabled", False)
-        trail_color = self._settings.get("trail_color", "#e94560")
-        self._trail_overlay.set_color(trail_color)
-        self._trail_overlay.set_enabled(trail_enabled)
+        self._apply_trail()
 
         # Click effects overlay
         from .click_effects import ClickEffectsOverlay
         self._click_effects = ClickEffectsOverlay(self)
         self._click_effects.setGeometry(self.rect())
         self._click_effects.raise_()
-        effects_enabled = self._settings.get("click_effects_enabled", True)
+        effects_enabled = self._settings.get("click_effects_enabled", False)
         self._click_effects.set_enabled(effects_enabled)
         self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
@@ -205,8 +362,14 @@ class MainWindow(QMainWindow):
             return
         mgr.register(self._btn_settings, "settings_btn")
         mgr.register(self._btn_patreon, "patreon_btn")
+        # Register per-tab tooltips on the QTabBar
+        mgr.register_tab_bar(
+            self._tabs.tabBar(),
+            ["alpha_fixer_tab", "converter_tab", "history_tab"],
+        )
         self._alpha_tab.register_tooltips(mgr)
         self._converter_tab.register_tooltips(mgr)
+        self._history_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""
@@ -214,9 +377,16 @@ class MainWindow(QMainWindow):
             return
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "Panda Dark")
-        # THEME_EFFECTS covers all preset themes; fall back to theme's own _effect
-        # key for user-saved custom themes (not in the preset registry).
-        effect_key = THEME_EFFECTS.get(theme_name) or theme.get("_effect", "default")
+        # If "use theme effect" is enabled, always auto-select from THEME_EFFECTS map
+        if self._settings.get("use_theme_effect", False):
+            effect_key = THEME_EFFECTS.get(theme_name, "default")
+        else:
+            # Prefer the theme dict's own _effect key (which the user may have
+            # customised in the settings dialog) over the hardcoded THEME_EFFECTS
+            # map.  This ensures that changing the "Click Effect Style" combo in
+            # Settings → Theme is actually respected even for preset themes.
+            # Fall back to THEME_EFFECTS only when no _effect key is stored.
+            effect_key = theme.get("_effect") or THEME_EFFECTS.get(theme_name, "default")
         self._click_effects.set_effect(effect_key)
         # Push the user's custom emoji list to the custom spawner
         custom_raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
@@ -229,27 +399,79 @@ class MainWindow(QMainWindow):
 
     def _check_unlocks(self) -> None:
         """Check whether any hidden theme should be unlocked."""
-        total = self._settings.get("total_clicks", 0) + 1
-        self._settings.set("total_clicks", total)
+        try:
+            total = self._settings.get("total_clicks", 0) + 1
+            self._settings.set("total_clicks", total)
+        except Exception:
+            return
 
-        # Secret Skeleton unlocks at 100 total clicks
-        already_unlocked = self._settings.get("unlock_skeleton", False)
-        if not already_unlocked and total >= 100:
-            self._settings.set("unlock_skeleton", True)
-            self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
-            QApplication.instance().beep()
+        # (threshold, settings_key, banner_message) — ordered ascending by threshold
+        _UNLOCK_TABLE = [
+            (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
+            (150,  "unlock_ice_cave",         "❄ 'Ice Cave' theme unlocked! (Settings → Theme)"),
+            (200,  "unlock_cyber_otter",      "🦦 'Cyber Otter' theme unlocked! (Settings → Theme)"),
+            (250,  "unlock_sakura",           "🌸 'Secret Sakura' theme unlocked! (Settings → Theme)"),
+            (350,  "unlock_toxic_neon",       "☢ 'Toxic Neon' theme unlocked! (Settings → Theme)"),
+            (400,  "unlock_sunset_beach",     "🌅 'Sunset Beach' theme unlocked! (Settings → Theme)"),
+            (500,  "unlock_ocean",            "🌊 'Deep Ocean' theme unlocked! (Settings → Theme)"),
+            (600,  "unlock_lava_cave",        "🌋 'Lava Cave' theme unlocked! (Settings → Theme)"),
+            (750,  "unlock_blood_moon",       "🩸 'Blood Moon' theme unlocked! (Settings → Theme)"),
+            (1000, "unlock_midnight_forest",  "🌲 'Midnight Forest' theme unlocked! (Settings → Theme)"),
+            (1250, "unlock_candy_land",       "🍭 'Candy Land' theme unlocked! (Settings → Theme)"),
+            (1500, "unlock_zombie",           "🧟 'Zombie Apocalypse' theme unlocked! (Settings → Theme)"),
+            (1750, "unlock_dragon_fire",      "🐉 'Dragon Fire' theme unlocked! (Settings → Theme)"),
+            (2000, "unlock_bubblegum",        "🫧 'Bubblegum' theme unlocked! (Settings → Theme)"),
+            (2250, "unlock_thunder_storm",    "⚡ 'Thunder Storm' theme unlocked! (Settings → Theme)"),
+            (2500, "unlock_rose_gold",        "🌹 'Rose Gold' theme unlocked! (Settings → Theme)"),
+            (2750, "unlock_space_cat",        "🐱 'Space Cat' theme unlocked! (Settings → Theme)"),
+            (3000, "unlock_magic_mushroom",   "🍄 'Magic Mushroom' theme unlocked! (Settings → Theme)"),
+            (3500, "unlock_abyssal_void",     "🕳 'Abyssal Void' theme unlocked! (Settings → Theme)"),
+            (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
+            (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
+            (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
+        ]
 
-        # Secret Sakura unlocks at 250 total clicks
-        already_sakura = self._settings.get("unlock_sakura", False)
-        if not already_sakura and total >= 250:
-            self._settings.set("unlock_sakura", True)
-            self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (Settings → Theme)")
-            QApplication.instance().beep()
+        newly_unlocked = False
+        for threshold, key, message in _UNLOCK_TABLE:
+            if not self._settings.get(key, False) and total >= threshold:
+                self._settings.set(key, True)
+                self._unlock_lbl.setText(message)
+                try:
+                    QApplication.instance().beep()
+                except Exception:
+                    pass
+                newly_unlocked = True
+
+        # Auto-clear the unlock banner after 6 seconds
+        if newly_unlocked:
+            self._schedule_unlock_clear()
+
+    def _schedule_unlock_clear(self) -> None:
+        """Start (or restart) a one-shot timer that clears the unlock label."""
+        from PyQt6.QtCore import QTimer
+        if self._unlock_timer is None:
+            self._unlock_timer = QTimer(self)
+            self._unlock_timer.setSingleShot(True)
+            self._unlock_timer.timeout.connect(lambda: self._unlock_lbl.setText(""))
+        self._unlock_timer.start(6000)
 
     def _apply_cursor(self):
-        cursor_name = self._settings.get("cursor", "Default")
-        shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
-        self.setCursor(QCursor(shape))
+        use_theme = self._settings.get("use_theme_cursor", False)
+        if use_theme:
+            # Read the active theme's preferred cursor
+            theme = self._settings.get_theme()
+            cursor_spec = theme.get("_cursor", "Default")
+            if cursor_spec.startswith("emoji:"):
+                emoji = cursor_spec[len("emoji:"):]
+                self.setCursor(_make_emoji_cursor(emoji))
+                return
+            # Otherwise treat it as a named cursor key
+            shape = _CURSOR_MAP.get(cursor_spec, Qt.CursorShape.ArrowCursor)
+            self.setCursor(QCursor(shape))
+        else:
+            cursor_name = self._settings.get("cursor", "Default")
+            shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
+            self.setCursor(QCursor(shape))
 
     def _apply_font_size(self):
         size = self._settings.get("font_size", 10)
@@ -267,10 +489,10 @@ class MainWindow(QMainWindow):
         if self._settings.get("window_maximized", False):
             self.showMaximized()
             return
-        x = self._settings.get("window_x", 100)
-        y = self._settings.get("window_y", 100)
-        w = self._settings.get("window_w", 1100)
-        h = self._settings.get("window_h", 750)
+        x = self._settings.get("window_x")
+        y = self._settings.get("window_y")
+        w = self._settings.get("window_w")
+        h = self._settings.get("window_h")
         self.setGeometry(x, y, w, h)
 
     def _save_geometry(self):
@@ -289,7 +511,138 @@ class MainWindow(QMainWindow):
     def _apply_theme(self):
         theme = self._settings.get_theme()
         QApplication.instance().setStyleSheet(build_stylesheet(theme))
-        self._theme_label.setText(f"  Theme: {theme.get('name', 'Custom')}  ")
+        theme_name = theme.get("name", "Custom")
+        self._theme_label.setText(f"  Theme: {theme_name}  ")
+        # Update the spinning banner emoji to the theme's representative icon.
+        # The emoji rotates continuously — no cycling between different emojis.
+        icon = get_theme_icon(theme_name)
+        if self._banner_emoji_left is not None:
+            self._banner_emoji_left.set_emoji(icon)
+        if self._banner_emoji_right is not None:
+            self._banner_emoji_right.set_emoji(icon)
+        # Keep static text label; update it to the theme banner (without emojis)
+        if self._banner_lbl is not None:
+            self._banner_lbl.setText("Alpha Fixer  &  File Converter")
+        # Stop any legacy animation timer (banner no longer cycles emojis)
+        if self._anim_timer is not None:
+            self._anim_timer.stop()
+        # Store theme-specific tab labels; update tab text directly (no spinner).
+        self._tab_base_labels = get_theme_tab_labels(theme_name)
+        self._update_tab_labels()
+        # Update inner tab headers to also reflect the active theme
+        self._alpha_tab.update_theme(theme_name)
+        self._converter_tab.update_theme(theme_name)
+        # Update status bar with per-theme flavor message
+        if self._status_bar is not None:
+            self._status_bar.showMessage(get_theme_status(theme_name))
+        # Re-apply cursor so theme-cursor mode updates immediately on theme change
+        self._apply_cursor()
+        # Update window icon and taskbar icon to match the current theme SVG
+        self._refresh_window_icon(theme_name)
+        # Refresh SVG badge to match new theme
+        self._refresh_svg_badge()
+        # Keep trail and click-effects in sync with the active theme.
+        # These overlays are created in _setup_effects() which runs after the
+        # first _apply_theme() call, so guard with None checks.
+        if self._trail_overlay is not None:
+            self._apply_trail()
+        if self._click_effects is not None:
+            self._apply_theme_effect()
+
+    def _update_tab_labels(self):
+        """Write the theme-specific label to every tab (no animation prefix)."""
+        for i, base in enumerate(self._tab_base_labels):
+            self._tabs.setTabText(i, base)
+
+    def _make_toolbar_panda_icon(self):
+        """Render the panda SVG to a 28×28 QLabel for the toolbar. Returns None on failure."""
+        import os
+        svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+        for candidate in ("panda_dark.svg", "panda_light.svg"):
+            svg_path = os.path.normpath(os.path.join(svg_dir, candidate))
+            if os.path.isfile(svg_path):
+                try:
+                    from PyQt6.QtSvg import QSvgRenderer
+                    renderer = QSvgRenderer(svg_path)
+                    pix = QPixmap(28, 28)
+                    pix.fill(Qt.GlobalColor.transparent)
+                    painter = QPainter(pix)
+                    renderer.render(painter)
+                    painter.end()
+                    lbl = QLabel()
+                    lbl.setPixmap(pix)
+                    lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+                    lbl.setContentsMargins(4, 0, 4, 0)
+                    return lbl
+                except Exception:
+                    pass
+                break
+        # Fallback: plain text panda emoji
+        lbl = QLabel("🐼")
+        lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+        lbl.setContentsMargins(4, 0, 4, 0)
+        return lbl
+
+    def _make_svg_badge(self):
+        """Create a small SVG theme badge widget.  Returns None if QtSvg unavailable."""
+        try:
+            from PyQt6.QtSvgWidgets import QSvgWidget
+            badge = QSvgWidget()
+            badge.setFixedSize(48, 48)
+            badge.setToolTip("Theme decoration")
+            return badge
+        except ImportError:
+            return None
+
+    def _refresh_svg_badge(self):
+        """Update the SVG badge to show the decoration for the current theme."""
+        if self._svg_badge is None:
+            return
+        try:
+            from PyQt6.QtSvgWidgets import QSvgWidget
+        except ImportError:
+            return
+        theme = self._settings.get_theme()
+        svg_path = get_theme_svg_path(theme.get("name", ""))
+        if svg_path:
+            self._svg_badge.load(svg_path)
+            self._svg_badge.setToolTip(f"{theme.get('name','?')} theme")
+            self._svg_badge.show()
+        else:
+            self._svg_badge.hide()
+
+    def _refresh_window_icon(self, theme_name: str):
+        """Update the window / taskbar icon to the theme-specific SVG.
+
+        Falls back to the panda icon when no theme SVG is available or when
+        the SVG renderer is not installed.
+        """
+        import os
+        svg_path = get_theme_svg_path(theme_name)
+        if not svg_path:
+            # No theme SVG – use the panda default
+            svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+            for candidate in ("panda_dark.svg", "panda_light.svg"):
+                candidate_path = os.path.normpath(os.path.join(svg_dir, candidate))
+                if os.path.isfile(candidate_path):
+                    svg_path = candidate_path
+                    break
+        if not svg_path:
+            return
+        try:
+            from PyQt6.QtSvg import QSvgRenderer
+            renderer = QSvgRenderer(svg_path)
+            pix = QPixmap(64, 64)
+            pix.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pix)
+            renderer.render(painter)
+            painter.end()
+            icon = QIcon(pix)
+            self.setWindowIcon(icon)
+            QApplication.setWindowIcon(icon)
+        except (ImportError, RuntimeError):
+            # QtSvg unavailable or widget destroyed – silently skip icon update.
+            pass
 
     # ------------------------------------------------------------------
     # Tabs
@@ -307,7 +660,29 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
         dlg.settings_changed.connect(self._on_settings_changed)
+
+        # Attach a click-effects overlay to the dialog so particle effects are
+        # visible while the settings window is open (the main overlay is behind
+        # the modal and therefore not visible).
+        dlg_overlay = None
+        if (self._click_effects is not None
+                and self._settings.get("click_effects_enabled", False)):
+            from .click_effects import ClickEffectsOverlay
+            dlg_overlay = ClickEffectsOverlay(dlg)
+            # Mirror the current effect setting but don't count clicks toward
+            # secret-theme unlocks (leave click_registered unconnected).
+            theme = self._settings.get_theme()
+            effect_key = (theme.get("_effect")
+                          or THEME_EFFECTS.get(theme.get("name", ""), "default"))
+            dlg_overlay.set_effect(effect_key)
+            custom_emoji = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
+            dlg_overlay.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
+            dlg_overlay.set_enabled(True)
+
         dlg.exec()
+
+        if dlg_overlay is not None:
+            dlg_overlay.set_enabled(False)
 
     def _on_settings_changed(self):
         """Re-apply all effect-related settings after the dialog closes."""
@@ -315,17 +690,38 @@ class MainWindow(QMainWindow):
         self._apply_cursor()
         self._apply_font_size()
         self._apply_theme_effect()
-        if self._trail_overlay is not None:
-            self._trail_overlay.set_color(
-                self._settings.get("trail_color", "#e94560")
-            )
-            self._trail_overlay.set_enabled(
-                self._settings.get("trail_enabled", False)
-            )
+        self._apply_trail()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
-                self._settings.get("click_effects_enabled", True)
+                self._settings.get("click_effects_enabled", False)
             )
+
+    def _apply_trail(self):
+        """Apply trail color, style and enabled state, honouring use_theme_trail."""
+        if self._trail_overlay is None:
+            return
+        use_theme = self._settings.get("use_theme_trail", False)
+        if use_theme:
+            theme = self._settings.get_theme()
+            color = theme.get("_trail_color", "#e94560")
+            effect = theme.get("_effect", "default")
+            # Map effect → trail style
+            if effect == "fairy":
+                style = "fairy"
+            elif effect in ("ocean", "mermaid", "ripple"):
+                style = "wave"
+            elif effect in ("sparkle", "ice"):
+                style = "sparkle"
+            else:
+                style = "dots"
+        else:
+            color = self._settings.get("trail_color", "#e94560")
+            style = self._settings.get("trail_style", "dots")
+        self._trail_overlay.set_color(color)
+        self._trail_overlay.set_style(style)
+        self._trail_overlay.set_enabled(
+            self._settings.get("trail_enabled", False)
+        )
 
     def _export_settings(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -387,12 +783,16 @@ class MainWindow(QMainWindow):
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
             "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
-            "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF</li>"
+            "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI and more</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
-            "<li>Before/after comparison slider preview</li>"
+            "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"
             "<li>Image preview, conversion history, export/import settings</li>"
-            "<li>12 preset themes + 2 hidden unlockables (keep clicking to find them!)</li>"
-            "<li>13 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥, Ice ❄, Panda 🐼, and more…</li>"
+            "<li>16 preset themes + 22 hidden unlockables (keep clicking to find them!)</li>"
+            "<li>21 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥,"
+            " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
+            "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"
+            "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
+            "<li>Unique per-theme banner, shapes, and visual style — each theme has its own look</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
             "</ul>"

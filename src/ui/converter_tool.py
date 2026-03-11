@@ -5,12 +5,12 @@ import datetime
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
-    QProgressBar, QGroupBox, QGridLayout,
+    QProgressBar, QGroupBox, QGridLayout, QScrollArea,
     QLineEdit, QSplitter, QMessageBox, QTextEdit,
 )
 
@@ -29,6 +29,13 @@ class ConverterTab(QWidget):
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
+        # Debounce timer: waits 150 ms after the last format/quality change
+        # before refreshing the preview so rapid spin-box steps don't each
+        # kick off a separate background conversion.
+        self._preview_debounce = QTimer(self)
+        self._preview_debounce.setSingleShot(True)
+        self._preview_debounce.setInterval(150)
+        self._preview_debounce.timeout.connect(self._update_converted_preview)
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -41,8 +48,13 @@ class ConverterTab(QWidget):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
-        hdr = QLabel("🔄  File Converter")
+        # Header – uses the default-theme label; updated to the active theme via update_theme()
+        from .theme_engine import get_theme_tab_labels
+        _default_labels = get_theme_tab_labels("Panda Dark")
+        _conv_prefix = _default_labels[1].split("  ", 1)[0] if "  " in _default_labels[1] else "🔄"
+        hdr = QLabel(f"{_conv_prefix}  File Converter")
         hdr.setObjectName("header")
+        self._hdr = hdr
         main_layout.addWidget(hdr)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -50,6 +62,7 @@ class ConverterTab(QWidget):
 
         # ---- Left: input files + preview ----
         left = QWidget()
+        left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
 
@@ -73,10 +86,12 @@ class ConverterTab(QWidget):
         lv.addWidget(self._recursive_check)
 
         self._file_list = DropFileList()
+        self._file_list.setMinimumHeight(180)
         self._file_list.setToolTip(
             "Files queued for conversion.\n"
             "• Drag files/folders here from Explorer/Finder\n"
-            "• Delete key or right-click → Remove Selected"
+            "• Delete key or right-click → Remove Selected\n"
+            "• Right-click → Thumbnails to toggle image previews"
         )
         lv.addWidget(self._file_list, 1)
 
@@ -84,88 +99,65 @@ class ConverterTab(QWidget):
         self._file_count_lbl.setObjectName("subheader")
         lv.addWidget(self._file_count_lbl)
 
+        # Output folder – placed here (adjacent to input) so source and
+        # destination are together and the layout reads top-to-bottom.
+        grp_out = QGroupBox("Output")
+        go_layout = QGridLayout(grp_out)
+        go_layout.setContentsMargins(10, 14, 10, 12)
+        go_layout.setColumnStretch(0, 0)
+        go_layout.setColumnStretch(1, 1)
+        go_layout.setColumnMinimumWidth(0, 120)
+        go_layout.setHorizontalSpacing(12)
+        go_layout.setVerticalSpacing(10)
+
+        lbl_out = QLabel("Output folder:")
+        lbl_out.setMinimumWidth(100)
+        lbl_out.setMinimumHeight(24)
+        go_layout.addWidget(lbl_out, 0, 0)
+        out_row = QHBoxLayout()
+        self._out_dir_edit = QLineEdit()
+        self._out_dir_edit.setPlaceholderText("Same as source (default)")
+        self._out_dir_edit.setMinimumHeight(28)
+        saved_out = self._settings.get("converter_output_dir", "")
+        if saved_out:
+            self._out_dir_edit.setText(saved_out)
+        self._btn_out_dir = QPushButton("Browse…")
+        self._btn_out_dir.setMinimumWidth(80)
+        self._btn_out_dir.setMinimumHeight(28)
+        out_row.addWidget(self._out_dir_edit, 1)
+        out_row.addWidget(self._btn_out_dir)
+        go_layout.addLayout(out_row, 0, 1)
+
+        lbl_suffix = QLabel("Filename suffix:")
+        lbl_suffix.setMinimumHeight(24)
+        go_layout.addWidget(lbl_suffix, 1, 0)
+        self._suffix_edit = QLineEdit()
+        self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
+        self._suffix_edit.setMinimumHeight(28)
+        go_layout.addWidget(self._suffix_edit, 1, 1)
+
+        lv.addWidget(grp_out)
+
         # Preview pane
         self._preview = ImagePreviewPane()
-        self._preview.setFixedHeight(260)
-        lv.addWidget(self._preview)
+        self._preview.setMinimumHeight(220)
+        lv.addWidget(self._preview, 1)
 
         splitter.addWidget(left)
 
         # ---- Right: options ----
         right = QWidget()
+        right.setMinimumWidth(360)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
+        rv.setSpacing(8)
 
-        # Output format
-        grp_fmt = QGroupBox("Output Format")
-        gf_layout = QGridLayout(grp_fmt)
-
-        gf_layout.addWidget(QLabel("Convert to:"), 0, 0)
-        self._fmt_combo = QComboBox()
-        for name, ext in OUTPUT_FORMAT_LIST:
-            self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
-        gf_layout.addWidget(self._fmt_combo, 0, 1)
-
-        # Restore last-used format
-        last_fmt = self._settings.get("last_converter_format", "PNG")
-        idx = self._fmt_combo.findText(last_fmt, Qt.MatchFlag.MatchContains)
-        if idx >= 0:
-            self._fmt_combo.setCurrentIndex(idx)
-
-        gf_layout.addWidget(QLabel("JPEG/WEBP quality:"), 1, 0)
-        self._quality_spin = QSpinBox()
-        self._quality_spin.setRange(1, 100)
-        self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
-        gf_layout.addWidget(self._quality_spin, 1, 1)
-
-        rv.addWidget(grp_fmt)
-
-        # Resize (optional)
-        grp_resize = QGroupBox("Resize (optional)")
-        gr_layout = QGridLayout(grp_resize)
-
-        self._resize_check = QCheckBox("Enable resize")
-        gr_layout.addWidget(self._resize_check, 0, 0, 1, 2)
-
-        gr_layout.addWidget(QLabel("Width:"), 1, 0)
-        self._width_spin = QSpinBox()
-        self._width_spin.setRange(1, 32768)
-        self._width_spin.setValue(1024)
-        self._width_spin.setEnabled(False)
-        gr_layout.addWidget(self._width_spin, 1, 1)
-
-        gr_layout.addWidget(QLabel("Height:"), 2, 0)
-        self._height_spin = QSpinBox()
-        self._height_spin.setRange(1, 32768)
-        self._height_spin.setValue(1024)
-        self._height_spin.setEnabled(False)
-        gr_layout.addWidget(self._height_spin, 2, 1)
-
-        rv.addWidget(grp_resize)
-
-        # Output folder
-        grp_out = QGroupBox("Output")
-        go_layout = QGridLayout(grp_out)
-
-        go_layout.addWidget(QLabel("Output folder:"), 0, 0)
-        out_row = QHBoxLayout()
-        self._out_dir_edit = QLineEdit()
-        self._out_dir_edit.setPlaceholderText("Same as source (default)")
-        saved_out = self._settings.get("converter_output_dir", "")
-        if saved_out:
-            self._out_dir_edit.setText(saved_out)
-        self._btn_out_dir = QPushButton("Browse")
-        out_row.addWidget(self._out_dir_edit, 1)
-        out_row.addWidget(self._btn_out_dir)
-        go_layout.addLayout(out_row, 0, 1)
-
-        rv.addWidget(grp_out)
-
-        # Run
+        # Run controls – at the very top so the Convert button is always
+        # immediately visible when the tab is opened.
         run_row = QHBoxLayout()
         self._btn_run = QPushButton("▶  Convert  [F5]")
         self._btn_run.setObjectName("accent")
-        self._btn_run.setMinimumHeight(42)
+        self._btn_run.setMinimumHeight(40)
         self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
         run_row.addWidget(self._btn_run, 1)
@@ -180,16 +172,102 @@ class ConverterTab(QWidget):
         self._status_lbl.setObjectName("subheader")
         rv.addWidget(self._status_lbl)
 
+        # Output format
+        grp_fmt = QGroupBox("Output Format")
+        gf_layout = QGridLayout(grp_fmt)
+        gf_layout.setContentsMargins(10, 14, 10, 12)
+        gf_layout.setColumnStretch(0, 0)
+        gf_layout.setColumnStretch(1, 1)
+        gf_layout.setColumnMinimumWidth(0, 140)
+        gf_layout.setHorizontalSpacing(12)
+        gf_layout.setVerticalSpacing(10)
+
+        lbl_fmt = QLabel("Convert to:")
+        lbl_fmt.setMinimumHeight(24)
+        gf_layout.addWidget(lbl_fmt, 0, 0)
+        self._fmt_combo = QComboBox()
+        self._fmt_combo.setMinimumWidth(140)
+        self._fmt_combo.setMinimumHeight(28)
+        for name, ext in OUTPUT_FORMAT_LIST:
+            self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
+        gf_layout.addWidget(self._fmt_combo, 0, 1)
+
+        # Restore last-used format
+        last_fmt = self._settings.get("last_converter_format", "PNG")
+        idx = self._fmt_combo.findText(last_fmt, Qt.MatchFlag.MatchContains)
+        if idx >= 0:
+            self._fmt_combo.setCurrentIndex(idx)
+
+        lbl_quality = QLabel("JPEG/WEBP quality:")
+        lbl_quality.setMinimumHeight(24)
+        gf_layout.addWidget(lbl_quality, 1, 0)
+        self._quality_spin = QSpinBox()
+        self._quality_spin.setRange(1, 100)
+        self._quality_spin.setMinimumHeight(28)
+        self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
+        gf_layout.addWidget(self._quality_spin, 1, 1)
+
+        self._keep_metadata_check = QCheckBox("Preserve metadata (EXIF/ICC)")
+        self._keep_metadata_check.setChecked(
+            bool(self._settings.get("converter_keep_metadata", False))
+        )
+        self._keep_metadata_check.setToolTip(
+            "Copy EXIF, ICC profile, and DPI data from the source file to the output.\n"
+            "Supported for JPEG, PNG, WEBP, and TIFF outputs."
+        )
+        gf_layout.addWidget(self._keep_metadata_check, 2, 0, 1, 2)
+
+        rv.addWidget(grp_fmt)
+
+        # Resize (optional)
+        grp_resize = QGroupBox("Resize (optional)")
+        gr_layout = QGridLayout(grp_resize)
+        gr_layout.setContentsMargins(10, 14, 10, 12)
+        gr_layout.setColumnStretch(0, 0)
+        gr_layout.setColumnStretch(1, 1)
+        gr_layout.setColumnMinimumWidth(0, 80)
+        gr_layout.setHorizontalSpacing(12)
+        gr_layout.setVerticalSpacing(10)
+
+        self._resize_check = QCheckBox("Enable resize")
+        gr_layout.addWidget(self._resize_check, 0, 0, 1, 2)
+
+        lbl_w = QLabel("Width:")
+        lbl_w.setMinimumHeight(24)
+        gr_layout.addWidget(lbl_w, 1, 0)
+        self._width_spin = QSpinBox()
+        self._width_spin.setRange(1, 32768)
+        self._width_spin.setValue(1024)
+        self._width_spin.setMinimumHeight(26)
+        self._width_spin.setEnabled(False)
+        gr_layout.addWidget(self._width_spin, 1, 1)
+
+        lbl_h = QLabel("Height:")
+        lbl_h.setMinimumHeight(24)
+        gr_layout.addWidget(lbl_h, 2, 0)
+        self._height_spin = QSpinBox()
+        self._height_spin.setRange(1, 32768)
+        self._height_spin.setValue(1024)
+        self._height_spin.setMinimumHeight(26)
+        self._height_spin.setEnabled(False)
+        gr_layout.addWidget(self._height_spin, 2, 1)
+
+        rv.addWidget(grp_resize)
+
         # Log
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(130)
+        self._log.setMinimumHeight(80)
         self._log.setPlaceholderText("Conversion log…")
-        rv.addWidget(self._log)
+        rv.addWidget(self._log, 1)
 
-        rv.addStretch(1)
-        splitter.addWidget(right)
-        splitter.setSizes([340, 560])
+        right_scroll = QScrollArea()
+        right_scroll.setWidget(right)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        right_scroll.setMinimumWidth(360)
+        splitter.addWidget(right_scroll)
+        splitter.setSizes([440, 580])
         main_layout.addWidget(splitter, 1)
 
         # ---- Connections ----
@@ -204,13 +282,17 @@ class ConverterTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
-        # Persist format/quality on change
+        # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
-        self._quality_spin.valueChanged.connect(
-            lambda v: self._settings.set("last_converter_quality", v)
+        self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
+        self._quality_spin.valueChanged.connect(self._on_quality_changed)
+        self._keep_metadata_check.toggled.connect(
+            lambda v: self._settings.set("converter_keep_metadata", v)
         )
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
+        # Initialise quality spinbox enabled state for the default format
+        self._on_format_changed(self._fmt_combo.currentIndex())
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -231,9 +313,25 @@ class ConverterTab(QWidget):
         mgr.register(self._btn_stop, "stop_btn")
         mgr.register(self._fmt_combo, "format_combo")
         mgr.register(self._quality_spin, "quality_spin")
+        mgr.register(self._resize_check, "resize_check")
+        mgr.register(self._width_spin, "width_spin")
+        mgr.register(self._height_spin, "height_spin")
         mgr.register(self._out_dir_edit, "out_dir")
+        mgr.register(self._btn_out_dir, "out_dir_browse")
         mgr.register(self._recursive_check, "recursive_check")
         mgr.register(self._file_list, "file_list")
+        mgr.register(self._suffix_edit, "suffix_edit")
+        mgr.register(self._keep_metadata_check, "keep_metadata_check")
+
+    def update_theme(self, theme_name: str) -> None:
+        """Update the inner header label to match the active theme's tab emoji."""
+        from .theme_engine import get_theme_tab_labels
+        labels = get_theme_tab_labels(theme_name)
+        # labels[1] is e.g. "🩸🔄  Converter" – extract the emoji prefix by splitting on
+        # the first double-space separator, then rebuild with "File Converter" as the title.
+        converter_label = labels[1]
+        prefix = converter_label.split("  ", 1)[0] if "  " in converter_label else ""
+        self._hdr.setText(f"{prefix}  File Converter")
 
     # ------------------------------------------------------------------
     # File management
@@ -243,7 +341,7 @@ class ConverterTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -258,15 +356,11 @@ class ConverterTab(QWidget):
             self._add_to_list(files)
 
     def _add_to_list(self, paths: list[str]):
-        existing = {self._file_list.item(i).text() for i in range(self._file_list.count())}
-        added = 0
-        for p in paths:
-            if p not in existing:
-                self._file_list.addItem(p)
-                existing.add(p)
-                added += 1
-        if added:
-            self._file_list.count_changed.emit(self._file_list.count())
+        """Add paths using the batch helper to stay responsive for large imports."""
+        was_empty = self._file_list.count() == 0
+        self._file_list.add_paths_batch(paths)
+        if was_empty and self._file_list.count() > 0:
+            self._file_list.setCurrentRow(0)
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
@@ -278,9 +372,41 @@ class ConverterTab(QWidget):
     def _on_selection_changed(self, row: int):
         item = self._file_list.item(row)
         if item:
-            self._preview.show_file(item.text())
+            self._refresh_preview(item.text())
         else:
             self._preview.clear()
+
+    @pyqtSlot(int)
+    def _on_format_changed(self, _index: int):
+        """Enable quality spinbox only for formats that support it (JPEG/WEBP/AVIF)."""
+        fmt_data = self._fmt_combo.currentData()
+        fmt = fmt_data[0] if fmt_data else ""
+        self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF"))
+        self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_quality_changed(self, value: int):
+        self._settings.set("last_converter_quality", value)
+        # Only debounce the preview refresh if quality affects the output format
+        fmt_data = self._fmt_combo.currentData()
+        fmt = fmt_data[0] if fmt_data else ""
+        if fmt in ("JPEG", "WEBP", "AVIF"):
+            self._preview_debounce.start()
+
+    def _update_converted_preview(self):
+        """Refresh the preview pane to reflect the current format and quality."""
+        row = self._file_list.currentRow()
+        item = self._file_list.item(row)
+        if item:
+            self._refresh_preview(item.text())
+
+    def _refresh_preview(self, path: str) -> None:
+        """Show *path* in the preview pane using the current format and quality."""
+        fmt_data = self._fmt_combo.currentData()
+        if fmt_data:
+            self._preview.show_converted(path, fmt_data[0], self._quality_spin.value())
+        else:
+            self._preview.show_file(path)
 
     def _browse_out_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")
@@ -317,6 +443,7 @@ class ConverterTab(QWidget):
         target_format, target_ext = fmt_data
 
         out_dir = self._out_dir_edit.text().strip() or None
+        suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
         resize = None
         if self._resize_check.isChecked():
@@ -349,6 +476,8 @@ class ConverterTab(QWidget):
             input_root=input_root,
             quality=quality,
             resize=resize,
+            keep_metadata=self._keep_metadata_check.isChecked(),
+            suffix=suffix,
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)
@@ -374,9 +503,7 @@ class ConverterTab(QWidget):
     def _on_file_done(self, src: str, ok: bool, msg: str):
         icon = "✔" if ok else "✘"
         name = Path(src).name
-        self._log.append(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
-        sb = self._log.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        self._log_msg(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
@@ -384,7 +511,14 @@ class ConverterTab(QWidget):
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
-        self._log.append(f"─── Finished: {success} ok, {errors} error(s) ───")
+        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+
+        # Refresh preview for the currently selected file so the pane stays
+        # in sync after conversion (e.g. if the file was converted in-place).
+        row = self._file_list.currentRow()
+        item = self._file_list.item(row)
+        if item:
+            self._refresh_preview(item.text())
 
         # Record in history
         entry = {
@@ -396,5 +530,10 @@ class ConverterTab(QWidget):
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
         }
         self._settings.add_converter_history(entry)
+
+    def _log_msg(self, msg: str) -> None:
+        self._log.append(msg)
+        sb = self._log.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
 

@@ -1,9 +1,15 @@
 """
 Settings manager – persists all application settings using QSettings.
+
+Settings are stored in an INI file next to the executable so they are easy
+to find, back-up, and delete when testing.  When running from source the INI
+file lands next to main.py; when frozen by PyInstaller it lands next to the
+.exe.
 """
 import json
 import os
-from PyQt6.QtCore import QSettings, QStandardPaths
+import sys
+from PyQt6.QtCore import QSettings
 
 
 APP_NAME = "AlphaFixerConverter"
@@ -11,6 +17,25 @@ ORG_NAME = "PandaTools"
 
 # Default custom emoji used when none have been configured yet
 DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
+
+
+def _settings_ini_path() -> str:
+    """Return the absolute path to the INI file that stores all settings.
+
+    Priority:
+    1. Next to the frozen executable (sys.frozen / PyInstaller).
+    2. Next to main.py when running from source (three levels up from this
+       file: src/core/settings_manager.py → src/core → src → project root).
+    """
+    if getattr(sys, "frozen", False):
+        # Running as a PyInstaller bundle – place the INI next to the .exe
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        # Running from source – project root is three directories above this file
+        exe_dir = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
+        )
+    return os.path.join(exe_dir, f"{APP_NAME}.ini")
 
 
 class SettingsManager:
@@ -37,18 +62,22 @@ class SettingsManager:
         "scrollbar_handle": "#e94560",
         "panda_white": "#f0f0f0",
         "panda_black": "#1a1a1a",
+        "_effect": "panda",
     }
 
     _DEFAULTS = {
         "theme": "Panda Dark",
         "theme_data": json.dumps(_DEFAULT_THEME),
         # Sound
-        "sound_enabled": True,
+        "sound_enabled": False,
         "click_sound_path": "",
         # Cursor & trail
         "cursor": "Default",
+        "use_theme_cursor": False,
         "trail_enabled": False,
         "trail_color": "#e94560",
+        "trail_style": "dots",
+        "use_theme_trail": False,
         # Appearance
         "font_size": 10,
         # Last-used state
@@ -63,26 +92,48 @@ class SettingsManager:
         "overwrite_originals": False,
         "converter_output_dir": "",
         "converter_recursive": True,
+        "converter_keep_metadata": False,
         # Window geometry
         "window_x": 100,
         "window_y": 100,
-        "window_w": 1100,
-        "window_h": 750,
+        "window_w": 1024,
+        "window_h": 720,
         "window_maximized": False,
         # Tooltip
-        "tooltip_mode": "Normal",
+        "tooltip_mode": "No Filter 🤬",
         # Click effects
-        "click_effects_enabled": True,
+        "click_effects_enabled": False,
+        "use_theme_effect": False,
         # Custom emoji particles
         "custom_emoji": DEFAULT_CUSTOM_EMOJI,
         # Unlock flags
         "unlock_skeleton": False,
         "unlock_sakura": False,
+        "unlock_ocean": False,
+        "unlock_blood_moon": False,
+        "unlock_ice_cave": False,
+        "unlock_cyber_otter": False,
+        "unlock_toxic_neon": False,
+        "unlock_lava_cave": False,
+        "unlock_sunset_beach": False,
+        "unlock_midnight_forest": False,
+        "unlock_candy_land": False,
+        "unlock_zombie": False,
+        "unlock_dragon_fire": False,
+        "unlock_bubblegum": False,
+        "unlock_thunder_storm": False,
+        "unlock_rose_gold": False,
+        "unlock_space_cat": False,
+        "unlock_magic_mushroom": False,
+        "unlock_abyssal_void": False,
+        "unlock_spring_bloom": False,
+        "unlock_gold_rush": False,
+        "unlock_nebula": False,
         "total_clicks": 0,
     }
 
     def __init__(self):
-        self._qs = QSettings(ORG_NAME, APP_NAME)
+        self._qs = QSettings(_settings_ini_path(), QSettings.Format.IniFormat)
 
     # ------------------------------------------------------------------
     # Generic helpers
@@ -200,6 +251,16 @@ class SettingsManager:
         self._qs.setValue("alpha_history", json.dumps(history))
         self._qs.sync()
 
+    def clear_converter_history(self) -> None:
+        """Erase all converter history entries."""
+        self._qs.setValue("converter_history", "[]")
+        self._qs.sync()
+
+    def clear_alpha_history(self) -> None:
+        """Erase all alpha-fixer history entries."""
+        self._qs.setValue("alpha_history", "[]")
+        self._qs.sync()
+
     # ------------------------------------------------------------------
     # Export / import all settings to a JSON file
     # ------------------------------------------------------------------
@@ -207,12 +268,12 @@ class SettingsManager:
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
         "sound_enabled", "click_sound_path",
-        "cursor", "trail_enabled", "trail_color",
+        "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "font_size",
-        "click_effects_enabled", "tooltip_mode",
+        "click_effects_enabled", "use_theme_effect", "tooltip_mode",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
-        "converter_output_dir", "converter_recursive",
+        "converter_output_dir", "converter_recursive", "converter_keep_metadata",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
         "custom_presets",
     ]

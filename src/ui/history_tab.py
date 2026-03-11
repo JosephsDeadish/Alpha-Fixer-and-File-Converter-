@@ -94,6 +94,17 @@ class HistoryTab(QWidget):
         self._btn_clear.clicked.connect(self._clear_history)
 
     # ------------------------------------------------------------------
+    # Tooltip registration
+    # ------------------------------------------------------------------
+
+    def register_tooltips(self, mgr) -> None:
+        """Register History tab widgets with the TooltipManager."""
+        mgr.register(self._btn_refresh, "history_refresh_btn")
+        mgr.register(self._btn_clear, "history_clear_btn")
+        mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
+        mgr.register(self._sub_tabs.widget(1), "history_alpha_sub")
+
+    # ------------------------------------------------------------------
     # Refresh
     # ------------------------------------------------------------------
 
@@ -156,7 +167,6 @@ class HistoryTab(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._settings._qs.setValue("converter_history", "[]")
-            self._settings._qs.setValue("alpha_history", "[]")
-            self._settings._qs.sync()
+            self._settings.clear_converter_history()
+            self._settings.clear_alpha_history()
             self.refresh()

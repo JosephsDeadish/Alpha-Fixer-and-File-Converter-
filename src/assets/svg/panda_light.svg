@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Panda face – light theme (blinking eyes) -->
+  <circle cx="32" cy="32" r="28" fill="#f5f5f5" stroke="#e94560" stroke-width="2">
+    <animate attributeName="stroke-opacity" values="1;0.5;1" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="14" cy="14" r="10" fill="#1a1a1a"/>
+  <circle cx="50" cy="14" r="10" fill="#1a1a1a"/>
+  <ellipse cx="32" cy="34" rx="20" ry="18" fill="#ffffff"/>
+  <ellipse cx="22" cy="28" rx="8" ry="7" fill="#1a1a1a"/>
+  <ellipse cx="42" cy="28" rx="8" ry="7" fill="#1a1a1a"/>
+  <!-- Eyes (blinking) -->
+  <ellipse cx="22" cy="28" rx="3.5" ry="3.5" fill="white">
+    <animate attributeName="ry" values="3.5;0.3;3.5" dur="5s" begin="2s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="42" cy="28" rx="3.5" ry="3.5" fill="white">
+    <animate attributeName="ry" values="3.5;0.3;3.5" dur="5s" begin="2s" repeatCount="indefinite"/>
+  </ellipse>
+  <circle cx="23" cy="27" r="1.5" fill="#1a1a1a"/>
+  <circle cx="43" cy="27" r="1.5" fill="#1a1a1a"/>
+  <ellipse cx="32" cy="37" rx="4" ry="3" fill="#e94560"/>
+  <path d="M27,42 Q32,47 37,42" stroke="#e94560" stroke-width="1.5" fill="none"/>
+  <!-- Sparkle accents -->
+  <circle cx="52" cy="50" r="2" fill="#e94560" opacity="0.4">
+    <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="10" cy="48" r="1.5" fill="#e94560" opacity="0.3">
+    <animate attributeName="opacity" values="0.3;0.1;0.3" dur="3.5s" begin="1s" repeatCount="indefinite"/>
+  </circle>
+</svg>

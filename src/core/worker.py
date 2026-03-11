@@ -2,8 +2,13 @@
 Background worker threads for the Alpha Fixer and Converter tools.
 
 Uses QThread + signals for safe UI communication without blocking the main thread.
+
+For large batches (>= _LARGE_BATCH_THRESHOLD files) the workers suppress
+per-file success log messages and emit progress updates at most every
+_PROGRESS_INTERVAL files to prevent flooding the UI event queue.
 """
 import os
+import time
 import traceback
 import logging
 from pathlib import Path
@@ -11,11 +16,18 @@ from typing import Optional, Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+# Above this number of files, suppress individual success log lines and
+# throttle progress signals to keep the UI responsive.
+_LARGE_BATCH_THRESHOLD = 1_000
+# Minimum seconds between consecutive progress signal emissions in large-batch mode.
+_PROGRESS_MIN_INTERVAL = 0.1   # 100 ms
+
 from .alpha_processor import (
     load_image,
     save_image,
     apply_alpha_preset,
     apply_manual_alpha,
+    apply_rgba_adjust,
     collect_files,
     SUPPORTED_READ,
 )
@@ -63,10 +75,16 @@ class AlphaWorker(QThread):
         total = len(self._files)
         success = 0
         errors = 0
+        large_batch = total >= _LARGE_BATCH_THRESHOLD
+        last_progress_time = 0.0
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
-            self.progress.emit(idx, total, src)
+            # Throttle progress signal in large-batch mode
+            now = time.monotonic()
+            if not large_batch or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
+                self.progress.emit(idx, total, src)
+                last_progress_time = now
             try:
                 img = load_image(src)
                 if self._preset is not None:
@@ -74,30 +92,46 @@ class AlphaWorker(QThread):
                 elif self._manual is not None:
                     img = apply_manual_alpha(
                         img,
-                        mode=self._manual.get("mode", "set"),
-                        value=self._manual.get("value", 255),
+                        value=self._manual.get("value"),  # None = clamp only, no fixed value
                         threshold=self._manual.get("threshold", 0),
                         invert=self._manual.get("invert", False),
                         clamp_min=self._manual.get("clamp_min", 0),
                         clamp_max=self._manual.get("clamp_max", 255),
+                        binary_cut=self._manual.get("binary_cut", False),
+                    )
+                # Optional per-channel RGBA adjust (works with both preset and manual modes)
+                rgb = (self._manual or {}).get("rgb")
+                if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b") or rgb.get("a")):
+                    img = apply_rgba_adjust(
+                        img,
+                        red_delta=rgb.get("r", 0),
+                        green_delta=rgb.get("g", 0),
+                        blue_delta=rgb.get("b", 0),
+                        alpha_delta=rgb.get("a", 0),
                     )
                 dest = self._resolve_output(src)
                 os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
                 ext = Path(src).suffix.lower()
                 save_image(img, dest, ext)
                 success += 1
-                self.file_done.emit(src, True, dest)
+                # In large-batch mode suppress per-file success messages to keep
+                # the UI log from accumulating 50 000 lines.
+                if not large_batch:
+                    self.file_done.emit(src, True, dest)
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()
                 logger.error("Alpha worker error on %s:\n%s", src, msg)
-                self.file_done.emit(src, False, msg)
+                self.file_done.emit(src, False, msg)  # always emit errors
         self.finished.emit(success, errors)
 
     def _resolve_output(self, src: str) -> str:
         p = Path(src)
         name = p.stem + (self._suffix or "") + p.suffix
-        if self._output_dir and not self._overwrite:
+        # Always honour output_dir when the user has specified one, regardless
+        # of whether overwrite mode is active (overwrite = no filename suffix,
+        # not "write back to the source directory").
+        if self._output_dir:
             return str(Path(self._output_dir) / name)
         return str(p.parent / name)
 
@@ -123,6 +157,8 @@ class ConverterWorker(QThread):
         input_root: Optional[str] = None,
         quality: int = 90,
         resize: Optional[tuple[int, int]] = None,
+        keep_metadata: bool = False,
+        suffix: str = "",
         parent=None,
     ):
         super().__init__(parent)
@@ -133,6 +169,8 @@ class ConverterWorker(QThread):
         self._input_root = input_root
         self._quality = quality
         self._resize = resize
+        self._keep_metadata = keep_metadata
+        self._suffix = suffix
         self._abort = False
 
     def stop(self):
@@ -142,16 +180,22 @@ class ConverterWorker(QThread):
         total = len(self._files)
         success = 0
         errors = 0
+        large_batch = total >= _LARGE_BATCH_THRESHOLD
+        last_progress_time = 0.0
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
-            self.progress.emit(idx, total, src)
+            now = time.monotonic()
+            if not large_batch or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
+                self.progress.emit(idx, total, src)
+                last_progress_time = now
             try:
                 dest = build_output_path(
                     src,
                     self._target_ext,
                     output_dir=self._output_dir,
                     input_root=self._input_root,
+                    suffix=self._suffix,
                 )
                 convert_file(
                     src,
@@ -159,9 +203,11 @@ class ConverterWorker(QThread):
                     self._target_format,
                     quality=self._quality,
                     resize=self._resize,
+                    keep_metadata=self._keep_metadata,
                 )
                 success += 1
-                self.file_done.emit(src, True, dest)
+                if not large_batch:
+                    self.file_done.emit(src, True, dest)
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()

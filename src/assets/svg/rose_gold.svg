@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" width="400" height="220">
+  <!-- Rose Gold: warm blush gradient, roses, gold sparkles -->
+  <defs>
+    <linearGradient id="bg_rg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3d1a26"/>
+      <stop offset="50%" stop-color="#5a2233"/>
+      <stop offset="100%" stop-color="#3d1a26"/>
+    </linearGradient>
+    <radialGradient id="gold_glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffd700" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="220" fill="url(#bg_rg)"/>
+
+  <!-- Subtle gold shimmer at top -->
+  <ellipse cx="200" cy="-20" rx="200" ry="80" fill="#c8860a" opacity="0.12">
+    <animate attributeName="opacity" values="0.08;0.18;0.08" dur="4s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Rose 1 (left) -->
+  <g transform="translate(70,135)">
+    <!-- Petals outer -->
+    <ellipse cx="0"   cy="-22" rx="16" ry="26" fill="#cc5577" opacity="0.9" transform="rotate(-15)"/>
+    <ellipse cx="20"  cy="-12" rx="16" ry="26" fill="#cc5577" opacity="0.9" transform="rotate(30)"/>
+    <ellipse cx="18"  cy="12"  rx="16" ry="26" fill="#dd6688" opacity="0.9" transform="rotate(75)"/>
+    <ellipse cx="-18" cy="12"  rx="16" ry="26" fill="#dd6688" opacity="0.9" transform="rotate(-75)"/>
+    <ellipse cx="-20" cy="-12" rx="16" ry="26" fill="#cc5577" opacity="0.9" transform="rotate(-30)"/>
+    <!-- Inner petals -->
+    <ellipse cx="0"   cy="-14" rx="11" ry="18" fill="#ee7799" opacity="0.9" transform="rotate(-10)"/>
+    <ellipse cx="12"  cy="-6"  rx="11" ry="18" fill="#ee7799" opacity="0.9" transform="rotate(42)"/>
+    <ellipse cx="-12" cy="-6"  rx="11" ry="18" fill="#ee7799" opacity="0.9" transform="rotate(-42)"/>
+    <!-- Centre -->
+    <circle cx="0" cy="0" r="10" fill="#ff99bb"/>
+    <circle cx="0" cy="0" r="6"  fill="#ffccdd"/>
+    <!-- Stem -->
+    <line x1="0" y1="22" x2="0" y2="65" stroke="#5a3322" stroke-width="3"/>
+    <!-- Leaf -->
+    <ellipse cx="-10" cy="45" rx="10" ry="4" fill="#4a7744" transform="rotate(-30,-10,45)"/>
+  </g>
+
+  <!-- Rose 2 (right) -->
+  <g transform="translate(330,125)">
+    <ellipse cx="0"   cy="-20" rx="14" ry="22" fill="#bb4466" opacity="0.9" transform="rotate(-10)"/>
+    <ellipse cx="18"  cy="-10" rx="14" ry="22" fill="#bb4466" opacity="0.9" transform="rotate(35)"/>
+    <ellipse cx="16"  cy="10"  rx="14" ry="22" fill="#cc5577" opacity="0.9" transform="rotate(70)"/>
+    <ellipse cx="-16" cy="10"  rx="14" ry="22" fill="#cc5577" opacity="0.9" transform="rotate(-70)"/>
+    <ellipse cx="-18" cy="-10" rx="14" ry="22" fill="#bb4466" opacity="0.9" transform="rotate(-35)"/>
+    <ellipse cx="0"   cy="-12" rx="10" ry="16" fill="#dd7788" opacity="0.9" transform="rotate(-8)"/>
+    <ellipse cx="10"  cy="-5"  rx="10" ry="16" fill="#dd7788" opacity="0.9" transform="rotate(40)"/>
+    <ellipse cx="-10" cy="-5"  rx="10" ry="16" fill="#dd7788" opacity="0.9" transform="rotate(-40)"/>
+    <circle cx="0" cy="0" r="9"  fill="#ee8899"/>
+    <circle cx="0" cy="0" r="5"  fill="#ffbbcc"/>
+    <line x1="0" y1="20" x2="5" y2="55" stroke="#5a3322" stroke-width="3"/>
+  </g>
+
+  <!-- Rose 3 (centre small) -->
+  <g transform="translate(200,90)">
+    <ellipse cx="0"  cy="-14" rx="10" ry="16" fill="#dd6688" opacity="0.9" transform="rotate(-12)"/>
+    <ellipse cx="12" cy="-7"  rx="10" ry="16" fill="#dd6688" opacity="0.9" transform="rotate(36)"/>
+    <ellipse cx="10" cy="8"   rx="10" ry="16" fill="#ee7799" opacity="0.9" transform="rotate(72)"/>
+    <ellipse cx="-10" cy="8"  rx="10" ry="16" fill="#ee7799" opacity="0.9" transform="rotate(-72)"/>
+    <ellipse cx="-12" cy="-7" rx="10" ry="16" fill="#dd6688" opacity="0.9" transform="rotate(-36)"/>
+    <circle cx="0" cy="0" r="7"  fill="#ff99bb"/>
+    <circle cx="0" cy="0" r="4"  fill="#ffd0e0"/>
+  </g>
+
+  <!-- Gold sparkles -->
+  <text x="130" y="68" font-size="14" fill="#ffd700" opacity="0.85">✦
+    <animate attributeName="opacity" values="0.85;0.3;0.85" dur="2s" repeatCount="indefinite"/>
+  </text>
+  <text x="250" y="55" font-size="10" fill="#ffd700" opacity="0.8">✦
+    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.5s" repeatCount="indefinite"/>
+  </text>
+  <text x="165" y="165" font-size="12" fill="#ffd700" opacity="0.75">✧
+    <animate attributeName="opacity" values="0.75;0.25;0.75" dur="1.8s" repeatCount="indefinite"/>
+  </text>
+  <text x="290" y="170" font-size="11" fill="#ffd700" opacity="0.7">✦
+    <animate attributeName="opacity" values="0.7;0.2;0.7" dur="3s" repeatCount="indefinite"/>
+  </text>
+  <text x="100" y="180" font-size="9" fill="#ffd700" opacity="0.65">✧
+    <animate attributeName="opacity" values="0.65;0.2;0.65" dur="2.2s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- Scattered petals on ground -->
+  <ellipse cx="130" cy="200" rx="8" ry="4" fill="#cc5577" opacity="0.5" transform="rotate(-20,130,200)"/>
+  <ellipse cx="240" cy="205" rx="7" ry="3" fill="#dd6688" opacity="0.45" transform="rotate(15,240,205)"/>
+  <ellipse cx="310" cy="195" rx="6" ry="3" fill="#cc5577" opacity="0.4" transform="rotate(-10,310,195)"/>
+</svg>

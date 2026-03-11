@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" width="400" height="220">
+  <!-- Thunder Storm: dark stormy sky, lightning bolts, rain -->
+  <defs>
+    <radialGradient id="sky_t" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0a0a18"/>
+    </radialGradient>
+    <linearGradient id="bolt_grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#ffff88"/>
+      <stop offset="100%" stop-color="#ffdd00"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="220" fill="url(#sky_t)"/>
+
+  <!-- Storm clouds -->
+  <ellipse cx="100" cy="55" rx="80" ry="40" fill="#2a2a3a" opacity="0.9">
+    <animate attributeName="cx" values="100;115;100" dur="6s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="160" cy="40" rx="70" ry="35" fill="#222233" opacity="0.85">
+    <animate attributeName="cx" values="160;148;160" dur="5s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="270" cy="50" rx="90" ry="45" fill="#2a2a3a" opacity="0.9">
+    <animate attributeName="cx" values="270;282;270" dur="7s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="340" cy="38" rx="65" ry="32" fill="#1e1e30" opacity="0.85">
+    <animate attributeName="cx" values="340;325;340" dur="5.5s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Lightning bolt 1 (main) -->
+  <polygon points="160,65 148,105 158,108 140,165 162,168 134,220 200,155 176,152 196,105 183,103 200,65"
+           fill="url(#bolt_grad)" opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;0.8;0;0;0;0;0" dur="4s" repeatCount="indefinite"/>
+  </polygon>
+
+  <!-- Lightning bolt 2 (secondary) -->
+  <polygon points="280,55 270,88 278,90 262,130 278,132 255,185 310,140 290,138 305,95 294,93 308,55"
+           fill="url(#bolt_grad)" opacity="0" transform="scale(0.75,0.75) translate(100,30)">
+    <animate attributeName="opacity" values="0;0;0;0;0;0;1;0.6;0;0" dur="4s" repeatCount="indefinite"/>
+  </polygon>
+
+  <!-- Flash glow behind bolt 1 -->
+  <ellipse cx="165" cy="140" rx="50" ry="80" fill="#ffff88" opacity="0">
+    <animate attributeName="opacity" values="0;0;0;0.25;0;0;0;0;0;0" dur="4s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Rain lines -->
+  <g opacity="0.6">
+    <line x1="30"  y1="100" x2="22"  y2="130" stroke="#8899cc" stroke-width="1.2"><animate attributeName="y1" values="100;120;100" dur="0.8s" repeatCount="indefinite"/><animate attributeName="y2" values="130;150;130" dur="0.8s" repeatCount="indefinite"/></line>
+    <line x1="70"  y1="90"  x2="62"  y2="120" stroke="#8899cc" stroke-width="1.2"><animate attributeName="y1" values="90;110;90"   dur="0.7s" repeatCount="indefinite"/><animate attributeName="y2" values="120;140;120" dur="0.7s" repeatCount="indefinite"/></line>
+    <line x1="110" y1="110" x2="102" y2="140" stroke="#8899cc" stroke-width="1.2"><animate attributeName="y1" values="110;130;110" dur="0.9s" repeatCount="indefinite"/><animate attributeName="y2" values="140;160;140" dur="0.9s" repeatCount="indefinite"/></line>
+    <line x1="230" y1="100" x2="222" y2="130" stroke="#8899cc" stroke-width="1.2"><animate attributeName="y1" values="100;125;100" dur="0.75s" repeatCount="indefinite"/><animate attributeName="y2" values="130;155;130" dur="0.75s" repeatCount="indefinite"/></line>
+    <line x1="300" y1="95"  x2="292" y2="125" stroke="#8899cc" stroke-width="1.2"><animate attributeName="y1" values="95;115;95"   dur="0.85s" repeatCount="indefinite"/><animate attributeName="y2" values="125;145;125" dur="0.85s" repeatCount="indefinite"/></line>
+    <line x1="360" y1="105" x2="352" y2="135" stroke="#8899cc" stroke-width="1.2"><animate attributeName="y1" values="105;125;105" dur="0.65s" repeatCount="indefinite"/><animate attributeName="y2" values="135;155;135" dur="0.65s" repeatCount="indefinite"/></line>
+    <line x1="50"  y1="140" x2="42"  y2="170" stroke="#8899cc" stroke-width="1"><animate attributeName="y1" values="140;160;140" dur="0.9s" repeatCount="indefinite"/><animate attributeName="y2" values="170;190;170" dur="0.9s" repeatCount="indefinite"/></line>
+    <line x1="170" y1="130" x2="162" y2="160" stroke="#8899cc" stroke-width="1"><animate attributeName="y1" values="130;150;130" dur="0.7s" repeatCount="indefinite"/><animate attributeName="y2" values="160;180;160" dur="0.7s" repeatCount="indefinite"/></line>
+    <line x1="340" y1="135" x2="332" y2="165" stroke="#8899cc" stroke-width="1"><animate attributeName="y1" values="135;155;135" dur="0.8s" repeatCount="indefinite"/><animate attributeName="y2" values="165;185;165" dur="0.8s" repeatCount="indefinite"/></line>
+  </g>
+
+  <!-- Dark horizon / ground -->
+  <rect x="0" y="195" width="400" height="25" fill="#0a0a1a"/>
+  <!-- Puddles -->
+  <ellipse cx="100" cy="210" rx="40" ry="6" fill="#1a2255" opacity="0.7"/>
+  <ellipse cx="280" cy="207" rx="35" ry="5" fill="#1a2255" opacity="0.7"/>
+</svg>

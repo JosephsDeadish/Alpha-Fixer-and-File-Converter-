@@ -2,4 +2,6 @@ PyQt6>=6.4.0
 Pillow>=10.0.0
 numpy>=1.24.0
 imageio>=2.33.0
-wand>=0.6.13
+# wand>=0.6.13  # Optional: improves DDS read/write quality.
+#               # Requires ImageMagick to be installed on the system.
+#               # The app works without it using the built-in raw DDS loader.

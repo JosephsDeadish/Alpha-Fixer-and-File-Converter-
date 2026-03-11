@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" width="400" height="220">
+  <!-- Gold Rush: warm amber/gold background, gold nuggets, coins, sparkles -->
+  <defs>
+    <linearGradient id="bg_gr" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a1a00"/>
+      <stop offset="50%" stop-color="#3a2800"/>
+      <stop offset="100%" stop-color="#1a1000"/>
+    </linearGradient>
+    <radialGradient id="coin_grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffee66"/>
+      <stop offset="50%" stop-color="#ffcc00"/>
+      <stop offset="100%" stop-color="#cc8800"/>
+    </radialGradient>
+    <radialGradient id="glow_gold" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffdd00" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#aa6600" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="220" fill="url(#bg_gr)"/>
+
+  <!-- Ambient gold glow -->
+  <ellipse cx="200" cy="110" rx="180" ry="100" fill="url(#glow_gold)" opacity="0.3">
+    <animate attributeName="opacity" values="0.2;0.4;0.2" dur="4s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Gold ore veins in background wall -->
+  <path d="M 0,80  Q 50,70  80,90  Q 110,110 140,95  Q 170,80 200,100" stroke="#c8860a" stroke-width="3" fill="none" opacity="0.4"/>
+  <path d="M 200,60 Q 240,50 270,70  Q 300,90 340,75  Q 370,65 400,80" stroke="#c8860a" stroke-width="3" fill="none" opacity="0.35"/>
+  <path d="M 30,140 Q 70,130 100,145 Q 130,160 160,140" stroke="#c8860a" stroke-width="2" fill="none" opacity="0.3"/>
+
+  <!-- Gold nuggets -->
+  <g transform="translate(80,145)">
+    <ellipse cx="0" cy="0" rx="28" ry="18" fill="#cc8800"/>
+    <ellipse cx="0" cy="-2" rx="24" ry="15" fill="#ffcc00"/>
+    <ellipse cx="-5" cy="-5" rx="10" ry="6" fill="#ffee66" opacity="0.7"/>
+    <ellipse cx="8"  cy="-6" rx="7"  ry="4" fill="#ffee66" opacity="0.6"/>
+    <ellipse cx="0" cy="0" rx="28" ry="18" fill="url(#glow_gold)" opacity="0.3">
+      <animate attributeName="opacity" values="0.2;0.5;0.2" dur="3s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <g transform="translate(300,150)">
+    <ellipse cx="0" cy="0" rx="22" ry="14" fill="#bb7700"/>
+    <ellipse cx="0" cy="-2" rx="19" ry="12" fill="#ffcc00"/>
+    <ellipse cx="-4" cy="-4" rx="8" ry="5" fill="#ffee66" opacity="0.7"/>
+    <ellipse cx="0" cy="0" rx="22" ry="14" fill="url(#glow_gold)" opacity="0.3">
+      <animate attributeName="opacity" values="0.2;0.5;0.2" dur="3.5s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <!-- Gold coins -->
+  <!-- Coin stack 1 -->
+  <g transform="translate(175,160)">
+    <ellipse cx="0" cy="0"    rx="20" ry="6"  fill="#cc8800"/>
+    <rect    x="-20" y="-25" width="40" height="25" fill="#cc9900"/>
+    <ellipse cx="0" cy="-25"  rx="20" ry="6"  fill="#ffcc00"/>
+    <ellipse cx="0" cy="-8"   rx="20" ry="6"  fill="#cc9900"/>
+    <ellipse cx="0" cy="-16"  rx="20" ry="6"  fill="#dd9900"/>
+    <text x="0" y="-10" fill="#ffee88" font-size="9" text-anchor="middle" font-family="serif" font-weight="bold">$</text>
+    <text x="0" y="-18" fill="#ffee88" font-size="9" text-anchor="middle" font-family="serif" font-weight="bold">$</text>
+    <ellipse cx="0" cy="-25" rx="20" ry="6" fill="url(#glow_gold)" opacity="0.4">
+      <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2.5s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <!-- Scattered coins on ground -->
+  <ellipse cx="130" cy="190" rx="12" ry="4" fill="#ffcc00" transform="rotate(-15,130,190)"/>
+  <ellipse cx="248" cy="188" rx="11" ry="3.5" fill="#ffcc00" transform="rotate(10,248,188)"/>
+  <ellipse cx="340" cy="186" rx="10" ry="3"   fill="#ffcc00" transform="rotate(-8,340,186)"/>
+
+  <!-- Sparkling gold highlights -->
+  <text x="50"  y="60"  font-size="16" fill="#ffdd00" opacity="0.9">✦<animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.5s" repeatCount="indefinite"/></text>
+  <text x="150" y="50"  font-size="12" fill="#ffee66" opacity="0.8">✧<animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s"   repeatCount="indefinite"/></text>
+  <text x="250" y="70"  font-size="14" fill="#ffdd00" opacity="0.85">✦<animate attributeName="opacity" values="0.85;0.15;0.85" dur="2.5s" repeatCount="indefinite"/></text>
+  <text x="350" y="55"  font-size="11" fill="#ffee66" opacity="0.75">✧<animate attributeName="opacity" values="0.75;0.2;0.75" dur="1.8s" repeatCount="indefinite"/></text>
+  <text x="100" y="120" font-size="10" fill="#ffd700" opacity="0.7">✦<animate attributeName="opacity" values="0.7;0.15;0.7" dur="3s"   repeatCount="indefinite"/></text>
+  <text x="320" y="110" font-size="13" fill="#ffd700" opacity="0.8">✦<animate attributeName="opacity" values="0.8;0.1;0.8" dur="2.2s" repeatCount="indefinite"/></text>
+
+  <!-- Ground / mine floor -->
+  <path d="M 0,195 Q 100,185 200,200 Q 300,215 400,195 L 400,220 L 0,220 Z" fill="#1a0f00"/>
+  <!-- Dirt texture suggestion -->
+  <path d="M 20,210 Q 60,205 100,212 Q 140,219 180,208 Q 220,197 260,210 Q 300,222 340,208 Q 370,200 400,210" fill="none" stroke="#2a1800" stroke-width="2" opacity="0.5"/>
+</svg>

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" fill="#1a1206" rx="8"/>
+
+  <!-- Water ripple in background -->
+  <ellipse cx="32" cy="56" rx="22" ry="5" fill="none" stroke="#4a8fa0" stroke-width="1.2" opacity="0.5">
+    <animate attributeName="rx" values="22;26;22" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0.2;0.5" dur="2s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="32" cy="56" rx="14" ry="3" fill="none" stroke="#6bb5cc" stroke-width="1" opacity="0.4">
+    <animate attributeName="rx" values="14;18;14" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Otter body -->
+  <ellipse cx="32" cy="42" rx="16" ry="11" fill="#8b5a2b"/>
+
+  <!-- Otter tail (wagging animation) -->
+  <g transform-origin="32 50">
+    <ellipse cx="32" cy="52" rx="8" ry="4" fill="#a06030">
+      <animateTransform attributeName="transform" type="rotate"
+        values="-15 32 50; 15 32 50; -15 32 50"
+        dur="1.2s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <!-- Otter head -->
+  <circle cx="32" cy="22" r="13" fill="#8b5a2b"/>
+  <!-- Face patches -->
+  <ellipse cx="32" cy="26" rx="9" ry="7" fill="#c49a6c"/>
+  <!-- Eyes -->
+  <ellipse cx="27" cy="20" rx="3" ry="3" fill="#2a1200">
+    <!-- Blink animation -->
+    <animate attributeName="ry" values="3;0.3;3" dur="3.5s" begin="1s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="37" cy="20" rx="3" ry="3" fill="#2a1200">
+    <animate attributeName="ry" values="3;0.3;3" dur="3.5s" begin="1s" repeatCount="indefinite"/>
+  </ellipse>
+  <circle cx="27.5" cy="19.5" r="1" fill="white"/>
+  <circle cx="37.5" cy="19.5" r="1" fill="white"/>
+  <!-- Nose -->
+  <ellipse cx="32" cy="24" rx="3" ry="2" fill="#2a1200"/>
+  <!-- Whiskers -->
+  <line x1="20" y1="25" x2="28" y2="26" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
+  <line x1="20" y1="27" x2="28" y2="27" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
+  <line x1="36" y1="26" x2="44" y2="25" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
+  <line x1="36" y1="27" x2="44" y2="27" stroke="#c49a6c" stroke-width="0.8" opacity="0.7"/>
+
+  <!-- Rock 🤘 emoji hint -->
+  <text x="32" y="62" text-anchor="middle" font-size="11" fill="#e8a040">🤘
+    <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite"/>
+  </text>
+</svg>
