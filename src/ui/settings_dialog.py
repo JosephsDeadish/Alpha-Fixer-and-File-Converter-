@@ -495,7 +495,18 @@ class SettingsDialog(QDialog):
         misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
         misc_gl.addWidget(QLabel("Tooltip Mode:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
-        self._tooltip_mode_combo.addItems(TOOLTIP_MODES)
+        _TOOLTIP_MODE_TIPS = {
+            "Normal":       "Standard helpful tooltips. Clear, informative, and professional.",
+            "Off":          "Tooltips are disabled. Hover over anything: silence. Pure, blessed silence.",
+            "Dumbed Down":  "Tips written as if you've never seen software before. Condescending but thorough.",
+            "No Filter 🤬": "Extremely vulgar, extremely funny, very sweary — but still actually helpful. The best mode.",
+        }
+        for mode in TOOLTIP_MODES:
+            self._tooltip_mode_combo.addItem(mode)
+            idx = self._tooltip_mode_combo.count() - 1
+            tip = _TOOLTIP_MODE_TIPS.get(mode, "")
+            if tip:
+                self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
             "No Filter 🤬 is the best mode – trust us."
@@ -504,10 +515,20 @@ class SettingsDialog(QDialog):
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
         misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
         self._tooltip_style_combo = QComboBox()
-        _TOOLTIP_STYLES = [
-            "Auto (follow theme)", "Angular", "Bubbly", "Rounded", "Icy", "Wavy", "Neon", "Classic",
+        _TOOLTIP_STYLE_ENTRIES = [
+            ("Auto (follow theme)",  "Tooltip style follows the active theme automatically."),
+            ("Angular",              "Sharp rectangular corners. Clean and minimal."),
+            ("Bubbly",               "Rounded corners, bold text. Friendly and playful."),
+            ("Rounded",              "Soft medium-radius corners. Works well with most themes."),
+            ("Icy",                  "Frosted blue tint with subtle glow. For ice/arctic themes."),
+            ("Wavy",                 "Alternating radius corners for a wavy feel. Ocean/mermaid themes."),
+            ("Neon",                 "Bold glowing border that pulses with the accent color."),
+            ("Classic",              "Traditional solid border. Familiar and unobtrusive."),
         ]
-        self._tooltip_style_combo.addItems(_TOOLTIP_STYLES)
+        for style_name, style_tip in _TOOLTIP_STYLE_ENTRIES:
+            self._tooltip_style_combo.addItem(style_name)
+            idx = self._tooltip_style_combo.count() - 1
+            self._tooltip_style_combo.setItemData(idx, style_tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_style_combo.setToolTip(
             "Controls the visual shape and appearance of tooltip boxes.\n"
             "Auto follows the active theme.  Other options force a fixed style."
