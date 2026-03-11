@@ -247,35 +247,24 @@ class AlphaFixerTab(QWidget):
         ca_layout.addWidget(compare_lbl)
 
         self._compare = BeforeAfterWidget()
-        self._compare.setMinimumHeight(200)
+        self._compare.setMinimumHeight(240)
         ca_layout.addWidget(self._compare, 1)
 
-        # Alpha stats: before on the left, after on the right (side-by-side)
-        stats_row = QHBoxLayout()
-        stats_row.setContentsMargins(0, 2, 0, 0)
-        stats_row.setSpacing(4)
-
-        self._before_stats_lbl = QLabel("BEFORE\n—")
-        self._before_stats_lbl.setObjectName("subheader")
-        self._before_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self._before_stats_lbl.setWordWrap(True)
-        self._before_stats_lbl.setToolTip("Alpha channel statistics for the original (before) image")
-
-        self._after_stats_lbl = QLabel("AFTER\n—")
-        self._after_stats_lbl.setObjectName("subheader")
-        self._after_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._after_stats_lbl.setWordWrap(True)
-        self._after_stats_lbl.setToolTip("Alpha channel statistics for the processed (after) image")
-
-        stats_row.addWidget(self._before_stats_lbl, 1)
-        stats_row.addWidget(self._after_stats_lbl, 1)
-        ca_layout.addLayout(stats_row)
-
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([260, 360])
+        left_vsplit.setSizes([220, 420])
 
         lv.addWidget(left_vsplit, 1)
-        outer_splitter.addWidget(left)
+
+        # Wrap the left panel in a scroll area (mirrors the right panel) so that
+        # users can scroll vertically on smaller windows, giving the compare
+        # widget room to be as large as possible.
+        left.setMinimumHeight(580)   # below this height, scrollbar appears
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        left_scroll.setMinimumWidth(320)
+        outer_splitter.addWidget(left_scroll)
 
         # ==============================================================
         # Right panel: run controls (top) + presets + fine-tune
@@ -902,10 +891,7 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
-        def _fmt(s: dict) -> str:
-            return f"min={s['min']}  max={s['max']}  mean={s['mean']:.1f}"
-        self._before_stats_lbl.setText(f"BEFORE\n{_fmt(before)}")
-        self._after_stats_lbl.setText(f"AFTER\n{_fmt(after)}")
+        self._compare.set_stats(before, after)
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):

@@ -1551,13 +1551,8 @@ class TooltipManager(QObject):
             pass
 
     def mode(self) -> str:
-        # Do NOT pass a hardcoded fallback here.  The SettingsManager._DEFAULTS
-        # already declares "tooltip_mode": "No Filter 🤬", so omitting the
-        # fallback argument lets that default take effect when the key has not
-        # yet been written to the INI file (e.g. on first run).  Passing
-        # "Normal" as a fallback would override _DEFAULTS and cause the app to
-        # show Normal tips on first run even though "No Filter 🤬" is shown as
-        # selected in the Settings dialog.
+        # No explicit fallback → SettingsManager._DEFAULTS supplies
+        # "No Filter 🤬" on first run, before the key is written to the INI.
         return self._settings.get("tooltip_mode")
 
     # ------------------------------------------------------------------

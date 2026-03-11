@@ -232,6 +232,10 @@ class BeforeAfterWidget(QWidget):
         self._dragging: bool = False
         self._loading: bool = False
         self._checker: QPixmap | None = None  # lazily built / invalidated
+        # Alpha-channel stats shown as bottom-corner overlays inside the widget
+        # so they don't need external QLabel widgets (which have opaque backgrounds).
+        self._stats_before: str = ""
+        self._stats_after: str = ""
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -265,11 +269,28 @@ class BeforeAfterWidget(QWidget):
         self._loading = True
         self.update()
 
+    def set_stats(self, before: dict, after: dict) -> None:
+        """Store alpha-channel stats to be painted at the bottom corners.
+
+        *before* and *after* are dicts with keys 'min', 'max', 'mean'.
+        Passing empty dicts clears the overlaid text.
+        """
+        def _fmt(s: dict) -> str:
+            if not s:
+                return ""
+            return f"min {s['min']}  max {s['max']}  mean {s['mean']:.1f}"
+
+        self._stats_before = _fmt(before)
+        self._stats_after = _fmt(after)
+        self.update()
+
     def clear(self) -> None:
         """Reset to empty / placeholder state."""
         self._pix_before = None
         self._pix_after = None
         self._loading = False
+        self._stats_before = ""
+        self._stats_after = ""
         self.update()
 
     # ------------------------------------------------------------------
@@ -357,6 +378,40 @@ class BeforeAfterWidget(QWidget):
                 painter.fillRect(ax, 4, aw2, lh, QColor(0, 0, 0, 150))
                 painter.setPen(QColor("#e94560"))
                 painter.drawText(ax + 4, 4 + fm.ascent() + 2, atext)
+
+        # ── Alpha stats at bottom corners ──────────────────────────────
+        # Rendered as semi-transparent overlay text so they sit inside the
+        # widget without needing external QLabel widgets (which would have
+        # opaque dark backgrounds from the global QWidget stylesheet).
+        if self._stats_before or self._stats_after:
+            stats_font = QFont("Segoe UI", 8)
+            painter.setFont(stats_font)
+            sfm = QFontMetrics(stats_font)
+            slh = sfm.height() + 4
+            margin = 4
+
+            if self._stats_before and split_x > 10:
+                sb_w = min(sfm.horizontalAdvance(self._stats_before) + 8,
+                           split_x - margin)
+                sb_y = h - slh - margin
+                painter.fillRect(margin, sb_y, sb_w, slh, QColor(0, 0, 0, 150))
+                painter.setPen(QColor("#dddddd"))
+                painter.setClipRect(QRect(margin, sb_y, sb_w, slh))
+                painter.drawText(margin + 4, sb_y + sfm.ascent() + 2,
+                                 self._stats_before)
+                painter.setClipping(False)
+
+            if self._stats_after and w - split_x > 10:
+                sa_w = min(sfm.horizontalAdvance(self._stats_after) + 8,
+                           w - split_x - margin)
+                sa_x = w - sa_w - margin
+                sa_y = h - slh - margin
+                painter.fillRect(sa_x, sa_y, sa_w, slh, QColor(0, 0, 0, 150))
+                painter.setPen(QColor("#e94560"))
+                painter.setClipRect(QRect(sa_x, sa_y, sa_w, slh))
+                painter.drawText(sa_x + 4, sa_y + sfm.ascent() + 2,
+                                 self._stats_after)
+                painter.setClipping(False)
 
         # ── Divider line ──────────────────────────────────────────────
         painter.setPen(QPen(QColor("#e94560"), self._DIVIDER_W))
