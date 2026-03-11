@@ -503,6 +503,13 @@ class SettingsDialog(QDialog):
             "Useful for testing easter eggs and unlock events."
         )
         btn_row.addWidget(self._btn_reset)
+        self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
+        self._btn_reset_unlocks.setToolTip(
+            "Reset only the unlock flags and click counter to zero.\n"
+            "All other settings (theme, sound, trail, etc.) are preserved.\n"
+            "Useful for re-testing hidden theme easter eggs without losing your setup."
+        )
+        btn_row.addWidget(self._btn_reset_unlocks)
         btn_row.addStretch(1)
         self._btn_close = QPushButton("Close")
         self._btn_close.setObjectName("accent")
@@ -520,6 +527,7 @@ class SettingsDialog(QDialog):
         self._btn_import_theme.clicked.connect(self._import_theme)
         self._btn_close.clicked.connect(self.accept)
         self._btn_reset.clicked.connect(self._reset_all_settings)
+        self._btn_reset_unlocks.clicked.connect(self._reset_unlocks_only)
         self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
@@ -940,6 +948,33 @@ class SettingsDialog(QDialog):
             "Restart the application to fully apply the changes.",
         )
         self.accept()
+
+    def _reset_unlocks_only(self) -> None:
+        """Ask the user then reset only unlock flags and click counter."""
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reset Unlocks & Clicks?",
+            "This will reset ONLY the unlock flags and click/file counter to zero.\n\n"
+            "All other settings (theme, sound, trail, cursor, etc.) are kept as-is.\n\n"
+            "Hidden themes and easter eggs will become re-triggerable from scratch.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._settings.reset_unlocks_only()
+        self.settings_changed.emit()
+        # Rebuild the theme combo so locked hidden themes are removed
+        self._rebuild_theme_combo(select=self._theme_preset_combo.currentText())
+        QMessageBox.information(
+            self,
+            "Unlocks Reset",
+            "Unlock flags and click counter have been reset.\n"
+            "Your theme, sound, and appearance settings are unchanged.\n"
+            "Start clicking or processing files to re-unlock hidden themes!",
+        )
 
     # ------------------------------------------------------------------
     # Live-update handlers for the General tab

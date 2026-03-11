@@ -291,6 +291,18 @@ class SettingsManager:
         self._qs.clear()
         self._qs.sync()
 
+    def reset_unlocks_only(self) -> None:
+        """Reset only unlock flags, click counter, and first-use flags.
+
+        Preserves all other preferences (theme, sound, trail, cursor, etc.)
+        so the user can test easter-egg triggers without losing their setup.
+        """
+        _unlock_keys = [k for k in self._DEFAULTS if k.startswith("unlock_")]
+        _progress_keys = ["total_clicks", "alpha_done_once", "conversion_done_once"]
+        for key in _unlock_keys + _progress_keys:
+            self._qs.setValue(key, self._DEFAULTS[key])
+        self._qs.sync()
+
     # ------------------------------------------------------------------
     # Export / import all settings to a JSON file
     # ------------------------------------------------------------------
