@@ -682,6 +682,7 @@ class MainWindow(QMainWindow):
         # Update inner tab headers to also reflect the active theme
         self._alpha_tab.update_theme(theme_name)
         self._converter_tab.update_theme(theme_name)
+        self._history_tab.update_theme(theme_name)
         # Update status bar with per-theme flavor message
         if self._status_bar is not None:
             self._status_bar.showMessage(get_theme_status(theme_name))

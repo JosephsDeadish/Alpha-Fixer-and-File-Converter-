@@ -289,6 +289,7 @@ class AlphaFixerTab(QWidget):
         compare_lbl = QLabel("Before / After Comparison  ◀▶ drag to compare")
         compare_lbl.setObjectName("section")
         compare_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._compare_lbl = compare_lbl
         ca_layout.addWidget(compare_lbl)
 
         # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
@@ -696,6 +697,7 @@ class AlphaFixerTab(QWidget):
         self._grp_out.setTitle(f"{icon}  Output")
         self._grp_preset.setTitle(f"{icon}  Preset")
         self._grp_tune.setTitle(f"{icon}  Fine-Tune Alpha && RGBA Channels")
+        self._compare_lbl.setText(f"{icon}  Before / After Comparison  ◀▶ drag to compare")
 
     # ------------------------------------------------------------------
     # Preset management

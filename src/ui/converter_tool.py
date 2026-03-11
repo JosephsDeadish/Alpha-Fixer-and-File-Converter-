@@ -380,6 +380,7 @@ class ConverterTab(QWidget):
         self._grp_out.setTitle(f"{icon}  Output")
         self._grp_fmt.setTitle(f"{icon}  Output Format")
         self._grp_resize.setTitle(f"{icon}  Resize (optional)")
+        self._preview.update_theme(icon)
 
     # ------------------------------------------------------------------
     # File management

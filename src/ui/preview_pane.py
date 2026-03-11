@@ -511,6 +511,7 @@ class ImagePreviewPane(QWidget):
         title = QLabel("Preview")
         title.setObjectName("section")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_lbl = title
         layout.addWidget(title)
 
         frame = QFrame()
@@ -571,6 +572,10 @@ class ImagePreviewPane(QWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def update_theme(self, icon: str) -> None:
+        """Update the Preview title label to include *icon* (the theme emoji)."""
+        self._title_lbl.setText(f"{icon}  Preview")
 
     def show_file(self, path: str):
         if not path or not os.path.isfile(path):
