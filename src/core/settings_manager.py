@@ -71,6 +71,7 @@ class SettingsManager:
         # Sound
         "sound_enabled": False,
         "click_sound_path": "",
+        "use_theme_sound": False,
         # Cursor & trail
         "cursor": "Default",
         "use_theme_cursor": False,
@@ -101,6 +102,7 @@ class SettingsManager:
         "window_maximized": False,
         # Tooltip
         "tooltip_mode": "No Filter 🤬",
+        "tooltip_mode_changed_once": False,
         # Click effects
         "click_effects_enabled": False,
         "use_theme_effect": False,
@@ -259,6 +261,16 @@ class SettingsManager:
     def clear_alpha_history(self) -> None:
         """Erase all alpha-fixer history entries."""
         self._qs.setValue("alpha_history", "[]")
+        self._qs.sync()
+
+    def reset_all(self) -> None:
+        """Erase every setting and reset to factory defaults.
+
+        Useful for testing/debugging: removes all unlock flags, click counts,
+        history, and UI preferences so easter eggs can be re-triggered.
+        Equivalent to deleting the .ini file next to the application.
+        """
+        self._qs.clear()
         self._qs.sync()
 
     # ------------------------------------------------------------------

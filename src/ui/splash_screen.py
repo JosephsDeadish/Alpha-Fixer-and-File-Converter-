@@ -259,6 +259,7 @@ class ThemeSplashScreen(QSplashScreen):
     def mousePressEvent(self, event) -> None:  # noqa: N802
         """Click anywhere on the splash to open the Patreon page."""
         webbrowser.open(PATREON_URL)
+        super().mousePressEvent(event)
 
     def finish_and_close(self, main_window) -> None:
         """Fade out and then call finish(main_window)."""

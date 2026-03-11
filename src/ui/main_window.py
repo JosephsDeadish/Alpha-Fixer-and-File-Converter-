@@ -694,6 +694,8 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
         dlg.settings_changed.connect(self._on_settings_changed)
+        # First tooltip mode change unlocks Secret Skeleton (independent of click count)
+        dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
 
         # Attach a click-effects overlay to the dialog so particle effects are
         # visible while the settings window is open (the main overlay is behind
@@ -729,6 +731,17 @@ class MainWindow(QMainWindow):
             self._click_effects.set_enabled(
                 self._settings.get("click_effects_enabled", False)
             )
+
+    def _on_first_tooltip_mode_change(self) -> None:
+        """Unlock Secret Skeleton the first time the user changes the tooltip mode."""
+        if not self._settings.get("unlock_skeleton", False):
+            self._settings.set("unlock_skeleton", True)
+            self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
 
     def _apply_trail(self):
         """Apply trail color, style and enabled state, honouring use_theme_trail."""

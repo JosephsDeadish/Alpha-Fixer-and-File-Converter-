@@ -218,6 +218,13 @@ _NORMAL: dict[str, list[str]] = {
         "Even $1/month helps keep the panda well-fed 🐼",
         "Visit patreon.com/c/DeadOnTheInside",
     ],
+    "use_theme_sound": [
+        "Play a click sound that matches the active theme.",
+        "Gore theme gets a deep thud; Panda gets a soft chime; Alien gets a bright ping.",
+        "Each of the 7 sound profiles is tailored to the theme's personality.",
+        "When disabled your custom .wav (or the default blip) is used instead.",
+        "Enable 'Use theme sound' for the full immersive themed experience.",
+    ],
     "alpha_fixer_tab": [
         "The Alpha Fixer tab — fix and adjust transparency in image files.",
         "Add files, pick a preset or manual mode, then hit Process.",
@@ -634,6 +641,13 @@ _DUMBED: dict[str, list[str]] = {
         "Think of it as a tip jar. For software. For a panda.",
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
+    ],
+    "use_theme_sound": [
+        "Tick this. Theme plays its own sound. Untick. Normal sound. That's it.",
+        "Theme sound = each theme gets its own click noise. Gore = thud. Panda = ping. Simple.",
+        "Think of it as sound effects that match what you're looking at. Toggle. Done.",
+        "Gore theme goes THUD. Fairy garden goes tinkle. Ice cave goes crystalline ding. Enable it.",
+        "It's just sounds. The button says 'theme sound'. It plays theme sounds. You're overthinking.",
     ],
     "alpha_fixer_tab": [
         "This is the Alpha Fixer tab. You click on it. You were already on it.",
@@ -1442,6 +1456,13 @@ _VULGAR: dict[str, list[str]] = {
         "The developer spent months building this app. patreon.com/c/DeadOnTheInside - show some love.",
         "Patreon support = more features, more themes, more everything. Good karma too.",
         "Link opens to DeadOnTheInside on Patreon. No payment required to follow. Just click.",
+    ],
+    "use_theme_sound": [
+        "Enable this and your click sounds will be as themed as the rest of this shit.",
+        "Gore theme = bone-crunching thud. Panda = cute ping. Alien = weird-ass beep. Choose your destiny.",
+        "Theme sounds are actually different. Not just the same blip in a different color. Real audio variety.",
+        "Check this or leave it unchecked, your sound adventure either starts here or it fucking doesn't.",
+        "7 sound profiles, 38 themes. Math says some themes share sounds. Theme sound: it's a thing. Enable it.",
     ],
     "keep_metadata_check": [
         "Keep metadata checked = EXIF, GPS, camera info, ICC profiles all survive the conversion. Congrats.",

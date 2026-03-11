@@ -79,6 +79,9 @@ class ColorButton(QPushButton):
 class SettingsDialog(QDialog):
     theme_changed = pyqtSignal(dict)
     settings_changed = pyqtSignal()
+    # Emitted the very first time the user changes the tooltip mode.
+    # MainWindow connects this to trigger the Secret Skeleton unlock.
+    first_tooltip_mode_change = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -329,14 +332,20 @@ class SettingsDialog(QDialog):
             "Your choice is remembered between sessions."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
-        sound_gl.addWidget(QLabel("Custom .wav:"), 1, 0)
+        self._use_theme_sound_check = QCheckBox("Use theme sound (each theme has its own click sound)")
+        self._use_theme_sound_check.setToolTip(
+            "When enabled the click sound changes to match the active theme.\n"
+            "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc."
+        )
+        sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
+        sound_gl.addWidget(QLabel("Custom .wav:"), 2, 0)
         sound_row = QHBoxLayout()
         self._click_sound_edit = QLineEdit()
         self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
         self._btn_sound_browse = QPushButton("Browse…")
         sound_row.addWidget(self._click_sound_edit, 1)
         sound_row.addWidget(self._btn_sound_browse)
-        sound_gl.addLayout(sound_row, 1, 1)
+        sound_gl.addLayout(sound_row, 2, 1)
         tv.addWidget(grp_sound)
 
         # Wrap the theme tab contents in a scroll area so all controls are always
@@ -390,6 +399,12 @@ class SettingsDialog(QDialog):
 
         # ---- Dialog button: just "Close" (settings already saved live) ----
         btn_row = QHBoxLayout()
+        self._btn_reset = QPushButton("Reset All Settings…")
+        self._btn_reset.setToolTip(
+            "Reset ALL settings, unlock flags, and history to factory defaults.\n"
+            "Useful for testing easter eggs and unlock events."
+        )
+        btn_row.addWidget(self._btn_reset)
         btn_row.addStretch(1)
         self._btn_close = QPushButton("Close")
         self._btn_close.setObjectName("accent")
@@ -406,12 +421,14 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.clicked.connect(self._export_theme)
         self._btn_import_theme.clicked.connect(self._import_theme)
         self._btn_close.clicked.connect(self.accept)
+        self._btn_reset.clicked.connect(self._reset_all_settings)
         self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
         self._btn_emoji_clear.clicked.connect(self._clear_emoji)
         # All controls save+emit live
         self._sound_check.toggled.connect(self._on_sound_changed)
+        self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
         self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
@@ -486,9 +503,9 @@ class SettingsDialog(QDialog):
         # trigger save-and-emit loops.
         controls = [
             self._theme_preset_combo, self._effect_combo, self._sound_check,
-            self._click_sound_edit, self._trail_check, self._trail_color_btn,
-            self._trail_style_combo, self._use_theme_trail_check, self._cursor_combo,
-            self._use_theme_cursor_check, self._font_size_spin,
+            self._use_theme_sound_check, self._click_sound_edit, self._trail_check,
+            self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
+            self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo,
         ]
@@ -512,6 +529,7 @@ class SettingsDialog(QDialog):
         self._update_emoji_display()
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
+        self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
@@ -558,6 +576,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._emoji_input, "custom_emoji")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
         mgr.register(self._sound_check, "sound_check")
+        mgr.register(self._use_theme_sound_check, "use_theme_sound")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -754,12 +773,40 @@ class SettingsDialog(QDialog):
         if path:
             self._click_sound_edit.setText(path)
 
+    def _reset_all_settings(self) -> None:
+        """Ask the user then wipe all settings back to factory defaults."""
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reset All Settings?",
+            "This will erase ALL settings, unlock flags, history, and custom themes.\n\n"
+            "Unlock events like easter eggs will be re-triggerable from scratch.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._settings.reset_all()
+        self.settings_changed.emit()
+        QMessageBox.information(
+            self,
+            "Settings Reset",
+            "All settings have been reset to defaults.\n"
+            "Restart the application to fully apply the changes.",
+        )
+        self.accept()
+
     # ------------------------------------------------------------------
     # Live-update handlers for the General tab
     # ------------------------------------------------------------------
 
     def _on_sound_changed(self) -> None:
         self._settings.set("sound_enabled", self._sound_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_use_theme_sound_changed(self) -> None:
+        self._settings.set("use_theme_sound", self._use_theme_sound_check.isChecked())
         self.settings_changed.emit()
 
     def _on_sound_path_changed(self) -> None:
@@ -803,5 +850,9 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:
+        # Track first-ever tooltip mode change to trigger the Secret Skeleton unlock
+        if not self._settings.get("tooltip_mode_changed_once", False):
+            self._settings.set("tooltip_mode_changed_once", True)
+            self.first_tooltip_mode_change.emit()
         self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
         self.settings_changed.emit()

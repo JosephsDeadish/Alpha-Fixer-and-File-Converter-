@@ -549,6 +549,10 @@ class ClickEffectsOverlay(QWidget):
     • click_registered signal fires with the total click count after each click.
     """
 
+    # Particles whose computed alpha falls below this value are skipped
+    # during painting — they are essentially invisible and not worth rendering.
+    _MIN_VISIBLE_ALPHA = 6
+
     click_registered = pyqtSignal(int)  # emitted with total click count on each click
 
     def __init__(self, main_window: QWidget):
@@ -651,9 +655,11 @@ class ClickEffectsOverlay(QWidget):
         # burst of particles finished (see _tick).
         if not self._timer.isActive():
             self._timer.start()
-        # Hard cap to prevent unbounded growth during rapid clicking
-        if len(self._particles) > 60:
-            self._particles = self._particles[-40:]
+        # Hard cap to prevent unbounded growth during rapid clicking.
+        # Keep the most recent particles (newest burst) so the effect feels
+        # responsive, and cull the oldest ones first.
+        if len(self._particles) > 50:
+            self._particles = self._particles[-35:]
 
     # ------------------------------------------------------------------
     # Event filter
@@ -715,7 +721,7 @@ class ClickEffectsOverlay(QWidget):
             p.y += p.vy
             if p.kind not in ("bat_fly", "fairy_fly"):
                 p.vy += self._GRAVITY
-            p.life -= 0.03   # faster decay → shorter burst, fewer frames rendered
+            p.life -= 0.04   # faster decay → shorter burst, fewer frames rendered
             # Cull ambient (bat/fairy) particles that have completely left the
             # window so they never accumulate off-screen indefinitely.
             if p.kind in ("bat_fly", "fairy_fly"):
@@ -766,6 +772,8 @@ class ClickEffectsOverlay(QWidget):
 
         for p in self._particles:
             alpha = max(0, min(255, int(p.alpha_frac * 220)))
+            if alpha < self._MIN_VISIBLE_ALPHA:
+                continue  # skip nearly transparent particles — not visible, free CPU
             if p.kind in ("text", "bat_fly", "fairy_fly"):
                 c = QColor(p.color)
                 c.setAlpha(alpha)
