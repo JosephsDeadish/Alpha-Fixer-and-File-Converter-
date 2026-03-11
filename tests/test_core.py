@@ -611,6 +611,81 @@ class TestSettingsManagerDefaults(unittest.TestCase):
         self.assertIn("get_theme_banner_frames", source,
                       "splash_screen.py should call get_theme_banner_frames for animated banner")
 
+    def test_effect_defaults_are_off(self):
+        """All visual/audio effect defaults must be False so new users start with a clean UI."""
+        import ast
+        settings_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "core", "settings_manager.py"
+        )
+        with open(settings_path) as f:
+            source = f.read()
+        tree = ast.parse(source)
+
+        defaults = {}
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "_DEFAULTS"
+                and isinstance(node.value, ast.Dict)
+            ):
+                for k, v in zip(node.value.keys, node.value.values):
+                    if isinstance(k, ast.Constant) and isinstance(v, ast.Constant):
+                        defaults[k.value] = v.value
+                break
+
+        off_by_default = [
+            "sound_enabled",
+            "trail_enabled",
+            "click_effects_enabled",
+            "use_theme_cursor",
+            "use_theme_trail",
+            "use_theme_effect",
+        ]
+        for key in off_by_default:
+            self.assertIn(key, defaults,
+                          f"'{key}' is missing from settings_manager._DEFAULTS")
+            self.assertIs(defaults[key], False,
+                          f"'{key}' default must be False (got {defaults[key]!r})")
+
+    def test_all_effect_fallbacks_are_false_in_main_window(self):
+        """Every settings.get() call for effects in main_window.py must use False as fallback."""
+        mw_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "main_window.py"
+        )
+        with open(mw_path) as f:
+            source = f.read()
+        # These patterns should NOT appear – they would mean a True fallback slipped in
+        bad_patterns = [
+            '"click_effects_enabled", True',
+            '"trail_enabled", True',
+            '"sound_enabled", True',
+        ]
+        for pattern in bad_patterns:
+            self.assertNotIn(
+                pattern, source,
+                f"main_window.py uses True as fallback for '{pattern}' – must be False",
+            )
+
+    def test_all_effect_fallbacks_are_false_in_settings_dialog(self):
+        """Every settings.get() call for effects in settings_dialog.py must use False as fallback."""
+        dlg_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "settings_dialog.py"
+        )
+        with open(dlg_path) as f:
+            source = f.read()
+        bad_patterns = [
+            '"click_effects_enabled", True',
+            '"trail_enabled", True',
+            '"sound_enabled", True',
+        ]
+        for pattern in bad_patterns:
+            self.assertNotIn(
+                pattern, source,
+                f"settings_dialog.py uses True as fallback for '{pattern}' – must be False",
+            )
+
 
 # ---------------------------------------------------------------------------
 # Alpha-delta spinbox wiring tests (no PyQt6 required — source inspection)
