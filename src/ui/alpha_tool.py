@@ -512,18 +512,6 @@ class AlphaFixerTab(QWidget):
         self._use_preset_check.setChecked(True)
         gt_layout.addWidget(self._use_preset_check, 9, 0, 1, 2)
 
-        # Live "Current Params" display — updates whenever any fine-tune control changes.
-        # Populated by _refresh_finetune_label() at the end of _setup_ui.
-        self._finetune_params_lbl = QLabel("")
-        self._finetune_params_lbl.setObjectName("subheader")
-        self._finetune_params_lbl.setWordWrap(True)
-        self._finetune_params_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._finetune_params_lbl.setToolTip(
-            "Live summary of the current fine-tune parameters.\n"
-            "Updates instantly as you change any control above."
-        )
-        gt_layout.addWidget(self._finetune_params_lbl, 10, 0, 1, 2)
-
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
         rgb_sep.setObjectName("subheader")
@@ -577,6 +565,19 @@ class AlphaFixerTab(QWidget):
             "the alpha fix. Useful for colour-correcting game textures."
         )
         gt_layout.addWidget(self._apply_rgb_check, 15, 0, 1, 2)
+
+        # Live "Current Params" display — updates whenever any fine-tune control changes.
+        # Placed after all controls so it summarises the full fine-tune state.
+        # Populated by _refresh_finetune_label() at the end of _setup_ui.
+        self._finetune_params_lbl = QLabel("")
+        self._finetune_params_lbl.setObjectName("subheader")
+        self._finetune_params_lbl.setWordWrap(True)
+        self._finetune_params_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._finetune_params_lbl.setToolTip(
+            "Live summary of the current fine-tune parameters.\n"
+            "Updates instantly as you change any control above."
+        )
+        gt_layout.addWidget(self._finetune_params_lbl, 16, 0, 1, 2)
 
         rv.addWidget(grp_tune)
 
@@ -966,9 +967,9 @@ class AlphaFixerTab(QWidget):
         # Prevent clamp_max from falling below the new minimum without preventing
         # the user from typing an independent value into clamp_max later.
         if self._clamp_max_spin.value() < value:
-            self._clamp_max_spin.blockSignals(True)
+            was_blocked = self._clamp_max_spin.blockSignals(True)
             self._clamp_max_spin.setValue(value)
-            self._clamp_max_spin.blockSignals(False)
+            self._clamp_max_spin.blockSignals(was_blocked)
         self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
@@ -977,9 +978,9 @@ class AlphaFixerTab(QWidget):
     def _on_clamp_max_changed(self, value: int) -> None:
         """Ensure clamp_min <= clamp_max, then trigger the normal finetune update."""
         if self._clamp_min_spin.value() > value:
-            self._clamp_min_spin.blockSignals(True)
+            was_blocked = self._clamp_min_spin.blockSignals(True)
             self._clamp_min_spin.setValue(value)
-            self._clamp_min_spin.blockSignals(False)
+            self._clamp_min_spin.blockSignals(was_blocked)
         self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
