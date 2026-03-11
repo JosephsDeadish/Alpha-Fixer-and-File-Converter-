@@ -305,7 +305,7 @@ class SettingsDialog(QDialog):
             # Standard system cursors
             "Default", "Cross", "Pointing Hand", "Open Hand",
             "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
-            # Emoji text cursors (drawn via mouse event override in main window)
+            # Emoji text cursors (rendered via _make_emoji_cursor() in main window)
             "🐼 Panda", "🦦 Otter", "🐱 Cat", "🦈 Shark",
             "🧜 Mermaid Trident", "🛸 UFO", "🦇 Bat",
             "🌊 Wave", "🔥 Fire", "❄ Snowflake", "⚡ Lightning",

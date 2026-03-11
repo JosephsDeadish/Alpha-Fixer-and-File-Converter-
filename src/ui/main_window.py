@@ -517,7 +517,7 @@ class MainWindow(QMainWindow):
                 # Combo items like "🐼 Panda" – extract the emoji (first char/cluster)
                 # by taking everything before the first space
                 parts = cursor_name.split(" ", 1)
-                if parts:
+                if parts and parts[0]:
                     self.setCursor(_make_emoji_cursor(parts[0]))
                 else:
                     self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))

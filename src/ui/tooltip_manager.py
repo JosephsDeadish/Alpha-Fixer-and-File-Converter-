@@ -23,6 +23,8 @@ The active mode is stored in settings under the key "tooltip_mode".
 # QtWidgets (QToolTip) does – so it is imported lazily inside eventFilter.
 from PyQt6.QtCore import QEvent, QObject
 
+from ..core.settings_manager import SettingsManager as _SettingsManager
+
 # ---------------------------------------------------------------------------
 # Tip variant database
 # ---------------------------------------------------------------------------
@@ -1908,8 +1910,7 @@ class TooltipManager(QObject):
             pass
 
     def mode(self) -> str:
-        from ..core.settings_manager import SettingsManager
-        default = SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
+        default = _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
         return self._settings.get("tooltip_mode", default)
 
     # ------------------------------------------------------------------

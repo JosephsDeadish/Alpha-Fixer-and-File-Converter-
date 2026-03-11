@@ -2809,29 +2809,6 @@ QLabel#rom_banner {{
     padding: 4px 6px;
 }}
 
-/* ===== Collections Cards ===== */
-QFrame#collection_card_unlocked {{
-    background-color: {t['surface']};
-    border: 1px solid {t['success']};
-    border-left: 3px solid {t['success']};
-    border-radius: 6px;
-}}
-QFrame#collection_card_locked {{
-    background-color: {t['surface']};
-    border: 1px solid {t['border']};
-    border-left: 3px solid {t['border']};
-    border-radius: 6px;
-    opacity: 0.7;
-}}
-QLabel#collection_status_ok {{
-    color: {t['success']};
-    font-size: 11px;
-}}
-QLabel#collection_status_locked {{
-    color: {t['text_secondary']};
-    font-size: 11px;
-}}
-
 /* ===== Group Box ===== */
 QGroupBox {{
     border: 1px solid {t['border']};

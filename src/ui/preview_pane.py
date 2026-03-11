@@ -223,8 +223,9 @@ class BeforeAfterWidget(QWidget):
     _DIVIDER_W = 2    # divider line width (px)
     _ARROW_W = 6      # arrow chevron reach from centre
     _ARROW_H = 4      # arrow head height
-    # Below this widget width the compact overlay stats are shown (the side
-    # panels in alpha_tool are not visible at very narrow widths).
+    # Below this widget width the compact overlay stats are shown as text
+    # painted inside the widget itself instead of relying on the external side
+    # panel QLabels in alpha_tool.py (those labels always occupy 84 px each).
     _COMPACT_OVERLAY_WIDTH_THRESHOLD = 500
 
     def __init__(self, parent=None):

@@ -198,7 +198,6 @@ def _dirs_to_check(p: Path) -> list[Path]:
     We intentionally stop at the user's home directory to avoid false
     positives from Linux system folders like /sys, /boot, etc.
     """
-    home = Path.home()
     dirs = []
     if p.is_dir():
         dirs.append(p)

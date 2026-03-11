@@ -5,7 +5,7 @@ Alpha Fixer & File Converter – Entry Point.
 Includes:
   • Pre-flight system-library check (libEGL, libGL) with clear install instructions
   • Global exception handling so uncaught errors show a dialog instead of crashing
-  • Crash logging with automatic rotation (logs stored next to the exe/main.py)
+  • Crash logging with timestamped log files (logs stored next to the exe/main.py)
   • Qt environment flags for compatibility on both good and bad hardware
 """
 import sys
