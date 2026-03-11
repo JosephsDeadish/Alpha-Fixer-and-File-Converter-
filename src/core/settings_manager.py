@@ -298,9 +298,14 @@ class SettingsManager:
         so the user can test easter-egg triggers without losing their setup.
         """
         _unlock_keys = [k for k in self._DEFAULTS if k.startswith("unlock_")]
-        _progress_keys = ["total_clicks", "alpha_done_once", "conversion_done_once"]
+        # reset click counter and first-use flags (keyed by their actual stored names)
+        _progress_keys = [k for k in self._DEFAULTS if k in (
+            "total_clicks", "conversion_done_once",
+        )]
+        # alpha_fix_done_once is stored but not in _DEFAULTS; reset to False explicitly
         for key in _unlock_keys + _progress_keys:
             self._qs.setValue(key, self._DEFAULTS[key])
+        self._qs.setValue("alpha_fix_done_once", False)
         self._qs.sync()
 
     # ------------------------------------------------------------------

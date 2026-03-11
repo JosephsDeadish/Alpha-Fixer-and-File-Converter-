@@ -226,8 +226,35 @@ class SettingsDialog(QDialog):
         effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
         self._effect_combo.setMinimumWidth(220)
+        _EFFECT_TIPS = {
+            "default":      "Pink sparks burst from click point. Light and fast.",
+            "gore":         "Blood splatter sprays outward. Dark and dramatic.",
+            "bat":          "Bats fly across the top of the window periodically.",
+            "rainbow":      "Unicorns and rainbow arcs fly from click point.",
+            "otter":        "Cute otter emojis burst and fall with gravity.",
+            "galaxy":       "Stars and cosmic dust scatter outward.",
+            "galaxy_otter": "Space otters emerge from a cosmic burst.",
+            "goth":         "Skulls and shadow sparks fall from click point.",
+            "neon":         "Electric lightning bolts crackle outward.",
+            "fire":         "Rising flame particles shoot upward from click.",
+            "ice":          "Snowflakes and frost crystals scatter outward.",
+            "sparkle":      "Glittering star crystals burst and fade.",
+            "panda":        "Cute panda emojis shower down from click point.",
+            "sakura":       "Cherry blossom petals drift down gracefully.",
+            "fairy":        "Glitter, magic wands, and fairies flutter across.",
+            "ocean":        "Bubbles rise and sea creatures pop from click.",
+            "ripple":       "Water droplets and wave rings spread from click.",
+            "mermaid":      "Magical sea creatures and sparkles float up.",
+            "shark":        "Shark bites with blood splatter effects.",
+            "alien":        "UFO abduction beams and alien emojis burst out.",
+            "custom":       "Use your own emoji (set in 'Custom Emoji' below).",
+        }
         for key, label in _EFFECT_OPTIONS:
             self._effect_combo.addItem(label, userData=key)
+            idx = self._effect_combo.count() - 1
+            tip = _EFFECT_TIPS.get(key, "")
+            if tip:
+                self._effect_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._effect_combo.setToolTip(
             "Choose the click particle effect for this theme.\n"
             "Select 'Custom' to use your own emoji as particles."
@@ -274,14 +301,18 @@ class SettingsDialog(QDialog):
         trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
         trail_gl.addWidget(QLabel("Trail Style:"), 2, 0)
         self._trail_style_combo = QComboBox()
-        self._trail_style_combo.addItems([
-            "Dots (default)",
-            "Ribbon / Noodle",
-            "Comet tail",
-            "Fairy dust ✨",
-            "Wave / Ocean 🌊",
-            "Sparkle / Ice ❄",
-        ])
+        _TRAIL_STYLE_OPTIONS = [
+            ("Dots (default)",    "Dots  – Small colored dots fade out behind the cursor."),
+            ("Ribbon / Noodle",   "Ribbon  – Smooth connected line trails the cursor like a ribbon or noodle."),
+            ("Comet tail",        "Comet tail  – Tapered bright streak that fades to nothing behind the cursor."),
+            ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
+            ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
+            ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
+        ]
+        for label, tip in _TRAIL_STYLE_OPTIONS:
+            self._trail_style_combo.addItem(label)
+            idx = self._trail_style_combo.count() - 1
+            self._trail_style_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._trail_style_combo.setToolTip(
             "Choose the visual style of the mouse trail.\n"
             "Ribbon draws a connected smooth line, Comet draws a tapered tail,\n"
@@ -730,6 +761,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._click_sound_edit, "sound_path")
         mgr.register(self._btn_sound_browse, "sound_browse")
         mgr.register(self._btn_reset, "reset_all_settings")
+        mgr.register(self._btn_reset_unlocks, "reset_unlocks_btn")
         # Settings dialog own tab bar (Theme / General tabs)
         mgr.register_tab_bar(
             self._settings_tabs.tabBar(),
@@ -967,7 +999,10 @@ class SettingsDialog(QDialog):
         self._settings.reset_unlocks_only()
         self.settings_changed.emit()
         # Rebuild the theme combo so locked hidden themes are removed
-        self._rebuild_theme_combo(select=self._theme_preset_combo.currentText())
+        self._rebuild_theme_combo(
+            select=self._theme_preset_combo.currentText(),
+            filter_text=self._current_filter_text(),
+        )
         QMessageBox.information(
             self,
             "Unlocks Reset",

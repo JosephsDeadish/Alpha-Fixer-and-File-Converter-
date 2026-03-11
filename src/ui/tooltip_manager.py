@@ -532,6 +532,13 @@ _NORMAL: dict[str, list[str]] = {
         "Processed files on disk are NOT affected — only the app configuration.",
         "Useful for a clean slate when testing or after a config gets corrupted.",
     ],
+    "reset_unlocks_btn": [
+        "Reset ONLY the hidden-theme unlock flags and click counter to zero.",
+        "Preserves all your other settings — theme, sound, trail, cursor, etc.",
+        "Use this to re-test easter eggs and hidden theme unlock events.",
+        "After reset, start clicking or processing files to re-unlock themes.",
+        "Does not erase history, custom themes, or any other preference.",
+    ],
     "mode_combo": [
         "Choose how the alpha value is applied to each pixel.",
         "'set' replaces every pixel's alpha with the exact value specified.",
@@ -1159,6 +1166,13 @@ _DUMBED: dict[str, list[str]] = {
         "Useful for when you break everything and just want to start over.",
         "Doesn't delete files on disk. Just resets the app config. Not THAT destructive.",
     ],
+    "reset_unlocks_btn": [
+        "Resets just the unlock flags. Won't nuke your theme or sound or anything fun. Calm down.",
+        "For when you want to redo the easter egg hunt without losing your perfect setup.",
+        "Unlock counter goes to zero. Click stuff again. Discover stuff again. Groundhog Day.",
+        "Keeps your colours, sounds, and presets. Just forgets which themes you already unlocked.",
+        "Useful for re-testing hidden theme unlocks without torching everything else.",
+    ],
     "mode_combo": [
         "Pick how the alpha gets applied. 'set' is probably the one you want.",
         "Alpha mode. It changes how alpha is calculated. Science!",
@@ -1744,6 +1758,13 @@ _VULGAR: dict[str, list[str]] = {
         "It asks for confirmation. Twice in your head should be enough. Or maybe just once.",
         "It does NOT delete files on disk. Just the app config. Calm down.",
         "After reset: default theme, default sounds, no presets, no custom themes. Clean slate.",
+    ],
+    "reset_unlocks_btn": [
+        "Only resets the unlock shit. Your theme, sounds, and setup stay the hell alone.",
+        "Re-test those easter egg unlocks without blowing up your whole damn config.",
+        "Zero out the click counter and re-earn those hidden themes. You know you want to.",
+        "Keeps all your preferences intact. Just clears the 'what I've unlocked' scorecard.",
+        "For when you want to re-do the unlock journey without starting from absolute scratch.",
     ],
     "mode_combo": [
         "'set' replaces all alpha values with your number. Use this one first, genius.",
