@@ -5,7 +5,7 @@ Alpha Fixer & File Converter – Entry Point.
 Includes:
   • Pre-flight system-library check (libEGL, libGL) with clear install instructions
   • Global exception handling so uncaught errors show a dialog instead of crashing
-  • Crash logging with automatic rotation
+  • Crash logging with timestamped log files (logs stored next to the exe/main.py)
   • Qt environment flags for compatibility on both good and bad hardware
 """
 import sys
@@ -20,8 +20,26 @@ from pathlib import Path
 # Logging configuration  (done early so even pre-Qt errors are logged)
 # ---------------------------------------------------------------------------
 
-LOG_DIR = Path.home() / ".alpha_fixer_converter" / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+def _log_dir() -> Path:
+    """Return the directory for log files.
+
+    Priority:
+    1. Next to the frozen executable (PyInstaller .exe)  →  <exe_dir>/logs/
+    2. Next to main.py when running from source          →  <project_root>/logs/
+
+    This keeps logs alongside the settings INI file so everything the app
+    writes is in one easy-to-find place next to the executable.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).parent
+    else:
+        base = Path(__file__).parent
+    d = base / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+LOG_DIR = _log_dir()
 
 log_file = LOG_DIR / f"app_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 

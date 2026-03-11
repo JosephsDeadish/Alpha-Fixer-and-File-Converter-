@@ -34,6 +34,75 @@ SUPPORTED_OUTPUT_FORMATS = {
 # Display list for UI combos (name → extension), alphabetical
 OUTPUT_FORMAT_LIST = sorted(SUPPORTED_OUTPUT_FORMATS.items())
 
+# Human-readable descriptions for each output format, shown as combo tooltips
+FORMAT_DESCRIPTIONS = {
+    "AVIF": (
+        "AV1 Image File Format — modern, high-quality lossy/lossless compression.\n"
+        "Excellent for photos and game textures. Requires Pillow ≥ 9.4 + libavif.\n"
+        "Supports alpha channel. Good browser support (Chrome, Firefox, Safari)."
+    ),
+    "BMP": (
+        "Windows Bitmap — uncompressed raster format.\n"
+        "Large file size but lossless and universally supported.\n"
+        "No alpha channel support. Best for simple compatibility."
+    ),
+    "DDS": (
+        "DirectDraw Surface — GPU-native texture format.\n"
+        "Used by DirectX games and engines (Unreal, Unity, etc.).\n"
+        "Supports DXT/BC compressed formats. Required for many game modding workflows."
+    ),
+    "GIF": (
+        "Graphics Interchange Format — 256-colour indexed format with animation.\n"
+        "Limited palette makes it unsuitable for photos or detailed textures.\n"
+        "Supports 1-bit transparency only. Best for simple icons or animations."
+    ),
+    "ICO": (
+        "Windows Icon format — multi-size icon bundle.\n"
+        "Used for application icons, desktop shortcuts, and taskbar icons.\n"
+        "Supports multiple resolutions in a single file (16×16 to 256×256)."
+    ),
+    "JPEG": (
+        "Joint Photographic Experts Group — lossy compression for photos.\n"
+        "No alpha channel support; transparent pixels are composited onto white.\n"
+        "Quality 85–95 gives a good size/quality balance for photos."
+    ),
+    "PCX": (
+        "PC Paintbrush format — old lossless format from the DOS era.\n"
+        "Limited support in modern software. Use PNG or BMP instead where possible.\n"
+        "Still encountered in some legacy game assets and old CAD workflows."
+    ),
+    "PNG": (
+        "Portable Network Graphics — lossless compression with full alpha channel.\n"
+        "The best choice for game textures, UI assets, and any image with transparency.\n"
+        "Larger than JPEG for photos but preserves every pixel perfectly."
+    ),
+    "PPM": (
+        "Portable Pixmap — simple, uncompressed text or binary RGB format.\n"
+        "Very large files with no compression. Supported by most graphics tools.\n"
+        "No alpha channel. Mostly used in scientific and batch-pipeline workflows."
+    ),
+    "QOI": (
+        "Quite OK Image Format — fast lossless compression with alpha support.\n"
+        "Encodes and decodes very quickly compared to PNG. Game-engine friendly.\n"
+        "Smaller than BMP, similar quality to PNG. Growing tool support."
+    ),
+    "TGA": (
+        "Truevision TGA — lossless format with optional alpha channel.\n"
+        "Widely used in 3D modelling and older game engines (Source, Quake, etc.).\n"
+        "Supports 32-bit RGBA. Simple format with broad tool support."
+    ),
+    "TIFF": (
+        "Tagged Image File Format — flexible lossless/compressed format.\n"
+        "Used in professional print, photography, and scientific imaging.\n"
+        "Supports alpha, multiple layers, and various colour depths."
+    ),
+    "WEBP": (
+        "Google WebP — modern lossy/lossless format for the web.\n"
+        "Supports alpha channel. Smaller than PNG at similar quality.\n"
+        "Best for web assets, UI images, and web-delivered game textures."
+    ),
+}
+
 # Formats whose save() accepts a quality parameter
 _QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif"}
 

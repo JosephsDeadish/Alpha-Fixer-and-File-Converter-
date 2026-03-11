@@ -2,8 +2,12 @@
 Alpha Fixer tab widget.
 """
 import datetime
+import logging
 import os
+import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
@@ -44,14 +48,17 @@ class _AlphaPreviewLoader(QThread):
 
     @staticmethod
     def _alpha_stats(img) -> dict:
-        """Return min/max/mean alpha for a PIL RGBA image."""
+        """Return min/max/mean/percent_nonzero alpha for a PIL RGBA image."""
         import numpy as np
         arr = np.array(img.convert("RGBA"), dtype=np.uint8)
         alpha = arr[:, :, 3]
+        total_pixels = alpha.size
+        nonzero = int(np.count_nonzero(alpha))
         return {
             "min": int(alpha.min()),
             "max": int(alpha.max()),
             "mean": float(alpha.mean()),
+            "percent_nonzero": round(nonzero / max(total_pixels, 1) * 100, 1),
         }
 
     def run(self):
@@ -80,6 +87,7 @@ class _AlphaPreviewLoader(QThread):
                     clamp_min=self._manual.get("clamp_min", 0),
                     clamp_max=self._manual.get("clamp_max", 255),
                     binary_cut=self._manual.get("binary_cut", False),
+                    mode=self._manual.get("mode", "set"),
                 )
             else:
                 processed = orig
@@ -109,11 +117,30 @@ class _AlphaPreviewLoader(QThread):
 # ---------------------------------------------------------------------------
 
 class AlphaFixerTab(QWidget):
+    """Tab widget for batch alpha-channel processing."""
+
+    # Maximum number of paths passed to ROM detection (keeps scan fast for
+    # very large file imports — the first few paths usually have enough
+    # context to identify the console).
+    _ROM_SCAN_LIMIT = 50
+
+    # Emitted after every successful batch: carries the count of files processed.
+    # MainWindow connects this to check for processing-based theme unlocks.
+    processing_done = pyqtSignal(int)
+    # Emitted the very first time a batch completes successfully.
+    # MainWindow uses this to trigger the 'first alpha fix' theme unlock.
+    first_alpha_fix = pyqtSignal()
+    # Emitted whenever at least one file is added to the queue.
+    files_added = pyqtSignal()
+
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
         self._presets = preset_manager
         self._settings = settings_manager
         self._worker = None
+        # ETA tracking for large batch runs
+        self._batch_start_time: float = 0.0
+        self._batch_total: int = 0
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
@@ -233,9 +260,16 @@ class AlphaFixerTab(QWidget):
         self._file_count_lbl.setObjectName("subheader")
         la_layout.addWidget(self._file_count_lbl)
 
+        # ROM / game folder detection banner (hidden when no game is detected)
+        self._rom_banner = QLabel()
+        self._rom_banner.setObjectName("rom_banner")
+        self._rom_banner.setWordWrap(True)
+        self._rom_banner.hide()
+        la_layout.addWidget(self._rom_banner)
+
         left_vsplit.addWidget(list_area)
 
-        # Bottom: before/after compare widget
+        # Bottom: before/after compare widget with side alpha-stat panels
         compare_area = QWidget()
         ca_layout = QVBoxLayout(compare_area)
         ca_layout.setContentsMargins(0, 0, 0, 0)
@@ -246,36 +280,47 @@ class AlphaFixerTab(QWidget):
         compare_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ca_layout.addWidget(compare_lbl)
 
+        # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
+        compare_row = QHBoxLayout()
+        compare_row.setContentsMargins(0, 0, 0, 0)
+        compare_row.setSpacing(4)
+
+        def _make_stats_panel() -> QLabel:
+            """Return a small fixed-width label used for alpha statistics."""
+            lbl = QLabel()
+            lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            lbl.setFixedWidth(84)
+            lbl.setWordWrap(True)
+            lbl.setObjectName("stats_panel")
+            lbl.setContentsMargins(2, 4, 2, 4)
+            return lbl
+
+        self._before_stats_lbl = _make_stats_panel()
+        self._after_stats_lbl = _make_stats_panel()
+
         self._compare = BeforeAfterWidget()
-        self._compare.setMinimumHeight(200)
-        ca_layout.addWidget(self._compare, 1)
+        self._compare.setMinimumHeight(240)
 
-        # Alpha stats: before on the left, after on the right (side-by-side)
-        stats_row = QHBoxLayout()
-        stats_row.setContentsMargins(0, 2, 0, 0)
-        stats_row.setSpacing(4)
-
-        self._before_stats_lbl = QLabel("BEFORE\n—")
-        self._before_stats_lbl.setObjectName("subheader")
-        self._before_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self._before_stats_lbl.setWordWrap(True)
-        self._before_stats_lbl.setToolTip("Alpha channel statistics for the original (before) image")
-
-        self._after_stats_lbl = QLabel("AFTER\n—")
-        self._after_stats_lbl.setObjectName("subheader")
-        self._after_stats_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._after_stats_lbl.setWordWrap(True)
-        self._after_stats_lbl.setToolTip("Alpha channel statistics for the processed (after) image")
-
-        stats_row.addWidget(self._before_stats_lbl, 1)
-        stats_row.addWidget(self._after_stats_lbl, 1)
-        ca_layout.addLayout(stats_row)
+        compare_row.addWidget(self._before_stats_lbl, 0)
+        compare_row.addWidget(self._compare, 1)
+        compare_row.addWidget(self._after_stats_lbl, 0)
+        ca_layout.addLayout(compare_row, 1)
 
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([260, 360])
+        left_vsplit.setSizes([220, 420])
 
         lv.addWidget(left_vsplit, 1)
-        outer_splitter.addWidget(left)
+
+        # Wrap the left panel in a scroll area (mirrors the right panel) so that
+        # users can scroll vertically on smaller windows, giving the compare
+        # widget room to be as large as possible.
+        left.setMinimumHeight(580)   # below this height, scrollbar appears
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        left_scroll.setMinimumWidth(320)
+        outer_splitter.addWidget(left_scroll)
 
         # ==============================================================
         # Right panel: run controls (top) + presets + fine-tune
@@ -355,24 +400,52 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(self._apply_alpha_check, 0, 0, 1, 2)
 
-        lbl_alpha_val = QLabel("Set alpha to (0–255):")
+        lbl_mode = QLabel("Apply mode:")
+        lbl_mode.setMinimumHeight(24)
+        gt_layout.addWidget(lbl_mode, 1, 0)
+        self._mode_combo = QComboBox()
+        _MODE_OPTIONS = [
+            ("set",      "set — replace each pixel's alpha with the value below"),
+            ("multiply", "multiply — scale: new = old × (value ÷ 255)"),
+            ("add",      "add — shift: new = old + value  (max 255)"),
+            ("subtract", "subtract — shift: new = old − value  (min 0)"),
+        ]
+        _MODE_TIPS = {
+            "set":      "Replace every pixel's alpha with the exact value you set below. The most common mode.",
+            "multiply": "Scale existing alpha. new = old × (value ÷ 255). Value=128 gives 50% of original. Classic PS2 fix.",
+            "add":      "Add the value to each pixel's existing alpha, clamped at 255. Brightens transparency.",
+            "subtract": "Subtract the value from each pixel's existing alpha, clamped at 0. Deepens transparency.",
+        }
+        for key, label in _MODE_OPTIONS:
+            self._mode_combo.addItem(label, userData=key)
+            idx = self._mode_combo.count() - 1
+            self._mode_combo.setItemData(idx, _MODE_TIPS[key], Qt.ItemDataRole.ToolTipRole)
+        self._mode_combo.setToolTip(
+            "How the alpha value below is applied to each pixel.\n"
+            "'set' replaces alpha; 'multiply' scales it; 'add'/'subtract' shift it."
+        )
+        self._mode_combo.setMinimumHeight(26)
+        gt_layout.addWidget(self._mode_combo, 1, 1)
+
+        lbl_alpha_val = QLabel("Alpha value (0–255):")
         lbl_alpha_val.setMinimumHeight(24)
         lbl_alpha_val.setToolTip(
-            "Target alpha value applied to all pixels (or to pixels below the threshold).\n"
-            "0 = fully transparent · 255 = fully opaque\n"
+            "Value used by the apply mode above.\n"
+            "set: target alpha for all pixels.  multiply: factor (255 = no change).\n"
+            "add/subtract: amount to shift each pixel's alpha.\n"
             "Only active when 'Apply fixed alpha value' is checked."
         )
-        gt_layout.addWidget(lbl_alpha_val, 1, 0)
+        gt_layout.addWidget(lbl_alpha_val, 2, 0)
         self._alpha_spin = QSpinBox()
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(255)
         self._alpha_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._alpha_spin, 1, 1)
+        gt_layout.addWidget(self._alpha_spin, 2, 1)
 
         self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
         self._alpha_slider.setRange(0, 255)
         self._alpha_slider.setValue(255)
-        gt_layout.addWidget(self._alpha_slider, 2, 0, 1, 2)
+        gt_layout.addWidget(self._alpha_slider, 3, 0, 1, 2)
 
         lbl_thresh = QLabel("Threshold (0 = all pixels):")
         lbl_thresh.setMinimumHeight(24)
@@ -380,16 +453,16 @@ class AlphaFixerTab(QWidget):
             "Only pixels with alpha BELOW this value are affected by the 'Set alpha to' value.\n"
             "0 means every pixel is affected regardless of its current alpha."
         )
-        gt_layout.addWidget(lbl_thresh, 3, 0)
+        gt_layout.addWidget(lbl_thresh, 4, 0)
         self._threshold_spin = QSpinBox()
         self._threshold_spin.setRange(0, 255)
         self._threshold_spin.setValue(0)
         self._threshold_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._threshold_spin, 3, 1)
+        gt_layout.addWidget(self._threshold_spin, 4, 1)
 
         lbl_cmin = QLabel("Clamp Min (floor, 0–255):")
         lbl_cmin.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_cmin, 4, 0)
+        gt_layout.addWidget(lbl_cmin, 5, 0)
         self._clamp_min_spin = QSpinBox()
         self._clamp_min_spin.setRange(0, 255)
         self._clamp_min_spin.setValue(0)
@@ -398,11 +471,11 @@ class AlphaFixerTab(QWidget):
             "Output floor: any pixel alpha below this value is raised to this value.\n"
             "0 = no floor (default). Applied after any fixed alpha value is set."
         )
-        gt_layout.addWidget(self._clamp_min_spin, 4, 1)
+        gt_layout.addWidget(self._clamp_min_spin, 5, 1)
 
         lbl_cmax = QLabel("Clamp Max (ceiling, 0–255):")
         lbl_cmax.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_cmax, 5, 0)
+        gt_layout.addWidget(lbl_cmax, 6, 0)
         self._clamp_max_spin = QSpinBox()
         self._clamp_max_spin.setRange(0, 255)
         self._clamp_max_spin.setValue(255)
@@ -412,10 +485,10 @@ class AlphaFixerTab(QWidget):
             "255 = no ceiling (default). Applied after any fixed alpha value is set.\n"
             "Example: set max=128 to replicate PS2's 0–128 alpha range."
         )
-        gt_layout.addWidget(self._clamp_max_spin, 5, 1)
+        gt_layout.addWidget(self._clamp_max_spin, 6, 1)
 
         self._invert_check = QCheckBox("Invert Alpha")
-        gt_layout.addWidget(self._invert_check, 6, 0, 1, 2)
+        gt_layout.addWidget(self._invert_check, 7, 0, 1, 2)
 
         self._binary_cut_check = QCheckBox("Binary cut (\u2265 threshold \u2192 255, else \u2192 0)")
         self._binary_cut_check.setToolTip(
@@ -425,11 +498,11 @@ class AlphaFixerTab(QWidget):
             "This overrides the 'Set alpha to' value for a strict cutout mask.\n"
             "Used by N64 1-bit alpha textures and similar hard-edge formats."
         )
-        gt_layout.addWidget(self._binary_cut_check, 7, 0, 1, 2)
+        gt_layout.addWidget(self._binary_cut_check, 8, 0, 1, 2)
 
         self._use_preset_check = QCheckBox("Use preset (ignore fine-tune)")
         self._use_preset_check.setChecked(True)
-        gt_layout.addWidget(self._use_preset_check, 8, 0, 1, 2)
+        gt_layout.addWidget(self._use_preset_check, 9, 0, 1, 2)
 
         # Live "Current Params" display — updates whenever any fine-tune control changes.
         # Populated by _refresh_finetune_label() at the end of _setup_ui.
@@ -441,7 +514,7 @@ class AlphaFixerTab(QWidget):
             "Live summary of the current fine-tune parameters.\n"
             "Updates instantly as you change any control above."
         )
-        gt_layout.addWidget(self._finetune_params_lbl, 9, 0, 1, 2)
+        gt_layout.addWidget(self._finetune_params_lbl, 10, 0, 1, 2)
 
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
@@ -546,6 +619,7 @@ class AlphaFixerTab(QWidget):
         self._invert_check.toggled.connect(self._on_finetune_changed)
         self._binary_cut_check.toggled.connect(self._on_finetune_changed)
         self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
+        self._mode_combo.currentIndexChanged.connect(self._on_finetune_changed)
         self._use_preset_check.toggled.connect(self._update_compare)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
         self._green_spin.valueChanged.connect(self._on_finetune_changed)
@@ -577,6 +651,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._btn_delete_preset, "delete_preset")
         mgr.register(self._alpha_slider, "alpha_slider")
         mgr.register(self._alpha_spin, "alpha_spin")
+        mgr.register(self._mode_combo, "mode_combo")
         mgr.register(self._threshold_spin, "threshold_spin")
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
         mgr.register(self._clamp_max_spin, "clamp_max_spin")
@@ -594,6 +669,13 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._blue_spin, "blue_spin")
         mgr.register(self._alpha_delta_spin, "alpha_delta_spin")
         mgr.register(self._apply_rgb_check, "apply_rgb_check")
+        mgr.register(self._before_stats_lbl, "before_stats_panel")
+        mgr.register(self._after_stats_lbl, "after_stats_panel")
+        mgr.register(self._rom_banner, "rom_banner")
+        mgr.register(self._file_count_lbl, "alpha_file_count_lbl")
+        mgr.register(self._log, "processing_log")
+        mgr.register(self._progress, "processing_progress")
+        mgr.register(self._status_lbl, "alpha_status_lbl")
 
     def update_theme(self, theme_name: str) -> None:
         """Update the inner header label to match the active theme's tab emoji."""
@@ -610,8 +692,13 @@ class AlphaFixerTab(QWidget):
         self._preset_combo.blockSignals(True)
         current = self._preset_combo.currentText()
         self._preset_combo.clear()
-        for p in self._presets.all_presets():
+        for i, p in enumerate(self._presets.all_presets()):
             self._preset_combo.addItem(p.name)
+            # Show the preset description as a hover tooltip on each item
+            if p.description:
+                self._preset_combo.setItemData(
+                    i, p.description, Qt.ItemDataRole.ToolTipRole
+                )
 
         last = self._settings.get("last_alpha_preset", "")
         target = last if last else current
@@ -743,6 +830,11 @@ class AlphaFixerTab(QWidget):
         # Auto-select the first item so the preview pane shows immediately
         if was_empty and self._file_list.count() > 0:
             self._file_list.setCurrentRow(0)
+        # Notify main window so it can play the file-add sound
+        if paths:
+            self.files_added.emit()
+        # Trigger game/ROM folder detection for the added paths
+        self._detect_rom(paths)
 
     @pyqtSlot(int)
     def _update_file_count(self, n: int):
@@ -759,6 +851,49 @@ class AlphaFixerTab(QWidget):
         else:
             self._preview_path = None
             self._compare.clear()
+            self._before_stats_lbl.setText("")
+            self._after_stats_lbl.setText("")
+
+    # ------------------------------------------------------------------
+    # ROM / game folder detection
+    # ------------------------------------------------------------------
+
+    def _detect_rom(self, paths: list[str]) -> None:
+        """Run ROM detection on *paths* and update the banner (non-blocking)."""
+        if not paths:
+            return
+        try:
+            from ..core.rom_detector import detect_from_paths
+        except ImportError:
+            return
+
+        # Run in the Qt event loop after a short delay so the UI stays
+        # responsive during large file imports
+        QTimer.singleShot(200, lambda: self._run_rom_detection(paths))
+
+    def _run_rom_detection(self, paths: list[str]) -> None:
+        try:
+            from ..core.rom_detector import detect_from_paths
+            # Limit the scan for performance when users drop thousands of files.
+            # _ROM_SCAN_LIMIT paths are enough to fingerprint any single-game
+            # folder while keeping the detection latency below ~50 ms.
+            if len(paths) > self._ROM_SCAN_LIMIT:
+                logger.debug(
+                    "ROM detection limited to first %d of %d paths for performance",
+                    self._ROM_SCAN_LIMIT, len(paths),
+                )
+            scan_paths = paths[:self._ROM_SCAN_LIMIT]
+            result = detect_from_paths(scan_paths)
+            if result.detected:
+                text = result.description()
+                if result.cover_art_hint:
+                    text += f"  🖼 Cover: {result.cover_art_hint}"
+                self._rom_banner.setText(text)
+                self._rom_banner.show()
+            else:
+                self._rom_banner.hide()
+        except Exception:
+            self._rom_banner.hide()
 
     def _refresh_finetune_label(self) -> None:
         """Update the live fine-tune params summary label."""
@@ -767,7 +902,8 @@ class AlphaFixerTab(QWidget):
         thresh = self._threshold_spin.value()
         parts  = []
         if self._apply_alpha_check.isChecked():
-            parts.append(f"set={self._alpha_spin.value()}")
+            mode = self._mode_combo.currentData() or "set"
+            parts.append(f"{mode}={self._alpha_spin.value()}")
         else:
             parts.append("clamp only")
         if cmin > 0 or cmax < 255:
@@ -785,6 +921,7 @@ class AlphaFixerTab(QWidget):
         """Enable/disable alpha value controls based on the 'Apply fixed alpha value' checkbox."""
         self._alpha_spin.setEnabled(checked)
         self._alpha_slider.setEnabled(checked)
+        self._mode_combo.setEnabled(checked)
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
@@ -858,6 +995,7 @@ class AlphaFixerTab(QWidget):
         else:
             manual = {
                 "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
+                "mode": self._mode_combo.currentData() or "set",
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
@@ -902,14 +1040,29 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
-        def _fmt(s: dict) -> str:
-            return f"min={s['min']}  max={s['max']}  mean={s['mean']:.1f}"
-        self._before_stats_lbl.setText(f"BEFORE\n{_fmt(before)}")
-        self._after_stats_lbl.setText(f"AFTER\n{_fmt(after)}")
+        self._compare.set_stats(before, after)
+        # Update the side stat panels with formatted channel values
+        def _panel_text(label: str, s: dict) -> str:
+            if not s:
+                return ""
+            pct = s.get("percent_nonzero", None)
+            pct_line = f"vis%<br><b>{pct}%</b><br>" if pct is not None else ""
+            return (
+                f"<b>{label}</b><br>"
+                f"min<br><b>{s['min']}</b><br>"
+                f"max<br><b>{s['max']}</b><br>"
+                f"mean<br><b>{s['mean']:.1f}</b><br>"
+                f"{pct_line}"
+            )
+        self._before_stats_lbl.setText(_panel_text("BEFORE", before))
+        self._after_stats_lbl.setText(_panel_text("AFTER", after))
+
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):
         self._compare.clear()
+        self._before_stats_lbl.setText("")
+        self._after_stats_lbl.setText("")
         self._log_msg(f"⚠ Preview failed: {err.splitlines()[0]}")
 
     # ------------------------------------------------------------------
@@ -946,6 +1099,7 @@ class AlphaFixerTab(QWidget):
         else:
             manual = {
                 "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
+                "mode": self._mode_combo.currentData() or "set",
                 "threshold": self._threshold_spin.value(),
                 "invert": self._invert_check.isChecked(),
                 "clamp_min": self._clamp_min_spin.value(),
@@ -987,6 +1141,8 @@ class AlphaFixerTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Processing…")
+        self._batch_start_time = time.monotonic()
+        self._batch_total = len(expanded)
 
         self._worker = AlphaWorker(
             files=expanded,
@@ -1012,9 +1168,14 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int, int, str)
     def _on_progress(self, current: int, total: int, path: str):
+        from ._ui_utils import format_eta
         pct = int(current / max(total, 1) * 100)
         self._progress.setValue(pct)
-        self._status_lbl.setText(f"Processing {current + 1}/{total}: {Path(path).name}")
+        elapsed = time.monotonic() - self._batch_start_time
+        eta_str = format_eta(current, total, elapsed)
+        self._status_lbl.setText(
+            f"Processing {current + 1}/{total}: {Path(path).name}{eta_str}"
+        )
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):
@@ -1043,6 +1204,13 @@ class AlphaFixerTab(QWidget):
             "files": [Path(f).name for f in getattr(self, "_last_run_files", [])[:10]],
         }
         self._settings.add_alpha_history(entry)
+        # Notify main window so processing-based theme unlocks can fire
+        if success > 0:
+            self.processing_done.emit(success)
+            # Emit first_alpha_fix signal the very first time processing succeeds
+            if not self._settings.get("alpha_fix_done_once", False):
+                self._settings.set("alpha_fix_done_once", True)
+                self.first_alpha_fix.emit()
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

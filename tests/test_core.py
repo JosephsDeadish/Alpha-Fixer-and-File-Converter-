@@ -190,6 +190,78 @@ class TestAlphaProcessor(unittest.TestCase):
         # 200 clamped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
+    def test_manual_alpha_mode_multiply(self):
+        """multiply mode: new = old × (value / 255), using floor division to avoid float rounding."""
+        img = make_rgba_image(alpha=200)
+        # value=128 → 200 * 128 // 255 = 100 (floor division matches implementation)
+        result = apply_manual_alpha(img, value=128, mode="multiply")
+        arr = np.array(result)
+        expected = 200 * 128 // 255  # floor division mirrors the implementation
+        self.assertTrue(np.all(arr[:, :, 3] == expected),
+                        f"Expected {expected}, got {arr[0, 0, 3]}")
+
+    def test_manual_alpha_mode_multiply_255_no_change(self):
+        """multiply mode with value=255 should not change alpha."""
+        img = make_rgba_image(alpha=200)
+        result = apply_manual_alpha(img, value=255, mode="multiply")
+        arr = np.array(result)
+        expected = 200 * 255 // 255
+        self.assertTrue(np.all(arr[:, :, 3] == expected))
+
+    def test_manual_alpha_mode_add(self):
+        """add mode: new = old + value, clamped at 255."""
+        img = make_rgba_image(alpha=100)
+        result = apply_manual_alpha(img, value=50, mode="add")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 150))
+
+    def test_manual_alpha_mode_add_clamps_at_255(self):
+        """add mode should clamp result at 255."""
+        img = make_rgba_image(alpha=200)
+        result = apply_manual_alpha(img, value=100, mode="add")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 255))
+
+    def test_manual_alpha_mode_subtract(self):
+        """subtract mode: new = old - value, clamped at 0."""
+        img = make_rgba_image(alpha=150)
+        result = apply_manual_alpha(img, value=50, mode="subtract")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
+
+    def test_manual_alpha_mode_subtract_clamps_at_0(self):
+        """subtract mode should clamp result at 0."""
+        img = make_rgba_image(alpha=30)
+        result = apply_manual_alpha(img, value=100, mode="subtract")
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 0))
+
+    def test_manual_alpha_mode_set_default(self):
+        """Default mode is 'set' (backward-compatible)."""
+        img = make_rgba_image(alpha=100)
+        result = apply_manual_alpha(img, value=200)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 200))
+
+    def test_manual_alpha_mode_multiply_with_threshold(self):
+        """multiply mode respects threshold: only pixels below threshold are affected."""
+        # Create an image with two different alpha values
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:2, :, :3] = 200  # grey
+        arr[2:, :, :3] = 200
+        arr[:2, :, 3] = 50   # below threshold=100 → will be multiplied
+        arr[2:, :, 3] = 150  # above threshold=100 → unchanged
+        from PIL import Image as _Image
+        img = _Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=128, threshold=100, mode="multiply")
+        out = np.array(result)
+        # pixels with old alpha 50 (< 100): 50 * 128 // 255 = 25
+        self.assertTrue(np.all(out[:2, :, 3] == 50 * 128 // 255),
+                        f"Below-threshold pixels should be multiplied, got {out[0, 0, 3]}")
+        # pixels with old alpha 150 (>= 100): unchanged
+        self.assertTrue(np.all(out[2:, :, 3] == 150),
+                        f"Above-threshold pixels should be unchanged, got {out[2, 0, 3]}")
+
     def test_clamp_min_preset(self):
         """Clamp-only preset with alpha_value=None should only clamp."""
         img = make_rgba_image(alpha=50)
@@ -482,8 +554,8 @@ class TestThemeEngineBannerFrames(unittest.TestCase):
 
     def test_hidden_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.HIDDEN_THEMES), 22,
-                         f"Expected 22 hidden themes, got {len(te.HIDDEN_THEMES)}")
+        self.assertEqual(len(te.HIDDEN_THEMES), 32,
+                         f"Expected 32 hidden themes, got {len(te.HIDDEN_THEMES)}")
 
     def test_new_preset_svgs_exist(self):
         """Mermaid, Shark Bait, and Alien should have dedicated SVG files."""
@@ -685,6 +757,94 @@ class TestSettingsManagerDefaults(unittest.TestCase):
                 pattern, source,
                 f"settings_dialog.py uses True as fallback for '{pattern}' – must be False",
             )
+
+    def test_reset_unlocks_only_method_exists(self):
+        """SettingsManager must have a reset_unlocks_only method."""
+        settings_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "core", "settings_manager.py"
+        )
+        with open(settings_path) as f:
+            source = f.read()
+        self.assertIn("def reset_unlocks_only", source,
+                      "settings_manager.py must define reset_unlocks_only()")
+
+    def test_reset_unlocks_only_does_not_use_qs_clear(self):
+        """reset_unlocks_only must NOT call _qs.clear() which would wipe all settings."""
+        settings_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "core", "settings_manager.py"
+        )
+        with open(settings_path) as f:
+            source = f.read()
+        method_start = source.find("def reset_unlocks_only")
+        method_body = source[method_start:method_start + 600]
+        self.assertNotIn("self._qs.clear()", method_body,
+                         "reset_unlocks_only must NOT call _qs.clear() – that wipes all settings")
+        # Verify it handles unlock_ keys and total_clicks
+        self.assertIn("unlock_", method_body,
+                      "reset_unlocks_only should reference unlock_ keys")
+        self.assertIn("total_clicks", method_body,
+                      "reset_unlocks_only should reset total_clicks")
+
+    def test_reset_unlocks_only_functional(self):
+        """reset_unlocks_only resets unlock flags but preserves other settings."""
+        try:
+            from PyQt6.QtCore import QSettings  # noqa: F401
+        except (ImportError, OSError):
+            raise unittest.SkipTest("PyQt6 not available — skipping functional test")
+        import tempfile
+        from unittest.mock import patch
+        tf = tempfile.NamedTemporaryFile(suffix=".ini", delete=False)
+        tf.close()
+        try:
+            with patch("src.core.settings_manager._settings_ini_path", return_value=tf.name):
+                from src.core.settings_manager import SettingsManager
+                sm = SettingsManager()
+                sm.set("unlock_skeleton", True)
+                sm.set("total_clicks", 500)
+                sm.set("alpha_fix_done_once", True)
+                sm.set("conversion_done_once", True)
+                sm.set("theme", "Goth")
+                sm.set("sound_enabled", True)
+
+                sm.reset_unlocks_only()
+
+                self.assertFalse(sm.get("unlock_skeleton"),
+                                 "unlock_skeleton should be False after reset_unlocks_only")
+                self.assertEqual(sm.get("total_clicks"), 0,
+                                 "total_clicks should be 0 after reset_unlocks_only")
+                self.assertFalse(sm.get("alpha_fix_done_once", True),
+                                 "alpha_fix_done_once should be False after reset_unlocks_only")
+                self.assertFalse(sm.get("conversion_done_once"),
+                                 "conversion_done_once should be False after reset_unlocks_only")
+                self.assertEqual(sm.get("theme"), "Goth",
+                                 "theme should be preserved by reset_unlocks_only")
+                self.assertTrue(sm.get("sound_enabled"),
+                                "sound_enabled should be preserved by reset_unlocks_only")
+        finally:
+            os.unlink(tf.name)
+
+    def test_reset_unlocks_btn_registered_in_settings_dialog(self):
+        """settings_dialog.py must register _btn_reset_unlocks with the tooltip manager."""
+        dlg_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "settings_dialog.py"
+        )
+        with open(dlg_path) as f:
+            source = f.read()
+        self.assertIn("_btn_reset_unlocks", source,
+                      "settings_dialog.py must define _btn_reset_unlocks button")
+        self.assertIn('"reset_unlocks_btn"', source,
+                      "settings_dialog.py must register reset_unlocks_btn with tooltip manager")
+
+    def test_reset_unlocks_btn_tooltip_in_all_modes(self):
+        """tooltip_manager.py must have reset_unlocks_btn in all 3 tip modes."""
+        tm_path = os.path.join(
+            os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py"
+        )
+        with open(tm_path) as f:
+            source = f.read()
+        count = source.count('"reset_unlocks_btn"')
+        self.assertEqual(count, 3,
+                         f"reset_unlocks_btn must appear in all 3 tip dicts (_NORMAL, _DUMBED, _VULGAR); found {count}")
 
 
 # ---------------------------------------------------------------------------
@@ -1042,3 +1202,51 @@ class TestConverterMetadata(unittest.TestCase):
             self.assertEqual(result.mode, "RGBA")
             self.assertEqual(result.size, (4, 4))
 
+
+
+# ---------------------------------------------------------------------------
+# format_eta helper
+# ---------------------------------------------------------------------------
+
+class TestFormatEta(unittest.TestCase):
+    """Unit tests for src.ui._ui_utils.format_eta."""
+
+    def _fmt(self, current, total, elapsed, threshold=500):
+        from src.ui._ui_utils import format_eta
+        return format_eta(current, total, elapsed, threshold=threshold)
+
+    def test_returns_empty_below_threshold(self):
+        """Small batches should never show an ETA."""
+        result = self._fmt(current=100, total=499, elapsed=5.0)
+        self.assertEqual(result, "")
+
+    def test_returns_empty_when_current_is_zero(self):
+        result = self._fmt(current=0, total=1000, elapsed=5.0)
+        self.assertEqual(result, "")
+
+    def test_returns_empty_when_elapsed_too_short(self):
+        result = self._fmt(current=50, total=1000, elapsed=0.5)
+        self.assertEqual(result, "")
+
+    def test_seconds_format_below_one_minute(self):
+        # 500 items, 50 done in 5 s → rate=10/s, remaining=450, eta=45s
+        result = self._fmt(current=50, total=500, elapsed=5.0)
+        self.assertIn("ETA", result)
+        self.assertIn("s", result)
+        self.assertNotIn("m", result)
+
+    def test_minutes_format_above_one_minute(self):
+        # 1000 items, 100 done in 10 s → rate=10/s, remaining=900, eta=90s
+        result = self._fmt(current=100, total=1000, elapsed=10.0)
+        self.assertIn("ETA", result)
+        self.assertIn("m", result)
+
+    def test_custom_threshold_respected(self):
+        # threshold=10: 20 items should show ETA
+        result = self._fmt(current=5, total=20, elapsed=2.0, threshold=10)
+        self.assertIn("ETA", result)
+
+    def test_starts_with_two_spaces(self):
+        """ETA string must start with '  ' so it appends cleanly to status text."""
+        result = self._fmt(current=100, total=1000, elapsed=10.0)
+        self.assertTrue(result.startswith("  "), repr(result))

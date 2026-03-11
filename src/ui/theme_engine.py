@@ -1140,10 +1140,355 @@ HIDDEN_THEMES.update({
     "Nebula":            SECRET_NEBULA_THEME,
 })
 
+# ---------------------------------------------------------------------------
+# Even more hidden themes (unlocked at very high milestones 2000–10000)
+# ---------------------------------------------------------------------------
+
+SECRET_CRYSTAL_CAVE_THEME = {
+    "name": "Crystal Cave",
+    "background": "#060010",
+    "surface": "#0e0025",
+    "primary": "#16003a",
+    "accent": "#99aaff",
+    "text": "#dde0ff",
+    "text_secondary": "#6677bb",
+    "border": "#22005a",
+    "success": "#7788ff",
+    "warning": "#ffcc44",
+    "error": "#ff4466",
+    "tab_selected": "#99aaff",
+    "button_bg": "#16003a",
+    "button_hover": "#99aaff",
+    "panda_white": "#dde0ff",
+    "panda_black": "#060010",
+    "progress_bar": "#99aaff",
+    "input_bg": "#040008",
+    "scrollbar": "#0e0025",
+    "scrollbar_handle": "#99aaff",
+    "_effect": "sparkle",
+    "_cursor": "emoji:💎",
+    "_trail_color": "#99aaff",
+    "_unlock": "crystal_cave",
+}
+
+SECRET_GLITCH_THEME = {
+    "name": "Glitch",
+    "background": "#000000",
+    "surface": "#0a0010",
+    "primary": "#100020",
+    "accent": "#ff00ff",
+    "text": "#00ffcc",
+    "text_secondary": "#ff00aa",
+    "border": "#330033",
+    "success": "#00ffaa",
+    "warning": "#ffff00",
+    "error": "#ff0000",
+    "tab_selected": "#ff00ff",
+    "button_bg": "#100020",
+    "button_hover": "#ff00ff",
+    "panda_white": "#00ffcc",
+    "panda_black": "#000000",
+    "progress_bar": "#ff00ff",
+    "input_bg": "#000008",
+    "scrollbar": "#0a0010",
+    "scrollbar_handle": "#ff00ff",
+    "_effect": "neon",
+    "_cursor": "emoji:📡",
+    "_trail_color": "#ff00ff",
+    "_unlock": "glitch",
+}
+
+SECRET_WILD_WEST_THEME = {
+    "name": "Wild West",
+    "background": "#120a00",
+    "surface": "#1e1200",
+    "primary": "#2e1e00",
+    "accent": "#cc8833",
+    "text": "#ffe0aa",
+    "text_secondary": "#aa8844",
+    "border": "#442800",
+    "success": "#88cc44",
+    "warning": "#ffcc00",
+    "error": "#cc2200",
+    "tab_selected": "#cc8833",
+    "button_bg": "#2e1e00",
+    "button_hover": "#cc8833",
+    "panda_white": "#ffe0aa",
+    "panda_black": "#120a00",
+    "progress_bar": "#cc8833",
+    "input_bg": "#0c0700",
+    "scrollbar": "#1e1200",
+    "scrollbar_handle": "#cc8833",
+    "_effect": "default",
+    "_cursor": "emoji:🤠",
+    "_trail_color": "#cc8833",
+    "_unlock": "wild_west",
+}
+
+SECRET_PIRATE_THEME = {
+    "name": "Pirate",
+    "background": "#08080e",
+    "surface": "#12121e",
+    "primary": "#1e1e2e",
+    "accent": "#ddaa22",
+    "text": "#eeddaa",
+    "text_secondary": "#998844",
+    "border": "#333322",
+    "success": "#44aa44",
+    "warning": "#ddaa22",
+    "error": "#cc2222",
+    "tab_selected": "#ddaa22",
+    "button_bg": "#1e1e2e",
+    "button_hover": "#ddaa22",
+    "panda_white": "#eeddaa",
+    "panda_black": "#08080e",
+    "progress_bar": "#ddaa22",
+    "input_bg": "#050508",
+    "scrollbar": "#12121e",
+    "scrollbar_handle": "#ddaa22",
+    "_effect": "default",
+    "_cursor": "emoji:🏴‍☠️",
+    "_trail_color": "#ddaa22",
+    "_unlock": "pirate",
+}
+
+SECRET_DEEP_SPACE_THEME = {
+    "name": "Deep Space",
+    "background": "#000005",
+    "surface": "#03030f",
+    "primary": "#06061a",
+    "accent": "#4466ff",
+    "text": "#aabbff",
+    "text_secondary": "#3344aa",
+    "border": "#111133",
+    "success": "#4488ff",
+    "warning": "#ffaa44",
+    "error": "#ff4466",
+    "tab_selected": "#4466ff",
+    "button_bg": "#06061a",
+    "button_hover": "#4466ff",
+    "panda_white": "#aabbff",
+    "panda_black": "#000005",
+    "progress_bar": "#4466ff",
+    "input_bg": "#020208",
+    "scrollbar": "#03030f",
+    "scrollbar_handle": "#4466ff",
+    "_effect": "galaxy",
+    "_cursor": "emoji:🛸",
+    "_trail_color": "#4466ff",
+    "_unlock": "deep_space",
+}
+
+SECRET_WITCHS_BREW_THEME = {
+    "name": "Witch's Brew",
+    "background": "#050010",
+    "surface": "#0e0025",
+    "primary": "#190040",
+    "accent": "#44ff88",
+    "text": "#ccffcc",
+    "text_secondary": "#33aa55",
+    "border": "#003322",
+    "success": "#44ff88",
+    "warning": "#ffdd00",
+    "error": "#ff2255",
+    "tab_selected": "#44ff88",
+    "button_bg": "#190040",
+    "button_hover": "#44ff88",
+    "panda_white": "#ccffcc",
+    "panda_black": "#050010",
+    "progress_bar": "#44ff88",
+    "input_bg": "#030008",
+    "scrollbar": "#0e0025",
+    "scrollbar_handle": "#44ff88",
+    "_effect": "sparkle",
+    "_cursor": "emoji:🧙",
+    "_trail_color": "#44ff88",
+    "_unlock": "witchs_brew",
+}
+
+SECRET_LAVA_LAMP_THEME = {
+    "name": "Lava Lamp",
+    "background": "#1a0a00",
+    "surface": "#280f00",
+    "primary": "#3a1800",
+    "accent": "#ff7700",
+    "text": "#ffddaa",
+    "text_secondary": "#cc8844",
+    "border": "#551500",
+    "success": "#ffaa00",
+    "warning": "#ffdd00",
+    "error": "#ff2200",
+    "tab_selected": "#ff7700",
+    "button_bg": "#3a1800",
+    "button_hover": "#ff7700",
+    "panda_white": "#ffddaa",
+    "panda_black": "#1a0a00",
+    "progress_bar": "#ff7700",
+    "input_bg": "#110600",
+    "scrollbar": "#280f00",
+    "scrollbar_handle": "#ff7700",
+    "_effect": "fire",
+    "_cursor": "emoji:🪔",
+    "_trail_color": "#ff7700",
+    "_unlock": "lava_lamp",
+}
+
+SECRET_CORAL_REEF_THEME = {
+    "name": "Coral Reef",
+    "background": "#001a22",
+    "surface": "#00263a",
+    "primary": "#003550",
+    "accent": "#ff6655",
+    "text": "#ffeecc",
+    "text_secondary": "#cc8866",
+    "border": "#005577",
+    "success": "#44ddaa",
+    "warning": "#ffcc44",
+    "error": "#ff2244",
+    "tab_selected": "#ff6655",
+    "button_bg": "#003550",
+    "button_hover": "#ff6655",
+    "panda_white": "#ffeecc",
+    "panda_black": "#001a22",
+    "progress_bar": "#ff6655",
+    "input_bg": "#00131a",
+    "scrollbar": "#00263a",
+    "scrollbar_handle": "#ff6655",
+    "_effect": "ocean",
+    "_cursor": "emoji:🪸",
+    "_trail_color": "#ff6655",
+    "_unlock": "coral_reef",
+}
+
+SECRET_STORM_CLOUD_THEME = {
+    "name": "Storm Cloud",
+    "background": "#080810",
+    "surface": "#101018",
+    "primary": "#181828",
+    "accent": "#8899cc",
+    "text": "#ccccdd",
+    "text_secondary": "#6677aa",
+    "border": "#222244",
+    "success": "#88aacc",
+    "warning": "#ffcc44",
+    "error": "#ff4444",
+    "tab_selected": "#8899cc",
+    "button_bg": "#181828",
+    "button_hover": "#8899cc",
+    "panda_white": "#ccccdd",
+    "panda_black": "#080810",
+    "progress_bar": "#8899cc",
+    "input_bg": "#05050c",
+    "scrollbar": "#101018",
+    "scrollbar_handle": "#8899cc",
+    "_effect": "neon",
+    "_cursor": "emoji:⛈",
+    "_trail_color": "#8899cc",
+    "_unlock": "storm_cloud",
+}
+
+SECRET_GOLDEN_HOUR_THEME = {
+    "name": "Golden Hour",
+    "background": "#140800",
+    "surface": "#201200",
+    "primary": "#301c00",
+    "accent": "#ffaa00",
+    "text": "#fff0cc",
+    "text_secondary": "#ddaa44",
+    "border": "#442200",
+    "success": "#ffdd44",
+    "warning": "#ffee88",
+    "error": "#ff4422",
+    "tab_selected": "#ffaa00",
+    "button_bg": "#301c00",
+    "button_hover": "#ffaa00",
+    "panda_white": "#fff0cc",
+    "panda_black": "#140800",
+    "progress_bar": "#ffaa00",
+    "input_bg": "#0c0600",
+    "scrollbar": "#201200",
+    "scrollbar_handle": "#ffaa00",
+    "_effect": "sparkle",
+    "_cursor": "emoji:🌇",
+    "_trail_color": "#ffaa00",
+    "_unlock": "golden_hour",
+}
+
+HIDDEN_THEMES.update({
+    "Crystal Cave":  SECRET_CRYSTAL_CAVE_THEME,
+    "Glitch":        SECRET_GLITCH_THEME,
+    "Wild West":     SECRET_WILD_WEST_THEME,
+    "Pirate":        SECRET_PIRATE_THEME,
+    "Deep Space":    SECRET_DEEP_SPACE_THEME,
+    "Witch's Brew":  SECRET_WITCHS_BREW_THEME,
+    "Lava Lamp":     SECRET_LAVA_LAMP_THEME,
+    "Coral Reef":    SECRET_CORAL_REEF_THEME,
+    "Storm Cloud":   SECRET_STORM_CLOUD_THEME,
+    "Golden Hour":   SECRET_GOLDEN_HOUR_THEME,
+})
+
 # Which effects each theme uses (name → effect key)
 THEME_EFFECTS = {t["name"]: t.get("_effect", "default") for t in {
     **PRESET_THEMES, **HIDDEN_THEMES,
 }.values()}
+
+# Short descriptions for each theme, shown as per-item tooltips in the theme combo.
+THEME_DESCRIPTIONS: dict[str, str] = {
+    # ─── Preset themes ─────────────────────────────────────────────────
+    "Panda Dark":       "Dark navy & crimson panda theme. The default. Classic.",
+    "Panda Light":      "White & rose panda theme. Clean and bright.",
+    "Neon Panda":       "Electric neon-pink panda on deep black. Eye-catching.",
+    "Gore":             "Blood red & black with sharp edges and drip styling.",
+    "Bat Cave":         "Deep purple gothic cave. Asymmetric bat-wing shapes.",
+    "Rainbow Chaos":    "Maximum colour chaos. Pill-shaped buttons, wild hues.",
+    "Otter Cove":       "Warm sandy beach tones. Smooth rounded pebble shapes.",
+    "Galaxy":           "Dark blue cosmic space. Angular star-map precision.",
+    "Galaxy Otter":     "Playful space-otter fusion. Purple cosmic shapes.",
+    "Goth":             "All-caps black & violet angular brutalism.",
+    "Volcano":          "Molten orange-red with jagged eruption shapes.",
+    "Arctic":           "Clean bright whites and icy blues. Minimal sharp corners.",
+    "Fairy Garden":     "Soft lavender & pink. Large rounded magical shapes.",
+    "Noodle":           "Warm yellow-tan. Wavy organic dangling noodle shapes.",
+    "Mermaid":          "Teal & seafoam iridescent. Wave-scale alternating radius.",
+    "Shark Bait":       "Ocean blue with blood-red bite marks on button edges.",
+    "Alien":            "Neon green sci-fi. Hexagonal angular uppercase tech UI.",
+    # ─── Hidden themes (shown when unlocked) ──────────────────────────
+    "Secret Skeleton":  "Bone-white on black. Stark angular skull energy. 💀",
+    "Secret Sakura":    "Delicate pink cherry blossoms. Soft rounded petals. 🌸",
+    "Deep Ocean":       "Bioluminescent deep-sea teal. Smooth bubble shapes. 🌊",
+    "Blood Moon":       "Crimson lunar gothic. Dramatic top-glow red edges. 🩸",
+    "Ice Cave":         "Crystal blue stalactites. Alternating sharp corners. ❄",
+    "Cyber Otter":      "Amber & cyan retro-digital. Warm organic digital blend. 🦦",
+    "Toxic Neon":       "Radioactive green. Glowing poisonous UI elements. ☢",
+    "Lava Cave":        "Deep orange volcanic rock. Rough glowing seam shapes. 🌋",
+    "Sunset Beach":     "Golden orange-pink sunset gradient. Warm rounded forms. 🌅",
+    "Midnight Forest":  "Deep forest green. Vertical gradient, rounded leaves. 🌲",
+    "Candy Land":       "Deep magenta candy swirls. Diagonal pastel wash. 🍭",
+    "Zombie Apocalypse":"Sickly green apocalyptic. Gore-meets-nature decay. 🧟",
+    "Dragon Fire":      "Fiery gold on deep black. Dramatic dragon-scale shapes. 🐉",
+    "Bubblegum":        "Pink & lavender candy bubbles. Bouncy diagonal wash. 🫧",
+    "Thunder Storm":    "Electric stormy blue. Charged high-voltage edges. ⚡",
+    "Rose Gold":        "Warm blush & metallic gold. Elegant curved shapes. 🌹",
+    "Space Cat":        "Deep space purple with cat-eye accents. Cosmic kitty. 🐱",
+    "Magic Mushroom":   "Psychedelic purple-red. Spacey vertical gradient glow. 🍄",
+    "Abyssal Void":     "Ultra-dark zero-colour void. Stark left-accent bars. 🕳",
+    "Spring Bloom":     "Soft flower-petal pastels. Diagonal spring bloom wash. 🌷",
+    "Gold Rush":        "Warm amber & deep brown. Rich golden theme. 💰",
+    "Nebula":           "Purple-magenta cosmic cloud. Alternating rounded forms. 🌌",
+    # ─── New hidden themes ────────────────────────────────────────────
+    "Crystal Cave":     "Deep indigo with blue-violet crystal accents. Icy alternating gem corners. 💎",
+    "Glitch":           "Black background, neon magenta + cyan chaos. Full digital corruption. 📡",
+    "Wild West":        "Warm sepia brown & amber. Rugged frontier vibe. 🤠",
+    "Pirate":           "Dark navy & gold doubloon. Plundering the high seas. 🏴‍☠️",
+    "Deep Space":       "Near-black with electric blue. Coldest void in the galaxy. 🛸",
+    "Witch's Brew":     "Near-black purple with toxic green cauldron glow. 🧙",
+    "Lava Lamp":        "Deep brown with molten orange blobs. Warm retro flow. 🪔",
+    "Coral Reef":       "Dark teal ocean floor with vivid coral-red accents. 🪸",
+    "Storm Cloud":      "Stormy steel-blue on near-black. Low-key charged atmosphere. ⛈",
+    "Golden Hour":      "Deep amber-black with warm golden-orange sundown glow. 🌇",
+    # ─── Pancake (preset, easy to miss) ───────────────────────────────
+    "Pancake":          "Syrupy brown stacked pancake shapes. Thick rounded borders.",
+}
 
 import os as _os
 _SVG_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "assets", "svg")
@@ -1192,6 +1537,17 @@ THEME_SVG = {
     "Gold Rush":         "gold_rush.svg",
     "Nebula":            "nebula.svg",
     "Toxic Neon":        "toxic_neon.svg",
+    # New hidden themes share existing SVGs where appropriate (no dedicated asset yet)
+    "Crystal Cave":      "ice_cave.svg",
+    "Glitch":            "neon.svg",
+    "Wild West":         "otter_cove.svg",
+    "Pirate":            "bat_cave.svg",
+    "Deep Space":        "galaxy.svg",
+    "Witch's Brew":      "midnight_forest.svg",
+    "Lava Lamp":         "lava_cave.svg",
+    "Coral Reef":        "deep_ocean.svg",
+    "Storm Cloud":       "thunder_storm.svg",
+    "Golden Hour":       "sunset_beach.svg",
 }
 
 
@@ -1641,6 +1997,66 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
         "🌌⭐💫  Alpha Fixer  &  File Converter  💫⭐🌌",
         "💫🔮🌌  Alpha Fixer  &  File Converter  🌌🔮💫",
     ],
+    "Crystal Cave": [
+        "💎❄  Alpha Fixer  &  File Converter  ❄💎",
+        "✦💎🔷  Alpha Fixer  &  File Converter  🔷💎✦",
+        "❄💎✨  Alpha Fixer  &  File Converter  ✨💎❄",
+        "🔷✦💎  Alpha Fixer  &  File Converter  💎✦🔷",
+    ],
+    "Glitch": [
+        "📡⚡  Alpha Fixer  &  File Converter  ⚡📡",
+        "⚡📡💀  Alpha Fixer  &  File Converter  💀📡⚡",
+        "📡🔴⚡  Alpha Fixer  &  File Converter  ⚡🔴📡",
+        "⚡💜📡  Alpha Fixer  &  File Converter  📡💜⚡",
+    ],
+    "Wild West": [
+        "🤠⭐  Alpha Fixer  &  File Converter  ⭐🤠",
+        "⭐🤠🌵  Alpha Fixer  &  File Converter  🌵🤠⭐",
+        "🤠🌟⭐  Alpha Fixer  &  File Converter  ⭐🌟🤠",
+        "🌵⭐🤠  Alpha Fixer  &  File Converter  🤠⭐🌵",
+    ],
+    "Pirate": [
+        "🏴‍☠️⚓  Alpha Fixer  &  File Converter  ⚓🏴‍☠️",
+        "⚓🏴‍☠️💀  Alpha Fixer  &  File Converter  💀🏴‍☠️⚓",
+        "🏴‍☠️⚔️⚓  Alpha Fixer  &  File Converter  ⚓⚔️🏴‍☠️",
+        "💀⚓🏴‍☠️  Alpha Fixer  &  File Converter  🏴‍☠️⚓💀",
+    ],
+    "Deep Space": [
+        "🛸🌑  Alpha Fixer  &  File Converter  🌑🛸",
+        "🌑🛸⭐  Alpha Fixer  &  File Converter  ⭐🛸🌑",
+        "🛸🪐🌑  Alpha Fixer  &  File Converter  🌑🪐🛸",
+        "⭐🌑🛸  Alpha Fixer  &  File Converter  🛸🌑⭐",
+    ],
+    "Witch's Brew": [
+        "🧙🫧  Alpha Fixer  &  File Converter  🫧🧙",
+        "🫧🧙🍄  Alpha Fixer  &  File Converter  🍄🧙🫧",
+        "🧙🌿🫧  Alpha Fixer  &  File Converter  🫧🌿🧙",
+        "🍄🫧🧙  Alpha Fixer  &  File Converter  🧙🫧🍄",
+    ],
+    "Lava Lamp": [
+        "🪔🔥  Alpha Fixer  &  File Converter  🔥🪔",
+        "🔥🪔🫧  Alpha Fixer  &  File Converter  🫧🪔🔥",
+        "🪔✨🔥  Alpha Fixer  &  File Converter  🔥✨🪔",
+        "🫧🔥🪔  Alpha Fixer  &  File Converter  🪔🔥🫧",
+    ],
+    "Coral Reef": [
+        "🪸🐠  Alpha Fixer  &  File Converter  🐠🪸",
+        "🐠🪸🌊  Alpha Fixer  &  File Converter  🌊🪸🐠",
+        "🪸🫧🐠  Alpha Fixer  &  File Converter  🐠🫧🪸",
+        "🌊🐠🪸  Alpha Fixer  &  File Converter  🪸🐠🌊",
+    ],
+    "Storm Cloud": [
+        "⛈⚡  Alpha Fixer  &  File Converter  ⚡⛈",
+        "⚡⛈🌧  Alpha Fixer  &  File Converter  🌧⛈⚡",
+        "⛈💨⚡  Alpha Fixer  &  File Converter  ⚡💨⛈",
+        "🌧⚡⛈  Alpha Fixer  &  File Converter  ⛈⚡🌧",
+    ],
+    "Golden Hour": [
+        "🌇✨  Alpha Fixer  &  File Converter  ✨🌇",
+        "✨🌇🌅  Alpha Fixer  &  File Converter  🌅🌇✨",
+        "🌇🌟✨  Alpha Fixer  &  File Converter  ✨🌟🌇",
+        "🌅✨🌇  Alpha Fixer  &  File Converter  🌇✨🌅",
+    ],
 }
 
 
@@ -1653,6 +2069,189 @@ def get_theme_banner_frames(theme_name: str) -> list[str]:
     distracting rather than useful.
     """
     return [get_theme_banner(theme_name)]
+
+
+def _get_tooltip_css(t: dict, tooltip_style: str = "Auto (follow theme)") -> str:
+    """Return a per-theme QToolTip CSS rule that matches each theme's visual style.
+
+    When *tooltip_style* is "Auto (follow theme)" (the default) the style is
+    derived from the active theme's visual identity.  Any other value forces a
+    fixed style regardless of the current theme:
+      Angular   – zero radius, left-accent bar, bold
+      Bubbly    – large radius (14 px), prominent coloured border
+      Rounded   – medium radius (10 px), standard border
+      Icy       – alternating corners (0 / 10 px), top-accent bar
+      Wavy      – alternating wide/narrow corners (12/2 px)
+      Neon      – zero radius, double-thick glow border, monospace text
+      Classic   – plain black background, white text, grey border
+    """
+    name    = t.get("name",    "")
+    accent  = t.get("accent",  "#e94560")
+    surface = t.get("surface", "#16213e")
+    text    = t.get("text",    "#eaeaea")
+
+    # ── Forced style overrides ──────────────────────────────────────────────
+    if tooltip_style == "Angular":
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-left: 3px solid {accent};
+    border-radius: 0px;
+    padding: 4px 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}}"""
+    if tooltip_style == "Bubbly":
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 2px solid {accent};
+    border-radius: 14px;
+    padding: 5px 12px;
+}}"""
+    if tooltip_style == "Rounded":
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-radius: 10px;
+    padding: 5px 11px;
+}}"""
+    if tooltip_style == "Icy":
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-top: 2px solid {accent};
+    border-radius: 0px 10px 0px 10px;
+    padding: 4px 10px;
+}}"""
+    if tooltip_style == "Wavy":
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 2px solid {accent};
+    border-radius: 12px 2px 12px 2px;
+    padding: 4px 10px;
+}}"""
+    if tooltip_style == "Neon":
+        return f"""QToolTip {{
+    background-color: #0a0a0a;
+    color: {accent};
+    border: 2px solid {accent};
+    border-radius: 0px;
+    padding: 4px 10px;
+    font-family: "Courier New", monospace;
+    font-weight: 700;
+    letter-spacing: 1px;
+}}"""
+    if tooltip_style == "Classic":
+        return """QToolTip {
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 4px 8px;
+}"""
+    # ── Angular/grim themes – zero radius, left-accent bar, bold text ──────
+    _ANGULAR = {
+        "Gore", "Goth", "Galaxy", "Abyssal Void", "Alien", "Zombie Apocalypse",
+        "Thunder Storm", "Blood Moon", "Toxic Neon", "Lava Cave", "Volcano",
+        "Dragon Fire", "Secret Skeleton", "Gold Rush", "Bat Cave",
+        "Glitch", "Pirate", "Storm Cloud",
+    }
+    if name in _ANGULAR:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-left: 3px solid {accent};
+    border-radius: 0px;
+    padding: 4px 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}}"""
+
+    # ── Very rounded/playful themes – large radius, prominent border ────────
+    _BUBBLY = {
+        "Candy Land", "Bubblegum", "Fairy Garden", "Rainbow Chaos",
+        "Pancake", "Secret Sakura", "Magic Mushroom", "Spring Bloom",
+        "Sunset Beach", "Midnight Forest",
+        "Witch's Brew", "Lava Lamp", "Golden Hour",
+    }
+    if name in _BUBBLY:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 2px solid {accent};
+    border-radius: 14px;
+    padding: 5px 12px;
+}}"""
+
+    # ── Wavy/organic themes – alternating corner radius ─────────────────────
+    _WAVY = {
+        "Noodle", "Nebula", "Galaxy Otter", "Mermaid", "Wild West",
+    }
+    if name in _WAVY:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 2px solid {accent};
+    border-radius: 12px 2px 12px 2px;
+    padding: 4px 10px;
+}}"""
+
+    # ── Ice/Crystal themes – top & right accent, angled corners ────────────
+    _ICE = {
+        "Ice Cave", "Arctic", "Cyber Otter", "Deep Ocean", "Crystal Cave",
+    }
+    if name in _ICE:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-top: 2px solid {accent};
+    border-radius: 0px 10px 0px 10px;
+    padding: 4px 10px;
+}}"""
+
+    # ── Ocean/water themes – smooth bubbles ─────────────────────────────────
+    _OCEAN = {
+        "Otter Cove", "Shark Bait", "Coral Reef",
+    }
+    if name in _OCEAN:
+        return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-bottom: 3px solid {accent};
+    border-radius: 10px;
+    padding: 4px 10px;
+}}"""
+
+    # ── Space/cosmos themes – glowing dark ──────────────────────────────────
+    _SPACE = {
+        "Deep Space",
+    }
+    if name in _SPACE:
+        return f"""QToolTip {{
+    background-color: #030308;
+    color: {text};
+    border: 1px solid {accent};
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-family: "Courier New", monospace;
+}}"""
+
+    # ── Default – slightly more padding than the base stylesheet ────────────
+    return f"""QToolTip {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {accent};
+    border-radius: 6px;
+    padding: 5px 10px;
+}}"""
 
 
 def _get_theme_extra_css(t: dict) -> str:
@@ -2337,8 +2936,73 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
     return ""
 
 
-def build_stylesheet(theme: Optional[dict] = None) -> str:
-    """Generate a full Qt stylesheet from the given theme dictionary."""
+def _get_theme_gradient_css(t: dict) -> str:
+    """Return a QMainWindow background gradient for themes that benefit from it.
+
+    Using CSS ``qlineargradient`` on QMainWindow gives themes a subtle depth
+    that makes them look far more designed than a flat solid colour.  Only
+    applied where it genuinely improves the look; returns "" for flat themes.
+    """
+    name = t.get("name", "")
+    bg   = t.get("background", "#1a1a2e")
+    surf = t.get("surface",    "#16213e")
+    acc  = t.get("accent",     "#e94560")
+
+    # ── Deep, dark themes — subtle top→bottom gradient ──────────────────
+    if name in {"Abyssal Void", "Galaxy", "Nebula", "Blood Moon"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {bg}, stop:1 {surf});
+}}"""
+
+    # ── Watery themes — soft diagonal ocean-depth gradient ──────────────
+    if name in {"Deep Ocean", "Mermaid", "Otter Cove", "Shark Bait"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:0.3, y2:1,
+        stop:0 {bg}, stop:0.6 {surf}, stop:1 {bg});
+}}"""
+
+    # ── Fire / lava themes — bottom glow effect ──────────────────────────
+    if name in {"Volcano", "Lava Cave", "Dragon Fire", "Gore"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 {acc}22, stop:0.4 {bg}, stop:1 {surf});
+}}"""
+
+    # ── Ice / crystal themes — top light, bottom dark ────────────────────
+    if name in {"Ice Cave", "Arctic", "Cyber Otter"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {surf}, stop:0.5 {bg}, stop:1 {bg});
+}}"""
+
+    # ── Candy / pastel themes — diagonal pastel wash ─────────────────────
+    if name in {"Candy Land", "Fairy Garden", "Secret Sakura", "Spring Bloom",
+                "Rainbow Chaos", "Bubblegum"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 {bg}, stop:0.5 {surf}, stop:1 {bg});
+}}"""
+
+    # ── Night / space themes — radial depth glow ─────────────────────────
+    if name in {"Midnight Forest", "Alien", "Magic Mushroom", "Toxic Neon"}:
+        return f"""QMainWindow {{
+    background: qlineargradient(x1:0.5, y1:0, x2:0.5, y2:1,
+        stop:0 {surf}, stop:0.4 {bg}, stop:1 {bg});
+}}"""
+
+    # Flat themes: no gradient needed
+    return ""
+
+
+def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (follow theme)") -> str:
+    """Generate a full Qt stylesheet from the given theme dictionary.
+
+    *tooltip_style* controls the visual shape of tooltips.  Pass
+    "Auto (follow theme)" (the default) to derive the style from the current
+    theme; or pass one of "Angular", "Bubbly", "Rounded", "Icy", "Wavy",
+    "Neon", "Classic" to force a fixed visual style for all tooltips.
+    """
     t = {**DEFAULT_THEME, **(theme or {})}
     return f"""
 /* ===== Global ===== */
@@ -2591,6 +3255,22 @@ QLabel#section {{
     color: {t['accent']};
     padding: 4px 0;
 }}
+QLabel#stats_panel {{
+    font-size: 11px;
+    color: {t['text_secondary']};
+    background-color: {t['surface']};
+    border: 1px solid {t['border']};
+    border-radius: 4px;
+    padding: 4px 2px;
+}}
+QLabel#rom_banner {{
+    font-size: 11px;
+    color: {t['text']};
+    background-color: {t['primary']};
+    border: 1px solid {t['accent']};
+    border-radius: 4px;
+    padding: 4px 6px;
+}}
 
 /* ===== Group Box ===== */
 QGroupBox {{
@@ -2615,6 +3295,10 @@ QListWidget {{
     color: {t['text']};
     border: 1px solid {t['border']};
     border-radius: 5px;
+}}
+QListWidget[drag_active="true"] {{
+    border: 2px dashed {t['accent']};
+    background-color: {t['primary']};
 }}
 QListWidget::item:selected {{
     background-color: {t['accent']};
@@ -2769,12 +3453,7 @@ QFrame#card {{
 }}
 
 /* ===== Tooltip ===== */
-QToolTip {{
-    background-color: {t['surface']};
-    color: {t['text']};
-    border: 1px solid {t['accent']};
-    padding: 4px;
-    border-radius: 4px;
-}}
+{_get_tooltip_css(t, tooltip_style)}
+{_get_theme_gradient_css(t)}
 {_get_theme_extra_css(t)}
 """

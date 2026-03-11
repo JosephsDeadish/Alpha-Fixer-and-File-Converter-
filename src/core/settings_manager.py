@@ -71,6 +71,7 @@ class SettingsManager:
         # Sound
         "sound_enabled": False,
         "click_sound_path": "",
+        "use_theme_sound": False,
         # Cursor & trail
         "cursor": "Default",
         "use_theme_cursor": False,
@@ -78,6 +79,9 @@ class SettingsManager:
         "trail_color": "#e94560",
         "trail_style": "dots",
         "use_theme_trail": False,
+        "trail_length": 50,       # number of trail points kept (deque maxlen)
+        "trail_fade_speed": 5,    # 1=slowest fade … 10=fastest fade
+        "trail_intensity": 100,   # 10–100 % max trail opacity
         # Appearance
         "font_size": 10,
         # Last-used state
@@ -101,6 +105,9 @@ class SettingsManager:
         "window_maximized": False,
         # Tooltip
         "tooltip_mode": "No Filter 🤬",
+        "tooltip_mode_changed_once": False,
+        "alpha_fix_done_once": False,
+        "conversion_done_once": False,
         # Click effects
         "click_effects_enabled": False,
         "use_theme_effect": False,
@@ -130,6 +137,19 @@ class SettingsManager:
         "unlock_gold_rush": False,
         "unlock_nebula": False,
         "total_clicks": 0,
+        # Tooltip visual style (separate from tooltip text mode)
+        "tooltip_style": "Auto (follow theme)",
+        # New hidden theme unlock flags
+        "unlock_crystal_cave": False,
+        "unlock_glitch": False,
+        "unlock_wild_west": False,
+        "unlock_pirate": False,
+        "unlock_deep_space": False,
+        "unlock_witchs_brew": False,
+        "unlock_lava_lamp": False,
+        "unlock_coral_reef": False,
+        "unlock_storm_cloud": False,
+        "unlock_golden_hour": False,
     }
 
     def __init__(self):
@@ -261,6 +281,30 @@ class SettingsManager:
         self._qs.setValue("alpha_history", "[]")
         self._qs.sync()
 
+    def reset_all(self) -> None:
+        """Erase every setting and reset to factory defaults.
+
+        Useful for testing/debugging: removes all unlock flags, click counts,
+        history, and UI preferences so easter eggs can be re-triggered.
+        Equivalent to deleting the .ini file next to the application.
+        """
+        self._qs.clear()
+        self._qs.sync()
+
+    def reset_unlocks_only(self) -> None:
+        """Reset only unlock flags, click counter, and first-use flags.
+
+        Preserves all other preferences (theme, sound, trail, cursor, etc.)
+        so the user can test easter-egg triggers without losing their setup.
+        """
+        _unlock_keys = [k for k in self._DEFAULTS if k.startswith("unlock_")]
+        _progress_keys = [k for k in self._DEFAULTS if k in (
+            "total_clicks", "alpha_fix_done_once", "conversion_done_once",
+        )]
+        for key in _unlock_keys + _progress_keys:
+            self._qs.setValue(key, self._DEFAULTS[key])
+        self._qs.sync()
+
     # ------------------------------------------------------------------
     # Export / import all settings to a JSON file
     # ------------------------------------------------------------------
@@ -269,8 +313,9 @@ class SettingsManager:
         "theme", "theme_data", "saved_themes",
         "sound_enabled", "click_sound_path",
         "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
+        "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
-        "click_effects_enabled", "use_theme_effect", "tooltip_mode",
+        "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",

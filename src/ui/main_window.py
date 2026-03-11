@@ -1,10 +1,11 @@
 """
 Main application window.
 """
+import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt, QSize, QRect, QTimer
-from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QPixmap, QPainter
+from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
@@ -26,6 +27,37 @@ from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
+
+def _apply_dwm_title_bar_color(hwnd: int, hex_color: str) -> bool:
+    """Attempt to set the Windows 11+ title bar color via DWM.
+
+    Uses DwmSetWindowAttribute (DWMWA_CAPTION_COLOR = 35) which is only
+    supported on Windows 11 build 22000+.  Silently returns False on older
+    Windows versions or non-Windows platforms.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        import ctypes.wintypes
+        # Parse "#rrggbb" → COLORREF (0x00bbggrr)
+        h = hex_color.lstrip("#")
+        if len(h) != 6:
+            return False
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        colorref = ctypes.c_uint32(b << 16 | g << 8 | r)
+        DWMWA_CAPTION_COLOR = 35
+        dwmapi = ctypes.windll.dwmapi
+        dwmapi.DwmSetWindowAttribute(
+            ctypes.wintypes.HWND(hwnd),
+            ctypes.c_uint32(DWMWA_CAPTION_COLOR),
+            ctypes.byref(colorref),
+            ctypes.c_uint32(ctypes.sizeof(colorref)),
+        )
+        return True
+    except Exception:
+        return False
+
 _CURSOR_MAP = {
     "Default":        Qt.CursorShape.ArrowCursor,
     "Cross":          Qt.CursorShape.CrossCursor,
@@ -39,14 +71,20 @@ _CURSOR_MAP = {
 }
 
 
-def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
+def _make_emoji_cursor(emoji: str, size: int = 40) -> QCursor:
     """Render *emoji* into a square pixmap and return a QCursor from it.
 
-    The hotspot is placed at the top-left corner so the cursor tip lines up
-    with the pointer position.  Falls back to the arrow cursor if pixmap
-    painting is unavailable (e.g. running headless without a display).
+    The emoji is drawn centred in the pixmap and the hotspot is placed at
+    the centre so that interactions (clicks, hover) register at the visual
+    centre of the emoji character rather than at the invisible top-left
+    corner of the bounding box.
+
+    Falls back to the arrow cursor if pixmap painting is unavailable
+    (e.g. running headless without a display).
     """
     try:
+        # Use a slightly larger pixmap than the rendered font size to ensure
+        # the full glyph is visible without clipping.
         pix = QPixmap(size, size)
         pix.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pix)
@@ -54,7 +92,7 @@ def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
         # and Linux (Noto Color Emoji) so the emoji renders on every platform.
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
-        font.setPointSize(max(6, size - 6))
+        font.setPointSize(max(6, size - 10))
         painter.setFont(font)
         painter.drawText(
             QRect(0, 0, size, size),
@@ -62,7 +100,9 @@ def _make_emoji_cursor(emoji: str, size: int = 32) -> QCursor:
             emoji,
         )
         painter.end()
-        return QCursor(pix, 0, 0)
+        # Hotspot at centre of the pixmap so the click-point matches the
+        # visual centre of the emoji (avoids the top-left offset problem).
+        return QCursor(pix, size // 2, size // 2)
     except Exception:
         return QCursor(Qt.CursorShape.ArrowCursor)
 
@@ -262,6 +302,11 @@ class MainWindow(QMainWindow):
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
 
+        # Keyboard shortcuts for tab switching: Ctrl+1/2/3
+        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3")):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(lambda i=idx: self._tabs.setCurrentIndex(i))
+
         self.setCentralWidget(central)
 
         # Status bar
@@ -338,6 +383,16 @@ class MainWindow(QMainWindow):
         self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
 
+        # Connect processing-done signals so file processing can unlock themes
+        self._alpha_tab.processing_done.connect(self._on_processing_done)
+        self._converter_tab.processing_done.connect(self._on_processing_done)
+        # First-use unlock triggers
+        self._alpha_tab.first_alpha_fix.connect(self._on_first_alpha_fix)
+        self._converter_tab.first_conversion.connect(self._on_first_conversion)
+        # File-add sounds
+        self._alpha_tab.files_added.connect(self._on_files_added)
+        self._converter_tab.files_added.connect(self._on_files_added)
+
         # Cursor
         self._apply_cursor()
 
@@ -398,13 +453,16 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _check_unlocks(self) -> None:
-        """Check whether any hidden theme should be unlocked."""
+        """Check whether any hidden theme should be unlocked (click path)."""
         try:
             total = self._settings.get("total_clicks", 0) + 1
             self._settings.set("total_clicks", total)
         except Exception:
             return
+        self._run_unlock_checks(total)
 
+    def _run_unlock_checks(self, total: int) -> None:
+        """Evaluate the unlock table against *total* and fire any new unlocks."""
         # (threshold, settings_key, banner_message) — ordered ascending by threshold
         _UNLOCK_TABLE = [
             (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
@@ -429,6 +487,16 @@ class MainWindow(QMainWindow):
             (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
             (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
             (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
+            (5500, "unlock_crystal_cave",     "💎 'Crystal Cave' theme unlocked! (Settings → Theme)"),
+            (6000, "unlock_glitch",           "📡 'Glitch' theme unlocked! (Settings → Theme)"),
+            (6500, "unlock_wild_west",        "🤠 'Wild West' theme unlocked! (Settings → Theme)"),
+            (7000, "unlock_pirate",           "🏴‍☠️ 'Pirate' theme unlocked! (Settings → Theme)"),
+            (7500, "unlock_deep_space",       "🛸 'Deep Space' theme unlocked! (Settings → Theme)"),
+            (8000, "unlock_witchs_brew",      "🧙 'Witch's Brew' theme unlocked! (Settings → Theme)"),
+            (8500, "unlock_lava_lamp",        "🪔 'Lava Lamp' theme unlocked! (Settings → Theme)"),
+            (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
+            (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
+            (10000,"unlock_golden_hour",      "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
         ]
 
         newly_unlocked = False
@@ -436,15 +504,49 @@ class MainWindow(QMainWindow):
             if not self._settings.get(key, False) and total >= threshold:
                 self._settings.set(key, True)
                 self._unlock_lbl.setText(message)
+                # Play unlock fanfare via SoundEngine (falls back to beep)
                 try:
-                    QApplication.instance().beep()
+                    self._sound.play_unlock()
                 except Exception:
-                    pass
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
                 newly_unlocked = True
 
         # Auto-clear the unlock banner after 6 seconds
         if newly_unlocked:
             self._schedule_unlock_clear()
+
+    def _on_processing_done(self, file_count: int) -> None:
+        """Called when a batch of files is processed (alpha-fix or convert).
+
+        Each file successfully processed is counted as a 'bonus click' so
+        that heavy users who batch-process files naturally unlock themes
+        without having to manually click thousands of times.  Also plays
+        the success chime if sound is enabled.
+        """
+        if file_count <= 0:
+            return
+        try:
+            self._sound.play_success()
+        except Exception:
+            pass
+        try:
+            total = self._settings.get("total_clicks", 0) + file_count
+            self._settings.set("total_clicks", total)
+        except Exception:
+            return
+        # Re-use the click-based unlock table but driven by total_clicks
+        # (which now includes processing bonuses).
+        self._run_unlock_checks(total)
+
+    def _on_files_added(self) -> None:
+        """Play a soft sound when files are added to either tab's queue."""
+        try:
+            self._sound.play_file_add()
+        except Exception:
+            pass
 
     def _schedule_unlock_clear(self) -> None:
         """Start (or restart) a one-shot timer that clears the unlock label."""
@@ -470,8 +572,20 @@ class MainWindow(QMainWindow):
             self.setCursor(QCursor(shape))
         else:
             cursor_name = self._settings.get("cursor", "Default")
-            shape = _CURSOR_MAP.get(cursor_name, Qt.CursorShape.ArrowCursor)
-            self.setCursor(QCursor(shape))
+            # Check if it's a system cursor name
+            if cursor_name in _CURSOR_MAP:
+                self.setCursor(QCursor(_CURSOR_MAP[cursor_name]))
+            elif cursor_name.startswith("emoji:"):
+                # Stored as "emoji:<char>" from theme profiles
+                self.setCursor(_make_emoji_cursor(cursor_name[len("emoji:"):]))
+            else:
+                # Combo items like "🐼 Panda" – extract the emoji (first char/cluster)
+                # by taking everything before the first space
+                parts = cursor_name.split(" ", 1)
+                if parts and parts[0].strip():
+                    self.setCursor(_make_emoji_cursor(parts[0]))
+                else:
+                    self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def _apply_font_size(self):
         size = self._settings.get("font_size", 10)
@@ -510,7 +624,8 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self):
         theme = self._settings.get_theme()
-        QApplication.instance().setStyleSheet(build_stylesheet(theme))
+        tooltip_style = self._settings.get("tooltip_style", "Auto (follow theme)")
+        QApplication.instance().setStyleSheet(build_stylesheet(theme, tooltip_style))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
         # Update the spinning banner emoji to the theme's representative icon.
@@ -548,6 +663,20 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
+        # On Windows 11+, colour the native title bar to match the theme's
+        # primary/surface colour so the window chrome integrates with the theme.
+        try:
+            hwnd = int(self.winId())
+            # Use the theme's 'primary' colour for the title bar background.
+            # Fallback to surface, then a dark default.
+            title_color = (
+                theme.get("primary")
+                or theme.get("surface")
+                or "#1a1a2e"
+            )
+            _apply_dwm_title_bar_color(hwnd, title_color)
+        except Exception:
+            pass
 
     def _update_tab_labels(self):
         """Write the theme-specific label to every tab (no animation prefix)."""
@@ -660,6 +789,8 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._apply_theme())
         dlg.settings_changed.connect(self._on_settings_changed)
+        # First tooltip mode change unlocks Secret Skeleton (independent of click count)
+        dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
 
         # Attach a click-effects overlay to the dialog so particle effects are
         # visible while the settings window is open (the main overlay is behind
@@ -696,8 +827,41 @@ class MainWindow(QMainWindow):
                 self._settings.get("click_effects_enabled", False)
             )
 
+    def _on_first_tooltip_mode_change(self) -> None:
+        """Unlock Secret Skeleton the first time the user changes the tooltip mode."""
+        if not self._settings.get("unlock_skeleton", False):
+            self._settings.set("unlock_skeleton", True)
+            self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_alpha_fix(self) -> None:
+        """Unlock Secret Sakura the very first time the user runs an alpha fix."""
+        if not self._settings.get("unlock_sakura", False):
+            self._settings.set("unlock_sakura", True)
+            self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (first alpha fix!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_conversion(self) -> None:
+        """Unlock Sunset Beach the very first time the user converts files."""
+        if not self._settings.get("unlock_sunset_beach", False):
+            self._settings.set("unlock_sunset_beach", True)
+            self._unlock_lbl.setText("🌅 'Sunset Beach' theme unlocked! (first conversion!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
     def _apply_trail(self):
-        """Apply trail color, style and enabled state, honouring use_theme_trail."""
+        """Apply trail color, style, length, fade speed, intensity and enabled state."""
         if self._trail_overlay is None:
             return
         use_theme = self._settings.get("use_theme_trail", False)
@@ -719,6 +883,10 @@ class MainWindow(QMainWindow):
             style = self._settings.get("trail_style", "dots")
         self._trail_overlay.set_color(color)
         self._trail_overlay.set_style(style)
+        # Apply length/fade/intensity — always from user settings regardless of theme trail
+        self._trail_overlay.set_length(int(self._settings.get("trail_length", 50)))
+        self._trail_overlay.set_fade_speed(int(self._settings.get("trail_fade_speed", 5)))
+        self._trail_overlay.set_intensity(int(self._settings.get("trail_intensity", 100)))
         self._trail_overlay.set_enabled(
             self._settings.get("trail_enabled", False)
         )
@@ -786,15 +954,15 @@ class MainWindow(QMainWindow):
             "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI and more</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"
-            "<li>Image preview, conversion history, export/import settings</li>"
-            "<li>16 preset themes + 22 hidden unlockables (keep clicking to find them!)</li>"
+            "<li>Image preview, conversion history + CSV export, export/import settings</li>"
+            "<li>18 preset themes + 32 hidden unlockables (keep clicking to find them!)</li>"
             "<li>21 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥,"
             " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
             "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"
             "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
             "<li>Unique per-theme banner, shapes, and visual style — each theme has its own look</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
-            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
+            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · Ctrl+1/2/3 switch tabs · F1 help</li>"
             "</ul>"
             "<p>Built with Python + PyQt6 + Pillow.</p>"
             f'<p><a href="{PATREON_URL}">❤ Support on Patreon</a></p>',

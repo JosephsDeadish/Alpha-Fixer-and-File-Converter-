@@ -1,17 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Neon lightning bolt with glow pulse -->
+  <!-- Neon Panda: electric lightning bolt with scanning grid and glow rings -->
   <rect width="64" height="64" fill="#0d0d0d" rx="8"/>
-  <polygon points="36,4 18,36 30,36 26,60 46,28 34,28" fill="#00ff88" stroke="#00ff88" stroke-width="1">
-    <animate attributeName="opacity" values="1;0.5;1" dur="0.6s" repeatCount="indefinite"/>
+
+  <!-- Scan-line grid (faint, fast flicker) -->
+  <rect width="64" height="1" y="12" fill="#00ff88" opacity="0.06">
+    <animate attributeName="opacity" values="0.06;0.14;0.06" dur="0.4s" repeatCount="indefinite"/>
+  </rect>
+  <rect width="64" height="1" y="24" fill="#00ff88" opacity="0.06">
+    <animate attributeName="opacity" values="0.06;0.12;0.06" dur="0.5s" begin="0.1s" repeatCount="indefinite"/>
+  </rect>
+  <rect width="64" height="1" y="36" fill="#00ff88" opacity="0.06">
+    <animate attributeName="opacity" values="0.06;0.14;0.06" dur="0.45s" begin="0.2s" repeatCount="indefinite"/>
+  </rect>
+  <rect width="64" height="1" y="48" fill="#00ff88" opacity="0.06">
+    <animate attributeName="opacity" values="0.06;0.12;0.06" dur="0.5s" begin="0.3s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Outer glow ring — slow breathe -->
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.2">
+    <animate attributeName="opacity" values="0.2;0.55;0.2" dur="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="27;30;27" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Middle glow ring — faster flicker -->
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#00ff88" stroke-width="1" opacity="0.3">
+    <animate attributeName="opacity" values="0.3;0.7;0.3" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="20;23;20" dur="0.6s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Inner ring — electric -->
+  <circle cx="32" cy="32" r="16" fill="none" stroke="#00ff88" stroke-width="1.5" opacity="0.25">
+    <animate attributeName="opacity" values="0.25;0.6;0.25" dur="0.6s" begin="0.15s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Lightning bolt — main -->
+  <polygon points="36,5 18,34 30,34 26,59 46,30 34,30" fill="#00ff88" stroke="#00ff88" stroke-width="0.5">
+    <animate attributeName="opacity" values="1;0.4;1;0.7;1" dur="0.5s" repeatCount="indefinite"/>
+    <animate attributeName="fill" values="#00ff88;#88ffcc;#00ff88" dur="0.5s" repeatCount="indefinite"/>
   </polygon>
-  <!-- Glow circles pulsing -->
-  <circle cx="32" cy="32" r="26" fill="none" stroke="#00ff88" stroke-width="1.5" opacity="0.4">
-    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="0.6s" repeatCount="indefinite"/>
-    <animate attributeName="r" values="24;28;24" dur="0.6s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="32" cy="32" r="20" fill="none" stroke="#00ff88" stroke-width="1" opacity="0.2">
-    <animate attributeName="opacity" values="0.2;0.5;0.2" dur="0.6s" begin="0.15s" repeatCount="indefinite"/>
-  </circle>
-  <text x="32" y="56" text-anchor="middle" font-size="10" fill="#00ff88" font-family="monospace">NEON</text>
+
+  <!-- Bolt highlight glow (inner bright core) -->
+  <polygon points="35,8 21,33 31,33 27,56 44,31 33,31" fill="none" stroke="#ffffff" stroke-width="0.5" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5;0.2;0.5" dur="0.5s" repeatCount="indefinite"/>
+  </polygon>
+
+  <!-- Electric sparks at bolt tip -->
+  <line x1="36" y1="5" x2="40" y2="2" stroke="#00ff88" stroke-width="1" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0;0.7" dur="0.3s" repeatCount="indefinite"/>
+  </line>
+  <line x1="36" y1="5" x2="42" y2="7" stroke="#00ff88" stroke-width="0.8" opacity="0.5">
+    <animate attributeName="opacity" values="0;0.5;0" dur="0.25s" begin="0.1s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- NEON label with flicker -->
+  <text x="32" y="63" text-anchor="middle" font-size="9" fill="#00ff88" font-family="monospace" letter-spacing="2">NEON</text>
 </svg>
 

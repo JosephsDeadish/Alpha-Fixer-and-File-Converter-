@@ -1,13 +1,15 @@
 """
 History tab – shows recent converter and alpha-fixer runs with timestamps.
 """
+import csv
 import datetime
+import io
 
 from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget,
+    QTabWidget, QFileDialog,
 )
 
 
@@ -20,13 +22,22 @@ def _fmt_ts(ts: str) -> str:
         return ts
 
 
-def _make_tree(columns: list[str]) -> QTreeWidget:
-    """Build a standard history QTreeWidget with the given column headers."""
+def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWidget:
+    """Build a standard history QTreeWidget with the given column headers.
+
+    If *col_tips* is provided it must have the same length as *columns*; each
+    non-empty string is set as the tooltip for that column header section.
+    """
     tree = QTreeWidget()
     tree.setHeaderLabels(columns)
     for i in range(len(columns) - 1):
         tree.header().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
     tree.header().setSectionResizeMode(len(columns) - 1, QHeaderView.ResizeMode.Stretch)
+    if col_tips:
+        header_item = tree.headerItem()
+        for i, tip in enumerate(col_tips):
+            if tip and header_item:
+                header_item.setToolTip(i, tip)
     tree.setAlternatingRowColors(True)
     tree.setRootIsDecorated(False)
     return tree
@@ -52,8 +63,10 @@ class HistoryTab(QWidget):
 
         btn_row = QHBoxLayout()
         self._btn_refresh = QPushButton("🔄  Refresh")
+        self._btn_export = QPushButton("📥  Export CSV…")
         self._btn_clear = QPushButton("🗑  Clear All History")
         btn_row.addWidget(self._btn_refresh)
+        btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
@@ -66,7 +79,15 @@ class HistoryTab(QWidget):
         conv_layout = QVBoxLayout(conv_widget)
         conv_layout.setContentsMargins(0, 6, 0, 0)
         self._conv_tree = _make_tree(
-            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"]
+            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            col_tips=[
+                "When the conversion batch was started.",
+                "Output format chosen for this batch (e.g. PNG, WEBP, DDS).",
+                "Total number of files submitted to the converter.",
+                "Files that converted successfully.",
+                "Files that failed — check the format/path if this is non-zero.",
+                "First 10 input filenames in this batch.",
+            ],
         )
         conv_layout.addWidget(self._conv_tree)
         self._conv_summary = QLabel("")
@@ -79,7 +100,15 @@ class HistoryTab(QWidget):
         alpha_layout = QVBoxLayout(alpha_widget)
         alpha_layout.setContentsMargins(0, 6, 0, 0)
         self._alpha_tree = _make_tree(
-            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"]
+            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            col_tips=[
+                "When the alpha-fix batch was started.",
+                "Preset or manual mode used for this batch.",
+                "Total number of files processed.",
+                "Files processed successfully.",
+                "Files that encountered errors — may be unsupported format or locked file.",
+                "First 10 input filenames in this batch.",
+            ],
         )
         alpha_layout.addWidget(self._alpha_tree)
         self._alpha_summary = QLabel("")
@@ -91,6 +120,7 @@ class HistoryTab(QWidget):
 
         # Connections
         self._btn_refresh.clicked.connect(self.refresh)
+        self._btn_export.clicked.connect(self._export_csv)
         self._btn_clear.clicked.connect(self._clear_history)
 
     # ------------------------------------------------------------------
@@ -101,8 +131,13 @@ class HistoryTab(QWidget):
         """Register History tab widgets with the TooltipManager."""
         mgr.register(self._btn_refresh, "history_refresh_btn")
         mgr.register(self._btn_clear, "history_clear_btn")
+        mgr.register(self._btn_export, "history_export_btn")
         mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
         mgr.register(self._sub_tabs.widget(1), "history_alpha_sub")
+        mgr.register(self._conv_tree, "history_conv_tree")
+        mgr.register(self._alpha_tree, "history_alpha_tree")
+        mgr.register(self._conv_summary, "history_conv_summary")
+        mgr.register(self._alpha_summary, "history_alpha_summary")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -132,7 +167,8 @@ class HistoryTab(QWidget):
         total = len(history)
         self._conv_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
-            + ("  (most recent first)" if total > 0 else "")
+            + ("  (most recent first)" if total > 0 else
+               " — run the Converter to see history here.")
         )
 
     def _refresh_alpha(self):
@@ -153,7 +189,8 @@ class HistoryTab(QWidget):
         total = len(history)
         self._alpha_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
-            + ("  (most recent first)" if total > 0 else "")
+            + ("  (most recent first)" if total > 0 else
+               " — run the Alpha Fixer to see history here.")
         )
 
     # ------------------------------------------------------------------
@@ -170,3 +207,44 @@ class HistoryTab(QWidget):
             self._settings.clear_converter_history()
             self._settings.clear_alpha_history()
             self.refresh()
+
+    # ------------------------------------------------------------------
+    # Export
+    # ------------------------------------------------------------------
+
+    def _export_csv(self) -> None:
+        """Export the currently visible history sub-tab to a CSV file."""
+        # Determine which sub-tab is active
+        idx = self._sub_tabs.currentIndex()
+        if idx == 0:
+            tree = self._conv_tree
+            default_name = "converter_history.csv"
+            headers = ["Time", "Format", "Files", "OK", "Errors", "File names (first 10)"]
+        else:
+            tree = self._alpha_tree
+            default_name = "alpha_fixer_history.csv"
+            headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names (first 10)"]
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export History as CSV", default_name,
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            buf = io.StringIO(newline="")
+            writer = csv.writer(buf)
+            writer.writerow(headers)
+            root = tree.invisibleRootItem()
+            for row in range(root.childCount()):
+                item = root.child(row)
+                writer.writerow([item.text(col) for col in range(tree.columnCount())])
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                f.write(buf.getvalue())
+            QMessageBox.information(
+                self, "Export Complete",
+                f"History exported to:\n{path}",
+            )
+        except OSError as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not write CSV:\n{exc}")

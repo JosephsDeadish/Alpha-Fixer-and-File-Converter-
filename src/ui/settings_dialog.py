@@ -10,15 +10,26 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
-    QMessageBox, QInputDialog, QSpinBox, QFileDialog,
+    QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
 )
 
-from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet
+from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet, THEME_DESCRIPTIONS
 from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
 _THEME_PREFIX_CHARS = "★🔓 "
+
+# Trail slider range constants
+_TRAIL_LENGTH_MIN = 10
+_TRAIL_LENGTH_MAX = 200
+_TRAIL_LENGTH_DEFAULT = 50
+_TRAIL_FADE_MIN = 1
+_TRAIL_FADE_MAX = 10
+_TRAIL_FADE_DEFAULT = 5
+_TRAIL_INTENSITY_MIN = 10
+_TRAIL_INTENSITY_MAX = 100
+_TRAIL_INTENSITY_DEFAULT = 100
 
 # Human-friendly labels for click-effect keys, in display order
 _EFFECT_OPTIONS = [
@@ -79,6 +90,9 @@ class ColorButton(QPushButton):
 class SettingsDialog(QDialog):
     theme_changed = pyqtSignal(dict)
     settings_changed = pyqtSignal()
+    # Emitted the very first time the user changes the tooltip mode.
+    # MainWindow connects this to trigger the Secret Skeleton unlock.
+    first_tooltip_mode_change = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -96,7 +110,8 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
-        tabs = QTabWidget()
+        self._settings_tabs = QTabWidget()
+        tabs = self._settings_tabs
 
         # ================================================================
         # ---- Theme tab ----
@@ -211,8 +226,35 @@ class SettingsDialog(QDialog):
         effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
         self._effect_combo.setMinimumWidth(220)
+        _EFFECT_TIPS = {
+            "default":      "Pink sparks burst from click point. Light and fast.",
+            "gore":         "Blood splatter sprays outward. Dark and dramatic.",
+            "bat":          "Bats fly across the top of the window periodically.",
+            "rainbow":      "Unicorns and rainbow arcs fly from click point.",
+            "otter":        "Cute otter emojis burst and fall with gravity.",
+            "galaxy":       "Stars and cosmic dust scatter outward.",
+            "galaxy_otter": "Space otters emerge from a cosmic burst.",
+            "goth":         "Skulls and shadow sparks fall from click point.",
+            "neon":         "Electric lightning bolts crackle outward.",
+            "fire":         "Rising flame particles shoot upward from click.",
+            "ice":          "Snowflakes and frost crystals scatter outward.",
+            "sparkle":      "Glittering star crystals burst and fade.",
+            "panda":        "Cute panda emojis shower down from click point.",
+            "sakura":       "Cherry blossom petals drift down gracefully.",
+            "fairy":        "Glitter, magic wands, and fairies flutter across.",
+            "ocean":        "Bubbles rise and sea creatures pop from click.",
+            "ripple":       "Water droplets and wave rings spread from click.",
+            "mermaid":      "Magical sea creatures and sparkles float up.",
+            "shark":        "Shark bites with blood splatter effects.",
+            "alien":        "UFO abduction beams and alien emojis burst out.",
+            "custom":       "Use your own emoji (set in 'Custom Emoji' below).",
+        }
         for key, label in _EFFECT_OPTIONS:
             self._effect_combo.addItem(label, userData=key)
+            idx = self._effect_combo.count() - 1
+            tip = _EFFECT_TIPS.get(key, "")
+            if tip:
+                self._effect_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._effect_combo.setToolTip(
             "Choose the click particle effect for this theme.\n"
             "Select 'Custom' to use your own emoji as particles."
@@ -259,14 +301,18 @@ class SettingsDialog(QDialog):
         trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
         trail_gl.addWidget(QLabel("Trail Style:"), 2, 0)
         self._trail_style_combo = QComboBox()
-        self._trail_style_combo.addItems([
-            "Dots (default)",
-            "Ribbon / Noodle",
-            "Comet tail",
-            "Fairy dust ✨",
-            "Wave / Ocean 🌊",
-            "Sparkle / Ice ❄",
-        ])
+        _TRAIL_STYLE_OPTIONS = [
+            ("Dots (default)",    "Dots  – Small colored dots fade out behind the cursor."),
+            ("Ribbon / Noodle",   "Ribbon  – Smooth connected line trails the cursor like a ribbon or noodle."),
+            ("Comet tail",        "Comet tail  – Tapered bright streak that fades to nothing behind the cursor."),
+            ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
+            ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
+            ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
+        ]
+        for label, tip in _TRAIL_STYLE_OPTIONS:
+            self._trail_style_combo.addItem(label)
+            idx = self._trail_style_combo.count() - 1
+            self._trail_style_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._trail_style_combo.setToolTip(
             "Choose the visual style of the mouse trail.\n"
             "Ribbon draws a connected smooth line, Comet draws a tapered tail,\n"
@@ -288,6 +334,66 @@ class SettingsDialog(QDialog):
         self._use_theme_trail_check.toggled.connect(
             lambda checked: self._trail_style_combo.setEnabled(not checked)
         )
+
+        # Trail Length slider (10–200 points)
+        trail_gl.addWidget(QLabel("Trail Length:"), 4, 0)
+        self._trail_length_slider = QSlider(Qt.Orientation.Horizontal)
+        self._trail_length_slider.setRange(_TRAIL_LENGTH_MIN, _TRAIL_LENGTH_MAX)
+        self._trail_length_slider.setValue(_TRAIL_LENGTH_DEFAULT)
+        self._trail_length_slider.setToolTip(
+            "Controls how many trail points are kept.\n"
+            "Short = snappy; Long = lingering ghost trail."
+        )
+        self._trail_length_val_lbl = QLabel(str(_TRAIL_LENGTH_DEFAULT))
+        self._trail_length_val_lbl.setFixedWidth(30)
+        length_row = QHBoxLayout()
+        length_row.addWidget(self._trail_length_slider)
+        length_row.addWidget(self._trail_length_val_lbl)
+        trail_gl.addLayout(length_row, 4, 1)
+        self._trail_length_slider.valueChanged.connect(
+            lambda v: self._trail_length_val_lbl.setText(str(v))
+        )
+        self._trail_length_slider.valueChanged.connect(self._on_trail_length_changed)
+
+        # Trail Fade Speed slider (1 slow … 10 fast)
+        trail_gl.addWidget(QLabel("Fade Speed:"), 5, 0)
+        self._trail_fade_slider = QSlider(Qt.Orientation.Horizontal)
+        self._trail_fade_slider.setRange(_TRAIL_FADE_MIN, _TRAIL_FADE_MAX)
+        self._trail_fade_slider.setValue(_TRAIL_FADE_DEFAULT)
+        self._trail_fade_slider.setToolTip(
+            "How quickly the trail fades out.\n"
+            "1 = very slow (long ghost), 10 = very fast (sharp snap)."
+        )
+        self._trail_fade_val_lbl = QLabel(str(_TRAIL_FADE_DEFAULT))
+        self._trail_fade_val_lbl.setFixedWidth(30)
+        fade_row = QHBoxLayout()
+        fade_row.addWidget(self._trail_fade_slider)
+        fade_row.addWidget(self._trail_fade_val_lbl)
+        trail_gl.addLayout(fade_row, 5, 1)
+        self._trail_fade_slider.valueChanged.connect(
+            lambda v: self._trail_fade_val_lbl.setText(str(v))
+        )
+        self._trail_fade_slider.valueChanged.connect(self._on_trail_fade_changed)
+
+        # Trail Intensity slider (10–100 %)
+        trail_gl.addWidget(QLabel("Intensity:"), 6, 0)
+        self._trail_intensity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._trail_intensity_slider.setRange(_TRAIL_INTENSITY_MIN, _TRAIL_INTENSITY_MAX)
+        self._trail_intensity_slider.setValue(_TRAIL_INTENSITY_DEFAULT)
+        self._trail_intensity_slider.setToolTip(
+            "Maximum opacity of the trail (10 % = very faint, 100 % = fully bright)."
+        )
+        self._trail_intensity_val_lbl = QLabel(f"{_TRAIL_INTENSITY_DEFAULT}%")
+        self._trail_intensity_val_lbl.setFixedWidth(40)
+        intensity_row = QHBoxLayout()
+        intensity_row.addWidget(self._trail_intensity_slider)
+        intensity_row.addWidget(self._trail_intensity_val_lbl)
+        trail_gl.addLayout(intensity_row, 6, 1)
+        self._trail_intensity_slider.valueChanged.connect(
+            lambda v: self._trail_intensity_val_lbl.setText(f"{v}%")
+        )
+        self._trail_intensity_slider.valueChanged.connect(self._on_trail_intensity_changed)
+
         mouse_row.addWidget(grp_trail, 1)
 
         grp_cursor = QGroupBox("Cursor")
@@ -298,8 +404,22 @@ class SettingsDialog(QDialog):
         cursor_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
         self._cursor_combo = QComboBox()
         self._cursor_combo.addItems([
+            # Standard system cursors
             "Default", "Cross", "Pointing Hand", "Open Hand",
             "Hourglass", "Forbidden", "IBeam", "Size All", "Blank",
+            # Emoji text cursors (rendered via _make_emoji_cursor() in main window)
+            "🐼 Panda", "🦦 Otter", "🐱 Cat", "🦈 Shark",
+            "🧜 Mermaid Trident", "🛸 UFO", "🦇 Bat",
+            "🌊 Wave", "🔥 Fire", "❄ Snowflake", "⚡ Lightning",
+            "💀 Skull", "🌸 Sakura", "✨ Sparkle",
+            # Extended emoji cursors
+            "🐉 Dragon", "🌈 Rainbow", "🧚 Fairy", "👽 Alien",
+            "🌙 Moon", "🍭 Candy", "🌿 Leaf", "🎯 Target",
+            "🔮 Crystal Ball", "🦋 Butterfly", "🐙 Octopus",
+            "🪄 Magic Wand", "🌺 Flower", "💎 Diamond",
+            "🍄 Mushroom", "🤠 Cowboy", "☠ Crossbones",
+            "🐠 Fish", "🍀 Clover", "🌟 Star", "🦴 Bone",
+            "🎃 Pumpkin", "🧿 Evil Eye", "⚗ Flask", "🪸 Coral",
         ])
         cursor_gl.addWidget(self._cursor_combo, 0, 1)
         self._use_theme_cursor_check = QCheckBox(
@@ -329,14 +449,20 @@ class SettingsDialog(QDialog):
             "Your choice is remembered between sessions."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
-        sound_gl.addWidget(QLabel("Custom .wav:"), 1, 0)
+        self._use_theme_sound_check = QCheckBox("Use theme sound (each theme has its own click sound)")
+        self._use_theme_sound_check.setToolTip(
+            "When enabled the click sound changes to match the active theme.\n"
+            "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc."
+        )
+        sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
+        sound_gl.addWidget(QLabel("Custom .wav:"), 2, 0)
         sound_row = QHBoxLayout()
         self._click_sound_edit = QLineEdit()
         self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
         self._btn_sound_browse = QPushButton("Browse…")
         sound_row.addWidget(self._click_sound_edit, 1)
         sound_row.addWidget(self._btn_sound_browse)
-        sound_gl.addLayout(sound_row, 1, 1)
+        sound_gl.addLayout(sound_row, 2, 1)
         tv.addWidget(grp_sound)
 
         # Wrap the theme tab contents in a scroll area so all controls are always
@@ -367,17 +493,48 @@ class SettingsDialog(QDialog):
         self._font_size_spin.setValue(10)
         self._font_size_spin.setMaximumWidth(80)
         misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
-        self._click_effects_check = QCheckBox("Enable per-theme click particle effects")
-        misc_gl.addWidget(self._click_effects_check, 1, 0, 1, 2)
-        misc_gl.addWidget(QLabel("Tooltip Mode:"), 2, 0)
+        misc_gl.addWidget(QLabel("Tooltip Mode:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
-        self._tooltip_mode_combo.addItems(TOOLTIP_MODES)
+        _TOOLTIP_MODE_TIPS = {
+            "Normal":       "Standard helpful tooltips. Clear, informative, and professional.",
+            "Off":          "Tooltips are disabled. Hover over anything: silence. Pure, blessed silence.",
+            "Dumbed Down":  "Tips written as if you've never seen software before. Condescending but thorough.",
+            "No Filter 🤬": "Extremely vulgar, extremely funny, very sweary — but still actually helpful. The best mode.",
+        }
+        for mode in TOOLTIP_MODES:
+            self._tooltip_mode_combo.addItem(mode)
+            idx = self._tooltip_mode_combo.count() - 1
+            tip = _TOOLTIP_MODE_TIPS.get(mode, "")
+            if tip:
+                self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
             "No Filter 🤬 is the best mode – trust us."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
-        misc_gl.addWidget(self._tooltip_mode_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
+        misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
+        self._tooltip_style_combo = QComboBox()
+        _TOOLTIP_STYLE_ENTRIES = [
+            ("Auto (follow theme)",  "Tooltip style follows the active theme automatically."),
+            ("Angular",              "Sharp rectangular corners. Clean and minimal."),
+            ("Bubbly",               "Rounded corners, bold text. Friendly and playful."),
+            ("Rounded",              "Soft medium-radius corners. Works well with most themes."),
+            ("Icy",                  "Frosted blue tint with subtle glow. For ice/arctic themes."),
+            ("Wavy",                 "Alternating radius corners for a wavy feel. Ocean/mermaid themes."),
+            ("Neon",                 "Bold glowing border that pulses with the accent color."),
+            ("Classic",              "Traditional solid border. Familiar and unobtrusive."),
+        ]
+        for style_name, style_tip in _TOOLTIP_STYLE_ENTRIES:
+            self._tooltip_style_combo.addItem(style_name)
+            idx = self._tooltip_style_combo.count() - 1
+            self._tooltip_style_combo.setItemData(idx, style_tip, Qt.ItemDataRole.ToolTipRole)
+        self._tooltip_style_combo.setToolTip(
+            "Controls the visual shape and appearance of tooltip boxes.\n"
+            "Auto follows the active theme.  Other options force a fixed style."
+        )
+        self._tooltip_style_combo.setMaximumWidth(220)
+        misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
         gv.addWidget(grp_misc)
 
         # Wrap the general tab contents in a scroll area so checkboxes
@@ -392,6 +549,19 @@ class SettingsDialog(QDialog):
 
         # ---- Dialog button: just "Close" (settings already saved live) ----
         btn_row = QHBoxLayout()
+        self._btn_reset = QPushButton("Reset All Settings…")
+        self._btn_reset.setToolTip(
+            "Reset ALL settings, unlock flags, and history to factory defaults.\n"
+            "Useful for testing easter eggs and unlock events."
+        )
+        btn_row.addWidget(self._btn_reset)
+        self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
+        self._btn_reset_unlocks.setToolTip(
+            "Reset only the unlock flags and click counter to zero.\n"
+            "All other settings (theme, sound, trail, etc.) are preserved.\n"
+            "Useful for re-testing hidden theme easter eggs without losing your setup."
+        )
+        btn_row.addWidget(self._btn_reset_unlocks)
         btn_row.addStretch(1)
         self._btn_close = QPushButton("Close")
         self._btn_close.setObjectName("accent")
@@ -408,12 +578,15 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.clicked.connect(self._export_theme)
         self._btn_import_theme.clicked.connect(self._import_theme)
         self._btn_close.clicked.connect(self.accept)
+        self._btn_reset.clicked.connect(self._reset_all_settings)
+        self._btn_reset_unlocks.clicked.connect(self._reset_unlocks_only)
         self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
         self._btn_emoji_clear.clicked.connect(self._clear_emoji)
         # All controls save+emit live
         self._sound_check.toggled.connect(self._on_sound_changed)
+        self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
         self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
@@ -422,10 +595,10 @@ class SettingsDialog(QDialog):
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
-        self._click_effects_check.toggled.connect(self._on_effects_enabled_changed)
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
+        self._tooltip_style_combo.currentTextChanged.connect(self._on_tooltip_style_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -448,14 +621,26 @@ class SettingsDialog(QDialog):
         def _matches(name: str) -> bool:
             return not needle or needle in name.lower()
 
+        def _set_tip(idx: int, name: str) -> None:
+            """Set a tooltip on a just-added combo item using THEME_DESCRIPTIONS."""
+            desc = THEME_DESCRIPTIONS.get(name, "")
+            if desc:
+                self._theme_preset_combo.setItemData(
+                    idx, desc, Qt.ItemDataRole.ToolTipRole
+                )
+
         for name in PRESET_THEMES:
             if _matches(name):
+                idx = self._theme_preset_combo.count()
                 self._theme_preset_combo.addItem(name)
+                _set_tip(idx, name)
         # Show hidden themes that have been unlocked
         for name, t in HIDDEN_THEMES.items():
             unlock_key = f"unlock_{t.get('_unlock', '')}"
             if self._settings.get(unlock_key, False) and _matches(name):
+                idx = self._theme_preset_combo.count()
                 self._theme_preset_combo.addItem(f"🔓 {name}")
+                _set_tip(idx, name)
         saved = self._settings.get_saved_themes()
         filtered_saved = [n for n in sorted(saved) if _matches(n)]
         if filtered_saved:
@@ -489,11 +674,11 @@ class SettingsDialog(QDialog):
         # trigger save-and-emit loops.
         controls = [
             self._theme_preset_combo, self._effect_combo, self._sound_check,
-            self._click_sound_edit, self._trail_check, self._trail_color_btn,
-            self._trail_style_combo, self._use_theme_trail_check, self._cursor_combo,
-            self._use_theme_cursor_check, self._font_size_spin,
-            self._click_effects_check, self._click_effects_theme_check,
-            self._use_theme_effect_check, self._tooltip_mode_combo,
+            self._use_theme_sound_check, self._click_sound_edit, self._trail_check,
+            self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
+            self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
+            self._click_effects_theme_check,
+            self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -515,6 +700,7 @@ class SettingsDialog(QDialog):
         self._update_emoji_display()
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
+        self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
@@ -528,6 +714,16 @@ class SettingsDialog(QDialog):
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
+        # Load trail sliders
+        saved_length = int(self._settings.get("trail_length", _TRAIL_LENGTH_DEFAULT))
+        self._trail_length_slider.setValue(max(_TRAIL_LENGTH_MIN, min(_TRAIL_LENGTH_MAX, saved_length)))
+        self._trail_length_val_lbl.setText(str(self._trail_length_slider.value()))
+        saved_fade = int(self._settings.get("trail_fade_speed", _TRAIL_FADE_DEFAULT))
+        self._trail_fade_slider.setValue(max(_TRAIL_FADE_MIN, min(_TRAIL_FADE_MAX, saved_fade)))
+        self._trail_fade_val_lbl.setText(str(self._trail_fade_slider.value()))
+        saved_intensity = int(self._settings.get("trail_intensity", _TRAIL_INTENSITY_DEFAULT))
+        self._trail_intensity_slider.setValue(max(_TRAIL_INTENSITY_MIN, min(_TRAIL_INTENSITY_MAX, saved_intensity)))
+        self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -535,9 +731,6 @@ class SettingsDialog(QDialog):
         self._use_theme_cursor_check.setChecked(use_theme_cur)
         self._cursor_combo.setEnabled(not use_theme_cur)
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
-        self._click_effects_check.setChecked(
-            self._settings.get("click_effects_enabled", False)
-        )
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         self._click_effects_theme_check.setChecked(
             self._settings.get("click_effects_enabled", False)
@@ -548,6 +741,9 @@ class SettingsDialog(QDialog):
         mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
+        style_val = self._settings.get("tooltip_style", "Auto (follow theme)")
+        idx_s = self._tooltip_style_combo.findText(style_val)
+        self._tooltip_style_combo.setCurrentIndex(max(idx_s, 0))
 
         for c in controls:
             c.blockSignals(False)
@@ -563,17 +759,38 @@ class SettingsDialog(QDialog):
         mgr.register(self._effect_combo, "effect_combo")
         mgr.register(self._emoji_input, "custom_emoji")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
+        mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
+        mgr.register(self._use_theme_sound_check, "use_theme_sound")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
         mgr.register(self._use_theme_trail_check, "use_theme_trail")
+        mgr.register(self._trail_length_slider, "trail_length_slider")
+        mgr.register(self._trail_fade_slider, "trail_fade_slider")
+        mgr.register(self._trail_intensity_slider, "trail_intensity_slider")
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._font_size_spin, "font_size")
-        mgr.register(self._click_effects_check, "click_effects_check")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
+        # Additional widget registrations
+        mgr.register(self._btn_save_theme, "save_custom_theme")
+        mgr.register(self._btn_delete_theme, "delete_custom_theme")
+        mgr.register(self._btn_export_theme, "export_custom_theme")
+        mgr.register(self._btn_import_theme, "import_custom_theme")
+        mgr.register(self._click_sound_edit, "sound_path")
+        mgr.register(self._btn_sound_browse, "sound_browse")
+        mgr.register(self._btn_reset, "reset_all_settings")
+        mgr.register(self._btn_reset_unlocks, "reset_unlocks_btn")
+        # Settings dialog own tab bar (Theme / General tabs)
+        mgr.register_tab_bar(
+            self._settings_tabs.tabBar(),
+            ["settings_theme_tab", "settings_general_tab"],
+        )
+        # Register all color swatch buttons with the same generic key
+        for btn in self._color_buttons.values():
+            mgr.register(btn, "theme_color_btn")
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply
@@ -761,12 +978,70 @@ class SettingsDialog(QDialog):
         if path:
             self._click_sound_edit.setText(path)
 
+    def _reset_all_settings(self) -> None:
+        """Ask the user then wipe all settings back to factory defaults."""
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reset All Settings?",
+            "This will erase ALL settings, unlock flags, history, and custom themes.\n\n"
+            "Unlock events like easter eggs will be re-triggerable from scratch.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._settings.reset_all()
+        self.settings_changed.emit()
+        QMessageBox.information(
+            self,
+            "Settings Reset",
+            "All settings have been reset to defaults.\n"
+            "Restart the application to fully apply the changes.",
+        )
+        self.accept()
+
+    def _reset_unlocks_only(self) -> None:
+        """Ask the user then reset only unlock flags and click counter."""
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reset Unlocks & Clicks?",
+            "This will reset ONLY the unlock flags and click/file counter to zero.\n\n"
+            "All other settings (theme, sound, trail, cursor, etc.) are kept as-is.\n\n"
+            "Hidden themes and easter eggs will become re-triggerable from scratch.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._settings.reset_unlocks_only()
+        self.settings_changed.emit()
+        # Rebuild the theme combo so locked hidden themes are removed
+        self._rebuild_theme_combo(
+            select=self._theme_preset_combo.currentText(),
+            filter_text=self._current_filter_text(),
+        )
+        QMessageBox.information(
+            self,
+            "Unlocks Reset",
+            "Unlock flags and click counter have been reset.\n"
+            "Your theme, sound, and appearance settings are unchanged.\n"
+            "Start clicking or processing files to re-unlock hidden themes!",
+        )
+
     # ------------------------------------------------------------------
     # Live-update handlers for the General tab
     # ------------------------------------------------------------------
 
     def _on_sound_changed(self) -> None:
         self._settings.set("sound_enabled", self._sound_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_use_theme_sound_changed(self) -> None:
+        self._settings.set("use_theme_sound", self._use_theme_sound_check.isChecked())
         self.settings_changed.emit()
 
     def _on_sound_path_changed(self) -> None:
@@ -789,6 +1064,18 @@ class SettingsDialog(QDialog):
         self._settings.set("trail_color", color)
         self.settings_changed.emit()
 
+    def _on_trail_length_changed(self, value: int) -> None:
+        self._settings.set("trail_length", value)
+        self.settings_changed.emit()
+
+    def _on_trail_fade_changed(self, value: int) -> None:
+        self._settings.set("trail_fade_speed", value)
+        self.settings_changed.emit()
+
+    def _on_trail_intensity_changed(self, value: int) -> None:
+        self._settings.set("trail_intensity", value)
+        self.settings_changed.emit()
+
     def _on_cursor_changed(self) -> None:
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
@@ -799,20 +1086,7 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_effects_enabled_changed(self) -> None:
-        # Keep both copies of the on/off toggle in sync
-        enabled = (self._click_effects_check.isChecked()
-                   or self._click_effects_theme_check.isChecked())
-        sender = self.sender()
-        if sender is self._click_effects_check:
-            enabled = self._click_effects_check.isChecked()
-            self._click_effects_theme_check.blockSignals(True)
-            self._click_effects_theme_check.setChecked(enabled)
-            self._click_effects_theme_check.blockSignals(False)
-        elif sender is self._click_effects_theme_check:
-            enabled = self._click_effects_theme_check.isChecked()
-            self._click_effects_check.blockSignals(True)
-            self._click_effects_check.setChecked(enabled)
-            self._click_effects_check.blockSignals(False)
+        enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("click_effects_enabled", enabled)
         self.settings_changed.emit()
 
@@ -823,5 +1097,17 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:
+        # Track first-ever tooltip mode change to trigger the Secret Skeleton unlock.
+        # Both settings saves complete before the signal fires, so the unlock
+        # only triggers after the flag and mode have been persisted.
+        should_unlock = not self._settings.get("tooltip_mode_changed_once", False)
+        if should_unlock:
+            self._settings.set("tooltip_mode_changed_once", True)
         self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
+        self.settings_changed.emit()
+        if should_unlock:
+            self.first_tooltip_mode_change.emit()
+
+    def _on_tooltip_style_changed(self) -> None:
+        self._settings.set("tooltip_style", self._tooltip_style_combo.currentText())
         self.settings_changed.emit()

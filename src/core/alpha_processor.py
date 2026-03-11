@@ -200,26 +200,67 @@ def apply_manual_alpha(
     clamp_min: int = 0,
     clamp_max: int = 255,
     binary_cut: bool = False,
+    mode: str = "set",
 ) -> Image.Image:
     """Apply alpha changes without a preset.
 
     Args:
-        value: Target alpha value (0-255) to set on affected pixels.
-               Pass None to skip the set step and only apply clamping.
-        binary_cut: When True, apply a hard 0/255 split at the threshold
-                    (pixels >= threshold → 255, else → 0).
+        value: Target alpha value (0-255).  Interpretation depends on *mode*.
+               Pass None to skip the value step and only apply clamping/invert.
+        mode:  How *value* is applied to each pixel's existing alpha:
+                 'set'      – replace: new_alpha = value
+                 'multiply' – scale:   new_alpha = old × (value / 255)
+                 'add'      – shift:   new_alpha = old + value  (clamped to 255)
+                 'subtract' – shift:   new_alpha = old − value  (clamped to 0)
+               Defaults to 'set' for backward-compatibility.
+        binary_cut: When True, apply a hard 0/255 split at the threshold.
     """
-    pseudo = AlphaPreset(
-        name="_manual",
-        alpha_value=value,
-        threshold=threshold,
-        invert=invert,
-        description="",
-        clamp_min=clamp_min,
-        clamp_max=clamp_max,
-        binary_cut=binary_cut,
-    )
-    return apply_alpha_preset(img, pseudo)
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    arr = np.array(img, dtype=np.int32)
+    alpha = arr[:, :, 3].copy()
+
+    # Step 1: Invert
+    if invert:
+        alpha = 255 - alpha
+
+    # Step 2: Apply value according to mode
+    if value is not None:
+        if mode == "multiply":
+            # raw_value is the 0-255 scale; actual multiplier = raw_value / 255.
+            # Integer floor division avoids float rounding.
+            raw_value = int(value)
+            if threshold > 0:
+                mask = alpha < threshold
+                alpha = np.where(mask, np.clip(alpha * raw_value // 255, 0, 255), alpha)
+            else:
+                alpha = np.clip(alpha * raw_value // 255, 0, 255)
+        elif mode == "add":
+            if threshold > 0:
+                mask = alpha < threshold
+                alpha = np.where(mask, np.clip(alpha + int(value), 0, 255), alpha)
+            else:
+                alpha = np.clip(alpha + int(value), 0, 255)
+        elif mode == "subtract":
+            if threshold > 0:
+                mask = alpha < threshold
+                alpha = np.where(mask, np.clip(alpha - int(value), 0, 255), alpha)
+            else:
+                alpha = np.clip(alpha - int(value), 0, 255)
+        else:  # 'set' (default)
+            if threshold > 0:
+                mask = alpha < threshold
+                alpha[mask] = int(value)
+            else:
+                alpha[:] = int(value)
+
+    # Step 3: Binary threshold cut (hard 0/255 split)
+    if binary_cut and threshold > 0:
+        alpha = np.where(alpha >= threshold, 255, 0)
+
+    # Step 4: Clamp
+    arr[:, :, 3] = np.clip(alpha, clamp_min, clamp_max).astype(np.uint8)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
 # ---------------------------------------------------------------------------

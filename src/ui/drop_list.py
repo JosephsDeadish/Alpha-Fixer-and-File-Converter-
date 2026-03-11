@@ -1,7 +1,7 @@
 """
 DropFileList – a QListWidget subclass that:
   • Accepts drag-and-drop of files / folders from the OS
-  • Supports Delete key and right-click → Remove Selected
+  • Supports Delete key and right-click → Remove Selected / Select All / Open Containing Folder
   • Emits paths_dropped(list[str]) so the parent can do dedup/counting
   • Emits count_changed(int) whenever the item count changes
   • Shows 56×56 thumbnails lazily (only for visible rows) via a background
@@ -15,7 +15,7 @@ from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
-from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage
+from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont
 from PyQt6.QtWidgets import QListWidget, QMenu, QApplication
 
 
@@ -88,6 +88,9 @@ class DropFileList(QListWidget):
     paths_dropped = pyqtSignal(list)   # list[str] – new paths dragged in
     count_changed = pyqtSignal(int)    # emitted after any add/remove
 
+    # Icon shown in the centre of the list when no files have been added yet
+    _EMPTY_STATE_ICON = "📂"
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
@@ -124,6 +127,40 @@ class DropFileList(QListWidget):
 
         # Set icon size
         self.setIconSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
+
+    # ------------------------------------------------------------------
+    # Empty-state hint overlay
+    # ------------------------------------------------------------------
+
+    def paintEvent(self, event):  # noqa: N802
+        super().paintEvent(event)
+        if self.count() == 0:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            rect = self.viewport().rect()
+
+            # Big icon
+            icon_font = QFont(painter.font())
+            icon_font.setPointSize(28)
+            painter.setFont(icon_font)
+            painter.setPen(QColor(128, 128, 128, 80))
+            painter.drawText(
+                rect.adjusted(0, 0, 0, -30),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                self._EMPTY_STATE_ICON,
+            )
+
+            # Hint text
+            hint_font = QFont(painter.font())
+            hint_font.setPointSize(9)
+            painter.setFont(hint_font)
+            painter.setPen(QColor(128, 128, 128, 120))
+            painter.drawText(
+                rect.adjusted(0, 40, 0, 0),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                "Drop files or folders here\nor use the Add Files button",
+            )
+            painter.end()
 
     # ------------------------------------------------------------------
     # Thumbnail helpers
@@ -237,6 +274,9 @@ class DropFileList(QListWidget):
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
+            self.setProperty("drag_active", True)
+            self.style().unpolish(self)
+            self.style().polish(self)
             event.acceptProposedAction()
         else:
             event.ignore()
@@ -247,7 +287,16 @@ class DropFileList(QListWidget):
         else:
             event.ignore()
 
+    def dragLeaveEvent(self, event):
+        self.setProperty("drag_active", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event):
+        self.setProperty("drag_active", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
         if event.mimeData().hasUrls():
             paths = [u.toLocalFile() for u in event.mimeData().urls() if u.toLocalFile()]
             if paths:
@@ -263,6 +312,9 @@ class DropFileList(QListWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:
             self._remove_selected()
+        elif (event.key() == Qt.Key.Key_A and
+              event.modifiers() == Qt.KeyboardModifier.ControlModifier):
+            self.selectAll()
         else:
             super().keyPressEvent(event)
 
@@ -279,10 +331,32 @@ class DropFileList(QListWidget):
 
         menu.addSeparator()
 
+        # Select-all / Deselect-all
+        act_select_all = QAction("Select All", self)
+        act_select_all.setShortcut("Ctrl+A")
+        act_select_all.setEnabled(self.count() > 0)
+        act_select_all.triggered.connect(self.selectAll)
+        menu.addAction(act_select_all)
+
+        act_deselect = QAction("Deselect All", self)
+        act_deselect.setEnabled(bool(self.selectedItems()))
+        act_deselect.triggered.connect(self.clearSelection)
+        menu.addAction(act_deselect)
+
+        menu.addSeparator()
+
         act_clear = QAction("Clear All", self)
         act_clear.setEnabled(self.count() > 0)
         act_clear.triggered.connect(self._clear_all)
         menu.addAction(act_clear)
+
+        # Open containing folder for single selection
+        selected = self.selectedItems()
+        if len(selected) == 1:
+            menu.addSeparator()
+            act_open = QAction("📂  Open Containing Folder", self)
+            act_open.triggered.connect(lambda: self._open_containing_folder(selected[0].text()))
+            menu.addAction(act_open)
 
         menu.addSeparator()
 
@@ -311,6 +385,32 @@ class DropFileList(QListWidget):
     # ------------------------------------------------------------------
     # Remove helpers (can also be called externally)
     # ------------------------------------------------------------------
+
+    def _open_containing_folder(self, path: str) -> None:
+        """Open the folder containing *path* in the OS file manager."""
+        import subprocess
+        import sys
+        abs_path = os.path.abspath(path)
+        folder = os.path.dirname(abs_path)
+        try:
+            if sys.platform == "win32":
+                # Highlight the specific file in Explorer
+                subprocess.run(
+                    ["explorer", "/select,", abs_path],
+                    check=False, timeout=5,
+                )
+            elif sys.platform == "darwin":
+                subprocess.run(
+                    ["open", "-R", abs_path],
+                    check=False, timeout=5,
+                )
+            else:
+                subprocess.run(
+                    ["xdg-open", folder],
+                    check=False, timeout=5,
+                )
+        except Exception:
+            pass
 
     def _remove_selected(self):
         items = self.selectedItems()

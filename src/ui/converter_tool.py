@@ -3,9 +3,10 @@ File Converter tab widget.
 """
 import datetime
 import os
+import time
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -15,20 +16,37 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.alpha_processor import collect_files
-from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST
+from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
 from .preview_pane import ImagePreviewPane
 
 
 class ConverterTab(QWidget):
+    """Tab widget for batch file-format conversion."""
+
+    # Emitted after every successful batch: carries the count of files converted.
+    # MainWindow connects this to check for processing-based theme unlocks.
+    processing_done = pyqtSignal(int)
+    # Emitted the very first time a conversion batch completes successfully.
+    # MainWindow uses this to trigger the 'first conversion' theme unlock.
+    first_conversion = pyqtSignal()
+    # Emitted whenever at least one file is added to the queue.
+    files_added = pyqtSignal()
+
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
+        # ETA tracking for large batch runs
+        self._batch_start_time: float = 0.0
+        self._batch_total: int = 0
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
+        # Cached aspect ratio (w, h) of the currently selected file
+        # to avoid re-opening the image on every width spinbox tick.
+        self._cached_aspect: tuple[int, int] | None = None
         # Debounce timer: waits 150 ms after the last format/quality change
         # before refreshing the preview so rapid spin-box steps don't each
         # kick off a separate background conversion.
@@ -188,8 +206,11 @@ class ConverterTab(QWidget):
         self._fmt_combo = QComboBox()
         self._fmt_combo.setMinimumWidth(140)
         self._fmt_combo.setMinimumHeight(28)
-        for name, ext in OUTPUT_FORMAT_LIST:
+        for i, (name, ext) in enumerate(OUTPUT_FORMAT_LIST):
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
+            desc = FORMAT_DESCRIPTIONS.get(name, "")
+            if desc:
+                self._fmt_combo.setItemData(i, desc, Qt.ItemDataRole.ToolTipRole)
         gf_layout.addWidget(self._fmt_combo, 0, 1)
 
         # Restore last-used format
@@ -252,6 +273,11 @@ class ConverterTab(QWidget):
         self._height_spin.setEnabled(False)
         gr_layout.addWidget(self._height_spin, 2, 1)
 
+        self._lock_aspect_check = QCheckBox("Lock aspect ratio")
+        self._lock_aspect_check.setEnabled(False)
+        self._lock_aspect_check.setChecked(True)
+        gr_layout.addWidget(self._lock_aspect_check, 3, 0, 1, 2)
+
         rv.addWidget(grp_resize)
 
         # Log
@@ -279,6 +305,9 @@ class ConverterTab(QWidget):
         self._btn_out_dir.clicked.connect(self._browse_out_dir)
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
         self._resize_check.toggled.connect(self._height_spin.setEnabled)
+        self._resize_check.toggled.connect(self._lock_aspect_check.setEnabled)
+        # When width changes and lock is on, update height proportionally
+        self._width_spin.valueChanged.connect(self._on_width_changed)
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
@@ -322,6 +351,11 @@ class ConverterTab(QWidget):
         mgr.register(self._file_list, "file_list")
         mgr.register(self._suffix_edit, "suffix_edit")
         mgr.register(self._keep_metadata_check, "keep_metadata_check")
+        mgr.register(self._file_count_lbl, "conv_file_count_lbl")
+        mgr.register(self._log, "processing_log")
+        mgr.register(self._progress, "processing_progress")
+        mgr.register(self._status_lbl, "conv_status_lbl")
+        mgr.register(self._lock_aspect_check, "lock_aspect_check")
 
     def update_theme(self, theme_name: str) -> None:
         """Update the inner header label to match the active theme's tab emoji."""
@@ -361,6 +395,8 @@ class ConverterTab(QWidget):
         self._file_list.add_paths_batch(paths)
         if was_empty and self._file_list.count() > 0:
             self._file_list.setCurrentRow(0)
+        if paths:
+            self.files_added.emit()
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
@@ -371,6 +407,8 @@ class ConverterTab(QWidget):
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
         item = self._file_list.item(row)
+        # Invalidate cached aspect ratio whenever the selection changes
+        self._cached_aspect = None
         if item:
             self._refresh_preview(item.text())
         else:
@@ -392,6 +430,33 @@ class ConverterTab(QWidget):
         fmt = fmt_data[0] if fmt_data else ""
         if fmt in ("JPEG", "WEBP", "AVIF"):
             self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_width_changed(self, width: int) -> None:
+        """Update height proportionally when lock aspect ratio is checked."""
+        if not (self._lock_aspect_check.isChecked() and
+                self._resize_check.isChecked()):
+            return
+        # Use cached aspect ratio to avoid re-opening the file on every tick
+        if self._cached_aspect is None:
+            row = self._file_list.currentRow()
+            item = self._file_list.item(row)
+            if item:
+                try:
+                    from PIL import Image
+                    with Image.open(item.text()) as im:
+                        self._cached_aspect = im.size
+                except Exception:
+                    return
+        if self._cached_aspect is None:
+            return
+        orig_w, orig_h = self._cached_aspect
+        if orig_w > 0:
+            new_h = max(1, round(width * orig_h / orig_w))
+            # Block signals to avoid recursive update
+            self._height_spin.blockSignals(True)
+            self._height_spin.setValue(new_h)
+            self._height_spin.blockSignals(False)
 
     def _update_converted_preview(self):
         """Refresh the preview pane to reflect the current format and quality."""
@@ -467,6 +532,8 @@ class ConverterTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Converting…")
+        self._batch_start_time = time.monotonic()
+        self._batch_total = len(expanded)
 
         self._worker = ConverterWorker(
             files=expanded,
@@ -495,9 +562,14 @@ class ConverterTab(QWidget):
 
     @pyqtSlot(int, int, str)
     def _on_progress(self, current: int, total: int, path: str):
+        from ._ui_utils import format_eta
         pct = int(current / max(total, 1) * 100)
         self._progress.setValue(pct)
-        self._status_lbl.setText(f"Converting {current + 1}/{total}: {Path(path).name}")
+        elapsed = time.monotonic() - self._batch_start_time
+        eta_str = format_eta(current, total, elapsed)
+        self._status_lbl.setText(
+            f"Converting {current + 1}/{total}: {Path(path).name}{eta_str}"
+        )
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):
@@ -530,6 +602,13 @@ class ConverterTab(QWidget):
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
         }
         self._settings.add_converter_history(entry)
+        # Notify main window so processing-based theme unlocks can fire
+        if success > 0:
+            self.processing_done.emit(success)
+            # Emit first_conversion signal the very first time conversion succeeds
+            if not self._settings.get("conversion_done_once", False):
+                self._settings.set("conversion_done_once", True)
+                self.first_conversion.emit()
 
     def _log_msg(self, msg: str) -> None:
         self._log.append(msg)

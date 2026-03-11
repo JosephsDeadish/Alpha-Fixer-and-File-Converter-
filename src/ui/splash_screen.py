@@ -7,6 +7,7 @@ app name, and a smooth loading progress bar, then fades out.
 from __future__ import annotations
 
 import math
+import webbrowser
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty
@@ -14,6 +15,8 @@ from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QFontMetrics, QRa
 from PyQt6.QtWidgets import QSplashScreen, QApplication
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtCore import QByteArray
+
+PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
 
 # Total display time before the splash auto-closes (ms)
@@ -174,6 +177,16 @@ class ThemeSplashScreen(QSplashScreen):
         p.setPen(QPen(sep_col, 1))
         p.drawLine(30, 105, W - 30, 105)
 
+        # Patreon link – visible in the lower-left corner above the loading text
+        patreon_font = QFont("Segoe UI", 8)
+        p.setFont(patreon_font)
+        patreon_col = QColor(self._accent)
+        patreon_col.setAlpha(180)
+        p.setPen(patreon_col)
+        p.drawText(QRect(30, H - 78, W - 60, 16),
+                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                   "❤ patreon.com/c/DeadOnTheInside  (click to support for free)")
+
         # Loading dots label
         msg_font = QFont("Segoe UI", 10)
         p.setFont(msg_font)
@@ -242,6 +255,11 @@ class ThemeSplashScreen(QSplashScreen):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        """Click anywhere on the splash to open the Patreon page."""
+        webbrowser.open(PATREON_URL)
+        super().mousePressEvent(event)
 
     def finish_and_close(self, main_window) -> None:
         """Fade out and then call finish(main_window)."""
