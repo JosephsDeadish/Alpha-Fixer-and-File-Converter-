@@ -1042,3 +1042,51 @@ class TestConverterMetadata(unittest.TestCase):
             self.assertEqual(result.mode, "RGBA")
             self.assertEqual(result.size, (4, 4))
 
+
+
+# ---------------------------------------------------------------------------
+# format_eta helper
+# ---------------------------------------------------------------------------
+
+class TestFormatEta(unittest.TestCase):
+    """Unit tests for src.ui._ui_utils.format_eta."""
+
+    def _fmt(self, current, total, elapsed, threshold=500):
+        from src.ui._ui_utils import format_eta
+        return format_eta(current, total, elapsed, threshold=threshold)
+
+    def test_returns_empty_below_threshold(self):
+        """Small batches should never show an ETA."""
+        result = self._fmt(current=100, total=499, elapsed=5.0)
+        self.assertEqual(result, "")
+
+    def test_returns_empty_when_current_is_zero(self):
+        result = self._fmt(current=0, total=1000, elapsed=5.0)
+        self.assertEqual(result, "")
+
+    def test_returns_empty_when_elapsed_too_short(self):
+        result = self._fmt(current=50, total=1000, elapsed=0.5)
+        self.assertEqual(result, "")
+
+    def test_seconds_format_below_one_minute(self):
+        # 500 items, 50 done in 5 s → rate=10/s, remaining=450, eta=45s
+        result = self._fmt(current=50, total=500, elapsed=5.0)
+        self.assertIn("ETA", result)
+        self.assertIn("s", result)
+        self.assertNotIn("m", result)
+
+    def test_minutes_format_above_one_minute(self):
+        # 1000 items, 100 done in 10 s → rate=10/s, remaining=900, eta=90s
+        result = self._fmt(current=100, total=1000, elapsed=10.0)
+        self.assertIn("ETA", result)
+        self.assertIn("m", result)
+
+    def test_custom_threshold_respected(self):
+        # threshold=10: 20 items should show ETA
+        result = self._fmt(current=5, total=20, elapsed=2.0, threshold=10)
+        self.assertIn("ETA", result)
+
+    def test_starts_with_two_spaces(self):
+        """ETA string must start with '  ' so it appends cleanly to status text."""
+        result = self._fmt(current=100, total=1000, elapsed=10.0)
+        self.assertTrue(result.startswith("  "), repr(result))

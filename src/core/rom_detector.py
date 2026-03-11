@@ -215,8 +215,9 @@ def _dirs_to_check(p: Path) -> list[Path]:
 def _is_safe_dir(d: Path) -> bool:
     """Return True if *d* is a safe directory to scan (not a system root)."""
     home = Path.home()
-    # Avoid scanning / or /sys /boot /etc etc.
-    if d == Path("/") or d == Path("C:\\") or d == Path("C:/"):
+    # Avoid scanning filesystem roots (/, C:\, D:\, etc.)
+    # d.anchor gives the drive root on all platforms ("/" on Unix, "C:\\" on Windows)
+    if d == Path(d.anchor):
         return False
     # If the directory is very short (depth ≤ 2 on Linux), it's probably a
     # system-level path — skip it

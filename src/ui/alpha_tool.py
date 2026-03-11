@@ -1122,23 +1122,14 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int, int, str)
     def _on_progress(self, current: int, total: int, path: str):
+        from ._ui_utils import format_eta
         pct = int(current / max(total, 1) * 100)
         self._progress.setValue(pct)
-        # Show ETA for large batches (>= 500 files) so the user knows how long to wait
         elapsed = time.monotonic() - self._batch_start_time
-        if total >= 500 and current > 0 and elapsed > 1.0:
-            rate = current / elapsed          # files/sec
-            remaining = max(0, total - current)
-            eta_secs = int(remaining / rate) if rate > 0 else 0
-            if eta_secs >= 60:
-                eta_str = f"  ETA ~{eta_secs // 60}m {eta_secs % 60:02d}s"
-            else:
-                eta_str = f"  ETA ~{eta_secs}s"
-            self._status_lbl.setText(
-                f"Processing {current + 1}/{total}: {Path(path).name}{eta_str}"
-            )
-        else:
-            self._status_lbl.setText(f"Processing {current + 1}/{total}: {Path(path).name}")
+        eta_str = format_eta(current, total, elapsed)
+        self._status_lbl.setText(
+            f"Processing {current + 1}/{total}: {Path(path).name}{eta_str}"
+        )
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):

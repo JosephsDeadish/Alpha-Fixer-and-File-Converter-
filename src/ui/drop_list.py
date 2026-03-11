@@ -88,6 +88,9 @@ class DropFileList(QListWidget):
     paths_dropped = pyqtSignal(list)   # list[str] – new paths dragged in
     count_changed = pyqtSignal(int)    # emitted after any add/remove
 
+    # Icon shown in the centre of the list when no files have been added yet
+    _EMPTY_STATE_ICON = "📂"
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
@@ -144,10 +147,10 @@ class DropFileList(QListWidget):
             painter.drawText(
                 rect.adjusted(0, 0, 0, -30),
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                "📂",
+                self._EMPTY_STATE_ICON,
             )
 
-            # Hint line 1
+            # Hint text
             hint_font = QFont(painter.font())
             hint_font.setPointSize(9)
             painter.setFont(hint_font)
@@ -384,15 +387,25 @@ class DropFileList(QListWidget):
         """Open the folder containing *path* in the OS file manager."""
         import subprocess
         import sys
-        folder = os.path.dirname(os.path.abspath(path))
+        abs_path = os.path.abspath(path)
+        folder = os.path.dirname(abs_path)
         try:
             if sys.platform == "win32":
-                # Highlight the file itself in Explorer
-                subprocess.Popen(["explorer", "/select,", os.path.abspath(path)])
+                # Highlight the specific file in Explorer
+                subprocess.run(
+                    ["explorer", "/select,", abs_path],
+                    check=False, timeout=5,
+                )
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", "-R", path])
+                subprocess.run(
+                    ["open", "-R", abs_path],
+                    check=False, timeout=5,
+                )
             else:
-                subprocess.Popen(["xdg-open", folder])
+                subprocess.run(
+                    ["xdg-open", folder],
+                    check=False, timeout=5,
+                )
         except Exception:
             pass
 
