@@ -4,7 +4,7 @@ Main application window.
 import webbrowser
 
 from PyQt6.QtCore import Qt, QSize, QRect, QTimer
-from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QPixmap, QPainter
+from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QToolBar,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
@@ -261,6 +261,11 @@ class MainWindow(QMainWindow):
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
+
+        # Keyboard shortcuts for tab switching: Ctrl+1/2/3
+        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3")):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(lambda i=idx: self._tabs.setCurrentIndex(i))
 
         self.setCentralWidget(central)
 
@@ -878,7 +883,7 @@ class MainWindow(QMainWindow):
             "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
             "<li>Unique per-theme banner, shapes, and visual style — each theme has its own look</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
-            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · F1 help</li>"
+            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · Ctrl+1/2/3 switch tabs · F1 help</li>"
             "</ul>"
             "<p>Built with Python + PyQt6 + Pillow.</p>"
             f'<p><a href="{PATREON_URL}">❤ Support on Patreon</a></p>',
