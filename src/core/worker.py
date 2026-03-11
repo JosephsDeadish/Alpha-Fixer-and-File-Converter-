@@ -2,14 +2,25 @@
 Background worker threads for the Alpha Fixer and Converter tools.
 
 Uses QThread + signals for safe UI communication without blocking the main thread.
+
+For large batches (>= _LARGE_BATCH_THRESHOLD files) the workers suppress
+per-file success log messages and emit progress updates at most every
+_PROGRESS_INTERVAL files to prevent flooding the UI event queue.
 """
 import os
+import time
 import traceback
 import logging
 from pathlib import Path
 from typing import Optional, Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
+
+# Above this number of files, suppress individual success log lines and
+# throttle progress signals to keep the UI responsive.
+_LARGE_BATCH_THRESHOLD = 1_000
+# Minimum seconds between consecutive progress signal emissions in large-batch mode.
+_PROGRESS_MIN_INTERVAL = 0.1   # 100 ms
 
 from .alpha_processor import (
     load_image,
@@ -64,10 +75,16 @@ class AlphaWorker(QThread):
         total = len(self._files)
         success = 0
         errors = 0
+        large_batch = total >= _LARGE_BATCH_THRESHOLD
+        last_progress_time = 0.0
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
-            self.progress.emit(idx, total, src)
+            # Throttle progress signal in large-batch mode
+            now = time.monotonic()
+            if not large_batch or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
+                self.progress.emit(idx, total, src)
+                last_progress_time = now
             try:
                 img = load_image(src)
                 if self._preset is not None:
@@ -97,12 +114,15 @@ class AlphaWorker(QThread):
                 ext = Path(src).suffix.lower()
                 save_image(img, dest, ext)
                 success += 1
-                self.file_done.emit(src, True, dest)
+                # In large-batch mode suppress per-file success messages to keep
+                # the UI log from accumulating 50 000 lines.
+                if not large_batch:
+                    self.file_done.emit(src, True, dest)
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()
                 logger.error("Alpha worker error on %s:\n%s", src, msg)
-                self.file_done.emit(src, False, msg)
+                self.file_done.emit(src, False, msg)  # always emit errors
         self.finished.emit(success, errors)
 
     def _resolve_output(self, src: str) -> str:
@@ -160,10 +180,15 @@ class ConverterWorker(QThread):
         total = len(self._files)
         success = 0
         errors = 0
+        large_batch = total >= _LARGE_BATCH_THRESHOLD
+        last_progress_time = 0.0
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
-            self.progress.emit(idx, total, src)
+            now = time.monotonic()
+            if not large_batch or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
+                self.progress.emit(idx, total, src)
+                last_progress_time = now
             try:
                 dest = build_output_path(
                     src,
@@ -181,7 +206,8 @@ class ConverterWorker(QThread):
                     keep_metadata=self._keep_metadata,
                 )
                 success += 1
-                self.file_done.emit(src, True, dest)
+                if not large_batch:
+                    self.file_done.emit(src, True, dest)
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()

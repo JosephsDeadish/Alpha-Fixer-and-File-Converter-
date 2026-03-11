@@ -62,6 +62,7 @@ class ConverterTab(QWidget):
 
         # ---- Left: input files + preview ----
         left = QWidget()
+        left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
 
@@ -85,10 +86,12 @@ class ConverterTab(QWidget):
         lv.addWidget(self._recursive_check)
 
         self._file_list = DropFileList()
+        self._file_list.setMinimumHeight(180)
         self._file_list.setToolTip(
             "Files queued for conversion.\n"
             "• Drag files/folders here from Explorer/Finder\n"
-            "• Delete key or right-click → Remove Selected"
+            "• Delete key or right-click → Remove Selected\n"
+            "• Right-click → Thumbnails to toggle image previews"
         )
         lv.addWidget(self._file_list, 1)
 
@@ -103,7 +106,7 @@ class ConverterTab(QWidget):
         go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 110)
+        go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
 
@@ -114,13 +117,13 @@ class ConverterTab(QWidget):
         out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
-        self._out_dir_edit.setMinimumHeight(26)
+        self._out_dir_edit.setMinimumHeight(28)
         saved_out = self._settings.get("converter_output_dir", "")
         if saved_out:
             self._out_dir_edit.setText(saved_out)
         self._btn_out_dir = QPushButton("Browse…")
         self._btn_out_dir.setMinimumWidth(80)
-        self._btn_out_dir.setMinimumHeight(26)
+        self._btn_out_dir.setMinimumHeight(28)
         out_row.addWidget(self._out_dir_edit, 1)
         out_row.addWidget(self._btn_out_dir)
         go_layout.addLayout(out_row, 0, 1)
@@ -130,7 +133,7 @@ class ConverterTab(QWidget):
         go_layout.addWidget(lbl_suffix, 1, 0)
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
-        self._suffix_edit.setMinimumHeight(26)
+        self._suffix_edit.setMinimumHeight(28)
         go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
@@ -144,6 +147,7 @@ class ConverterTab(QWidget):
 
         # ---- Right: options ----
         right = QWidget()
+        right.setMinimumWidth(360)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
         rv.setSpacing(8)
@@ -174,7 +178,7 @@ class ConverterTab(QWidget):
         gf_layout.setContentsMargins(10, 14, 10, 12)
         gf_layout.setColumnStretch(0, 0)
         gf_layout.setColumnStretch(1, 1)
-        gf_layout.setColumnMinimumWidth(0, 130)
+        gf_layout.setColumnMinimumWidth(0, 140)
         gf_layout.setHorizontalSpacing(12)
         gf_layout.setVerticalSpacing(10)
 
@@ -182,8 +186,8 @@ class ConverterTab(QWidget):
         lbl_fmt.setMinimumHeight(24)
         gf_layout.addWidget(lbl_fmt, 0, 0)
         self._fmt_combo = QComboBox()
-        self._fmt_combo.setMinimumWidth(130)
-        self._fmt_combo.setMinimumHeight(26)
+        self._fmt_combo.setMinimumWidth(140)
+        self._fmt_combo.setMinimumHeight(28)
         for name, ext in OUTPUT_FORMAT_LIST:
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
         gf_layout.addWidget(self._fmt_combo, 0, 1)
@@ -199,7 +203,7 @@ class ConverterTab(QWidget):
         gf_layout.addWidget(lbl_quality, 1, 0)
         self._quality_spin = QSpinBox()
         self._quality_spin.setRange(1, 100)
-        self._quality_spin.setMinimumHeight(26)
+        self._quality_spin.setMinimumHeight(28)
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
         gf_layout.addWidget(self._quality_spin, 1, 1)
 
@@ -261,8 +265,9 @@ class ConverterTab(QWidget):
         right_scroll.setWidget(right)
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        right_scroll.setMinimumWidth(360)
         splitter.addWidget(right_scroll)
-        splitter.setSizes([420, 580])
+        splitter.setSizes([440, 580])
         main_layout.addWidget(splitter, 1)
 
         # ---- Connections ----
@@ -349,18 +354,11 @@ class ConverterTab(QWidget):
             self._add_to_list(files)
 
     def _add_to_list(self, paths: list[str]):
-        existing = {self._file_list.item(i).text() for i in range(self._file_list.count())}
-        added = 0
-        for p in paths:
-            if p not in existing:
-                self._file_list.addItem(p)
-                existing.add(p)
-                added += 1
-        if added:
-            self._file_list.count_changed.emit(self._file_list.count())
-            # Auto-select the first item so the preview pane shows immediately
-            if self._file_list.currentRow() < 0:
-                self._file_list.setCurrentRow(0)
+        """Add paths using the batch helper to stay responsive for large imports."""
+        was_empty = self._file_list.count() == 0
+        self._file_list.add_paths_batch(paths)
+        if was_empty and self._file_list.count() > 0:
+            self._file_list.setCurrentRow(0)
 
     @pyqtSlot(int)
     def _update_count(self, n: int):

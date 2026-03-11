@@ -150,6 +150,7 @@ class AlphaFixerTab(QWidget):
         # Left panel: file list  +  before/after comparison
         # ==============================================================
         left = QWidget()
+        left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
         lv.setSpacing(6)
@@ -180,7 +181,7 @@ class AlphaFixerTab(QWidget):
         go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 110)
+        go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
 
@@ -190,9 +191,10 @@ class AlphaFixerTab(QWidget):
         out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
-        self._out_dir_edit.setMinimumHeight(26)
+        self._out_dir_edit.setMinimumHeight(28)
         self._btn_out_dir = QPushButton("Browse…")
-        self._btn_out_dir.setMinimumHeight(26)
+        self._btn_out_dir.setMinimumHeight(28)
+        self._btn_out_dir.setMinimumWidth(80)
         out_row.addWidget(self._out_dir_edit, 1)
         out_row.addWidget(self._btn_out_dir)
         go_layout.addLayout(out_row, 0, 1)
@@ -202,7 +204,7 @@ class AlphaFixerTab(QWidget):
         go_layout.addWidget(lbl_suffix, 1, 0)
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _fixed  (blank = overwrite source)")
-        self._suffix_edit.setMinimumHeight(26)
+        self._suffix_edit.setMinimumHeight(28)
         go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
@@ -211,17 +213,19 @@ class AlphaFixerTab(QWidget):
         left_vsplit = QSplitter(Qt.Orientation.Vertical)
         left_vsplit.setChildrenCollapsible(False)
 
-        # Top: file list
+        # Top: file list (with thumbnails, handles 50 000+ files via lazy loading)
         list_area = QWidget()
         la_layout = QVBoxLayout(list_area)
         la_layout.setContentsMargins(0, 0, 0, 0)
         la_layout.setSpacing(4)
 
         self._file_list = DropFileList()
+        self._file_list.setMinimumHeight(180)
         self._file_list.setToolTip(
             "Files queued for processing.\n"
             "• Drag files/folders here from Explorer/Finder\n"
-            "• Delete key or right-click → Remove Selected"
+            "• Delete key or right-click → Remove Selected\n"
+            "• Right-click → Thumbnails to toggle image previews"
         )
         la_layout.addWidget(self._file_list, 1)
 
@@ -255,7 +259,7 @@ class AlphaFixerTab(QWidget):
         ca_layout.addWidget(self._alpha_stats_lbl)
 
         left_vsplit.addWidget(compare_area)
-        left_vsplit.setSizes([300, 300])
+        left_vsplit.setSizes([340, 300])
 
         lv.addWidget(left_vsplit, 1)
         outer_splitter.addWidget(left)
@@ -264,6 +268,7 @@ class AlphaFixerTab(QWidget):
         # Right panel: run controls (top) + presets + fine-tune
         # ==============================================================
         right = QWidget()
+        right.setMinimumWidth(380)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(6, 0, 0, 0)
         rv.setSpacing(8)
@@ -292,12 +297,16 @@ class AlphaFixerTab(QWidget):
         # Preset section
         grp_preset = QGroupBox("Preset")
         gp_layout = QVBoxLayout(grp_preset)
+        gp_layout.setSpacing(8)
 
         preset_row = QHBoxLayout()
         self._preset_combo = QComboBox()
-        self._preset_combo.setMinimumWidth(160)
+        self._preset_combo.setMinimumWidth(180)
+        self._preset_combo.setMinimumHeight(28)
         self._btn_save_preset = QPushButton("Save")
+        self._btn_save_preset.setMinimumWidth(60)
         self._btn_delete_preset = QPushButton("Delete")
+        self._btn_delete_preset.setMinimumWidth(60)
         preset_row.addWidget(QLabel("Preset:"))
         preset_row.addWidget(self._preset_combo, 1)
         preset_row.addWidget(self._btn_save_preset)
@@ -307,6 +316,7 @@ class AlphaFixerTab(QWidget):
         self._preset_desc = QLabel("")
         self._preset_desc.setWordWrap(True)
         self._preset_desc.setObjectName("subheader")
+        self._preset_desc.setMinimumHeight(44)
         gp_layout.addWidget(self._preset_desc)
 
         rv.addWidget(grp_preset)
@@ -317,7 +327,7 @@ class AlphaFixerTab(QWidget):
         gt_layout.setContentsMargins(10, 14, 10, 12)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
-        gt_layout.setColumnMinimumWidth(0, 155)
+        gt_layout.setColumnMinimumWidth(0, 165)
         gt_layout.setHorizontalSpacing(12)
         gt_layout.setVerticalSpacing(8)
 
@@ -325,8 +335,8 @@ class AlphaFixerTab(QWidget):
         lbl_mode.setMinimumHeight(24)
         gt_layout.addWidget(lbl_mode, 0, 0)
         self._mode_combo = QComboBox()
-        self._mode_combo.setMinimumWidth(130)
-        self._mode_combo.setMinimumHeight(26)
+        self._mode_combo.setMinimumWidth(140)
+        self._mode_combo.setMinimumHeight(28)
         self._mode_combo.addItems(["set", "multiply", "add", "subtract", "clamp_min", "clamp_max"])
         gt_layout.addWidget(self._mode_combo, 0, 1)
 
@@ -386,51 +396,63 @@ class AlphaFixerTab(QWidget):
         self._use_preset_check.setChecked(True)
         gt_layout.addWidget(self._use_preset_check, 7, 0, 1, 2)
 
+        # Live "Current Params" display — updates whenever any fine-tune control changes.
+        # Populated by _refresh_finetune_label() at the end of _setup_ui.
+        self._finetune_params_lbl = QLabel("")
+        self._finetune_params_lbl.setObjectName("subheader")
+        self._finetune_params_lbl.setWordWrap(True)
+        self._finetune_params_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._finetune_params_lbl.setToolTip(
+            "Live summary of the current fine-tune parameters.\n"
+            "Updates instantly as you change any control above."
+        )
+        gt_layout.addWidget(self._finetune_params_lbl, 8, 0, 1, 2)
+
         # --- RGBA channel adjustments ---
         rgb_sep = QLabel("─── RGBA Channel Adjust (delta \u2013255 to +255) ───")
         rgb_sep.setObjectName("subheader")
         rgb_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        gt_layout.addWidget(rgb_sep, 8, 0, 1, 2)
+        gt_layout.addWidget(rgb_sep, 9, 0, 1, 2)
 
         lbl_red = QLabel("Red adjust:")
         lbl_red.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_red, 9, 0)
+        gt_layout.addWidget(lbl_red, 10, 0)
         self._red_spin = QSpinBox()
         self._red_spin.setRange(-255, 255)
         self._red_spin.setValue(0)
         self._red_spin.setPrefix("R ")
-        self._red_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._red_spin, 9, 1)
+        self._red_spin.setMinimumHeight(28)
+        gt_layout.addWidget(self._red_spin, 10, 1)
 
         lbl_green = QLabel("Green adjust:")
         lbl_green.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_green, 10, 0)
+        gt_layout.addWidget(lbl_green, 11, 0)
         self._green_spin = QSpinBox()
         self._green_spin.setRange(-255, 255)
         self._green_spin.setValue(0)
         self._green_spin.setPrefix("G ")
-        self._green_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._green_spin, 10, 1)
+        self._green_spin.setMinimumHeight(28)
+        gt_layout.addWidget(self._green_spin, 11, 1)
 
         lbl_blue = QLabel("Blue adjust:")
         lbl_blue.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_blue, 11, 0)
+        gt_layout.addWidget(lbl_blue, 12, 0)
         self._blue_spin = QSpinBox()
         self._blue_spin.setRange(-255, 255)
         self._blue_spin.setValue(0)
         self._blue_spin.setPrefix("B ")
-        self._blue_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._blue_spin, 11, 1)
+        self._blue_spin.setMinimumHeight(28)
+        gt_layout.addWidget(self._blue_spin, 12, 1)
 
         lbl_alpha_adj = QLabel("Alpha adjust:")
         lbl_alpha_adj.setMinimumHeight(24)
-        gt_layout.addWidget(lbl_alpha_adj, 12, 0)
+        gt_layout.addWidget(lbl_alpha_adj, 13, 0)
         self._alpha_delta_spin = QSpinBox()
         self._alpha_delta_spin.setRange(-255, 255)
         self._alpha_delta_spin.setValue(0)
         self._alpha_delta_spin.setPrefix("A\u25b3 ")
-        self._alpha_delta_spin.setMinimumHeight(26)
-        gt_layout.addWidget(self._alpha_delta_spin, 12, 1)
+        self._alpha_delta_spin.setMinimumHeight(28)
+        gt_layout.addWidget(self._alpha_delta_spin, 13, 1)
 
         self._apply_rgb_check = QCheckBox("Apply RGBA adjustments")
         self._apply_rgb_check.setChecked(False)
@@ -438,14 +460,14 @@ class AlphaFixerTab(QWidget):
             "When checked, the Red/Green/Blue/Alpha deltas are applied on top of\n"
             "the alpha fix. Useful for colour-correcting game textures."
         )
-        gt_layout.addWidget(self._apply_rgb_check, 13, 0, 1, 2)
+        gt_layout.addWidget(self._apply_rgb_check, 14, 0, 1, 2)
 
         rv.addWidget(grp_tune)
 
         # Log
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMinimumHeight(80)
+        self._log.setMinimumHeight(90)
         self._log.setPlaceholderText("Processing log…")
         rv.addWidget(self._log, 1)
 
@@ -455,8 +477,9 @@ class AlphaFixerTab(QWidget):
         right_scroll.setWidget(right)
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        right_scroll.setMinimumWidth(380)
         outer_splitter.addWidget(right_scroll)
-        outer_splitter.setSizes([440, 560])
+        outer_splitter.setSizes([460, 580])
         main_layout.addWidget(outer_splitter, 1)
 
         # ==============================================================
@@ -478,7 +501,7 @@ class AlphaFixerTab(QWidget):
         self._file_list.count_changed.connect(self._update_file_count)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
-        # Fine-tune controls → refresh compare preview
+        # Fine-tune controls → refresh compare preview AND live params label
         self._mode_combo.currentTextChanged.connect(self._on_finetune_changed)
         self._alpha_spin.valueChanged.connect(self._on_finetune_changed)
         self._threshold_spin.valueChanged.connect(self._on_finetune_changed)
@@ -491,6 +514,8 @@ class AlphaFixerTab(QWidget):
         self._blue_spin.valueChanged.connect(self._on_finetune_changed)
         self._alpha_delta_spin.valueChanged.connect(self._on_finetune_changed)
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
+        # Initialise the live params label
+        self._refresh_finetune_label()
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -584,6 +609,8 @@ class AlphaFixerTab(QWidget):
         for c in finetune_controls:
             c.blockSignals(False)
         self._btn_delete_preset.setEnabled(not preset.builtin)
+        # Refresh live params label to match newly-loaded preset values
+        self._refresh_finetune_label()
         # Refresh compare preview (via debounce so rapid preset changes don't
         # stack up many simultaneous background threads).
         self._preview_debounce.start()
@@ -657,18 +684,12 @@ class AlphaFixerTab(QWidget):
             self._add_to_list(files)
 
     def _add_to_list(self, paths: list[str]):
-        existing = {self._file_list.item(i).text() for i in range(self._file_list.count())}
-        added = 0
-        for p in paths:
-            if p not in existing:
-                self._file_list.addItem(p)
-                existing.add(p)
-                added += 1
-        if added:
-            self._file_list.count_changed.emit(self._file_list.count())
-            # Auto-select the first item so the preview pane shows immediately
-            if self._file_list.currentRow() < 0:
-                self._file_list.setCurrentRow(0)
+        """Add paths using the batch helper to stay responsive for large imports."""
+        was_empty = self._file_list.count() == 0
+        self._file_list.add_paths_batch(paths)
+        # Auto-select the first item so the preview pane shows immediately
+        if was_empty and self._file_list.count() > 0:
+            self._file_list.setCurrentRow(0)
 
     @pyqtSlot(int)
     def _update_file_count(self, n: int):
@@ -686,11 +707,26 @@ class AlphaFixerTab(QWidget):
             self._preview_path = None
             self._compare.clear()
 
+    def _refresh_finetune_label(self) -> None:
+        """Update the live fine-tune params summary label."""
+        mode   = self._mode_combo.currentText()
+        val    = self._alpha_spin.value()
+        cmin   = self._clamp_min_spin.value()
+        cmax   = self._clamp_max_spin.value()
+        thresh = self._threshold_spin.value()
+        parts  = [f"mode={mode}", f"value={val}"]
+        if mode in ("clamp_min", "clamp_max"):
+            parts.append(f"clamp={cmin}–{cmax}")
+        if thresh:
+            parts.append(f"thresh={thresh}")
+        if self._invert_check.isChecked():
+            parts.append("invert=yes")
+        self._finetune_params_lbl.setText("  ·  ".join(parts))
+
     @pyqtSlot()
     def _on_finetune_changed(self, *args):
-        """Refresh the compare preview via a debounce timer to avoid rapid-fire threads."""
-        # Always debounce regardless of preset/manual mode so the preview
-        # stays in sync when the user drags sliders or changes the preset.
+        """Refresh live params label and debounce the compare preview update."""
+        self._refresh_finetune_label()
         self._preview_debounce.start()
 
     # ------------------------------------------------------------------
