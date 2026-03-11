@@ -1145,6 +1145,53 @@ THEME_EFFECTS = {t["name"]: t.get("_effect", "default") for t in {
     **PRESET_THEMES, **HIDDEN_THEMES,
 }.values()}
 
+# Short descriptions for each theme, shown as per-item tooltips in the theme combo.
+THEME_DESCRIPTIONS: dict[str, str] = {
+    # ─── Preset themes ─────────────────────────────────────────────────
+    "Panda Dark":       "Dark navy & crimson panda theme. The default. Classic.",
+    "Panda Light":      "White & rose panda theme. Clean and bright.",
+    "Neon Panda":       "Electric neon-pink panda on deep black. Eye-catching.",
+    "Gore":             "Blood red & black with sharp edges and drip styling.",
+    "Bat Cave":         "Deep purple gothic cave. Asymmetric bat-wing shapes.",
+    "Rainbow Chaos":    "Maximum colour chaos. Pill-shaped buttons, wild hues.",
+    "Otter Cove":       "Warm sandy beach tones. Smooth rounded pebble shapes.",
+    "Galaxy":           "Dark blue cosmic space. Angular star-map precision.",
+    "Galaxy Otter":     "Playful space-otter fusion. Purple cosmic shapes.",
+    "Goth":             "All-caps black & violet angular brutalism.",
+    "Volcano":          "Molten orange-red with jagged eruption shapes.",
+    "Arctic":           "Clean bright whites and icy blues. Minimal sharp corners.",
+    "Fairy Garden":     "Soft lavender & pink. Large rounded magical shapes.",
+    "Noodle":           "Warm yellow-tan. Wavy organic dangling noodle shapes.",
+    "Mermaid":          "Teal & seafoam iridescent. Wave-scale alternating radius.",
+    "Shark Bait":       "Ocean blue with blood-red bite marks on button edges.",
+    "Alien":            "Neon green sci-fi. Hexagonal angular uppercase tech UI.",
+    # ─── Hidden themes (shown when unlocked) ──────────────────────────
+    "Secret Skeleton":  "Bone-white on black. Stark angular skull energy. 💀",
+    "Secret Sakura":    "Delicate pink cherry blossoms. Soft rounded petals. 🌸",
+    "Deep Ocean":       "Bioluminescent deep-sea teal. Smooth bubble shapes. 🌊",
+    "Blood Moon":       "Crimson lunar gothic. Dramatic top-glow red edges. 🩸",
+    "Ice Cave":         "Crystal blue stalactites. Alternating sharp corners. ❄",
+    "Cyber Otter":      "Amber & cyan retro-digital. Warm organic digital blend. 🦦",
+    "Toxic Neon":       "Radioactive green. Glowing poisonous UI elements. ☢",
+    "Lava Cave":        "Deep orange volcanic rock. Rough glowing seam shapes. 🌋",
+    "Sunset Beach":     "Golden orange-pink sunset gradient. Warm rounded forms. 🌅",
+    "Midnight Forest":  "Deep forest green. Vertical gradient, rounded leaves. 🌲",
+    "Candy Land":       "Deep magenta candy swirls. Diagonal pastel wash. 🍭",
+    "Zombie Apocalypse":"Sickly green apocalyptic. Gore-meets-nature decay. 🧟",
+    "Dragon Fire":      "Fiery gold on deep black. Dramatic dragon-scale shapes. 🐉",
+    "Bubblegum":        "Pink & lavender candy bubbles. Bouncy diagonal wash. 🫧",
+    "Thunder Storm":    "Electric stormy blue. Charged high-voltage edges. ⚡",
+    "Rose Gold":        "Warm blush & metallic gold. Elegant curved shapes. 🌹",
+    "Space Cat":        "Deep space purple with cat-eye accents. Cosmic kitty. 🐱",
+    "Magic Mushroom":   "Psychedelic purple-red. Spacey vertical gradient glow. 🍄",
+    "Abyssal Void":     "Ultra-dark zero-colour void. Stark left-accent bars. 🕳",
+    "Spring Bloom":     "Soft flower-petal pastels. Diagonal spring bloom wash. 🌷",
+    "Gold Rush":        "Warm amber & deep brown. Rich golden theme. 💰",
+    "Nebula":           "Purple-magenta cosmic cloud. Alternating rounded forms. 🌌",
+    # ─── Pancake (preset, easy to miss) ───────────────────────────────
+    "Pancake":          "Syrupy brown stacked pancake shapes. Thick rounded borders.",
+}
+
 import os as _os
 _SVG_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "assets", "svg")
 

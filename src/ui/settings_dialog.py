@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QFileDialog,
 )
 
-from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet
+from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, DEFAULT_THEME, build_stylesheet, THEME_DESCRIPTIONS
 from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 
@@ -468,14 +468,26 @@ class SettingsDialog(QDialog):
         def _matches(name: str) -> bool:
             return not needle or needle in name.lower()
 
+        def _set_tip(idx: int, name: str) -> None:
+            """Set a tooltip on a just-added combo item using THEME_DESCRIPTIONS."""
+            desc = THEME_DESCRIPTIONS.get(name, "")
+            if desc:
+                self._theme_preset_combo.setItemData(
+                    idx, desc, Qt.ItemDataRole.ToolTipRole
+                )
+
         for name in PRESET_THEMES:
             if _matches(name):
+                idx = self._theme_preset_combo.count()
                 self._theme_preset_combo.addItem(name)
+                _set_tip(idx, name)
         # Show hidden themes that have been unlocked
         for name, t in HIDDEN_THEMES.items():
             unlock_key = f"unlock_{t.get('_unlock', '')}"
             if self._settings.get(unlock_key, False) and _matches(name):
+                idx = self._theme_preset_combo.count()
                 self._theme_preset_combo.addItem(f"🔓 {name}")
+                _set_tip(idx, name)
         saved = self._settings.get_saved_themes()
         filtered_saved = [n for n in sorted(saved) if _matches(n)]
         if filtered_saved:

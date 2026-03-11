@@ -185,10 +185,10 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "theme_combo": [
         "Choose a visual theme for the application.",
-        "Themes change colors and enable unique click particle effects.",
-        "The Bat Cave theme adds periodic bat flyovers across the window!",
-        "Try Gore, Rainbow Chaos, or Galaxy for dramatic visual effects.",
-        "You can create custom color themes in the Theme tab of Settings.",
+        "Hover over each theme in the dropdown to see a description of its style.",
+        "Themes change colors, button shapes, and enable unique click particle effects.",
+        "Locked hidden themes show 🔓 when unlocked — earn them by clicking and processing files.",
+        "You can create custom color themes using the color pickers in the Theme tab.",
     ],
     "effect_combo": [
         "Choose the click particle effect style for this theme.",
@@ -700,7 +700,7 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "theme_combo": [
         "Choose pretty colors. There's blood and bats and rainbows. You're welcome.",
-        "The theme changes how the app looks. Some have cool effects!",
+        "Hover each theme in the dropdown to see what it looks like. Descriptions exist.",
         "Bat Cave makes bats fly across the screen. Because why not.",
         "Gore theme has blood splatter. It's... tasteful. Mostly.",
         "Rainbow Chaos will do things to your eyes. You've been warned.",
@@ -1310,7 +1310,7 @@ _VULGAR: dict[str, list[str]] = {
     "theme_combo": [
         "Choose a theme. Gore has blood splatter. Bat Cave has literal fucking bats. You're welcome.",
         "Rainbow Chaos will assault your retinas. You'll love it or hate it. No in-between.",
-        "Galaxy theme is for when you want to feel like you're coding in space.",
+        "Hover each theme to see a short description. We wrote them. They're good.",
         "Otter Cove is cute and cozy. Galaxy Otter is cuter AND cosmic. Best of both worlds.",
         "Goth theme for when you're feeling angsty and want skulls everywhere.",
         "Mermaid theme: teal and more teal. Trident cursor. Ripple clicks. Underwater vibes.",
