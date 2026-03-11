@@ -32,10 +32,12 @@ logger = logging.getLogger(__name__)
 def _write_wav(samples: list, sample_rate: int = 22050) -> str:
     """Write a list of 16-bit PCM samples to a temp WAV file and return the path.
 
-    *samples* must be non-empty; an empty list is treated as a single frame of
-    silence so the caller always gets a valid (if silent) WAV back.
+    *samples* should be non-empty; if an empty list is passed a warning is
+    logged and a single silent frame is written so the caller always gets a
+    valid WAV file back.
     """
     if not samples:
+        logger.warning("_write_wav called with empty samples list — writing silent frame")
         samples = [0]
     samples = [max(-32768, min(32767, s)) for s in samples]
     tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)

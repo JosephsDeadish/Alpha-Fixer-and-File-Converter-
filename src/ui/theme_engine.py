@@ -2686,6 +2686,22 @@ QLabel#section {{
     color: {t['accent']};
     padding: 4px 0;
 }}
+QLabel#stats_panel {{
+    font-size: 11px;
+    color: {t['text_secondary']};
+    background-color: {t['surface']};
+    border: 1px solid {t['border']};
+    border-radius: 4px;
+    padding: 4px 2px;
+}}
+QLabel#rom_banner {{
+    font-size: 11px;
+    color: {t['text']};
+    background-color: {t['primary']};
+    border: 1px solid {t['accent']};
+    border-radius: 4px;
+    padding: 4px 6px;
+}}
 
 /* ===== Group Box ===== */
 QGroupBox {{

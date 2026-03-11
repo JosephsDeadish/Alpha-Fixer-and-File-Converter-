@@ -449,6 +449,27 @@ _NORMAL: dict[str, list[str]] = {
         "Useful when converting photos that need to retain color accuracy.",
         "Leave unchecked when processing game textures that don't need metadata.",
     ],
+    "before_stats_panel": [
+        "Alpha channel statistics for the BEFORE (original) image.",
+        "min = darkest alpha value (0 = fully transparent pixel found).",
+        "max = brightest alpha value (255 = fully opaque pixel found).",
+        "mean = average alpha across all pixels — lower means more transparency.",
+        "Use these values to tune the clamp min/max and threshold spinboxes.",
+    ],
+    "after_stats_panel": [
+        "Alpha channel statistics for the AFTER (processed) image.",
+        "Compare with the BEFORE panel to see how your settings changed the alpha.",
+        "min / max / mean update every time you adjust the fine-tune controls.",
+        "A max of 255 and high mean means most pixels are now fully opaque.",
+        "If min=0 and max=0, every pixel was set to fully transparent — check settings.",
+    ],
+    "rom_banner": [
+        "Game/ROM folder detected! The app identified the console based on folder structure.",
+        "PS2 folders often contain SLUS_xxx files or SYSTEM.CNF — these are recognised automatically.",
+        "GameCube/Wii: boot.bin and bi2.bin are fingerprints the detector looks for.",
+        "The disc ID (e.g. SLUS-20626) can be used to look up game info online.",
+        "If cover art is found in your emulator's covers directory, the path is shown here.",
+    ],
 }
 
 # Dumbed Down – mocking the user for needing tooltips, but still informative
@@ -872,6 +893,27 @@ _DUMBED: dict[str, list[str]] = {
         "Game textures? Don't care about EXIF. Photos? Probably check this.",
         "ICC profiles are what keep colors looking correct. Leave checked if you care about accuracy.",
         "Unchecked = smaller files, no extra info. Checked = full metadata intact. Simple.",
+    ],
+    "before_stats_panel": [
+        "This shows the alpha stats BEFORE you did anything. Original image. Untouched.",
+        "Min = the lowest alpha value. Max = the highest. Mean = the average. It's math. Basic math.",
+        "These numbers tell you how transparent your original image is. Lower mean = more transparent.",
+        "Compare this to the AFTER panel on the right to see if your settings are doing anything.",
+        "If min and max are both 255, your image had zero transparency to begin with. Congrats?",
+    ],
+    "after_stats_panel": [
+        "These are the alpha stats AFTER your fix ran. Right side. After. You get it.",
+        "Compare with BEFORE on the left to see if your settings actually changed anything.",
+        "If min/max/mean look the same as before, you might not have changed anything useful.",
+        "Mean going up = more opaque. Mean going down = more transparent. Simple concept.",
+        "If after stats show all zeros, you set everything to transparent. Check your settings.",
+    ],
+    "rom_banner": [
+        "The app spotted a game folder! It recognized the console from file/folder names.",
+        "PS2 = SLUS/SCUS files or SYSTEM.CNF. GameCube = boot.bin. N64 = .z64 files.",
+        "The disc ID shown here can help you look up the game online or find cover art.",
+        "This banner appears automatically when the tool detects a known game format.",
+        "If it detected the wrong console, the folder structure might use common names.",
     ],
 }
 
@@ -1473,6 +1515,27 @@ _VULGAR: dict[str, list[str]] = {
         "Checked = metadata preserved. Unchecked = stripped out. Simple binary choice. Make it.",
         "Your EXIF data contains your life story (camera model, date, GPS). Check this to keep that story intact.",
         "For photographers: check this always. For game devs: don't bother. Now you know.",
+    ],
+    "before_stats_panel": [
+        "BEFORE stats. Min, max, mean alpha. The raw untouched shit before you fucked with it.",
+        "This is what your alpha channel looked like before you did anything. Pure, virgin data.",
+        "Compare this to the AFTER panel. If the numbers changed, your settings did something. Congrats.",
+        "Min=0 means some pixel is fully transparent. Max=255 means some pixel is fully opaque. Now you know.",
+        "Mean alpha is the average. Low mean = mostly transparent garbage. High mean = mostly solid. Simple math.",
+    ],
+    "after_stats_panel": [
+        "AFTER stats. This is what your alpha looks like after you messed with it.",
+        "If these numbers match the BEFORE panel exactly, you changed absolutely nothing. Check your settings.",
+        "Mean going up = you made shit more opaque. Mean going down = you transparent-ified it. Pick wisely.",
+        "All zeros here means everything is now fully transparent. Unless that's what you wanted, fix it.",
+        "High max and high mean after processing means your alpha fix actually worked. Good job, genius.",
+    ],
+    "rom_banner": [
+        "Holy shit, the app figured out what game this is from the folder structure. Pretty smart, right?",
+        "PS2 disc detected! SLUS_xxx files or SYSTEM.CNF gave it away. Your game textures are in good hands.",
+        "Console detected from file patterns. The app isn't psychic — it just reads the damn folder names.",
+        "Disc ID shown here. Use it to look up the game or find cover art. Also nice to know what you're fixing.",
+        "If it detected the wrong console, blame the modder who named their folders weirdly. Not our fault.",
     ],
 }
 

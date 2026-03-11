@@ -223,6 +223,9 @@ class BeforeAfterWidget(QWidget):
     _DIVIDER_W = 2    # divider line width (px)
     _ARROW_W = 6      # arrow chevron reach from centre
     _ARROW_H = 4      # arrow head height
+    # Below this widget width the compact overlay stats are shown (the side
+    # panels in alpha_tool are not visible at very narrow widths).
+    _COMPACT_OVERLAY_WIDTH_THRESHOLD = 500
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -379,11 +382,11 @@ class BeforeAfterWidget(QWidget):
                 painter.setPen(QColor("#e94560"))
                 painter.drawText(ax + 4, 4 + fm.ascent() + 2, atext)
 
-        # ── Alpha stats at bottom corners ──────────────────────────────
-        # Rendered as semi-transparent overlay text so they sit inside the
-        # widget without needing external QLabel widgets (which would have
-        # opaque dark backgrounds from the global QWidget stylesheet).
-        if self._stats_before or self._stats_after:
+        # ── Alpha stats overlay (compact, below divider handle) ──────────
+        # The primary stats display is now in the side panels in alpha_tool.py;
+        # this compact overlay serves as a fallback when the widget is used
+        # standalone (e.g. in other contexts) or the window is too narrow.
+        if (self._stats_before or self._stats_after) and w < self._COMPACT_OVERLAY_WIDTH_THRESHOLD:
             stats_font = QFont("Segoe UI", 8)
             painter.setFont(stats_font)
             sfm = QFontMetrics(stats_font)

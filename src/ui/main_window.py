@@ -341,6 +341,9 @@ class MainWindow(QMainWindow):
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
         self._converter_tab.processing_done.connect(self._on_processing_done)
+        # First-use unlock triggers
+        self._alpha_tab.first_alpha_fix.connect(self._on_first_alpha_fix)
+        self._converter_tab.first_conversion.connect(self._on_first_conversion)
 
         # Cursor
         self._apply_cursor()
@@ -737,6 +740,28 @@ class MainWindow(QMainWindow):
         if not self._settings.get("unlock_skeleton", False):
             self._settings.set("unlock_skeleton", True)
             self._unlock_lbl.setText("🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_alpha_fix(self) -> None:
+        """Unlock Secret Sakura the very first time the user runs an alpha fix."""
+        if not self._settings.get("unlock_sakura", False):
+            self._settings.set("unlock_sakura", True)
+            self._unlock_lbl.setText("🌸 'Secret Sakura' theme unlocked! (first alpha fix!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_conversion(self) -> None:
+        """Unlock Sunset Beach the very first time the user converts files."""
+        if not self._settings.get("unlock_sunset_beach", False):
+            self._settings.set("unlock_sunset_beach", True)
+            self._unlock_lbl.setText("🌅 'Sunset Beach' theme unlocked! (first conversion!)")
             try:
                 self._sound.play_unlock()
             except Exception:

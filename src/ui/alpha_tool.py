@@ -111,9 +111,18 @@ class _AlphaPreviewLoader(QThread):
 class AlphaFixerTab(QWidget):
     """Tab widget for batch alpha-channel processing."""
 
+    # Maximum number of paths passed to ROM detection (keeps scan fast for
+    # very large file imports — the first few paths usually have enough
+    # context to identify the console).
+    _ROM_SCAN_LIMIT = 50
+
     # Emitted after every successful batch: carries the count of files processed.
     # MainWindow connects this to check for processing-based theme unlocks.
     processing_done = pyqtSignal(int)
+    # Emitted the very first time a batch completes successfully.
+    # MainWindow uses this to trigger the 'first alpha fix' theme unlock.
+    first_alpha_fix = pyqtSignal()
+
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
         self._presets = preset_manager
@@ -238,9 +247,16 @@ class AlphaFixerTab(QWidget):
         self._file_count_lbl.setObjectName("subheader")
         la_layout.addWidget(self._file_count_lbl)
 
+        # ROM / game folder detection banner (hidden when no game is detected)
+        self._rom_banner = QLabel()
+        self._rom_banner.setObjectName("rom_banner")
+        self._rom_banner.setWordWrap(True)
+        self._rom_banner.hide()
+        la_layout.addWidget(self._rom_banner)
+
         left_vsplit.addWidget(list_area)
 
-        # Bottom: before/after compare widget
+        # Bottom: before/after compare widget with side alpha-stat panels
         compare_area = QWidget()
         ca_layout = QVBoxLayout(compare_area)
         ca_layout.setContentsMargins(0, 0, 0, 0)
@@ -251,9 +267,31 @@ class AlphaFixerTab(QWidget):
         compare_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ca_layout.addWidget(compare_lbl)
 
+        # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
+        compare_row = QHBoxLayout()
+        compare_row.setContentsMargins(0, 0, 0, 0)
+        compare_row.setSpacing(4)
+
+        def _make_stats_panel() -> QLabel:
+            """Return a small fixed-width label used for alpha statistics."""
+            lbl = QLabel()
+            lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            lbl.setFixedWidth(84)
+            lbl.setWordWrap(True)
+            lbl.setObjectName("stats_panel")
+            lbl.setContentsMargins(2, 4, 2, 4)
+            return lbl
+
+        self._before_stats_lbl = _make_stats_panel()
+        self._after_stats_lbl = _make_stats_panel()
+
         self._compare = BeforeAfterWidget()
         self._compare.setMinimumHeight(240)
-        ca_layout.addWidget(self._compare, 1)
+
+        compare_row.addWidget(self._before_stats_lbl, 0)
+        compare_row.addWidget(self._compare, 1)
+        compare_row.addWidget(self._after_stats_lbl, 0)
+        ca_layout.addLayout(compare_row, 1)
 
         left_vsplit.addWidget(compare_area)
         left_vsplit.setSizes([220, 420])
@@ -588,6 +626,9 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._blue_spin, "blue_spin")
         mgr.register(self._alpha_delta_spin, "alpha_delta_spin")
         mgr.register(self._apply_rgb_check, "apply_rgb_check")
+        mgr.register(self._before_stats_lbl, "before_stats_panel")
+        mgr.register(self._after_stats_lbl, "after_stats_panel")
+        mgr.register(self._rom_banner, "rom_banner")
 
     def update_theme(self, theme_name: str) -> None:
         """Update the inner header label to match the active theme's tab emoji."""
@@ -737,6 +778,8 @@ class AlphaFixerTab(QWidget):
         # Auto-select the first item so the preview pane shows immediately
         if was_empty and self._file_list.count() > 0:
             self._file_list.setCurrentRow(0)
+        # Trigger game/ROM folder detection for the added paths
+        self._detect_rom(paths)
 
     @pyqtSlot(int)
     def _update_file_count(self, n: int):
@@ -753,6 +796,40 @@ class AlphaFixerTab(QWidget):
         else:
             self._preview_path = None
             self._compare.clear()
+            self._before_stats_lbl.setText("")
+            self._after_stats_lbl.setText("")
+
+    # ------------------------------------------------------------------
+    # ROM / game folder detection
+    # ------------------------------------------------------------------
+
+    def _detect_rom(self, paths: list[str]) -> None:
+        """Run ROM detection on *paths* and update the banner (non-blocking)."""
+        if not paths:
+            return
+        try:
+            from ..core.rom_detector import detect_from_paths
+        except ImportError:
+            return
+
+        # Run in the Qt event loop after a short delay so the UI stays
+        # responsive during large file imports
+        QTimer.singleShot(200, lambda: self._run_rom_detection(paths))
+
+    def _run_rom_detection(self, paths: list[str]) -> None:
+        try:
+            from ..core.rom_detector import detect_from_paths
+            result = detect_from_paths(paths[:self._ROM_SCAN_LIMIT])
+            if result.detected:
+                text = result.description()
+                if result.cover_art_hint:
+                    text += f"  🖼 Cover: {result.cover_art_hint}"
+                self._rom_banner.setText(text)
+                self._rom_banner.show()
+            else:
+                self._rom_banner.hide()
+        except Exception:
+            self._rom_banner.hide()
 
     def _refresh_finetune_label(self) -> None:
         """Update the live fine-tune params summary label."""
@@ -897,10 +974,25 @@ class AlphaFixerTab(QWidget):
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
         self._compare.set_stats(before, after)
+        # Update the side stat panels with formatted channel values
+        def _panel_text(label: str, s: dict) -> str:
+            if not s:
+                return ""
+            return (
+                f"<b>{label}</b><br>"
+                f"min<br><b>{s['min']}</b><br>"
+                f"max<br><b>{s['max']}</b><br>"
+                f"mean<br><b>{s['mean']:.1f}</b>"
+            )
+        self._before_stats_lbl.setText(_panel_text("BEFORE", before))
+        self._after_stats_lbl.setText(_panel_text("AFTER", after))
+
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):
         self._compare.clear()
+        self._before_stats_lbl.setText("")
+        self._after_stats_lbl.setText("")
         self._log_msg(f"⚠ Preview failed: {err.splitlines()[0]}")
 
     # ------------------------------------------------------------------
@@ -1037,6 +1129,10 @@ class AlphaFixerTab(QWidget):
         # Notify main window so processing-based theme unlocks can fire
         if success > 0:
             self.processing_done.emit(success)
+            # Emit first_alpha_fix signal the very first time processing succeeds
+            if not self._settings.get("alpha_fix_done_once", False):
+                self._settings.set("alpha_fix_done_once", True)
+                self.first_alpha_fix.emit()
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

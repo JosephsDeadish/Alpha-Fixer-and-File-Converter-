@@ -103,6 +103,8 @@ class SettingsManager:
         # Tooltip
         "tooltip_mode": "No Filter 🤬",
         "tooltip_mode_changed_once": False,
+        "alpha_fix_done_once": False,
+        "conversion_done_once": False,
         # Click effects
         "click_effects_enabled": False,
         "use_theme_effect": False,
