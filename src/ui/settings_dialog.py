@@ -99,7 +99,8 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
-        tabs = QTabWidget()
+        self._settings_tabs = QTabWidget()
+        tabs = self._settings_tabs
 
         # ================================================================
         # ---- Theme tab ----
@@ -612,6 +613,11 @@ class SettingsDialog(QDialog):
         mgr.register(self._click_sound_edit, "sound_path")
         mgr.register(self._btn_sound_browse, "sound_browse")
         mgr.register(self._btn_reset, "reset_all_settings")
+        # Settings dialog own tab bar (Theme / General tabs)
+        mgr.register_tab_bar(
+            self._settings_tabs.tabBar(),
+            ["settings_theme_tab", "settings_general_tab"],
+        )
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply

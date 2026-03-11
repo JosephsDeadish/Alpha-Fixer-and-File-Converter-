@@ -20,13 +20,22 @@ def _fmt_ts(ts: str) -> str:
         return ts
 
 
-def _make_tree(columns: list[str]) -> QTreeWidget:
-    """Build a standard history QTreeWidget with the given column headers."""
+def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWidget:
+    """Build a standard history QTreeWidget with the given column headers.
+
+    If *col_tips* is provided it must have the same length as *columns*; each
+    non-empty string is set as the tooltip for that column header section.
+    """
     tree = QTreeWidget()
     tree.setHeaderLabels(columns)
     for i in range(len(columns) - 1):
         tree.header().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
     tree.header().setSectionResizeMode(len(columns) - 1, QHeaderView.ResizeMode.Stretch)
+    if col_tips:
+        header_item = tree.headerItem()
+        for i, tip in enumerate(col_tips):
+            if tip and header_item:
+                header_item.setToolTip(i, tip)
     tree.setAlternatingRowColors(True)
     tree.setRootIsDecorated(False)
     return tree
@@ -66,7 +75,15 @@ class HistoryTab(QWidget):
         conv_layout = QVBoxLayout(conv_widget)
         conv_layout.setContentsMargins(0, 6, 0, 0)
         self._conv_tree = _make_tree(
-            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"]
+            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            col_tips=[
+                "When the conversion batch was started.",
+                "Output format chosen for this batch (e.g. PNG, WEBP, DDS).",
+                "Total number of files submitted to the converter.",
+                "Files that converted successfully.",
+                "Files that failed — check the format/path if this is non-zero.",
+                "First 10 input filenames in this batch.",
+            ],
         )
         conv_layout.addWidget(self._conv_tree)
         self._conv_summary = QLabel("")
@@ -79,7 +96,15 @@ class HistoryTab(QWidget):
         alpha_layout = QVBoxLayout(alpha_widget)
         alpha_layout.setContentsMargins(0, 6, 0, 0)
         self._alpha_tree = _make_tree(
-            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"]
+            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            col_tips=[
+                "When the alpha-fix batch was started.",
+                "Preset or manual mode used for this batch.",
+                "Total number of files processed.",
+                "Files processed successfully.",
+                "Files that encountered errors — may be unsupported format or locked file.",
+                "First 10 input filenames in this batch.",
+            ],
         )
         alpha_layout.addWidget(self._alpha_tree)
         self._alpha_summary = QLabel("")
@@ -103,6 +128,10 @@ class HistoryTab(QWidget):
         mgr.register(self._btn_clear, "history_clear_btn")
         mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
         mgr.register(self._sub_tabs.widget(1), "history_alpha_sub")
+        mgr.register(self._conv_tree, "history_conv_tree")
+        mgr.register(self._alpha_tree, "history_alpha_tree")
+        mgr.register(self._conv_summary, "history_conv_summary")
+        mgr.register(self._alpha_summary, "history_alpha_summary")
 
     # ------------------------------------------------------------------
     # Refresh
