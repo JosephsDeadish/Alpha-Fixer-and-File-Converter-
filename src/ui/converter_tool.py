@@ -31,6 +31,8 @@ class ConverterTab(QWidget):
     # Emitted the very first time a conversion batch completes successfully.
     # MainWindow uses this to trigger the 'first conversion' theme unlock.
     first_conversion = pyqtSignal()
+    # Emitted whenever at least one file is added to the queue.
+    files_added = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -390,6 +392,8 @@ class ConverterTab(QWidget):
         self._file_list.add_paths_batch(paths)
         if was_empty and self._file_list.count() > 0:
             self._file_list.setCurrentRow(0)
+        if paths:
+            self.files_added.emit()
 
     @pyqtSlot(int)
     def _update_count(self, n: int):

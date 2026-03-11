@@ -392,6 +392,18 @@ class SettingsDialog(QDialog):
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
+        misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
+        self._tooltip_style_combo = QComboBox()
+        _TOOLTIP_STYLES = [
+            "Auto (follow theme)", "Angular", "Bubbly", "Rounded", "Icy", "Wavy", "Neon", "Classic",
+        ]
+        self._tooltip_style_combo.addItems(_TOOLTIP_STYLES)
+        self._tooltip_style_combo.setToolTip(
+            "Controls the visual shape and appearance of tooltip boxes.\n"
+            "Auto follows the active theme.  Other options force a fixed style."
+        )
+        self._tooltip_style_combo.setMaximumWidth(220)
+        misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
         gv.addWidget(grp_misc)
 
         # Wrap the general tab contents in a scroll area so checkboxes
@@ -447,6 +459,7 @@ class SettingsDialog(QDialog):
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
+        self._tooltip_style_combo.currentTextChanged.connect(self._on_tooltip_style_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -526,7 +539,7 @@ class SettingsDialog(QDialog):
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
             self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
             self._click_effects_theme_check,
-            self._use_theme_effect_check, self._tooltip_mode_combo,
+            self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -579,6 +592,9 @@ class SettingsDialog(QDialog):
         mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
+        style_val = self._settings.get("tooltip_style", "Auto (follow theme)")
+        idx_s = self._tooltip_style_combo.findText(style_val)
+        self._tooltip_style_combo.setCurrentIndex(max(idx_s, 0))
 
         for c in controls:
             c.blockSignals(False)
@@ -594,6 +610,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._effect_combo, "effect_combo")
         mgr.register(self._emoji_input, "custom_emoji")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
+        mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
         mgr.register(self._trail_check, "trail_check")
@@ -895,3 +912,7 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
         if should_unlock:
             self.first_tooltip_mode_change.emit()
+
+    def _on_tooltip_style_changed(self) -> None:
+        self._settings.set("tooltip_style", self._tooltip_style_combo.currentText())
+        self.settings_changed.emit()

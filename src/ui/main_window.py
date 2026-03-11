@@ -349,6 +349,9 @@ class MainWindow(QMainWindow):
         # First-use unlock triggers
         self._alpha_tab.first_alpha_fix.connect(self._on_first_alpha_fix)
         self._converter_tab.first_conversion.connect(self._on_first_conversion)
+        # File-add sounds
+        self._alpha_tab.files_added.connect(self._on_files_added)
+        self._converter_tab.files_added.connect(self._on_files_added)
 
         # Cursor
         self._apply_cursor()
@@ -444,6 +447,16 @@ class MainWindow(QMainWindow):
             (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
             (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
             (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
+            (5500, "unlock_crystal_cave",     "💎 'Crystal Cave' theme unlocked! (Settings → Theme)"),
+            (6000, "unlock_glitch",           "📡 'Glitch' theme unlocked! (Settings → Theme)"),
+            (6500, "unlock_wild_west",        "🤠 'Wild West' theme unlocked! (Settings → Theme)"),
+            (7000, "unlock_pirate",           "🏴‍☠️ 'Pirate' theme unlocked! (Settings → Theme)"),
+            (7500, "unlock_deep_space",       "🛸 'Deep Space' theme unlocked! (Settings → Theme)"),
+            (8000, "unlock_witchs_brew",      "🧙 'Witch's Brew' theme unlocked! (Settings → Theme)"),
+            (8500, "unlock_lava_lamp",        "🪔 'Lava Lamp' theme unlocked! (Settings → Theme)"),
+            (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
+            (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
+            (10000,"unlock_golden_hour",      "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
         ]
 
         newly_unlocked = False
@@ -487,6 +500,13 @@ class MainWindow(QMainWindow):
         # Re-use the click-based unlock table but driven by total_clicks
         # (which now includes processing bonuses).
         self._run_unlock_checks(total)
+
+    def _on_files_added(self) -> None:
+        """Play a soft sound when files are added to either tab's queue."""
+        try:
+            self._sound.play_file_add()
+        except Exception:
+            pass
 
     def _schedule_unlock_clear(self) -> None:
         """Start (or restart) a one-shot timer that clears the unlock label."""
@@ -564,7 +584,8 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self):
         theme = self._settings.get_theme()
-        QApplication.instance().setStyleSheet(build_stylesheet(theme))
+        tooltip_style = self._settings.get("tooltip_style", "Auto (follow theme)")
+        QApplication.instance().setStyleSheet(build_stylesheet(theme, tooltip_style))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
         # Update the spinning banner emoji to the theme's representative icon.
@@ -876,7 +897,7 @@ class MainWindow(QMainWindow):
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"
             "<li>Image preview, conversion history + CSV export, export/import settings</li>"
-            "<li>18 preset themes + 22 hidden unlockables (keep clicking to find them!)</li>"
+            "<li>18 preset themes + 32 hidden unlockables (keep clicking to find them!)</li>"
             "<li>21 click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥,"
             " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
             "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"

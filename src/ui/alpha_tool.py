@@ -129,6 +129,8 @@ class AlphaFixerTab(QWidget):
     # Emitted the very first time a batch completes successfully.
     # MainWindow uses this to trigger the 'first alpha fix' theme unlock.
     first_alpha_fix = pyqtSignal()
+    # Emitted whenever at least one file is added to the queue.
+    files_added = pyqtSignal()
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -797,6 +799,9 @@ class AlphaFixerTab(QWidget):
         # Auto-select the first item so the preview pane shows immediately
         if was_empty and self._file_list.count() > 0:
             self._file_list.setCurrentRow(0)
+        # Notify main window so it can play the file-add sound
+        if paths:
+            self.files_added.emit()
         # Trigger game/ROM folder detection for the added paths
         self._detect_rom(paths)
 

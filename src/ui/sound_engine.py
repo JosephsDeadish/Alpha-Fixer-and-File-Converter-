@@ -14,6 +14,7 @@ startup (no external audio assets needed).  Users can also supply their own
 import logging
 import math
 import os
+import random as _random
 import struct
 import sys
 import tempfile
@@ -75,6 +76,11 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
       warm    – organic wood-block (otter, ocean, mermaid, sunset, forest)
       icy     – crystalline tinkle (ice, arctic, cyber_otter)
       sparkle – fast ascending twinkle (magic, rose, gold, pancake, noodle)
+      growl   – low rumbling growl (gore, zombie, dragon, blood moon)
+      bubble  – watery bubble pop (ocean, mermaid, deep ocean, coral reef)
+      chirp   – bright bird/fairy chirp (fairy garden, spring bloom, sakura)
+      crunch  – bone-dry crunch (skeleton, goth, abyssal void)
+      purr    – warm rhythmic purr (space cat, pancake, otter)
     """
     samples: list = []
     if profile == "hard":
@@ -126,6 +132,52 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
             for i in range(n):
                 env = math.exp(-i / sample_rate * 35)
                 samples.append(int(20000 * math.sin(2 * math.pi * freq * i / sample_rate) * env))
+    elif profile == "growl":
+        # Low rumbling growl — two close low frequencies creating a beating effect
+        n = int(sample_rate * 0.12)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 14) * (1 - math.exp(-t * 60))
+            s = math.sin(2 * math.pi * 90 * t)
+            s += 0.7 * math.sin(2 * math.pi * 95 * t)    # beat frequency ~ 5 Hz
+            s += 0.35 * math.sin(2 * math.pi * 180 * t)  # second harmonic
+            samples.append(int(24000 * s * env))
+    elif profile == "bubble":
+        # Watery bubble pop — descending pitch glide (high→low pop)
+        n = int(sample_rate * 0.09)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 30)
+            freq = 900 - 700 * (t / 0.09)  # glide 900 Hz → 200 Hz
+            samples.append(int(22000 * math.sin(2 * math.pi * freq * t) * env))
+    elif profile == "chirp":
+        # Bird/fairy chirp — fast ascending frequency glide
+        n = int(sample_rate * 0.07)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 25) * (1 - math.exp(-t * 100))
+            freq = 800 + 1400 * (t / 0.07)  # glide 800 Hz → 2200 Hz
+            samples.append(int(20000 * math.sin(2 * math.pi * freq * t) * env))
+    elif profile == "crunch":
+        # Bone-dry crunch — short noise burst filtered with a sine carrier
+        n = int(sample_rate * 0.06)
+        rng = _random.Random(42)  # deterministic noise
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 50) * (1 - math.exp(-t * 200))
+            noise = rng.uniform(-1, 1)
+            carrier = math.sin(2 * math.pi * 300 * t)
+            samples.append(int(22000 * (0.6 * noise + 0.4 * carrier) * env))
+    elif profile == "purr":
+        # Warm rhythmic purr — amplitude-modulated low tone (throat vibration)
+        n = int(sample_rate * 0.14)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 10) * (1 - math.exp(-t * 40))
+            mod = 0.5 + 0.5 * math.sin(2 * math.pi * 28 * t)  # 28 Hz purr rate
+            carrier = math.sin(2 * math.pi * 120 * t)
+            carrier += 0.4 * math.sin(2 * math.pi * 240 * t)
+            samples.append(int(20000 * carrier * mod * env))
     else:  # soft / default
         freq, dur, decay = 880, 0.06, 45
         n = int(sample_rate * dur)
@@ -139,21 +191,26 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
 _THEME_SOUND_PROFILES: dict[str, str] = {
     # Preset themes
     "Panda Dark": "soft", "Panda Light": "soft", "Neon Panda": "bright",
-    "Gore": "hard", "Bat Cave": "dark", "Rainbow Chaos": "bright",
-    "Otter Cove": "warm", "Galaxy": "dark", "Galaxy Otter": "dark",
-    "Goth": "hard", "Volcano": "hard", "Arctic": "icy",
-    "Fairy Garden": "soft", "Mermaid": "warm", "Shark Bait": "warm",
+    "Gore": "growl", "Bat Cave": "dark", "Rainbow Chaos": "bright",
+    "Otter Cove": "purr", "Galaxy": "dark", "Galaxy Otter": "dark",
+    "Goth": "crunch", "Volcano": "hard", "Arctic": "icy",
+    "Fairy Garden": "chirp", "Mermaid": "bubble", "Shark Bait": "bubble",
     "Alien": "bright", "Noodle": "sparkle", "Pancake": "sparkle",
     # Hidden themes
-    "Secret Skeleton": "hard", "Secret Sakura": "soft",
-    "Deep Ocean": "warm", "Blood Moon": "hard", "Ice Cave": "icy",
+    "Secret Skeleton": "crunch", "Secret Sakura": "chirp",
+    "Deep Ocean": "bubble", "Blood Moon": "growl", "Ice Cave": "icy",
     "Cyber Otter": "icy", "Toxic Neon": "bright", "Lava Cave": "hard",
     "Sunset Beach": "warm", "Midnight Forest": "warm",
-    "Candy Land": "bright", "Zombie Apocalypse": "hard",
-    "Dragon Fire": "hard", "Bubblegum": "soft", "Thunder Storm": "bright",
-    "Rose Gold": "soft", "Space Cat": "dark", "Magic Mushroom": "sparkle",
-    "Abyssal Void": "dark", "Spring Bloom": "soft",
+    "Candy Land": "bright", "Zombie Apocalypse": "growl",
+    "Dragon Fire": "growl", "Bubblegum": "bubble", "Thunder Storm": "bright",
+    "Rose Gold": "chirp", "Space Cat": "purr", "Magic Mushroom": "sparkle",
+    "Abyssal Void": "dark", "Spring Bloom": "chirp",
     "Gold Rush": "sparkle", "Nebula": "dark",
+    # New hidden themes (added below in theme_engine.py)
+    "Crystal Cave": "icy", "Glitch": "bright", "Wild West": "warm",
+    "Pirate": "dark", "Deep Space": "dark", "Witch's Brew": "crunch",
+    "Lava Lamp": "warm", "Coral Reef": "bubble", "Storm Cloud": "hard",
+    "Golden Hour": "sparkle",
 }
 
 
@@ -194,6 +251,28 @@ def _make_unlock_wav(sample_rate: int = 22050) -> str:
     return _write_wav(samples, sample_rate)
 
 
+def _make_file_add_wav(sample_rate: int = 22050) -> str:
+    """Soft 'drop' sound for when a file is added to the queue — a gentle 'thunk'."""
+    n = int(sample_rate * 0.05)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        env = math.exp(-t * 60) * (1 - math.exp(-t * 200))
+        samples.append(int(18000 * math.sin(2 * math.pi * 350 * t) * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_preview_wav(sample_rate: int = 22050) -> str:
+    """Very subtle single-note 'ping' for preview refresh."""
+    n = int(sample_rate * 0.04)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        env = math.exp(-t * 80)
+        samples.append(int(14000 * math.sin(2 * math.pi * 1100 * t) * env))
+    return _write_wav(samples, sample_rate)
+
+
 
 # ---------------------------------------------------------------------------
 # Click-filter that plays a sound on every QAbstractButton press
@@ -223,10 +302,12 @@ class SoundEngine(QObject):
 
     Provides synthetic sounds generated at startup (no external assets):
       click         – short blip played on every button press
-      theme_click   – per-theme click sound variant (7 profiles)
+      theme_click   – per-theme click sound variant (12 profiles)
       success       – cheerful two-note chime, played after a successful batch
       error         – descending buzz, played after a batch with errors
       unlock        – ascending arpeggio fanfare, played when a theme unlocks
+      file_add      – soft 'thunk' when a file is dropped into the queue
+      preview       – subtle ping when the live preview refreshes
 
     When 'use_theme_sound' is enabled in settings and a theme is active,
     play_click() uses the theme-appropriate sound profile instead of the
@@ -241,6 +322,8 @@ class SoundEngine(QObject):
         self._success_wav: str = ""
         self._error_wav: str = ""
         self._unlock_wav: str = ""
+        self._file_add_wav: str = ""
+        self._preview_wav: str = ""
         # Per-profile click WAVs keyed by profile name
         self._theme_click_wavs: dict[str, str] = {}
         self._filter: _ButtonClickFilter | None = None
@@ -256,8 +339,11 @@ class SoundEngine(QObject):
             self._success_wav = _make_success_wav()
             self._error_wav   = _make_error_wav()
             self._unlock_wav  = _make_unlock_wav()
-            # Generate one WAV per sound profile (7 profiles)
-            for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle"):
+            self._file_add_wav = _make_file_add_wav()
+            self._preview_wav  = _make_preview_wav()
+            # Generate one WAV per sound profile (12 profiles)
+            for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
+                            "growl", "bubble", "chirp", "crunch", "purr"):
                 self._theme_click_wavs[profile] = _make_theme_click_wav(profile)
         except Exception as exc:
             logger.warning("Could not generate sound WAVs: %s", exc)
@@ -336,6 +422,20 @@ class SoundEngine(QObject):
         if self._unlock_wav:
             self._play(self._unlock_wav)
 
+    def play_file_add(self) -> None:
+        """Play a soft 'thunk' when a file is added to the queue."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if self._file_add_wav:
+            self._play(self._file_add_wav)
+
+    def play_preview(self) -> None:
+        """Play a subtle ping when the live preview refreshes."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if self._preview_wav:
+            self._play(self._preview_wav)
+
     # ------------------------------------------------------------------
     # Internal playback
     # ------------------------------------------------------------------
@@ -387,7 +487,8 @@ class SoundEngine(QObject):
     def cleanup(self) -> None:
         """Remove temp WAV files on application exit."""
         all_wavs = [self._click_wav, self._success_wav,
-                    self._error_wav, self._unlock_wav]
+                    self._error_wav, self._unlock_wav,
+                    self._file_add_wav, self._preview_wav]
         all_wavs.extend(self._theme_click_wavs.values())
         for path in all_wavs:
             if path and os.path.isfile(path):

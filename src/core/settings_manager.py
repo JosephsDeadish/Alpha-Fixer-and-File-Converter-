@@ -134,6 +134,19 @@ class SettingsManager:
         "unlock_gold_rush": False,
         "unlock_nebula": False,
         "total_clicks": 0,
+        # Tooltip visual style (separate from tooltip text mode)
+        "tooltip_style": "Auto (follow theme)",
+        # New hidden theme unlock flags
+        "unlock_crystal_cave": False,
+        "unlock_glitch": False,
+        "unlock_wild_west": False,
+        "unlock_pirate": False,
+        "unlock_deep_space": False,
+        "unlock_witchs_brew": False,
+        "unlock_lava_lamp": False,
+        "unlock_coral_reef": False,
+        "unlock_storm_cloud": False,
+        "unlock_golden_hour": False,
     }
 
     def __init__(self):
@@ -284,7 +297,7 @@ class SettingsManager:
         "sound_enabled", "click_sound_path",
         "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "font_size",
-        "click_effects_enabled", "use_theme_effect", "tooltip_mode",
+        "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",

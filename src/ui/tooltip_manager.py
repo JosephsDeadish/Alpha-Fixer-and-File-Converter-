@@ -220,6 +220,17 @@ _NORMAL: dict[str, list[str]] = {
         "Dumbed Down: simplified tips with some light roasting.",
         "No Filter 🤬: extremely vulgar, funny, and still helpful.",
     ],
+    "tooltip_style_combo": [
+        "Controls the visual shape of tooltip boxes — separate from their text content.",
+        "Auto follows the active theme (Gore gets angular, Fairy gets bubbly, etc.).",
+        "Angular: sharp corners, left accent bar — clinical and precise.",
+        "Bubbly: large rounded corners — soft and friendly.",
+        "Rounded: medium corners — clean and modern.",
+        "Icy: alternating corner radii — crystalline and asymmetric.",
+        "Wavy: wide/narrow alternating corners — organic and flowing.",
+        "Neon: monospace text, glowing accent border — cyberpunk terminal vibes.",
+        "Classic: plain dark box, grey border — classic tooltip look.",
+    ],
     "patreon_btn": [
         "Support development on Patreon!",
         "Your support funds new features and themes.",
@@ -804,6 +815,13 @@ _DUMBED: dict[str, list[str]] = {
         "Dumbed Down mode is this mode. How's it going? Feeling talked down to?",
         "No Filter 🤬 mode is the BEST mode. Trust us on this one.",
         "Normal mode has 5 helpful tips per widget. Very sensible. Boring.",
+    ],
+    "tooltip_style_combo": [
+        "Tooltip Style. Separate from the mode — this one changes how the box looks.",
+        "Auto = follows the theme. Gore gets pointy corners. Fairy gets big round ones.",
+        "Pick Angular if you like sharp things. Bubbly if you like round things.",
+        "Neon makes tooltips look like hacker terminal output. Very cool.",
+        "Classic is the boring normal box. You probably already know what it looks like.",
     ],
     "save_preset": [
         "Click Save, type a name. Wow, technology.",
@@ -1495,6 +1513,16 @@ _VULGAR: dict[str, list[str]] = {
         "No Filter mode: helpful tips, real profanity, actual jokes. The default for a reason.",
         "Switching to Normal would be a step backwards. You've tasted the forbidden fruit. Stay.",
         "The tooltip mode selector. Currently set to the objectively correct option. Don't touch it.",
+    ],
+    "tooltip_style_combo": [
+        "Tooltip visual style. You can finally make these little boxes look less shit.",
+        "Auto follows the theme. If your theme is sharp and pointy the tooltips will be too. 🤌",
+        "Angular means zero radius, left accent bar. Like if a tooltip was built in a prison.",
+        "Bubbly makes the corners so round they look like a baby designed them. Very soft. Very pink.",
+        "Neon mode makes the tooltip look like a fucking hacker terminal. Pick it. Do it.",
+        "Classic = boring plain box. Grandma-safe. Works fine. Not impressive.",
+        "Icy style has alternating corners that look like a crystal. Fancy as fuck.",
+        "This dropdown does not affect what the tips *say*. Just how the box looks. Different thing.",
     ],
     "sound_check": [
         "Toggle sounds on or off. Enabled = satisfying clicks. Disabled = sad silence.",
