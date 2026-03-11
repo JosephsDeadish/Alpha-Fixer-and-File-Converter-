@@ -262,6 +262,13 @@ _NORMAL: dict[str, list[str]] = {
         "Useful if you just finished a batch and want to verify the results.",
         "Pulls the latest session logs from settings storage.",
     ],
+    "history_export_btn": [
+        "Export the currently visible history sub-tab to a CSV file.",
+        "Saves Time, Format/Preset, file counts, and file names to a .csv file.",
+        "Useful for auditing batch runs, tracking files processed, or making a backup log.",
+        "Only the active sub-tab is exported — switch to Converter or Alpha Fixer first.",
+        "The CSV is standard format and can be opened in Excel, Google Sheets, or any text editor.",
+    ],
     "history_clear_btn": [
         "Clear all history entries for both the Converter and Alpha Fixer tabs.",
         "This permanently removes past session records — there's no undo.",
@@ -846,6 +853,13 @@ _DUMBED: dict[str, list[str]] = {
         "Click to reload recent sessions. It's a refresh button. Very standard.",
         "If your new entries aren't showing, click this. Problem solved.",
         "Refresh button. Does refreshing. You got this.",
+    ],
+    "history_export_btn": [
+        "Export the current history to a CSV file. Opens a save dialog. Very intuitive.",
+        "Saves the visible sub-tab (Converter or Alpha Fixer) as a spreadsheet-friendly CSV.",
+        "Open in Excel. Google Sheets. Notepad. Whatever. It's just a CSV.",
+        "Exports only the currently active sub-tab. Switch tabs to export the other one.",
+        "Good for auditing big batches or sending logs to someone who doesn't have this app.",
     ],
     "history_clear_btn": [
         "This erases all history. Gone. Forever. No takebacks.",
@@ -1786,6 +1800,16 @@ _VULGAR: dict[str, list[str]] = {
         "Paranoid the history didn't update? Hit refresh. It updates. Trust issues are valid.",
         "New entries appear after processing. Refresh if you need to convince yourself.",
         "The history auto-refreshes on tab switch, but this button forces an immediate reload.",
+    ],
+    "history_export_btn": [
+        "Export to CSV. Because sometimes you need to prove to yourself that you actually worked.",
+        "Saves the history as a spreadsheet CSV. Excel will open it. Google Sheets will open it.",
+        "Click it, save a file, send it to someone, look professional. Three easy steps.",
+        "Exports only the current sub-tab. Converter or Alpha Fixer. Your choice. Your file.",
+        "A CSV file of your entire processing history. For auditing, archiving, or bragging.",
+        "It makes a CSV. You can open it in anything. It has all your session data in it.",
+        "100 conversions and want a receipt? Export CSV. There's your receipt.",
+        "Exports what you see in the active sub-tab. Switch tabs first if you want the other one.",
     ],
     "history_clear_btn": [
         "Nuke the entire history. No backup. No recovery. No regrets.",

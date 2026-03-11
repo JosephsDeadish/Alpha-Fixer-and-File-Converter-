@@ -1,13 +1,15 @@
 """
 History tab – shows recent converter and alpha-fixer runs with timestamps.
 """
+import csv
 import datetime
+import io
 
 from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget,
+    QTabWidget, QFileDialog,
 )
 
 
@@ -61,8 +63,10 @@ class HistoryTab(QWidget):
 
         btn_row = QHBoxLayout()
         self._btn_refresh = QPushButton("🔄  Refresh")
+        self._btn_export = QPushButton("📥  Export CSV…")
         self._btn_clear = QPushButton("🗑  Clear All History")
         btn_row.addWidget(self._btn_refresh)
+        btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
@@ -116,6 +120,7 @@ class HistoryTab(QWidget):
 
         # Connections
         self._btn_refresh.clicked.connect(self.refresh)
+        self._btn_export.clicked.connect(self._export_csv)
         self._btn_clear.clicked.connect(self._clear_history)
 
     # ------------------------------------------------------------------
@@ -126,6 +131,7 @@ class HistoryTab(QWidget):
         """Register History tab widgets with the TooltipManager."""
         mgr.register(self._btn_refresh, "history_refresh_btn")
         mgr.register(self._btn_clear, "history_clear_btn")
+        mgr.register(self._btn_export, "history_export_btn")
         mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
         mgr.register(self._sub_tabs.widget(1), "history_alpha_sub")
         mgr.register(self._conv_tree, "history_conv_tree")
@@ -201,3 +207,44 @@ class HistoryTab(QWidget):
             self._settings.clear_converter_history()
             self._settings.clear_alpha_history()
             self.refresh()
+
+    # ------------------------------------------------------------------
+    # Export
+    # ------------------------------------------------------------------
+
+    def _export_csv(self) -> None:
+        """Export the currently visible history sub-tab to a CSV file."""
+        # Determine which sub-tab is active
+        idx = self._sub_tabs.currentIndex()
+        if idx == 0:
+            tree = self._conv_tree
+            default_name = "converter_history.csv"
+            headers = ["Time", "Format", "Files", "OK", "Errors", "File names (first 10)"]
+        else:
+            tree = self._alpha_tree
+            default_name = "alpha_fixer_history.csv"
+            headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names (first 10)"]
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export History as CSV", default_name,
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            buf = io.StringIO(newline="")
+            writer = csv.writer(buf)
+            writer.writerow(headers)
+            root = tree.invisibleRootItem()
+            for row in range(root.childCount()):
+                item = root.child(row)
+                writer.writerow([item.text(col) for col in range(tree.columnCount())])
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                f.write(buf.getvalue())
+            QMessageBox.information(
+                self, "Export Complete",
+                f"History exported to:\n{path}",
+            )
+        except OSError as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not write CSV:\n{exc}")
