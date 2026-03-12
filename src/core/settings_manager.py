@@ -201,7 +201,8 @@ class SettingsManager:
         raw = self.get("theme_data", json.dumps(self._DEFAULT_THEME))
         try:
             data = json.loads(raw)
-            # Guard against non-dict values (e.g. stored "null" or "42")
+            # Guard against non-dict values: json.loads("null") → None,
+            # json.loads("42") → int, json.loads("[]") → list, etc.
             if not isinstance(data, dict):
                 return dict(self._DEFAULT_THEME)
             # Merge with defaults so all required keys are always present,

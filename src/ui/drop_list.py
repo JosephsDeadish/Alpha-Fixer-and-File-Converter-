@@ -8,6 +8,7 @@ DropFileList – a QListWidget subclass that:
     loader queue – capable of handling 50,000+ files without lag or crashes
 """
 import os
+import threading
 from collections import OrderedDict
 from typing import Dict, Optional
 
@@ -43,16 +44,28 @@ class _ThumbSignals(QObject):
 
 
 class _ThumbRunnable(QRunnable):
-    """QRunnable that loads one thumbnail and emits a signal when done."""
+    """QRunnable that loads one thumbnail and emits a signal when done.
 
-    def __init__(self, path: str, signals: _ThumbSignals):
+    *cancel* is a :class:`threading.Event` shared with the owning
+    :class:`DropFileList`.  If the list is cleared while this runnable is
+    queued or running, the event is set and the runnable bails out early
+    without emitting, saving CPU and avoiding work for items that no longer
+    exist.
+    """
+
+    def __init__(self, path: str, signals: _ThumbSignals,
+                 cancel: threading.Event):
         super().__init__()
         self._path = path
         self._signals = signals
+        self._cancel = cancel
         self.setAutoDelete(True)
 
     @pyqtSlot()
     def run(self):
+        # Bail out immediately if the list was cleared before we started.
+        if self._cancel.is_set():
+            return
         try:
             from PIL import Image
             img = Image.open(self._path)
@@ -85,7 +98,10 @@ class _ThumbRunnable(QRunnable):
                 )
                 painter.end()
             icon = QIcon(out)
-            self._signals.loaded.emit(self._path, icon)
+            # Final cancel check before emitting so we don't deliver the icon
+            # to a list that was cleared while the thumbnail was being built.
+            if not self._cancel.is_set():
+                self._signals.loaded.emit(self._path, icon)
         except Exception:
             pass  # silently skip unreadable / non-image files
 
@@ -123,6 +139,11 @@ class DropFileList(QListWidget):
         # Shared signals object (must live on the main thread)
         self._signals = _ThumbSignals()
         self._signals.loaded.connect(self._on_thumb_loaded)
+
+        # Cancellation event shared with all _ThumbRunnable tasks.  When the
+        # list is cleared, we retire the current event (set it so running
+        # runnables bail out) and create a fresh one for future requests.
+        self._cancel_event: threading.Event = threading.Event()
 
         # Scroll-debounce timer: wait for user to stop scrolling
         self._scroll_timer = QTimer(self)
@@ -221,7 +242,7 @@ class DropFileList(QListWidget):
                 continue
             # Kick off background load
             self._pending.add(path)
-            runnable = _ThumbRunnable(path, self._signals)
+            runnable = _ThumbRunnable(path, self._signals, self._cancel_event)
             self._pool.start(runnable)
             batch += 1
             loaded_any = True
@@ -442,6 +463,11 @@ class DropFileList(QListWidget):
         self._thumb_cache.clear()
         self._pending.clear()
         self._load_tick.stop()
+        # Cancel any runnables that are still queued or running so they don't
+        # waste CPU decoding thumbnails for items that no longer exist.
+        # Create a fresh event for the next batch of thumbnail requests.
+        self._cancel_event.set()
+        self._cancel_event = threading.Event()
         super().clear()
         self.count_changed.emit(0)
 
@@ -452,5 +478,8 @@ class DropFileList(QListWidget):
         self._thumb_cache.clear()
         self._pending.clear()
         self._load_tick.stop()
+        # Same cancellation as _clear_all for consistency.
+        self._cancel_event.set()
+        self._cancel_event = threading.Event()
         super().clear()
         self.count_changed.emit(0)

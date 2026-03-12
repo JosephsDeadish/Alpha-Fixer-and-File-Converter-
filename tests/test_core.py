@@ -2270,3 +2270,160 @@ class TestRound2CrashHangLag(unittest.TestCase):
         section = src[method_pos:next_method]
         self.assertIn(".stop()", section,
                       "_start_loader() must call stop() on the old loader")
+
+
+# ---------------------------------------------------------------------------
+# Round-3 crash/hang/memory prevention tests
+# ---------------------------------------------------------------------------
+
+class TestRound3Hardening(unittest.TestCase):
+    """Round-3: load_image MemoryError, ThumbRunnable cancel flag,
+    worker signal disconnect."""
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    # ------------------------------------------------------------------
+    # alpha_processor – load_image() MemoryError guard
+    # ------------------------------------------------------------------
+
+    def _alpha_processor_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "alpha_processor.py")) as f:
+            return f.read()
+
+    def test_load_image_memoryerror_guard_in_source(self):
+        """load_image() must wrap img.convert('RGBA') in a MemoryError guard
+        so that OOM on colour-space conversion gives a useful message."""
+        src = self._alpha_processor_source()
+        load_pos = src.find("def load_image(")
+        # Find end of function (next top-level def)
+        next_def = src.find("\ndef ", load_pos + 1)
+        fn_src = src[load_pos:next_def]
+        self.assertIn("MemoryError", fn_src,
+                      "load_image() must have a MemoryError guard for the RGBA conversion")
+        self.assertIn("megapixels", fn_src,
+                      "load_image() MemoryError message must include 'megapixels' for context")
+
+    def test_load_image_wraps_convert_memoryerror(self):
+        """load_image() must re-raise MemoryError from img.convert with W×H context."""
+        from unittest.mock import patch, MagicMock
+        from src.core.alpha_processor import load_image
+        import tempfile
+        img = make_rgba_image(4, 4, alpha=128)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            img.save(f.name)
+            tmp = f.name
+        try:
+            with patch("src.core.alpha_processor.Image.open") as mock_open:
+                mock_img = MagicMock()
+                mock_img.mode = "RGB"
+                mock_img.size = (4, 4)
+                mock_img.convert.side_effect = MemoryError("OOM")
+                mock_open.return_value = mock_img
+                with self.assertRaises(MemoryError) as ctx:
+                    load_image(tmp)
+            self.assertIn("megapixels", str(ctx.exception))
+        finally:
+            os.unlink(tmp)
+
+    # ------------------------------------------------------------------
+    # drop_list – _ThumbRunnable cancel flag
+    # ------------------------------------------------------------------
+
+    def _drop_list_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "drop_list.py")) as f:
+            return f.read()
+
+    def test_thumb_runnable_accepts_cancel_event(self):
+        """_ThumbRunnable must accept a cancel threading.Event parameter."""
+        src = self._drop_list_source()
+        init_pos = src.find("class _ThumbRunnable")
+        next_class = src.find("\nclass ", init_pos + 1)
+        cls_src = src[init_pos:next_class]
+        self.assertIn("cancel", cls_src,
+                      "_ThumbRunnable.__init__ must accept a cancel parameter")
+        self.assertIn("threading.Event", cls_src,
+                      "_ThumbRunnable must reference threading.Event (or threading)")
+
+    def test_thumb_runnable_checks_cancel_before_emit(self):
+        """_ThumbRunnable.run() must check the cancel event before emitting."""
+        src = self._drop_list_source()
+        run_pos = src.find("class _ThumbRunnable")
+        next_class = src.find("\nclass ", run_pos + 1)
+        cls_src = src[run_pos:next_class]
+        # Must check cancel at least twice: once at top and once before emit
+        cancel_count = cls_src.count("_cancel.is_set()")
+        self.assertGreaterEqual(cancel_count, 2,
+                                "_ThumbRunnable.run() must check cancel at entry AND before emit")
+
+    def test_drop_list_has_cancel_event(self):
+        """DropFileList must initialise a _cancel_event threading.Event."""
+        src = self._drop_list_source()
+        self.assertIn("_cancel_event", src,
+                      "DropFileList must have a _cancel_event attribute")
+        self.assertIn("threading.Event()", src,
+                      "DropFileList must create threading.Event() instances")
+
+    def test_drop_list_clear_retires_cancel_event(self):
+        """DropFileList.clear() and _clear_all() must retire the cancel event
+        so that already-queued runnables bail out early."""
+        src = self._drop_list_source()
+        # Find _clear_all
+        clear_all_pos = src.find("def _clear_all(")
+        next_method = src.find("\n    def ", clear_all_pos + 1)
+        clear_all_src = src[clear_all_pos:next_method]
+        self.assertIn("_cancel_event.set()", clear_all_src,
+                      "_clear_all() must call self._cancel_event.set() to retire old event")
+        # Find clear()
+        clear_pos = src.find("def clear(")
+        next_method2 = src.find("\n    def ", clear_pos + 1)
+        clear_src = src[clear_pos:next_method2]
+        self.assertIn("_cancel_event.set()", clear_src,
+                      "clear() must call self._cancel_event.set() to retire old event")
+
+    def test_thumb_runnable_cancel_prevents_emit(self):
+        """_ThumbRunnable.run() must return early (without emitting) when the
+        cancel event is already set.  Verified via source inspection since
+        Qt display is unavailable in the headless test environment."""
+        src = self._drop_list_source()
+        run_pos = src.find("class _ThumbRunnable")
+        next_class = src.find("\nclass ", run_pos + 1)
+        cls_src = src[run_pos:next_class]
+        # The run() method must have an early return when cancel is set
+        self.assertIn("return", cls_src,
+                      "_ThumbRunnable.run() must return early when cancel is set")
+        # It must also guard the emit call with is_set()
+        self.assertIn("is_set()", cls_src,
+                      "_ThumbRunnable.run() must call _cancel.is_set() before emitting")
+
+    # ------------------------------------------------------------------
+    # alpha_tool + converter_tool – worker signal disconnect
+    # ------------------------------------------------------------------
+
+    def _alpha_tool_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "alpha_tool.py")) as f:
+            return f.read()
+
+    def _converter_tool_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "converter_tool.py")) as f:
+            return f.read()
+
+    def _run_method_source(self, src: str) -> str:
+        run_pos = src.rfind("def _run(")
+        next_method = src.find("\n    def ", run_pos + 1)
+        return src[run_pos:next_method]
+
+    def test_alpha_tool_run_disconnects_old_worker(self):
+        """AlphaTool._run() must disconnect the old worker's signals before
+        creating a new worker to prevent signal connection table growth."""
+        src = self._alpha_tool_source()
+        run_src = self._run_method_source(src)
+        self.assertIn(".disconnect()", run_src,
+                      "AlphaTool._run() must call .disconnect() on old worker signals")
+
+    def test_converter_tool_run_disconnects_old_worker(self):
+        """ConverterTool._run() must disconnect the old worker's signals before
+        creating a new worker to prevent signal connection table growth."""
+        src = self._converter_tool_source()
+        run_src = self._run_method_source(src)
+        self.assertIn(".disconnect()", run_src,
+                      "ConverterTool._run() must call .disconnect() on old worker signals")

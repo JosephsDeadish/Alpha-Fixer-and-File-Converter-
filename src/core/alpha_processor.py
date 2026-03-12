@@ -143,7 +143,15 @@ def load_image(path: str) -> Image.Image:
         return _load_dds(path)
     img = Image.open(path)
     if img.mode != "RGBA":
-        img = img.convert("RGBA")
+        w, h = img.size
+        try:
+            img = img.convert("RGBA")
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to load {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) as RGBA. "
+                "Try processing a smaller file."
+            )
     return img
 
 

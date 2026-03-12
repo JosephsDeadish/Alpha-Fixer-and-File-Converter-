@@ -1387,6 +1387,17 @@ class AlphaFixerTab(QWidget):
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
 
+        # Disconnect the previous worker's signals before replacing it to
+        # prevent the signal connection table from growing across multiple
+        # run → stop → run cycles in a long session.
+        if self._worker is not None:
+            try:
+                self._worker.progress.disconnect()
+                self._worker.file_done.disconnect()
+                self._worker.finished.disconnect()
+            except RuntimeError:
+                pass  # already disconnected
+
         self._worker = AlphaWorker(
             files=expanded,
             preset=preset,
