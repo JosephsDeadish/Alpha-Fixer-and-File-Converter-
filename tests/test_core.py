@@ -111,6 +111,53 @@ class TestPresets(unittest.TestCase):
         self.assertFalse(result)
         self.assertIsNotNone(self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME))
 
+    def test_save_custom_preset_preserves_mode_multiply(self):
+        """Custom preset saved with mode='multiply' must survive a round-trip."""
+        custom = AlphaPreset("Mul Test", 128, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=255, mode="multiply")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Mul Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "multiply",
+                         "mode field must be preserved after save/retrieve")
+
+    def test_save_custom_preset_preserves_mode_normalize(self):
+        """Custom preset saved with mode='normalize' must survive a round-trip."""
+        custom = AlphaPreset("Norm Test", None, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=128, mode="normalize")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Norm Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "normalize",
+                         "mode field must be preserved after save/retrieve")
+
+    def test_save_custom_preset_preserves_mode_add(self):
+        """Custom preset saved with mode='add' must survive a round-trip."""
+        custom = AlphaPreset("Add Test", 50, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=255, mode="add")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Add Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "add")
+
+    def test_save_custom_preset_preserves_mode_subtract(self):
+        """Custom preset saved with mode='subtract' must survive a round-trip."""
+        custom = AlphaPreset("Sub Test", 30, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=255, mode="subtract")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Sub Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "subtract")
+
+    def test_preset_from_dict_preserves_mode(self):
+        """AlphaPreset.from_dict must correctly restore the mode field."""
+        original = AlphaPreset("Roundtrip", None, 0, False, "desc", builtin=False,
+                               clamp_min=0, clamp_max=128, mode="normalize")
+        restored = AlphaPreset.from_dict(original.to_dict())
+        self.assertEqual(restored.mode, "normalize")
+        self.assertEqual(restored.clamp_min, 0)
+        self.assertEqual(restored.clamp_max, 128)
+
 
 # ---------------------------------------------------------------------------
 # Alpha processor tests
@@ -345,6 +392,85 @@ class TestAlphaProcessor(unittest.TestCase):
         self.assertEqual(result.mode, "RGBA")
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 128))
+
+    # ------------------------------------------------------------------
+    # Normalize mode tests
+    # ------------------------------------------------------------------
+
+    def test_manual_alpha_normalize_full_range_to_half(self):
+        """normalize: [0, 255] → [0, 128] maps 255→128, 0→0."""
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:2, :, 3] = 0
+        arr[2:, :, 3] = 255
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=128, mode="normalize")
+        out = np.array(result)
+        self.assertEqual(int(out[:2, :, 3].max()), 0,  "min pixels should stay 0")
+        self.assertEqual(int(out[2:, :, 3].min()), 128, "max pixels should map to 128")
+
+    def test_manual_alpha_normalize_half_range_to_full(self):
+        """normalize: [0, 128] → [0, 255] maps 128→255, 0→0."""
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:2, :, 3] = 0
+        arr[2:, :, 3] = 128
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=255, mode="normalize")
+        out = np.array(result)
+        self.assertEqual(int(out[:2, :, 3].max()), 0,   "min pixels should stay 0")
+        self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
+
+    def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
+        """normalize on uniform alpha (all same value) should map to clamp_max."""
+        img = make_rgba_image(alpha=200)
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=128, mode="normalize")
+        out = np.array(result)
+        # All pixels are the same → no range → map to target_hi (clamp_max)
+        self.assertTrue(np.all(out[:, :, 3] == 128))
+
+    def test_manual_alpha_normalize_preserves_proportions(self):
+        """normalize: midpoint of source range maps to midpoint of target range."""
+        arr = np.zeros((1, 3, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 128   # midpoint of [0, 255]
+        arr[0, 2, 3] = 255
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=100, mode="normalize")
+        out = np.array(result)
+        # 128 / 255 * 100 ≈ 50
+        mid = int(out[0, 1, 3])
+        self.assertAlmostEqual(mid, round(128 / 255 * 100), delta=1)
+
+    def test_preset_normalize_mode(self):
+        """AlphaPreset with mode='normalize' uses apply_alpha_preset correctly."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 128
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset(
+            "norm_test", alpha_value=None, threshold=0, invert=False,
+            description="", clamp_min=0, clamp_max=255, mode="normalize",
+        )
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 0)
+        self.assertEqual(int(out[0, 1, 3]), 255)
+
+    def test_builtin_ps2_normalize_presets_exist(self):
+        """PS2 normalize presets should be present in built-in list."""
+        from unittest.mock import MagicMock
+        from src.core.presets import PresetManager
+        mock_settings = MagicMock()
+        mock_settings.get_custom_presets.return_value = []
+        mgr = PresetManager(mock_settings)
+        names = [p.name for p in mgr.all_presets()]
+        self.assertTrue(
+            any("Normalize" in n and "0–128" in n for n in names),
+            "Expected a PS2 Normalize → 0–128 preset",
+        )
+        self.assertTrue(
+            any("Normalize" in n and "0–255" in n for n in names),
+            "Expected a PS2 Normalize → 0–255 preset",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -980,6 +1106,63 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
             source = f.read()
         self.assertIn("def register_tab_bar", source,
                       "TooltipManager should have a register_tab_bar method")
+
+
+# ---------------------------------------------------------------------------
+# Use-preset re-check sync tests (source inspection, no PyQt6 required)
+# ---------------------------------------------------------------------------
+
+class TestUsePresetRecheck(unittest.TestCase):
+    """When the user manually re-checks 'Use preset', fine-tune controls must
+    be reloaded from the preset so the display matches what will be processed."""
+
+    def _alpha_tool_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
+        with open(path) as f:
+            return f.read()
+
+    def test_on_use_preset_toggled_handler_defined(self):
+        """alpha_tool.py must define the _on_use_preset_toggled slot."""
+        self.assertIn("def _on_use_preset_toggled", self._alpha_tool_source(),
+                      "_on_use_preset_toggled slot must be defined in alpha_tool.py")
+
+    def test_use_preset_check_connected_to_on_use_preset_toggled(self):
+        """_use_preset_check.toggled must be connected to _on_use_preset_toggled,
+        not directly to _update_compare."""
+        source = self._alpha_tool_source()
+        self.assertIn(
+            "_use_preset_check.toggled.connect(self._on_use_preset_toggled)",
+            source,
+            "_use_preset_check.toggled must connect to _on_use_preset_toggled",
+        )
+        # The old direct-to-_update_compare connection must no longer exist
+        self.assertNotIn(
+            "_use_preset_check.toggled.connect(self._update_compare)",
+            source,
+            "_use_preset_check.toggled must NOT connect directly to _update_compare",
+        )
+
+    def test_on_use_preset_toggled_calls_on_preset_changed_when_checked(self):
+        """_on_use_preset_toggled must call _on_preset_changed when checked=True."""
+        source = self._alpha_tool_source()
+        # Find the handler body
+        start = source.find("def _on_use_preset_toggled")
+        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
+        # Find the next method definition to scope the search; fall back to
+        # end-of-file if this is the last method (avoids a -1 index).
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_on_preset_changed",
+            body,
+            "_on_use_preset_toggled must call _on_preset_changed when checked",
+        )
+        self.assertIn(
+            "_update_compare",
+            body,
+            "_on_use_preset_toggled must call _update_compare when unchecked",
+        )
 
 
 # ---------------------------------------------------------------------------

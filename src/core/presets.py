@@ -26,6 +26,9 @@ class AlphaPreset:
     clamp_max: int = 255
     # When True: pixels >= threshold become 255, pixels < threshold become 0 (hard binary cut)
     binary_cut: bool = False
+    # Apply mode: 'set' (default), 'multiply', 'add', 'subtract', or 'normalize'.
+    # 'normalize' remaps the image's actual alpha range to [clamp_min, clamp_max].
+    mode: str = "set"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -106,6 +109,37 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
         ),
         clamp_min=0,
         clamp_max=128,
+    ),
+    # Normalize: remap any alpha range to the PS2 native 0–128 scale.
+    AlphaPreset(
+        name="PS2 Normalize → 0–128  (rescale alpha range to PS2 GS scale)",
+        alpha_value=None,
+        threshold=0,
+        invert=False,
+        description=(
+            "Linearly rescales the texture's existing alpha range to PS2's native 0–128 GS scale. "
+            "Example: a texture with alpha 0–255 is remapped so 0→0 and 255→128. "
+            "A texture with min=0, max=255, mean=247 becomes min=0, max=128, mean≈62. "
+            "Use this instead of 'PS2 Clamp' when you want proportional rescaling rather than hard capping."
+        ),
+        clamp_min=0,
+        clamp_max=128,
+        mode="normalize",
+    ),
+    # Normalize: rescale from PS2 0–128 back to standard 0–255.
+    AlphaPreset(
+        name="PS2 Normalize → 0–255  (rescale PS2 alpha to standard PC range)",
+        alpha_value=None,
+        threshold=0,
+        invert=False,
+        description=(
+            "Linearly rescales a PS2 texture's alpha (0–128 GS scale) to the standard 0–255 PC range. "
+            "Example: alpha=128 (PS2 fully opaque) → 255; alpha=64 → 128. "
+            "Use when importing PS2 textures into a PC pipeline that expects 0–255 alpha."
+        ),
+        clamp_min=0,
+        clamp_max=255,
+        mode="normalize",
     ),
     # -----------------------------------------------------------------------
     # PS2 UI / HUD — 75% opacity in standard 0–255 range

@@ -144,9 +144,6 @@ class AlphaFixerTab(QWidget):
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
-        # When True the next stats_ready signal should auto-fill Clamp Min/Max
-        # from the image's actual alpha range (set on every new file selection).
-        self._autofill_clamp_on_next_stats: bool = False
         # Debounce timer so rapid fine-tune slider changes don't flood with threads
         self._preview_debounce = QTimer(self)
         self._preview_debounce.setSingleShot(True)
@@ -417,7 +414,8 @@ class AlphaFixerTab(QWidget):
         self._apply_alpha_check.setChecked(True)
         self._apply_alpha_check.setToolTip(
             "When checked, all pixels (or pixels below threshold) are set to the value above.\n"
-            "When unchecked, pixel alpha values are preserved — only Clamp Min/Max are applied."
+            "When unchecked, pixel alpha values are preserved — only Clamp Min/Max are applied.\n"
+            "Not used in 'normalize' mode (normalize always remaps the full range)."
         )
         gt_layout.addWidget(self._apply_alpha_check, 0, 0, 1, 2)
 
@@ -426,16 +424,23 @@ class AlphaFixerTab(QWidget):
         gt_layout.addWidget(lbl_mode, 1, 0)
         self._mode_combo = QComboBox()
         _MODE_OPTIONS = [
-            ("set",      "set — replace each pixel's alpha with the value below"),
-            ("multiply", "multiply — scale: new = old × (value ÷ 255)"),
-            ("add",      "add — shift: new = old + value  (max 255)"),
-            ("subtract", "subtract — shift: new = old − value  (min 0)"),
+            ("set",       "set — replace each pixel's alpha with the value below"),
+            ("multiply",  "multiply — scale: new = old × (value ÷ 255)"),
+            ("add",       "add — shift: new = old + value  (max 255)"),
+            ("subtract",  "subtract — shift: new = old − value  (min 0)"),
+            ("normalize", "normalize — remap: scale image range → [Clamp Min, Clamp Max]"),
         ]
         _MODE_TIPS = {
-            "set":      "Replace every pixel's alpha with the exact value you set below. The most common mode.",
-            "multiply": "Scale existing alpha. new = old × (value ÷ 255). Value=128 gives 50% of original. Classic PS2 fix.",
-            "add":      "Add the value to each pixel's existing alpha, clamped at 255. Brightens transparency.",
-            "subtract": "Subtract the value from each pixel's existing alpha, clamped at 0. Deepens transparency.",
+            "set":       "Replace every pixel's alpha with the exact value you set below. The most common mode.",
+            "multiply":  "Scale existing alpha. new = old × (value ÷ 255). Value=128 gives 50% of original. Classic PS2 fix.",
+            "add":       "Add the value to each pixel's existing alpha, clamped at 255. Brightens transparency.",
+            "subtract":  "Subtract the value from each pixel's existing alpha, clamped at 0. Deepens transparency.",
+            "normalize": (
+                "Linearly remap the image's actual alpha range to [Clamp Min, Clamp Max].\n"
+                "Example: image with alpha 0–128 and Clamp Min=0, Clamp Max=255 → maps 128 → 255.\n"
+                "Useful for PS2 texture conversions (0–128 ↔ 0–255) or any range rescaling.\n"
+                "The 'Alpha value' spinbox is not used in this mode."
+            ),
         }
         for key, label in _MODE_OPTIONS:
             self._mode_combo.addItem(label, userData=key)
@@ -443,7 +448,8 @@ class AlphaFixerTab(QWidget):
             self._mode_combo.setItemData(idx, _MODE_TIPS[key], Qt.ItemDataRole.ToolTipRole)
         self._mode_combo.setToolTip(
             "How the alpha value below is applied to each pixel.\n"
-            "'set' replaces alpha; 'multiply' scales it; 'add'/'subtract' shift it."
+            "'set' replaces alpha; 'multiply' scales it; 'add'/'subtract' shift it.\n"
+            "'normalize' remaps the image's alpha range to [Clamp Min, Clamp Max]."
         )
         self._mode_combo.setMinimumHeight(26)
         gt_layout.addWidget(self._mode_combo, 1, 1)
@@ -490,7 +496,8 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Output floor: any pixel alpha below this value is raised to this value.\n"
-            "0 = no floor (default). Applied after any fixed alpha value is set."
+            "0 = no floor (default). Applied after any fixed alpha value is set.\n"
+            "In 'normalize' mode this becomes the TARGET minimum of the output range."
         )
         gt_layout.addWidget(self._clamp_min_spin, 5, 1)
 
@@ -504,6 +511,7 @@ class AlphaFixerTab(QWidget):
         self._clamp_max_spin.setToolTip(
             "Output ceiling: any pixel alpha above this value is capped to this value.\n"
             "255 = no ceiling (default). Applied after any fixed alpha value is set.\n"
+            "In 'normalize' mode this becomes the TARGET maximum of the output range.\n"
             "Example: set max=128 to replicate PS2's 0–128 alpha range."
         )
         gt_layout.addWidget(self._clamp_max_spin, 6, 1)
@@ -641,8 +649,8 @@ class AlphaFixerTab(QWidget):
         self._invert_check.toggled.connect(self._on_finetune_changed)
         self._binary_cut_check.toggled.connect(self._on_finetune_changed)
         self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
-        self._mode_combo.currentIndexChanged.connect(self._on_finetune_changed)
-        self._use_preset_check.toggled.connect(self._update_compare)
+        self._mode_combo.currentIndexChanged.connect(self._on_mode_combo_changed)
+        self._use_preset_check.toggled.connect(self._on_use_preset_toggled)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
         self._green_spin.valueChanged.connect(self._on_finetune_changed)
         self._blue_spin.valueChanged.connect(self._on_finetune_changed)
@@ -757,6 +765,7 @@ class AlphaFixerTab(QWidget):
             self._alpha_spin, self._alpha_slider,
             self._threshold_spin, self._clamp_min_spin, self._clamp_max_spin,
             self._invert_check, self._binary_cut_check,
+            self._mode_combo,
         ]
         for c in finetune_controls:
             c.blockSignals(True)
@@ -764,17 +773,26 @@ class AlphaFixerTab(QWidget):
         # and show that value.  If alpha_value is None (clamp-only presets), uncheck it
         # so the fine-tune shows the correct "clamp only" intent.
         has_value = preset.alpha_value is not None
+        preset_mode = getattr(preset, "mode", "set")
+        is_normalize = (preset_mode == "normalize")
         self._apply_alpha_check.setChecked(has_value)
         val = preset.alpha_value if has_value else 255
         self._alpha_spin.setValue(int(val))
         self._alpha_slider.setValue(int(val))
-        self._alpha_spin.setEnabled(has_value)
-        self._alpha_slider.setEnabled(has_value)
+        # Value spinbox/slider inactive in normalize mode or when no fixed value
+        value_active = has_value and not is_normalize
+        self._alpha_spin.setEnabled(value_active)
+        self._alpha_slider.setEnabled(value_active)
         self._threshold_spin.setValue(int(preset.threshold))
         self._clamp_min_spin.setValue(int(preset.clamp_min))
         self._clamp_max_spin.setValue(int(preset.clamp_max))
         self._invert_check.setChecked(bool(preset.invert))
         self._binary_cut_check.setChecked(bool(preset.binary_cut))
+        # Sync mode combo to the preset's mode field
+        for i in range(self._mode_combo.count()):
+            if self._mode_combo.itemData(i) == preset_mode:
+                self._mode_combo.setCurrentIndex(i)
+                break
         for c in finetune_controls:
             c.blockSignals(False)
         self._btn_delete_preset.setEnabled(not preset.builtin)
@@ -803,11 +821,16 @@ class AlphaFixerTab(QWidget):
         apply_val = self._apply_alpha_check.isChecked()
         alpha_val = self._alpha_spin.value() if apply_val else None
         binary_cut = self._binary_cut_check.isChecked()
+        mode = self._mode_combo.currentData() or "set"
+        # normalize never uses a fixed value regardless of the checkbox state
+        if mode == "normalize":
+            alpha_val = None
         desc_parts = []
         if alpha_val is not None:
             desc_parts.append(f"value={alpha_val}")
         desc_parts.append(
-            f"threshold={self._threshold_spin.value()}  "
+            f"mode={mode} "
+            f"threshold={self._threshold_spin.value()} "
             f"clamp={self._clamp_min_spin.value()}–{self._clamp_max_spin.value()}"
         )
         if binary_cut:
@@ -824,6 +847,7 @@ class AlphaFixerTab(QWidget):
             clamp_min=self._clamp_min_spin.value(),
             clamp_max=self._clamp_max_spin.value(),
             binary_cut=binary_cut,
+            mode=mode,
         )
         saved = self._presets.save_custom_preset(preset)
         if not saved:
@@ -891,15 +915,9 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
-        # Always reset the flag so stale threads never autofill for a different
-        # file than the one currently selected.
-        self._autofill_clamp_on_next_stats = False
         item = self._file_list.item(row)
         if item and os.path.isfile(item.text()):
             self._preview_path = item.text()
-            # Request autofill of Clamp Min/Max from the image's actual alpha
-            # range once the background loader returns the BEFORE stats.
-            self._autofill_clamp_on_next_stats = True
             self._preview_debounce.start()
         else:
             self._preview_path = None
@@ -948,24 +966,35 @@ class AlphaFixerTab(QWidget):
         except Exception:
             self._rom_banner.hide()
 
+    @staticmethod
+    def _clamp_range_label(lo: int, hi: int, raw_lo: int, raw_hi: int) -> str:
+        """Return a compact clamp range string with an inverted-range warning."""
+        if raw_lo > raw_hi:
+            return f"{lo}–{hi} ⚠ inverted (will swap)"
+        return f"{lo}–{hi}"
+
     def _refresh_finetune_label(self) -> None:
         """Update the live fine-tune params summary label."""
         cmin   = self._clamp_min_spin.value()
         cmax   = self._clamp_max_spin.value()
         thresh = self._threshold_spin.value()
+        mode   = self._mode_combo.currentData() or "set"
+        lo, hi = min(cmin, cmax), max(cmin, cmax)
         parts  = []
-        if self._apply_alpha_check.isChecked():
-            mode = self._mode_combo.currentData() or "set"
-            parts.append(f"{mode}={self._alpha_spin.value()}")
+
+        if mode == "normalize":
+            # normalize remaps the image's actual alpha range to [cmin, cmax].
+            # Show the target range prominently so the user can see at a glance
+            # what output range is selected.
+            parts.append(f"normalize → [{self._clamp_range_label(lo, hi, cmin, cmax)}]")
         else:
-            parts.append("clamp only")
-        if cmin > 0 or cmax < 255:
-            if cmin > cmax:
-                # Values will be swapped at processing time; flag so the user
-                # can see the inverted state and correct it if desired.
-                parts.append(f"clamp={cmin}–{cmax} ⚠ inverted (will swap)")
+            if self._apply_alpha_check.isChecked():
+                parts.append(f"{mode}={self._alpha_spin.value()}")
             else:
-                parts.append(f"clamp={cmin}–{cmax}")
+                parts.append("clamp only")
+            if cmin > 0 or cmax < 255:
+                parts.append(f"clamp={self._clamp_range_label(lo, hi, cmin, cmax)}")
+
         if thresh:
             parts.append(f"thresh={thresh}")
         if self._invert_check.isChecked():
@@ -977,9 +1006,43 @@ class AlphaFixerTab(QWidget):
     @pyqtSlot(bool)
     def _on_apply_alpha_toggled(self, checked: bool) -> None:
         """Enable/disable alpha value controls based on the 'Apply fixed alpha value' checkbox."""
-        self._alpha_spin.setEnabled(checked)
-        self._alpha_slider.setEnabled(checked)
-        self._mode_combo.setEnabled(checked)
+        mode = self._mode_combo.currentData() or "set"
+        is_normalize = (mode == "normalize")
+        # Value spinbox/slider are irrelevant both when normalize is active
+        # (range remapping needs no fixed value) and when the checkbox is off
+        # (clamp-only mode).  In every other case they follow the checkbox.
+        value_active = checked and not is_normalize
+        self._alpha_spin.setEnabled(value_active)
+        self._alpha_slider.setEnabled(value_active)
+        # Mode combo is ALWAYS enabled so the user can always switch modes
+        # regardless of whether a fixed value is being applied.
+        # Toggling this checkbox is a fine-tune edit — switch to manual mode so
+        # the new state is actually used for processing (consistent with how all
+        # other fine-tune control handlers behave).
+        self._switch_to_manual_if_preset_active()
+        self._refresh_finetune_label()
+        self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_mode_combo_changed(self, _index: int) -> None:
+        """Update value-control states when the apply mode changes.
+
+        'normalize' remaps the alpha range to [Clamp Min, Clamp Max] and never
+        uses the fixed alpha value, so the value spinbox/slider are disabled.
+        All other modes use the fixed value when 'Apply fixed alpha value' is
+        checked, following that checkbox's state.
+        """
+        mode = self._mode_combo.currentData() or "set"
+        is_normalize = (mode == "normalize")
+        value_active = self._apply_alpha_check.isChecked() and not is_normalize
+        self._alpha_spin.setEnabled(value_active)
+        self._alpha_slider.setEnabled(value_active)
+        # Switch to manual mode if a preset is active, same as any other
+        # fine-tune control edit.
+        if not self._preset_combo.signalsBlocked() and self._use_preset_check.isChecked():
+            was_blocked = self._use_preset_check.blockSignals(True)
+            self._use_preset_check.setChecked(False)
+            self._use_preset_check.blockSignals(was_blocked)
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
@@ -1002,6 +1065,28 @@ class AlphaFixerTab(QWidget):
             was_blocked = self._use_preset_check.blockSignals(True)
             self._use_preset_check.setChecked(False)
             self._use_preset_check.blockSignals(was_blocked)
+
+    @pyqtSlot(bool)
+    def _on_use_preset_toggled(self, checked: bool) -> None:
+        """Handle the 'Use preset' checkbox being toggled by the user.
+
+        When re-checked:  reload the selected preset's parameters into the
+        fine-tune controls so the display always matches what will be
+        processed.  Without this, the controls could show the user's old
+        hand-typed values while the preset is silently used, creating a
+        confusing mismatch between the displayed numbers and the actual
+        processing result.
+
+        When unchecked:  just refresh the preview using the current fine-tune
+        values (no control changes needed — the values already reflect what
+        the user last typed).
+        """
+        if checked:
+            # Reload preset values into the fine-tune controls so the display
+            # is consistent with what "Process" will actually apply.
+            self._on_preset_changed(self._preset_combo.currentText())
+        else:
+            self._update_compare()
 
     @pyqtSlot(int)
     def _on_clamp_min_changed(self, value: int) -> None:  # noqa: ARG002  # value unused; spinbox read directly
@@ -1058,9 +1143,16 @@ class AlphaFixerTab(QWidget):
         """
         raw_cmin = self._clamp_min_spin.value()
         raw_cmax = self._clamp_max_spin.value()
+        mode = self._mode_combo.currentData() or "set"
+        # normalize remaps [img_min, img_max] → [clamp_min, clamp_max] and
+        # does not use a fixed alpha value regardless of the checkbox state.
+        if mode == "normalize":
+            value = None
+        else:
+            value = self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None
         return {
-            "value": self._alpha_spin.value() if self._apply_alpha_check.isChecked() else None,
-            "mode": self._mode_combo.currentData() or "set",
+            "value": value,
+            "mode": mode,
             "threshold": self._threshold_spin.value(),
             "invert": self._invert_check.isChecked(),
             "clamp_min": min(raw_cmin, raw_cmax),
@@ -1145,35 +1237,6 @@ class AlphaFixerTab(QWidget):
             )
         self._before_stats_lbl.setText(_panel_text("BEFORE", before))
         self._after_stats_lbl.setText(_panel_text("AFTER", after))
-
-        # Auto-fill Clamp Min/Max from the image's actual alpha range when a
-        # new file was just selected and the user is in manual (not preset) mode.
-        # This lets the user see "where the image currently sits" before typing
-        # in their desired target values.
-        if self._autofill_clamp_on_next_stats and before and not self._use_preset_check.isChecked():
-            self._autofill_clamp_on_next_stats = False
-            self._autofill_clamp_from_stats(before)
-
-    def _autofill_clamp_from_stats(self, before_stats: dict) -> None:
-        """Populate Clamp Min/Max spinboxes from the image's actual alpha range.
-
-        Signals are blocked while setting the spinbox values so the change
-        handlers do not re-trigger the preview debounce (the caller is already
-        inside a stats_ready callback — a fresh preview will start automatically
-        once the debounce fires for the changed values).
-        """
-        img_min = before_stats.get("min", 0)
-        img_max = before_stats.get("max", 255)
-        for spin, val in ((self._clamp_min_spin, img_min), (self._clamp_max_spin, img_max)):
-            spin.blockSignals(True)
-            spin.setValue(val)
-            spin.blockSignals(False)
-        self._refresh_finetune_label()
-        # Kick off a fresh preview so AFTER stats reflect the newly-set clamp
-        # values (clamping to [actual_min, actual_max] is a no-op, so AFTER
-        # will match BEFORE — giving the user a clean baseline to edit from).
-        self._preview_debounce.start()
-
 
     @pyqtSlot(str)
     def _on_compare_failed(self, err: str):
