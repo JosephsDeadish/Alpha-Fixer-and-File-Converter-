@@ -3895,3 +3895,298 @@ class TestRound10ResourceHygiene(unittest.TestCase):
                            "img.close() must appear after save_img.close()")
         self.assertLess(save_close, img_close,
                         "save_img.close() must come before img.close() on success path")
+
+
+class TestRound11ResourceHygiene(unittest.TestCase):
+    """Round-11: six PIL image resource leaks in _ConvertedThumbLoader and
+    _ConverterPreviewLoader (preview_pane.py).
+
+    Bug 1 (_ConvertedThumbLoader.run()):
+        ``img`` was not closed when an unexpected exception propagated to the
+        outer ``except Exception`` handler (e.g. MemoryError from a format-
+        conversion call at lines 185-195).  Fix: ``img = None`` sentinel before
+        the outer try + ``finally: if img is not None: img.close()``.
+
+    Bug 2 (_ConvertedThumbLoader.run()):
+        ``preview_img`` was not closed if ``preview_img.load()`` raised
+        (e.g. MemoryError) — the inner ``except`` block returned without
+        closing it.  Fix: ``preview_img = None`` sentinel before the inner try
+        + ``if preview_img is not None: preview_img.close()`` in the inner
+        except.
+
+    Bug 3 (_ConverterPreviewLoader.run()):
+        Same ``img`` leak as Bug 1 — no outer ``try/finally`` to guarantee
+        ``img.close()`` on unexpected exceptions.
+
+    Bug 4 (_ConverterPreviewLoader.run()):
+        ``src_thumb = img.copy()`` was followed by explicit calls to
+        ``src_thumb.thumbnail()`` and ``src_thumb.close()`` but lacked a
+        try/finally, so an exception between open and close would leak the
+        thumbnail image.  Fix: wrap the three-line block in try/finally.
+
+    Bug 5 (_ConverterPreviewLoader.run()):
+        ``out_img`` was opened inside the inner try but the inner ``except``
+        block did not close it when ``out_img.load()`` raised.  Fix: initialise
+        ``out_img = None`` before the inner try and close it in the inner except
+        when not None.
+
+    Bug 6 (_ConverterPreviewLoader.run()):
+        ``out_thumb = out_img.copy()`` lacked a try/finally, so an exception
+        during ``thumbnail()`` or ``_pil_to_qimage()`` would leak ``out_thumb``
+        and ``out_img``.  Fix: wrap in try/finally that closes both.
+    """
+
+    _PP_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "preview_pane.py"
+    )
+
+    def _read(self) -> str:
+        with open(self._PP_SRC) as f:
+            return f.read()
+
+    def _class_src(self, src: str, class_name: str) -> str:
+        """Return the full source of a named class."""
+        marker = f"\nclass {class_name}("
+        start = src.find(marker)
+        self.assertGreater(start, 0, f"class {class_name} not found")
+        next_cls = src.find("\nclass ", start + 1)
+        return src[start:next_cls] if next_cls > 0 else src[start:]
+
+    def _method_src(self, cls_src: str, method_name: str) -> str:
+        """Return the source of a method within a class body."""
+        marker = f"\n    def {method_name}("
+        start = cls_src.find(marker)
+        self.assertGreater(start, 0,
+                           f"def {method_name} not found in class source")
+        next_method = cls_src.find("\n    def ", start + 1)
+        return cls_src[start:next_method] if next_method > 0 else cls_src[start:]
+
+    # ------------------------------------------------------------------
+    # Bug 1 — _ConvertedThumbLoader.run(): img not closed on outer except
+    # ------------------------------------------------------------------
+
+    def _ctl_run_src(self) -> str:
+        src = self._read()
+        cls = self._class_src(src, "_ConvertedThumbLoader")
+        return self._method_src(cls, "run")
+
+    def test_converted_thumb_loader_img_sentinel_before_outer_try(self):
+        """_ConvertedThumbLoader.run must initialise ``img = None`` before the
+        outer try so the finally block can always reference it."""
+        run = self._ctl_run_src()
+        sentinel_pos = run.find("img = None")
+        self.assertGreater(sentinel_pos, 0,
+                           "_ConvertedThumbLoader.run must have 'img = None' sentinel")
+        try_pos = run.find("try:")
+        self.assertGreater(try_pos, sentinel_pos,
+                           "'img = None' must appear before the outer 'try:'")
+
+    def test_converted_thumb_loader_outer_finally_closes_img(self):
+        """_ConvertedThumbLoader.run must have a ``finally`` block that closes
+        ``img`` when it is not None."""
+        run = self._ctl_run_src()
+        self.assertIn(
+            "finally:",
+            run,
+            "_ConvertedThumbLoader.run must have a 'finally:' block",
+        )
+        self.assertIn(
+            "if img is not None:",
+            run,
+            "_ConvertedThumbLoader.run finally must guard with 'if img is not None:'",
+        )
+        # img.close() must appear inside the finally guard
+        guard_pos = run.rfind("if img is not None:")
+        self.assertGreater(guard_pos, 0)
+        close_pos = run.find("img.close()", guard_pos)
+        self.assertGreater(
+            close_pos, guard_pos,
+            "img.close() must appear after the 'if img is not None:' guard in finally",
+        )
+
+    def test_converted_thumb_loader_sets_img_none_after_abort_close(self):
+        """After the early-abort ``img.close()``, ``img`` must be set to None
+        so the finally block does not double-close it."""
+        run = self._ctl_run_src()
+        abort_close = run.find("img.close()")
+        self.assertGreater(abort_close, 0, "img.close() not found in abort path")
+        null_pos = run.find("img = None", abort_close)
+        self.assertGreater(
+            null_pos, abort_close,
+            "img = None must follow img.close() on the abort path",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 2 — _ConvertedThumbLoader.run(): preview_img not closed on load() error
+    # ------------------------------------------------------------------
+
+    def test_converted_thumb_loader_preview_img_sentinel(self):
+        """_ConvertedThumbLoader.run must initialise ``preview_img = None``
+        before the inner try so it can be closed in the except block."""
+        run = self._ctl_run_src()
+        self.assertIn(
+            "preview_img = None",
+            run,
+            "_ConvertedThumbLoader.run must have 'preview_img = None' sentinel",
+        )
+
+    def test_converted_thumb_loader_inner_except_closes_preview_img(self):
+        """When ``preview_img.load()`` raises, the inner except must close
+        ``preview_img`` if it was opened."""
+        run = self._ctl_run_src()
+        self.assertIn(
+            "if preview_img is not None:",
+            run,
+            "_ConvertedThumbLoader inner except must guard with "
+            "'if preview_img is not None:'",
+        )
+        guard_pos = run.find("if preview_img is not None:")
+        close_pos = run.find("preview_img.close()", guard_pos)
+        self.assertGreater(
+            close_pos, guard_pos,
+            "preview_img.close() must follow the 'if preview_img is not None:' guard",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 3 — _ConverterPreviewLoader.run(): img not closed on outer except
+    # ------------------------------------------------------------------
+
+    def _cpl_run_src(self) -> str:
+        src = self._read()
+        cls = self._class_src(src, "_ConverterPreviewLoader")
+        return self._method_src(cls, "run")
+
+    def test_converter_preview_loader_img_sentinel_before_outer_try(self):
+        """_ConverterPreviewLoader.run must initialise ``img = None`` before
+        the outer try."""
+        run = self._cpl_run_src()
+        sentinel_pos = run.find("img = None")
+        self.assertGreater(sentinel_pos, 0,
+                           "_ConverterPreviewLoader.run must have 'img = None' sentinel")
+        try_pos = run.find("try:")
+        self.assertGreater(try_pos, sentinel_pos,
+                           "'img = None' must appear before the outer 'try:'")
+
+    def test_converter_preview_loader_outer_finally_closes_img(self):
+        """_ConverterPreviewLoader.run must have a ``finally`` block that closes
+        ``img`` when it is not None."""
+        run = self._cpl_run_src()
+        self.assertIn(
+            "finally:",
+            run,
+            "_ConverterPreviewLoader.run must have a 'finally:' block",
+        )
+        self.assertIn(
+            "if img is not None:",
+            run,
+            "_ConverterPreviewLoader.run finally must guard with 'if img is not None:'",
+        )
+        guard_pos = run.rfind("if img is not None:")
+        self.assertGreater(guard_pos, 0)
+        close_pos = run.find("img.close()", guard_pos)
+        self.assertGreater(
+            close_pos, guard_pos,
+            "img.close() must appear after the last 'if img is not None:' guard",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 4 — _ConverterPreviewLoader.run(): src_thumb not in try/finally
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_src_thumb_in_try_finally(self):
+        """src_thumb must be wrapped in a try/finally so it is always closed."""
+        run = self._cpl_run_src()
+        copy_pos = run.find("src_thumb = img.copy()")
+        self.assertGreater(copy_pos, 0,
+                           "src_thumb = img.copy() not found in _ConverterPreviewLoader.run")
+        try_pos = run.find("try:", copy_pos)
+        self.assertGreater(
+            try_pos, copy_pos,
+            "A 'try:' block must follow 'src_thumb = img.copy()'",
+        )
+        finally_pos = run.find("finally:", try_pos)
+        self.assertGreater(
+            finally_pos, try_pos,
+            "A 'finally:' block must follow the src_thumb try: block",
+        )
+        close_pos = run.find("src_thumb.close()", finally_pos)
+        self.assertGreater(
+            close_pos, finally_pos,
+            "src_thumb.close() must appear inside the finally block after src_thumb try:",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 5 — _ConverterPreviewLoader.run(): out_img not closed on load() error
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_out_img_sentinel(self):
+        """_ConverterPreviewLoader.run must initialise ``out_img = None``
+        before the inner buf try."""
+        run = self._cpl_run_src()
+        self.assertIn(
+            "out_img = None",
+            run,
+            "_ConverterPreviewLoader.run must have 'out_img = None' sentinel",
+        )
+
+    def test_converter_preview_loader_inner_except_closes_out_img(self):
+        """When ``out_img.load()`` raises, the inner except must close
+        ``out_img`` if it was opened."""
+        run = self._cpl_run_src()
+        self.assertIn(
+            "if out_img is not None:",
+            run,
+            "_ConverterPreviewLoader inner except must guard with "
+            "'if out_img is not None:'",
+        )
+        guard_pos = run.find("if out_img is not None:")
+        close_pos = run.find("out_img.close()", guard_pos)
+        self.assertGreater(
+            close_pos, guard_pos,
+            "out_img.close() must follow the 'if out_img is not None:' guard",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 6 — _ConverterPreviewLoader.run(): out_thumb / out_img not in try/finally
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_out_thumb_in_try_finally(self):
+        """out_thumb must be wrapped in a try/finally so it and out_img are
+        always closed."""
+        run = self._cpl_run_src()
+        copy_pos = run.find("out_thumb = out_img.copy()")
+        self.assertGreater(
+            copy_pos, 0,
+            "out_thumb = out_img.copy() not found in _ConverterPreviewLoader.run",
+        )
+        finally_pos = run.find("finally:", copy_pos)
+        self.assertGreater(
+            finally_pos, copy_pos,
+            "A 'finally:' block must follow the out_thumb = out_img.copy() line",
+        )
+        out_thumb_close = run.find("out_thumb.close()", finally_pos)
+        self.assertGreater(
+            out_thumb_close, finally_pos,
+            "out_thumb.close() must appear in the finally block",
+        )
+        out_img_close = run.find("out_img.close()", finally_pos)
+        self.assertGreater(
+            out_img_close, finally_pos,
+            "out_img.close() must appear in the finally block",
+        )
+
+    def test_converter_preview_loader_out_thumb_sentinel(self):
+        """out_thumb must be initialised to None before the try/finally so the
+        guard 'if out_thumb is not None:' prevents closing an unset variable."""
+        run = self._cpl_run_src()
+        self.assertIn(
+            "out_thumb = None",
+            run,
+            "_ConverterPreviewLoader.run must have 'out_thumb = None' sentinel",
+        )
+        self.assertIn(
+            "if out_thumb is not None:",
+            run,
+            "_ConverterPreviewLoader.run finally must guard with "
+            "'if out_thumb is not None:'",
+        )

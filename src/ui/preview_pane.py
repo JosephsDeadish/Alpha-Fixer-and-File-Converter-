@@ -161,6 +161,7 @@ class _ConvertedThumbLoader(QThread):
         self._abort = True
 
     def run(self):
+        img = None
         try:
             import io
             from PIL import Image
@@ -173,6 +174,7 @@ class _ConvertedThumbLoader(QThread):
             # image header was even decoded.
             if self._abort:
                 img.close()
+                img = None
                 return
 
             # Convert to target format in-memory so the preview reflects
@@ -196,6 +198,7 @@ class _ConvertedThumbLoader(QThread):
             if fmt in _QUALITY_FORMATS:
                 save_kwargs["quality"] = self._quality
 
+            preview_img = None
             try:
                 save_img.save(buf, format=fmt, **save_kwargs)
                 converted_size = buf.tell()
@@ -207,11 +210,15 @@ class _ConvertedThumbLoader(QThread):
                 # Fallback: show the source image if in-memory conversion fails
                 # (e.g. unsupported format like DDS which requires wand).
                 buf.close()
+                if preview_img is not None:
+                    preview_img.close()
+                    preview_img = None
                 if save_img is not img:
                     save_img.close()
                 img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
                 qimg = _pil_to_qimage(img)
                 img.close()
+                img = None
                 meta = (
                     f"{Path(self._path).name}\n"
                     f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
@@ -223,6 +230,7 @@ class _ConvertedThumbLoader(QThread):
             if save_img is not img:
                 save_img.close()
             img.close()
+            img = None
             preview_img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(preview_img)
             preview_img.close()
@@ -236,6 +244,9 @@ class _ConvertedThumbLoader(QThread):
             self.loaded.emit(qimg, meta)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            if img is not None:
+                img.close()
 
 
 # ---------------------------------------------------------------------------
@@ -538,6 +549,7 @@ class _ConverterPreviewLoader(QThread):
         self._abort = True
 
     def run(self):
+        img = None
         try:
             import io
             from PIL import Image
@@ -551,13 +563,16 @@ class _ConverterPreviewLoader(QThread):
             # different file before we even decoded the header), skip all work.
             if self._abort:
                 img.close()
+                img = None
                 return
 
             # --- Source side ---
             src_thumb = img.copy()
-            src_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
-            src_qi = _pil_to_qimage(src_thumb)
-            src_thumb.close()
+            try:
+                src_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+                src_qi = _pil_to_qimage(src_thumb)
+            finally:
+                src_thumb.close()
             src_meta = (
                 f"{Path(self._path).name}\n"
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
@@ -568,6 +583,7 @@ class _ConverterPreviewLoader(QThread):
             # running the expensive in-memory conversion step.
             if self._abort:
                 img.close()
+                img = None
                 return
 
             # --- Output side: convert in-memory to see encoding artefacts ---
@@ -591,6 +607,7 @@ class _ConverterPreviewLoader(QThread):
             # Allocate the buffer outside the try so it is always in scope for
             # the except block and can be closed on both success and error paths.
             buf = io.BytesIO()
+            out_img = None
             try:
                 save_img.save(buf, format=fmt, **save_kwargs)
                 converted_size = buf.tell()
@@ -601,6 +618,9 @@ class _ConverterPreviewLoader(QThread):
             except Exception:
                 # Fallback: show source image again if conversion fails
                 buf.close()
+                if out_img is not None:
+                    out_img.close()
+                    out_img = None
                 if save_img is not img:
                     save_img.close()
                 out_qi = src_qi
@@ -613,18 +633,24 @@ class _ConverterPreviewLoader(QThread):
                     f"(source shown – conversion unsupported)"
                 )
                 img.close()
+                img = None
                 self.ready.emit(src_qi, out_qi, src_meta, out_meta)
                 return
 
             if save_img is not img:
                 save_img.close()
             img.close()
+            img = None
             out_mode = out_img.mode
-            out_thumb = out_img.copy()
-            out_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
-            out_qi = _pil_to_qimage(out_thumb)
-            out_thumb.close()
-            out_img.close()
+            out_thumb = None
+            try:
+                out_thumb = out_img.copy()
+                out_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+                out_qi = _pil_to_qimage(out_thumb)
+            finally:
+                if out_thumb is not None:
+                    out_thumb.close()
+                out_img.close()
 
             quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
             out_meta = (
@@ -635,6 +661,9 @@ class _ConverterPreviewLoader(QThread):
             self.ready.emit(src_qi, out_qi, src_meta, out_meta)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            if img is not None:
+                img.close()
 
 
 # ---------------------------------------------------------------------------
