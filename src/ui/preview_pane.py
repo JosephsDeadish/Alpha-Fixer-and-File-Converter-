@@ -78,6 +78,11 @@ class _ThumbLoader(QThread):
         super().__init__()
         self._path = path
         self._max_size = max_size
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
 
     def run(self):
         try:
@@ -86,6 +91,10 @@ class _ThumbLoader(QThread):
             mode = img.mode
             width, height = img.size
             file_size = os.path.getsize(self._path)
+
+            # Bail out if a newer file has been selected before we decoded.
+            if self._abort:
+                return
 
             # Check for alpha channel
             has_alpha = mode in ("RGBA", "LA", "PA") or (
@@ -135,6 +144,11 @@ class _ConvertedThumbLoader(QThread):
         self._target_fmt = target_fmt.upper()
         self._quality = quality
         self._max_size = max_size
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
 
     def run(self):
         try:
@@ -144,6 +158,12 @@ class _ConvertedThumbLoader(QThread):
             img = Image.open(self._path)
             orig_mode = img.mode
             orig_w, orig_h = img.size
+
+            # Bail out early if a newer format/file was selected before the
+            # image header was even decoded.
+            if self._abort:
+                img.close()
+                return
 
             # Convert to target format in-memory so the preview reflects
             # actual encoding artefacts (e.g. JPEG chroma subsampling).
@@ -715,8 +735,9 @@ class ImagePreviewPane(QWidget):
         self._start_loader(_ConvertedThumbLoader(path, target_fmt, quality))
 
     def _start_loader(self, loader):
-        """Disconnect any stale loader and start *loader*."""
+        """Disconnect and stop any stale loader, then start *loader*."""
         if self._loader is not None:
+            self._loader.stop()
             try:
                 self._loader.loaded.disconnect()
                 self._loader.failed.disconnect()

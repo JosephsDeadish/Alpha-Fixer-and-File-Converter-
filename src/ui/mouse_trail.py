@@ -171,6 +171,10 @@ class MouseTrailOverlay(QWidget):
                 emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
                 emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
                 self._trail.append([lx, ly, 1.0, emoji])
+                # If the timer was stopped because the trail had emptied, restart it
+                # now that a new point has been added.
+                if not self._timer.isActive():
+                    self._timer.start()
             except AttributeError:
                 pass
 
@@ -187,6 +191,10 @@ class MouseTrailOverlay(QWidget):
 
     def _tick(self) -> None:
         if not self._trail:
+            # Trail is empty — nothing to animate.  Stop the timer so we don't
+            # fire 30 no-op callbacks per second while the mouse is idle.
+            # The timer is restarted by eventFilter when the next point arrives.
+            self._timer.stop()
             return
         # Skip rendering while the window is minimised to avoid wasting CPU
         # on emoji font shaping for pixels that are never shown.
@@ -206,6 +214,12 @@ class MouseTrailOverlay(QWidget):
             if a > 0.0:
                 new_trail.append([x, y, a, emoji])
         self._trail = new_trail
+        if not self._trail:
+            # Last particles just faded out — stop the timer until new points
+            # arrive.  This is a second check (distinct from the early-return
+            # above) to handle the case where the trail transitioned from
+            # non-empty to empty during this tick.
+            self._timer.stop()
         # Always request a full repaint so Qt re-paints the parent region
         # first, clearing stale trail pixels before we draw new ones.
         self.update()

@@ -200,7 +200,13 @@ class SettingsManager:
     def get_theme(self) -> dict:
         raw = self.get("theme_data", json.dumps(self._DEFAULT_THEME))
         try:
-            return json.loads(raw)
+            data = json.loads(raw)
+            # Guard against non-dict values (e.g. stored "null" or "42")
+            if not isinstance(data, dict):
+                return dict(self._DEFAULT_THEME)
+            # Merge with defaults so all required keys are always present,
+            # even if the stored theme was saved by an older app version.
+            return {**self._DEFAULT_THEME, **data}
         except (json.JSONDecodeError, TypeError):
             return dict(self._DEFAULT_THEME)
 
@@ -215,7 +221,9 @@ class SettingsManager:
         """Return {name: theme_dict} for all user-saved named themes."""
         raw = self._qs.value("saved_themes", "{}")
         try:
-            return json.loads(raw)
+            data = json.loads(raw)
+            # Protect callers that iterate over the result with .items()
+            return data if isinstance(data, dict) else {}
         except (json.JSONDecodeError, TypeError):
             return {}
 
@@ -241,7 +249,9 @@ class SettingsManager:
     def get_custom_presets(self) -> list:
         raw = self._qs.value("custom_presets", "[]")
         try:
-            return json.loads(raw)
+            data = json.loads(raw)
+            # Protect callers that call .insert() / .append() on the result
+            return data if isinstance(data, list) else []
         except (json.JSONDecodeError, TypeError):
             return []
 
@@ -256,7 +266,8 @@ class SettingsManager:
     def get_converter_history(self) -> list:
         raw = self._qs.value("converter_history", "[]")
         try:
-            return json.loads(raw)
+            data = json.loads(raw)
+            return data if isinstance(data, list) else []
         except (json.JSONDecodeError, TypeError):
             return []
 
@@ -274,7 +285,8 @@ class SettingsManager:
     def get_alpha_history(self) -> list:
         raw = self._qs.value("alpha_history", "[]")
         try:
-            return json.loads(raw)
+            data = json.loads(raw)
+            return data if isinstance(data, list) else []
         except (json.JSONDecodeError, TypeError):
             return []
 
@@ -351,9 +363,17 @@ class SettingsManager:
         """
         Load settings from a JSON file exported by export_settings().
         Returns a list of keys that were imported.
+        Raises OSError on file-read failure, json.JSONDecodeError if the
+        file contains invalid JSON syntax, or ValueError if the JSON root
+        is not an object (dict).
         """
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Settings file must contain a JSON object, "
+                f"got {type(data).__name__!r} instead."
+            )
         imported = []
         for key in self.EXPORT_KEYS:
             if key in data:

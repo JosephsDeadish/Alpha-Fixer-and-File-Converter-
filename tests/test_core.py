@@ -1960,3 +1960,313 @@ class TestCrashHangLagPrevention(unittest.TestCase):
                       "_get_font() must check against _FONT_CACHE_MAX")
         self.assertIn("pop(", get_font_section,
                       "_get_font() must evict (pop) an entry when the cache is full")
+
+
+# ---------------------------------------------------------------------------
+# Round-2 crash/hang/lag prevention tests
+# ---------------------------------------------------------------------------
+
+class TestRound2CrashHangLag(unittest.TestCase):
+    """Round-2 hardening: settings type-safety, file_converter validation,
+    mouse_trail timer optimisation, ThumbLoader abort flags."""
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    # ------------------------------------------------------------------
+    # settings_manager – type-safe JSON getters
+    # ------------------------------------------------------------------
+
+    def _make_settings_manager(self):
+        """Return a real SettingsManager backed by an in-memory QSettings."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from unittest.mock import MagicMock, patch
+        from src.core.settings_manager import SettingsManager
+        from PyQt6.QtCore import QSettings
+        with patch("src.core.settings_manager.QSettings") as MockQS:
+            qs = MagicMock()
+            MockQS.return_value = qs
+            mgr = SettingsManager.__new__(SettingsManager)
+            mgr._qs = qs
+            return mgr, qs
+
+    def test_get_converter_history_null_returns_empty_list(self):
+        """get_converter_history() must return [] when JSON is 'null', not None."""
+        from src.core.settings_manager import SettingsManager
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        qs.value.return_value = "null"  # JSON null → json.loads returns None
+        mgr._qs = qs
+        result = mgr.get_converter_history()
+        self.assertIsInstance(result, list,
+                              "get_converter_history() must return list when stored value is JSON null")
+        self.assertEqual(result, [])
+
+    def test_get_alpha_history_null_returns_empty_list(self):
+        """get_alpha_history() must return [] when JSON is 'null'."""
+        from src.core.settings_manager import SettingsManager
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        qs.value.return_value = "null"
+        mgr._qs = qs
+        result = mgr.get_alpha_history()
+        self.assertIsInstance(result, list)
+        self.assertEqual(result, [])
+
+    def test_get_custom_presets_null_returns_empty_list(self):
+        """get_custom_presets() must return [] when JSON is 'null'."""
+        from src.core.settings_manager import SettingsManager
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        qs.value.return_value = "null"
+        mgr._qs = qs
+        result = mgr.get_custom_presets()
+        self.assertIsInstance(result, list)
+        self.assertEqual(result, [])
+
+    def test_get_saved_themes_null_returns_empty_dict(self):
+        """get_saved_themes() must return {} when JSON is 'null', not None."""
+        from src.core.settings_manager import SettingsManager
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        qs.value.return_value = "null"
+        mgr._qs = qs
+        result = mgr.get_saved_themes()
+        self.assertIsInstance(result, dict,
+                              "get_saved_themes() must return dict when stored value is JSON null")
+        self.assertEqual(result, {})
+
+    def test_get_theme_returns_complete_dict(self):
+        """get_theme() must always return a dict with all required keys,
+        merging missing keys from _DEFAULT_THEME for forward-compatibility."""
+        from src.core.settings_manager import SettingsManager
+        import json
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        # Simulate a stored theme with only some keys (e.g. saved by older version)
+        partial_theme = {"name": "Custom", "background": "#000000"}
+        qs.value.return_value = json.dumps(partial_theme)
+        mgr._qs = qs
+        result = mgr.get_theme()
+        self.assertIsInstance(result, dict)
+        # All required keys from _DEFAULT_THEME must be present
+        for key in SettingsManager._DEFAULT_THEME:
+            self.assertIn(key, result,
+                          f"get_theme() result must contain default key '{key}'")
+        # But stored values should take priority
+        self.assertEqual(result["name"], "Custom")
+        self.assertEqual(result["background"], "#000000")
+
+    def test_get_theme_non_dict_returns_default(self):
+        """get_theme() must return _DEFAULT_THEME when the stored JSON is not a dict."""
+        from src.core.settings_manager import SettingsManager
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        qs.value.return_value = "[1, 2, 3]"  # JSON array, not object
+        mgr._qs = qs
+        result = mgr.get_theme()
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["name"], "Panda Dark",
+                         "get_theme() must return default when stored value is not a JSON object")
+
+    # ------------------------------------------------------------------
+    # settings_manager – import_settings validation
+    # ------------------------------------------------------------------
+
+    def _settings_manager_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "settings_manager.py")) as f:
+            return f.read()
+
+    def test_import_settings_validates_json_is_dict(self):
+        """import_settings() must raise ValueError when the JSON root is not a dict."""
+        import json, tempfile
+        from src.core.settings_manager import SettingsManager
+        from unittest.mock import MagicMock
+        mgr = SettingsManager.__new__(SettingsManager)
+        qs = MagicMock()
+        mgr._qs = qs
+        # Write a JSON file that has an array at the root (not an object)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                         delete=False, encoding="utf-8") as f:
+            json.dump([1, 2, 3], f)
+            tmp_path = f.name
+        try:
+            with self.assertRaises(ValueError):
+                mgr.import_settings(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+
+    # ------------------------------------------------------------------
+    # file_converter – resize validation
+    # ------------------------------------------------------------------
+
+    def _file_converter_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "file_converter.py")) as f:
+            return f.read()
+
+    def test_convert_file_rejects_zero_resize(self):
+        """convert_file() must raise ValueError when resize contains a zero dimension."""
+        import tempfile
+        from src.core.file_converter import convert_file
+        img = make_rgba_image(8, 8, alpha=200)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as src_f:
+            img.save(src_f.name)
+            src_path = src_f.name
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as dst_f:
+            dst_path = dst_f.name
+        try:
+            with self.assertRaises(ValueError):
+                convert_file(src_path, dst_path, "PNG", resize=(0, 100))
+            with self.assertRaises(ValueError):
+                convert_file(src_path, dst_path, "PNG", resize=(100, 0))
+        finally:
+            os.unlink(src_path)
+            try:
+                os.unlink(dst_path)
+            except FileNotFoundError:
+                pass
+
+    def test_convert_file_rejects_negative_resize(self):
+        """convert_file() must raise ValueError when resize has negative dimensions."""
+        import tempfile
+        from src.core.file_converter import convert_file
+        img = make_rgba_image(8, 8, alpha=200)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as src_f:
+            img.save(src_f.name)
+            src_path = src_f.name
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as dst_f:
+            dst_path = dst_f.name
+        try:
+            with self.assertRaises(ValueError):
+                convert_file(src_path, dst_path, "PNG", resize=(-1, 100))
+        finally:
+            os.unlink(src_path)
+            try:
+                os.unlink(dst_path)
+            except FileNotFoundError:
+                pass
+
+    def test_convert_file_rejects_oversized_resize(self):
+        """convert_file() must raise ValueError when resize dimensions exceed 65535."""
+        import tempfile
+        from src.core.file_converter import convert_file
+        img = make_rgba_image(8, 8, alpha=200)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as src_f:
+            img.save(src_f.name)
+            src_path = src_f.name
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as dst_f:
+            dst_path = dst_f.name
+        try:
+            with self.assertRaises(ValueError):
+                convert_file(src_path, dst_path, "PNG", resize=(100000, 100))
+        finally:
+            os.unlink(src_path)
+            try:
+                os.unlink(dst_path)
+            except FileNotFoundError:
+                pass
+
+    def test_open_image_wraps_memoryerror(self):
+        """file_converter._open_image() must catch MemoryError from img.load()
+        and re-raise it with a user-friendly message."""
+        from unittest.mock import patch, MagicMock
+        from src.core.file_converter import _open_image
+        import tempfile
+        # Create a valid PNG we can open
+        img = make_rgba_image(4, 4, alpha=128)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            img.save(f.name)
+            tmp_path = f.name
+        try:
+            with patch("src.core.file_converter.Image.open") as mock_open:
+                mock_img = MagicMock()
+                mock_img.mode = "RGBA"
+                mock_img.size = (4, 4)
+                mock_img.load.side_effect = MemoryError("mock OOM")
+                mock_open.return_value = mock_img
+                with self.assertRaises(MemoryError) as ctx:
+                    _open_image(tmp_path)
+            self.assertIn("memory", str(ctx.exception).lower())
+        finally:
+            os.unlink(tmp_path)
+
+    # ------------------------------------------------------------------
+    # mouse_trail – timer stop/restart optimisation
+    # ------------------------------------------------------------------
+
+    def _mouse_trail_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "mouse_trail.py")) as f:
+            return f.read()
+
+    def test_trail_tick_stops_timer_when_empty(self):
+        """_tick() must call self._timer.stop() when the trail deque becomes
+        empty so the 33ms timer does not fire during idle mouse periods."""
+        src = self._mouse_trail_source()
+        tick_pos = src.find("def _tick(")
+        next_method = src.find("\n    def ", tick_pos + 1)
+        tick_section = src[tick_pos:next_method]
+        self.assertIn("_timer.stop()", tick_section,
+                      "_tick() must call self._timer.stop() when the trail is empty")
+
+    def test_trail_eventfilter_restarts_timer(self):
+        """eventFilter must restart the timer when a new trail point is
+        appended, in case the timer was stopped while the trail was idle."""
+        src = self._mouse_trail_source()
+        ef_pos = src.find("def eventFilter(")
+        next_method = src.find("\n    def ", ef_pos + 1)
+        ef_section = src[ef_pos:next_method]
+        self.assertIn("_timer.start()", ef_section,
+                      "eventFilter must restart the timer when a new trail point is added")
+        self.assertIn("_timer.isActive()", ef_section,
+                      "eventFilter must check isActive() before restarting the timer")
+
+    # ------------------------------------------------------------------
+    # preview_pane – _ThumbLoader / _ConvertedThumbLoader abort flags
+    # ------------------------------------------------------------------
+
+    def _preview_pane_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "preview_pane.py")) as f:
+            return f.read()
+
+    def test_thumb_loader_has_abort_flag(self):
+        """_ThumbLoader must have an _abort flag and a stop() method
+        so it can be cancelled when a newer file is selected."""
+        src = self._preview_pane_source()
+        loader_start = src.find("class _ThumbLoader")
+        next_class = src.find("\nclass ", loader_start + 1)
+        loader_section = src[loader_start:next_class]
+        self.assertIn("self._abort = False", loader_section,
+                      "_ThumbLoader.__init__ must set self._abort = False")
+        self.assertIn("def stop(", loader_section,
+                      "_ThumbLoader must have a stop() method")
+        self.assertIn("self._abort", loader_section,
+                      "_ThumbLoader.run() must check self._abort")
+
+    def test_converted_thumb_loader_has_abort_flag(self):
+        """_ConvertedThumbLoader must have an _abort flag and a stop() method."""
+        src = self._preview_pane_source()
+        loader_start = src.find("class _ConvertedThumbLoader")
+        next_class = src.find("\nclass ", loader_start + 1)
+        loader_section = src[loader_start:next_class]
+        self.assertIn("self._abort = False", loader_section,
+                      "_ConvertedThumbLoader.__init__ must set self._abort = False")
+        self.assertIn("def stop(", loader_section,
+                      "_ConvertedThumbLoader must have a stop() method")
+        self.assertIn("self._abort", loader_section,
+                      "_ConvertedThumbLoader.run() must check self._abort")
+
+    def test_image_preview_pane_start_loader_calls_stop(self):
+        """ImagePreviewPane._start_loader() must call stop() on the old loader
+        before replacing it so stale threads don't waste CPU."""
+        src = self._preview_pane_source()
+        method_pos = src.find("def _start_loader(")
+        next_method = src.find("\n    def ", method_pos + 1)
+        section = src[method_pos:next_method]
+        self.assertIn(".stop()", section,
+                      "_start_loader() must call stop() on the old loader")

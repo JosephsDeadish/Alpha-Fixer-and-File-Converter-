@@ -113,7 +113,14 @@ def _open_image(path: str) -> Image.Image:
     if ext == ".dds":
         return _load_dds(path)
     img = Image.open(path)
-    img.load()  # force decode so the file handle can be closed
+    try:
+        img.load()  # force decode so the file handle can be closed
+    except MemoryError:
+        w, h = img.size
+        raise MemoryError(
+            f"Not enough memory to open {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels). Try a smaller file."
+        )
     return img
 
 
@@ -177,7 +184,30 @@ def convert_file(
     img = src_img
 
     if resize:
-        img = img.resize(resize, Image.LANCZOS)
+        try:
+            w, h = int(resize[0]), int(resize[1])
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid resize value: {resize!r}. "
+                "Both width and height must be integers."
+            )
+        if w < 1 or h < 1:
+            raise ValueError(
+                f"Invalid resize dimensions: {w}×{h}. "
+                "Both width and height must be at least 1 pixel."
+            )
+        if w > 65535 or h > 65535:
+            raise ValueError(
+                f"Resize dimensions too large: {w}×{h}. "
+                "Maximum supported size is 65535×65535 pixels."
+            )
+        try:
+            img = img.resize((w, h), Image.LANCZOS)
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to resize image to {w}×{h}. "
+                "Try a smaller target size."
+            )
 
     ext = Path(output_path).suffix.lower()
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
