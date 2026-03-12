@@ -1473,7 +1473,6 @@ class TestFormatEta(unittest.TestCase):
         self.assertTrue(result.startswith("  "), repr(result))
 
 
-
 # ---------------------------------------------------------------------------
 # Alpha tool UI simplification: value-first ordering and disabled-spinbox fix
 # ---------------------------------------------------------------------------
@@ -4190,3 +4189,306 @@ class TestRound11ResourceHygiene(unittest.TestCase):
             "_ConverterPreviewLoader.run finally must guard with "
             "'if out_thumb is not None:'",
         )
+
+
+class TestRound12ResourceHygiene(unittest.TestCase):
+    """Round-12: three PIL image resource leaks in _flatten_alpha (file_converter.py).
+
+    Bug 1 (_flatten_alpha RGBA branch):
+        ``base = Image.new("RGB", ...)`` was allocated before the paste call but
+        never closed if ``img.split()`` or ``base.paste()`` raised an exception
+        (e.g. MemoryError during compositing).  Fix wraps the paste call in
+        ``try/except Exception: base.close(); raise``.
+
+    Bug 2 (_flatten_alpha LA branch):
+        Same as Bug 1 but for LA (luminance-alpha) images.  ``base = Image.new("L", ...)``
+        was not protected, so any exception during ``img.split()`` or ``base.paste()``
+        would leak it.  Fix applies the same ``try/except Exception:`` guard.
+
+    Bug 3 (_flatten_alpha PA/P branch):
+        The existing try/finally already guaranteed ``rgba.close()``, but
+        ``base = Image.new("RGB", ...)`` inside the try block was not itself
+        protected — if ``rgba.split()`` or ``base.paste()`` raised, ``rgba``
+        would be closed (correctly) but ``base`` would leak.  Fix adds an inner
+        ``try/except Exception: base.close(); raise`` around the paste call.
+    """
+
+    _FC_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "file_converter.py"
+    )
+
+    def _read_fc(self) -> str:
+        with open(self._FC_SRC) as f:
+            return f.read()
+
+    def _flatten_alpha_src(self) -> str:
+        src = self._read_fc()
+        start = src.find("\ndef _flatten_alpha(")
+        self.assertGreater(start, 0, "_flatten_alpha not found")
+        next_def = src.find("\ndef ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    # ------------------------------------------------------------------
+    # Bug 1 — RGBA branch: base must be closed on exception
+    # ------------------------------------------------------------------
+
+    def test_flatten_alpha_rgba_branch_has_try_around_paste(self):
+        """RGBA branch must wrap base.paste() in a try block so an exception
+        does not silently leak the base image."""
+        fn = self._flatten_alpha_src()
+        rgba_branch_pos = fn.find('img.mode == "RGBA"')
+        self.assertGreater(rgba_branch_pos, 0,
+                           'RGBA branch must exist in _flatten_alpha')
+        # There must be a 'try:' before the first 'except Exception:' in the
+        # RGBA branch (i.e. before the LA branch starts).
+        la_branch_pos = fn.find('img.mode == "LA"', rgba_branch_pos)
+        self.assertGreater(la_branch_pos, rgba_branch_pos,
+                           'LA branch must follow RGBA branch')
+        try_pos = fn.find("try:", rgba_branch_pos)
+        self.assertGreater(try_pos, rgba_branch_pos,
+                           "RGBA branch must contain a 'try:' block")
+        self.assertLess(try_pos, la_branch_pos,
+                        "try: block must be inside the RGBA branch (before LA branch)")
+
+    def test_flatten_alpha_rgba_branch_closes_base_in_except(self):
+        """RGBA branch except block must call base.close() before re-raising."""
+        fn = self._flatten_alpha_src()
+        rgba_branch_pos = fn.find('img.mode == "RGBA"')
+        la_branch_pos = fn.find('img.mode == "LA"', rgba_branch_pos)
+        rgba_branch = fn[rgba_branch_pos:la_branch_pos]
+        self.assertIn(
+            "except Exception:",
+            rgba_branch,
+            "RGBA branch must have 'except Exception:' to catch paste failures",
+        )
+        except_pos = rgba_branch.find("except Exception:")
+        close_pos = rgba_branch.find("base.close()", except_pos)
+        self.assertGreater(
+            close_pos, except_pos,
+            "base.close() must appear after 'except Exception:' in the RGBA branch",
+        )
+        raise_pos = rgba_branch.find("raise", close_pos)
+        self.assertGreater(
+            raise_pos, close_pos,
+            "'raise' must appear after base.close() in the RGBA except block",
+        )
+
+    def test_flatten_alpha_rgba_branch_returns_base_outside_try(self):
+        """'return base' in the RGBA branch must NOT be inside the try block
+        to avoid accidentally suppressing exceptions from paste()."""
+        fn = self._flatten_alpha_src()
+        rgba_branch_pos = fn.find('img.mode == "RGBA"')
+        la_branch_pos = fn.find('img.mode == "LA"', rgba_branch_pos)
+        rgba_branch = fn[rgba_branch_pos:la_branch_pos]
+        # 'return base' must come AFTER the except block, not inside 'try:'
+        try_pos = rgba_branch.find("try:")
+        except_pos = rgba_branch.find("except Exception:")
+        return_pos = rgba_branch.find("return base")
+        self.assertGreater(return_pos, except_pos,
+                           "'return base' must appear after the except block "
+                           "in the RGBA branch (not inside the try block)")
+
+    # ------------------------------------------------------------------
+    # Bug 2 — LA branch: base must be closed on exception
+    # ------------------------------------------------------------------
+
+    def test_flatten_alpha_la_branch_has_try_around_paste(self):
+        """LA branch must wrap base.paste() in a try block."""
+        fn = self._flatten_alpha_src()
+        la_branch_pos = fn.find('img.mode == "LA"')
+        self.assertGreater(la_branch_pos, 0,
+                           'LA branch must exist in _flatten_alpha')
+        pa_branch_pos = fn.find('"PA", "P"', la_branch_pos)
+        self.assertGreater(pa_branch_pos, la_branch_pos,
+                           'PA/P branch must follow LA branch')
+        try_pos = fn.find("try:", la_branch_pos)
+        self.assertGreater(try_pos, la_branch_pos,
+                           "LA branch must contain a 'try:' block")
+        self.assertLess(try_pos, pa_branch_pos,
+                        "try: block must be inside the LA branch (before PA/P branch)")
+
+    def test_flatten_alpha_la_branch_closes_base_in_except(self):
+        """LA branch except block must call base.close() before re-raising."""
+        fn = self._flatten_alpha_src()
+        la_branch_pos = fn.find('img.mode == "LA"')
+        pa_branch_pos = fn.find('"PA", "P"', la_branch_pos)
+        la_branch = fn[la_branch_pos:pa_branch_pos]
+        self.assertIn(
+            "except Exception:",
+            la_branch,
+            "LA branch must have 'except Exception:' to catch paste failures",
+        )
+        except_pos = la_branch.find("except Exception:")
+        close_pos = la_branch.find("base.close()", except_pos)
+        self.assertGreater(
+            close_pos, except_pos,
+            "base.close() must appear after 'except Exception:' in the LA branch",
+        )
+        raise_pos = la_branch.find("raise", close_pos)
+        self.assertGreater(
+            raise_pos, close_pos,
+            "'raise' must appear after base.close() in the LA except block",
+        )
+
+    def test_flatten_alpha_la_branch_returns_base_outside_try(self):
+        """'return base' in the LA branch must come after the except block."""
+        fn = self._flatten_alpha_src()
+        la_branch_pos = fn.find('img.mode == "LA"')
+        pa_branch_pos = fn.find('"PA", "P"', la_branch_pos)
+        la_branch = fn[la_branch_pos:pa_branch_pos]
+        except_pos = la_branch.find("except Exception:")
+        return_pos = la_branch.find("return base")
+        self.assertGreater(return_pos, except_pos,
+                           "'return base' must appear after the except block "
+                           "in the LA branch (not inside the try block)")
+
+    # ------------------------------------------------------------------
+    # Bug 3 — PA/P branch: base must also be closed on exception
+    # ------------------------------------------------------------------
+
+    def test_flatten_alpha_pap_branch_has_inner_try_for_base(self):
+        """PA/P branch must have an inner try block protecting base from paste
+        exceptions (in addition to the outer try/finally that closes rgba)."""
+        fn = self._flatten_alpha_src()
+        pa_branch_pos = fn.find('"PA", "P"')
+        self.assertGreater(pa_branch_pos, 0,
+                           'PA/P branch must exist in _flatten_alpha')
+        # There must be at least two 'try:' occurrences in the PA/P branch:
+        # the outer one (guarding rgba) and the inner one (guarding base).
+        pa_branch = fn[pa_branch_pos:]
+        # Limit to the PA/P function section (everything up to the next top-level
+        # 'if' at the same indentation level, or end of function)
+        next_top_if = pa_branch.find("\n    if img.mode not in")
+        if next_top_if < 0:
+            next_top_if = pa_branch.find("\n    return img")
+        pa_section = pa_branch[:next_top_if] if next_top_if > 0 else pa_branch
+        first_try = pa_section.find("try:")
+        self.assertGreater(first_try, 0, "PA/P branch must have at least one try:")
+        second_try = pa_section.find("try:", first_try + 1)
+        self.assertGreater(
+            second_try, first_try,
+            "PA/P branch must have a second (inner) try: block to guard base.paste()",
+        )
+
+    def test_flatten_alpha_pap_branch_closes_base_in_inner_except(self):
+        """PA/P branch inner except block must call base.close() before re-raising."""
+        fn = self._flatten_alpha_src()
+        pa_branch_pos = fn.find('"PA", "P"')
+        pa_branch = fn[pa_branch_pos:]
+        next_top_if = pa_branch.find("\n    if img.mode not in")
+        if next_top_if < 0:
+            next_top_if = pa_branch.find("\n    return img")
+        pa_section = pa_branch[:next_top_if] if next_top_if > 0 else pa_branch
+        self.assertIn(
+            "except Exception:",
+            pa_section,
+            "PA/P branch must have 'except Exception:' guard for base",
+        )
+        except_pos = pa_section.find("except Exception:")
+        close_pos = pa_section.find("base.close()", except_pos)
+        self.assertGreater(
+            close_pos, except_pos,
+            "base.close() must appear after 'except Exception:' in the PA/P branch",
+        )
+        raise_pos = pa_section.find("raise", close_pos)
+        self.assertGreater(
+            raise_pos, close_pos,
+            "'raise' must follow base.close() in the PA/P inner except block",
+        )
+
+    def test_flatten_alpha_pap_branch_outer_finally_still_closes_rgba(self):
+        """Round-8 fix must still be intact: rgba.close() in the outer finally."""
+        fn = self._flatten_alpha_src()
+        pa_branch_pos = fn.find('"PA", "P"')
+        pa_branch = fn[pa_branch_pos:]
+        finally_pos = pa_branch.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "PA/P branch must still have an outer finally: block")
+        close_pos = pa_branch.find("rgba.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "rgba.close() must still appear in the outer finally block")
+
+    # ------------------------------------------------------------------
+    # Behavioural smoke tests (functional verification)
+    # ------------------------------------------------------------------
+
+    def test_flatten_alpha_rgba_closes_base_on_paste_error(self):
+        """When paste() raises in the RGBA branch, base must be closed and the
+        exception must propagate (not be swallowed)."""
+        from PIL import Image
+        from src.core.file_converter import _flatten_alpha
+
+        closed = []
+        raised = []
+
+        class _FakeRGBA:
+            mode = "RGBA"
+            size = (4, 4)
+
+            def split(self):
+                # Return dummy channel objects
+                ch = Image.new("L", (4, 4), 0)
+                return [ch, ch, ch, ch]
+
+        class _FakeBase:
+            def paste(self, img, mask=None):
+                raise MemoryError("simulated paste OOM")
+
+            def close(self):
+                closed.append(True)
+
+        import unittest.mock as mock
+        orig_new = Image.new
+
+        def patched_new(mode, size, *args, **kwargs):
+            if mode == "RGB":
+                return _FakeBase()
+            return orig_new(mode, size, *args, **kwargs)
+
+        img = Image.new("RGBA", (4, 4), (255, 0, 0, 128))
+        try:
+            with mock.patch("src.core.file_converter.Image.new", side_effect=patched_new):
+                _flatten_alpha(img)
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "_flatten_alpha RGBA: MemoryError must propagate")
+        self.assertTrue(closed, "_flatten_alpha RGBA: base must be closed when paste raises")
+
+    def test_flatten_alpha_la_closes_base_on_paste_error(self):
+        """When paste() raises in the LA branch, base must be closed and the
+        exception must propagate."""
+        from PIL import Image
+        from src.core.file_converter import _flatten_alpha
+
+        closed = []
+        raised = []
+
+        class _FakeBase:
+            def paste(self, img, mask=None):
+                raise MemoryError("simulated paste OOM")
+
+            def close(self):
+                closed.append(True)
+
+        import unittest.mock as mock
+        orig_new = Image.new
+
+        def patched_new(mode, size, *args, **kwargs):
+            if mode == "L":
+                return _FakeBase()
+            return orig_new(mode, size, *args, **kwargs)
+
+        img = Image.new("LA", (4, 4), (128, 200))
+        try:
+            with mock.patch("src.core.file_converter.Image.new", side_effect=patched_new):
+                _flatten_alpha(img)
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "_flatten_alpha LA: MemoryError must propagate")
+        self.assertTrue(closed, "_flatten_alpha LA: base must be closed when paste raises")
