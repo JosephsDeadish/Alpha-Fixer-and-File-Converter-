@@ -2797,3 +2797,126 @@ class TestRound5ResourceHygiene(unittest.TestCase):
         self.assertIn("set()", fn_src,
                       "sync() docstring must reference set() and explain why it "
                       "does not call sync()")
+
+
+# ---------------------------------------------------------------------------
+# Round-6 resource-hygiene tests
+# ---------------------------------------------------------------------------
+
+class TestRound6ResourceHygiene(unittest.TestCase):
+    """Round-6: _ConverterPreviewLoader buf/save_img resource leaks.
+
+    _ConverterPreviewLoader.run() previously had three resource leaks:
+    1. buf not closed in the fallback except block
+    2. buf not closed in the success path after out_img.load()
+    3. save_img (a mode-converted copy of img) not closed in either path
+    """
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    def _preview_pane_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "preview_pane.py")) as f:
+            return f.read()
+
+    def _converter_loader_run_src(self) -> str:
+        src = self._preview_pane_source()
+        cls_start = src.find("class _ConverterPreviewLoader(")
+        next_cls = src.find("\nclass ", cls_start + 1)
+        cls_src = src[cls_start:next_cls]
+        run_start = cls_src.find("    def run(")
+        return cls_src[run_start:]
+
+    # ------------------------------------------------------------------
+    # buf closed in fallback except path
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_closes_buf_in_fallback(self):
+        """_ConverterPreviewLoader.run() must close the BytesIO buffer in the
+        fallback except block so it is released even when in-memory conversion
+        fails (e.g. unsupported format)."""
+        run_src = self._converter_loader_run_src()
+        # Locate the except block that has the fallback "source shown" text
+        fallback_start = run_src.find("(source shown")
+        self.assertGreater(fallback_start, 0,
+                           "Could not find fallback 'source shown' text in run()")
+        # buf.close() must appear BEFORE the fallback "source shown" string
+        buf_close_pos = run_src.find("buf.close()")
+        # There should be at least two buf.close() calls: one in success path,
+        # one in fallback path
+        self.assertGreaterEqual(run_src.count("buf.close()"), 2,
+                      "_ConverterPreviewLoader.run() must close buf in both the "
+                      "success path and the fallback exception path")
+        # The first buf.close() must appear before "source shown"
+        self.assertLess(buf_close_pos, fallback_start,
+                      "buf.close() must appear before the 'source shown' fallback "
+                      "text so it is called in the except block")
+
+    # ------------------------------------------------------------------
+    # buf closed in success path after out_img.load()
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_closes_buf_after_full_decode(self):
+        """_ConverterPreviewLoader.run() must close buf immediately after
+        out_img.load() so the BytesIO backing store is freed as soon as the
+        image data is in memory."""
+        run_src = self._converter_loader_run_src()
+        load_pos = run_src.find("out_img.load()")
+        self.assertGreater(load_pos, 0, "Could not find out_img.load() in run()")
+        # The first buf.close() after out_img.load() should be in the success path
+        first_close_after_load = run_src.find("buf.close()", load_pos)
+        self.assertGreater(first_close_after_load, load_pos,
+                      "buf.close() must appear after out_img.load() in the "
+                      "success path of _ConverterPreviewLoader.run()")
+
+    # ------------------------------------------------------------------
+    # buf allocated before inner try so it is always in scope for except
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_buf_allocated_before_try(self):
+        """buf = io.BytesIO() must be allocated BEFORE the inner try block so
+        that buf is always defined in the except block regardless of which
+        statement raises."""
+        run_src = self._converter_loader_run_src()
+        buf_alloc_pos = run_src.find("buf = io.BytesIO()")
+        self.assertGreater(buf_alloc_pos, 0,
+                           "buf = io.BytesIO() not found in run()")
+        # The inner try block starts after the buf allocation
+        inner_try_pos = run_src.find("try:", buf_alloc_pos)
+        self.assertGreater(inner_try_pos, buf_alloc_pos,
+                      "buf = io.BytesIO() must appear BEFORE the inner try block "
+                      "so buf is always defined when the except block runs")
+
+    # ------------------------------------------------------------------
+    # save_img closed when it is a converted copy
+    # ------------------------------------------------------------------
+
+    def test_converter_preview_loader_closes_save_img_in_fallback(self):
+        """_ConverterPreviewLoader.run() must close save_img in the fallback
+        except block when it is a mode-converted copy (save_img is not img).
+        Without this, the converted PIL image is leaked every time an
+        unsupported format triggers the fallback path."""
+        run_src = self._converter_loader_run_src()
+        # The guard must appear in the except block (before "source shown")
+        fallback_end = run_src.find("(source shown")
+        guard = "if save_img is not img:"
+        self.assertIn(guard, run_src,
+                      "_ConverterPreviewLoader.run() must have "
+                      "'if save_img is not img:' guard to close converted copies")
+        guard_pos = run_src.find(guard)
+        self.assertLess(guard_pos, fallback_end,
+                      "'if save_img is not img:' guard must appear in the "
+                      "fallback except block (before 'source shown' text)")
+
+    def test_converter_preview_loader_closes_save_img_in_success_path(self):
+        """_ConverterPreviewLoader.run() must close save_img in the success
+        path when it is a mode-converted copy.  Without this, the converted
+        PIL image is leaked on every successful preview render of a format
+        that requires mode conversion (e.g. JPEG, BMP, GIF, ICO)."""
+        run_src = self._converter_loader_run_src()
+        guard = "if save_img is not img:"
+        # There must be at least two occurrences: one in except, one after try
+        count = run_src.count(guard)
+        self.assertGreaterEqual(count, 2,
+                      "_ConverterPreviewLoader.run() must have at least two "
+                      "'if save_img is not img:' guards — one in the fallback "
+                      "except block and one in the success path")

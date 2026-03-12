@@ -584,15 +584,21 @@ class _ConverterPreviewLoader(QThread):
             if fmt in _QUALITY_FORMATS:
                 save_kwargs["quality"] = self._quality
 
+            # Allocate the buffer outside the try so it is always in scope for
+            # the except block and can be closed on both success and error paths.
+            buf = io.BytesIO()
             try:
-                buf = io.BytesIO()
                 save_img.save(buf, format=fmt, **save_kwargs)
                 converted_size = buf.tell()
                 buf.seek(0)
                 out_img = Image.open(buf)
-                out_img.load()
+                out_img.load()  # fully decode into memory; buf can be closed now
+                buf.close()
             except Exception:
                 # Fallback: show source image again if conversion fails
+                buf.close()
+                if save_img is not img:
+                    save_img.close()
                 out_qi = src_qi
                 quality_note = (
                     f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
@@ -606,6 +612,8 @@ class _ConverterPreviewLoader(QThread):
                 self.ready.emit(src_qi, out_qi, src_meta, out_meta)
                 return
 
+            if save_img is not img:
+                save_img.close()
             img.close()
             out_mode = out_img.mode
             out_thumb = out_img.copy()
