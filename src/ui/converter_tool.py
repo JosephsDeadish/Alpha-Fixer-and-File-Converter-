@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
@@ -635,7 +635,8 @@ class ConverterTab(QWidget):
             self._out_dir_edit.setText(folder)
             self._settings.set("converter_output_dir", folder)
 
-    def _on_preview_ready(self, src_qi, out_qi, src_meta: str, out_meta: str):
+    @pyqtSlot(QImage, QImage, str, str)
+    def _on_preview_ready(self, src_qi: QImage, out_qi: QImage, src_meta: str, out_meta: str):
         """Called when the converter preview loader finishes loading both images."""
         self._compare.set_before(src_qi)
         self._compare.set_after(out_qi)

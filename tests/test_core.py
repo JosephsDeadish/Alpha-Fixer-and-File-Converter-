@@ -1470,3 +1470,84 @@ class TestFormatEta(unittest.TestCase):
         """ETA string must start with '  ' so it appends cleanly to status text."""
         result = self._fmt(current=100, total=1000, elapsed=10.0)
         self.assertTrue(result.startswith("  "), repr(result))
+
+
+
+# ---------------------------------------------------------------------------
+# Alpha tool UI simplification: value-first ordering and disabled-spinbox fix
+# ---------------------------------------------------------------------------
+
+class TestAlphaToolUISimplification(unittest.TestCase):
+    """Source-level checks for the simplified Alpha Channel Settings section."""
+
+    def _alpha_tool_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
+        with open(path) as f:
+            return f.read()
+
+    def test_alpha_value_spinbox_defined_before_mode_combo(self):
+        """_alpha_spin must be instantiated before _mode_combo in the source
+        (i.e., the value control appears before the advanced mode control)."""
+        src = self._alpha_tool_source()
+        spin_pos = src.find("self._alpha_spin = QSpinBox()")
+        mode_pos = src.find("self._mode_combo = QComboBox()")
+        self.assertGreater(spin_pos, 0, "_alpha_spin not found in alpha_tool.py")
+        self.assertGreater(mode_pos, 0, "_mode_combo not found in alpha_tool.py")
+        self.assertLess(spin_pos, mode_pos,
+                        "_alpha_spin must be defined before _mode_combo "
+                        "(value shown first, mode moved to Advanced section)")
+
+    def test_apply_alpha_check_defined_after_alpha_spin(self):
+        """_apply_alpha_check must be defined AFTER _alpha_spin — it lives in
+        the Advanced section so basic users see the value input first."""
+        src = self._alpha_tool_source()
+        spin_pos = src.find("self._alpha_spin = QSpinBox()")
+        check_pos = src.find("self._apply_alpha_check = QCheckBox(")
+        self.assertGreater(spin_pos, 0, "_alpha_spin not found")
+        self.assertGreater(check_pos, 0, "_apply_alpha_check not found")
+        self.assertLess(spin_pos, check_pos,
+                        "_apply_alpha_check must appear after _alpha_spin "
+                        "in the source (it lives in the Advanced section)")
+
+    def test_use_preset_renamed_auto_fills(self):
+        """The 'Use preset' checkbox label must mention 'auto-fills' to make
+        its purpose obvious to users who don't use presets."""
+        src = self._alpha_tool_source()
+        self.assertIn("auto-fills", src,
+                      "Use-preset checkbox label must contain 'auto-fills'")
+
+    def test_on_use_preset_toggled_reenables_spinbox_on_uncheck(self):
+        """_on_use_preset_toggled must re-enable the alpha spinbox when the
+        user switches to manual mode (unchecks Use preset).  Without this fix,
+        a clamp-only preset leaves the spinbox disabled and users cannot type
+        a value."""
+        src = self._alpha_tool_source()
+        start = src.find("def _on_use_preset_toggled")
+        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
+        next_def = src.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(src)
+        body = src[start:end]
+        self.assertIn("_alpha_spin.setEnabled(True)", body,
+                      "_on_use_preset_toggled must call _alpha_spin.setEnabled(True) "
+                      "when switching to manual mode so users can type a value")
+        self.assertIn("_alpha_slider.setEnabled(True)", body,
+                      "_on_use_preset_toggled must call _alpha_slider.setEnabled(True) "
+                      "when switching to manual mode")
+
+    def test_hint_label_in_setup_ui(self):
+        """_setup_ui must add an explanatory hint label to guide new users."""
+        src = self._alpha_tool_source()
+        # The hint should mention both entering a value and picking a preset
+        self.assertIn("Type an alpha value", src,
+                      "Fine-tune section should have a hint label mentioning "
+                      "typing a value")
+        self.assertIn("preset", src.lower(),
+                      "Hint label should mention presets")
+
+    def test_advanced_separator_present(self):
+        """An 'Advanced' separator must visually separate basic and advanced
+        controls in the Alpha Channel Settings group."""
+        src = self._alpha_tool_source()
+        self.assertIn("Advanced Options", src,
+                      "Fine-tune section must have an 'Advanced Options' separator "
+                      "to keep basic controls visually distinct from advanced ones")
