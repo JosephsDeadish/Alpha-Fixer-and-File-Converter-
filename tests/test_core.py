@@ -1,6 +1,7 @@
 """
 Tests for core alpha processing and preset management.
 """
+import re
 import sys
 import os
 import tempfile
@@ -3375,7 +3376,6 @@ class TestRound9ResourceHygiene(unittest.TestCase):
         # Ensure quantize result is stored in gif_img, not back into img.
         # Use a word-boundary check: "img = img.quantize" is only problematic
         # when NOT preceded by other identifier chars (e.g. "gif_img = img.quantize" is fine).
-        import re
         bad_pattern = re.compile(r'(?<![A-Za-z0-9_])img\s*=\s*img\.quantize\(')
         self.assertIsNone(
             bad_pattern.search(gif_section),

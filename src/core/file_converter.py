@@ -288,16 +288,16 @@ def convert_file(
             # --- PPM (RGB only, no alpha) ---
             if ext == ".ppm":
                 flat = _flatten_alpha(img)
+                rgb = None
                 try:
                     if flat.mode not in ("RGB", "L"):
                         rgb = flat.convert("RGB")
-                        try:
-                            rgb.save(output_path)
-                        finally:
-                            rgb.close()
+                        rgb.save(output_path)
                     else:
                         flat.save(output_path)
                 finally:
+                    if rgb is not None:
+                        rgb.close()
                     if flat is not img:
                         flat.close()
                 return output_path
