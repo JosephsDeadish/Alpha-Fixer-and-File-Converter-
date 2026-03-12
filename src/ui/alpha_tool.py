@@ -1173,6 +1173,7 @@ class AlphaFixerTab(QWidget):
         if self._preview_loader is not None:
             try:
                 self._preview_loader.preview_ready.disconnect()
+                self._preview_loader.stats_ready.disconnect()
                 self._preview_loader.failed.disconnect()
             except RuntimeError:
                 pass  # already disconnected

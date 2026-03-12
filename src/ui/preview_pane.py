@@ -476,7 +476,108 @@ class BeforeAfterWidget(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# Simple thumbnail preview pane (used by Converter tab)
+# Before/After preview loader for the Converter tab
+# ---------------------------------------------------------------------------
+
+class _ConverterPreviewLoader(QThread):
+    """Load the source image AND an in-memory converted version.
+
+    Emits both images as QImages together with compact metadata strings
+    so the Converter tab can display a side-by-side before/after view
+    matching the Alpha Fixer tab's preview style.
+    """
+    ready = pyqtSignal(QImage, QImage, str, str)   # (src_qi, out_qi, src_meta, out_meta)
+    failed = pyqtSignal(str)
+
+    def __init__(self, path: str, target_fmt: str, quality: int, max_size: int = 512):
+        super().__init__()
+        self._path = path
+        self._target_fmt = target_fmt.upper()
+        self._quality = quality
+        self._max_size = max_size
+
+    def run(self):
+        try:
+            import io
+            from PIL import Image
+
+            img = Image.open(self._path)
+            orig_mode = img.mode
+            orig_w, orig_h = img.size
+            src_file_size = os.path.getsize(self._path)
+
+            # --- Source side ---
+            src_thumb = img.copy()
+            src_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+            src_qi = _pil_to_qimage(src_thumb)
+            src_thumb.close()
+            src_meta = (
+                f"{Path(self._path).name}\n"
+                f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
+                f"{_fmt_size(src_file_size)}"
+            )
+
+            # --- Output side: convert in-memory to see encoding artefacts ---
+            fmt = self._target_fmt
+            save_img = img
+            if fmt == "JPEG":
+                if save_img.mode != "RGB":
+                    save_img = save_img.convert("RGB")
+            elif fmt == "BMP":
+                if save_img.mode == "RGBA":
+                    save_img = save_img.convert("RGB")
+            elif fmt == "GIF":
+                save_img = save_img.convert("P")
+            elif fmt == "ICO":
+                save_img = save_img.convert("RGBA")
+
+            save_kwargs: dict = {}
+            if fmt in _QUALITY_FORMATS:
+                save_kwargs["quality"] = self._quality
+
+            try:
+                buf = io.BytesIO()
+                save_img.save(buf, format=fmt, **save_kwargs)
+                converted_size = buf.tell()
+                buf.seek(0)
+                out_img = Image.open(buf)
+                out_img.load()
+            except Exception:
+                # Fallback: show source image again if conversion fails
+                out_qi = src_qi
+                quality_note = (
+                    f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
+                )
+                out_meta = (
+                    f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
+                    f"Preview as {fmt}{quality_note}\n"
+                    f"(source shown – conversion unsupported)"
+                )
+                img.close()
+                self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+                return
+
+            img.close()
+            out_mode = out_img.mode
+            out_thumb = out_img.copy()
+            out_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+            out_qi = _pil_to_qimage(out_thumb)
+            out_thumb.close()
+            out_img.close()
+
+            quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
+            out_meta = (
+                f"{orig_w} × {orig_h}  ·  {out_mode}\n"
+                f"Preview as {fmt}{quality_note}\n"
+                f"~{_fmt_size(converted_size)}"
+            )
+            self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Simple thumbnail preview pane (kept for backward compatibility)
 # ---------------------------------------------------------------------------
 
 class ImagePreviewPane(QWidget):
