@@ -727,6 +727,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._alpha_spin, "alpha_spin")
         mgr.register(self._mode_combo, "mode_combo")
         mgr.register(self._threshold_spin, "threshold_spin")
+        mgr.register(self._apply_alpha_check, "apply_alpha_check")
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
         mgr.register(self._clamp_max_spin, "clamp_max_spin")
         mgr.register(self._invert_check, "invert_check")

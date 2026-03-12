@@ -1551,3 +1551,115 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         self.assertIn("Advanced Options", src,
                       "Fine-tune section must have an 'Advanced Options' separator "
                       "to keep basic controls visually distinct from advanced ones")
+
+
+# ---------------------------------------------------------------------------
+# Tooltip correctness tests: ensure stale references were cleaned up
+# ---------------------------------------------------------------------------
+
+class TestTooltipCorrectness(unittest.TestCase):
+    """Source-level checks that tooltip_manager.py has correct text after the
+    alpha tool UI redesign (value-first, Advanced section, apply_alpha_check)."""
+
+    def _tooltip_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
+            return f.read()
+
+    def _alpha_tool_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
+        with open(path) as f:
+            return f.read()
+
+    # ── apply_alpha_check must be registered ──────────────────────────────────
+
+    def test_apply_alpha_check_registered_in_alpha_tool(self):
+        """register_tooltips must register _apply_alpha_check so it gets
+        cycling tips from the tooltip manager."""
+        src = self._alpha_tool_source()
+        self.assertIn('mgr.register(self._apply_alpha_check, "apply_alpha_check")', src,
+                      "_apply_alpha_check must be registered with the tooltip manager")
+
+    def test_apply_alpha_check_key_exists_in_all_tip_dicts(self):
+        """apply_alpha_check must have entries in _NORMAL, _DUMBED, and _VULGAR."""
+        src = self._tooltip_source()
+        count = src.count('"apply_alpha_check":')
+        self.assertGreaterEqual(count, 3,
+                                "apply_alpha_check must appear in _NORMAL, _DUMBED, and _VULGAR "
+                                f"(found {count} occurrence(s))")
+
+    # ── No stale clamp_min / clamp_max mode references ────────────────────────
+
+    def test_no_clamp_min_mode_reference_in_clamp_tips(self):
+        """clamp_min_spin and clamp_max_spin tips must not reference non-existent
+        'clamp_min mode' or 'clamp_max mode'."""
+        src = self._tooltip_source()
+        self.assertNotIn("clamp_min mode", src,
+                         "Tooltip text must not reference 'clamp_min mode' — "
+                         "clamp_min is a spinbox, not a processing mode")
+        self.assertNotIn("clamp_max mode", src,
+                         "Tooltip text must not reference 'clamp_max mode' — "
+                         "clamp_max is a spinbox, not a processing mode")
+        self.assertNotIn("clamp modes", src,
+                         "Tooltip text must not reference 'clamp modes' — "
+                         "clamping is applied via spinboxes, not via a mode selection")
+
+    def test_mode_combo_no_clamp_min_max_mode_in_list(self):
+        """mode_combo tips must not list clamp_min or clamp_max as mode names."""
+        src = self._tooltip_source()
+        self.assertNotIn("clamp_min, clamp_max", src,
+                         "mode_combo tips must not list 'clamp_min, clamp_max' as mode names. "
+                         "Modes are: set, multiply, add, subtract, normalize")
+        self.assertNotIn("clamp_min/clamp_max", src,
+                         "mode_combo tips must not list 'clamp_min/clamp_max' as mode names. "
+                         "Modes are: set, multiply, add, subtract, normalize")
+        self.assertNotIn("clamp_min/max", src,
+                         "mode_combo tips must not list 'clamp_min/max' as mode names. "
+                         "Modes are: set, multiply, add, subtract, normalize")
+
+    def test_mode_combo_normal_mentions_normalize(self):
+        """_NORMAL mode_combo tips must mention the 'normalize' mode."""
+        src = self._tooltip_source()
+        # The _NORMAL dict comes before _DUMBED
+        normal_end = src.find("# Dumbed Down")
+        normal_section = src[:normal_end]
+        self.assertIn("normalize", normal_section,
+                      "_NORMAL mode_combo tips must describe the normalize mode")
+
+    # ── No "grayed out" for use_preset_check ──────────────────────────────────
+
+    def test_use_preset_check_no_grayed_out_in_tips(self):
+        """use_preset_check tips must not say the controls are 'grayed out'.
+        The redesigned UI re-enables the spinbox when switching to manual mode."""
+        src = self._tooltip_source()
+        # Find all use_preset_check blocks
+        idx = 0
+        while True:
+            pos = src.find('"use_preset_check":', idx)
+            if pos < 0:
+                break
+            # Get the block up to the closing bracket of the list
+            end = src.find("],", pos)
+            block = src[pos:end]
+            self.assertNotIn("grayed out", block,
+                             "use_preset_check tips must not say controls are 'grayed out' — "
+                             "switching to manual now re-enables the spinbox")
+            self.assertNotIn("grey out", block,
+                             "use_preset_check tips must not say controls 'grey out'")
+            idx = end + 1
+
+    # ── alpha_spin Vulgar must not say "mode above" ───────────────────────────
+
+    def test_alpha_spin_vulgar_no_mode_above(self):
+        """_VULGAR alpha_spin tips must not say 'mode above' — the mode combo
+        is now in the Advanced section BELOW the spinbox."""
+        src = self._tooltip_source()
+        vulgar_start = src.find("# No Filter")
+        vulgar_section = src[vulgar_start:]
+        # Find alpha_spin block in vulgar section
+        pos = vulgar_section.find('"alpha_spin":')
+        end = vulgar_section.find("],", pos)
+        block = vulgar_section[pos:end]
+        self.assertNotIn("mode above", block,
+                         "_VULGAR alpha_spin tips must not say 'mode above' — the mode "
+                         "combo is in the Advanced section below the spinbox")
