@@ -821,11 +821,16 @@ class AlphaFixerTab(QWidget):
         apply_val = self._apply_alpha_check.isChecked()
         alpha_val = self._alpha_spin.value() if apply_val else None
         binary_cut = self._binary_cut_check.isChecked()
+        mode = self._mode_combo.currentData() or "set"
+        # normalize never uses a fixed value regardless of the checkbox state
+        if mode == "normalize":
+            alpha_val = None
         desc_parts = []
         if alpha_val is not None:
             desc_parts.append(f"value={alpha_val}")
         desc_parts.append(
-            f"threshold={self._threshold_spin.value()}  "
+            f"mode={mode} "
+            f"threshold={self._threshold_spin.value()} "
             f"clamp={self._clamp_min_spin.value()}–{self._clamp_max_spin.value()}"
         )
         if binary_cut:
@@ -842,6 +847,7 @@ class AlphaFixerTab(QWidget):
             clamp_min=self._clamp_min_spin.value(),
             clamp_max=self._clamp_max_spin.value(),
             binary_cut=binary_cut,
+            mode=mode,
         )
         saved = self._presets.save_custom_preset(preset)
         if not saved:
@@ -1010,6 +1016,10 @@ class AlphaFixerTab(QWidget):
         self._alpha_slider.setEnabled(value_active)
         # Mode combo is ALWAYS enabled so the user can always switch modes
         # regardless of whether a fixed value is being applied.
+        # Toggling this checkbox is a fine-tune edit — switch to manual mode so
+        # the new state is actually used for processing (consistent with how all
+        # other fine-tune control handlers behave).
+        self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
 

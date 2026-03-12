@@ -111,6 +111,53 @@ class TestPresets(unittest.TestCase):
         self.assertFalse(result)
         self.assertIsNotNone(self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME))
 
+    def test_save_custom_preset_preserves_mode_multiply(self):
+        """Custom preset saved with mode='multiply' must survive a round-trip."""
+        custom = AlphaPreset("Mul Test", 128, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=255, mode="multiply")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Mul Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "multiply",
+                         "mode field must be preserved after save/retrieve")
+
+    def test_save_custom_preset_preserves_mode_normalize(self):
+        """Custom preset saved with mode='normalize' must survive a round-trip."""
+        custom = AlphaPreset("Norm Test", None, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=128, mode="normalize")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Norm Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "normalize",
+                         "mode field must be preserved after save/retrieve")
+
+    def test_save_custom_preset_preserves_mode_add(self):
+        """Custom preset saved with mode='add' must survive a round-trip."""
+        custom = AlphaPreset("Add Test", 50, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=255, mode="add")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Add Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "add")
+
+    def test_save_custom_preset_preserves_mode_subtract(self):
+        """Custom preset saved with mode='subtract' must survive a round-trip."""
+        custom = AlphaPreset("Sub Test", 30, 0, False, "desc", builtin=False,
+                             clamp_min=0, clamp_max=255, mode="subtract")
+        self._mgr.save_custom_preset(custom)
+        retrieved = self._mgr.get_preset("Sub Test")
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.mode, "subtract")
+
+    def test_preset_from_dict_preserves_mode(self):
+        """AlphaPreset.from_dict must correctly restore the mode field."""
+        original = AlphaPreset("Roundtrip", None, 0, False, "desc", builtin=False,
+                               clamp_min=0, clamp_max=128, mode="normalize")
+        restored = AlphaPreset.from_dict(original.to_dict())
+        self.assertEqual(restored.mode, "normalize")
+        self.assertEqual(restored.clamp_min, 0)
+        self.assertEqual(restored.clamp_max, 128)
+
 
 # ---------------------------------------------------------------------------
 # Alpha processor tests
