@@ -1109,6 +1109,63 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Use-preset re-check sync tests (source inspection, no PyQt6 required)
+# ---------------------------------------------------------------------------
+
+class TestUsePresetRecheck(unittest.TestCase):
+    """When the user manually re-checks 'Use preset', fine-tune controls must
+    be reloaded from the preset so the display matches what will be processed."""
+
+    def _alpha_tool_source(self) -> str:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
+        with open(path) as f:
+            return f.read()
+
+    def test_on_use_preset_toggled_handler_defined(self):
+        """alpha_tool.py must define the _on_use_preset_toggled slot."""
+        self.assertIn("def _on_use_preset_toggled", self._alpha_tool_source(),
+                      "_on_use_preset_toggled slot must be defined in alpha_tool.py")
+
+    def test_use_preset_check_connected_to_on_use_preset_toggled(self):
+        """_use_preset_check.toggled must be connected to _on_use_preset_toggled,
+        not directly to _update_compare."""
+        source = self._alpha_tool_source()
+        self.assertIn(
+            "_use_preset_check.toggled.connect(self._on_use_preset_toggled)",
+            source,
+            "_use_preset_check.toggled must connect to _on_use_preset_toggled",
+        )
+        # The old direct-to-_update_compare connection must no longer exist
+        self.assertNotIn(
+            "_use_preset_check.toggled.connect(self._update_compare)",
+            source,
+            "_use_preset_check.toggled must NOT connect directly to _update_compare",
+        )
+
+    def test_on_use_preset_toggled_calls_on_preset_changed_when_checked(self):
+        """_on_use_preset_toggled must call _on_preset_changed when checked=True."""
+        source = self._alpha_tool_source()
+        # Find the handler body
+        start = source.find("def _on_use_preset_toggled")
+        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
+        # Find the next method definition to scope the search; fall back to
+        # end-of-file if this is the last method (avoids a -1 index).
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_on_preset_changed",
+            body,
+            "_on_use_preset_toggled must call _on_preset_changed when checked",
+        )
+        self.assertIn(
+            "_update_compare",
+            body,
+            "_on_use_preset_toggled must call _update_compare when unchecked",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Dedicated hidden-theme SVG tests
 # ---------------------------------------------------------------------------
 

@@ -650,7 +650,7 @@ class AlphaFixerTab(QWidget):
         self._binary_cut_check.toggled.connect(self._on_finetune_changed)
         self._apply_alpha_check.toggled.connect(self._on_apply_alpha_toggled)
         self._mode_combo.currentIndexChanged.connect(self._on_mode_combo_changed)
-        self._use_preset_check.toggled.connect(self._update_compare)
+        self._use_preset_check.toggled.connect(self._on_use_preset_toggled)
         self._red_spin.valueChanged.connect(self._on_finetune_changed)
         self._green_spin.valueChanged.connect(self._on_finetune_changed)
         self._blue_spin.valueChanged.connect(self._on_finetune_changed)
@@ -1065,6 +1065,28 @@ class AlphaFixerTab(QWidget):
             was_blocked = self._use_preset_check.blockSignals(True)
             self._use_preset_check.setChecked(False)
             self._use_preset_check.blockSignals(was_blocked)
+
+    @pyqtSlot(bool)
+    def _on_use_preset_toggled(self, checked: bool) -> None:
+        """Handle the 'Use preset' checkbox being toggled by the user.
+
+        When re-checked:  reload the selected preset's parameters into the
+        fine-tune controls so the display always matches what will be
+        processed.  Without this, the controls could show the user's old
+        hand-typed values while the preset is silently used, creating a
+        confusing mismatch between the displayed numbers and the actual
+        processing result.
+
+        When unchecked:  just refresh the preview using the current fine-tune
+        values (no control changes needed — the values already reflect what
+        the user last typed).
+        """
+        if checked:
+            # Reload preset values into the fine-tune controls so the display
+            # is consistent with what "Process" will actually apply.
+            self._on_preset_changed(self._preset_combo.currentText())
+        else:
+            self._update_compare()
 
     @pyqtSlot(int)
     def _on_clamp_min_changed(self, value: int) -> None:  # noqa: ARG002  # value unused; spinbox read directly
