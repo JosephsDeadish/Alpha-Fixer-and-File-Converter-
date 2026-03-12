@@ -26,11 +26,18 @@ from PyQt6.QtWidgets import (
 
 def _pil_to_qimage(img) -> QImage:
     """Convert any PIL Image to a detached RGBA QImage."""
+    # Only create a new RGBA image when the mode is not already RGBA so we
+    # can close the temporary conversion image and release its backing store
+    # early instead of relying on the garbage collector.
     img_rgba = img.convert("RGBA") if img.mode != "RGBA" else img
-    data = img_rgba.tobytes("raw", "RGBA")
-    qimg = QImage(data, img_rgba.width, img_rgba.height,
-                  QImage.Format.Format_RGBA8888)
-    return qimg.copy()  # detach from the bytes buffer
+    try:
+        data = img_rgba.tobytes("raw", "RGBA")
+        qimg = QImage(data, img_rgba.width, img_rgba.height,
+                      QImage.Format.Format_RGBA8888)
+        return qimg.copy()  # detach from the bytes buffer
+    finally:
+        if img_rgba is not img:
+            img_rgba.close()
 
 
 def _make_checker(w: int, h: int, sq: int = 12) -> QPixmap:
@@ -85,6 +92,7 @@ class _ThumbLoader(QThread):
         self._abort = True
 
     def run(self):
+        img = None
         try:
             from PIL import Image
             img = Image.open(self._path)
@@ -115,7 +123,6 @@ class _ThumbLoader(QThread):
 
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
-            img.close()
 
             meta_text = (
                 f"{Path(self._path).name}\n"
@@ -125,6 +132,9 @@ class _ThumbLoader(QThread):
             self.loaded.emit(qimg, meta_text)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            if img is not None:
+                img.close()
 
 
 class _ConvertedThumbLoader(QThread):
@@ -191,10 +201,12 @@ class _ConvertedThumbLoader(QThread):
                 converted_size = buf.tell()
                 buf.seek(0)
                 preview_img = Image.open(buf)
-                preview_img.load()  # fully decode before buf goes out of scope
+                preview_img.load()  # fully decode into memory; buf can be closed now
+                buf.close()
             except Exception:
                 # Fallback: show the source image if in-memory conversion fails
                 # (e.g. unsupported format like DDS which requires wand).
+                buf.close()
                 img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
                 qimg = _pil_to_qimage(img)
                 img.close()

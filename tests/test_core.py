@@ -2623,3 +2623,177 @@ class TestRound4Hardening(unittest.TestCase):
         fn_src = src[fn_pos:next_method]
         self.assertIn("with io.StringIO", fn_src,
                       "_export_csv() must use 'with io.StringIO(...)' context manager")
+
+
+# ---------------------------------------------------------------------------
+# Round-5 resource-hygiene tests
+# ---------------------------------------------------------------------------
+
+class TestRound5ResourceHygiene(unittest.TestCase):
+    """Round-5: PIL image close in all paths, BytesIO close in fallback,
+    settings_manager sync docstring accuracy."""
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    # ------------------------------------------------------------------
+    # preview_pane – _pil_to_qimage closes temporary RGBA conversion image
+    # ------------------------------------------------------------------
+
+    def _preview_pane_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "preview_pane.py")) as f:
+            return f.read()
+
+    def test_pil_to_qimage_closes_converted_image(self):
+        """_pil_to_qimage() must close the temporary RGBA image it creates
+        via img.convert('RGBA') so that backing-store memory is released early
+        rather than relying on the garbage collector."""
+        src = self._preview_pane_source()
+        fn_start = src.find("def _pil_to_qimage(")
+        fn_end = src.find("\ndef ", fn_start + 1)
+        fn_src = src[fn_start:fn_end]
+        self.assertIn("img_rgba.close()", fn_src,
+                      "_pil_to_qimage() must close the converted RGBA image")
+        # Must guard against closing the caller's own image
+        self.assertIn("img_rgba is not img", fn_src,
+                      "_pil_to_qimage() must only close the image when a new one was created")
+
+    def test_pil_to_qimage_does_not_close_original(self):
+        """_pil_to_qimage() must NOT close the caller's image when it is
+        already RGBA (img_rgba is img); only the temporary copy should be
+        closed."""
+        from unittest.mock import patch, MagicMock
+        src = self._preview_pane_source()
+        # The guard 'if img_rgba is not img' must be present
+        self.assertIn("if img_rgba is not img", src,
+                      "_pil_to_qimage() must use 'if img_rgba is not img' guard")
+
+    # ------------------------------------------------------------------
+    # preview_pane – _ThumbLoader closes image on all exit paths
+    # ------------------------------------------------------------------
+
+    def test_thumb_loader_closes_image_in_finally(self):
+        """_ThumbLoader.run() must close the PIL image in a finally block so
+        that image resources are released even when an exception occurs."""
+        src = self._preview_pane_source()
+        class_start = src.find("class _ThumbLoader(")
+        next_class = src.find("\nclass ", class_start + 1)
+        class_src = src[class_start:next_class]
+        run_start = class_src.find("    def run(")
+        run_src = class_src[run_start:]
+        self.assertIn("finally:", run_src,
+                      "_ThumbLoader.run() must have a finally block")
+        self.assertIn("img.close()", run_src,
+                      "_ThumbLoader.run() must close img in the finally block")
+
+    # ------------------------------------------------------------------
+    # preview_pane – _ConvertedThumbLoader closes buf in fallback path
+    # ------------------------------------------------------------------
+
+    def test_converted_thumb_loader_closes_buf_in_fallback(self):
+        """_ConvertedThumbLoader.run() must close the BytesIO buffer in the
+        fallback exception path so it is released even when in-memory
+        conversion fails."""
+        src = self._preview_pane_source()
+        class_start = src.find("class _ConvertedThumbLoader(")
+        next_class = src.find("\nclass ", class_start + 1)
+        class_src = src[class_start:next_class]
+        run_start = class_src.find("    def run(")
+        run_src = class_src[run_start:]
+        # buf.close() must appear BOTH in the try-success path and in the
+        # except-fallback path
+        self.assertGreaterEqual(run_src.count("buf.close()"), 2,
+                      "_ConvertedThumbLoader.run() must close buf in both the "
+                      "success path and the fallback exception path")
+
+    def test_converted_thumb_loader_closes_buf_after_full_decode(self):
+        """After preview_img.load() fully decodes the image into memory, the
+        BytesIO buffer should be closed immediately since it is no longer
+        needed."""
+        src = self._preview_pane_source()
+        class_start = src.find("class _ConvertedThumbLoader(")
+        next_class = src.find("\nclass ", class_start + 1)
+        class_src = src[class_start:next_class]
+        run_start = class_src.find("    def run(")
+        run_src = class_src[run_start:]
+        # The buf.close() after full decode should come BEFORE preview_img use
+        # (ensuring the buffer is closed when the image data is in memory)
+        load_pos = run_src.find("preview_img.load()")
+        first_close_pos = run_src.find("buf.close()")
+        self.assertGreater(first_close_pos, load_pos,
+                      "buf.close() must appear after preview_img.load() in the "
+                      "success path")
+
+    # ------------------------------------------------------------------
+    # drop_list – _ThumbRunnable closes PIL image on all exit paths
+    # ------------------------------------------------------------------
+
+    def _drop_list_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "drop_list.py")) as f:
+            return f.read()
+
+    def test_thumb_runnable_closes_image_in_finally(self):
+        """_ThumbRunnable.run() must close the PIL image it opens in a finally
+        block so file descriptor / backing-store resources are released on all
+        exit paths (success, exception, and cancel-check exit)."""
+        src = self._drop_list_source()
+        class_start = src.find("class _ThumbRunnable(")
+        next_class = src.find("\nclass ", class_start + 1)
+        class_src = src[class_start:next_class]
+        run_start = class_src.find("    def run(")
+        run_src = class_src[run_start:]
+        self.assertIn("finally:", run_src,
+                      "_ThumbRunnable.run() must have a finally block")
+        self.assertIn("img.close()", run_src,
+                      "_ThumbRunnable.run() must close img in the finally block")
+        self.assertIn("img = None", run_src,
+                      "_ThumbRunnable.run() must initialise img = None before "
+                      "try so the finally guard can check 'if img is not None'")
+
+    def test_thumb_runnable_closes_original_before_convert(self):
+        """_ThumbRunnable.run() must explicitly close the original PIL image
+        BEFORE reassigning img to the converted version, so the original
+        Image.open() result is released and not orphaned."""
+        src = self._drop_list_source()
+        class_start = src.find("class _ThumbRunnable(")
+        next_class = src.find("\nclass ", class_start + 1)
+        class_src = src[class_start:next_class]
+        run_start = class_src.find("    def run(")
+        run_src = class_src[run_start:]
+        # img.close() must appear before `img = converted`
+        close_pos = run_src.find("img.close()")
+        assign_pos = run_src.find("img = converted")
+        self.assertGreater(assign_pos, close_pos,
+                      "_ThumbRunnable.run() must call img.close() before "
+                      "reassigning img to the converted version")
+
+    # ------------------------------------------------------------------
+    # settings_manager – sync() docstring accuracy
+    # ------------------------------------------------------------------
+
+    def _settings_manager_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "settings_manager.py")) as f:
+            return f.read()
+
+    def test_sync_docstring_no_longer_claims_only_place(self):
+        """The sync() docstring must not claim it is the 'only place' to call
+        _qs.sync() since mutation methods (save_named_theme, etc.) also call
+        it to protect important user data from crash-induced loss."""
+        src = self._settings_manager_source()
+        fn_pos = src.find("def sync(")
+        next_def = src.find("\n    def ", fn_pos + 1)
+        fn_src = src[fn_pos:next_def]
+        self.assertNotIn("only place", fn_src,
+                         "sync() docstring must not claim it is the 'only place' "
+                         "to call _qs.sync() — mutation methods also call it "
+                         "intentionally")
+
+    def test_sync_docstring_explains_design_rationale(self):
+        """The sync() docstring must explain the two-tier sync strategy:
+        set() defers, mutation methods sync immediately for data durability."""
+        src = self._settings_manager_source()
+        fn_pos = src.find("def sync(")
+        next_def = src.find("\n    def ", fn_pos + 1)
+        fn_src = src[fn_pos:next_def]
+        self.assertIn("set()", fn_src,
+                      "sync() docstring must reference set() and explain why it "
+                      "does not call sync()")

@@ -66,6 +66,7 @@ class _ThumbRunnable(QRunnable):
         # Bail out immediately if the list was cleared before we started.
         if self._cancel.is_set():
             return
+        img = None
         try:
             from PIL import Image
             img = Image.open(self._path)
@@ -75,7 +76,11 @@ class _ThumbRunnable(QRunnable):
                 qimg = QImage(data, img.width, img.height,
                               QImage.Format.Format_RGBA8888)
             else:
-                img = img.convert("RGB")
+                # Convert to RGB and track the new image so the finally block
+                # closes it; the original opened image (img) is reassigned.
+                converted = img.convert("RGB")
+                img.close()
+                img = converted
                 data = img.tobytes("raw", "RGB")
                 qimg = QImage(data, img.width, img.height,
                               QImage.Format.Format_RGB888)
@@ -104,6 +109,9 @@ class _ThumbRunnable(QRunnable):
                 self._signals.loaded.emit(self._path, icon)
         except Exception:
             pass  # silently skip unreadable / non-image files
+        finally:
+            if img is not None:
+                img.close()
 
 
 # ---------------------------------------------------------------------------

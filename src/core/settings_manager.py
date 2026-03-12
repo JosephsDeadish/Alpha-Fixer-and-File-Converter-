@@ -186,10 +186,18 @@ class SettingsManager:
     def sync(self) -> None:
         """Flush all pending settings writes to disk.
 
-        Call this on clean exit (e.g. closeEvent) so that changes made
-        during the session are persisted even if QSettings has not yet
-        auto-synced.  This is the only place that should call _qs.sync()
-        so that the disk-I/O cost is predictable and bounded.
+        Design note on sync strategy:
+        - ``set()`` deliberately does **not** call ``_qs.sync()`` because
+          ``set()`` is invoked on every click and every widget interaction;
+          syncing there would cause per-click disk I/O and noticeable lag.
+        - Important mutation methods (``save_named_theme``,
+          ``save_custom_presets``, ``add_converter_history``, etc.) call
+          ``_qs.sync()`` individually to protect user data from crash-induced
+          data loss.  Those are infrequent, deliberate user actions, so the
+          disk-I/O cost is acceptable.
+        - This method handles the final close-time flush to persist any
+          remaining in-flight changes (e.g., UI preferences updated through
+          ``set()``) before the application exits.
         """
         self._qs.sync()
 
