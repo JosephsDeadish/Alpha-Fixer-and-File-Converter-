@@ -229,7 +229,9 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
       4. Clamp to [clamp_min, clamp_max]
     """
     if img.mode != "RGBA":
+        _orig = img
         img = img.convert("RGBA")
+        _orig.close()
     try:
         arr = np.array(img, dtype=np.int32)
     except MemoryError:
@@ -309,7 +311,9 @@ def apply_manual_alpha(
         binary_cut: When True, apply a hard 0/255 split at the threshold.
     """
     if img.mode != "RGBA":
+        _orig = img
         img = img.convert("RGBA")
+        _orig.close()
     try:
         arr = np.array(img, dtype=np.int32)
     except MemoryError:
@@ -403,7 +407,9 @@ def apply_rgba_adjust(
     Returns the modified image in RGBA mode.
     """
     if img.mode != "RGBA":
+        _orig = img
         img = img.convert("RGBA")
+        _orig.close()
     try:
         arr = np.array(img, dtype=np.int32)
     except MemoryError:

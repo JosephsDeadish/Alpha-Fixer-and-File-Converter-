@@ -82,46 +82,54 @@ class _AlphaPreviewLoader(QThread):
             from .preview_pane import _pil_to_qimage
 
             orig = load_image(self._path)  # always RGBA PIL image
+            processed = None
+            try:
+                # If the user has already moved to a different file, bail out now
+                # before spending CPU on the expensive numpy processing step.
+                if self._abort:
+                    return
 
-            # If the user has already moved to a different file, bail out now
-            # before spending CPU on the expensive numpy processing step.
-            if self._abort:
-                return
+                before_qi = _pil_to_qimage(orig)
+                before_stats = self._alpha_stats(orig)
 
-            before_qi = _pil_to_qimage(orig)
-            before_stats = self._alpha_stats(orig)
+                if self._preset is not None:
+                    processed = apply_alpha_preset(orig, self._preset)
+                elif self._manual is not None:
+                    processed = apply_manual_alpha(
+                        orig,
+                        value=self._manual.get("value"),  # None = clamp only
+                        threshold=self._manual.get("threshold", 0),
+                        invert=self._manual.get("invert", False),
+                        clamp_min=self._manual.get("clamp_min", 0),
+                        clamp_max=self._manual.get("clamp_max", 255),
+                        binary_cut=self._manual.get("binary_cut", False),
+                        mode=self._manual.get("mode", "set"),
+                    )
+                else:
+                    processed = orig
 
-            if self._preset is not None:
-                processed = apply_alpha_preset(orig, self._preset)
-            elif self._manual is not None:
-                processed = apply_manual_alpha(
-                    orig,
-                    value=self._manual.get("value"),  # None = clamp only
-                    threshold=self._manual.get("threshold", 0),
-                    invert=self._manual.get("invert", False),
-                    clamp_min=self._manual.get("clamp_min", 0),
-                    clamp_max=self._manual.get("clamp_max", 255),
-                    binary_cut=self._manual.get("binary_cut", False),
-                    mode=self._manual.get("mode", "set"),
-                )
-            else:
-                processed = orig
+                # Apply optional RGBA channel adjustments
+                rgb = self._manual.get("rgb") if self._manual else None
+                if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b") or rgb.get("a")):
+                    _tmp = apply_rgba_adjust(
+                        processed,
+                        red_delta=rgb.get("r", 0),
+                        green_delta=rgb.get("g", 0),
+                        blue_delta=rgb.get("b", 0),
+                        alpha_delta=rgb.get("a", 0),
+                    )
+                    if processed is not orig:
+                        processed.close()
+                    processed = _tmp
 
-            # Apply optional RGBA channel adjustments
-            rgb = self._manual.get("rgb") if self._manual else None
-            if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b") or rgb.get("a")):
-                processed = apply_rgba_adjust(
-                    processed,
-                    red_delta=rgb.get("r", 0),
-                    green_delta=rgb.get("g", 0),
-                    blue_delta=rgb.get("b", 0),
-                    alpha_delta=rgb.get("a", 0),
-                )
-
-            after_qi = _pil_to_qimage(processed)
-            after_stats = self._alpha_stats(processed)
-            self.preview_ready.emit(before_qi, after_qi)
-            self.stats_ready.emit(before_stats, after_stats)
+                after_qi = _pil_to_qimage(processed)
+                after_stats = self._alpha_stats(processed)
+                self.preview_ready.emit(before_qi, after_qi)
+                self.stats_ready.emit(before_stats, after_stats)
+            finally:
+                orig.close()
+                if processed is not None and processed is not orig:
+                    processed.close()
         except Exception as exc:
             import traceback
             self.failed.emit(traceback.format_exc())

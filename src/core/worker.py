@@ -89,38 +89,47 @@ class AlphaWorker(QThread):
                 last_progress_time = now
             try:
                 img = load_image(src)
-                if self._preset is not None:
-                    img = apply_alpha_preset(img, self._preset)
-                elif self._manual is not None:
-                    img = apply_manual_alpha(
-                        img,
-                        value=self._manual.get("value"),  # None = clamp only, no fixed value
-                        threshold=self._manual.get("threshold", 0),
-                        invert=self._manual.get("invert", False),
-                        clamp_min=self._manual.get("clamp_min", 0),
-                        clamp_max=self._manual.get("clamp_max", 255),
-                        binary_cut=self._manual.get("binary_cut", False),
-                        mode=self._manual.get("mode", "set"),
-                    )
-                # Optional per-channel RGBA adjust (works with both preset and manual modes)
-                rgb = (self._manual or {}).get("rgb")
-                if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b") or rgb.get("a")):
-                    img = apply_rgba_adjust(
-                        img,
-                        red_delta=rgb.get("r", 0),
-                        green_delta=rgb.get("g", 0),
-                        blue_delta=rgb.get("b", 0),
-                        alpha_delta=rgb.get("a", 0),
-                    )
-                dest = self._resolve_output(src)
-                os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-                ext = Path(src).suffix.lower()
-                save_image(img, dest, ext)
-                success += 1
-                # In large-batch mode suppress per-file success messages to keep
-                # the UI log from accumulating 50 000 lines.
-                if not large_batch:
-                    self.file_done.emit(src, True, dest)
+                try:
+                    if self._preset is not None:
+                        _tmp = apply_alpha_preset(img, self._preset)
+                        img.close()
+                        img = _tmp
+                    elif self._manual is not None:
+                        _tmp = apply_manual_alpha(
+                            img,
+                            value=self._manual.get("value"),  # None = clamp only, no fixed value
+                            threshold=self._manual.get("threshold", 0),
+                            invert=self._manual.get("invert", False),
+                            clamp_min=self._manual.get("clamp_min", 0),
+                            clamp_max=self._manual.get("clamp_max", 255),
+                            binary_cut=self._manual.get("binary_cut", False),
+                            mode=self._manual.get("mode", "set"),
+                        )
+                        img.close()
+                        img = _tmp
+                    # Optional per-channel RGBA adjust (works with both preset and manual modes)
+                    rgb = (self._manual or {}).get("rgb")
+                    if rgb and (rgb.get("r") or rgb.get("g") or rgb.get("b") or rgb.get("a")):
+                        _tmp = apply_rgba_adjust(
+                            img,
+                            red_delta=rgb.get("r", 0),
+                            green_delta=rgb.get("g", 0),
+                            blue_delta=rgb.get("b", 0),
+                            alpha_delta=rgb.get("a", 0),
+                        )
+                        img.close()
+                        img = _tmp
+                    dest = self._resolve_output(src)
+                    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+                    ext = Path(src).suffix.lower()
+                    save_image(img, dest, ext)
+                    success += 1
+                    # In large-batch mode suppress per-file success messages to keep
+                    # the UI log from accumulating 50 000 lines.
+                    if not large_batch:
+                        self.file_done.emit(src, True, dest)
+                finally:
+                    img.close()
             except MemoryError as exc:
                 errors += 1
                 msg = f"Out of memory — {exc}"

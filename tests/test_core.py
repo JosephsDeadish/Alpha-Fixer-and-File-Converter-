@@ -3521,3 +3521,377 @@ class TestRound9ResourceHygiene(unittest.TestCase):
         close_pos = fn.find("img.close()", mem_err_pos)
         self.assertGreater(close_pos, mem_err_pos,
                            "img.close() must appear inside the except MemoryError block")
+
+
+class TestRound10ResourceHygiene(unittest.TestCase):
+    """Round-10: four PIL image resource leaks.
+
+    Bug 1 (apply_alpha_preset / apply_manual_alpha / apply_rgba_adjust,
+            alpha_processor.py):
+        ``img = img.convert("RGBA")`` leaked the original non-RGBA image when
+        one of these functions was called with a non-RGBA input.  Fix uses a
+        ``_orig`` intermediate variable and calls ``_orig.close()`` immediately
+        after the convert succeeds.
+
+    Bug 2 (AlphaWorker.run(), worker.py):
+        The PIL image loaded by ``load_image()`` was never closed, and every
+        reassignment like ``img = apply_alpha_preset(img, ...)`` also leaked
+        the previous image object.  Fix closes the old ``img`` before each
+        reassignment and adds an inner ``try/finally: img.close()`` to
+        guarantee the final image is always released.
+
+    Bug 3 (_AlphaPreviewLoader.run(), alpha_tool.py):
+        ``orig`` was not closed on the early-abort path; ``orig`` and
+        ``processed`` were never closed on the success path.  Fix adds
+        ``processed = None`` sentinel and an inner ``try/finally`` that closes
+        both, guarded by ``processed is not None and processed is not orig``.
+
+    Bug 4 (_ConvertedThumbLoader.run(), preview_pane.py):
+        The success path called ``img.close()`` but skipped closing
+        ``save_img`` when it was a converted image (different object from
+        ``img``).  Fix adds ``if save_img is not img: save_img.close()``
+        before ``img.close()`` on the success path, mirroring the existing
+        exception-path guard.
+    """
+
+    _AP_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "alpha_processor.py"
+    )
+    _W_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "worker.py"
+    )
+    _AT_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py"
+    )
+    _PP_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "preview_pane.py"
+    )
+
+    def _read(self, path: str) -> str:
+        with open(path) as f:
+            return f.read()
+
+    def _fn_src(self, file_src: str, fn_name: str) -> str:
+        """Return the source of a top-level def *fn_name* from *file_src*."""
+        marker = f"\ndef {fn_name}("
+        start = file_src.find(marker)
+        self.assertGreater(start, 0, f"def {fn_name} not found in source")
+        next_def = file_src.find("\ndef ", start + 1)
+        return file_src[start:next_def] if next_def > 0 else file_src[start:]
+
+    def _method_src(self, file_src: str, class_name: str, method_name: str) -> str:
+        """Return the source of a method inside a named class."""
+        class_marker = f"\nclass {class_name}("
+        cls_start = file_src.find(class_marker)
+        self.assertGreater(cls_start, 0, f"class {class_name} not found")
+        next_class = file_src.find("\nclass ", cls_start + 1)
+        cls_body = file_src[cls_start:next_class] if next_class > 0 else file_src[cls_start:]
+        method_marker = f"\n    def {method_name}("
+        m_start = cls_body.find(method_marker)
+        self.assertGreater(m_start, 0,
+                           f"def {method_name} not found in class {class_name}")
+        next_method = cls_body.find("\n    def ", m_start + 1)
+        return cls_body[m_start:next_method] if next_method > 0 else cls_body[m_start:]
+
+    # ------------------------------------------------------------------
+    # Bug 1 — apply_alpha_preset: leaks original on convert
+    # ------------------------------------------------------------------
+
+    def _apply_alpha_preset_src(self) -> str:
+        return self._fn_src(self._read(self._AP_SRC), "apply_alpha_preset")
+
+    def test_apply_alpha_preset_saves_orig_before_reassigning_img(self):
+        """apply_alpha_preset must store the old img reference in ``_orig``
+        *before* the ``img = img.convert(`` line so the original is closeable."""
+        fn = self._apply_alpha_preset_src()
+        orig_pos = fn.find("_orig = img")
+        self.assertGreater(orig_pos, 0,
+                           "apply_alpha_preset must have '_orig = img' before convert()")
+        reassign_pos = fn.find("img = img.convert(", orig_pos)
+        self.assertGreater(reassign_pos, orig_pos,
+                           "_orig = img must precede img = img.convert()")
+
+    def test_apply_alpha_preset_uses_orig_local_for_convert(self):
+        """apply_alpha_preset must store the old img in ``_orig`` before
+        converting, so the original can be closed."""
+        fn = self._apply_alpha_preset_src()
+        self.assertIn(
+            "_orig = img",
+            fn,
+            "apply_alpha_preset must save the original in '_orig' before convert()",
+        )
+
+    def test_apply_alpha_preset_closes_orig_after_convert(self):
+        """apply_alpha_preset must call ``_orig.close()`` after converting."""
+        fn = self._apply_alpha_preset_src()
+        self.assertIn(
+            "_orig.close()",
+            fn,
+            "apply_alpha_preset must call _orig.close() after the RGBA convert",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 1 (cont.) — apply_manual_alpha
+    # ------------------------------------------------------------------
+
+    def _apply_manual_alpha_src(self) -> str:
+        return self._fn_src(self._read(self._AP_SRC), "apply_manual_alpha")
+
+    def test_apply_manual_alpha_saves_orig_before_reassigning_img(self):
+        """apply_manual_alpha must store the old img reference in ``_orig``
+        *before* the ``img = img.convert(`` line so the original is closeable."""
+        fn = self._apply_manual_alpha_src()
+        orig_pos = fn.find("_orig = img")
+        self.assertGreater(orig_pos, 0,
+                           "apply_manual_alpha must have '_orig = img' before convert()")
+        reassign_pos = fn.find("img = img.convert(", orig_pos)
+        self.assertGreater(reassign_pos, orig_pos,
+                           "_orig = img must precede img = img.convert()")
+
+    def test_apply_manual_alpha_uses_orig_local_for_convert(self):
+        fn = self._apply_manual_alpha_src()
+        self.assertIn(
+            "_orig = img",
+            fn,
+            "apply_manual_alpha must save the original in '_orig' before convert()",
+        )
+
+    def test_apply_manual_alpha_closes_orig_after_convert(self):
+        fn = self._apply_manual_alpha_src()
+        self.assertIn(
+            "_orig.close()",
+            fn,
+            "apply_manual_alpha must call _orig.close() after the RGBA convert",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 1 (cont.) — apply_rgba_adjust
+    # ------------------------------------------------------------------
+
+    def _apply_rgba_adjust_src(self) -> str:
+        return self._fn_src(self._read(self._AP_SRC), "apply_rgba_adjust")
+
+    def test_apply_rgba_adjust_saves_orig_before_reassigning_img(self):
+        """apply_rgba_adjust must store the old img reference in ``_orig``
+        *before* the ``img = img.convert(`` line so the original is closeable."""
+        fn = self._apply_rgba_adjust_src()
+        orig_pos = fn.find("_orig = img")
+        self.assertGreater(orig_pos, 0,
+                           "apply_rgba_adjust must have '_orig = img' before convert()")
+        reassign_pos = fn.find("img = img.convert(", orig_pos)
+        self.assertGreater(reassign_pos, orig_pos,
+                           "_orig = img must precede img = img.convert()")
+
+    def test_apply_rgba_adjust_uses_orig_local_for_convert(self):
+        fn = self._apply_rgba_adjust_src()
+        self.assertIn(
+            "_orig = img",
+            fn,
+            "apply_rgba_adjust must save the original in '_orig' before convert()",
+        )
+
+    def test_apply_rgba_adjust_closes_orig_after_convert(self):
+        fn = self._apply_rgba_adjust_src()
+        self.assertIn(
+            "_orig.close()",
+            fn,
+            "apply_rgba_adjust must call _orig.close() after the RGBA convert",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 2 — AlphaWorker.run(): img never closed
+    # ------------------------------------------------------------------
+
+    def _alpha_worker_run_src(self) -> str:
+        return self._method_src(self._read(self._W_SRC), "AlphaWorker", "run")
+
+    def test_alpha_worker_run_does_not_reassign_img_with_apply_preset(self):
+        """AlphaWorker.run must not use ``img = apply_alpha_preset(img,``
+        because that leaks the old PIL image."""
+        fn = self._alpha_worker_run_src()
+        self.assertNotIn(
+            "img = apply_alpha_preset(img,",
+            fn,
+            "AlphaWorker.run must not reassign img directly with apply_alpha_preset; "
+            "use _tmp then img.close(); img = _tmp",
+        )
+
+    def test_alpha_worker_run_does_not_reassign_img_with_apply_manual(self):
+        """AlphaWorker.run must not use ``img = apply_manual_alpha(img,``."""
+        fn = self._alpha_worker_run_src()
+        self.assertNotIn(
+            "img = apply_manual_alpha(",
+            fn,
+            "AlphaWorker.run must not reassign img directly with apply_manual_alpha; "
+            "use _tmp then img.close(); img = _tmp",
+        )
+
+    def test_alpha_worker_run_does_not_reassign_img_with_apply_rgba(self):
+        """AlphaWorker.run must not use ``img = apply_rgba_adjust(img,``."""
+        fn = self._alpha_worker_run_src()
+        self.assertNotIn(
+            "img = apply_rgba_adjust(",
+            fn,
+            "AlphaWorker.run must not reassign img directly with apply_rgba_adjust; "
+            "use _tmp then img.close(); img = _tmp",
+        )
+
+    def test_alpha_worker_run_closes_img_before_reassigning_to_tmp(self):
+        """After each apply_* call the old img must be closed before img = _tmp."""
+        fn = self._alpha_worker_run_src()
+        # Confirm the _tmp pattern is used
+        self.assertIn(
+            "_tmp = apply_alpha_preset(",
+            fn,
+            "AlphaWorker.run must store apply_alpha_preset result in '_tmp'",
+        )
+        # img.close() must appear before img = _tmp
+        close_pos = fn.find("img.close()")
+        self.assertGreater(close_pos, 0,
+                           "AlphaWorker.run must call img.close() before reassigning")
+        tmp_assign_pos = fn.find("img = _tmp", close_pos)
+        self.assertGreater(tmp_assign_pos, close_pos,
+                           "img = _tmp must follow img.close() in AlphaWorker.run")
+
+    def test_alpha_worker_run_has_inner_finally_closing_img(self):
+        """AlphaWorker.run must have an inner try/finally: img.close() wrapping
+        the processing block so the final PIL image is always released."""
+        fn = self._alpha_worker_run_src()
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "AlphaWorker.run must have a finally block")
+        close_pos = fn.find("img.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "img.close() must appear inside the finally block "
+                           "in AlphaWorker.run")
+
+    # ------------------------------------------------------------------
+    # Bug 3 — _AlphaPreviewLoader.run(): orig / processed not closed
+    # ------------------------------------------------------------------
+
+    def _alpha_preview_loader_run_src(self) -> str:
+        return self._method_src(
+            self._read(self._AT_SRC), "_AlphaPreviewLoader", "run"
+        )
+
+    def test_alpha_preview_loader_initialises_processed_to_none(self):
+        """_AlphaPreviewLoader.run must initialise ``processed = None`` before
+        the inner try so the finally guard works even on early abort."""
+        fn = self._alpha_preview_loader_run_src()
+        self.assertIn(
+            "processed = None",
+            fn,
+            "_AlphaPreviewLoader.run must initialise processed = None",
+        )
+
+    def test_alpha_preview_loader_closes_orig_in_finally(self):
+        """_AlphaPreviewLoader.run must close ``orig`` in a finally block."""
+        fn = self._alpha_preview_loader_run_src()
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "_AlphaPreviewLoader.run must have a finally block")
+        close_pos = fn.find("orig.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "orig.close() must appear inside the finally block")
+
+    def test_alpha_preview_loader_closes_processed_in_finally_with_guard(self):
+        """_AlphaPreviewLoader.run must close ``processed`` in the finally,
+        guarded by ``processed is not None and processed is not orig``."""
+        fn = self._alpha_preview_loader_run_src()
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "_AlphaPreviewLoader.run must have a finally block")
+        finally_block = fn[finally_pos:]
+        self.assertIn(
+            "processed is not None",
+            finally_block,
+            "finally block must guard processed.close() with 'processed is not None'",
+        )
+        self.assertIn(
+            "processed is not orig",
+            finally_block,
+            "finally block must guard processed.close() with 'processed is not orig'",
+        )
+        close_pos = finally_block.find("processed.close()")
+        self.assertGreater(close_pos, 0,
+                           "processed.close() must appear in the finally block")
+
+    def test_alpha_preview_loader_abort_inside_inner_try(self):
+        """The early-abort ``return`` must sit inside the inner try so that
+        the finally always closes ``orig``."""
+        fn = self._alpha_preview_loader_run_src()
+        # processed = None sentinel must appear BEFORE the inner try
+        none_pos = fn.find("processed = None")
+        self.assertGreater(none_pos, 0)
+        inner_try_pos = fn.find("try:", none_pos)
+        self.assertGreater(inner_try_pos, none_pos,
+                           "inner try must follow 'processed = None' sentinel")
+        abort_pos = fn.find("if self._abort:", inner_try_pos)
+        self.assertGreater(abort_pos, inner_try_pos,
+                           "abort check must be inside the inner try block")
+
+    def test_alpha_preview_loader_closes_old_processed_before_rgba_reassign(self):
+        """When apply_rgba_adjust creates a new processed image the old one
+        must be closed (if it is not orig) before reassignment."""
+        fn = self._alpha_preview_loader_run_src()
+        # _tmp is used for the rgba-adjust result
+        self.assertIn(
+            "_tmp = apply_rgba_adjust(",
+            fn,
+            "_AlphaPreviewLoader.run must store rgba adjust result in '_tmp'",
+        )
+        # processed is closed before reassignment when it differs from orig
+        self.assertIn(
+            "if processed is not orig:",
+            fn,
+            "must guard processed.close() with 'if processed is not orig:'",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 4 — _ConvertedThumbLoader.run(): save_img not closed on success
+    # ------------------------------------------------------------------
+
+    def _converted_thumb_loader_src(self) -> str:
+        src = self._read(self._PP_SRC)
+        marker = "\nclass _ConvertedThumbLoader("
+        start = src.find(marker)
+        self.assertGreater(start, 0, "_ConvertedThumbLoader class not found")
+        next_cls = src.find("\nclass ", start + 1)
+        return src[start:next_cls] if next_cls > 0 else src[start:]
+
+    def test_converted_thumb_loader_closes_save_img_on_success_path(self):
+        """On the success path, _ConvertedThumbLoader.run must close
+        ``save_img`` when it is a converted (different) image."""
+        cls_src = self._converted_thumb_loader_src()
+        # Find the success path: after the except block ends and before thumbnail
+        # The pattern 'if save_img is not img:' followed by 'save_img.close()'
+        # must appear before 'img.close()' in the success path.
+        guard_pos = cls_src.find("if save_img is not img:")
+        self.assertGreater(guard_pos, 0,
+                           "_ConvertedThumbLoader must have 'if save_img is not img:' guard")
+        # There must be TWO occurrences: one in except, one in success path.
+        second_guard_pos = cls_src.find("if save_img is not img:", guard_pos + 1)
+        self.assertGreater(
+            second_guard_pos, guard_pos,
+            "_ConvertedThumbLoader success path must also have "
+            "'if save_img is not img:' guard (not just the exception path)",
+        )
+
+    def test_converted_thumb_loader_success_save_img_close_before_img_close(self):
+        """save_img.close() must appear before img.close() on the success
+        path (i.e., not only in the fallback exception path)."""
+        cls_src = self._converted_thumb_loader_src()
+        # The second guard is on the success path; find it
+        guard_pos = cls_src.find("if save_img is not img:")
+        second_guard_pos = cls_src.find("if save_img is not img:", guard_pos + 1)
+        self.assertGreater(second_guard_pos, guard_pos)
+        success_section = cls_src[second_guard_pos:]
+        # save_img.close() must precede img.close() in that section
+        save_close = success_section.find("save_img.close()")
+        img_close = success_section.find("img.close()")
+        self.assertGreater(save_close, -1,
+                           "save_img.close() must appear in success path section")
+        self.assertGreater(img_close, -1,
+                           "img.close() must appear after save_img.close()")
+        self.assertLess(save_close, img_close,
+                        "save_img.close() must come before img.close() on success path")

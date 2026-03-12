@@ -220,6 +220,8 @@ class _ConvertedThumbLoader(QThread):
                 self.loaded.emit(qimg, meta)
                 return
 
+            if save_img is not img:
+                save_img.close()
             img.close()
             preview_img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(preview_img)
