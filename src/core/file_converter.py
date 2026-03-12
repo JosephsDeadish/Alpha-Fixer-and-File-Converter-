@@ -184,150 +184,199 @@ def convert_file(
     :raises:  Exception on failure.
     """
     src_img = _open_image(input_path)
-    img = src_img
+    try:
+        img = src_img
 
-    if resize:
+        if resize:
+            try:
+                # int() intentionally truncates floats (e.g. 100.9 → 100).
+                # Image dimensions are always whole pixels; callers should pass
+                # integer values, but fractional values are silently floored here
+                # to be lenient with minor rounding errors from UI spinboxes or
+                # computed aspect-ratio widths/heights.
+                w, h = int(resize[0]), int(resize[1])
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Invalid resize value: {resize!r}. "
+                    "Both width and height must be integers."
+                )
+            if w < 1 or h < 1:
+                raise ValueError(
+                    f"Invalid resize dimensions: {w}×{h}. "
+                    "Both width and height must be at least 1 pixel."
+                )
+            if w > 65535 or h > 65535:
+                raise ValueError(
+                    f"Resize dimensions too large: {w}×{h}. "
+                    "Maximum supported size is 65535×65535 pixels."
+                )
+            try:
+                img = img.resize((w, h), Image.LANCZOS)
+            except MemoryError:
+                raise MemoryError(
+                    f"Not enough memory to resize image to {w}×{h}. "
+                    "Try a smaller target size."
+                )
+
+        ext = Path(output_path).suffix.lower()
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+        # Helper: inject metadata kwargs into save calls
+        def _meta_kwargs(fmt_ext: str) -> dict:
+            if not keep_metadata:
+                return {}
+            kw: dict = {}
+            try:
+                if fmt_ext in (".jpg", ".jpeg"):
+                    for k in ("exif", "icc_profile", "dpi"):
+                        if k in src_img.info:
+                            kw[k] = src_img.info[k]
+                elif fmt_ext in (".webp",):
+                    for k in ("exif", "icc_profile"):
+                        if k in src_img.info:
+                            kw[k] = src_img.info[k]
+                elif fmt_ext in (".png",):
+                    for k in ("exif", "icc_profile", "dpi"):
+                        if k in src_img.info:
+                            kw[k] = src_img.info[k]
+                elif fmt_ext in (".tiff", ".tif"):
+                    for k in ("exif", "icc_profile", "dpi"):
+                        if k in src_img.info:
+                            kw[k] = src_img.info[k]
+                elif fmt_ext in (".avif",):
+                    if "exif" in src_img.info:
+                        kw["exif"] = src_img.info["exif"]
+            except Exception:
+                pass
+            return kw
+
+        # Capture final image dimensions before format-specific conversions may
+        # change the image object, so any MemoryError message has accurate context.
+        _save_w, _save_h = img.size
+
         try:
-            # int() intentionally truncates floats (e.g. 100.9 → 100).
-            # Image dimensions are always whole pixels; callers should pass
-            # integer values, but fractional values are silently floored here
-            # to be lenient with minor rounding errors from UI spinboxes or
-            # computed aspect-ratio widths/heights.
-            w, h = int(resize[0]), int(resize[1])
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Invalid resize value: {resize!r}. "
-                "Both width and height must be integers."
-            )
-        if w < 1 or h < 1:
-            raise ValueError(
-                f"Invalid resize dimensions: {w}×{h}. "
-                "Both width and height must be at least 1 pixel."
-            )
-        if w > 65535 or h > 65535:
-            raise ValueError(
-                f"Resize dimensions too large: {w}×{h}. "
-                "Maximum supported size is 65535×65535 pixels."
-            )
-        try:
-            img = img.resize((w, h), Image.LANCZOS)
+            # --- DDS (custom writer, needs RGBA) ---
+            if ext == ".dds":
+                rgba = _ensure_rgba(img)
+                try:
+                    _save_dds(rgba, output_path)
+                finally:
+                    if rgba is not img:
+                        rgba.close()
+                return output_path
+
+            # --- JPEG (no alpha, RGB or L only) ---
+            if ext in (".jpg", ".jpeg"):
+                flat = _flatten_alpha(img)
+                try:
+                    flat.save(output_path, quality=quality, **_meta_kwargs(ext))
+                finally:
+                    if flat is not img:
+                        flat.close()
+                return output_path
+
+            # --- BMP (no alpha; standard viewers expect RGB or L) ---
+            if ext == ".bmp":
+                flat = _flatten_alpha(img)
+                try:
+                    flat.save(output_path)
+                finally:
+                    if flat is not img:
+                        flat.close()
+                return output_path
+
+            # --- PPM (RGB only, no alpha) ---
+            if ext == ".ppm":
+                flat = _flatten_alpha(img)
+                try:
+                    if flat.mode not in ("RGB", "L"):
+                        rgb = flat.convert("RGB")
+                        try:
+                            rgb.save(output_path)
+                        finally:
+                            rgb.close()
+                    else:
+                        flat.save(output_path)
+                finally:
+                    if flat is not img:
+                        flat.close()
+                return output_path
+
+            # --- PCX (RGB or P, no alpha) ---
+            if ext == ".pcx":
+                flat = _flatten_alpha(img)
+                try:
+                    flat.save(output_path)
+                finally:
+                    if flat is not img:
+                        flat.close()
+                return output_path
+
+            # --- GIF (palette mode; optionally 1-colour transparency) ---
+            if ext == ".gif":
+                if img.mode == "RGBA":
+                    # Quantise to palette preserving transparency
+                    gif_img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
+                    try:
+                        gif_img.save(output_path)
+                    finally:
+                        gif_img.close()
+                elif img.mode not in ("P", "L", "1"):
+                    gif_img = img.convert("P")
+                    try:
+                        gif_img.save(output_path)
+                    finally:
+                        gif_img.close()
+                else:
+                    img.save(output_path)
+                return output_path
+
+            # --- ICO (needs RGBA for proper transparency) ---
+            if ext == ".ico":
+                rgba = _ensure_rgba(img)
+                try:
+                    rgba.save(output_path, sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+                finally:
+                    if rgba is not img:
+                        rgba.close()
+                return output_path
+
+            # --- WEBP (supports RGB and RGBA, quality applies) ---
+            if ext == ".webp":
+                img.save(output_path, quality=quality, **_meta_kwargs(ext))
+                return output_path
+
+            # --- AVIF (supports RGB and RGBA, quality applies) ---
+            if ext == ".avif":
+                img.save(output_path, quality=quality, **_meta_kwargs(ext))
+                return output_path
+
+            # --- QOI (supports RGB and RGBA) ---
+            if ext == ".qoi":
+                if img.mode not in ("RGB", "RGBA"):
+                    qoi_img = img.convert("RGBA" if img.mode in ("LA", "PA") else "RGB")
+                    try:
+                        qoi_img.save(output_path)
+                    finally:
+                        qoi_img.close()
+                else:
+                    img.save(output_path)
+                return output_path
+
+            # --- Default: PNG, TIFF, TGA – all support RGBA; preserve mode ---
+            img.save(output_path, **_meta_kwargs(ext))
+            return output_path
+
         except MemoryError:
             raise MemoryError(
-                f"Not enough memory to resize image to {w}×{h}. "
-                "Try a smaller target size."
+                f"Not enough memory to save {_save_w}×{_save_h} image "
+                f"({_save_w * _save_h / 1_000_000:.1f} megapixels) as "
+                f"{ext.lstrip('.')}. Try a smaller resize target or a lower quality setting."
             )
-
-    ext = Path(output_path).suffix.lower()
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-
-    # Helper: inject metadata kwargs into save calls
-    def _meta_kwargs(fmt_ext: str) -> dict:
-        if not keep_metadata:
-            return {}
-        kw: dict = {}
-        try:
-            if fmt_ext in (".jpg", ".jpeg"):
-                for k in ("exif", "icc_profile", "dpi"):
-                    if k in src_img.info:
-                        kw[k] = src_img.info[k]
-            elif fmt_ext in (".webp",):
-                for k in ("exif", "icc_profile"):
-                    if k in src_img.info:
-                        kw[k] = src_img.info[k]
-            elif fmt_ext in (".png",):
-                for k in ("exif", "icc_profile", "dpi"):
-                    if k in src_img.info:
-                        kw[k] = src_img.info[k]
-            elif fmt_ext in (".tiff", ".tif"):
-                for k in ("exif", "icc_profile", "dpi"):
-                    if k in src_img.info:
-                        kw[k] = src_img.info[k]
-            elif fmt_ext in (".avif",):
-                if "exif" in src_img.info:
-                    kw["exif"] = src_img.info["exif"]
-        except Exception:
-            pass
-        return kw
-
-    # Capture final image dimensions before format-specific conversions may
-    # change the image object, so any MemoryError message has accurate context.
-    _save_w, _save_h = img.size
-
-    try:
-        # --- DDS (custom writer, needs RGBA) ---
-        if ext == ".dds":
-            _save_dds(_ensure_rgba(img), output_path)
-            return output_path
-
-        # --- JPEG (no alpha, RGB or L only) ---
-        if ext in (".jpg", ".jpeg"):
-            img = _flatten_alpha(img)
-            img.save(output_path, quality=quality, **_meta_kwargs(ext))
-            return output_path
-
-        # --- BMP (no alpha; standard viewers expect RGB or L) ---
-        if ext == ".bmp":
-            img = _flatten_alpha(img)
-            img.save(output_path)
-            return output_path
-
-        # --- PPM (RGB only, no alpha) ---
-        if ext == ".ppm":
-            img = _flatten_alpha(img)
-            if img.mode not in ("RGB", "L"):
-                img = img.convert("RGB")
-            img.save(output_path)
-            return output_path
-
-        # --- PCX (RGB or P, no alpha) ---
-        if ext == ".pcx":
-            img = _flatten_alpha(img)
-            img.save(output_path)
-            return output_path
-
-        # --- GIF (palette mode; optionally 1-colour transparency) ---
-        if ext == ".gif":
-            if img.mode == "RGBA":
-                # Quantise to palette preserving transparency
-                img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
-            elif img.mode not in ("P", "L", "1"):
-                img = img.convert("P")
-            img.save(output_path)
-            return output_path
-
-        # --- ICO (needs RGBA for proper transparency) ---
-        if ext == ".ico":
-            img = _ensure_rgba(img)
-            img.save(output_path, sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
-            return output_path
-
-        # --- WEBP (supports RGB and RGBA, quality applies) ---
-        if ext == ".webp":
-            img.save(output_path, quality=quality, **_meta_kwargs(ext))
-            return output_path
-
-        # --- AVIF (supports RGB and RGBA, quality applies) ---
-        if ext == ".avif":
-            img.save(output_path, quality=quality, **_meta_kwargs(ext))
-            return output_path
-
-        # --- QOI (supports RGB and RGBA) ---
-        if ext == ".qoi":
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "PA") else "RGB")
-            img.save(output_path)
-            return output_path
-
-        # --- Default: PNG, TIFF, TGA – all support RGBA; preserve mode ---
-        img.save(output_path, **_meta_kwargs(ext))
-        return output_path
-
-    except MemoryError:
-        raise MemoryError(
-            f"Not enough memory to save {_save_w}×{_save_h} image "
-            f"({_save_w * _save_h / 1_000_000:.1f} megapixels) as "
-            f"{ext.lstrip('.')}. Try a smaller resize target or a lower quality setting."
-        )
+    finally:
+        if img is not src_img:
+            img.close()
+        src_img.close()
 
 
 def build_output_path(

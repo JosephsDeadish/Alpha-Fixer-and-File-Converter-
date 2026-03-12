@@ -167,13 +167,16 @@ def load_image(path: str) -> Image.Image:
     if img.mode != "RGBA":
         w, h = img.size
         try:
-            img = img.convert("RGBA")
+            img_rgba = img.convert("RGBA")
         except MemoryError:
+            img.close()
             raise MemoryError(
                 f"Not enough memory to load {w}×{h} image "
                 f"({w * h / 1_000_000:.1f} megapixels) as RGBA. "
                 "Try processing a smaller file."
             )
+        img.close()
+        return img_rgba
     return img
 
 
@@ -185,13 +188,24 @@ def save_image(img: Image.Image, path: str, original_ext: str):
     if ext in (".jpg", ".jpeg", ".bmp"):
         w, h = img.size
         try:
-            img = img.convert("RGB")
+            img_rgb = img.convert("RGB")
         except MemoryError:
             raise MemoryError(
                 f"Not enough memory to convert {w}×{h} image "
                 f"({w * h / 1_000_000:.1f} megapixels) to RGB for {ext}. "
                 "Try processing a smaller file."
             )
+        try:
+            img_rgb.save(path)
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to write {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+                "Try processing a smaller file."
+            )
+        finally:
+            img_rgb.close()
+        return
     w, h = img.size
     try:
         img.save(path)

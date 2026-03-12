@@ -3259,3 +3259,265 @@ class TestRound8ResourceHygiene(unittest.TestCase):
             "finally block in _flatten_alpha must not contain 'return base' "
             "(that would suppress exceptions from the try block)",
         )
+
+
+class TestRound9ResourceHygiene(unittest.TestCase):
+    """Round-9: three PIL image resource leaks.
+
+    Bug 1 (convert_file, file_converter.py):
+        ``src_img = _open_image(...)`` was never closed.  Every call leaked the
+        source PIL image.  Format branches also leaked intermediate images by
+        reassigning ``img`` without closing the old value (flatten, quantize,
+        ensure_rgba, convert).  Fix wraps the function body in
+        ``try/finally: src_img.close()`` and uses named local variables (flat,
+        gif_img, rgba, qoi_img) for every format-branch intermediate so each one
+        is closed inside its own try/finally.
+
+    Bug 2 (save_image, alpha_processor.py):
+        ``img = img.convert("RGB")`` in the JPEG/BMP branch leaked the original
+        RGBA image.  Fix uses a local ``img_rgb`` variable and closes it inside
+        a try/finally after ``img_rgb.save()``.
+
+    Bug 3 (load_image, alpha_processor.py):
+        ``img = img.convert("RGBA")`` leaked the original non-RGBA PIL image.
+        Fix uses a local ``img_rgba`` variable, closes the original ``img``
+        after a successful convert (and also on MemoryError), then returns
+        ``img_rgba``.
+    """
+
+    _AP_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "alpha_processor.py"
+    )
+    _FC_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "file_converter.py"
+    )
+
+    def _read(self, path: str) -> str:
+        with open(path) as f:
+            return f.read()
+
+    # ------------------------------------------------------------------
+    # Helpers to extract named function bodies from source
+    # ------------------------------------------------------------------
+
+    def _fn_src(self, file_src: str, fn_name: str) -> str:
+        """Return the source of a top-level def *fn_name* from *file_src*."""
+        marker = f"\ndef {fn_name}("
+        start = file_src.find(marker)
+        self.assertGreater(start, 0, f"def {fn_name} not found in source")
+        next_def = file_src.find("\ndef ", start + 1)
+        return file_src[start:next_def] if next_def > 0 else file_src[start:]
+
+    # ------------------------------------------------------------------
+    # Bug 1 — convert_file: src_img / format-branch intermediates
+    # ------------------------------------------------------------------
+
+    def test_convert_file_wraps_src_img_in_try_finally(self):
+        """convert_file must close src_img via a try/finally block."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        # The outer try must appear after src_img is opened
+        open_pos = fn.find("src_img = _open_image(")
+        self.assertGreater(open_pos, 0, "src_img = _open_image() not found")
+        # A finally that closes src_img must exist
+        finally_pos = fn.find("finally:", open_pos)
+        self.assertGreater(finally_pos, open_pos,
+                           "convert_file must have a try/finally after _open_image()")
+        close_pos = fn.find("src_img.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "src_img.close() must appear inside the finally block")
+
+    def test_convert_file_closes_resized_img_in_finally(self):
+        """When a resize happened img differs from src_img; the finally must
+        close it too."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        finally_pos = fn.rfind("finally:")
+        self.assertGreater(finally_pos, 0, "no finally block found in convert_file")
+        guard_pos = fn.find("if img is not src_img:", finally_pos)
+        self.assertGreater(guard_pos, finally_pos,
+                           "'if img is not src_img:' must appear in the outer finally")
+        img_close_pos = fn.find("img.close()", guard_pos)
+        self.assertGreater(img_close_pos, guard_pos,
+                           "img.close() must follow the guard in the outer finally")
+
+    def test_convert_file_jpeg_branch_uses_flat_local_not_img(self):
+        """JPEG branch must store _flatten_alpha result in a local 'flat' and
+        close it in try/finally, not reassign img."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        # The format dispatch section starts after _save_w/_save_h is captured;
+        # use that anchor to avoid matching the JPEG key inside _meta_kwargs.
+        dispatch_pos = fn.find("_save_w, _save_h = img.size")
+        self.assertGreater(dispatch_pos, 0, "_save_w/_save_h capture not found")
+        jpeg_pos = fn.find('(".jpg", ".jpeg")', dispatch_pos)
+        self.assertGreater(jpeg_pos, 0, "JPEG branch not found in convert_file format dispatch")
+        jpeg_section = fn[jpeg_pos: jpeg_pos + 300]
+        self.assertNotIn(
+            "img = _flatten_alpha(",
+            jpeg_section,
+            "JPEG branch must not reassign 'img' with _flatten_alpha (leaks old img)",
+        )
+        self.assertIn(
+            "flat = _flatten_alpha(",
+            jpeg_section,
+            "JPEG branch must store _flatten_alpha result in 'flat'",
+        )
+
+    def test_convert_file_gif_branch_uses_gif_img_local(self):
+        """GIF branch must store quantize/convert result in a local 'gif_img'
+        and close it in try/finally, not reassign img."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        gif_pos = fn.find('".gif"')
+        self.assertGreater(gif_pos, 0, "GIF branch not found in convert_file")
+        gif_section = fn[gif_pos: gif_pos + 600]
+        # Ensure quantize result is stored in gif_img, not back into img.
+        # Use a word-boundary check: "img = img.quantize" is only problematic
+        # when NOT preceded by other identifier chars (e.g. "gif_img = img.quantize" is fine).
+        import re
+        bad_pattern = re.compile(r'(?<![A-Za-z0-9_])img\s*=\s*img\.quantize\(')
+        self.assertIsNone(
+            bad_pattern.search(gif_section),
+            "GIF branch must not reassign plain 'img' with quantize (leaks RGBA img); "
+            "use 'gif_img = img.quantize(...)' instead",
+        )
+        self.assertIn(
+            "gif_img",
+            gif_section,
+            "GIF branch must use a 'gif_img' local variable for the palette image",
+        )
+
+    def test_convert_file_gif_img_closed_in_finally(self):
+        """gif_img must be closed inside a try/finally in the GIF branch."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        gif_pos = fn.find('".gif"')
+        gif_section = fn[gif_pos: gif_pos + 600]
+        finally_pos = gif_section.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "GIF branch must have a try/finally for gif_img")
+        close_pos = gif_section.find("gif_img.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "gif_img.close() must appear inside the GIF finally block")
+
+    def test_convert_file_ico_branch_uses_rgba_local(self):
+        """ICO branch must store _ensure_rgba result in a local 'rgba' and
+        close it in try/finally, not reassign img."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        ico_pos = fn.find('".ico"')
+        self.assertGreater(ico_pos, 0, "ICO branch not found in convert_file")
+        ico_section = fn[ico_pos: ico_pos + 400]
+        self.assertNotIn(
+            "img = _ensure_rgba(",
+            ico_section,
+            "ICO branch must not reassign 'img' with _ensure_rgba (leaks old img)",
+        )
+        self.assertIn(
+            "rgba = _ensure_rgba(",
+            ico_section,
+            "ICO branch must store _ensure_rgba result in 'rgba'",
+        )
+
+    def test_convert_file_ico_rgba_guarded_close(self):
+        """ICO rgba must only be closed when it differs from img."""
+        src = self._read(self._FC_SRC)
+        fn = self._fn_src(src, "convert_file")
+        ico_pos = fn.find('".ico"')
+        ico_section = fn[ico_pos: ico_pos + 400]
+        self.assertIn(
+            "if rgba is not img:",
+            ico_section,
+            "ICO branch must guard rgba.close() with 'if rgba is not img:'",
+        )
+
+    # ------------------------------------------------------------------
+    # Bug 2 — save_image: RGBA-to-RGB intermediate not closed
+    # ------------------------------------------------------------------
+
+    def _save_image_src(self) -> str:
+        src = self._read(self._AP_SRC)
+        return self._fn_src(src, "save_image")
+
+    def test_save_image_does_not_reassign_img_with_convert(self):
+        """save_image must NOT use ``img = img.convert('RGB')`` (leaks the
+        original RGBA image).  It must store the result in a local variable."""
+        fn = self._save_image_src()
+        self.assertNotIn(
+            "img = img.convert(",
+            fn,
+            "save_image must not reassign img with convert() (leaks old image); "
+            "use a local variable instead",
+        )
+
+    def test_save_image_uses_img_rgb_local(self):
+        """save_image must store the RGB conversion in a local 'img_rgb'."""
+        fn = self._save_image_src()
+        self.assertIn(
+            "img_rgb",
+            fn,
+            "save_image must use an 'img_rgb' local variable for the RGB copy",
+        )
+
+    def test_save_image_closes_img_rgb_in_finally(self):
+        """save_image must close img_rgb in a try/finally block."""
+        fn = self._save_image_src()
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "save_image must have a try/finally block for img_rgb")
+        close_pos = fn.find("img_rgb.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "img_rgb.close() must appear inside the finally block")
+
+    # ------------------------------------------------------------------
+    # Bug 3 — load_image: non-RGBA source not closed after convert
+    # ------------------------------------------------------------------
+
+    def _load_image_src(self) -> str:
+        src = self._read(self._AP_SRC)
+        return self._fn_src(src, "load_image")
+
+    def test_load_image_does_not_reassign_img_with_convert(self):
+        """load_image must NOT use ``img = img.convert('RGBA')`` (leaks the
+        original image).  It must store the result in a local variable."""
+        fn = self._load_image_src()
+        self.assertNotIn(
+            "img = img.convert(",
+            fn,
+            "load_image must not reassign img with convert() (leaks old image); "
+            "use a local variable instead",
+        )
+
+    def test_load_image_uses_img_rgba_local(self):
+        """load_image must store the RGBA conversion in a local 'img_rgba'."""
+        fn = self._load_image_src()
+        self.assertIn(
+            "img_rgba",
+            fn,
+            "load_image must use an 'img_rgba' local variable for the RGBA copy",
+        )
+
+    def test_load_image_closes_original_after_convert(self):
+        """load_image must close the original PIL image after a successful
+        convert('RGBA') so the non-RGBA data is released promptly."""
+        fn = self._load_image_src()
+        # img.close() must appear after the convert, not inside a finally
+        # (because load_image returns img_rgba and the caller owns that)
+        self.assertIn(
+            "img.close()",
+            fn,
+            "load_image must call img.close() after a successful convert('RGBA')",
+        )
+
+    def test_load_image_closes_original_on_memory_error(self):
+        """load_image must also close the original PIL image when MemoryError
+        is raised by convert('RGBA'), so the file handle / decode buffer is
+        released even in the error path."""
+        fn = self._load_image_src()
+        mem_err_pos = fn.find("except MemoryError:")
+        self.assertGreater(mem_err_pos, 0,
+                           "load_image must have an except MemoryError block")
+        close_pos = fn.find("img.close()", mem_err_pos)
+        self.assertGreater(close_pos, mem_err_pos,
+                           "img.close() must appear inside the except MemoryError block")
