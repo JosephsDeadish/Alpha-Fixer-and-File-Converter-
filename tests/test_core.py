@@ -1561,14 +1561,14 @@ class TestTooltipCorrectness(unittest.TestCase):
     """Source-level checks that tooltip_manager.py has correct text after the
     alpha tool UI redesign (value-first, Advanced section, apply_alpha_check)."""
 
+    _UI_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "ui")
+
     def _tooltip_source(self) -> str:
-        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
-        with open(path) as f:
+        with open(os.path.join(self._UI_DIR, "tooltip_manager.py")) as f:
             return f.read()
 
     def _alpha_tool_source(self) -> str:
-        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
-        with open(path) as f:
+        with open(os.path.join(self._UI_DIR, "alpha_tool.py")) as f:
             return f.read()
 
     # ── apply_alpha_check must be registered ──────────────────────────────────
@@ -1663,3 +1663,67 @@ class TestTooltipCorrectness(unittest.TestCase):
         self.assertNotIn("mode above", block,
                          "_VULGAR alpha_spin tips must not say 'mode above' — the mode "
                          "combo is in the Advanced section below the spinbox")
+
+    # ── finetune_params_lbl: registered + in all 3 dicts ─────────────────────
+
+    def test_finetune_params_lbl_registered_in_alpha_tool(self):
+        """register_tooltips must register _finetune_params_lbl so it gets
+        cycling tips from the tooltip manager instead of just its inline tooltip."""
+        src = self._alpha_tool_source()
+        self.assertIn('mgr.register(self._finetune_params_lbl, "finetune_params_lbl")', src,
+                      "_finetune_params_lbl must be registered with the tooltip manager")
+
+    def test_finetune_params_lbl_key_exists_in_all_tip_dicts(self):
+        """finetune_params_lbl must have entries in _NORMAL, _DUMBED, and _VULGAR."""
+        src = self._tooltip_source()
+        count = src.count('"finetune_params_lbl":')
+        self.assertGreaterEqual(count, 3,
+                                "finetune_params_lbl must appear in _NORMAL, _DUMBED, and _VULGAR "
+                                f"(found {count} occurrence(s))")
+
+    def test_finetune_params_lbl_no_inline_tooltip_in_alpha_tool(self):
+        """_finetune_params_lbl must not set an inline setToolTip() — the
+        TooltipManager owns the tooltip now and the inline call is redundant."""
+        src = self._alpha_tool_source()
+        # Find the finetune_params_lbl construction block
+        lbl_pos = src.find("self._finetune_params_lbl = QLabel")
+        # Scan forward to the next widget creation to bound the search
+        next_widget = src.find("gt_layout.addWidget", lbl_pos + 1)
+        block = src[lbl_pos:next_widget]
+        self.assertNotIn("setToolTip", block,
+                         "_finetune_params_lbl must not have an inline setToolTip() — "
+                         "the TooltipManager provides cycling tips for it now")
+
+    # ── binary_cut_check: no stale "threshold above" reference ────────────────
+
+    def test_binary_cut_check_no_threshold_above(self):
+        """binary_cut_check tips must not say 'threshold ... above' — the threshold
+        spinbox is in the Advanced section BELOW binary_cut in the UI grid."""
+        src = self._tooltip_source()
+        idx = 0
+        while True:
+            pos = src.find('"binary_cut_check":', idx)
+            if pos < 0:
+                break
+            end = src.find("],", pos)
+            block = src[pos:end].lower()
+            self.assertNotIn("threshold spinbox above", block,
+                             "binary_cut_check tips must not say 'threshold spinbox above' — "
+                             "threshold is in Advanced Options below binary_cut")
+            self.assertNotIn("threshold value above", block,
+                             "binary_cut_check tips must not say 'threshold value above' — "
+                             "threshold is in Advanced Options below binary_cut")
+            idx = end + 1
+
+    # ── threshold_spin: no wrong "process only fully transparent" ─────────────
+
+    def test_threshold_255_not_described_as_process_none(self):
+        """threshold_spin tips must not claim threshold=255 processes 'almost nothing'
+        or 'only fully transparent pixels' — it actually skips only alpha=255 pixels."""
+        src = self._tooltip_source()
+        self.assertNotIn("process only fully transparent pixels", src,
+                         "threshold_spin tips must not say '255 = process only fully transparent "
+                         "pixels' — threshold=255 skips only fully opaque pixels (alpha=255)")
+        self.assertNotIn("process almost NONE", src,
+                         "threshold_spin tips must not say 'process almost NONE' for threshold=255 — "
+                         "threshold=255 processes everything except fully opaque pixels")

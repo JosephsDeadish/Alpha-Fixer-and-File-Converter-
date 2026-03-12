@@ -577,10 +577,6 @@ class AlphaFixerTab(QWidget):
         self._finetune_params_lbl.setObjectName("subheader")
         self._finetune_params_lbl.setWordWrap(True)
         self._finetune_params_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._finetune_params_lbl.setToolTip(
-            "Live summary of what will be applied when you click ▶ Process.\n"
-            "Updates instantly as you change any control above."
-        )
         gt_layout.addWidget(self._finetune_params_lbl, 12, 0, 1, 2)
 
         # ── RGBA channel adjustments ────────────────────────────────────────────
@@ -728,6 +724,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._mode_combo, "mode_combo")
         mgr.register(self._threshold_spin, "threshold_spin")
         mgr.register(self._apply_alpha_check, "apply_alpha_check")
+        mgr.register(self._finetune_params_lbl, "finetune_params_lbl")
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
         mgr.register(self._clamp_max_spin, "clamp_max_spin")
         mgr.register(self._invert_check, "invert_check")
