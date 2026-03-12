@@ -52,7 +52,13 @@ def _load_dds(path: str) -> Image.Image:
             with WandImage(filename=path) as wimg:
                 wimg.format = "png"
                 blob = wimg.make_blob()
-            return Image.open(io.BytesIO(blob)).convert("RGBA")
+            _tmp = Image.open(io.BytesIO(blob))
+            try:
+                return _tmp.convert("RGBA")
+            finally:
+                _tmp.close()
+        except MemoryError:
+            raise
         except Exception as exc:
             logger.warning("Wand failed to load DDS %s: %s", path, exc)
     # Fallback: minimal DDS reader using raw BGRA or RGBA data
@@ -78,13 +84,19 @@ def _load_dds_raw(path: str) -> Image.Image:
         # Most common: BGRA → RGBA
         img = Image.fromarray(arr[:, :, [2, 1, 0, 3]], "RGBA")
     else:
-        img = Image.fromarray(arr[:, :, [2, 1, 0]], "RGB").convert("RGBA")
+        _rgb = Image.fromarray(arr[:, :, [2, 1, 0]], "RGB")
+        try:
+            img = _rgb.convert("RGBA")
+        finally:
+            _rgb.close()
     return img
 
 
 def _save_dds(img: Image.Image, path: str):
     """Save a PIL Image as DDS (BGRA uncompressed) via Wand, or fall back to raw."""
     if _has_wand():
+        img_rgba = None
+        buf = None
         try:
             from wand.image import Image as WandImage
             img_rgba = img.convert("RGBA")
@@ -95,16 +107,26 @@ def _save_dds(img: Image.Image, path: str):
                 wimg.format = "dds"
                 wimg.save(filename=path)
             return
+        except MemoryError:
+            raise
         except Exception as exc:
             logger.warning("Wand failed to save DDS %s: %s", path, exc)
+        finally:
+            if img_rgba is not None:
+                img_rgba.close()
+            if buf is not None:
+                buf.close()
     _save_dds_raw(img, path)
 
 
 def _save_dds_raw(img: Image.Image, path: str):
     """Write a minimal uncompressed BGRA DDS file."""
     img_rgba = img.convert("RGBA")
-    w, h = img_rgba.size
-    arr = np.array(img_rgba, dtype=np.uint8)
+    try:
+        w, h = img_rgba.size
+        arr = np.array(img_rgba, dtype=np.uint8)
+    finally:
+        img_rgba.close()
     # Convert RGBA → BGRA
     bgra = arr[:, :, [2, 1, 0, 3]]
     pixel_data = bgra.tobytes()

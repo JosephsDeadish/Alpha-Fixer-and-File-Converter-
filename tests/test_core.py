@@ -2920,3 +2920,165 @@ class TestRound6ResourceHygiene(unittest.TestCase):
                       "_ConverterPreviewLoader.run() must have at least two "
                       "'if save_img is not img:' guards — one in the fallback "
                       "except block and one in the success path")
+
+
+# ---------------------------------------------------------------------------
+# Round-7 resource-hygiene tests
+# ---------------------------------------------------------------------------
+
+class TestRound7DdsHelperResourceHygiene(unittest.TestCase):
+    """Round-7: DDS helper (alpha_processor.py) PIL image and BytesIO resource leaks.
+
+    _load_dds: Image.open(BytesIO(blob)).convert("RGBA") leaked the temporary
+               Image from open(); also except Exception swallowed MemoryError.
+    _load_dds_raw: Image.fromarray(..., "RGB").convert("RGBA") leaked the
+                   intermediate RGB image.
+    _save_dds: img_rgba and buf were never closed when except Exception fired;
+               except Exception also swallowed MemoryError.
+    _save_dds_raw: img_rgba = img.convert("RGBA") was never closed.
+    """
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    def _ap_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "alpha_processor.py")) as f:
+            return f.read()
+
+    def _func_src(self, src: str, func_name: str) -> str:
+        """Extract the source of a top-level function from the module source."""
+        start = src.find(f"\ndef {func_name}(")
+        self.assertGreater(start, 0, f"Function {func_name} not found")
+        next_def = src.find("\ndef ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    # ------------------------------------------------------------------
+    # _load_dds: tmp image closed in try/finally
+    # ------------------------------------------------------------------
+
+    def test_load_dds_tmp_image_closed_in_finally(self):
+        """_load_dds must open the PIL image into _tmp and close it in a
+        try/finally so the raw decoded image is released even if .convert()
+        raises (e.g. MemoryError on very large DDS files)."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_load_dds")
+        self.assertIn("_tmp = Image.open(", fn,
+                      "_load_dds must assign Image.open() to _tmp (not chain .convert())")
+        self.assertIn("_tmp.close()", fn,
+                      "_load_dds must call _tmp.close() to release the opened image")
+        # close must be inside a finally block
+        finally_pos = fn.find("finally:")
+        close_pos = fn.find("_tmp.close()")
+        self.assertGreater(finally_pos, 0, "_load_dds must have a finally block for _tmp")
+        self.assertGreater(close_pos, finally_pos,
+                           "_tmp.close() must appear inside the finally block")
+
+    def test_load_dds_propagates_memory_error(self):
+        """_load_dds must re-raise MemoryError rather than catching it with
+        the broad 'except Exception' fallback used for Wand failures."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_load_dds")
+        self.assertIn("except MemoryError:", fn,
+                      "_load_dds must have 'except MemoryError: raise' before "
+                      "'except Exception'")
+        mem_pos = fn.find("except MemoryError:")
+        exc_pos = fn.find("except Exception")
+        self.assertLess(mem_pos, exc_pos,
+                        "'except MemoryError' must appear before 'except Exception' "
+                        "in _load_dds")
+
+    # ------------------------------------------------------------------
+    # _load_dds_raw: intermediate RGB image closed in try/finally
+    # ------------------------------------------------------------------
+
+    def test_load_dds_raw_rgb_intermediate_closed(self):
+        """_load_dds_raw must assign the fromarray RGB image to a named variable
+        and close it in a try/finally before returning the RGBA copy."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_load_dds_raw")
+        # Intermediate should NOT be chained (.convert() on anonymous fromarray result)
+        self.assertNotIn('.fromarray(arr[:, :, [2, 1, 0]], "RGB").convert("RGBA")', fn,
+                         "_load_dds_raw must NOT chain .convert() on the fromarray result "
+                         "(intermediate RGB image would leak)")
+        self.assertIn("_rgb", fn,
+                      "_load_dds_raw must use a named variable (_rgb) for the "
+                      "intermediate RGB image")
+        self.assertIn("_rgb.close()", fn,
+                      "_load_dds_raw must call _rgb.close() to release the intermediate "
+                      "RGB image")
+
+    # ------------------------------------------------------------------
+    # _save_dds: img_rgba and buf closed in finally
+    # ------------------------------------------------------------------
+
+    def test_save_dds_img_rgba_initialised_to_none(self):
+        """_save_dds must initialise img_rgba = None before the try block so
+        it is always defined in the finally clause even if .convert() raises."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_save_dds")
+        self.assertIn("img_rgba = None", fn,
+                      "_save_dds must initialise 'img_rgba = None' before the try block")
+        # None init must appear before the inner try
+        none_pos = fn.find("img_rgba = None")
+        try_pos = fn.find("try:", none_pos)
+        self.assertGreater(try_pos, none_pos,
+                           "'img_rgba = None' must appear before the try block in _save_dds")
+
+    def test_save_dds_buf_initialised_to_none(self):
+        """_save_dds must initialise buf = None before the try block."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_save_dds")
+        self.assertIn("buf = None", fn,
+                      "_save_dds must initialise 'buf = None' before the try block")
+
+    def test_save_dds_finally_closes_img_rgba(self):
+        """_save_dds must close img_rgba in a finally block."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_save_dds")
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0, "_save_dds must have a finally block")
+        close_pos = fn.find("img_rgba.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "img_rgba.close() must appear inside the finally block in _save_dds")
+
+    def test_save_dds_finally_closes_buf(self):
+        """_save_dds must close buf in a finally block."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_save_dds")
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0, "_save_dds must have a finally block")
+        close_pos = fn.find("buf.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "buf.close() must appear inside the finally block in _save_dds")
+
+    def test_save_dds_propagates_memory_error(self):
+        """_save_dds must re-raise MemoryError before the broad 'except Exception'."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_save_dds")
+        self.assertIn("except MemoryError:", fn,
+                      "_save_dds must have 'except MemoryError: raise'")
+        mem_pos = fn.find("except MemoryError:")
+        exc_pos = fn.find("except Exception")
+        self.assertLess(mem_pos, exc_pos,
+                        "'except MemoryError' must appear before 'except Exception' "
+                        "in _save_dds")
+
+    # ------------------------------------------------------------------
+    # _save_dds_raw: img_rgba closed after np.array()
+    # ------------------------------------------------------------------
+
+    def test_save_dds_raw_closes_img_rgba(self):
+        """_save_dds_raw must close img_rgba (the RGBA-converted copy) as soon
+        as the numpy array has been extracted from it, so the PIL image memory
+        is released promptly."""
+        src = self._ap_source()
+        fn = self._func_src(src, "_save_dds_raw")
+        self.assertIn("img_rgba.close()", fn,
+                      "_save_dds_raw must call img_rgba.close() after np.array() "
+                      "to release the converted PIL image")
+        # close must be inside a finally block
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0, "_save_dds_raw must have a finally block")
+        close_pos = fn.find("img_rgba.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "img_rgba.close() must be inside the finally block in "
+                           "_save_dds_raw so it runs even if np.array() raises")
