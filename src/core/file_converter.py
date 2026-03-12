@@ -185,6 +185,11 @@ def convert_file(
 
     if resize:
         try:
+            # int() intentionally truncates floats (e.g. 100.9 → 100).
+            # Image dimensions are always whole pixels; callers should pass
+            # integer values, but fractional values are silently floored here
+            # to be lenient with minor rounding errors from UI spinboxes or
+            # computed aspect-ratio widths/heights.
             w, h = int(resize[0]), int(resize[1])
         except (TypeError, ValueError):
             raise ValueError(
@@ -241,73 +246,85 @@ def convert_file(
             pass
         return kw
 
-    # --- DDS (custom writer, needs RGBA) ---
-    if ext == ".dds":
-        _save_dds(_ensure_rgba(img), output_path)
+    # Capture final image dimensions before format-specific conversions may
+    # change the image object, so any MemoryError message has accurate context.
+    _save_w, _save_h = img.size
+
+    try:
+        # --- DDS (custom writer, needs RGBA) ---
+        if ext == ".dds":
+            _save_dds(_ensure_rgba(img), output_path)
+            return output_path
+
+        # --- JPEG (no alpha, RGB or L only) ---
+        if ext in (".jpg", ".jpeg"):
+            img = _flatten_alpha(img)
+            img.save(output_path, quality=quality, **_meta_kwargs(ext))
+            return output_path
+
+        # --- BMP (no alpha; standard viewers expect RGB or L) ---
+        if ext == ".bmp":
+            img = _flatten_alpha(img)
+            img.save(output_path)
+            return output_path
+
+        # --- PPM (RGB only, no alpha) ---
+        if ext == ".ppm":
+            img = _flatten_alpha(img)
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            img.save(output_path)
+            return output_path
+
+        # --- PCX (RGB or P, no alpha) ---
+        if ext == ".pcx":
+            img = _flatten_alpha(img)
+            img.save(output_path)
+            return output_path
+
+        # --- GIF (palette mode; optionally 1-colour transparency) ---
+        if ext == ".gif":
+            if img.mode == "RGBA":
+                # Quantise to palette preserving transparency
+                img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
+            elif img.mode not in ("P", "L", "1"):
+                img = img.convert("P")
+            img.save(output_path)
+            return output_path
+
+        # --- ICO (needs RGBA for proper transparency) ---
+        if ext == ".ico":
+            img = _ensure_rgba(img)
+            img.save(output_path, sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+            return output_path
+
+        # --- WEBP (supports RGB and RGBA, quality applies) ---
+        if ext == ".webp":
+            img.save(output_path, quality=quality, **_meta_kwargs(ext))
+            return output_path
+
+        # --- AVIF (supports RGB and RGBA, quality applies) ---
+        if ext == ".avif":
+            img.save(output_path, quality=quality, **_meta_kwargs(ext))
+            return output_path
+
+        # --- QOI (supports RGB and RGBA) ---
+        if ext == ".qoi":
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "PA") else "RGB")
+            img.save(output_path)
+            return output_path
+
+        # --- Default: PNG, TIFF, TGA – all support RGBA; preserve mode ---
+        img.save(output_path, **_meta_kwargs(ext))
         return output_path
 
-    # --- JPEG (no alpha, RGB or L only) ---
-    if ext in (".jpg", ".jpeg"):
-        img = _flatten_alpha(img)
-        img.save(output_path, quality=quality, **_meta_kwargs(ext))
-        return output_path
-
-    # --- BMP (no alpha; standard viewers expect RGB or L) ---
-    if ext == ".bmp":
-        img = _flatten_alpha(img)
-        img.save(output_path)
-        return output_path
-
-    # --- PPM (RGB only, no alpha) ---
-    if ext == ".ppm":
-        img = _flatten_alpha(img)
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        img.save(output_path)
-        return output_path
-
-    # --- PCX (RGB or P, no alpha) ---
-    if ext == ".pcx":
-        img = _flatten_alpha(img)
-        img.save(output_path)
-        return output_path
-
-    # --- GIF (palette mode; optionally 1-colour transparency) ---
-    if ext == ".gif":
-        if img.mode == "RGBA":
-            # Quantise to palette preserving transparency
-            img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
-        elif img.mode not in ("P", "L", "1"):
-            img = img.convert("P")
-        img.save(output_path)
-        return output_path
-
-    # --- ICO (needs RGBA for proper transparency) ---
-    if ext == ".ico":
-        img = _ensure_rgba(img)
-        img.save(output_path, sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
-        return output_path
-
-    # --- WEBP (supports RGB and RGBA, quality applies) ---
-    if ext == ".webp":
-        img.save(output_path, quality=quality, **_meta_kwargs(ext))
-        return output_path
-
-    # --- AVIF (supports RGB and RGBA, quality applies) ---
-    if ext == ".avif":
-        img.save(output_path, quality=quality, **_meta_kwargs(ext))
-        return output_path
-
-    # --- QOI (supports RGB and RGBA) ---
-    if ext == ".qoi":
-        if img.mode not in ("RGB", "RGBA"):
-            img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "PA") else "RGB")
-        img.save(output_path)
-        return output_path
-
-    # --- Default: PNG, TIFF, TGA – all support RGBA; preserve mode ---
-    img.save(output_path, **_meta_kwargs(ext))
-    return output_path
+    except MemoryError:
+        raise MemoryError(
+            f"Not enough memory to save {_save_w}×{_save_h} image "
+            f"({_save_w * _save_h / 1_000_000:.1f} megapixels) as "
+            f"{ext.lstrip('.')}. Try a smaller resize target or a lower quality setting."
+        )
 
 
 def build_output_path(

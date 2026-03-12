@@ -2427,3 +2427,199 @@ class TestRound3Hardening(unittest.TestCase):
         run_src = self._run_method_source(src)
         self.assertIn(".disconnect()", run_src,
                       "ConverterTool._run() must call .disconnect() on old worker signals")
+
+
+# ---------------------------------------------------------------------------
+# Round-4 crash/hang/resource prevention tests
+# ---------------------------------------------------------------------------
+
+class TestRound4Hardening(unittest.TestCase):
+    """Round-4: save_image MemoryError guard, convert_file MemoryError guard,
+    main_window lambda fix + overlay stop in closeEvent, history_tab StringIO
+    context manager."""
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    # ------------------------------------------------------------------
+    # alpha_processor – save_image() MemoryError guards
+    # ------------------------------------------------------------------
+
+    def _alpha_processor_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "alpha_processor.py")) as f:
+            return f.read()
+
+    def test_save_image_has_memoryerror_guard_in_source(self):
+        """save_image() must wrap img.convert('RGB') and img.save() in
+        MemoryError guards consistent with the rest of the module."""
+        src = self._alpha_processor_source()
+        save_pos = src.find("def save_image(")
+        next_def = src.find("\ndef ", save_pos + 1)
+        fn_src = src[save_pos:next_def]
+        self.assertIn("MemoryError", fn_src,
+                      "save_image() must have MemoryError guards")
+        self.assertIn("megapixels", fn_src,
+                      "save_image() MemoryError must include 'megapixels' context")
+
+    def test_save_image_convert_wraps_memoryerror(self):
+        """save_image() must re-raise MemoryError from img.convert with context."""
+        from unittest.mock import patch, MagicMock
+        from src.core.alpha_processor import save_image
+        import tempfile
+        img = make_rgba_image(4, 4, alpha=128)
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            tmp = f.name
+        try:
+            with patch.object(img, "convert", side_effect=MemoryError("OOM")):
+                with self.assertRaises(MemoryError) as ctx:
+                    save_image(img, tmp, ".jpg")
+            self.assertIn("megapixels", str(ctx.exception))
+        finally:
+            os.unlink(tmp)
+
+    def test_save_image_write_wraps_memoryerror(self):
+        """save_image() must re-raise MemoryError from img.save with context."""
+        from unittest.mock import patch, MagicMock
+        from src.core.alpha_processor import save_image
+        import tempfile
+        img = make_rgba_image(4, 4, alpha=200)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            tmp = f.name
+        try:
+            with patch.object(img, "save", side_effect=MemoryError("OOM")):
+                with self.assertRaises(MemoryError) as ctx:
+                    save_image(img, tmp, ".png")
+            self.assertIn("megapixels", str(ctx.exception))
+        finally:
+            os.unlink(tmp)
+
+    # ------------------------------------------------------------------
+    # file_converter – convert_file() MemoryError guard
+    # ------------------------------------------------------------------
+
+    def _file_converter_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "file_converter.py")) as f:
+            return f.read()
+
+    def test_convert_file_has_memoryerror_guard(self):
+        """convert_file() format-dispatch block must be wrapped in a single
+        MemoryError guard that provides W×H context."""
+        src = self._file_converter_source()
+        fn_pos = src.find("def convert_file(")
+        fn_end = src.find("\ndef ", fn_pos + 1)
+        fn_src = src[fn_pos:fn_end]
+        self.assertIn("except MemoryError", fn_src,
+                      "convert_file() must have a MemoryError guard")
+        self.assertIn("megapixels", fn_src,
+                      "convert_file() MemoryError message must include 'megapixels'")
+        # The guard must cover all the format branches — they must all be
+        # inside a try block
+        self.assertIn("try:", fn_src,
+                      "convert_file() must use try/except for the format dispatch block")
+
+    def test_convert_file_save_memoryerror_gives_context(self):
+        """convert_file() must re-raise MemoryError from img.save with W×H context."""
+        from unittest.mock import patch
+        from PIL import Image
+        from src.core.file_converter import convert_file
+        import tempfile
+        # Create a small PNG source
+        src_img = make_rgba_image(4, 4, alpha=200)
+        with (
+            tempfile.NamedTemporaryFile(suffix=".png", delete=False) as sf,
+            tempfile.NamedTemporaryFile(suffix=".png", delete=False) as df,
+        ):
+            src_img.save(sf.name)
+            src_path = sf.name
+            dst_path = df.name
+        try:
+            # Patch Image.open to return our known image, then patch its save to OOM
+            with patch("src.core.file_converter.Image.open") as mock_open:
+                mock_img = MagicMock(wraps=src_img)
+                mock_img.size = (4, 4)
+                mock_img.mode = "RGBA"
+                mock_img.info = {}
+                mock_img.save = MagicMock(side_effect=MemoryError("OOM"))
+                mock_open.return_value = mock_img
+                with self.assertRaises(MemoryError) as ctx:
+                    convert_file(src_path, dst_path, "PNG")
+            self.assertIn("megapixels", str(ctx.exception))
+        finally:
+            os.unlink(src_path)
+            os.unlink(dst_path)
+
+    # ------------------------------------------------------------------
+    # main_window – lambda → named method
+    # ------------------------------------------------------------------
+
+    def _main_window_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "main_window.py")) as f:
+            return f.read()
+
+    def test_schedule_unlock_clear_uses_named_method(self):
+        """_schedule_unlock_clear() must use a named method instead of a lambda
+        so that the callback is safe even if the window starts closing before
+        the 6-second timeout fires."""
+        src = self._main_window_source()
+        fn_pos = src.find("def _schedule_unlock_clear(")
+        next_method = src.find("\n    def ", fn_pos + 1)
+        fn_src = src[fn_pos:next_method]
+        # The connection must NOT use a bare lambda expression
+        self.assertNotIn(".connect(lambda", fn_src,
+                         "_schedule_unlock_clear() must not use a lambda connection")
+        self.assertIn("_clear_unlock_label", fn_src,
+                      "_schedule_unlock_clear() must connect to _clear_unlock_label")
+
+    def test_clear_unlock_label_method_exists_and_guards_none(self):
+        """_clear_unlock_label() method must exist and guard _unlock_lbl is not None."""
+        src = self._main_window_source()
+        self.assertIn("def _clear_unlock_label", src,
+                      "MainWindow must have a _clear_unlock_label() method")
+        fn_pos = src.find("def _clear_unlock_label")
+        next_method = src.find("\n    def ", fn_pos + 1)
+        fn_src = src[fn_pos:next_method]
+        self.assertIn("_unlock_lbl is not None", fn_src,
+                      "_clear_unlock_label() must guard against _unlock_lbl being None")
+
+    # ------------------------------------------------------------------
+    # main_window – closeEvent stops overlays
+    # ------------------------------------------------------------------
+
+    def test_closeevent_stops_click_effects(self):
+        """closeEvent must call set_enabled(False) on _click_effects to remove
+        the event filter and stop animation timers before teardown."""
+        src = self._main_window_source()
+        close_pos = src.find("def closeEvent(")
+        next_method = src.find("\n    def ", close_pos + 1)
+        close_src = src[close_pos:next_method]
+        self.assertIn("_click_effects", close_src,
+                      "closeEvent must handle _click_effects")
+        self.assertIn("set_enabled(False)", close_src,
+                      "closeEvent must call set_enabled(False) on overlays")
+
+    def test_closeevent_stops_trail_overlay(self):
+        """closeEvent must call set_enabled(False) on _trail_overlay to stop
+        the mouse trail timer and event filter before teardown."""
+        src = self._main_window_source()
+        close_pos = src.find("def closeEvent(")
+        next_method = src.find("\n    def ", close_pos + 1)
+        close_src = src[close_pos:next_method]
+        self.assertIn("_trail_overlay", close_src,
+                      "closeEvent must handle _trail_overlay")
+
+    # ------------------------------------------------------------------
+    # history_tab – io.StringIO context manager
+    # ------------------------------------------------------------------
+
+    def _history_tab_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "history_tab.py")) as f:
+            return f.read()
+
+    def test_export_csv_uses_stringio_context_manager(self):
+        """_export_csv() must use io.StringIO as a context manager (with block)
+        to guarantee buffer cleanup on any exit path."""
+        src = self._history_tab_source()
+        fn_pos = src.find("def _export_csv(")
+        next_method = src.find("\n    def ", fn_pos + 1)
+        fn_src = src[fn_pos:next_method]
+        self.assertIn("with io.StringIO", fn_src,
+                      "_export_csv() must use 'with io.StringIO(...)' context manager")

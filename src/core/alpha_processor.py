@@ -161,8 +161,24 @@ def save_image(img: Image.Image, path: str, original_ext: str):
         _save_dds(img, path)
         return
     if ext in (".jpg", ".jpeg", ".bmp"):
-        img = img.convert("RGB")
-    img.save(path)
+        w, h = img.size
+        try:
+            img = img.convert("RGB")
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to convert {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to RGB for {ext}. "
+                "Try processing a smaller file."
+            )
+    w, h = img.size
+    try:
+        img.save(path)
+    except MemoryError:
+        raise MemoryError(
+            f"Not enough memory to write {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+            "Try processing a smaller file."
+        )
 
 
 def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
