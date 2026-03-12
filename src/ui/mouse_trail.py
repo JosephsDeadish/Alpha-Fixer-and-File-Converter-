@@ -71,6 +71,16 @@ class MouseTrailOverlay(QWidget):
         self._fade_speed: int = 5    # 1=slowest … 10=fastest; maps to decay per tick
         self._intensity: int = 100   # 10–100 %  max rendered alpha (220 × intensity/100)
 
+        # Throttle MouseMove events: only append a new trail point when the
+        # cursor has moved at least this many pixels from the last recorded
+        # point.  High-DPI mice can fire hundreds of events per second; without
+        # throttling the deque fills up instantly, random.choice() runs on
+        # every event, and the tick loop processes far more entries than needed.
+        self._last_trail_x: int = -9999
+        self._last_trail_y: int = -9999
+        _MIN_MOVE_PX = 4  # minimum pixel distance before adding a new trail point
+        self._min_move_sq: int = _MIN_MOVE_PX * _MIN_MOVE_PX
+
         self._timer = QTimer(self)
         self._timer.setInterval(33)  # ~30 fps – smoother trail fade without hogging CPU
         self._timer.timeout.connect(self._tick)
@@ -90,15 +100,21 @@ class MouseTrailOverlay(QWidget):
         if self._enabled == enabled:
             return
         self._enabled = enabled
+        app = QApplication.instance()
         if enabled:
-            QApplication.instance().installEventFilter(self)
+            if app is not None:
+                app.installEventFilter(self)
             self._timer.start()
             self.raise_()
             self.show()
         else:
-            QApplication.instance().removeEventFilter(self)
+            if app is not None:
+                app.removeEventFilter(self)
             self._timer.stop()
             self._trail.clear()
+            # Reset throttle state so the next enable sees a fresh start.
+            self._last_trail_x = -9999
+            self._last_trail_y = -9999
             self.hide()
 
     def set_color(self, color: str) -> None:
@@ -140,10 +156,21 @@ class MouseTrailOverlay(QWidget):
             try:
                 global_pos = event.globalPosition().toPoint()
                 local = self._main_window.mapFromGlobal(global_pos)
+                lx, ly = local.x(), local.y()
+                # Throttle: skip if cursor has not moved far enough from the
+                # last recorded point.  High-DPI mice emit hundreds of events
+                # per second; recording every one bloats the deque and calls
+                # random.choice() far more than necessary.
+                dx = lx - self._last_trail_x
+                dy = ly - self._last_trail_y
+                if dx * dx + dy * dy < self._min_move_sq:
+                    return False
+                self._last_trail_x = lx
+                self._last_trail_y = ly
                 # Store extra data for emoji styles: which emoji to show
                 emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
                 emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
-                self._trail.append([local.x(), local.y(), 1.0, emoji])
+                self._trail.append([lx, ly, 1.0, emoji])
             except AttributeError:
                 pass
 

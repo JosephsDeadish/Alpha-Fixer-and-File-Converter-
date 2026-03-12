@@ -59,6 +59,7 @@ class HistoryTab(QWidget):
 
         hdr = QLabel("📋  Processing History")
         hdr.setObjectName("header")
+        self._hdr = hdr
         layout.addWidget(hdr)
 
         btn_row = QHBoxLayout()
@@ -138,6 +139,24 @@ class HistoryTab(QWidget):
         mgr.register(self._alpha_tree, "history_alpha_tree")
         mgr.register(self._conv_summary, "history_conv_summary")
         mgr.register(self._alpha_summary, "history_alpha_summary")
+
+    # ------------------------------------------------------------------
+    # Theme
+    # ------------------------------------------------------------------
+
+    def update_theme(self, theme_name: str) -> None:
+        """Update the inner header and sub-tab labels to match the active theme."""
+        from .theme_engine import get_theme_tab_labels, get_theme_icon
+        labels = get_theme_tab_labels(theme_name)
+        # labels[2] is e.g. "📋🐼  History" — extract the emoji prefix and
+        # rebuild the descriptive inner header title.
+        history_label = labels[2]
+        prefix = history_label.split("  ", 1)[0] if "  " in history_label else "📋"
+        self._hdr.setText(f"{prefix}  Processing History")
+        # Decorate the converter/alpha-fixer sub-tab labels with the theme icon.
+        icon = get_theme_icon(theme_name)
+        self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
+        self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha Fixer")
 
     # ------------------------------------------------------------------
     # Refresh

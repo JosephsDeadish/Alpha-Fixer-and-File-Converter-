@@ -78,14 +78,16 @@ class ConverterTab(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
 
-        # ---- Left: input files + preview ----
+        # ---- Left: input files (scrollable) + preview (always visible) ----
         left = QWidget()
         left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 6, 0)
+        lv.setSpacing(6)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
+        self._lbl_files = lbl_files
         lv.addWidget(lbl_files)
 
         btn_row = QHBoxLayout()
@@ -103,23 +105,10 @@ class ConverterTab(QWidget):
         )
         lv.addWidget(self._recursive_check)
 
-        self._file_list = DropFileList()
-        self._file_list.setMinimumHeight(180)
-        self._file_list.setToolTip(
-            "Files queued for conversion.\n"
-            "• Drag files/folders here from Explorer/Finder\n"
-            "• Delete key or right-click → Remove Selected\n"
-            "• Right-click → Thumbnails to toggle image previews"
-        )
-        lv.addWidget(self._file_list, 1)
-
-        self._file_count_lbl = QLabel("0 files  |  F5 to convert  |  Esc to stop")
-        self._file_count_lbl.setObjectName("subheader")
-        lv.addWidget(self._file_count_lbl)
-
         # Output folder – placed here (adjacent to input) so source and
         # destination are together and the layout reads top-to-bottom.
         grp_out = QGroupBox("Output")
+        self._grp_out = grp_out
         go_layout = QGridLayout(grp_out)
         go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
@@ -127,6 +116,12 @@ class ConverterTab(QWidget):
         go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
+        # Explicit row minimum heights prevent the nested QHBoxLayout in row 0
+        # from causing the two rows to visually overlap on some platforms.
+        # 40 px gives comfortable clearance for 28 px widgets plus any
+        # platform-default margins the nested QHBoxLayout may add.
+        go_layout.setRowMinimumHeight(0, 40)
+        go_layout.setRowMinimumHeight(1, 40)
 
         lbl_out = QLabel("Output folder:")
         lbl_out.setMinimumWidth(100)
@@ -152,16 +147,63 @@ class ConverterTab(QWidget):
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
         self._suffix_edit.setMinimumHeight(28)
+        saved_suffix = self._settings.get("output_suffix", "")
+        if saved_suffix:
+            self._suffix_edit.setText(saved_suffix)
         go_layout.addWidget(self._suffix_edit, 1, 1)
 
         lv.addWidget(grp_out)
 
-        # Preview pane
+        # ---- File list area (inside the scrollable controls panel) ----
+        list_area = QWidget()
+        la_layout = QVBoxLayout(list_area)
+        la_layout.setContentsMargins(0, 0, 0, 0)
+        la_layout.setSpacing(4)
+
+        self._file_list = DropFileList()
+        self._file_list.setMinimumHeight(120)
+        self._file_list.setToolTip(
+            "Files queued for conversion.\n"
+            "• Drag files/folders here from Explorer/Finder\n"
+            "• Delete key or right-click → Remove Selected\n"
+            "• Right-click → Thumbnails to toggle image previews"
+        )
+        la_layout.addWidget(self._file_list, 1)
+
+        self._file_count_lbl = QLabel("0 files  |  F5 to convert  |  Esc to stop")
+        self._file_count_lbl.setObjectName("subheader")
+        la_layout.addWidget(self._file_count_lbl)
+
+        lv.addWidget(list_area, 1)
+
+        # Wrap controls + file-list in a scroll area so they remain
+        # accessible on smaller windows.  The preview pane lives OUTSIDE
+        # this scroll area so it is never hidden by a layout size constraint.
+        # Do NOT set an explicit minimum height here: the QVBoxLayout already
+        # computes a natural minimum (~370 px) from its children, and the
+        # scroll area respects that value.  An explicit override smaller than
+        # the natural minimum (e.g. 300 px) would allow the scroll area to
+        # squish the widget below its natural minimum, causing rows in the
+        # Output group-box and the file list to visually overlap.
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        # ---- Preview pane (outside scroll area, always visible) ----
         self._preview = ImagePreviewPane()
         self._preview.setMinimumHeight(220)
-        lv.addWidget(self._preview, 1)
 
-        splitter.addWidget(left)
+        # Left column: vertical splitter – controls/file-list on top
+        # (scrollable), preview on the bottom (always fully visible).
+        # This matches the layout structure used by the Alpha Fixer tab.
+        left_vsplit = QSplitter(Qt.Orientation.Vertical)
+        left_vsplit.setChildrenCollapsible(False)
+        left_vsplit.setMinimumWidth(320)
+        left_vsplit.addWidget(left_scroll)
+        left_vsplit.addWidget(self._preview)
+        left_vsplit.setSizes([420, 280])
+        splitter.addWidget(left_vsplit)
 
         # ---- Right: options ----
         right = QWidget()
@@ -192,6 +234,7 @@ class ConverterTab(QWidget):
 
         # Output format
         grp_fmt = QGroupBox("Output Format")
+        self._grp_fmt = grp_fmt
         gf_layout = QGridLayout(grp_fmt)
         gf_layout.setContentsMargins(10, 14, 10, 12)
         gf_layout.setColumnStretch(0, 0)
@@ -242,6 +285,7 @@ class ConverterTab(QWidget):
 
         # Resize (optional)
         grp_resize = QGroupBox("Resize (optional)")
+        self._grp_resize = grp_resize
         gr_layout = QGridLayout(grp_resize)
         gr_layout.setContentsMargins(10, 14, 10, 12)
         gr_layout.setColumnStretch(0, 0)
@@ -306,8 +350,11 @@ class ConverterTab(QWidget):
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
         self._resize_check.toggled.connect(self._height_spin.setEnabled)
         self._resize_check.toggled.connect(self._lock_aspect_check.setEnabled)
-        # When width changes and lock is on, update height proportionally
+        # When width or height changes and lock is on, update the other dimension
+        # proportionally.  Both directions must be handled so the user can type
+        # in either field and have the other update automatically.
         self._width_spin.valueChanged.connect(self._on_width_changed)
+        self._height_spin.valueChanged.connect(self._on_height_changed)
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
@@ -317,6 +364,13 @@ class ConverterTab(QWidget):
         self._quality_spin.valueChanged.connect(self._on_quality_changed)
         self._keep_metadata_check.toggled.connect(
             lambda v: self._settings.set("converter_keep_metadata", v)
+        )
+        # Persist recursive checkbox and suffix on change
+        self._recursive_check.toggled.connect(
+            lambda v: self._settings.set("converter_recursive", v)
+        )
+        self._suffix_edit.textChanged.connect(
+            lambda t: self._settings.set("output_suffix", t)
         )
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
@@ -358,14 +412,21 @@ class ConverterTab(QWidget):
         mgr.register(self._lock_aspect_check, "lock_aspect_check")
 
     def update_theme(self, theme_name: str) -> None:
-        """Update the inner header label to match the active theme's tab emoji."""
-        from .theme_engine import get_theme_tab_labels
+        """Update inner header, section labels and group-box titles to match the active theme."""
+        from .theme_engine import get_theme_tab_labels, get_theme_icon
         labels = get_theme_tab_labels(theme_name)
         # labels[1] is e.g. "🩸🔄  Converter" – extract the emoji prefix by splitting on
         # the first double-space separator, then rebuild with "File Converter" as the title.
         converter_label = labels[1]
         prefix = converter_label.split("  ", 1)[0] if "  " in converter_label else ""
         self._hdr.setText(f"{prefix}  File Converter")
+        # Decorate section labels and group-box titles with the theme's representative icon.
+        icon = get_theme_icon(theme_name)
+        self._lbl_files.setText(f"{icon}  Input Files / Folders  (drag & drop supported)")
+        self._grp_out.setTitle(f"{icon}  Output")
+        self._grp_fmt.setTitle(f"{icon}  Output Format")
+        self._grp_resize.setTitle(f"{icon}  Resize (optional)")
+        self._preview.update_theme(icon)
 
     # ------------------------------------------------------------------
     # File management
@@ -457,6 +518,32 @@ class ConverterTab(QWidget):
             self._height_spin.blockSignals(True)
             self._height_spin.setValue(new_h)
             self._height_spin.blockSignals(False)
+
+    def _on_height_changed(self, height: int) -> None:
+        """Update width proportionally when lock aspect ratio is checked."""
+        if not (self._lock_aspect_check.isChecked() and
+                self._resize_check.isChecked()):
+            return
+        # Use cached aspect ratio to avoid re-opening the file on every tick
+        if self._cached_aspect is None:
+            row = self._file_list.currentRow()
+            item = self._file_list.item(row)
+            if item:
+                try:
+                    from PIL import Image
+                    with Image.open(item.text()) as im:
+                        self._cached_aspect = im.size
+                except Exception:
+                    return
+        if self._cached_aspect is None:
+            return
+        orig_w, orig_h = self._cached_aspect
+        if orig_h > 0:
+            new_w = max(1, round(height * orig_w / orig_h))
+            # Block signals to avoid recursive update
+            self._width_spin.blockSignals(True)
+            self._width_spin.setValue(new_w)
+            self._width_spin.blockSignals(False)
 
     def _update_converted_preview(self):
         """Refresh the preview pane to reflect the current format and quality."""

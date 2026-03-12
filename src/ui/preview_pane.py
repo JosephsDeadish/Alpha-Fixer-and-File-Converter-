@@ -74,7 +74,7 @@ class _ThumbLoader(QThread):
     loaded = pyqtSignal(QImage, str)   # (thumbnail_qimage, metadata_text)
     failed = pyqtSignal(str)           # error message
 
-    def __init__(self, path: str, max_size: int = 260):
+    def __init__(self, path: str, max_size: int = 512):
         super().__init__()
         self._path = path
         self._max_size = max_size
@@ -129,7 +129,7 @@ class _ConvertedThumbLoader(QThread):
     failed = pyqtSignal(str)
 
     def __init__(self, path: str, target_fmt: str, quality: int,
-                 max_size: int = 260):
+                 max_size: int = 512):
         super().__init__()
         self._path = path
         self._target_fmt = target_fmt.upper()
@@ -483,11 +483,24 @@ class ImagePreviewPane(QWidget):
     """
     Drop-in side-panel.  Call ``show_file(path)`` to load a preview.
     Call ``clear()`` to reset to the placeholder.
+
+    The loaded pixmap is kept in ``_current_pix`` and re-scaled every time the
+    widget is resized so the image always fills the available space without
+    being clipped.
     """
+
+    # Minimum dimensions (px) used when the label has not been laid out yet.
+    _PLACEHOLDER_MIN_WIDTH: int = 200
+    _PLACEHOLDER_MIN_HEIGHT: int = 140
+    # Ignore resize events where the label is thinner/shorter than this (px).
+    _MIN_DISPLAY_SIZE: int = 4
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._loader: _ThumbLoader | None = None
+        # Full-resolution pixmap received from the loader thread.  Stored so
+        # it can be re-scaled to whatever size the pane has at any given time.
+        self._current_pix: QPixmap | None = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -498,6 +511,7 @@ class ImagePreviewPane(QWidget):
         title = QLabel("Preview")
         title.setObjectName("section")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_lbl = title
         layout.addWidget(title)
 
         frame = QFrame()
@@ -525,13 +539,43 @@ class ImagePreviewPane(QWidget):
         self._set_placeholder()
 
     def _set_placeholder(self):
-        size = 200
-        checker = _make_checker(size, size, sq=20)
+        w = max(self._img_label.width(), self._PLACEHOLDER_MIN_WIDTH)
+        h = max(self._img_label.height(), self._PLACEHOLDER_MIN_HEIGHT)
+        checker = _make_checker(w, h, sq=20)
         self._img_label.setPixmap(checker)
+
+    def _update_display_pix(self):
+        """Scale ``_current_pix`` to fill the current label size."""
+        if self._current_pix is None:
+            return
+        available = self._img_label.size()
+        if available.width() < self._MIN_DISPLAY_SIZE or available.height() < self._MIN_DISPLAY_SIZE:
+            return
+        scaled = self._current_pix.scaled(
+            available,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._img_label.setPixmap(scaled)
+
+    # ------------------------------------------------------------------
+    # Qt event override
+    # ------------------------------------------------------------------
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._current_pix is not None:
+            self._update_display_pix()
+        else:
+            self._set_placeholder()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def update_theme(self, icon: str) -> None:
+        """Update the Preview title label to include *icon* (the theme emoji)."""
+        self._title_lbl.setText(f"{icon}  Preview")
 
     def show_file(self, path: str):
         if not path or not os.path.isfile(path):
@@ -567,6 +611,7 @@ class ImagePreviewPane(QWidget):
         self._loader.start()
 
     def clear(self):
+        self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText("Select a file to preview")
 
@@ -575,24 +620,28 @@ class ImagePreviewPane(QWidget):
     # ------------------------------------------------------------------
 
     def _on_loaded(self, qimg: QImage, meta: str):
-        pix = QPixmap.fromImage(qimg)
-        available = self._img_label.size()
+        # Store the full pixmap so _update_display_pix can re-scale it any
+        # time the pane changes size (e.g., window resize or splitter drag).
+        self._current_pix = QPixmap.fromImage(qimg)
         # Guard against a zero/tiny label size when the widget hasn't been
         # laid out yet (the thread may finish before the first layout pass).
+        available = self._img_label.size()
         if available.width() < 20 or available.height() < 20:
-            # Use a sensible fallback so the image is still visible.
-            available = QSize(max(pix.width(), 200), max(pix.height(), 180))
-        if not available.isEmpty():
-            scaled = pix.scaled(
+            available = QSize(
+                max(self._current_pix.width(), self._PLACEHOLDER_MIN_WIDTH),
+                max(self._current_pix.height(), self._PLACEHOLDER_MIN_HEIGHT),
+            )
+            scaled = self._current_pix.scaled(
                 available,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self._img_label.setPixmap(scaled)
         else:
-            self._img_label.setPixmap(pix)
+            self._update_display_pix()
         self._meta_label.setText(meta)
 
     def _on_failed(self, err: str):
+        self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText(f"Preview unavailable\n{err[:80]}")

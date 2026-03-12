@@ -8,7 +8,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
+    QComboBox, QCompleter, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
 )
@@ -19,6 +19,11 @@ from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
 _THEME_PREFIX_CHARS = "★🔓 "
+
+# Maximum character length accepted as a directly-typed custom emoji.
+# Emoji can be multi-codepoint sequences (e.g. 🏴‍☠️ = 7 code units) but are
+# never longer than ~8 chars; this guards against adding entire search strings.
+_MAX_CUSTOM_EMOJI_LEN = 8
 
 # Trail slider range constants
 _TRAIL_LENGTH_MIN = 10
@@ -263,17 +268,124 @@ class SettingsDialog(QDialog):
         effect_layout.addLayout(effect_inner)
         effect_emoji_row.addWidget(grp_effect, 3)
 
-        grp_emoji = QGroupBox("Custom Emoji  (with 'Custom' effect)")
+        # Curated emoji palette for the custom click-effect picker.
+        # Each entry is (emoji_char, display_label).  The label is shown in the
+        # dropdown so users know exactly what they're selecting without needing
+        # an emoji keyboard.
+        _EMOJI_PALETTE = [
+            # ── Sparkles & Stars ────────────────────────────────────────────
+            ("✨", "✨  Sparkle"),
+            ("⭐", "⭐  Star"),
+            ("💫", "💫  Dizzy Star"),
+            ("🌟", "🌟  Glowing Star"),
+            ("🌠", "🌠  Shooting Star"),
+            # ── Fire & Elements ─────────────────────────────────────────────
+            ("🔥", "🔥  Fire"),
+            ("❄", "❄  Snowflake"),
+            ("💧", "💧  Water Drop"),
+            ("⚡", "⚡  Lightning"),
+            ("💥", "💥  Explosion"),
+            ("💨", "💨  Wind"),
+            # ── Hearts & Gems ────────────────────────────────────────────────
+            ("❤️", "❤️  Red Heart"),
+            ("💜", "💜  Purple Heart"),
+            ("💙", "💙  Blue Heart"),
+            ("💚", "💚  Green Heart"),
+            ("💛", "💛  Yellow Heart"),
+            ("🧡", "🧡  Orange Heart"),
+            ("🖤", "🖤  Black Heart"),
+            ("💎", "💎  Diamond"),
+            # ── Celebration ─────────────────────────────────────────────────
+            ("🎉", "🎉  Party Popper"),
+            ("🎊", "🎊  Confetti Ball"),
+            ("🎈", "🎈  Balloon"),
+            ("🎀", "🎀  Ribbon"),
+            ("🌈", "🌈  Rainbow"),
+            # ── Nature & Flowers ────────────────────────────────────────────
+            ("🌸", "🌸  Cherry Blossom"),
+            ("🌺", "🌺  Hibiscus"),
+            ("🌼", "🌼  Blossom"),
+            ("🌻", "🌻  Sunflower"),
+            ("🍀", "🍀  Four Leaf Clover"),
+            ("🍁", "🍁  Maple Leaf"),
+            # ── Animals ──────────────────────────────────────────────────────
+            ("🐼", "🐼  Panda"),
+            ("🦦", "🦦  Otter"),
+            ("🦋", "🦋  Butterfly"),
+            ("🐱", "🐱  Cat"),
+            ("🐸", "🐸  Frog"),
+            ("🦊", "🦊  Fox"),
+            ("🦄", "🦄  Unicorn"),
+            ("🐝", "🐝  Bee"),
+            # ── Sea Creatures ────────────────────────────────────────────────
+            ("🐟", "🐟  Fish"),
+            ("🦈", "🦈  Shark"),
+            ("🐙", "🐙  Octopus"),
+            ("🦑", "🦑  Squid"),
+            ("🐬", "🐬  Dolphin"),
+            ("🦀", "🦀  Crab"),
+            # ── Space & Sci-Fi ───────────────────────────────────────────────
+            ("🌙", "🌙  Crescent Moon"),
+            ("🪐", "🪐  Planet"),
+            ("🛸", "🛸  UFO"),
+            ("👽", "👽  Alien"),
+            ("🤖", "🤖  Robot"),
+            # ── Spooky ───────────────────────────────────────────────────────
+            ("💀", "💀  Skull"),
+            ("👻", "👻  Ghost"),
+            ("🦇", "🦇  Bat"),
+            ("🕷️", "🕷️  Spider"),
+            ("👾", "👾  Alien Monster"),
+            ("😈", "😈  Smiling Devil"),
+            # ── Fun & Misc ────────────────────────────────────────────────────
+            ("🎮", "🎮  Game Controller"),
+            ("🍕", "🍕  Pizza"),
+            ("🍩", "🍩  Donut"),
+            ("🍭", "🍭  Lollipop"),
+            ("🩸", "🩸  Blood Drop"),
+            ("💩", "💩  Poop"),
+            ("🤡", "🤡  Clown"),
+            ("🥳", "🥳  Partying Face"),
+            ("🤓", "🤓  Nerd Face"),
+        ]
+
+        grp_emoji = QGroupBox("Custom Click Emoji  ·  used when effect = 'Custom'")
         emoji_v = QVBoxLayout(grp_emoji)
         emoji_v.setSpacing(6)
+        _emoji_hint = QLabel(
+            "Pick an emoji, click Add.  "
+            "Set the Click Effect to 'Custom' (above) to fire these on every click."
+        )
+        _emoji_hint.setWordWrap(True)
+        _emoji_hint.setObjectName("subheader")
+        emoji_v.addWidget(_emoji_hint)
         emoji_row = QHBoxLayout()
-        self._emoji_input = QLineEdit()
-        self._emoji_input.setPlaceholderText("e.g.  🐼 🎉 💥  (space-separated)")
+        self._emoji_combo = QComboBox()
+        self._emoji_combo.setMinimumWidth(160)
+        self._emoji_combo.setEditable(True)
+        self._emoji_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._emoji_combo.lineEdit().setPlaceholderText("Search emoji…")
+        self._emoji_combo.setToolTip(
+            "Type to search emoji by name, then click Add to include it in your "
+            "custom click-effect pool.\nSet the Click Effect dropdown to "
+            "'Custom' to fire these emoji as particles on every click."
+        )
+        for emoji_char, label in _EMOJI_PALETTE:
+            self._emoji_combo.addItem(label, userData=emoji_char)
+        # Configure the auto-created completer for contains-mode filtering so
+        # the user can search by any part of the label (e.g. "heart", "fire").
+        emoji_completer = self._emoji_combo.completer()
+        if emoji_completer is not None:
+            try:
+                emoji_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+                emoji_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            except AttributeError:
+                pass
         self._btn_emoji_add = QPushButton("Add")
-        self._btn_emoji_clear = QPushButton("Clear")
-        self._btn_emoji_add.setFixedWidth(50)
-        self._btn_emoji_clear.setFixedWidth(52)
-        emoji_row.addWidget(self._emoji_input, 1)
+        self._btn_emoji_clear = QPushButton("Clear All")
+        self._btn_emoji_add.setMinimumWidth(60)
+        self._btn_emoji_clear.setMinimumWidth(80)
+        emoji_row.addWidget(self._emoji_combo, 1)
         emoji_row.addWidget(self._btn_emoji_add)
         emoji_row.addWidget(self._btn_emoji_clear)
         emoji_v.addLayout(emoji_row)
@@ -282,6 +394,7 @@ class SettingsDialog(QDialog):
         self._emoji_display.setObjectName("subheader")
         emoji_v.addWidget(self._emoji_display)
         effect_emoji_row.addWidget(grp_emoji, 2)
+
 
         tv.addLayout(effect_emoji_row)
 
@@ -487,7 +600,7 @@ class SettingsDialog(QDialog):
         misc_gl.setColumnStretch(1, 1)
         misc_gl.setHorizontalSpacing(10)
         misc_gl.setVerticalSpacing(6)
-        misc_gl.addWidget(QLabel("Font Size (pt):"), 0, 0)
+        misc_gl.addWidget(QLabel("Tooltip Font Size (pt):"), 0, 0)
         self._font_size_spin = QSpinBox()
         self._font_size_spin.setRange(8, 24)
         self._font_size_spin.setValue(10)
@@ -513,7 +626,7 @@ class SettingsDialog(QDialog):
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
-        misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
+        misc_gl.addWidget(QLabel("Tooltip Popups Style:"), 2, 0)
         self._tooltip_style_combo = QComboBox()
         _TOOLTIP_STYLE_ENTRIES = [
             ("Auto (follow theme)",  "Tooltip style follows the active theme automatically."),
@@ -679,6 +792,9 @@ class SettingsDialog(QDialog):
             self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
+            # Sliders must also be signal-blocked during load; their valueChanged
+            # is connected to _on_trail_*_changed which emits settings_changed.
+            self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -757,7 +873,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._theme_search, "theme_search")
         mgr.register(self._theme_preset_combo, "theme_combo")
         mgr.register(self._effect_combo, "effect_combo")
-        mgr.register(self._emoji_input, "custom_emoji")
+        mgr.register(self._emoji_combo, "custom_emoji")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
@@ -951,20 +1067,30 @@ class SettingsDialog(QDialog):
         )
 
     def _add_emoji(self) -> None:
-        text = self._emoji_input.text().strip()
-        if not text:
+        # Prefer the userData (emoji char) of the currently selected palette item.
+        # Fall back to the raw text in the line edit so that the user can type a
+        # custom emoji (not in the palette) directly into the search box and click
+        # Add to include it.
+        emoji_char = self._emoji_combo.currentData()
+        if not emoji_char:
+            typed = self._emoji_combo.currentText().strip()
+            # Only accept the fallback text if it looks like an emoji / short symbol
+            # (≤_MAX_CUSTOM_EMOJI_LEN chars) to avoid accidentally adding search
+            # strings like "fire".
+            if typed and len(typed) <= _MAX_CUSTOM_EMOJI_LEN:
+                emoji_char = typed
+        if not emoji_char:
             return
         current = self._get_emoji_list()
-        for item in text.split():
-            if item and item not in current:
-                current.append(item)
+        current.append(emoji_char)
         self._settings.set("custom_emoji", " ".join(current))
         self._update_emoji_display()
-        self._emoji_input.clear()
+        self.settings_changed.emit()
 
     def _clear_emoji(self) -> None:
         self._settings.set("custom_emoji", "")
         self._update_emoji_display()
+        self.settings_changed.emit()
 
     # ------------------------------------------------------------------
     # Sound file browser

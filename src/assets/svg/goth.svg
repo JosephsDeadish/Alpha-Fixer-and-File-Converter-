@@ -13,6 +13,13 @@
   <ellipse cx="38" cy="24" rx="3" ry="4" fill="#8800aa">
     <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" begin="0.4s" repeatCount="indefinite"/>
   </ellipse>
+  <!-- Blink eyelids – skull-coloured overlay that snaps shut then open -->
+  <ellipse cx="26" cy="24" rx="5" ry="0" fill="#1a001a">
+    <animate attributeName="ry" values="0;0;6;0;0" keyTimes="0;0.78;0.85;0.93;1" dur="5s" begin="1.5s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="38" cy="24" rx="5" ry="0" fill="#1a001a">
+    <animate attributeName="ry" values="0;0;6;0;0" keyTimes="0;0.78;0.85;0.93;1" dur="5s" begin="1.5s" repeatCount="indefinite"/>
+  </ellipse>
   <!-- Teeth -->
   <rect x="24" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>
   <rect x="30" y="36" width="4" height="5" rx="1" fill="#0a0a0a"/>

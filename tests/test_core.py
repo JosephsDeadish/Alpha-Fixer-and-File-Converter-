@@ -280,6 +280,43 @@ class TestAlphaProcessor(unittest.TestCase):
         # 200 capped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
+    def test_clamp_min_manual_alpha(self):
+        """apply_manual_alpha with clamp_min>0 should raise low alpha values."""
+        img = make_rgba_image(alpha=50)
+        result = apply_manual_alpha(img, value=None, clamp_min=128, clamp_max=255)
+        arr = np.array(result)
+        # 50 raised to floor 128
+        self.assertTrue(np.all(arr[:, :, 3] == 128))
+
+    def test_clamp_min_manual_alpha_value_below_floor(self):
+        """apply_manual_alpha: if the set value is below clamp_min, clamp_min wins."""
+        img = make_rgba_image(alpha=200)
+        # Explicitly set alpha to 64, then clamp floor at 128 → should be 128
+        result = apply_manual_alpha(img, value=64, clamp_min=128, clamp_max=255)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 128))
+
+    def test_builtin_clamp_128_255_preset(self):
+        """The built-in 'Clamp 128-255' preset should raise all alpha below 128."""
+        from unittest.mock import MagicMock
+        from src.core.presets import PresetManager
+        mock_settings = MagicMock()
+        mock_settings.get_custom_presets.return_value = []
+        mgr = PresetManager(mock_settings)
+        preset = next(
+            (p for p in mgr.all_presets() if "Clamp 128" in p.name and "raise" in p.description.lower()),
+            None,
+        )
+        self.assertIsNotNone(preset, "Expected 'Clamp 128–255 (raise floor to 128)' preset")
+        self.assertEqual(preset.clamp_min, 128)
+        self.assertEqual(preset.clamp_max, 255)
+        self.assertIsNone(preset.alpha_value)
+        img = make_rgba_image(alpha=50)
+        result = apply_alpha_preset(img, preset)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 128),
+                        f"Expected 128, got {arr[0, 0, 3]}")
+
     def test_binary_cut_preset(self):
         """binary_cut=True should give hard 0/255 split at threshold."""
         # alpha=50 → below 128 → should become 0

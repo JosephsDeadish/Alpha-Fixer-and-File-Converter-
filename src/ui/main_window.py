@@ -166,6 +166,43 @@ class _SpinningEmojiLabel(QWidget):
 
 
 class MainWindow(QMainWindow):
+    # Unlock table: (click_threshold, settings_key, banner_message).
+    # Stored at class level so it is built once, not rebuilt on every click.
+    _UNLOCK_TABLE = [
+        (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
+        (150,  "unlock_ice_cave",         "❄ 'Ice Cave' theme unlocked! (Settings → Theme)"),
+        (200,  "unlock_cyber_otter",      "🦦 'Cyber Otter' theme unlocked! (Settings → Theme)"),
+        (250,  "unlock_sakura",           "🌸 'Secret Sakura' theme unlocked! (Settings → Theme)"),
+        (350,  "unlock_toxic_neon",       "☢ 'Toxic Neon' theme unlocked! (Settings → Theme)"),
+        (400,  "unlock_sunset_beach",     "🌅 'Sunset Beach' theme unlocked! (Settings → Theme)"),
+        (500,  "unlock_ocean",            "🌊 'Deep Ocean' theme unlocked! (Settings → Theme)"),
+        (600,  "unlock_lava_cave",        "🌋 'Lava Cave' theme unlocked! (Settings → Theme)"),
+        (750,  "unlock_blood_moon",       "🩸 'Blood Moon' theme unlocked! (Settings → Theme)"),
+        (1000, "unlock_midnight_forest",  "🌲 'Midnight Forest' theme unlocked! (Settings → Theme)"),
+        (1250, "unlock_candy_land",       "🍭 'Candy Land' theme unlocked! (Settings → Theme)"),
+        (1500, "unlock_zombie",           "🧟 'Zombie Apocalypse' theme unlocked! (Settings → Theme)"),
+        (1750, "unlock_dragon_fire",      "🐉 'Dragon Fire' theme unlocked! (Settings → Theme)"),
+        (2000, "unlock_bubblegum",        "🫧 'Bubblegum' theme unlocked! (Settings → Theme)"),
+        (2250, "unlock_thunder_storm",    "⚡ 'Thunder Storm' theme unlocked! (Settings → Theme)"),
+        (2500, "unlock_rose_gold",        "🌹 'Rose Gold' theme unlocked! (Settings → Theme)"),
+        (2750, "unlock_space_cat",        "🐱 'Space Cat' theme unlocked! (Settings → Theme)"),
+        (3000, "unlock_magic_mushroom",   "🍄 'Magic Mushroom' theme unlocked! (Settings → Theme)"),
+        (3500, "unlock_abyssal_void",     "🕳 'Abyssal Void' theme unlocked! (Settings → Theme)"),
+        (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
+        (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
+        (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
+        (5500, "unlock_crystal_cave",     "💎 'Crystal Cave' theme unlocked! (Settings → Theme)"),
+        (6000, "unlock_glitch",           "📡 'Glitch' theme unlocked! (Settings → Theme)"),
+        (6500, "unlock_wild_west",        "🤠 'Wild West' theme unlocked! (Settings → Theme)"),
+        (7000, "unlock_pirate",           "🏴‍☠️ 'Pirate' theme unlocked! (Settings → Theme)"),
+        (7500, "unlock_deep_space",       "🛸 'Deep Space' theme unlocked! (Settings → Theme)"),
+        (8000, "unlock_witchs_brew",      "🧙 'Witch's Brew' theme unlocked! (Settings → Theme)"),
+        (8500, "unlock_lava_lamp",        "🪔 'Lava Lamp' theme unlocked! (Settings → Theme)"),
+        (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
+        (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
+        (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
+    ]
+
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
@@ -178,12 +215,28 @@ class MainWindow(QMainWindow):
         self._banner_lbl = None
         self._banner_emoji_left: "_SpinningEmojiLabel | None" = None
         self._banner_emoji_right: "_SpinningEmojiLabel | None" = None
+        self._toolbar_panda_lbl: "QLabel | None" = None
         self._status_bar = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
         self._tab_base_labels: tuple = ()   # set during first _apply_theme()
+        # Debounce timer: collapses rapid settings_changed signals into a
+        # single re-apply call so slider drags / spinbox scrolling don't
+        # trigger dozens of expensive setStyleSheet() calls per second.
+        self._settings_apply_timer = QTimer(self)
+        self._settings_apply_timer.setSingleShot(True)
+        self._settings_apply_timer.setInterval(200)
+        self._settings_apply_timer.timeout.connect(self._apply_settings_now)
+        # Resize debounce timer: window resize fires very rapidly during an
+        # interactive drag.  Repositioning the overlays on every pixel update
+        # is wasteful; coalesce them into a single update 50ms after the last
+        # resize event to keep the UI responsive during dragging.
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(50)
+        self._resize_timer.timeout.connect(self._reposition_overlays)
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -197,30 +250,63 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
         self.setMinimumSize(1000, 780)
-        # Set the panda SVG as the window icon (used in title bar + taskbar)
+        # Set the panda SVG as the window / taskbar icon (initial default).
+        # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
+        # which contains all shell sizes (16 → 256 px) for crisp display at
+        # every zoom level.  Falls back to rendering the SVG directly when the
+        # ICO is not present (e.g. running from source without running
+        # scripts/make_icon.py first).
         self._set_panda_window_icon()
 
+    @staticmethod
+    def _render_svg_to_icon(svg_path: str) -> "QIcon | None":
+        """Render *svg_path* at multiple resolutions and return a QIcon.
+
+        Provides 16, 24, 32, 48, 64, 128 and 256 px variants so Qt always has
+        a sharp pixmap for the title bar (16 px), taskbar (32/40/48 px) and
+        the jump-list thumbnail (256 px) on every platform and DPI setting.
+        Returns *None* if QtSvg is not available.
+        """
+        try:
+            from PyQt6.QtSvg import QSvgRenderer
+            renderer = QSvgRenderer(svg_path)
+            icon = QIcon()
+            for size in (16, 24, 32, 40, 48, 64, 128, 256):
+                pix = QPixmap(size, size)
+                pix.fill(Qt.GlobalColor.transparent)
+                p = QPainter(pix)
+                if p.isActive():
+                    renderer.render(p)
+                    p.end()
+                    icon.addPixmap(pix)
+            return icon if not icon.isNull() else None
+        except (ImportError, Exception):
+            return None
+
     def _set_panda_window_icon(self):
-        """Render panda_dark.svg to a QPixmap and use it as the window/app icon."""
+        """Set the initial window / taskbar icon to the panda theme graphic."""
         import os
-        svg_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "svg")
+        assets_dir = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "assets")
+        )
+        # 1. Prefer the pre-generated multi-size ICO (ships with the repo).
+        ico_path = os.path.join(assets_dir, "icon.ico")
+        if os.path.isfile(ico_path):
+            icon = QIcon(ico_path)
+            if not icon.isNull():
+                self.setWindowIcon(icon)
+                QApplication.setWindowIcon(icon)
+                return
+        # 2. Fall back to rendering the panda SVG at multiple sizes.
+        svg_dir = os.path.join(assets_dir, "svg")
         for candidate in ("panda_dark.svg", "panda_light.svg"):
             svg_path = os.path.normpath(os.path.join(svg_dir, candidate))
             if os.path.isfile(svg_path):
-                try:
-                    from PyQt6.QtSvg import QSvgRenderer
-                    renderer = QSvgRenderer(svg_path)
-                    pix = QPixmap(64, 64)
-                    pix.fill(Qt.GlobalColor.transparent)
-                    painter = QPainter(pix)
-                    renderer.render(painter)
-                    painter.end()
-                    self.setWindowIcon(QIcon(pix))
-                    QApplication.setWindowIcon(QIcon(pix))
-                    return
-                except Exception:
-                    pass
-                break
+                icon = self._render_svg_to_icon(svg_path)
+                if icon is not None:
+                    self.setWindowIcon(icon)
+                    QApplication.setWindowIcon(icon)
+                return
 
     def _setup_ui(self):
         # Menu bar
@@ -323,6 +409,7 @@ class MainWindow(QMainWindow):
 
         # Panda icon on the far left of the toolbar
         panda_lbl = self._make_toolbar_panda_icon()
+        self._toolbar_panda_lbl = panda_lbl
         if panda_lbl is not None:
             toolbar.addWidget(panda_lbl)
             toolbar.addSeparator()
@@ -463,45 +550,18 @@ class MainWindow(QMainWindow):
 
     def _run_unlock_checks(self, total: int) -> None:
         """Evaluate the unlock table against *total* and fire any new unlocks."""
-        # (threshold, settings_key, banner_message) — ordered ascending by threshold
-        _UNLOCK_TABLE = [
-            (100,  "unlock_skeleton",        "🔓 'Secret Skeleton' theme unlocked! (Settings → Theme)"),
-            (150,  "unlock_ice_cave",         "❄ 'Ice Cave' theme unlocked! (Settings → Theme)"),
-            (200,  "unlock_cyber_otter",      "🦦 'Cyber Otter' theme unlocked! (Settings → Theme)"),
-            (250,  "unlock_sakura",           "🌸 'Secret Sakura' theme unlocked! (Settings → Theme)"),
-            (350,  "unlock_toxic_neon",       "☢ 'Toxic Neon' theme unlocked! (Settings → Theme)"),
-            (400,  "unlock_sunset_beach",     "🌅 'Sunset Beach' theme unlocked! (Settings → Theme)"),
-            (500,  "unlock_ocean",            "🌊 'Deep Ocean' theme unlocked! (Settings → Theme)"),
-            (600,  "unlock_lava_cave",        "🌋 'Lava Cave' theme unlocked! (Settings → Theme)"),
-            (750,  "unlock_blood_moon",       "🩸 'Blood Moon' theme unlocked! (Settings → Theme)"),
-            (1000, "unlock_midnight_forest",  "🌲 'Midnight Forest' theme unlocked! (Settings → Theme)"),
-            (1250, "unlock_candy_land",       "🍭 'Candy Land' theme unlocked! (Settings → Theme)"),
-            (1500, "unlock_zombie",           "🧟 'Zombie Apocalypse' theme unlocked! (Settings → Theme)"),
-            (1750, "unlock_dragon_fire",      "🐉 'Dragon Fire' theme unlocked! (Settings → Theme)"),
-            (2000, "unlock_bubblegum",        "🫧 'Bubblegum' theme unlocked! (Settings → Theme)"),
-            (2250, "unlock_thunder_storm",    "⚡ 'Thunder Storm' theme unlocked! (Settings → Theme)"),
-            (2500, "unlock_rose_gold",        "🌹 'Rose Gold' theme unlocked! (Settings → Theme)"),
-            (2750, "unlock_space_cat",        "🐱 'Space Cat' theme unlocked! (Settings → Theme)"),
-            (3000, "unlock_magic_mushroom",   "🍄 'Magic Mushroom' theme unlocked! (Settings → Theme)"),
-            (3500, "unlock_abyssal_void",     "🕳 'Abyssal Void' theme unlocked! (Settings → Theme)"),
-            (4000, "unlock_spring_bloom",     "🌷 'Spring Bloom' theme unlocked! (Settings → Theme)"),
-            (4500, "unlock_gold_rush",        "💰 'Gold Rush' theme unlocked! (Settings → Theme)"),
-            (5000, "unlock_nebula",           "🌌 'Nebula' theme unlocked! (Settings → Theme)"),
-            (5500, "unlock_crystal_cave",     "💎 'Crystal Cave' theme unlocked! (Settings → Theme)"),
-            (6000, "unlock_glitch",           "📡 'Glitch' theme unlocked! (Settings → Theme)"),
-            (6500, "unlock_wild_west",        "🤠 'Wild West' theme unlocked! (Settings → Theme)"),
-            (7000, "unlock_pirate",           "🏴‍☠️ 'Pirate' theme unlocked! (Settings → Theme)"),
-            (7500, "unlock_deep_space",       "🛸 'Deep Space' theme unlocked! (Settings → Theme)"),
-            (8000, "unlock_witchs_brew",      "🧙 'Witch's Brew' theme unlocked! (Settings → Theme)"),
-            (8500, "unlock_lava_lamp",        "🪔 'Lava Lamp' theme unlocked! (Settings → Theme)"),
-            (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
-            (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
-            (10000,"unlock_golden_hour",      "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
-        ]
-
+        # _UNLOCK_TABLE is a class constant (sorted ascending by threshold).
+        # The break condition `threshold > total` is equivalent to the original
+        # `total >= threshold` guard, with the addition that we skip the rest of
+        # the table once no further entry can fire — avoiding iterating all 33
+        # entries on every click for users who have not yet reached many thresholds.
         newly_unlocked = False
-        for threshold, key, message in _UNLOCK_TABLE:
-            if not self._settings.get(key, False) and total >= threshold:
+        for threshold, key, message in self._UNLOCK_TABLE:
+            if threshold > total:
+                # Remaining entries all have higher thresholds; none can fire.
+                break
+            if not self._settings.get(key, False):
+                # Threshold reached and not yet unlocked.
                 self._settings.set(key, True)
                 self._unlock_lbl.setText(message)
                 # Play unlock fanfare via SoundEngine (falls back to beep)
@@ -647,6 +707,7 @@ class MainWindow(QMainWindow):
         # Update inner tab headers to also reflect the active theme
         self._alpha_tab.update_theme(theme_name)
         self._converter_tab.update_theme(theme_name)
+        self._history_tab.update_theme(theme_name)
         # Update status bar with per-theme flavor message
         if self._status_bar is not None:
             self._status_bar.showMessage(get_theme_status(theme_name))
@@ -654,6 +715,8 @@ class MainWindow(QMainWindow):
         self._apply_cursor()
         # Update window icon and taskbar icon to match the current theme SVG
         self._refresh_window_icon(theme_name)
+        # Update toolbar icon to match the current theme
+        self._refresh_toolbar_icon(theme_name)
         # Refresh SVG badge to match new theme
         self._refresh_svg_badge()
         # Keep trail and click-effects in sync with the active theme.
@@ -743,8 +806,9 @@ class MainWindow(QMainWindow):
     def _refresh_window_icon(self, theme_name: str):
         """Update the window / taskbar icon to the theme-specific SVG.
 
-        Falls back to the panda icon when no theme SVG is available or when
-        the SVG renderer is not installed.
+        Renders the theme SVG at multiple resolutions (16 → 256 px) so Qt can
+        pick the sharpest pixmap for each use-case (title bar, taskbar, etc.).
+        Falls back to the panda default when no theme SVG is available.
         """
         import os
         svg_path = get_theme_svg_path(theme_name)
@@ -759,19 +823,45 @@ class MainWindow(QMainWindow):
         if not svg_path:
             return
         try:
-            from PyQt6.QtSvg import QSvgRenderer
-            renderer = QSvgRenderer(svg_path)
-            pix = QPixmap(64, 64)
-            pix.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pix)
-            renderer.render(painter)
-            painter.end()
-            icon = QIcon(pix)
+            icon = self._render_svg_to_icon(svg_path)
+            if icon is None:
+                return
             self.setWindowIcon(icon)
             QApplication.setWindowIcon(icon)
-        except (ImportError, RuntimeError):
-            # QtSvg unavailable or widget destroyed – silently skip icon update.
+        except RuntimeError:
+            # Widget destroyed – silently skip.
             pass
+
+    def _refresh_toolbar_icon(self, theme_name: str) -> None:
+        """Update the toolbar icon label to show the active theme's graphic.
+
+        Tries to render the theme's SVG at 28×28 first; falls back to the
+        theme's representative emoji when SVG rendering is unavailable.
+        """
+        if self._toolbar_panda_lbl is None:
+            return
+        svg_path = get_theme_svg_path(theme_name)
+        if svg_path:
+            try:
+                from PyQt6.QtSvg import QSvgRenderer
+                renderer = QSvgRenderer(svg_path)
+                pix = QPixmap(28, 28)
+                pix.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pix)
+                if painter.isActive():
+                    renderer.render(painter)
+                    painter.end()
+                    self._toolbar_panda_lbl.setPixmap(pix)
+                    self._toolbar_panda_lbl.setText("")
+                    self._toolbar_panda_lbl.setToolTip(f"{theme_name} theme")
+                    return
+            except Exception:
+                pass
+        # Fallback: plain emoji text
+        icon = get_theme_icon(theme_name)
+        self._toolbar_panda_lbl.setPixmap(QPixmap())
+        self._toolbar_panda_lbl.setText(icon)
+        self._toolbar_panda_lbl.setToolTip(f"{theme_name} theme")
 
     # ------------------------------------------------------------------
     # Tabs
@@ -787,7 +877,7 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
-        dlg.theme_changed.connect(lambda t: self._apply_theme())
+        dlg.theme_changed.connect(lambda t: self._on_settings_changed())
         dlg.settings_changed.connect(self._on_settings_changed)
         # First tooltip mode change unlocks Secret Skeleton (independent of click count)
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
@@ -816,7 +906,17 @@ class MainWindow(QMainWindow):
             dlg_overlay.set_enabled(False)
 
     def _on_settings_changed(self):
-        """Re-apply all effect-related settings after the dialog closes."""
+        """Schedule a deferred re-apply of all effect-related settings.
+
+        The signal can fire very rapidly (e.g. every step of a spinbox or
+        slider drag).  Restarting a 200 ms single-shot timer each time
+        collapses bursts of signals into a single apply call, eliminating
+        the per-change setStyleSheet / icon-refresh lag.
+        """
+        self._settings_apply_timer.start()
+
+    def _apply_settings_now(self):
+        """Re-apply all effect-related settings (called via debounce timer)."""
         self._apply_theme()
         self._apply_cursor()
         self._apply_font_size()
@@ -977,6 +1077,18 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # Debounce overlay repositioning: during an interactive window drag,
+        # Qt fires resizeEvent on every pixel of movement.  Repositioning
+        # overlays immediately each time spends unnecessary GPU/CPU on geometry
+        # recalculations.  Schedule a single coalesced update 50ms after the
+        # last resize event instead.  The overlays also self-correct via their
+        # own eventFilter (QEvent.Type.Resize on the main window), which provides
+        # the immediate fine-grained correction; the timer fires for any cases
+        # where the eventFilter is not installed (e.g., effects disabled).
+        self._resize_timer.start()
+
+    def _reposition_overlays(self) -> None:
+        """Reposition both overlays to fill the window after a resize burst."""
         if self._trail_overlay is not None:
             self._trail_overlay.setGeometry(self.rect())
             self._trail_overlay.raise_()
@@ -998,5 +1110,12 @@ class MainWindow(QMainWindow):
         if self._sound is not None:
             self._sound.cleanup()
         self._save_geometry()
+        # Flush any buffered QSettings writes to disk before closing.
+        # This is the one place we explicitly sync since set() no longer
+        # calls sync() after every write (which caused per-click disk I/O).
+        try:
+            self._settings.sync()
+        except Exception:
+            pass
         super().closeEvent(event)
 

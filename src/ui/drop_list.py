@@ -66,12 +66,25 @@ class _ThumbRunnable(QRunnable):
                 data = img.tobytes("raw", "RGB")
                 qimg = QImage(data, img.width, img.height,
                               QImage.Format.Format_RGB888)
-            px = QPixmap.fromImage(qimg).scaled(
+            # Scale the image to fit within the thumbnail cell while preserving
+            # its aspect ratio, then letterbox it into an exact _THUMB_SIZE square
+            # transparent pixmap so Qt never stretches it to fill the icon slot.
+            scaled = QPixmap.fromImage(qimg).scaled(
                 _THUMB_SIZE, _THUMB_SIZE,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            icon = QIcon(px)
+            out = QPixmap(_THUMB_SIZE, _THUMB_SIZE)
+            out.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(out)
+            if painter.isActive():
+                painter.drawPixmap(
+                    (_THUMB_SIZE - scaled.width()) // 2,
+                    (_THUMB_SIZE - scaled.height()) // 2,
+                    scaled,
+                )
+                painter.end()
+            icon = QIcon(out)
             self._signals.loaded.emit(self._path, icon)
         except Exception:
             pass  # silently skip unreadable / non-image files

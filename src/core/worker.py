@@ -55,6 +55,7 @@ class AlphaWorker(QThread):
         preset: Optional[AlphaPreset] = None,
         manual_params: Optional[dict] = None,
         output_dir: Optional[str] = None,
+        input_root: Optional[str] = None,
         overwrite: bool = False,
         suffix: str = "",
         parent=None,
@@ -64,6 +65,7 @@ class AlphaWorker(QThread):
         self._preset = preset
         self._manual = manual_params        # dict with keys: mode, value, threshold, invert
         self._output_dir = output_dir
+        self._input_root = input_root
         self._overwrite = overwrite
         self._suffix = suffix
         self._abort = False
@@ -133,7 +135,26 @@ class AlphaWorker(QThread):
         # of whether overwrite mode is active (overwrite = no filename suffix,
         # not "write back to the source directory").
         if self._output_dir:
-            return str(Path(self._output_dir) / name)
+            # Mirror subdirectory structure relative to input_root so that
+            # files from different subdirectories never overwrite each other.
+            # E.g. root=C:/textures, src=C:/textures/chars/hero.png,
+            #      output_dir=D:/out  →  D:/out/chars/hero.png
+            if self._input_root:
+                try:
+                    rel = p.parent.relative_to(self._input_root)
+                    dest_dir = Path(self._output_dir) / rel
+                except ValueError:
+                    # src is not under input_root (e.g. file added from a
+                    # different drive); fall back to flat placement.
+                    logger.debug(
+                        "_resolve_output: %s is not relative to root %s; "
+                        "placing flat in output_dir",
+                        src, self._input_root,
+                    )
+                    dest_dir = Path(self._output_dir)
+            else:
+                dest_dir = Path(self._output_dir)
+            return str(dest_dir / name)
         return str(p.parent / name)
 
 
