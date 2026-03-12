@@ -162,7 +162,9 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
 
     Processing pipeline (in order):
       1. Invert alpha (if preset.invert is True)
-      2. Set fixed alpha value (if preset.alpha_value is not None), respecting threshold
+      2. Apply value / mode operation:
+           - 'normalize': remap image's actual [min, max] to [clamp_min, clamp_max] (ignores alpha_value)
+           - other modes: set alpha_value (if not None), respecting threshold
       3. Binary threshold cut (if preset.binary_cut is True): pixels >= threshold → 255, else → 0
       4. Clamp to [clamp_min, clamp_max]
     """
@@ -175,8 +177,27 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
     if preset.invert:
         alpha = 255 - alpha
 
-    # Step 2: Set fixed value (only if alpha_value is specified)
-    if preset.alpha_value is not None:
+    mode = getattr(preset, "mode", "set")
+    target_lo = min(preset.clamp_min, preset.clamp_max)
+    target_hi = max(preset.clamp_min, preset.clamp_max)
+
+    # Step 2: Apply value/mode
+    if mode == "normalize":
+        # Linearly remap the image's actual alpha range to [clamp_min, clamp_max].
+        img_min = int(alpha.min())
+        img_max = int(alpha.max())
+        if img_max > img_min:
+            alpha = (
+                target_lo
+                + (alpha - img_min).astype(np.float32)
+                * (target_hi - target_lo)
+                / (img_max - img_min)
+            )
+            alpha = np.round(alpha).astype(np.int32)
+        else:
+            alpha = np.full_like(alpha, target_hi)
+    elif preset.alpha_value is not None:
+        # Set fixed value (only if alpha_value is specified)
         if preset.threshold > 0:
             mask = alpha < preset.threshold
             alpha[mask] = preset.alpha_value
@@ -207,11 +228,16 @@ def apply_manual_alpha(
     Args:
         value: Target alpha value (0-255).  Interpretation depends on *mode*.
                Pass None to skip the value step and only apply clamping/invert.
+               Ignored when mode is 'normalize'.
         mode:  How *value* is applied to each pixel's existing alpha:
-                 'set'      – replace: new_alpha = value
-                 'multiply' – scale:   new_alpha = old × (value / 255)
-                 'add'      – shift:   new_alpha = old + value  (clamped to 255)
-                 'subtract' – shift:   new_alpha = old − value  (clamped to 0)
+                 'set'       – replace: new_alpha = value
+                 'multiply'  – scale:   new_alpha = old × (value / 255)
+                 'add'       – shift:   new_alpha = old + value  (clamped to 255)
+                 'subtract'  – shift:   new_alpha = old − value  (clamped to 0)
+                 'normalize' – remap:   linearly maps the image's actual alpha
+                               range [img_min, img_max] to [clamp_min, clamp_max].
+                               Useful for rescaling PS2 (0–128) textures to
+                               standard (0–255) or any other target range.
                Defaults to 'set' for backward-compatibility.
         binary_cut: When True, apply a hard 0/255 split at the threshold.
     """
@@ -225,7 +251,25 @@ def apply_manual_alpha(
         alpha = 255 - alpha
 
     # Step 2: Apply value according to mode
-    if value is not None:
+    if mode == "normalize":
+        # Linearly remap the image's actual alpha range to [clamp_min, clamp_max].
+        # This is independent of `value` and threshold — all pixels are remapped.
+        img_min = int(alpha.min())
+        img_max = int(alpha.max())
+        target_lo = min(clamp_min, clamp_max)
+        target_hi = max(clamp_min, clamp_max)
+        if img_max > img_min:
+            alpha = (
+                target_lo
+                + (alpha - img_min).astype(np.float32)
+                * (target_hi - target_lo)
+                / (img_max - img_min)
+            )
+            alpha = np.round(alpha).astype(np.int32)
+        else:
+            # All pixels share the same alpha value; map to top of target range.
+            alpha = np.full_like(alpha, target_hi)
+    elif value is not None:
         if mode == "multiply":
             # raw_value is the 0-255 scale; actual multiplier = raw_value / 255.
             # Integer floor division avoids float rounding.

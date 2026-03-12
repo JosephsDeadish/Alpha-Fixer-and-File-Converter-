@@ -426,16 +426,23 @@ class AlphaFixerTab(QWidget):
         gt_layout.addWidget(lbl_mode, 1, 0)
         self._mode_combo = QComboBox()
         _MODE_OPTIONS = [
-            ("set",      "set — replace each pixel's alpha with the value below"),
-            ("multiply", "multiply — scale: new = old × (value ÷ 255)"),
-            ("add",      "add — shift: new = old + value  (max 255)"),
-            ("subtract", "subtract — shift: new = old − value  (min 0)"),
+            ("set",       "set — replace each pixel's alpha with the value below"),
+            ("multiply",  "multiply — scale: new = old × (value ÷ 255)"),
+            ("add",       "add — shift: new = old + value  (max 255)"),
+            ("subtract",  "subtract — shift: new = old − value  (min 0)"),
+            ("normalize", "normalize — remap: scale image range → [Clamp Min, Clamp Max]"),
         ]
         _MODE_TIPS = {
-            "set":      "Replace every pixel's alpha with the exact value you set below. The most common mode.",
-            "multiply": "Scale existing alpha. new = old × (value ÷ 255). Value=128 gives 50% of original. Classic PS2 fix.",
-            "add":      "Add the value to each pixel's existing alpha, clamped at 255. Brightens transparency.",
-            "subtract": "Subtract the value from each pixel's existing alpha, clamped at 0. Deepens transparency.",
+            "set":       "Replace every pixel's alpha with the exact value you set below. The most common mode.",
+            "multiply":  "Scale existing alpha. new = old × (value ÷ 255). Value=128 gives 50% of original. Classic PS2 fix.",
+            "add":       "Add the value to each pixel's existing alpha, clamped at 255. Brightens transparency.",
+            "subtract":  "Subtract the value from each pixel's existing alpha, clamped at 0. Deepens transparency.",
+            "normalize": (
+                "Linearly remap the image's actual alpha range to [Clamp Min, Clamp Max].\n"
+                "Example: image with alpha 0–128 and Clamp Min=0, Clamp Max=255 → maps 128 → 255.\n"
+                "Useful for PS2 texture conversions (0–128 ↔ 0–255) or any range rescaling.\n"
+                "The 'Alpha value' spinbox is not used in this mode."
+            ),
         }
         for key, label in _MODE_OPTIONS:
             self._mode_combo.addItem(label, userData=key)
@@ -443,7 +450,8 @@ class AlphaFixerTab(QWidget):
             self._mode_combo.setItemData(idx, _MODE_TIPS[key], Qt.ItemDataRole.ToolTipRole)
         self._mode_combo.setToolTip(
             "How the alpha value below is applied to each pixel.\n"
-            "'set' replaces alpha; 'multiply' scales it; 'add'/'subtract' shift it."
+            "'set' replaces alpha; 'multiply' scales it; 'add'/'subtract' shift it.\n"
+            "'normalize' remaps the image's alpha range to [Clamp Min, Clamp Max]."
         )
         self._mode_combo.setMinimumHeight(26)
         gt_layout.addWidget(self._mode_combo, 1, 1)
@@ -1013,6 +1021,9 @@ class AlphaFixerTab(QWidget):
         values are swapped automatically at the point of use (see
         _update_compare / _run) so numpy.clip always receives a valid range.
         """
+        # Cancel any pending autofill so this manual edit is not overwritten
+        # by the autofill that fires on the next stats_ready signal.
+        self._autofill_clamp_on_next_stats = False
         self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
@@ -1020,6 +1031,8 @@ class AlphaFixerTab(QWidget):
     @pyqtSlot(int)
     def _on_clamp_max_changed(self, value: int) -> None:  # noqa: ARG002  # value unused; spinbox read directly
         """Trigger the normal fine-tune update when Clamp Max changes."""
+        # Cancel any pending autofill so this manual edit is not overwritten.
+        self._autofill_clamp_on_next_stats = False
         self._switch_to_manual_if_preset_active()
         self._refresh_finetune_label()
         self._preview_debounce.start()
@@ -1043,6 +1056,9 @@ class AlphaFixerTab(QWidget):
             was_blocked = self._use_preset_check.blockSignals(True)
             self._use_preset_check.setChecked(False)
             self._use_preset_check.blockSignals(was_blocked)
+        # Cancel any pending autofill so the user's edits are not overwritten.
+        if sender is not None and sender is not self._use_preset_check:
+            self._autofill_clamp_on_next_stats = False
         self._refresh_finetune_label()
         self._preview_debounce.start()
 

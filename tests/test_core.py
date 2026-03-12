@@ -346,6 +346,85 @@ class TestAlphaProcessor(unittest.TestCase):
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
+    # ------------------------------------------------------------------
+    # Normalize mode tests
+    # ------------------------------------------------------------------
+
+    def test_manual_alpha_normalize_full_range_to_half(self):
+        """normalize: [0, 255] → [0, 128] maps 255→128, 0→0."""
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:2, :, 3] = 0
+        arr[2:, :, 3] = 255
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=128, mode="normalize")
+        out = np.array(result)
+        self.assertEqual(int(out[:2, :, 3].max()), 0,  "min pixels should stay 0")
+        self.assertEqual(int(out[2:, :, 3].min()), 128, "max pixels should map to 128")
+
+    def test_manual_alpha_normalize_half_range_to_full(self):
+        """normalize: [0, 128] → [0, 255] maps 128→255, 0→0."""
+        arr = np.zeros((4, 4, 4), dtype=np.uint8)
+        arr[:2, :, 3] = 0
+        arr[2:, :, 3] = 128
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=255, mode="normalize")
+        out = np.array(result)
+        self.assertEqual(int(out[:2, :, 3].max()), 0,   "min pixels should stay 0")
+        self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
+
+    def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
+        """normalize on uniform alpha (all same value) should map to clamp_max."""
+        img = make_rgba_image(alpha=200)
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=128, mode="normalize")
+        out = np.array(result)
+        # All pixels are the same → no range → map to target_hi (clamp_max)
+        self.assertTrue(np.all(out[:, :, 3] == 128))
+
+    def test_manual_alpha_normalize_preserves_proportions(self):
+        """normalize: midpoint of source range maps to midpoint of target range."""
+        arr = np.zeros((1, 3, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 128   # midpoint of [0, 255]
+        arr[0, 2, 3] = 255
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=100, mode="normalize")
+        out = np.array(result)
+        # 128 / 255 * 100 ≈ 50
+        mid = int(out[0, 1, 3])
+        self.assertAlmostEqual(mid, round(128 / 255 * 100), delta=1)
+
+    def test_preset_normalize_mode(self):
+        """AlphaPreset with mode='normalize' uses apply_alpha_preset correctly."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 128
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset(
+            "norm_test", alpha_value=None, threshold=0, invert=False,
+            description="", clamp_min=0, clamp_max=255, mode="normalize",
+        )
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 0)
+        self.assertEqual(int(out[0, 1, 3]), 255)
+
+    def test_builtin_ps2_normalize_presets_exist(self):
+        """PS2 normalize presets should be present in built-in list."""
+        from unittest.mock import MagicMock
+        from src.core.presets import PresetManager
+        mock_settings = MagicMock()
+        mock_settings.get_custom_presets.return_value = []
+        mgr = PresetManager(mock_settings)
+        names = [p.name for p in mgr.all_presets()]
+        self.assertTrue(
+            any("Normalize" in n and "0–128" in n for n in names),
+            "Expected a PS2 Normalize → 0–128 preset",
+        )
+        self.assertTrue(
+            any("Normalize" in n and "0–255" in n for n in names),
+            "Expected a PS2 Normalize → 0–255 preset",
+        )
+
 
 # ---------------------------------------------------------------------------
 # collect_files tests
