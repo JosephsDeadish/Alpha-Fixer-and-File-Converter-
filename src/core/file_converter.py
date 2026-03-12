@@ -140,9 +140,12 @@ def _flatten_alpha(img: Image.Image, bg_rgb: tuple[int, int, int] = (255, 255, 2
     if img.mode in ("PA", "P"):
         # Palette images may have embedded transparency; go via RGBA
         rgba = img.convert("RGBA")
-        base = Image.new("RGB", img.size, bg_rgb)
-        base.paste(rgba, mask=rgba.split()[3])
-        return base
+        try:
+            base = Image.new("RGB", img.size, bg_rgb)
+            base.paste(rgba, mask=rgba.split()[3])
+            return base
+        finally:
+            rgba.close()
     if img.mode not in ("RGB", "L", "1"):
         return img.convert("RGB")
     return img

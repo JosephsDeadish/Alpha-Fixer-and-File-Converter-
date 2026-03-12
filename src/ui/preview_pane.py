@@ -207,6 +207,8 @@ class _ConvertedThumbLoader(QThread):
                 # Fallback: show the source image if in-memory conversion fails
                 # (e.g. unsupported format like DDS which requires wand).
                 buf.close()
+                if save_img is not img:
+                    save_img.close()
                 img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
                 qimg = _pil_to_qimage(img)
                 img.close()

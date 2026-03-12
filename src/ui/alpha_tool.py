@@ -55,16 +55,21 @@ class _AlphaPreviewLoader(QThread):
     def _alpha_stats(img) -> dict:
         """Return min/max/mean/percent_nonzero alpha for a PIL RGBA image."""
         import numpy as np
-        arr = np.array(img.convert("RGBA"), dtype=np.uint8)
-        alpha = arr[:, :, 3]
-        total_pixels = alpha.size
-        nonzero = int(np.count_nonzero(alpha))
-        return {
-            "min": int(alpha.min()),
-            "max": int(alpha.max()),
-            "mean": float(alpha.mean()),
-            "percent_nonzero": round(nonzero / max(total_pixels, 1) * 100, 1),
-        }
+        img_rgba = img.convert("RGBA") if img.mode != "RGBA" else img
+        try:
+            arr = np.array(img_rgba, dtype=np.uint8)
+            alpha = arr[:, :, 3]
+            total_pixels = alpha.size
+            nonzero = int(np.count_nonzero(alpha))
+            return {
+                "min": int(alpha.min()),
+                "max": int(alpha.max()),
+                "mean": float(alpha.mean()),
+                "percent_nonzero": round(nonzero / max(total_pixels, 1) * 100, 1),
+            }
+        finally:
+            if img_rgba is not img:
+                img_rgba.close()
 
     def run(self):
         try:

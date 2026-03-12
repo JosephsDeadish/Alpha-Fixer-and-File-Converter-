@@ -3082,3 +3082,180 @@ class TestRound7DdsHelperResourceHygiene(unittest.TestCase):
         self.assertGreater(close_pos, finally_pos,
                            "img_rgba.close() must be inside the finally block in "
                            "_save_dds_raw so it runs even if np.array() raises")
+
+
+# ---------------------------------------------------------------------------
+# Round-8 resource-hygiene tests
+# ---------------------------------------------------------------------------
+
+class TestRound8ResourceHygiene(unittest.TestCase):
+    """Round-8: three PIL image resource leaks.
+
+    Bug 1 (_ConvertedThumbLoader, preview_pane.py):
+        When the inner save/open cycle raises an exception the fallback path
+        closed buf and img but never closed save_img when save_img was a
+        *newly converted* copy (e.g. RGB for JPEG, P for GIF).  Fix adds
+        ``if save_img is not img: save_img.close()`` right after buf.close().
+
+    Bug 2 (_alpha_stats, alpha_tool.py):
+        ``np.array(img.convert("RGBA"), ...)`` created an anonymous PIL image
+        that was immediately passed to numpy and never closed.  Fix stores the
+        converted image in img_rgba and closes it in a try/finally (only if it
+        differs from img).
+
+    Bug 3 (_flatten_alpha PA/P branch, file_converter.py):
+        ``rgba = img.convert("RGBA")`` was created, used in paste(), and then
+        the function returned without closing rgba.  Fix wraps the paste + return
+        in try/finally to always close rgba.
+    """
+
+    _PREVIEW_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "preview_pane.py"
+    )
+    _ALPHA_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py"
+    )
+    _FC_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "file_converter.py"
+    )
+
+    def _read(self, path: str) -> str:
+        with open(path) as f:
+            return f.read()
+
+    # -------------------------------------------------------------------
+    # Bug 1: _ConvertedThumbLoader except path closes save_img
+    # -------------------------------------------------------------------
+
+    def _conv_thumb_loader_src(self) -> str:
+        src = self._read(self._PREVIEW_SRC)
+        start = src.find("\nclass _ConvertedThumbLoader(")
+        self.assertGreater(start, 0, "_ConvertedThumbLoader class not found")
+        end = src.find("\nclass ", start + 1)
+        return src[start:end] if end > 0 else src[start:]
+
+    def test_converted_thumb_loader_closes_save_img_in_except(self):
+        """The except/fallback path must close save_img when it differs from img."""
+        cls_src = self._conv_thumb_loader_src()
+        # Locate the inner except block
+        inner_except_pos = cls_src.find("except Exception:")
+        self.assertGreater(inner_except_pos, 0, "inner except block not found")
+        # The close call must appear before img.thumbnail (which modifies img in-place)
+        close_str = "if save_img is not img:"
+        close_pos = cls_src.find(close_str, inner_except_pos)
+        thumbnail_pos = cls_src.find("img.thumbnail(", inner_except_pos)
+        self.assertGreater(close_pos, inner_except_pos,
+                           "'if save_img is not img:' must appear in the except block")
+        self.assertLess(close_pos, thumbnail_pos,
+                        "'if save_img is not img:' must appear before img.thumbnail()")
+        # The close() call must immediately follow
+        close_call_str = "save_img.close()"
+        close_call_pos = cls_src.find(close_call_str, close_pos)
+        self.assertGreater(close_call_pos, close_pos,
+                           "'save_img.close()' must follow the guard in the except block")
+
+    def test_converted_thumb_loader_except_path_order(self):
+        """buf.close() must come before save_img.close() in the except path."""
+        cls_src = self._conv_thumb_loader_src()
+        inner_except_pos = cls_src.find("except Exception:")
+        buf_close_pos = cls_src.find("buf.close()", inner_except_pos)
+        save_close_pos = cls_src.find("save_img.close()", inner_except_pos)
+        self.assertGreater(buf_close_pos, inner_except_pos,
+                           "buf.close() must appear in the except block")
+        self.assertGreater(save_close_pos, buf_close_pos,
+                           "save_img.close() must come after buf.close() in except block")
+
+    # -------------------------------------------------------------------
+    # Bug 2: _alpha_stats closes the RGBA convert
+    # -------------------------------------------------------------------
+
+    def _alpha_stats_src(self) -> str:
+        src = self._read(self._ALPHA_SRC)
+        start = src.find("\n    def _alpha_stats(")
+        self.assertGreater(start, 0, "_alpha_stats not found")
+        # find next method (starts with 4-space indent + "def ")
+        next_def = src.find("\n    def ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    def test_alpha_stats_does_not_chain_convert_into_np_array(self):
+        """_alpha_stats must NOT pass an anonymous img.convert() directly to
+        np.array() — that would create a PIL image that is never closed."""
+        fn = self._alpha_stats_src()
+        self.assertNotIn(
+            "np.array(img.convert(",
+            fn,
+            "_alpha_stats must not chain img.convert() directly into np.array() "
+            "(the PIL image would never be closed)",
+        )
+
+    def test_alpha_stats_stores_rgba_in_variable(self):
+        """_alpha_stats must assign the RGBA conversion to img_rgba."""
+        fn = self._alpha_stats_src()
+        self.assertIn(
+            "img_rgba",
+            fn,
+            "_alpha_stats must use a named 'img_rgba' variable for the RGBA copy",
+        )
+
+    def test_alpha_stats_closes_rgba_in_finally(self):
+        """_alpha_stats must close img_rgba in a try/finally (only when it
+        differs from the input image, i.e. only when a conversion was needed)."""
+        fn = self._alpha_stats_src()
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0,
+                           "_alpha_stats must have a try/finally block")
+        close_pos = fn.find("img_rgba.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "img_rgba.close() must appear inside the finally block")
+
+    def test_alpha_stats_guards_close_with_is_not_check(self):
+        """_alpha_stats must only close img_rgba when it is a *different* object
+        from img (to avoid double-close when the input is already RGBA)."""
+        fn = self._alpha_stats_src()
+        self.assertIn(
+            "if img_rgba is not img:",
+            fn,
+            "_alpha_stats must guard img_rgba.close() with 'if img_rgba is not img:'",
+        )
+
+    # -------------------------------------------------------------------
+    # Bug 3: _flatten_alpha closes rgba in finally
+    # -------------------------------------------------------------------
+
+    def _flatten_alpha_src(self) -> str:
+        src = self._read(self._FC_SRC)
+        start = src.find("\ndef _flatten_alpha(")
+        self.assertGreater(start, 0, "_flatten_alpha not found")
+        next_def = src.find("\ndef ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    def test_flatten_alpha_closes_rgba_in_finally(self):
+        """_flatten_alpha must close the rgba intermediate image in a
+        try/finally so it is released even if Image.new() or paste() raises."""
+        fn = self._flatten_alpha_src()
+        # Only the PA/P branch creates a local `rgba`; check it has finally
+        pa_branch_pos = fn.find('"PA", "P"')
+        self.assertGreater(pa_branch_pos, 0,
+                           "PA/P branch must exist in _flatten_alpha")
+        finally_pos = fn.find("finally:", pa_branch_pos)
+        self.assertGreater(finally_pos, pa_branch_pos,
+                           "_flatten_alpha PA/P branch must have a finally block")
+        close_pos = fn.find("rgba.close()", finally_pos)
+        self.assertGreater(close_pos, finally_pos,
+                           "rgba.close() must appear inside the finally block")
+
+    def test_flatten_alpha_finally_does_not_suppress_exception(self):
+        """The finally block must only call close(); it must NOT contain a
+        bare 'return base' that would silently suppress exceptions."""
+        fn = self._flatten_alpha_src()
+        finally_pos = fn.find("finally:")
+        self.assertGreater(finally_pos, 0, "no finally block found in _flatten_alpha")
+        # After finally: the only statement should be close, not a return
+        end = fn.find("\n    if ", finally_pos + 1)
+        finally_body = fn[finally_pos:end] if end > 0 else fn[finally_pos:finally_pos + 200]
+        self.assertNotIn(
+            "return base",
+            finally_body,
+            "finally block in _flatten_alpha must not contain 'return base' "
+            "(that would suppress exceptions from the try block)",
+        )
