@@ -45,6 +45,11 @@ class _AlphaPreviewLoader(QThread):
         self._path = path
         self._preset = preset
         self._manual = manual_params
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
 
     @staticmethod
     def _alpha_stats(img) -> dict:
@@ -72,6 +77,11 @@ class _AlphaPreviewLoader(QThread):
             from .preview_pane import _pil_to_qimage
 
             orig = load_image(self._path)  # always RGBA PIL image
+
+            # If the user has already moved to a different file, bail out now
+            # before spending CPU on the expensive numpy processing step.
+            if self._abort:
+                return
 
             before_qi = _pil_to_qimage(orig)
             before_stats = self._alpha_stats(orig)
@@ -1215,10 +1225,12 @@ class AlphaFixerTab(QWidget):
 
         # Disconnect the previous loader's signals before replacing it so that
         # a stale thread finishing late cannot overwrite the current result.
+        # Also ask the thread to abandon its work so CPU is freed quickly.
         # Do NOT wait for the thread — waiting blocks the UI thread and causes
         # severe lag when the user rapidly moves a slider.  The thread will
         # finish naturally; its signals are already disconnected.
         if self._preview_loader is not None:
+            self._preview_loader.stop()
             try:
                 self._preview_loader.preview_ready.disconnect()
                 self._preview_loader.stats_ready.disconnect()

@@ -170,7 +170,14 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
     """
     if img.mode != "RGBA":
         img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
+    try:
+        arr = np.array(img, dtype=np.int32)
+    except MemoryError:
+        w, h = img.size
+        raise MemoryError(
+            f"Not enough memory to process {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
+        )
     alpha = arr[:, :, 3].copy()
 
     # Step 1: Invert
@@ -243,7 +250,14 @@ def apply_manual_alpha(
     """
     if img.mode != "RGBA":
         img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
+    try:
+        arr = np.array(img, dtype=np.int32)
+    except MemoryError:
+        w, h = img.size
+        raise MemoryError(
+            f"Not enough memory to process {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
+        )
     alpha = arr[:, :, 3].copy()
 
     # Step 1: Invert
@@ -330,7 +344,14 @@ def apply_rgba_adjust(
     """
     if img.mode != "RGBA":
         img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
+    try:
+        arr = np.array(img, dtype=np.int32)
+    except MemoryError:
+        w, h = img.size
+        raise MemoryError(
+            f"Not enough memory to adjust {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
+        )
     arr[:, :, 0] = np.clip(arr[:, :, 0] + red_delta,   *red_clamp)
     arr[:, :, 1] = np.clip(arr[:, :, 1] + green_delta, *green_clamp)
     arr[:, :, 2] = np.clip(arr[:, :, 2] + blue_delta,  *blue_clamp)

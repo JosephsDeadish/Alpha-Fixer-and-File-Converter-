@@ -612,7 +612,9 @@ class ConverterTab(QWidget):
 
         # Disconnect any stale previous loader to prevent it from overwriting
         # the current preview after the selection or format has changed.
+        # Also ask the thread to abandon work so it doesn't waste CPU.
         if self._preview_loader is not None:
+            self._preview_loader.stop()
             try:
                 self._preview_loader.ready.disconnect()
                 self._preview_loader.failed.disconnect()

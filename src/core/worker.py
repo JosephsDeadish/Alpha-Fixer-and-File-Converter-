@@ -121,6 +121,11 @@ class AlphaWorker(QThread):
                 # the UI log from accumulating 50 000 lines.
                 if not large_batch:
                     self.file_done.emit(src, True, dest)
+            except MemoryError as exc:
+                errors += 1
+                msg = f"Out of memory — {exc}"
+                logger.error("Alpha worker MemoryError on %s: %s", src, msg)
+                self.file_done.emit(src, False, msg)
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()
@@ -230,6 +235,11 @@ class ConverterWorker(QThread):
                 success += 1
                 if not large_batch:
                     self.file_done.emit(src, True, dest)
+            except MemoryError as exc:
+                errors += 1
+                msg = f"Out of memory — {exc}"
+                logger.error("Converter worker MemoryError on %s: %s", src, msg)
+                self.file_done.emit(src, False, msg)
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()

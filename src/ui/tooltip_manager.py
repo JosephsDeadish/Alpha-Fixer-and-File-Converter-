@@ -2364,6 +2364,15 @@ class TooltipManager(QObject):
         # Keep a strong Python reference so id(tab_bar) stays stable.
         self._tab_bar_refs[bar_id] = tab_bar
         tab_bar.setToolTip("")
+        # When the QTabBar is destroyed, remove its refs so the O(N) scan
+        # in eventFilter does not accumulate stale entries over time.
+        # Use a default-argument to capture bar_id by value; a bare `lambda`
+        # would capture it by reference which can give the wrong id if the
+        # variable is ever reassigned.
+        try:
+            tab_bar.destroyed.connect(lambda bid=bar_id: self._cleanup_tab_bar(bid))
+        except Exception:
+            pass
         # Also clear per-tab native tooltips
         for i in range(len(tip_keys)):
             try:
@@ -2383,6 +2392,18 @@ class TooltipManager(QObject):
     def mode(self) -> str:
         default = _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
         return self._settings.get("tooltip_mode", default)
+
+    def _cleanup_tab_bar(self, bar_id: int) -> None:
+        """Remove all refs for a destroyed QTabBar to prevent stale-ref scans."""
+        self._tab_bar_keys.pop(bar_id, None)
+        self._tab_bar_refs.pop(bar_id, None)
+        # Remove matching parent-widget entries
+        dead_parents = [
+            wid for wid, bar_ref in self._tab_widget_to_bar.items()
+            if id(bar_ref) == bar_id
+        ]
+        for wid in dead_parents:
+            self._tab_widget_to_bar.pop(wid, None)
 
     # ------------------------------------------------------------------
     # Event filter

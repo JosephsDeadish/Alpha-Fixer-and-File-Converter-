@@ -1727,3 +1727,236 @@ class TestTooltipCorrectness(unittest.TestCase):
         self.assertNotIn("process almost NONE", src,
                          "threshold_spin tips must not say 'process almost NONE' for threshold=255 — "
                          "threshold=255 processes everything except fully opaque pixels")
+
+
+# ---------------------------------------------------------------------------
+# Crash / hang / lag prevention tests
+# ---------------------------------------------------------------------------
+
+class TestCrashHangLagPrevention(unittest.TestCase):
+    """Verify that the crash, hang, and lag prevention measures are in place."""
+
+    _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+
+    # ── MemoryError handling ──────────────────────────────────────────────────
+
+    def test_apply_alpha_preset_wraps_memoryerror(self):
+        """apply_alpha_preset must catch MemoryError from np.array and re-raise
+        it with a user-friendly message that includes image dimensions."""
+        from unittest.mock import patch
+        img = make_rgba_image(4, 4, alpha=128)
+        preset = AlphaPreset(
+            name="test", alpha_value=255, threshold=0, invert=False,
+            description="test preset", builtin=True,
+        )
+        with patch("src.core.alpha_processor.np.array", side_effect=MemoryError("mock OOM")):
+            with self.assertRaises(MemoryError) as ctx:
+                apply_alpha_preset(img, preset)
+        self.assertIn("memory", str(ctx.exception).lower(),
+                      "MemoryError message should mention memory")
+
+    def test_apply_manual_alpha_wraps_memoryerror(self):
+        """apply_manual_alpha must catch MemoryError from np.array and re-raise
+        it with a user-friendly message."""
+        from unittest.mock import patch
+        img = make_rgba_image(4, 4, alpha=128)
+        with patch("src.core.alpha_processor.np.array", side_effect=MemoryError("mock OOM")):
+            with self.assertRaises(MemoryError) as ctx:
+                apply_manual_alpha(img, value=255)
+        self.assertIn("memory", str(ctx.exception).lower())
+
+    def test_apply_rgba_adjust_wraps_memoryerror(self):
+        """apply_rgba_adjust must catch MemoryError from np.array and re-raise
+        it with a user-friendly message."""
+        from unittest.mock import patch
+        img = make_rgba_image(4, 4, alpha=128)
+        with patch("src.core.alpha_processor.np.array", side_effect=MemoryError("mock OOM")):
+            with self.assertRaises(MemoryError) as ctx:
+                apply_rgba_adjust(img, red_delta=10)
+        self.assertIn("memory", str(ctx.exception).lower())
+
+    # ── Worker MemoryError handling ───────────────────────────────────────────
+
+    def _worker_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "core", "worker.py")) as f:
+            return f.read()
+
+    def test_alpha_worker_has_memoryerror_catch(self):
+        """AlphaWorker.run() must have an explicit MemoryError except clause
+        before the generic Exception handler so OOM errors get a clear message."""
+        src = self._worker_source()
+        # Find AlphaWorker's run() method
+        alpha_run_start = src.find("class AlphaWorker")
+        converter_start = src.find("class ConverterWorker")
+        alpha_run_section = src[alpha_run_start:converter_start]
+        self.assertIn("except MemoryError", alpha_run_section,
+                      "AlphaWorker.run() must catch MemoryError explicitly")
+
+    def test_converter_worker_has_memoryerror_catch(self):
+        """ConverterWorker.run() must have an explicit MemoryError except clause."""
+        src = self._worker_source()
+        converter_start = src.find("class ConverterWorker")
+        converter_section = src[converter_start:]
+        self.assertIn("except MemoryError", converter_section,
+                      "ConverterWorker.run() must catch MemoryError explicitly")
+
+    # ── Preview loader abort flag ─────────────────────────────────────────────
+
+    def _alpha_tool_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "alpha_tool.py")) as f:
+            return f.read()
+
+    def _preview_pane_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "preview_pane.py")) as f:
+            return f.read()
+
+    def _converter_tool_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "converter_tool.py")) as f:
+            return f.read()
+
+    def test_alpha_preview_loader_has_abort_flag(self):
+        """_AlphaPreviewLoader must have an _abort flag and a stop() method
+        so superseded threads can bail out before expensive processing."""
+        src = self._alpha_tool_source()
+        loader_start = src.find("class _AlphaPreviewLoader")
+        # Find the end of the class (next class or end of file)
+        next_class = src.find("\nclass ", loader_start + 1)
+        loader_section = src[loader_start:next_class] if next_class != -1 else src[loader_start:]
+        self.assertIn("self._abort = False", loader_section,
+                      "_AlphaPreviewLoader.__init__ must set self._abort = False")
+        self.assertIn("def stop(", loader_section,
+                      "_AlphaPreviewLoader must have a stop() method")
+        self.assertIn("self._abort", loader_section,
+                      "_AlphaPreviewLoader.run() must check self._abort")
+
+    def test_alpha_preview_loader_stop_called_on_replace(self):
+        """_update_compare() must call stop() on the old preview loader
+        before replacing it, not just disconnect its signals."""
+        src = self._alpha_tool_source()
+        update_pos = src.find("def _update_compare(")
+        # Find the next method after _update_compare
+        next_method = src.find("\n    def ", update_pos + 1)
+        update_section = src[update_pos:next_method]
+        self.assertIn(".stop()", update_section,
+                      "_update_compare() must call stop() on the old preview loader")
+
+    def test_converter_preview_loader_has_abort_flag(self):
+        """_ConverterPreviewLoader must have an _abort flag and a stop() method."""
+        src = self._preview_pane_source()
+        loader_start = src.find("class _ConverterPreviewLoader")
+        next_class = src.find("\nclass ", loader_start + 1)
+        loader_section = src[loader_start:next_class] if next_class != -1 else src[loader_start:]
+        self.assertIn("self._abort = False", loader_section,
+                      "_ConverterPreviewLoader.__init__ must set self._abort = False")
+        self.assertIn("def stop(", loader_section,
+                      "_ConverterPreviewLoader must have a stop() method")
+        self.assertIn("self._abort", loader_section,
+                      "_ConverterPreviewLoader.run() must check self._abort")
+
+    def test_converter_refresh_preview_calls_stop(self):
+        """_refresh_preview() in converter_tool must call stop() on the old
+        preview loader before replacing it."""
+        src = self._converter_tool_source()
+        refresh_pos = src.find("def _refresh_preview(")
+        next_method = src.find("\n    def ", refresh_pos + 1)
+        refresh_section = src[refresh_pos:next_method]
+        self.assertIn(".stop()", refresh_section,
+                      "_refresh_preview() must call stop() on the old preview loader")
+
+    # ── closeEvent cleanup ────────────────────────────────────────────────────
+
+    def _main_window_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "main_window.py")) as f:
+            return f.read()
+
+    def test_closeevent_stops_preview_loaders(self):
+        """closeEvent must stop preview loaders on both tabs so their threads
+        do not emit signals into already-destroyed Qt objects."""
+        src = self._main_window_source()
+        close_pos = src.find("def closeEvent(")
+        next_method = src.find("\n    def ", close_pos + 1)
+        close_section = src[close_pos:next_method]
+        self.assertIn("_preview_loader", close_section,
+                      "closeEvent must reference _preview_loader to cancel it")
+        self.assertIn(".stop()", close_section,
+                      "closeEvent must call stop() to cancel in-flight preview loaders")
+
+    def test_closeevent_stops_debounce_timers(self):
+        """closeEvent must stop preview debounce timers on both tabs to prevent
+        pending timeouts firing after the tab is torn down."""
+        src = self._main_window_source()
+        close_pos = src.find("def closeEvent(")
+        next_method = src.find("\n    def ", close_pos + 1)
+        close_section = src[close_pos:next_method]
+        self.assertIn("_preview_debounce", close_section,
+                      "closeEvent must reference _preview_debounce to stop it")
+
+    def test_closeevent_stops_main_window_timers(self):
+        """closeEvent must stop the main-window-level timers
+        (_settings_apply_timer, _resize_timer)."""
+        src = self._main_window_source()
+        close_pos = src.find("def closeEvent(")
+        next_method = src.find("\n    def ", close_pos + 1)
+        close_section = src[close_pos:next_method]
+        self.assertIn("_settings_apply_timer", close_section,
+                      "closeEvent must stop _settings_apply_timer")
+        self.assertIn("_resize_timer", close_section,
+                      "closeEvent must stop _resize_timer")
+
+    # ── Tooltip manager destroyed-ref cleanup ─────────────────────────────────
+
+    def _tooltip_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "tooltip_manager.py")) as f:
+            return f.read()
+
+    def test_register_tab_bar_connects_destroyed_signal(self):
+        """register_tab_bar() must connect tab_bar.destroyed to a cleanup
+        method so stale refs don't accumulate in _tab_bar_keys/_tab_bar_refs."""
+        src = self._tooltip_source()
+        reg_pos = src.find("def register_tab_bar(")
+        next_method = src.find("\n    def ", reg_pos + 1)
+        reg_section = src[reg_pos:next_method]
+        self.assertIn("destroyed", reg_section,
+                      "register_tab_bar() must connect tab_bar.destroyed for cleanup")
+
+    def test_cleanup_tab_bar_method_exists(self):
+        """TooltipManager must have a _cleanup_tab_bar() method that removes
+        dead refs from all three tracking dicts."""
+        src = self._tooltip_source()
+        self.assertIn("def _cleanup_tab_bar(", src,
+                      "TooltipManager must have a _cleanup_tab_bar() method")
+        cleanup_pos = src.find("def _cleanup_tab_bar(")
+        # Find end of method (next def at same indent)
+        next_method = src.find("\n    def ", cleanup_pos + 1)
+        cleanup_section = src[cleanup_pos:next_method]
+        self.assertIn("_tab_bar_keys", cleanup_section,
+                      "_cleanup_tab_bar() must clean up _tab_bar_keys")
+        self.assertIn("_tab_bar_refs", cleanup_section,
+                      "_cleanup_tab_bar() must clean up _tab_bar_refs")
+        self.assertIn("_tab_widget_to_bar", cleanup_section,
+                      "_cleanup_tab_bar() must clean up _tab_widget_to_bar")
+
+    # ── Font cache cap ────────────────────────────────────────────────────────
+
+    def _click_effects_source(self) -> str:
+        with open(os.path.join(self._SRC_DIR, "ui", "click_effects.py")) as f:
+            return f.read()
+
+    def test_font_cache_has_max_size_constant(self):
+        """ClickEffectsOverlay must define _FONT_CACHE_MAX to cap the font
+        cache and prevent unbounded growth over long sessions."""
+        src = self._click_effects_source()
+        self.assertIn("_FONT_CACHE_MAX", src,
+                      "ClickEffectsOverlay must define _FONT_CACHE_MAX")
+
+    def test_font_cache_eviction_in_get_font(self):
+        """_get_font() must evict an entry when the cache exceeds _FONT_CACHE_MAX
+        to keep memory bounded during long sessions with many particle sizes."""
+        src = self._click_effects_source()
+        get_font_pos = src.find("def _get_font(")
+        next_method = src.find("\n    def ", get_font_pos + 1)
+        get_font_section = src[get_font_pos:next_method]
+        self.assertIn("_FONT_CACHE_MAX", get_font_section,
+                      "_get_font() must check against _FONT_CACHE_MAX")
+        self.assertIn("pop(", get_font_section,
+                      "_get_font() must evict (pop) an entry when the cache is full")

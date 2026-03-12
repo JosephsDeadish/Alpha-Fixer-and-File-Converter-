@@ -495,6 +495,11 @@ class _ConverterPreviewLoader(QThread):
         self._target_fmt = target_fmt.upper()
         self._quality = quality
         self._max_size = max_size
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
 
     def run(self):
         try:
@@ -506,6 +511,12 @@ class _ConverterPreviewLoader(QThread):
             orig_w, orig_h = img.size
             src_file_size = os.path.getsize(self._path)
 
+            # Early abort: if the request is already stale (user moved to a
+            # different file before we even decoded the header), skip all work.
+            if self._abort:
+                img.close()
+                return
+
             # --- Source side ---
             src_thumb = img.copy()
             src_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
@@ -516,6 +527,12 @@ class _ConverterPreviewLoader(QThread):
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                 f"{_fmt_size(src_file_size)}"
             )
+
+            # If a newer selection or format change arrived, bail out before
+            # running the expensive in-memory conversion step.
+            if self._abort:
+                img.close()
+                return
 
             # --- Output side: convert in-memory to see encoding artefacts ---
             fmt = self._target_fmt

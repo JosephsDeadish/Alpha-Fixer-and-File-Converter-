@@ -1106,6 +1106,23 @@ class MainWindow(QMainWindow):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
                 tab._worker.stop()
                 tab._worker.wait(3000)
+            # Cancel any in-flight preview loaders so their threads don't
+            # try to emit signals into already-destroyed Qt objects.
+            if hasattr(tab, "_preview_loader") and tab._preview_loader is not None:
+                tab._preview_loader.stop()
+            # Stop preview debounce timers so pending timeouts don't fire
+            # after the tab widgets have been torn down.
+            if hasattr(tab, "_preview_debounce") and tab._preview_debounce is not None:
+                tab._preview_debounce.stop()
+        # Stop main-window timers before the window is destroyed
+        for timer in (
+            self._settings_apply_timer,
+            self._resize_timer,
+            self._unlock_timer,
+            self._anim_timer,
+        ):
+            if timer is not None:
+                timer.stop()
         # Clean up temp sound file
         if self._sound is not None:
             self._sound.cleanup()
