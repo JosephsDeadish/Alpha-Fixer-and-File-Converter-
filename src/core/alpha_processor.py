@@ -319,21 +319,24 @@ def apply_manual_alpha(
          above threshold keep their original alpha (they are protected from change).
          When threshold == 0 (default) or binary_cut is True, all pixels are processed.
       2. Invert alpha (if invert is True, applied to masked pixels only).
-      3. Normalize: remap masked [img_min, img_max] → [clamp_min, clamp_max].
-         When clamp_min == clamp_max every masked pixel gets that exact value.
+      3. Scale: remap each pixel from the full [0, 255] source range to
+         [clamp_min, clamp_max].  This means pixel=0 always becomes clamp_min,
+         pixel=255 always becomes clamp_max, and values in between scale linearly.
+         When clamp_min == clamp_max every processed pixel gets that exact value.
+         Unlike source-range normalization this gives perfectly predictable results
+         regardless of the image's current alpha distribution.
       4. Binary threshold cut (if binary_cut is True): pixels >= threshold → 255,
          else → 0 (applied to ALL pixels; threshold is the hard-cut split point here).
-      5. Clamp to [clamp_min, clamp_max] (applied to processed pixels only when a
-         threshold filter is active, so protected pixels keep their original values).
+      5. Clamp to [clamp_min, clamp_max] (safety net).
 
     Args:
         threshold:  Protect pixels with alpha >= this value from being changed
                     (0 = process all pixels).  When binary_cut is True this becomes
                     the hard-cut split point instead.
-        invert:     Invert alpha before normalizing (applied to processed pixels).
-        clamp_min:  Target range minimum (0–255).
-        clamp_max:  Target range maximum (0–255).
-        binary_cut: When True, apply a hard 0/255 split at the threshold after normalizing.
+        invert:     Invert alpha before scaling (applied to processed pixels).
+        clamp_min:  Target range minimum (0–255).  pixel=0 maps to this value.
+        clamp_max:  Target range maximum (0–255).  pixel=255 maps to this value.
+        binary_cut: When True, apply a hard 0/255 split at the threshold after scaling.
     """
     _converted = img.mode != "RGBA"
     if _converted:
@@ -363,26 +366,22 @@ def apply_manual_alpha(
         if invert:
             alpha[proc_mask] = 255 - alpha[proc_mask]
 
-        # Step 3: Normalize — remap masked [img_min, img_max] → [target_lo, target_hi].
-        # When target_lo == target_hi every masked pixel becomes that value.
+        # Step 3: Scale from the full [0, 255] range to [target_lo, target_hi].
+        # pixel=0 → target_lo, pixel=255 → target_hi, linear in between.
+        # This is unconditional: every processed pixel is scaled regardless of
+        # whether the source image is uniform or not.
         target_lo = min(clamp_min, clamp_max)
         target_hi = max(clamp_min, clamp_max)
         alpha_sel = alpha[proc_mask]
         if alpha_sel.size > 0:
-            img_min = int(alpha_sel.min())
-            img_max = int(alpha_sel.max())
-            if img_max > img_min:
+            if target_lo == target_hi:
+                alpha[proc_mask] = target_lo
+            else:
                 alpha[proc_mask] = np.round(
                     target_lo
-                    + (alpha_sel - img_min).astype(np.float32)
+                    + alpha_sel.astype(np.float32) / 255.0
                     * (target_hi - target_lo)
-                    / (img_max - img_min)
                 ).astype(np.int32)
-            else:
-                # Uniform selection: map proportionally on the absolute [0, 255] scale
-                # so that both Min and Max spinboxes remain live for all source values.
-                out_val = int(round(target_lo + img_min / 255.0 * (target_hi - target_lo)))
-                alpha[proc_mask] = out_val
 
         # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
         # threshold is the split point here, not a selection gate).

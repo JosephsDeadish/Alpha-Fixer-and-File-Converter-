@@ -246,25 +246,31 @@ class TestPresets(unittest.TestCase):
                          "alpha=100 normalizes to ~129")
 
     def test_clamp_only_manual_preserves_range(self):
-        """apply_manual_alpha normalizes alpha into [clamp_min, clamp_max].
+        """apply_manual_alpha scales alpha from the full [0,255] range to [clamp_min, clamp_max].
+        pixel=0→Min, pixel=255→Max, others scale linearly.
         The min and max of the output MUST differ when the source has varied alpha.
         This tests the core 'new min and max' use-case."""
         arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
-        arr_in[0, 0] = [0, 0, 0, 30]    # below floor
-        arr_in[0, 1] = [0, 0, 0, 150]   # within range
-        arr_in[1, 0] = [0, 0, 0, 230]   # above ceiling
-        arr_in[1, 1] = [0, 0, 0, 80]    # within range
+        arr_in[0, 0] = [0, 0, 0, 30]    # low alpha
+        arr_in[0, 1] = [0, 0, 0, 150]   # mid alpha
+        arr_in[1, 0] = [0, 0, 0, 230]   # high alpha
+        arr_in[1, 1] = [0, 0, 0, 80]    # low-mid alpha
         img = Image.fromarray(arr_in, "RGBA")
         result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
         out = np.array(result)
-        self.assertEqual(int(out[0, 0, 3]), 50,  "below floor → raised to floor")
-        self.assertEqual(int(out[0, 1, 3]), 140, "alpha=150 normalizes to 140")
-        self.assertEqual(int(out[1, 0, 3]), 200, "above ceiling → capped")
-        self.assertEqual(int(out[1, 1, 3]), 88,  "alpha=80 normalizes to 88")
+        # new formula: round(50 + pixel/255 * 150)
+        # pixel=30  → round(50 + 30/255*150)  = round(67.65) = 68
+        # pixel=150 → round(50 + 150/255*150) = round(138.24) = 138
+        # pixel=230 → round(50 + 230/255*150) = round(185.29) = 185
+        # pixel=80  → round(50 + 80/255*150)  = round(97.06) = 97
+        self.assertEqual(int(out[0, 0, 3]), 68,  "alpha=30 → 68")
+        self.assertEqual(int(out[0, 1, 3]), 138, "alpha=150 → 138")
+        self.assertEqual(int(out[1, 0, 3]), 185, "alpha=230 → 185")
+        self.assertEqual(int(out[1, 1, 3]), 97,  "alpha=80 → 97")
         # Crucially: min ≠ max in the output (the user gets a true range)
         alpha_out = out[:, :, 3]
         self.assertGreater(int(alpha_out.max()), int(alpha_out.min()),
-                           "clamp-only mode must produce a range, not a single value")
+                           "output must have a range, not a single value")
 
     def test_clamp_min_manual_alpha(self):
         """apply_manual_alpha: uniform alpha is proportionally mapped on [0, 255] into
@@ -399,15 +405,18 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(int(out[2:, :, 3].min()), 128, "max pixels should map to 128")
 
     def test_manual_alpha_normalize_half_range_to_full(self):
-        """normalize: [0, 128] → [0, 255] maps 128→255, 0→0."""
+        """apply_manual_alpha scales alpha linearly from [0,255] to [target_lo, target_hi].
+        pixel=0 → target_lo, pixel=255 → target_hi, others scale proportionally."""
         arr = np.zeros((4, 4, 4), dtype=np.uint8)
         arr[:2, :, 3] = 0
         arr[2:, :, 3] = 128
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, clamp_min=0, clamp_max=255)
         out = np.array(result)
+        # pixel=0 → round(0/255*255) = 0
         self.assertEqual(int(out[:2, :, 3].max()), 0,   "min pixels should stay 0")
-        self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
+        # pixel=128 → round(128/255*255) = 128 (not 255 — no source-range stretch)
+        self.assertEqual(int(out[2:, :, 3].min()), 128, "pixel=128 stays at 128")
 
     def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
         """Uniform alpha above target_hi is proportionally mapped, not hard-capped.
@@ -585,13 +594,14 @@ class TestPresets(unittest.TestCase):
         """threshold=0 (default) must process every pixel — backward-compatible."""
         arr = np.zeros((1, 2, 4), dtype=np.uint8)
         arr[0, 0, 3] = 0
-        arr[0, 1, 3] = 200   # would be 'protected' if threshold=128, but threshold=0
+        arr[0, 1, 3] = 200
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, threshold=0, clamp_min=0, clamp_max=64)
         out = np.array(result)
-        # Both pixels are processed: [0, 200] → [0, 64]
-        self.assertEqual(int(out[0, 0, 3]), 0,   "alpha=0 → 0 (min)")
-        self.assertEqual(int(out[0, 1, 3]), 64,  "alpha=200 → 64 (max of range)")
+        # pixel=0 → round(0/255*64) = 0
+        # pixel=200 → round(200/255*64) = round(50.2) = 50  (NOT 64; no source-range stretch)
+        self.assertEqual(int(out[0, 0, 3]), 0,  "alpha=0 → 0")
+        self.assertEqual(int(out[0, 1, 3]), 50, "alpha=200 → 50 (proportional on [0,255])")
 
     def test_manual_alpha_threshold_mixed_range_partial_protect(self):
         """threshold=128 protects the top half while remapping the bottom half."""
@@ -603,12 +613,14 @@ class TestPresets(unittest.TestCase):
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, threshold=128, clamp_min=0, clamp_max=100)
         out = np.array(result)
-        # Processed pixels: [0, 64] normalized to [0, 100]
-        self.assertEqual(int(out[0, 0, 3]), 0,    "alpha=0 → 0 (min of range)")
-        self.assertEqual(int(out[0, 1, 3]), 100,  "alpha=64 → 100 (max of processed range)")
+        # Processed pixels: use proportional formula on [0,255] → [0,100]
+        # pixel=0  → round(0/255*100) = 0
+        # pixel=64 → round(64/255*100) = round(25.1) = 25  (NOT 100)
+        self.assertEqual(int(out[0, 0, 3]), 0,   "alpha=0 → 0")
+        self.assertEqual(int(out[0, 1, 3]), 25,  "alpha=64 → 25 (proportional on [0,255])")
         # Protected pixels: original values must be preserved
-        self.assertEqual(int(out[0, 2, 3]), 128,  "alpha=128 >= threshold → unchanged")
-        self.assertEqual(int(out[0, 3, 3]), 200,  "alpha=200 >= threshold → unchanged")
+        self.assertEqual(int(out[0, 2, 3]), 128, "alpha=128 >= threshold → unchanged")
+        self.assertEqual(int(out[0, 3, 3]), 200, "alpha=200 >= threshold → unchanged")
 
     def test_preset_threshold_protects_high_alpha_pixels(self):
         """apply_alpha_preset: threshold > 0 with binary_cut=False protects
@@ -1258,14 +1270,11 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         self.assertIn("_alpha_delta_spin", self._alpha_tool_source())
 
     def test_alpha_delta_included_in_rgb_params(self):
-        """The rgb_params dict in alpha_tool.py should include key 'a' for alpha delta."""
+        """The rgb dict in alpha_tool.py should include key 'a' for alpha delta."""
         source = self._alpha_tool_source()
-        # Look for 'a': self._alpha_delta_spin near rgb_params
-        rgb_idx = source.find("rgb_params")
-        self.assertGreater(rgb_idx, 0, "rgb_params not found in alpha_tool.py")
-        rgb_section = source[rgb_idx:]
-        self.assertIn('"a"', rgb_section,
-                      "rgb_params in alpha_tool.py should include key 'a' for alpha delta")
+        # Look for the alpha_delta_spin value being assigned under key "a"
+        self.assertIn('"a": self._alpha_delta_spin.value()', source,
+                      "rgb dict in alpha_tool.py should include key 'a' for alpha delta")
 
     def test_worker_passes_alpha_delta(self):
         """worker.py should forward alpha_delta from the rgb dict to apply_rgba_adjust."""
@@ -1326,236 +1335,16 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestUsePresetRecheck(unittest.TestCase):
-    """When the user manually re-checks 'Use preset', fine-tune controls must
-    be reloaded from the preset so the display matches what will be processed."""
+    """Source-level checks for the simplified alpha tool (no presets, no Force-same)."""
 
     def _alpha_tool_source(self) -> str:
         path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
         with open(path) as f:
             return f.read()
 
-    def test_on_use_preset_toggled_handler_defined(self):
-        """alpha_tool.py must define the _on_use_preset_toggled slot."""
-        self.assertIn("def _on_use_preset_toggled", self._alpha_tool_source(),
-                      "_on_use_preset_toggled slot must be defined in alpha_tool.py")
-
-    def test_use_preset_check_connected_to_on_use_preset_toggled(self):
-        """_use_preset_check.toggled must be connected to _on_use_preset_toggled,
-        not directly to _update_compare."""
-        source = self._alpha_tool_source()
-        self.assertIn(
-            "_use_preset_check.toggled.connect(self._on_use_preset_toggled)",
-            source,
-            "_use_preset_check.toggled must connect to _on_use_preset_toggled",
-        )
-        # The old direct-to-_update_compare connection must no longer exist
-        self.assertNotIn(
-            "_use_preset_check.toggled.connect(self._update_compare)",
-            source,
-            "_use_preset_check.toggled must NOT connect directly to _update_compare",
-        )
-
-    def test_on_use_preset_toggled_calls_on_preset_changed_when_checked(self):
-        """_on_use_preset_toggled must call _on_preset_changed when checked=True."""
-        source = self._alpha_tool_source()
-        # Find the handler body
-        start = source.find("def _on_use_preset_toggled")
-        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
-        # Find the next method definition to scope the search; fall back to
-        # end-of-file if this is the last method (avoids a -1 index).
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_on_preset_changed",
-            body,
-            "_on_use_preset_toggled must call _on_preset_changed when checked",
-        )
-        self.assertIn(
-            "_update_compare",
-            body,
-            "_on_use_preset_toggled must call _update_compare when unchecked",
-        )
-
-    def test_on_preset_changed_guards_spinbox_update_on_use_preset_check(self):
-        """_on_preset_changed must only update fine-tune controls when 'Use preset'
-        is checked.  When in manual mode, changing the preset combo must not
-        overwrite the user's custom Min/Max values (many built-in presets have
-        clamp_min == clamp_max which would silently collapse the range)."""
-        source = self._alpha_tool_source()
-        # Locate _on_preset_changed body
-        start = source.find("def _on_preset_changed")
-        self.assertGreater(start, 0, "_on_preset_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        # The spinbox setValue calls must be inside a use_preset_check.isChecked() guard
-        self.assertIn(
-            "self._use_preset_check.isChecked()",
-            body,
-            "_on_preset_changed must guard fine-tune control updates with "
-            "'_use_preset_check.isChecked()' so manual Min/Max values are "
-            "preserved when browsing presets in manual mode",
-        )
-        # Confirm the setValue calls exist (they must be inside the guard)
-        self.assertIn(
-            "_clamp_min_spin.setValue",
-            body,
-            "_on_preset_changed must still set clamp_min spinbox (inside the guard)",
-        )
-        self.assertIn(
-            "_clamp_max_spin.setValue",
-            body,
-            "_on_preset_changed must still set clamp_max spinbox (inside the guard)",
-        )
-
-    def test_force_same_value_check_exists_in_alpha_tool(self):
-        """_force_same_value_check QCheckBox must exist in alpha_tool.py."""
-        source = self._alpha_tool_source()
-        self.assertIn(
-            "self._force_same_value_check",
-            source,
-            "_force_same_value_check widget must be defined in alpha_tool.py",
-        )
-
-    def test_force_same_value_check_connected_to_handler(self):
-        """_force_same_value_check.toggled must be connected to _on_force_same_value_toggled."""
-        source = self._alpha_tool_source()
-        self.assertIn(
-            "_force_same_value_check.toggled.connect(self._on_force_same_value_toggled)",
-            source,
-            "_force_same_value_check.toggled must connect to _on_force_same_value_toggled",
-        )
-
-    def test_on_force_same_value_toggled_handler_defined(self):
-        """alpha_tool.py must define _on_force_same_value_toggled."""
-        source = self._alpha_tool_source()
-        self.assertIn(
-            "def _on_force_same_value_toggled",
-            source,
-            "_on_force_same_value_toggled must be defined in alpha_tool.py",
-        )
-
-    def test_on_clamp_min_changed_syncs_max_when_force_same_checked(self):
-        """_on_clamp_min_changed must update clamp_max_spin when Force same value is checked."""
-        source = self._alpha_tool_source()
-        start = source.find("def _on_clamp_min_changed")
-        self.assertGreater(start, 0, "_on_clamp_min_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_force_same_value_check.isChecked()",
-            body,
-            "_on_clamp_min_changed must check _force_same_value_check.isChecked()",
-        )
-        self.assertIn(
-            "_clamp_max_spin.setValue",
-            body,
-            "_on_clamp_min_changed must call _clamp_max_spin.setValue when locked",
-        )
-
-    def test_on_clamp_max_changed_syncs_min_when_force_same_checked(self):
-        """_on_clamp_max_changed must update clamp_min_spin when Force same value is checked."""
-        source = self._alpha_tool_source()
-        start = source.find("def _on_clamp_max_changed")
-        self.assertGreater(start, 0, "_on_clamp_max_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_force_same_value_check.isChecked()",
-            body,
-            "_on_clamp_max_changed must check _force_same_value_check.isChecked()",
-        )
-        self.assertIn(
-            "_clamp_min_spin.setValue",
-            body,
-            "_on_clamp_max_changed must call _clamp_min_spin.setValue when locked",
-        )
-
-    def test_force_same_value_check_registered_in_register_tooltips(self):
-        """_force_same_value_check must be registered with the tooltip manager."""
-        source = self._alpha_tool_source()
-        self.assertIn(
-            'mgr.register(self._force_same_value_check, "force_same_value_check")',
-            source,
-            "_force_same_value_check must be registered with the tooltip manager",
-        )
-
-    def test_force_same_value_check_tooltip_key_in_all_tip_dicts(self):
-        """force_same_value_check must have entries in _NORMAL, _DUMBED_DOWN, and _NO_FILTER."""
-        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
-        with open(path) as f:
-            src = f.read()
-        count = src.count('"force_same_value_check":')
-        self.assertGreaterEqual(
-            count, 3,
-            "force_same_value_check must appear in _NORMAL, _DUMBED_DOWN, and _NO_FILTER "
-            f"(found {count} occurrence(s))",
-        )
-
-    def test_on_preset_changed_sets_force_same_value_check_when_loading_preset(self):
-        """_on_preset_changed must set _force_same_value_check state when loading a preset."""
-        source = self._alpha_tool_source()
-        start = source.find("def _on_preset_changed")
-        self.assertGreater(start, 0, "_on_preset_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_force_same_value_check",
-            body,
-            "_on_preset_changed must set _force_same_value_check when loading a preset",
-        )
-
-    def test_on_preset_changed_uses_clamp_equality_to_set_force_same(self):
-        """_on_preset_changed must use `preset.clamp_min == preset.clamp_max` to set
-        the force_same_value_check — this evaluates to False for range presets so
-        they are never accidentally shown with the lock enabled."""
-        source = self._alpha_tool_source()
-        start = source.find("def _on_preset_changed")
-        self.assertGreater(start, 0, "_on_preset_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "preset.clamp_min == preset.clamp_max",
-            body,
-            "_on_preset_changed must use 'preset.clamp_min == preset.clamp_max' as the "
-            "condition for setting force_same_value_check, so range presets (min != max) "
-            "correctly result in the checkbox being unchecked",
-        )
-
-    def test_on_preset_changed_blocks_force_same_signals_during_load(self):
-        """_on_preset_changed must include _force_same_value_check in the
-        finetune_controls list so its signals are blocked during the spinbox
-        updates.  Without this, setting the checkbox could trigger its toggled
-        handler before the spinboxes have their new values, potentially collapsing
-        a range preset's min/max to the same value via the sync logic."""
-        source = self._alpha_tool_source()
-        start = source.find("def _on_preset_changed")
-        self.assertGreater(start, 0, "_on_preset_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        # The finetune_controls list must contain _force_same_value_check
-        # AND the list must come BEFORE the setChecked call (signals blocked first)
-        controls_pos = body.find("finetune_controls")
-        force_same_in_controls = body.find(
-            "_force_same_value_check", controls_pos,
-            body.find("for c in finetune_controls", controls_pos)
-        )
-        self.assertGreater(
-            force_same_in_controls, controls_pos,
-            "_force_same_value_check must appear inside the finetune_controls list "
-            "so its signals are blocked before any spinbox or checkbox values change",
-        )
-
     def test_on_preset_changed_range_preset_force_same_evaluates_false(self):
         """For any built-in preset with clamp_min != clamp_max, the expression
-        `preset.clamp_min == preset.clamp_max` evaluates to False — confirming
-        those presets will uncheck the 'Force same value' control when loaded."""
+        `preset.clamp_min == preset.clamp_max` evaluates to False."""
         from src.core.presets import BUILTIN_PRESETS
         range_presets = [p for p in BUILTIN_PRESETS if p.clamp_min != p.clamp_max]
         self.assertGreaterEqual(len(range_presets), 3,
@@ -1565,14 +1354,12 @@ class TestUsePresetRecheck(unittest.TestCase):
             self.assertFalse(
                 result,
                 f"Preset '{p.name}' has clamp_min={p.clamp_min}, clamp_max={p.clamp_max} "
-                f"(different), but clamp_min == clamp_max evaluates to True — this would "
-                f"wrongly CHECK the 'Force same value' checkbox for a range preset",
+                f"(different), but clamp_min == clamp_max evaluates to True",
             )
 
     def test_on_preset_changed_flat_preset_force_same_evaluates_true(self):
         """For built-in flat presets with clamp_min == clamp_max, the expression
-        evaluates to True — confirming the 'Force same value' control is correctly
-        checked when those presets are loaded."""
+        evaluates to True."""
         from src.core.presets import BUILTIN_PRESETS
         flat_presets = [p for p in BUILTIN_PRESETS
                         if p.clamp_min == p.clamp_max and not p.binary_cut]
@@ -1583,87 +1370,8 @@ class TestUsePresetRecheck(unittest.TestCase):
             self.assertTrue(
                 result,
                 f"Preset '{p.name}' has clamp_min == clamp_max == {p.clamp_min} "
-                f"but the expression evaluates to False — this would wrongly UNCHECK "
-                f"the 'Force same value' checkbox for a flat preset",
+                f"but the expression evaluates to False",
             )
-
-    def test_switch_to_manual_releases_force_same_via_spinbox_edit(self):
-        """_switch_to_manual_if_preset_active must uncheck force_same_value_check
-        when it switches from 'Use preset' to manual mode.  Without this, editing
-        a spinbox while force_same is checked (auto-set by a flat preset) keeps Min
-        and Max locked together and the user cannot change them independently."""
-        source = self._alpha_tool_source()
-        start = source.find("def _switch_to_manual_if_preset_active")
-        self.assertGreater(start, 0, "_switch_to_manual_if_preset_active not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_force_same_value_check",
-            body,
-            "_switch_to_manual_if_preset_active must uncheck _force_same_value_check "
-            "when switching to manual mode so the user can freely edit Min and Max",
-        )
-        self.assertIn(
-            "setChecked(False)",
-            body,
-            "_switch_to_manual_if_preset_active must call setChecked(False) on "
-            "_force_same_value_check to release the lock",
-        )
-
-    def test_on_use_preset_toggled_false_releases_force_same(self):
-        """_on_use_preset_toggled must uncheck force_same_value_check when the
-        checkbox is unchecked (checked=False).  Without this, explicitly clicking
-        'Use preset' off while a flat preset is active leaves force_same checked,
-        preventing the user from having different Min and Max values."""
-        source = self._alpha_tool_source()
-        start = source.find("def _on_use_preset_toggled")
-        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_force_same_value_check",
-            body,
-            "_on_use_preset_toggled must reference _force_same_value_check so the "
-            "lock is released when the user switches to manual mode",
-        )
-        self.assertIn(
-            "setChecked(False)",
-            body,
-            "_on_use_preset_toggled must call setChecked(False) on "
-            "_force_same_value_check when unchecked",
-        )
-
-    def test_on_finetune_changed_releases_force_same_when_switching_to_manual(self):
-        """_on_finetune_changed must uncheck force_same_value_check when it
-        auto-switches from 'Use preset' to manual mode.
-
-        If threshold/invert/binary_cut are changed while a flat preset is active,
-        _on_finetune_changed silently unchecks 'Use preset'.  Without also releasing
-        force_same_value_check, subsequent edits to the Min/Max spinboxes can no
-        longer free the lock (because _switch_to_manual_if_preset_active only acts
-        when 'Use preset' is still checked).  This leaves Min and Max permanently
-        locked together until the user explicitly unchecks 'Use preset' again.
-        """
-        source = self._alpha_tool_source()
-        start = source.find("def _on_finetune_changed")
-        self.assertGreater(start, 0, "_on_finetune_changed not found")
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_force_same_value_check",
-            body,
-            "_on_finetune_changed must reference _force_same_value_check so the "
-            "lock is released when it auto-switches from preset to manual mode",
-        )
-        self.assertIn(
-            "setChecked(False)",
-            body,
-            "_on_finetune_changed must call setChecked(False) on "
-            "_force_same_value_check to release the lock when switching to manual",
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -1985,19 +1693,12 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         with open(path) as f:
             return f.read()
 
-    def test_use_preset_renamed_auto_fills(self):
-        """The 'Use preset' checkbox label must mention 'auto-fills' to make
-        its purpose obvious to users who don't use presets."""
-        src = self._alpha_tool_source()
-        self.assertIn("auto-fills", src,
-                      "Use-preset checkbox label must contain 'auto-fills'")
-
     def test_hint_label_in_setup_ui(self):
         """_setup_ui must add an explanatory hint label to guide new users."""
         src = self._alpha_tool_source()
-        # The hint should mention Min/Max
-        self.assertIn("Min/Max", src,
-                      "Fine-tune section should have a hint label mentioning 'Min/Max'")
+        # The hint should describe the scaling behavior
+        self.assertIn("0–255", src,
+                      "Fine-tune section should have a hint label describing the 0–255 scale")
 
     def _tooltip_source(self) -> str:
         path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
@@ -2103,42 +1804,6 @@ class TestAlphaToolUISimplification(unittest.TestCase):
                          "threshold=255 processes everything except fully opaque pixels")
 
     # ── _on_force_same_value_toggled must NOT call _switch_to_manual_if_preset_active ──
-
-    def test_force_same_toggled_does_not_call_switch_to_manual(self):
-        """_on_force_same_value_toggled must NOT delegate to
-        _switch_to_manual_if_preset_active().  That helper unconditionally releases
-        the force_same lock when a preset is active, making it impossible for the
-        user to intentionally check force_same while in preset mode.  The handler
-        must implement its own inline preset-exit guard that preserves the user's
-        explicit force_same choice."""
-        src = self._alpha_tool_source()
-        start = src.find("def _on_force_same_value_toggled")
-        self.assertGreater(start, 0, "_on_force_same_value_toggled not found")
-        next_def = src.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(src)
-        body = src[start:end]
-        self.assertNotIn(
-            "_switch_to_manual_if_preset_active",
-            body,
-            "_on_force_same_value_toggled must not call _switch_to_manual_if_preset_active — "
-            "that helper releases force_same which overrides the user's explicit toggle",
-        )
-
-    def test_force_same_toggled_still_exits_preset_mode(self):
-        """_on_force_same_value_toggled must still switch to manual mode (uncheck
-        _use_preset_check) when a preset is active, just without releasing force_same."""
-        src = self._alpha_tool_source()
-        start = src.find("def _on_force_same_value_toggled")
-        self.assertGreater(start, 0, "_on_force_same_value_toggled not found")
-        next_def = src.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(src)
-        body = src[start:end]
-        # Must check whether a preset is currently active
-        self.assertIn("_use_preset_check.isChecked()", body,
-                      "_on_force_same_value_toggled must check _use_preset_check.isChecked()")
-        # Must uncheck use_preset when active
-        self.assertIn("_use_preset_check.setChecked(False)", body,
-                      "_on_force_same_value_toggled must uncheck _use_preset_check when preset active")
 
     def test_threshold_tooltip_describes_protect_behavior(self):
         """The threshold label tooltip must describe the 'protect above threshold'
