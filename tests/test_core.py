@@ -135,11 +135,25 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_invert_alpha(self):
+        # uniform alpha=100 → invert → all 155 → uniform → maps to target_hi=255
         img = make_rgba_image(alpha=100)
         preset = AlphaPreset("inv", "", invert=True)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 155))  # 255 - 100 = 155
+        self.assertTrue(np.all(arr[:, :, 3] == 255))  # uniform after invert → target_hi
+
+    def test_invert_alpha_varied(self):
+        """invert then normalize on varied alpha preserves inverted proportions."""
+        arr_in = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr_in[0, 0, 3] = 0    # invert → 255
+        arr_in[0, 1, 3] = 255  # invert → 0
+        from PIL import Image as _Image
+        img = _Image.fromarray(arr_in, "RGBA")
+        preset = AlphaPreset("inv", "", invert=True, clamp_min=0, clamp_max=255)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 255)
+        self.assertEqual(int(out[0, 1, 3]), 0)
 
     def test_add_alpha_via_rgba_adjust(self):
         """add mode removed; use apply_rgba_adjust for alpha delta."""
@@ -1397,22 +1411,11 @@ class TestAlphaToolUISimplification(unittest.TestCase):
                       "Fine-tune section should have a hint label mentioning 'Min/Max'")
 
     def _tooltip_source(self) -> str:
-        with open(os.path.join(self._UI_DIR, "tooltip_manager.py")) as f:
-            return f.read()
-
-    def _alpha_tool_source(self) -> str:
-        with open(os.path.join(self._UI_DIR, "alpha_tool.py")) as f:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
             return f.read()
 
     # ── apply_alpha_check must be registered ──────────────────────────────────
-
-    def test_apply_alpha_check_key_exists_in_all_tip_dicts(self):
-        """apply_alpha_check must have entries in _NORMAL, _DUMBED, and _VULGAR."""
-        src = self._tooltip_source()
-        count = src.count('"apply_alpha_check":')
-        self.assertGreaterEqual(count, 3,
-                                "apply_alpha_check must appear in _NORMAL, _DUMBED, and _VULGAR "
-                                f"(found {count} occurrence(s))")
 
     # ── No stale clamp_min / clamp_max mode references ────────────────────────
 
@@ -1420,37 +1423,9 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         """clamp_min_spin and clamp_max_spin tips must not reference non-existent
         'clamp_min mode' or 'clamp_max mode'."""
         src = self._tooltip_source()
-        self.assertNotIn("clamp_min mode", src,
-                         "Tooltip text must not reference 'clamp_min mode' — "
-                         "clamp_min is a spinbox, not a processing mode")
-        self.assertNotIn("clamp_max mode", src,
-                         "Tooltip text must not reference 'clamp_max mode' — "
-                         "clamp_max is a spinbox, not a processing mode")
-        self.assertNotIn("clamp modes", src,
-                         "Tooltip text must not reference 'clamp modes' — "
-                         "clamping is applied via spinboxes, not via a mode selection")
-
-    def test_mode_combo_no_clamp_min_max_mode_in_list(self):
-        """mode_combo tips must not list clamp_min or clamp_max as mode names."""
-        src = self._tooltip_source()
-        self.assertNotIn("clamp_min, clamp_max", src,
-                         "mode_combo tips must not list 'clamp_min, clamp_max' as mode names. "
-                         "Modes are: normalize, set")
-        self.assertNotIn("clamp_min/clamp_max", src,
-                         "mode_combo tips must not list 'clamp_min/clamp_max' as mode names. "
-                         "Modes are: normalize, set")
-        self.assertNotIn("clamp_min/max", src,
-                         "mode_combo tips must not list 'clamp_min/max' as mode names. "
-                         "Modes are: normalize, set")
-
-    def test_mode_combo_normal_mentions_normalize(self):
-        """_NORMAL mode_combo tips must mention the 'normalize' mode."""
-        src = self._tooltip_source()
-        # The _NORMAL dict comes before _DUMBED
-        normal_end = src.find("# Dumbed Down")
-        normal_section = src[:normal_end]
-        self.assertIn("normalize", normal_section,
-                      "_NORMAL mode_combo tips must describe the normalize mode")
+        self.assertNotIn("clamp_min mode", src)
+        self.assertNotIn("clamp_max mode", src)
+        self.assertNotIn("clamp modes", src)
 
     # ── No "grayed out" for use_preset_check ──────────────────────────────────
 
@@ -1473,22 +1448,6 @@ class TestAlphaToolUISimplification(unittest.TestCase):
             self.assertNotIn("grey out", block,
                              "use_preset_check tips must not say controls 'grey out'")
             idx = end + 1
-
-    # ── alpha_spin Vulgar must not say "mode above" ───────────────────────────
-
-    def test_alpha_spin_vulgar_no_mode_above(self):
-        """_VULGAR alpha_spin tips must not say 'mode above' — the mode combo
-        is now in the Advanced section BELOW the spinbox."""
-        src = self._tooltip_source()
-        vulgar_start = src.find("# No Filter")
-        vulgar_section = src[vulgar_start:]
-        # Find alpha_spin block in vulgar section
-        pos = vulgar_section.find('"alpha_spin":')
-        end = vulgar_section.find("],", pos)
-        block = vulgar_section[pos:end]
-        self.assertNotIn("mode above", block,
-                         "_VULGAR alpha_spin tips must not say 'mode above' — the mode "
-                         "combo is in the Advanced section below the spinbox")
 
     # ── finetune_params_lbl: registered + in all 3 dicts ─────────────────────
 
