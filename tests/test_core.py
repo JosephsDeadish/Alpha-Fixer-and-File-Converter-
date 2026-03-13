@@ -229,8 +229,7 @@ class TestPresets(unittest.TestCase):
                          "alpha=100 normalizes to ~129")
 
     def test_clamp_only_manual_preserves_range(self):
-        """apply_manual_alpha with value=None (clamp-only) should preserve the
-        alpha distribution, only bounding values to [clamp_min, clamp_max].
+        """apply_manual_alpha normalizes alpha into [clamp_min, clamp_max].
         The min and max of the output MUST differ when the source has varied alpha.
         This tests the core 'new min and max' use-case."""
         arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
