@@ -279,8 +279,11 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
         if preset.binary_cut and preset.threshold > 0:
             alpha = np.where(alpha >= preset.threshold, 255, 0)
 
-        # Step 4: Clamp
-        arr[:, :, 3] = np.clip(alpha, preset.clamp_min, preset.clamp_max).astype(np.uint8)
+        # Step 4: Clamp — use target_lo/target_hi (computed from
+        # min/max(preset.clamp_min, preset.clamp_max) at the top of this function)
+        # so that a custom preset with inverted clamp values still clips to the
+        # correct ordered range instead of collapsing every pixel to one value.
+        arr[:, :, 3] = np.clip(alpha, target_lo, target_hi).astype(np.uint8)
         return Image.fromarray(arr.astype(np.uint8), "RGBA")
     finally:
         if _converted:

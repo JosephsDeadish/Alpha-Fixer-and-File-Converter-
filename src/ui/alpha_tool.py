@@ -469,7 +469,12 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Floor: any pixel alpha below this value is raised to this value.\n"
-            "0 = no minimum (default). In 'normalize' mode this is the target minimum."
+            "0 = no minimum (default). In 'normalize' mode this is the target minimum.\n"
+            "\n"
+            "⚠ In 'set' mode this floor only activates when the set value is below it.\n"
+            "For a true output range [min, max] that preserves existing alpha variation,\n"
+            "uncheck 'Apply value to pixels' in Advanced Options (clamp-only mode)\n"
+            "or switch to 'normalize' mode."
         )
         gt_layout.addWidget(self._clamp_min_spin, 3, 1)
 
@@ -1047,11 +1052,19 @@ class AlphaFixerTab(QWidget):
             parts.append(f"normalize → [{self._clamp_range_label(lo, hi, cmin, cmax)}]")
         else:
             if self._apply_alpha_check.isChecked():
-                parts.append(f"{mode}={self._alpha_spin.value()}")
+                val = self._alpha_spin.value()
+                parts.append(f"{mode}={val}")
+                if cmin > 0 or cmax < 255:
+                    parts.append(f"clamp={self._clamp_range_label(lo, hi, cmin, cmax)}")
+                    # Warn when the set value is already at or above the floor so
+                    # the user can see that clamp_min has no effect on the output.
+                    # (clamp_min only raises the output when the set value < floor.)
+                    if lo > 0 and val >= lo:
+                        parts.append(f"⚠ floor={lo} unused (set {val} ≥ floor)")
             else:
                 parts.append("clamp only")
-            if cmin > 0 or cmax < 255:
-                parts.append(f"clamp={self._clamp_range_label(lo, hi, cmin, cmax)}")
+                if cmin > 0 or cmax < 255:
+                    parts.append(f"clamp={self._clamp_range_label(lo, hi, cmin, cmax)}")
 
         if thresh:
             parts.append(f"thresh={thresh}")
@@ -1135,28 +1148,24 @@ class AlphaFixerTab(QWidget):
         confusing mismatch between the displayed numbers and the actual
         processing result.
 
-        When unchecked:  switch to manual mode.  If the spinbox is currently
-        disabled (e.g. because a clamp-only preset was loaded which unchecked
-        ``_apply_alpha_check``), re-enable it so the user can immediately type
-        a value without having to discover the Advanced option first.
+        When unchecked:  switch to manual mode, keeping the controls exactly
+        as they are.  In particular, if the active preset was a clamp-only
+        preset (``_apply_alpha_check`` unchecked), that clamp-only behaviour
+        is preserved so that the min/max range works as the user set it.
+        The 'Apply value' checkbox in Advanced Options can always be toggled
+        to switch between 'set fixed value' and 'clamp only' modes.
         """
         if checked:
             # Reload preset values into the fine-tune controls so the display
             # is consistent with what "Process" will actually apply.
             self._on_preset_changed(self._preset_combo.currentText())
         else:
-            # Switching to manual mode: ensure the alpha value spinbox and
-            # slider are usable so the user can type any value straight away.
-            # A clamp-only preset sets apply_alpha_check=False and disables
-            # the spinbox, which would leave users confused with a greyed-out
-            # control and no obvious way to re-enable it.
-            mode = self._mode_combo.currentData() or "set"
-            if mode != "normalize" and not self._apply_alpha_check.isChecked():
-                was_blocked = self._apply_alpha_check.blockSignals(True)
-                self._apply_alpha_check.setChecked(True)
-                self._apply_alpha_check.blockSignals(was_blocked)
-                self._alpha_spin.setEnabled(True)
-                self._alpha_slider.setEnabled(True)
+            # Switching to manual mode: leave all fine-tune controls at their
+            # current values (including whether apply_alpha_check is checked).
+            # Forcing apply_alpha_check=True here used to silently convert a
+            # clamp-only preset into "set+clamp" mode, which made clamp_min
+            # completely ineffective when the set value was above the floor.
+            self._refresh_finetune_label()
             self._update_compare()
 
     @pyqtSlot(int)

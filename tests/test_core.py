@@ -328,6 +328,54 @@ class TestAlphaProcessor(unittest.TestCase):
         # 200 capped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
+    def test_inverted_clamp_preset(self):
+        """apply_alpha_preset normalizes inverted clamp values (clamp_min > clamp_max)
+        by treating the lower value as the floor and the higher value as the ceiling,
+        preventing all alpha values from collapsing to a single incorrect value."""
+        # Build a small image with alpha values spanning 0–255.
+        arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
+        arr_in[0, 0] = [0, 0, 0, 50]    # low alpha — should be raised to 100
+        arr_in[0, 1] = [0, 0, 0, 150]   # mid alpha — unchanged (within [100, 200])
+        arr_in[1, 0] = [0, 0, 0, 220]   # high alpha — should be capped to 200
+        arr_in[1, 1] = [0, 0, 0, 100]   # at floor — unchanged
+        img = Image.fromarray(arr_in, "RGBA")
+        # Preset with INVERTED values (clamp_min=200, clamp_max=100).
+        # The processor must normalize the order before clipping.
+        preset = AlphaPreset("inverted", None, 0, False, "",
+                             clamp_min=200, clamp_max=100)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 100,
+                         "alpha=50 below floor=100 should be raised to 100")
+        self.assertEqual(int(out[0, 1, 3]), 150,
+                         "alpha=150 within [100, 200] should be unchanged")
+        self.assertEqual(int(out[1, 0, 3]), 200,
+                         "alpha=220 above ceiling=200 should be capped to 200")
+        self.assertEqual(int(out[1, 1, 3]), 100,
+                         "alpha=100 at floor should be unchanged")
+
+    def test_clamp_only_manual_preserves_range(self):
+        """apply_manual_alpha with value=None (clamp-only) should preserve the
+        alpha distribution, only bounding values to [clamp_min, clamp_max].
+        The min and max of the output MUST differ when the source has varied alpha.
+        This tests the core 'new min and max' use-case."""
+        arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
+        arr_in[0, 0] = [0, 0, 0, 30]    # below floor
+        arr_in[0, 1] = [0, 0, 0, 150]   # within range
+        arr_in[1, 0] = [0, 0, 0, 230]   # above ceiling
+        arr_in[1, 1] = [0, 0, 0, 80]    # within range
+        img = Image.fromarray(arr_in, "RGBA")
+        result = apply_manual_alpha(img, value=None, clamp_min=50, clamp_max=200)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 50,  "below floor → raised to floor")
+        self.assertEqual(int(out[0, 1, 3]), 150, "within range → unchanged")
+        self.assertEqual(int(out[1, 0, 3]), 200, "above ceiling → capped")
+        self.assertEqual(int(out[1, 1, 3]), 80,  "within range → unchanged")
+        # Crucially: min ≠ max in the output (the user gets a true range)
+        alpha_out = out[:, :, 3]
+        self.assertGreater(int(alpha_out.max()), int(alpha_out.min()),
+                           "clamp-only mode must produce a range, not a single value")
+
     def test_clamp_min_manual_alpha(self):
         """apply_manual_alpha with clamp_min>0 should raise low alpha values."""
         img = make_rgba_image(alpha=50)
@@ -1516,23 +1564,30 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         self.assertIn("auto-fills", src,
                       "Use-preset checkbox label must contain 'auto-fills'")
 
-    def test_on_use_preset_toggled_reenables_spinbox_on_uncheck(self):
-        """_on_use_preset_toggled must re-enable the alpha spinbox when the
-        user switches to manual mode (unchecks Use preset).  Without this fix,
-        a clamp-only preset leaves the spinbox disabled and users cannot type
-        a value."""
+    def test_on_use_preset_toggled_preserves_clamp_only_on_uncheck(self):
+        """_on_use_preset_toggled must NOT force apply_alpha_check=True when
+        switching to manual mode.  The old behaviour silently converted a
+        clamp-only preset into 'set+clamp' mode, which made clamp_min
+        completely ineffective because the fixed set value (255) was always
+        above the floor.  The fix: preserve the controls exactly as they are,
+        including an unchecked apply_alpha_check from a clamp-only preset."""
         src = self._alpha_tool_source()
         start = src.find("def _on_use_preset_toggled")
         self.assertGreater(start, 0, "_on_use_preset_toggled not found")
         next_def = src.find("\n    def ", start + 1)
         end = next_def if next_def > start else len(src)
         body = src[start:end]
-        self.assertIn("_alpha_spin.setEnabled(True)", body,
-                      "_on_use_preset_toggled must call _alpha_spin.setEnabled(True) "
-                      "when switching to manual mode so users can type a value")
-        self.assertIn("_alpha_slider.setEnabled(True)", body,
-                      "_on_use_preset_toggled must call _alpha_slider.setEnabled(True) "
-                      "when switching to manual mode")
+        # Must NOT force apply_alpha_check into the True state in the else branch.
+        self.assertNotIn(
+            "apply_alpha_check.setChecked(True)", body,
+            "_on_use_preset_toggled must not force apply_alpha_check=True on uncheck; "
+            "this would break clamp-only mode and make clamp_min ineffective"
+        )
+        # Must refresh the label and trigger a compare update.
+        self.assertIn("_refresh_finetune_label", body,
+                      "_on_use_preset_toggled must refresh the finetune label on uncheck")
+        self.assertIn("_update_compare", body,
+                      "_on_use_preset_toggled must call _update_compare on uncheck")
 
     def test_hint_label_in_setup_ui(self):
         """_setup_ui must add an explanatory hint label to guide new users."""
