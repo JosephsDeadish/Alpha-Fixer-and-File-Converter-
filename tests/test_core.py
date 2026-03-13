@@ -402,10 +402,100 @@ class TestPresets(unittest.TestCase):
             "Expected a builtin preset with clamp_min=0, clamp_max=255 (PS2 to PC rescale)",
         )
 
+    def test_range_presets_have_different_min_max(self):
+        """Built-in range presets must NOT have clamp_min == clamp_max so
+        they can remap alpha across a span rather than forcing a single value."""
+        from src.core.presets import BUILTIN_PRESETS
+        range_presets = [p for p in BUILTIN_PRESETS if p.clamp_min != p.clamp_max]
+        self.assertGreaterEqual(
+            len(range_presets), 3,
+            "Expected at least 3 built-in presets with different clamp_min and clamp_max; "
+            f"found {len(range_presets)}: {[p.name for p in range_presets]}",
+        )
 
-# ---------------------------------------------------------------------------
-# collect_files tests
-# ---------------------------------------------------------------------------
+    def test_ps2_rescale_0_128_has_different_min_max(self):
+        """'PS2 Rescale → 0–128' preset must have clamp_min=0, clamp_max=128."""
+        from src.core.presets import BUILTIN_PRESETS
+        # Match by exact values rather than fragile name substring checks
+        preset = next(
+            (p for p in BUILTIN_PRESETS
+             if p.clamp_min == 0 and p.clamp_max == 128 and not p.invert and not p.binary_cut),
+            None,
+        )
+        self.assertIsNotNone(preset, "PS2 Rescale 0-128 preset not found (expected clamp_min=0, clamp_max=128)")
+        self.assertNotEqual(preset.clamp_min, preset.clamp_max,
+                            "PS2 Rescale preset must have different min and max")
+
+    def test_clamp_128_255_preset_has_different_min_max(self):
+        """'Clamp 128–255' preset must have clamp_min=128, clamp_max=255."""
+        from src.core.presets import BUILTIN_PRESETS
+        preset = next((p for p in BUILTIN_PRESETS
+                       if p.clamp_min == 128 and p.clamp_max == 255
+                       and not p.binary_cut and not p.invert), None)
+        self.assertIsNotNone(preset, "Clamp 128-255 preset not found")
+        self.assertNotEqual(preset.clamp_min, preset.clamp_max,
+                            "Clamp 128-255 preset must have different min and max")
+
+    def test_alpha_preset_from_dict_preserves_range_min_max(self):
+        """AlphaPreset.from_dict() must faithfully preserve different clamp_min and
+        clamp_max values.  Custom presets with a range (e.g. min=0, max=128) must
+        survive a to_dict() / from_dict() round-trip without collapsing to min==max."""
+        from src.core.presets import AlphaPreset as _AP
+        original = _AP(name="Range Test", description="test range", builtin=False,
+                       clamp_min=0, clamp_max=128)
+        d = original.to_dict()
+        loaded = _AP.from_dict(d)
+        self.assertEqual(loaded.clamp_min, 0,
+                         f"clamp_min changed after round-trip: {loaded.clamp_min}")
+        self.assertEqual(loaded.clamp_max, 128,
+                         f"clamp_max changed after round-trip: {loaded.clamp_max}")
+        self.assertNotEqual(loaded.clamp_min, loaded.clamp_max,
+                            "from_dict must NOT collapse min==max for a range preset")
+
+    def test_alpha_preset_from_dict_preserves_raised_floor(self):
+        """A custom preset with clamp_min=128, clamp_max=255 (raised floor) must
+        survive from_dict round-trip with both values intact."""
+        from src.core.presets import AlphaPreset as _AP
+        original = _AP(name="Floor Test", description="test floor", builtin=False,
+                       clamp_min=128, clamp_max=255)
+        loaded = _AP.from_dict(original.to_dict())
+        self.assertEqual(loaded.clamp_min, 128)
+        self.assertEqual(loaded.clamp_max, 255)
+
+    def test_apply_alpha_preset_range_produces_varied_output(self):
+        """apply_alpha_preset with a range preset (clamp_min=0, clamp_max=128) on a
+        two-alpha image must produce at least two distinct output values — proving
+        the range mapping actually spans [0, 128] and is not collapsed to a single value."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0] = [128, 128, 128, 0]    # fully transparent
+        arr[0, 1] = [128, 128, 128, 255]  # fully opaque
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("ps2_rescale", "", clamp_min=0, clamp_max=128)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 0,
+                         "alpha=0 must stay at 0 with clamp_min=0")
+        self.assertEqual(int(out[0, 1, 3]), 128,
+                         "alpha=255 must map to 128 with clamp_max=128")
+        self.assertNotEqual(int(out[0, 0, 3]), int(out[0, 1, 3]),
+                            "Range preset must produce different output values — not forced to same")
+
+    def test_apply_alpha_preset_range_floor_raised(self):
+        """apply_alpha_preset with clamp_min=128, clamp_max=255 must map source [0,255]
+        to target [128,255], confirming both endpoints differ and the floor is enforced."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0] = [0, 0, 0, 0]
+        arr[0, 1] = [0, 0, 0, 255]
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("floor_raised", "", clamp_min=128, clamp_max=255)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 128,
+                         "alpha=0 must map to clamp_min=128 (floor raised)")
+        self.assertEqual(int(out[0, 1, 3]), 255,
+                         "alpha=255 must map to clamp_max=255")
+        self.assertNotEqual(int(out[0, 0, 3]), int(out[0, 1, 3]),
+                            "Floor-raised preset must produce different output values — not forced to same")
 
 class TestCollectFiles(unittest.TestCase):
 
@@ -1212,6 +1302,84 @@ class TestUsePresetRecheck(unittest.TestCase):
             body,
             "_on_preset_changed must set _force_same_value_check when loading a preset",
         )
+
+    def test_on_preset_changed_uses_clamp_equality_to_set_force_same(self):
+        """_on_preset_changed must use `preset.clamp_min == preset.clamp_max` to set
+        the force_same_value_check — this evaluates to False for range presets so
+        they are never accidentally shown with the lock enabled."""
+        source = self._alpha_tool_source()
+        start = source.find("def _on_preset_changed")
+        self.assertGreater(start, 0, "_on_preset_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "preset.clamp_min == preset.clamp_max",
+            body,
+            "_on_preset_changed must use 'preset.clamp_min == preset.clamp_max' as the "
+            "condition for setting force_same_value_check, so range presets (min != max) "
+            "correctly result in the checkbox being unchecked",
+        )
+
+    def test_on_preset_changed_blocks_force_same_signals_during_load(self):
+        """_on_preset_changed must include _force_same_value_check in the
+        finetune_controls list so its signals are blocked during the spinbox
+        updates.  Without this, setting the checkbox could trigger its toggled
+        handler before the spinboxes have their new values, potentially collapsing
+        a range preset's min/max to the same value via the sync logic."""
+        source = self._alpha_tool_source()
+        start = source.find("def _on_preset_changed")
+        self.assertGreater(start, 0, "_on_preset_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        # The finetune_controls list must contain _force_same_value_check
+        # AND the list must come BEFORE the setChecked call (signals blocked first)
+        controls_pos = body.find("finetune_controls")
+        force_same_in_controls = body.find(
+            "_force_same_value_check", controls_pos,
+            body.find("for c in finetune_controls", controls_pos)
+        )
+        self.assertGreater(
+            force_same_in_controls, controls_pos,
+            "_force_same_value_check must appear inside the finetune_controls list "
+            "so its signals are blocked before any spinbox or checkbox values change",
+        )
+
+    def test_on_preset_changed_range_preset_force_same_evaluates_false(self):
+        """For any built-in preset with clamp_min != clamp_max, the expression
+        `preset.clamp_min == preset.clamp_max` evaluates to False — confirming
+        those presets will uncheck the 'Force same value' control when loaded."""
+        from src.core.presets import BUILTIN_PRESETS
+        range_presets = [p for p in BUILTIN_PRESETS if p.clamp_min != p.clamp_max]
+        self.assertGreaterEqual(len(range_presets), 3,
+                                "Need at least 3 range presets to test against")
+        for p in range_presets:
+            result = (p.clamp_min == p.clamp_max)
+            self.assertFalse(
+                result,
+                f"Preset '{p.name}' has clamp_min={p.clamp_min}, clamp_max={p.clamp_max} "
+                f"(different), but clamp_min == clamp_max evaluates to True — this would "
+                f"wrongly CHECK the 'Force same value' checkbox for a range preset",
+            )
+
+    def test_on_preset_changed_flat_preset_force_same_evaluates_true(self):
+        """For built-in flat presets with clamp_min == clamp_max, the expression
+        evaluates to True — confirming the 'Force same value' control is correctly
+        checked when those presets are loaded."""
+        from src.core.presets import BUILTIN_PRESETS
+        flat_presets = [p for p in BUILTIN_PRESETS
+                        if p.clamp_min == p.clamp_max and not p.binary_cut]
+        self.assertGreaterEqual(len(flat_presets), 3,
+                                "Need at least 3 flat presets to test against")
+        for p in flat_presets:
+            result = (p.clamp_min == p.clamp_max)
+            self.assertTrue(
+                result,
+                f"Preset '{p.name}' has clamp_min == clamp_max == {p.clamp_min} "
+                f"but the expression evaluates to False — this would wrongly UNCHECK "
+                f"the 'Force same value' checkbox for a flat preset",
+            )
 
 
 # ---------------------------------------------------------------------------
