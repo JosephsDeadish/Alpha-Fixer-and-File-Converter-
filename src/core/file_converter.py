@@ -117,6 +117,7 @@ def _open_image(path: str) -> Image.Image:
         img.load()  # force decode so the file handle can be closed
     except MemoryError:
         w, h = img.size
+        img.close()
         raise MemoryError(
             f"Not enough memory to open {w}×{h} image "
             f"({w * h / 1_000_000:.1f} megapixels). Try a smaller file."

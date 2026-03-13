@@ -4726,3 +4726,148 @@ class TestRound13ResourceHygiene(unittest.TestCase):
             "when it was already RGBA (no double-close)",
         )
         img.close()  # caller's responsibility
+
+
+class TestRound14ResourceHygiene(unittest.TestCase):
+    """Round-14: _open_image() leaks img when img.load() raises MemoryError.
+
+    Bug (file_converter._open_image):
+
+    When ``Image.open(path)`` succeeds but the subsequent ``img.load()`` call
+    raises a ``MemoryError``, the original code accessed ``img.size`` to build
+    the error message and then re-raised *without* calling ``img.close()``.
+    This left the underlying file handle open until the garbage collector ran,
+    potentially exhausting OS file-descriptor limits on large batches.
+
+    Fix: call ``img.close()`` before the re-raise inside the ``MemoryError``
+    handler.
+    """
+
+    _FC_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "file_converter.py"
+    )
+
+    def _read_fc(self) -> str:
+        with open(self._FC_SRC) as f:
+            return f.read()
+
+    def _fn_src(self, fn_name: str) -> str:
+        """Return the source of a top-level function in file_converter.py."""
+        src = self._read_fc()
+        start = src.find(f"\ndef {fn_name}(")
+        self.assertGreater(start, 0, f"{fn_name} not found in file_converter.py")
+        next_def = src.find("\ndef ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    # ------------------------------------------------------------------
+    # Source-level structural tests (guard against regression)
+    # ------------------------------------------------------------------
+
+    def test_open_image_closes_img_before_memory_error_raise(self):
+        """_open_image must call img.close() inside the MemoryError handler."""
+        fn = self._fn_src("_open_image")
+        mem_pos = fn.find("except MemoryError:")
+        self.assertGreater(mem_pos, 0,
+                           "_open_image: must have an 'except MemoryError:' block")
+        close_pos = fn.find("img.close()", mem_pos)
+        raise_pos = fn.find("raise MemoryError(", mem_pos)
+        self.assertGreater(
+            close_pos, mem_pos,
+            "_open_image: img.close() must appear inside the MemoryError handler",
+        )
+        self.assertGreater(
+            raise_pos, close_pos,
+            "_open_image: img.close() must come before the re-raise in the "
+            "MemoryError handler",
+        )
+
+    def test_open_image_close_precedes_raise_in_handler(self):
+        """img.close() must appear strictly before the raise MemoryError() line."""
+        fn = self._fn_src("_open_image")
+        mem_pos = fn.find("except MemoryError:")
+        close_pos = fn.find("img.close()", mem_pos)
+        raise_pos = fn.find("raise MemoryError(", mem_pos)
+        self.assertLess(
+            close_pos, raise_pos,
+            "_open_image: img.close() must precede the raise inside the handler",
+        )
+
+    # ------------------------------------------------------------------
+    # Behavioural smoke tests
+    # ------------------------------------------------------------------
+
+    def test_open_image_closes_img_on_load_memory_error(self):
+        """_open_image must close the image when img.load() raises MemoryError."""
+        import unittest.mock as mock
+        from src.core.file_converter import _open_image
+
+        closed = []
+
+        class _FakeImg:
+            mode = "RGB"
+            size = (4, 4)
+
+            def load(self):
+                raise MemoryError("simulated OOM")
+
+            def close(self):
+                closed.append(True)
+
+        raised = []
+        with mock.patch("src.core.file_converter.Image.open",
+                        return_value=_FakeImg()):
+            try:
+                _open_image("/fake/path.png")
+            except MemoryError:
+                raised.append(True)
+
+        self.assertTrue(raised, "_open_image: MemoryError must propagate")
+        self.assertTrue(
+            closed,
+            "_open_image: img must be closed before re-raising MemoryError",
+        )
+
+    def test_open_image_memory_error_message_contains_dimensions(self):
+        """_open_image MemoryError message must contain image dimensions."""
+        from PIL import Image
+        import unittest.mock as mock
+        from src.core.file_converter import _open_image
+
+        orig_open = Image.open
+
+        def patched_open(fp, *args, **kwargs):
+            return Image.new("RGB", (100, 200))
+
+        raised_msgs = []
+        with mock.patch("src.core.file_converter.Image.open", patched_open):
+            with mock.patch.object(Image.Image, "load",
+                                   side_effect=MemoryError("OOM")):
+                try:
+                    _open_image("/fake/path.png")
+                except MemoryError as exc:
+                    raised_msgs.append(str(exc))
+
+        self.assertTrue(raised_msgs, "_open_image: MemoryError must propagate")
+        self.assertIn("100", raised_msgs[0],
+                      "_open_image: error message must contain width")
+        self.assertIn("200", raised_msgs[0],
+                      "_open_image: error message must contain height")
+
+    def test_open_image_returns_img_on_success(self):
+        """_open_image must return the image when load() succeeds."""
+        from PIL import Image
+        import unittest.mock as mock
+        import tempfile, os
+        from src.core.file_converter import _open_image
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            tmp_path = f.name
+        try:
+            Image.new("RGB", (8, 8), (255, 0, 0)).save(tmp_path)
+            result = _open_image(tmp_path)
+            try:
+                self.assertEqual(result.size, (8, 8))
+            finally:
+                result.close()
+        finally:
+            os.unlink(tmp_path)
