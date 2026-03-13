@@ -1113,6 +1113,106 @@ class TestUsePresetRecheck(unittest.TestCase):
             "_on_preset_changed must still set clamp_max spinbox (inside the guard)",
         )
 
+    def test_force_same_value_check_exists_in_alpha_tool(self):
+        """_force_same_value_check QCheckBox must exist in alpha_tool.py."""
+        source = self._alpha_tool_source()
+        self.assertIn(
+            "self._force_same_value_check",
+            source,
+            "_force_same_value_check widget must be defined in alpha_tool.py",
+        )
+
+    def test_force_same_value_check_connected_to_handler(self):
+        """_force_same_value_check.toggled must be connected to _on_force_same_value_toggled."""
+        source = self._alpha_tool_source()
+        self.assertIn(
+            "_force_same_value_check.toggled.connect(self._on_force_same_value_toggled)",
+            source,
+            "_force_same_value_check.toggled must connect to _on_force_same_value_toggled",
+        )
+
+    def test_on_force_same_value_toggled_handler_defined(self):
+        """alpha_tool.py must define _on_force_same_value_toggled."""
+        source = self._alpha_tool_source()
+        self.assertIn(
+            "def _on_force_same_value_toggled",
+            source,
+            "_on_force_same_value_toggled must be defined in alpha_tool.py",
+        )
+
+    def test_on_clamp_min_changed_syncs_max_when_force_same_checked(self):
+        """_on_clamp_min_changed must update clamp_max_spin when Force same value is checked."""
+        source = self._alpha_tool_source()
+        start = source.find("def _on_clamp_min_changed")
+        self.assertGreater(start, 0, "_on_clamp_min_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_force_same_value_check.isChecked()",
+            body,
+            "_on_clamp_min_changed must check _force_same_value_check.isChecked()",
+        )
+        self.assertIn(
+            "_clamp_max_spin.setValue",
+            body,
+            "_on_clamp_min_changed must call _clamp_max_spin.setValue when locked",
+        )
+
+    def test_on_clamp_max_changed_syncs_min_when_force_same_checked(self):
+        """_on_clamp_max_changed must update clamp_min_spin when Force same value is checked."""
+        source = self._alpha_tool_source()
+        start = source.find("def _on_clamp_max_changed")
+        self.assertGreater(start, 0, "_on_clamp_max_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_force_same_value_check.isChecked()",
+            body,
+            "_on_clamp_max_changed must check _force_same_value_check.isChecked()",
+        )
+        self.assertIn(
+            "_clamp_min_spin.setValue",
+            body,
+            "_on_clamp_max_changed must call _clamp_min_spin.setValue when locked",
+        )
+
+    def test_force_same_value_check_registered_in_register_tooltips(self):
+        """_force_same_value_check must be registered with the tooltip manager."""
+        source = self._alpha_tool_source()
+        self.assertIn(
+            'mgr.register(self._force_same_value_check, "force_same_value_check")',
+            source,
+            "_force_same_value_check must be registered with the tooltip manager",
+        )
+
+    def test_force_same_value_check_tooltip_key_in_all_tip_dicts(self):
+        """force_same_value_check must have entries in _NORMAL, _DUMBED_DOWN, and _NO_FILTER."""
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
+            src = f.read()
+        count = src.count('"force_same_value_check":')
+        self.assertGreaterEqual(
+            count, 3,
+            "force_same_value_check must appear in _NORMAL, _DUMBED_DOWN, and _NO_FILTER "
+            f"(found {count} occurrence(s))",
+        )
+
+    def test_on_preset_changed_sets_force_same_value_check_when_loading_preset(self):
+        """_on_preset_changed must set _force_same_value_check state when loading a preset."""
+        source = self._alpha_tool_source()
+        start = source.find("def _on_preset_changed")
+        self.assertGreater(start, 0, "_on_preset_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_force_same_value_check",
+            body,
+            "_on_preset_changed must set _force_same_value_check when loading a preset",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Dedicated hidden-theme SVG tests
