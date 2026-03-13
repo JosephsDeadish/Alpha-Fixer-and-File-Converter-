@@ -69,7 +69,7 @@ _NORMAL: dict[str, list[str]] = {
     "preset_combo": [
         "Choose a preset alpha profile for common platforms.",
         "Hover over each preset in the dropdown to see a detailed description.",
-        "PS2 Full Opaque: uses alpha=128 (PS2 GS max).  Full Opacity: alpha=255 for PC.",
+        "PS2 Force Opaque: uses alpha=128 (PS2 GS max).  PC Full Opacity: alpha=255 for PC/PCSX2.",
         "N64 / GameCube / Wii / PSP all expect fully opaque textures (alpha=255).",
         "Custom presets you save also appear here and have their description as a tooltip.",
     ],

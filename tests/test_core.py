@@ -61,8 +61,8 @@ class TestPresets(unittest.TestCase):
                         "Expected a transparent preset")
 
     # Use the current preset names
-    _FULL_OPACITY_NAME = "Full Opacity  (N64 · DS · Wii · GameCube · Xbox 360 · PSP · PS2 BG)"
-    _PS2_FULL_OPAQUE_NAME = "PS2 Full Opaque  (native GS α=128)"
+    _FULL_OPACITY_NAME = "PC Full Opacity  (α=255)"
+    _PS2_FULL_OPAQUE_NAME = "PS2 Force Opaque  (α=128)"
 
     def test_ps2_preset_values(self):
         p = self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME)
@@ -71,10 +71,10 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(p.clamp_max, 128)
 
     def test_ps2_clamp_presets(self):
-        # PS2 clamp at native max 128 must exist
+        # There must be at least one PS2-related preset that caps alpha at 128
         matched = [p for p in self._mgr.all_presets()
-                   if "Clamp" in p.name and "128" in p.name and "PS2" in p.name]
-        self.assertTrue(matched, "Expected a PS2 clamp-max-128 preset")
+                   if "PS2" in p.name and p.clamp_max == 128 and not p.binary_cut]
+        self.assertTrue(matched, "Expected a PS2 preset with clamp_max=128")
         p = matched[0]
         self.assertEqual(p.clamp_max, 128)
 
