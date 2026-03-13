@@ -16,27 +16,37 @@ from typing import Optional
 @dataclass
 class AlphaPreset:
     name: str
-    alpha_value: Optional[int]  # 0-255; None means "do not change alpha values, only clamp"
-    threshold: int              # 0-255; pixels with alpha < threshold are affected (0 = all)
-    invert: bool
     description: str
     builtin: bool = True
-    # Clamp range applied after all other operations
+    # Output alpha range — always applied as normalize: remap image's actual
+    # [img_min, img_max] to [clamp_min, clamp_max].  When clamp_min == clamp_max,
+    # every pixel gets that exact value (equivalent to old "set" mode).
     clamp_min: int = 0
     clamp_max: int = 255
-    # When True: pixels >= threshold become 255, pixels < threshold become 0 (hard binary cut)
-    binary_cut: bool = False
-    # Apply mode: 'set' (default), 'multiply', 'add', 'subtract', or 'normalize'.
-    # 'normalize' remaps the image's actual alpha range to [clamp_min, clamp_max].
-    mode: str = "set"
+    # Advanced operations applied independently of the range remap.
+    threshold: int = 0        # only process pixels with alpha < this (0 = all)
+    invert: bool = False      # invert alpha before range remap
+    binary_cut: bool = False  # hard 0/255 split at threshold after remap
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "AlphaPreset":
-        # Drop legacy fields that no longer exist (fill_mode, fill_value)
+        # Backward compat: old presets stored alpha_value + mode fields.
+        # Convert: if a fixed alpha_value was set with a non-normalize mode,
+        # translate to clamp_min=clamp_max=alpha_value so behavior is preserved.
+        alpha_value = d.get("alpha_value")
+        mode = d.get("mode", "set")
+        clamp_min = int(d.get("clamp_min", 0))
+        clamp_max = int(d.get("clamp_max", 255))
+        if alpha_value is not None and mode != "normalize":
+            clamp_min = int(alpha_value)
+            clamp_max = int(alpha_value)
+        # Build with only known fields (drops alpha_value, mode, and any other legacy keys)
         known = {k: v for k, v in d.items() if k in cls.__dataclass_fields__}
+        known["clamp_min"] = clamp_min
+        known["clamp_max"] = clamp_max
         return cls(**known)
 
 
@@ -46,211 +56,128 @@ class AlphaPreset:
 
 BUILTIN_PRESETS: list[AlphaPreset] = [
     # -----------------------------------------------------------------------
-    # Full opacity (alpha = 255) — used by multiple platforms
+    # Full opacity — used by multiple platforms
     # -----------------------------------------------------------------------
     AlphaPreset(
         name="Full Opacity  (N64 · DS · Wii · GameCube · Xbox 360 · PSP · PS2 BG)",
-        alpha_value=255,
-        threshold=0,
-        invert=False,
+        clamp_min=255,
+        clamp_max=255,
         description=(
-            "Forces all pixels to full opacity (255/255). "
+            "Sets all pixels to full opacity (alpha = 255). "
             "Used by N64, Nintendo DS, Wii, GameCube, Xbox 360, PSP, and PS2 background/environment "
             "textures — all expect opaque textures with no transparency channel. "
             "Also correct for PCSX2 emulator texture replacements (PC alpha range 0–255)."
         ),
     ),
     # -----------------------------------------------------------------------
-    # PS2 — native full-opaque value is 128 on the 0–128 GS scale.
+    # PS2 — native 0–128 GS scale
     # -----------------------------------------------------------------------
     AlphaPreset(
         name="PS2 Full Opaque  (native GS α=128)",
-        alpha_value=128,
-        threshold=0,
-        invert=False,
+        clamp_min=128,
+        clamp_max=128,
         description=(
+            "Sets all pixels to PS2 full opacity (alpha = 128). "
             "PS2 Graphics Synthesizer uses a 0–128 alpha scale where 128 = fully opaque. "
-            "Fill every pixel with alpha=128 for fully opaque PS2 textures targeting real PS2 hardware "
-            "or a PS2-accurate renderer. "
             "NOTE: PCSX2 emulator texture replacements typically use standard 0–255 alpha (use 'Full Opacity' above)."
         ),
     ),
     AlphaPreset(
         name="PS2 Half Opacity  (native GS α=64)",
-        alpha_value=64,
-        threshold=0,
-        invert=False,
+        clamp_min=64,
+        clamp_max=64,
         description=(
-            "PS2 Graphics Synthesizer 50% opacity in the native 0–128 scale. "
-            "alpha=64 is exactly half of PS2's maximum (128). "
-            "Used for semi-transparent PS2 overlays, effects, and UI elements targeting real PS2 hardware."
+            "Sets all pixels to PS2 50% opacity (alpha = 64). "
+            "PS2 Graphics Synthesizer: 64 is exactly half of the native maximum (128). "
+            "Used for semi-transparent PS2 overlays, effects, and UI elements."
         ),
     ),
     AlphaPreset(
         name="PS2 Quarter Opacity  (native GS α=32)",
-        alpha_value=32,
-        threshold=0,
-        invert=False,
+        clamp_min=32,
+        clamp_max=32,
         description=(
-            "PS2 Graphics Synthesizer 25% opacity in the native 0–128 scale. "
-            "alpha=32 is one quarter of PS2's maximum (128). "
-            "Used for very faint PS2 effects, halos, and particle textures targeting real PS2 hardware."
+            "Sets all pixels to PS2 25% opacity (alpha = 32). "
+            "PS2 Graphics Synthesizer: 32 is one quarter of the native maximum (128). "
+            "Used for very faint PS2 effects, halos, and particle textures."
         ),
     ),
     AlphaPreset(
-        name="PS2 Clamp 0–128  (cap α at 128)",
-        alpha_value=None,
-        threshold=0,
-        invert=False,
-        description=(
-            "Clamps the alpha channel so no pixel exceeds 128 — PS2's native fully-opaque value. "
-            "Useful when converting textures for real PS2 hardware so alpha stays within the 0–128 GS range. "
-            "Values above 128 on the PS2 GS activate 'double-bright' additive blending."
-        ),
+        name="PS2 Rescale → 0–128  (remap alpha range to PS2 GS scale)",
         clamp_min=0,
         clamp_max=128,
-    ),
-    # Normalize: remap any alpha range to the PS2 native 0–128 scale.
-    AlphaPreset(
-        name="PS2 Normalize → 0–128  (rescale alpha range to PS2 GS scale)",
-        alpha_value=None,
-        threshold=0,
-        invert=False,
         description=(
-            "Linearly rescales the texture's existing alpha range to PS2's native 0–128 GS scale. "
-            "Example: a texture with alpha 0–255 is remapped so 0→0 and 255→128. "
-            "A texture with min=0, max=255, mean=247 becomes min=0, max=128, mean≈62. "
-            "Use this instead of 'PS2 Clamp' when you want proportional rescaling rather than hard capping."
+            "Remaps the texture's alpha range to PS2's native 0–128 GS scale. "
+            "Example: a texture with alpha 0–255 remaps so 0→0 and 255→128. "
+            "Use this to convert standard PC alpha to PS2 hardware format."
         ),
-        clamp_min=0,
-        clamp_max=128,
-        mode="normalize",
     ),
-    # Normalize: rescale from PS2 0–128 back to standard 0–255.
     AlphaPreset(
-        name="PS2 Normalize → 0–255  (rescale PS2 alpha to standard PC range)",
-        alpha_value=None,
-        threshold=0,
-        invert=False,
+        name="PS2 Rescale → 0–255  (remap PS2 alpha to standard PC range)",
+        clamp_min=0,
+        clamp_max=255,
         description=(
-            "Linearly rescales a PS2 texture's alpha (0–128 GS scale) to the standard 0–255 PC range. "
+            "Remaps a PS2 texture's alpha (0–128 GS scale) back to the standard 0–255 PC range. "
             "Example: alpha=128 (PS2 fully opaque) → 255; alpha=64 → 128. "
             "Use when importing PS2 textures into a PC pipeline that expects 0–255 alpha."
         ),
-        clamp_min=0,
-        clamp_max=255,
-        mode="normalize",
     ),
     # -----------------------------------------------------------------------
-    # PS2 UI / HUD — 75% opacity in standard 0–255 range
+    # Fade levels (standard 0–255 range)
     # -----------------------------------------------------------------------
     AlphaPreset(
-        name="Fade 75%  (α=192 · PS2 UI / HUD)",
-        alpha_value=192,
-        threshold=0,
-        invert=False,
+        name="Fade 75%  (α=192)",
+        clamp_min=192,
+        clamp_max=192,
         description=(
-            "Sets all alpha to 75% opacity (192/255 in standard 0–255 range). "
-            "Commonly used for PS2 UI/HUD overlays and general fade effects. "
+            "Sets all pixels to 75% opacity (alpha = 192). "
+            "Used for PS2 UI/HUD overlays and general fade effects. "
             "PS2 native GS equivalent: alpha=96 (75% of PS2's 0–128 scale)."
         ),
     ),
-    # -----------------------------------------------------------------------
-    # GBA / PSP — 50% opacity (alpha = 128)
-    # -----------------------------------------------------------------------
     AlphaPreset(
-        name="Half Opacity 50%  (GBA · PSP · α=128)",
-        alpha_value=128,
-        threshold=0,
-        invert=False,
-        description=(
-            "Sets all pixels to 50% opacity (128/255) in standard 0–255 alpha range. "
-            "Used by Game Boy Advance and PSP blending modes that target 50% alpha, "
-            "and for general half-opacity fade effects. "
-            "NOTE: for PS2 native hardware use 'PS2 Half Opacity  (native GS α=64)' instead."
-        ),
-    ),
-    # -----------------------------------------------------------------------
-    # N64 — 1-bit binary alpha (common for N64 cartridge textures)
-    # -----------------------------------------------------------------------
-    AlphaPreset(
-        name="N64 Binary Alpha  (1-bit cut: 0 or 255)",
-        alpha_value=None,
-        threshold=128,
-        invert=False,
-        description=(
-            "Hard cut at 50%: pixels ≥ 128 alpha → fully opaque (255), pixels < 128 → fully transparent (0). "
-            "Matches the N64 1-bit alpha texture format (IA4/IA8/RGBA16 with binary transparency) used by many "
-            "N64 cartridge textures for characters, foliage, and decals."
-        ),
-        clamp_min=0,
-        clamp_max=255,
-        binary_cut=True,
-    ),
-    # -----------------------------------------------------------------------
-    # PSP — specific alpha for PSP texture conventions
-    # -----------------------------------------------------------------------
-    AlphaPreset(
-        name="PSP Full Opacity  (α=255)",
-        alpha_value=255,
-        threshold=0,
-        invert=False,
-        description=(
-            "Sets all pixels to full opacity (255/255). "
-            "PSP uses standard 0–255 alpha. Use this for PSP textures that should be fully opaque "
-            "(backgrounds, solid character textures, environmental assets)."
-        ),
-    ),
-    AlphaPreset(
-        name="PSP Clamp 0–128  (cap α at 128 for PSP additive effects)",
-        alpha_value=None,
-        threshold=0,
-        invert=False,
-        description=(
-            "Clamps the alpha channel so no pixel exceeds 128. "
-            "Some PSP games use additive blending where alpha values above 128 cause double-bright effects. "
-            "Use this to constrain PSP particle/effect textures to the standard 0–128 range."
-        ),
-        clamp_min=0,
+        name="Fade 50%  (α=128 · GBA · PSP)",
+        clamp_min=128,
         clamp_max=128,
-    ),
-    # -----------------------------------------------------------------------
-    # GameCube / Wii
-    # -----------------------------------------------------------------------
-    AlphaPreset(
-        name="GameCube / Wii  (TPL α=255 full opaque)",
-        alpha_value=255,
-        threshold=0,
-        invert=False,
         description=(
-            "Sets all pixels to full opacity (255/255). "
-            "GameCube and Wii textures use standard 0–255 alpha (stored in TPL/BTI format). "
-            "Use for solid background, character, and environment textures where transparency is not needed."
+            "Sets all pixels to 50% opacity (alpha = 128) in standard 0–255 range. "
+            "Used by Game Boy Advance and PSP blending modes that target 50% alpha. "
+            "NOTE: for PS2 native hardware use 'PS2 Half Opacity (α=64)' instead."
+        ),
+    ),
+    AlphaPreset(
+        name="Fade 25%  (α=64)",
+        clamp_min=64,
+        clamp_max=64,
+        description=(
+            "Sets all pixels to 25% opacity (alpha = 64). "
+            "Very faint ghost, watermark, or particle effect."
         ),
     ),
     # -----------------------------------------------------------------------
-    # Fully transparent
+    # Transparent
     # -----------------------------------------------------------------------
     AlphaPreset(
         name="Transparent  (α=0)",
-        alpha_value=0,
-        threshold=0,
-        invert=False,
+        clamp_min=0,
+        clamp_max=0,
         description=(
-            "Makes the entire image fully transparent (alpha = 0)."
+            "Sets the entire image to fully transparent (alpha = 0)."
         ),
     ),
     # -----------------------------------------------------------------------
-    # iOS / macOS
+    # N64 — 1-bit binary alpha
     # -----------------------------------------------------------------------
     AlphaPreset(
-        name="iOS / macOS  (threshold=128 → opaque)",
-        alpha_value=255,
+        name="N64 Binary Alpha  (1-bit cut: 0 or 255)",
+        clamp_min=0,
+        clamp_max=255,
         threshold=128,
-        invert=False,
+        binary_cut=True,
         description=(
-            "iOS/macOS assets: any pixel whose alpha is below 128 is raised to full opacity (255). "
-            "Pixels already at 128 or above are left unchanged."
+            "Hard cut at 50%: pixels ≥ 128 alpha → fully opaque (255), pixels < 128 → fully transparent (0). "
+            "Matches the N64 1-bit alpha texture format (IA4/IA8/RGBA16) used by many "
+            "N64 cartridge textures for characters, foliage, and decals."
         ),
     ),
     # -----------------------------------------------------------------------
@@ -258,63 +185,47 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
     # -----------------------------------------------------------------------
     AlphaPreset(
         name="Invert Alpha",
-        alpha_value=None,
-        threshold=0,
+        clamp_min=0,
+        clamp_max=255,
         invert=True,
         description=(
-            "Inverts the alpha channel (transparent↔opaque). "
-            "Useful for textures where the alpha mask polarity is reversed from what is expected."
+            "Inverts the alpha channel (transparent ↔ opaque). "
+            "Useful for textures where the alpha mask polarity is reversed."
         ),
     ),
     AlphaPreset(
         name="Threshold Cut  (< 128 → 0, ≥ 128 → 255)",
-        alpha_value=None,
+        clamp_min=0,
+        clamp_max=255,
         threshold=128,
-        invert=False,
+        binary_cut=True,
         description=(
             "Hard cut at 50%: pixels ≥ 128 alpha become fully opaque (255), "
             "pixels < 128 become fully transparent (0). "
             "Useful for creating clean cutout transparency from anti-aliased or blended masks."
-        ),
-        clamp_min=0,
-        clamp_max=255,
-        binary_cut=True,
-    ),
-    # -----------------------------------------------------------------------
-    # Fade levels
-    # -----------------------------------------------------------------------
-    AlphaPreset(
-        name="Fade 25%  (α=64)",
-        alpha_value=64,
-        threshold=0,
-        invert=False,
-        description=(
-            "Sets all alpha to 25% opacity (64/255) — very faint ghost or watermark effect."
-        ),
-    ),
-    AlphaPreset(
-        name="Fade 50%  (α=128)",
-        alpha_value=128,
-        threshold=0,
-        invert=False,
-        description=(
-            "Sets all alpha to 50% opacity (128/255) — classic half-transparent overlay effect."
         ),
     ),
     # -----------------------------------------------------------------------
     # Clamp ranges
     # -----------------------------------------------------------------------
     AlphaPreset(
-        name="Clamp 128–255  (raise floor to 128)",
-        alpha_value=None,
-        threshold=0,
-        invert=False,
+        name="Clamp 0–128  (cap alpha at 128 · PS2 / PSP)",
+        clamp_min=0,
+        clamp_max=128,
         description=(
-            "Clamps alpha: pixels below 128 are raised to 128; values above 128 remain unchanged. "
-            "Useful to eliminate near-transparent pixels that cause edge fringing in certain renderers."
+            "Remaps the alpha range to 0–128. "
+            "PS2/PSP: values above 128 activate double-bright additive blending. "
+            "Use this to keep alpha within the safe 0–128 range."
         ),
+    ),
+    AlphaPreset(
+        name="Clamp 128–255  (raise floor to 128)",
         clamp_min=128,
         clamp_max=255,
+        description=(
+            "Remaps the alpha range so the minimum is 128. "
+            "Useful to eliminate near-transparent pixels that cause edge fringing."
+        ),
     ),
 ]
 

@@ -67,7 +67,8 @@ class TestPresets(unittest.TestCase):
     def test_ps2_preset_values(self):
         p = self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME)
         self.assertIsNotNone(p)
-        self.assertEqual(p.alpha_value, 128)
+        self.assertEqual(p.clamp_min, 128)
+        self.assertEqual(p.clamp_max, 128)
 
     def test_ps2_clamp_presets(self):
         # PS2 clamp at native max 128 must exist
@@ -76,32 +77,32 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(matched, "Expected a PS2 clamp-max-128 preset")
         p = matched[0]
         self.assertEqual(p.clamp_max, 128)
-        # Clamp-only presets should have alpha_value=None
-        self.assertIsNone(p.alpha_value)
 
     def test_n64_preset_values(self):
         p = self._mgr.get_preset(self._FULL_OPACITY_NAME)
         self.assertIsNotNone(p)
-        self.assertEqual(p.alpha_value, 255)
+        self.assertEqual(p.clamp_min, 255)
+        self.assertEqual(p.clamp_max, 255)
 
     def test_get_nonexistent_preset(self):
         self.assertIsNone(self._mgr.get_preset("DoesNotExist"))
 
     def test_cannot_overwrite_builtin(self):
-        custom = AlphaPreset(self._PS2_FULL_OPAQUE_NAME, 0, 0, False, "test")
+        custom = AlphaPreset(self._PS2_FULL_OPAQUE_NAME, "test", clamp_min=0, clamp_max=0)
         result = self._mgr.save_custom_preset(custom)
         self.assertFalse(result)
 
     def test_save_and_retrieve_custom_preset(self):
-        custom = AlphaPreset("My Custom", 200, 0, False, "desc", builtin=False)
+        custom = AlphaPreset("My Custom", "desc", builtin=False, clamp_min=200, clamp_max=200)
         result = self._mgr.save_custom_preset(custom)
         self.assertTrue(result)
         retrieved = self._mgr.get_preset("My Custom")
         self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.alpha_value, 200)
+        self.assertEqual(retrieved.clamp_min, 200)
+        self.assertEqual(retrieved.clamp_max, 200)
 
     def test_delete_custom_preset(self):
-        custom = AlphaPreset("ToDelete", 100, 0, False, "desc", builtin=False)
+        custom = AlphaPreset("ToDelete", "desc", builtin=False, clamp_min=100, clamp_max=100)
         self._mgr.save_custom_preset(custom)
         result = self._mgr.delete_custom_preset("ToDelete")
         self.assertTrue(result)
@@ -112,87 +113,47 @@ class TestPresets(unittest.TestCase):
         self.assertFalse(result)
         self.assertIsNotNone(self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME))
 
-    def test_save_custom_preset_preserves_mode_multiply(self):
-        """Custom preset saved with mode='multiply' must survive a round-trip."""
-        custom = AlphaPreset("Mul Test", 128, 0, False, "desc", builtin=False,
-                             clamp_min=0, clamp_max=255, mode="multiply")
-        self._mgr.save_custom_preset(custom)
-        retrieved = self._mgr.get_preset("Mul Test")
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.mode, "multiply",
-                         "mode field must be preserved after save/retrieve")
-
-    def test_save_custom_preset_preserves_mode_normalize(self):
-        """Custom preset saved with mode='normalize' must survive a round-trip."""
-        custom = AlphaPreset("Norm Test", None, 0, False, "desc", builtin=False,
-                             clamp_min=0, clamp_max=128, mode="normalize")
-        self._mgr.save_custom_preset(custom)
-        retrieved = self._mgr.get_preset("Norm Test")
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.mode, "normalize",
-                         "mode field must be preserved after save/retrieve")
-
-    def test_save_custom_preset_preserves_mode_add(self):
-        """Custom preset saved with mode='add' must survive a round-trip."""
-        custom = AlphaPreset("Add Test", 50, 0, False, "desc", builtin=False,
-                             clamp_min=0, clamp_max=255, mode="add")
-        self._mgr.save_custom_preset(custom)
-        retrieved = self._mgr.get_preset("Add Test")
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.mode, "add")
-
-    def test_save_custom_preset_preserves_mode_subtract(self):
-        """Custom preset saved with mode='subtract' must survive a round-trip."""
-        custom = AlphaPreset("Sub Test", 30, 0, False, "desc", builtin=False,
-                             clamp_min=0, clamp_max=255, mode="subtract")
-        self._mgr.save_custom_preset(custom)
-        retrieved = self._mgr.get_preset("Sub Test")
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.mode, "subtract")
-
-    def test_preset_from_dict_preserves_mode(self):
-        """AlphaPreset.from_dict must correctly restore the mode field."""
-        original = AlphaPreset("Roundtrip", None, 0, False, "desc", builtin=False,
-                               clamp_min=0, clamp_max=128, mode="normalize")
-        restored = AlphaPreset.from_dict(original.to_dict())
-        self.assertEqual(restored.mode, "normalize")
-        self.assertEqual(restored.clamp_min, 0)
-        self.assertEqual(restored.clamp_max, 128)
-
-
-# ---------------------------------------------------------------------------
-# Alpha processor tests
-# ---------------------------------------------------------------------------
-
-class TestAlphaProcessor(unittest.TestCase):
-
     def test_set_alpha_to_255(self):
         img = make_rgba_image(alpha=128)
-        preset = AlphaPreset("test", 255, 0, False, "")
+        preset = AlphaPreset("test", "", clamp_min=255, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 255))
 
     def test_set_alpha_to_0(self):
         img = make_rgba_image(alpha=200)
-        preset = AlphaPreset("test", 0, 0, False, "")
+        preset = AlphaPreset("test", "", clamp_min=0, clamp_max=0)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 0))
 
     def test_ps2_preset(self):
         img = make_rgba_image(alpha=200)
-        preset = AlphaPreset("PS2", 128, 0, False, "")
+        preset = AlphaPreset("PS2", "", clamp_min=128, clamp_max=128)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_invert_alpha(self):
+        # uniform alpha=100 → invert → uniform 155 → normalize uniform → maps to target_hi=255
         img = make_rgba_image(alpha=100)
-        preset = AlphaPreset("inv", None, 0, True, "")
+        preset = AlphaPreset("inv", "", invert=True)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 155))  # 255 - 100 = 155
+        self.assertTrue(np.all(arr[:, :, 3] == 255))  # uniform after invert → target_hi
+
+    def test_invert_alpha_varied(self):
+        """invert then normalize on varied alpha preserves inverted proportions."""
+        arr_in = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr_in[0, 0, 3] = 0    # invert → 255
+        arr_in[0, 1, 3] = 255  # invert → 0
+        from PIL import Image as _Image
+        img = _Image.fromarray(arr_in, "RGBA")
+        preset = AlphaPreset("inv", "", invert=True, clamp_min=0, clamp_max=255)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 255)
+        self.assertEqual(int(out[0, 1, 3]), 0)
 
     def test_add_alpha_via_rgba_adjust(self):
         """add mode removed; use apply_rgba_adjust for alpha delta."""
@@ -226,123 +187,89 @@ class TestAlphaProcessor(unittest.TestCase):
 
     def test_manual_alpha(self):
         img = make_rgba_image(alpha=100)
-        result = apply_manual_alpha(img, value=200)
+        result = apply_manual_alpha(img, clamp_min=200, clamp_max=200)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 200))
 
     def test_manual_alpha_clamp_only(self):
-        """value=None should only apply clamping, not change pixel alpha."""
+        """Uniform alpha with clamp_max clamped to target_hi."""
         img = make_rgba_image(alpha=200)
-        result = apply_manual_alpha(img, value=None, clamp_max=128)
+        result = apply_manual_alpha(img, clamp_max=128)
         arr = np.array(result)
         # 200 clamped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
-    def test_manual_alpha_mode_multiply(self):
-        """multiply mode: new = old × (value / 255), using floor division to avoid float rounding."""
-        img = make_rgba_image(alpha=200)
-        # value=128 → 200 * 128 // 255 = 100 (floor division matches implementation)
-        result = apply_manual_alpha(img, value=128, mode="multiply")
-        arr = np.array(result)
-        expected = 200 * 128 // 255  # floor division mirrors the implementation
-        self.assertTrue(np.all(arr[:, :, 3] == expected),
-                        f"Expected {expected}, got {arr[0, 0, 3]}")
-
-    def test_manual_alpha_mode_multiply_255_no_change(self):
-        """multiply mode with value=255 should not change alpha."""
-        img = make_rgba_image(alpha=200)
-        result = apply_manual_alpha(img, value=255, mode="multiply")
-        arr = np.array(result)
-        expected = 200 * 255 // 255
-        self.assertTrue(np.all(arr[:, :, 3] == expected))
-
-    def test_manual_alpha_mode_add(self):
-        """add mode: new = old + value, clamped at 255."""
-        img = make_rgba_image(alpha=100)
-        result = apply_manual_alpha(img, value=50, mode="add")
-        arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 150))
-
-    def test_manual_alpha_mode_add_clamps_at_255(self):
-        """add mode should clamp result at 255."""
-        img = make_rgba_image(alpha=200)
-        result = apply_manual_alpha(img, value=100, mode="add")
-        arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 255))
-
-    def test_manual_alpha_mode_subtract(self):
-        """subtract mode: new = old - value, clamped at 0."""
-        img = make_rgba_image(alpha=150)
-        result = apply_manual_alpha(img, value=50, mode="subtract")
-        arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 100))
-
-    def test_manual_alpha_mode_subtract_clamps_at_0(self):
-        """subtract mode should clamp result at 0."""
-        img = make_rgba_image(alpha=30)
-        result = apply_manual_alpha(img, value=100, mode="subtract")
-        arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 0))
-
-    def test_manual_alpha_mode_set_default(self):
-        """Default mode is 'set' (backward-compatible)."""
-        img = make_rgba_image(alpha=100)
-        result = apply_manual_alpha(img, value=200)
-        arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 200))
-
-    def test_manual_alpha_mode_multiply_with_threshold(self):
-        """multiply mode respects threshold: only pixels below threshold are affected."""
-        # Create an image with two different alpha values
-        arr = np.zeros((4, 4, 4), dtype=np.uint8)
-        arr[:2, :, :3] = 200  # grey
-        arr[2:, :, :3] = 200
-        arr[:2, :, 3] = 50   # below threshold=100 → will be multiplied
-        arr[2:, :, 3] = 150  # above threshold=100 → unchanged
-        from PIL import Image as _Image
-        img = _Image.fromarray(arr, "RGBA")
-        result = apply_manual_alpha(img, value=128, threshold=100, mode="multiply")
-        out = np.array(result)
-        # pixels with old alpha 50 (< 100): 50 * 128 // 255 = 25
-        self.assertTrue(np.all(out[:2, :, 3] == 50 * 128 // 255),
-                        f"Below-threshold pixels should be multiplied, got {out[0, 0, 3]}")
-        # pixels with old alpha 150 (>= 100): unchanged
-        self.assertTrue(np.all(out[2:, :, 3] == 150),
-                        f"Above-threshold pixels should be unchanged, got {out[2, 0, 3]}")
-
     def test_clamp_min_preset(self):
-        """Clamp-only preset with alpha_value=None should only clamp."""
+        """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
         img = make_rgba_image(alpha=50)
-        preset = AlphaPreset("clamp", None, 0, False, "", clamp_min=100, clamp_max=255)
+        preset = AlphaPreset("clamp", "", clamp_min=100, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # 50 raised to 100
-        self.assertTrue(np.all(arr[:, :, 3] == 100))
+        # uniform → target_hi=max(100,255)=255
+        self.assertTrue(np.all(arr[:, :, 3] == 255))
 
     def test_clamp_max_preset(self):
-        """Clamp-only preset with alpha_value=None should only clamp."""
+        """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
         img = make_rgba_image(alpha=200)
-        preset = AlphaPreset("clamp", None, 0, False, "", clamp_min=0, clamp_max=128)
+        preset = AlphaPreset("clamp", "", clamp_min=0, clamp_max=128)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
         # 200 capped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
-    def test_clamp_min_manual_alpha(self):
-        """apply_manual_alpha with clamp_min>0 should raise low alpha values."""
-        img = make_rgba_image(alpha=50)
-        result = apply_manual_alpha(img, value=None, clamp_min=128, clamp_max=255)
-        arr = np.array(result)
-        # 50 raised to floor 128
-        self.assertTrue(np.all(arr[:, :, 3] == 128))
+    def test_inverted_clamp_preset(self):
+        """apply_alpha_preset normalizes inverted clamp values (clamp_min > clamp_max)
+        by treating the lower value as the floor and the higher value as the ceiling,
+        preventing all alpha values from collapsing to a single incorrect value."""
+        # Build a small image with alpha values spanning 0–255.
+        arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
+        arr_in[0, 0] = [0, 0, 0, 50]    # low alpha — should be raised to 100
+        arr_in[0, 1] = [0, 0, 0, 150]   # mid alpha — unchanged (within [100, 200])
+        arr_in[1, 0] = [0, 0, 0, 220]   # high alpha — should be capped to 200
+        arr_in[1, 1] = [0, 0, 0, 100]   # at floor — unchanged
+        img = Image.fromarray(arr_in, "RGBA")
+        # Preset with INVERTED values (clamp_min=200, clamp_max=100).
+        # The processor must normalize the order before clipping.
+        preset = AlphaPreset("inverted", "", clamp_min=200, clamp_max=100)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 100,
+                         "alpha=50 below floor=100 should be raised to 100")
+        self.assertEqual(int(out[0, 1, 3]), 159,
+                         "alpha=150 normalizes to ~159")
+        self.assertEqual(int(out[1, 0, 3]), 200,
+                         "alpha=220 above ceiling=200 should be capped to 200")
+        self.assertEqual(int(out[1, 1, 3]), 129,
+                         "alpha=100 normalizes to ~129")
 
-    def test_clamp_min_manual_alpha_value_below_floor(self):
-        """apply_manual_alpha: if the set value is below clamp_min, clamp_min wins."""
-        img = make_rgba_image(alpha=200)
-        # Explicitly set alpha to 64, then clamp floor at 128 → should be 128
-        result = apply_manual_alpha(img, value=64, clamp_min=128, clamp_max=255)
+    def test_clamp_only_manual_preserves_range(self):
+        """apply_manual_alpha normalizes alpha into [clamp_min, clamp_max].
+        The min and max of the output MUST differ when the source has varied alpha.
+        This tests the core 'new min and max' use-case."""
+        arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
+        arr_in[0, 0] = [0, 0, 0, 30]    # below floor
+        arr_in[0, 1] = [0, 0, 0, 150]   # within range
+        arr_in[1, 0] = [0, 0, 0, 230]   # above ceiling
+        arr_in[1, 1] = [0, 0, 0, 80]    # within range
+        img = Image.fromarray(arr_in, "RGBA")
+        result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 50,  "below floor → raised to floor")
+        self.assertEqual(int(out[0, 1, 3]), 140, "alpha=150 normalizes to 140")
+        self.assertEqual(int(out[1, 0, 3]), 200, "above ceiling → capped")
+        self.assertEqual(int(out[1, 1, 3]), 88,  "alpha=80 normalizes to 88")
+        # Crucially: min ≠ max in the output (the user gets a true range)
+        alpha_out = out[:, :, 3]
+        self.assertGreater(int(alpha_out.max()), int(alpha_out.min()),
+                           "clamp-only mode must produce a range, not a single value")
+
+    def test_clamp_min_manual_alpha(self):
+        """apply_manual_alpha: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        img = make_rgba_image(alpha=50)
+        result = apply_manual_alpha(img, clamp_min=128, clamp_max=255)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 128))
+        # uniform → target_hi=max(128,255)=255
+        self.assertTrue(np.all(arr[:, :, 3] == 255))
 
     def test_builtin_clamp_128_255_preset(self):
         """The built-in 'Clamp 128-255' preset should raise all alpha below 128."""
@@ -352,43 +279,44 @@ class TestAlphaProcessor(unittest.TestCase):
         mock_settings.get_custom_presets.return_value = []
         mgr = PresetManager(mock_settings)
         preset = next(
-            (p for p in mgr.all_presets() if "Clamp 128" in p.name and "raise" in p.description.lower()),
+            (p for p in mgr.all_presets() if p.clamp_min == 128 and p.clamp_max == 255
+             and not p.binary_cut and not p.invert),
             None,
         )
-        self.assertIsNotNone(preset, "Expected 'Clamp 128–255 (raise floor to 128)' preset")
+        self.assertIsNotNone(preset, "Expected a builtin preset with clamp_min=128, clamp_max=255")
         self.assertEqual(preset.clamp_min, 128)
         self.assertEqual(preset.clamp_max, 255)
-        self.assertIsNone(preset.alpha_value)
         img = make_rgba_image(alpha=50)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 128),
-                        f"Expected 128, got {arr[0, 0, 3]}")
+        self.assertTrue(np.all(arr[:, :, 3] == 255),
+                        f"Expected 255, got {arr[0, 0, 3]}")
 
     def test_binary_cut_preset(self):
-        """binary_cut=True should give hard 0/255 split at threshold."""
-        # alpha=50 → below 128 → should become 0
-        img_low = make_rgba_image(alpha=50)
-        preset = AlphaPreset("cut", None, 128, False, "", binary_cut=True)
-        result_low = apply_alpha_preset(img_low, preset)
-        arr_low = np.array(result_low)
-        self.assertTrue(np.all(arr_low[:, :, 3] == 0))
-
-        # alpha=200 → above 128 → should become 255
-        img_high = make_rgba_image(alpha=200)
-        result_high = apply_alpha_preset(img_high, preset)
-        arr_high = np.array(result_high)
-        self.assertTrue(np.all(arr_high[:, :, 3] == 255))
+        """binary_cut=True should give hard 0/255 split at threshold.
+        Uses a two-row image so normalize maps 50→0 and 200→255, then
+        binary_cut at threshold=128 gives 0 and 255 respectively."""
+        arr_in = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr_in[0, :, :3] = 200
+        arr_in[0, :, 3] = 50   # low alpha → normalizes to 0 → binary cut → 0
+        arr_in[1, :, :3] = 200
+        arr_in[1, :, 3] = 200  # high alpha → normalizes to 255 → binary cut → 255
+        img = Image.fromarray(arr_in, "RGBA")
+        preset = AlphaPreset("cut", "", threshold=128, binary_cut=True)
+        result = apply_alpha_preset(img, preset)
+        arr_out = np.array(result)
+        self.assertTrue(np.all(arr_out[0, :, 3] == 0))
+        self.assertTrue(np.all(arr_out[1, :, 3] == 255))
 
     def test_output_is_rgba(self):
         img = make_rgba_image(alpha=100)
-        preset = AlphaPreset("test", 200, 0, False, "")
+        preset = AlphaPreset("test", "", clamp_min=200, clamp_max=200)
         result = apply_alpha_preset(img, preset)
         self.assertEqual(result.mode, "RGBA")
 
     def test_rgb_input_converted(self):
         img = Image.new("RGB", (4, 4), (200, 200, 200))
-        preset = AlphaPreset("test", 128, 0, False, "")
+        preset = AlphaPreset("test", "", clamp_min=128, clamp_max=128)
         result = apply_alpha_preset(img, preset)
         self.assertEqual(result.mode, "RGBA")
         arr = np.array(result)
@@ -404,7 +332,7 @@ class TestAlphaProcessor(unittest.TestCase):
         arr[:2, :, 3] = 0
         arr[2:, :, 3] = 255
         img = Image.fromarray(arr, "RGBA")
-        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=128, mode="normalize")
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
         out = np.array(result)
         self.assertEqual(int(out[:2, :, 3].max()), 0,  "min pixels should stay 0")
         self.assertEqual(int(out[2:, :, 3].min()), 128, "max pixels should map to 128")
@@ -415,7 +343,7 @@ class TestAlphaProcessor(unittest.TestCase):
         arr[:2, :, 3] = 0
         arr[2:, :, 3] = 128
         img = Image.fromarray(arr, "RGBA")
-        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=255, mode="normalize")
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=255)
         out = np.array(result)
         self.assertEqual(int(out[:2, :, 3].max()), 0,   "min pixels should stay 0")
         self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
@@ -423,7 +351,7 @@ class TestAlphaProcessor(unittest.TestCase):
     def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
         """normalize on uniform alpha (all same value) should map to clamp_max."""
         img = make_rgba_image(alpha=200)
-        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=128, mode="normalize")
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
         out = np.array(result)
         # All pixels are the same → no range → map to target_hi (clamp_max)
         self.assertTrue(np.all(out[:, :, 3] == 128))
@@ -435,7 +363,7 @@ class TestAlphaProcessor(unittest.TestCase):
         arr[0, 1, 3] = 128   # midpoint of [0, 255]
         arr[0, 2, 3] = 255
         img = Image.fromarray(arr, "RGBA")
-        result = apply_manual_alpha(img, value=None, clamp_min=0, clamp_max=100, mode="normalize")
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=100)
         out = np.array(result)
         # 128 / 255 * 100 ≈ 50
         mid = int(out[0, 1, 3])
@@ -447,10 +375,7 @@ class TestAlphaProcessor(unittest.TestCase):
         arr[0, 0, 3] = 0
         arr[0, 1, 3] = 128
         img = Image.fromarray(arr, "RGBA")
-        preset = AlphaPreset(
-            "norm_test", alpha_value=None, threshold=0, invert=False,
-            description="", clamp_min=0, clamp_max=255, mode="normalize",
-        )
+        preset = AlphaPreset("norm_test", "", clamp_min=0, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         out = np.array(result)
         self.assertEqual(int(out[0, 0, 3]), 0)
@@ -463,14 +388,18 @@ class TestAlphaProcessor(unittest.TestCase):
         mock_settings = MagicMock()
         mock_settings.get_custom_presets.return_value = []
         mgr = PresetManager(mock_settings)
-        names = [p.name for p in mgr.all_presets()]
+        presets = mgr.all_presets()
+        # PS2 Rescale → 0–128: remap to PS2 native range
         self.assertTrue(
-            any("Normalize" in n and "0–128" in n for n in names),
-            "Expected a PS2 Normalize → 0–128 preset",
+            any(p.clamp_min == 0 and p.clamp_max == 128 and not p.binary_cut and not p.invert
+                for p in presets),
+            "Expected a builtin preset with clamp_min=0, clamp_max=128 (PS2 rescale)",
         )
+        # PS2 Rescale → 0–255: remap back to PC range
         self.assertTrue(
-            any("Normalize" in n and "0–255" in n for n in names),
-            "Expected a PS2 Normalize → 0–255 preset",
+            any(p.clamp_min == 0 and p.clamp_max == 255 and not p.binary_cut and not p.invert
+                for p in presets),
+            "Expected a builtin preset with clamp_min=0, clamp_max=255 (PS2 to PC rescale)",
         )
 
 
@@ -1032,19 +961,6 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         """alpha_tool.py should define self._alpha_delta_spin."""
         self.assertIn("_alpha_delta_spin", self._alpha_tool_source())
 
-    def test_alpha_delta_spin_connected_to_finetune_changed(self):
-        """alpha_delta_spin must be connected to _on_finetune_changed."""
-        source = self._alpha_tool_source()
-        self.assertIn("_alpha_delta_spin", source)
-        self.assertIn("_on_finetune_changed", source)
-        # The alpha_spin (primary alpha control) should be connected to finetune
-        conn_start = source.find("_alpha_spin.valueChanged")
-        self.assertGreater(conn_start, 0,
-                           "_alpha_spin.valueChanged not found in alpha_tool.py")
-        conn_block = source[conn_start:]
-        self.assertIn("_alpha_delta_spin", conn_block,
-                      "_alpha_delta_spin not connected to signal in alpha_tool.py")
-
     def test_alpha_delta_included_in_rgb_params(self):
         """The rgb_params dict in alpha_tool.py should include key 'a' for alpha delta."""
         source = self._alpha_tool_source()
@@ -1485,30 +1401,6 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         with open(path) as f:
             return f.read()
 
-    def test_alpha_value_spinbox_defined_before_mode_combo(self):
-        """_alpha_spin must be instantiated before _mode_combo in the source
-        (i.e., the value control appears before the advanced mode control)."""
-        src = self._alpha_tool_source()
-        spin_pos = src.find("self._alpha_spin = QSpinBox()")
-        mode_pos = src.find("self._mode_combo = QComboBox()")
-        self.assertGreater(spin_pos, 0, "_alpha_spin not found in alpha_tool.py")
-        self.assertGreater(mode_pos, 0, "_mode_combo not found in alpha_tool.py")
-        self.assertLess(spin_pos, mode_pos,
-                        "_alpha_spin must be defined before _mode_combo "
-                        "(value shown first, mode moved to Advanced section)")
-
-    def test_apply_alpha_check_defined_after_alpha_spin(self):
-        """_apply_alpha_check must be defined AFTER _alpha_spin — it lives in
-        the Advanced section so basic users see the value input first."""
-        src = self._alpha_tool_source()
-        spin_pos = src.find("self._alpha_spin = QSpinBox()")
-        check_pos = src.find("self._apply_alpha_check = QCheckBox(")
-        self.assertGreater(spin_pos, 0, "_alpha_spin not found")
-        self.assertGreater(check_pos, 0, "_apply_alpha_check not found")
-        self.assertLess(spin_pos, check_pos,
-                        "_apply_alpha_check must appear after _alpha_spin "
-                        "in the source (it lives in the Advanced section)")
-
     def test_use_preset_renamed_auto_fills(self):
         """The 'Use preset' checkbox label must mention 'auto-fills' to make
         its purpose obvious to users who don't use presets."""
@@ -1516,77 +1408,19 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         self.assertIn("auto-fills", src,
                       "Use-preset checkbox label must contain 'auto-fills'")
 
-    def test_on_use_preset_toggled_reenables_spinbox_on_uncheck(self):
-        """_on_use_preset_toggled must re-enable the alpha spinbox when the
-        user switches to manual mode (unchecks Use preset).  Without this fix,
-        a clamp-only preset leaves the spinbox disabled and users cannot type
-        a value."""
-        src = self._alpha_tool_source()
-        start = src.find("def _on_use_preset_toggled")
-        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
-        next_def = src.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(src)
-        body = src[start:end]
-        self.assertIn("_alpha_spin.setEnabled(True)", body,
-                      "_on_use_preset_toggled must call _alpha_spin.setEnabled(True) "
-                      "when switching to manual mode so users can type a value")
-        self.assertIn("_alpha_slider.setEnabled(True)", body,
-                      "_on_use_preset_toggled must call _alpha_slider.setEnabled(True) "
-                      "when switching to manual mode")
-
     def test_hint_label_in_setup_ui(self):
         """_setup_ui must add an explanatory hint label to guide new users."""
         src = self._alpha_tool_source()
-        # The hint should mention both entering a value and picking a preset
-        self.assertIn("Type an alpha value", src,
-                      "Fine-tune section should have a hint label mentioning "
-                      "typing a value")
-        self.assertIn("preset", src.lower(),
-                      "Hint label should mention presets")
-
-    def test_advanced_separator_present(self):
-        """An 'Advanced' separator must visually separate basic and advanced
-        controls in the Alpha Channel Settings group."""
-        src = self._alpha_tool_source()
-        self.assertIn("Advanced Options", src,
-                      "Fine-tune section must have an 'Advanced Options' separator "
-                      "to keep basic controls visually distinct from advanced ones")
-
-
-# ---------------------------------------------------------------------------
-# Tooltip correctness tests: ensure stale references were cleaned up
-# ---------------------------------------------------------------------------
-
-class TestTooltipCorrectness(unittest.TestCase):
-    """Source-level checks that tooltip_manager.py has correct text after the
-    alpha tool UI redesign (value-first, Advanced section, apply_alpha_check)."""
-
-    _UI_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "ui")
+        # The hint should mention Min/Max
+        self.assertIn("Min/Max", src,
+                      "Fine-tune section should have a hint label mentioning 'Min/Max'")
 
     def _tooltip_source(self) -> str:
-        with open(os.path.join(self._UI_DIR, "tooltip_manager.py")) as f:
-            return f.read()
-
-    def _alpha_tool_source(self) -> str:
-        with open(os.path.join(self._UI_DIR, "alpha_tool.py")) as f:
+        path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+        with open(path) as f:
             return f.read()
 
     # ── apply_alpha_check must be registered ──────────────────────────────────
-
-    def test_apply_alpha_check_registered_in_alpha_tool(self):
-        """register_tooltips must register _apply_alpha_check so it gets
-        cycling tips from the tooltip manager."""
-        src = self._alpha_tool_source()
-        self.assertIn('mgr.register(self._apply_alpha_check, "apply_alpha_check")', src,
-                      "_apply_alpha_check must be registered with the tooltip manager")
-
-    def test_apply_alpha_check_key_exists_in_all_tip_dicts(self):
-        """apply_alpha_check must have entries in _NORMAL, _DUMBED, and _VULGAR."""
-        src = self._tooltip_source()
-        count = src.count('"apply_alpha_check":')
-        self.assertGreaterEqual(count, 3,
-                                "apply_alpha_check must appear in _NORMAL, _DUMBED, and _VULGAR "
-                                f"(found {count} occurrence(s))")
 
     # ── No stale clamp_min / clamp_max mode references ────────────────────────
 
@@ -1594,37 +1428,9 @@ class TestTooltipCorrectness(unittest.TestCase):
         """clamp_min_spin and clamp_max_spin tips must not reference non-existent
         'clamp_min mode' or 'clamp_max mode'."""
         src = self._tooltip_source()
-        self.assertNotIn("clamp_min mode", src,
-                         "Tooltip text must not reference 'clamp_min mode' — "
-                         "clamp_min is a spinbox, not a processing mode")
-        self.assertNotIn("clamp_max mode", src,
-                         "Tooltip text must not reference 'clamp_max mode' — "
-                         "clamp_max is a spinbox, not a processing mode")
-        self.assertNotIn("clamp modes", src,
-                         "Tooltip text must not reference 'clamp modes' — "
-                         "clamping is applied via spinboxes, not via a mode selection")
-
-    def test_mode_combo_no_clamp_min_max_mode_in_list(self):
-        """mode_combo tips must not list clamp_min or clamp_max as mode names."""
-        src = self._tooltip_source()
-        self.assertNotIn("clamp_min, clamp_max", src,
-                         "mode_combo tips must not list 'clamp_min, clamp_max' as mode names. "
-                         "Modes are: set, multiply, add, subtract, normalize")
-        self.assertNotIn("clamp_min/clamp_max", src,
-                         "mode_combo tips must not list 'clamp_min/clamp_max' as mode names. "
-                         "Modes are: set, multiply, add, subtract, normalize")
-        self.assertNotIn("clamp_min/max", src,
-                         "mode_combo tips must not list 'clamp_min/max' as mode names. "
-                         "Modes are: set, multiply, add, subtract, normalize")
-
-    def test_mode_combo_normal_mentions_normalize(self):
-        """_NORMAL mode_combo tips must mention the 'normalize' mode."""
-        src = self._tooltip_source()
-        # The _NORMAL dict comes before _DUMBED
-        normal_end = src.find("# Dumbed Down")
-        normal_section = src[:normal_end]
-        self.assertIn("normalize", normal_section,
-                      "_NORMAL mode_combo tips must describe the normalize mode")
+        self.assertNotIn("clamp_min mode", src)
+        self.assertNotIn("clamp_max mode", src)
+        self.assertNotIn("clamp modes", src)
 
     # ── No "grayed out" for use_preset_check ──────────────────────────────────
 
@@ -1647,22 +1453,6 @@ class TestTooltipCorrectness(unittest.TestCase):
             self.assertNotIn("grey out", block,
                              "use_preset_check tips must not say controls 'grey out'")
             idx = end + 1
-
-    # ── alpha_spin Vulgar must not say "mode above" ───────────────────────────
-
-    def test_alpha_spin_vulgar_no_mode_above(self):
-        """_VULGAR alpha_spin tips must not say 'mode above' — the mode combo
-        is now in the Advanced section BELOW the spinbox."""
-        src = self._tooltip_source()
-        vulgar_start = src.find("# No Filter")
-        vulgar_section = src[vulgar_start:]
-        # Find alpha_spin block in vulgar section
-        pos = vulgar_section.find('"alpha_spin":')
-        end = vulgar_section.find("],", pos)
-        block = vulgar_section[pos:end]
-        self.assertNotIn("mode above", block,
-                         "_VULGAR alpha_spin tips must not say 'mode above' — the mode "
-                         "combo is in the Advanced section below the spinbox")
 
     # ── finetune_params_lbl: registered + in all 3 dicts ─────────────────────
 
@@ -1745,10 +1535,7 @@ class TestCrashHangLagPrevention(unittest.TestCase):
         it with a user-friendly message that includes image dimensions."""
         from unittest.mock import patch
         img = make_rgba_image(4, 4, alpha=128)
-        preset = AlphaPreset(
-            name="test", alpha_value=255, threshold=0, invert=False,
-            description="test preset", builtin=True,
-        )
+        preset = AlphaPreset(name="test", description="test preset", clamp_min=255, clamp_max=255, builtin=True)
         with patch("src.core.alpha_processor.np.array", side_effect=MemoryError("mock OOM")):
             with self.assertRaises(MemoryError) as ctx:
                 apply_alpha_preset(img, preset)
@@ -1762,7 +1549,7 @@ class TestCrashHangLagPrevention(unittest.TestCase):
         img = make_rgba_image(4, 4, alpha=128)
         with patch("src.core.alpha_processor.np.array", side_effect=MemoryError("mock OOM")):
             with self.assertRaises(MemoryError) as ctx:
-                apply_manual_alpha(img, value=255)
+                apply_manual_alpha(img, clamp_min=255, clamp_max=255)
         self.assertIn("memory", str(ctx.exception).lower())
 
     def test_apply_rgba_adjust_wraps_memoryerror(self):
@@ -4609,7 +4396,7 @@ class TestRound13ResourceHygiene(unittest.TestCase):
             with mock.patch.object(Image.Image, "convert", patched_convert):
                 with mock.patch("src.core.alpha_processor.np.array",
                                 side_effect=MemoryError("simulated OOM")):
-                    apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+                    apply_alpha_preset(img, AlphaPreset("test", "", clamp_min=255, clamp_max=255))
         except MemoryError:
             raised.append(True)
         finally:
@@ -4647,7 +4434,7 @@ class TestRound13ResourceHygiene(unittest.TestCase):
             with mock.patch.object(Image.Image, "convert", patched_convert):
                 with mock.patch("src.core.alpha_processor.np.array",
                                 side_effect=MemoryError("simulated OOM")):
-                    apply_manual_alpha(img, value=255)
+                    apply_manual_alpha(img, clamp_min=255, clamp_max=255)
         except MemoryError:
             raised.append(True)
         finally:
@@ -4715,7 +4502,7 @@ class TestRound13ResourceHygiene(unittest.TestCase):
             with mock.patch.object(Image.Image, "close", counting_close):
                 with mock.patch("src.core.alpha_processor.np.array",
                                 side_effect=MemoryError("simulated OOM")):
-                    apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+                    apply_alpha_preset(img, AlphaPreset("test", "", clamp_min=255, clamp_max=255))
         except MemoryError:
             raised.append(True)
 
@@ -4983,7 +4770,7 @@ class TestRound15ResourceHygiene(unittest.TestCase):
                                    self._patched_convert_tracking(closed)):
                 with mock.patch("src.core.alpha_processor.Image.fromarray",
                                 side_effect=MemoryError("late OOM")):
-                    apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+                    apply_alpha_preset(img, AlphaPreset("test", "", clamp_min=255, clamp_max=255))
         except MemoryError:
             raised.append(True)
         finally:
@@ -5008,7 +4795,7 @@ class TestRound15ResourceHygiene(unittest.TestCase):
                                    self._patched_convert_tracking(closed)):
                 with mock.patch("src.core.alpha_processor.Image.fromarray",
                                 side_effect=MemoryError("late OOM")):
-                    apply_manual_alpha(img, value=255)
+                    apply_manual_alpha(img, clamp_min=255, clamp_max=255)
         except MemoryError:
             raised.append(True)
         finally:
@@ -5060,7 +4847,7 @@ class TestRound15ResourceHygiene(unittest.TestCase):
         try:
             with mock.patch.object(Image.Image, "convert",
                                    self._patched_convert_tracking(closed)):
-                result = apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+                result = apply_alpha_preset(img, AlphaPreset("test", "", clamp_min=255, clamp_max=255))
                 result.close()
         finally:
             img.close()
@@ -5080,7 +4867,7 @@ class TestRound15ResourceHygiene(unittest.TestCase):
         try:
             with mock.patch.object(Image.Image, "convert",
                                    self._patched_convert_tracking(closed)):
-                result = apply_manual_alpha(img, value=255)
+                result = apply_manual_alpha(img, clamp_min=255, clamp_max=255)
                 result.close()
         finally:
             img.close()
@@ -5124,7 +4911,7 @@ class TestRound15ResourceHygiene(unittest.TestCase):
             orig_close()
 
         img.close = tracking_close
-        result = apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+        result = apply_alpha_preset(img, AlphaPreset("test", "", clamp_min=255, clamp_max=255))
         result.close()
 
         self.assertEqual(
@@ -5146,7 +4933,7 @@ class TestRound15ResourceHygiene(unittest.TestCase):
             orig_close()
 
         img.close = tracking_close
-        result = apply_manual_alpha(img, value=255)
+        result = apply_manual_alpha(img, clamp_min=255, clamp_max=255)
         result.close()
 
         self.assertEqual(
