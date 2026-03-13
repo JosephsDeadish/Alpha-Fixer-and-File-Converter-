@@ -264,19 +264,10 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
             alpha = np.round(alpha).astype(np.int32)
         else:
             # Uniform image (every pixel has the same alpha value img_min).
-            # Three-case rule so that BOTH Min and Max spinboxes are always live:
-            #   • below target floor → raise to target_lo  (Min is effective)
-            #   • above target ceiling → cap at target_hi  (Max is effective)
-            #   • within range → proportionally scale from the absolute [0, 255]
-            #     axis into [target_lo, target_hi], so that moving either
-            #     boundary visibly shifts the single output value.
-            v = img_min
-            if v <= target_lo:
-                out_val = target_lo
-            elif v >= target_hi:
-                out_val = target_hi
-            else:
-                out_val = int(round(target_lo + v / 255.0 * (target_hi - target_lo)))
+            # Map the single value proportionally on the absolute [0, 255] scale so
+            # that BOTH Min and Max spinboxes remain live for all source values.
+            # Step 4's np.clip provides the safety bounds [target_lo, target_hi].
+            out_val = int(round(target_lo + img_min / 255.0 * (target_hi - target_lo)))
             alpha = np.full_like(alpha, out_val)
 
         # Step 3: Binary threshold cut (hard 0/255 split)
@@ -347,19 +338,10 @@ def apply_manual_alpha(
             alpha = np.round(alpha).astype(np.int32)
         else:
             # Uniform image (every pixel has the same alpha value img_min).
-            # Three-case rule so that BOTH Min and Max spinboxes are always live:
-            #   • below target floor → raise to target_lo  (Min is effective)
-            #   • above target ceiling → cap at target_hi  (Max is effective)
-            #   • within range → proportionally scale from the absolute [0, 255]
-            #     axis into [target_lo, target_hi], so that moving either
-            #     boundary visibly shifts the single output value.
-            v = img_min
-            if v <= target_lo:
-                out_val = target_lo
-            elif v >= target_hi:
-                out_val = target_hi
-            else:
-                out_val = int(round(target_lo + v / 255.0 * (target_hi - target_lo)))
+            # Map the single value proportionally on the absolute [0, 255] scale so
+            # that BOTH Min and Max spinboxes remain live for all source values.
+            # Step 4's np.clip provides the safety bounds [target_lo, target_hi].
+            out_val = int(round(target_lo + img_min / 255.0 * (target_hi - target_lo)))
             alpha = np.full_like(alpha, out_val)
 
         # Step 3: Binary threshold cut (hard 0/255 split)

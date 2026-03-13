@@ -192,30 +192,33 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 200))
 
     def test_manual_alpha_clamp_only(self):
-        """Uniform alpha with clamp_max clamped to target_hi."""
+        """Uniform alpha is proportionally mapped on [0, 255] into [0, clamp_max].
+        alpha=200 out of 255 → round(0 + 200/255 * 128) = 100."""
         img = make_rgba_image(alpha=200)
         result = apply_manual_alpha(img, clamp_max=128)
         arr = np.array(result)
-        # 200 clamped to 128
-        self.assertTrue(np.all(arr[:, :, 3] == 128))
+        # 200/255 * 128 ≈ 100  (proportional, not a hard ceiling cap)
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
 
     def test_clamp_min_preset(self):
-        """Preset: uniform alpha below target_lo is raised to target_lo (min floor)."""
+        """Preset: uniform alpha is proportionally mapped on [0, 255] into [target_lo, target_hi].
+        alpha=50 with target=[100, 255] → round(100 + 50/255 * 155) = 130."""
         img = make_rgba_image(alpha=50)
         preset = AlphaPreset("clamp", "", clamp_min=100, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # 50 < target_lo=100 → raised to floor (100), not pushed to target_hi (255)
-        self.assertTrue(np.all(arr[:, :, 3] == 100))
+        # 50/255 of the way through [100, 255] ≈ 130
+        self.assertTrue(np.all(arr[:, :, 3] == 130))
 
     def test_clamp_max_preset(self):
-        """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        """Preset: uniform alpha is proportionally mapped on [0, 255] into [target_lo, target_hi].
+        alpha=200 with target=[0, 128] → round(0 + 200/255 * 128) = 100."""
         img = make_rgba_image(alpha=200)
         preset = AlphaPreset("clamp", "", clamp_min=0, clamp_max=128)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # 200 capped to 128
-        self.assertTrue(np.all(arr[:, :, 3] == 128))
+        # 200/255 of the way through [0, 128] ≈ 100  (proportional, not a hard ceiling cap)
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
 
     def test_inverted_clamp_preset(self):
         """apply_alpha_preset normalizes inverted clamp values (clamp_min > clamp_max)
@@ -264,15 +267,18 @@ class TestPresets(unittest.TestCase):
                            "clamp-only mode must produce a range, not a single value")
 
     def test_clamp_min_manual_alpha(self):
-        """apply_manual_alpha: uniform alpha below target_lo is raised to target_lo."""
+        """apply_manual_alpha: uniform alpha is proportionally mapped on [0, 255] into
+        [target_lo, target_hi].  alpha=50 with target=[128, 255] →
+        round(128 + 50/255 * 127) = 153."""
         img = make_rgba_image(alpha=50)
         result = apply_manual_alpha(img, clamp_min=128, clamp_max=255)
         arr = np.array(result)
-        # 50 < target_lo=128 → raised to floor (128), not pushed to target_hi (255)
-        self.assertTrue(np.all(arr[:, :, 3] == 128))
+        # 50/255 of the way through [128, 255] ≈ 153
+        self.assertTrue(np.all(arr[:, :, 3] == 153))
 
     def test_builtin_clamp_128_255_preset(self):
-        """The built-in 'Clamp 128-255' preset raises uniform alpha below 128 to 128."""
+        """The built-in 'Clamp 128-255' preset proportionally maps uniform alpha on
+        [0, 255] into [128, 255].  alpha=50 → round(128 + 50/255 * 127) = 153."""
         from unittest.mock import MagicMock
         from src.core.presets import PresetManager
         mock_settings = MagicMock()
@@ -289,20 +295,19 @@ class TestPresets(unittest.TestCase):
         img = make_rgba_image(alpha=50)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # alpha=50 < clamp_min=128 → raised to floor (128)
-        self.assertTrue(np.all(arr[:, :, 3] == 128),
-                        f"Expected 128, got {arr[0, 0, 3]}")
+        # 50/255 of the way through [128, 255] ≈ 153
+        self.assertTrue(np.all(arr[:, :, 3] == 153),
+                        f"Expected 153, got {arr[0, 0, 3]}")
 
     def test_uniform_below_floor_raises_to_min(self):
-        """Uniform alpha below target_lo must be raised to target_lo.
-        This regression test proves the Min spinbox is effective for
-        transparent (or low-alpha) images even when all pixels share
-        the same source value."""
+        """Uniform alpha=0 must map to exactly target_lo.
+        With the proportional formula: round(target_lo + 0/255 * span) = target_lo.
+        This proves the Min spinbox is effective for fully-transparent images."""
         img = make_rgba_image(alpha=0)   # fully transparent
         result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
         arr = np.array(result)
         self.assertTrue(np.all(arr[:, :, 3] == 50),
-                        f"Expected 50 (raised to floor), got {arr[0, 0, 3]}")
+                        f"Expected 50 (alpha=0 maps to target_lo), got {arr[0, 0, 3]}")
 
     def test_uniform_within_range_min_is_live(self):
         """For a uniform-alpha image whose value is inside [target_lo, target_hi],
@@ -327,7 +332,28 @@ class TestPresets(unittest.TestCase):
             "Raising Min from 50→100 on a uniform-128 image must change the "
             "output — both Min and Max must be live controls")
 
+    def test_uniform_above_ceiling_min_is_live(self):
+        """For a uniform-alpha image whose value is ABOVE target_hi, changing Min
+        must now visibly shift the output — the old ceiling-cap bug is gone."""
+        img = make_rgba_image(alpha=200)  # above target_hi=128
 
+        result_a = apply_manual_alpha(img, clamp_min=0,  clamp_max=128)
+        result_b = apply_manual_alpha(img, clamp_min=50, clamp_max=128)
+        val_a = int(np.array(result_a)[0, 0, 3])
+        val_b = int(np.array(result_b)[0, 0, 3])
+
+        # Both must be within their respective [target_lo, target_hi] bounds
+        self.assertGreaterEqual(val_a, 0)
+        self.assertLessEqual(val_a, 128)
+        self.assertGreaterEqual(val_b, 50)
+        self.assertLessEqual(val_b, 128)
+
+        # The critical check: changing Min from 0→50 must produce a different result
+        self.assertNotEqual(val_a, val_b,
+            "Raising Min from 0→50 on a uniform-200 image must change the output — "
+            "the old ceiling-cap that silently discarded min is fixed")
+
+    def test_uniform_binary_cut(self):
         """binary_cut=True should give hard 0/255 split at threshold.
         Uses a two-row image so normalize maps 50→0 and 200→255, then
         binary_cut at threshold=128 gives 0 and 255 respectively."""
@@ -384,12 +410,13 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
 
     def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
-        """Uniform alpha above target_hi is clamped to target_hi (clamp_max)."""
+        """Uniform alpha above target_hi is proportionally mapped, not hard-capped.
+        alpha=200 with target=[0, 128] → round(0 + 200/255 * 128) = 100."""
         img = make_rgba_image(alpha=200)
         result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
         out = np.array(result)
-        # 200 > target_hi=128 → clamped to 128
-        self.assertTrue(np.all(out[:, :, 3] == 128))
+        # 200/255 of the way through [0, 128] ≈ 100  (proportional on absolute [0,255] scale)
+        self.assertTrue(np.all(out[:, :, 3] == 100))
 
     def test_manual_alpha_normalize_preserves_proportions(self):
         """normalize: midpoint of source range maps to midpoint of target range."""
