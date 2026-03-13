@@ -4871,3 +4871,308 @@ class TestRound14ResourceHygiene(unittest.TestCase):
                 result.close()
         finally:
             os.unlink(tmp_path)
+
+
+class TestRound15ResourceHygiene(unittest.TestCase):
+    """Round-15: verify that locally-created RGBA copies are always closed in
+    apply_alpha_preset / apply_manual_alpha / apply_rgba_adjust.
+
+    Bug (all three processing functions):
+
+    Round-13 fixed the MemoryError path by closing the locally-created RGBA
+    copy inside the ``except MemoryError:`` handler.  However, the copy was
+    still never explicitly closed:
+
+      (a) on the **success** path — relying silently on CPython's reference-
+          counting garbage collector instead of an explicit ``close()`` call, and
+      (b) when any exception (MemoryError or otherwise) is raised by a numpy
+          operation or ``Image.fromarray()`` *after* the ``np.array()`` call
+          succeeds.
+
+    Fix: wrap each function's processing body in a ``try/finally`` block so
+    that ``if _converted: img.close()`` is called unconditionally, covering
+    all code paths.
+    """
+
+    _AP_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "alpha_processor.py"
+    )
+
+    def _read_ap(self) -> str:
+        with open(self._AP_SRC) as f:
+            return f.read()
+
+    def _fn_src(self, fn_name: str) -> str:
+        """Return the source of a top-level function in alpha_processor.py."""
+        src = self._read_ap()
+        start = src.find(f"\ndef {fn_name}(")
+        self.assertGreater(start, 0, f"{fn_name} not found")
+        next_def = src.find("\ndef ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    # ------------------------------------------------------------------
+    # Source-level structural tests
+    # ------------------------------------------------------------------
+
+    def _assert_finally_closes_converted(self, fn_name: str) -> None:
+        """Assert that fn_name has a finally block that closes img when _converted."""
+        fn = self._fn_src(fn_name)
+        self.assertIn(
+            "finally:",
+            fn,
+            f"{fn_name}: must have a 'finally:' block",
+        )
+        fin_pos = fn.find("finally:")
+        converted_pos = fn.find("if _converted:", fin_pos)
+        self.assertGreater(
+            converted_pos, fin_pos,
+            f"{fn_name}: 'if _converted:' must appear inside the 'finally:' block",
+        )
+        close_pos = fn.find("img.close()", converted_pos)
+        self.assertGreater(
+            close_pos, converted_pos,
+            f"{fn_name}: 'img.close()' must follow 'if _converted:' in the 'finally:' block",
+        )
+
+    def test_apply_alpha_preset_has_finally_close(self):
+        """apply_alpha_preset must close the converted RGBA copy in a finally block."""
+        self._assert_finally_closes_converted("apply_alpha_preset")
+
+    def test_apply_manual_alpha_has_finally_close(self):
+        """apply_manual_alpha must close the converted RGBA copy in a finally block."""
+        self._assert_finally_closes_converted("apply_manual_alpha")
+
+    def test_apply_rgba_adjust_has_finally_close(self):
+        """apply_rgba_adjust must close the converted RGBA copy in a finally block."""
+        self._assert_finally_closes_converted("apply_rgba_adjust")
+
+    # ------------------------------------------------------------------
+    # Behavioural smoke tests — late exception path
+    # ------------------------------------------------------------------
+
+    def _make_rgb_img(self, size=(4, 4)):
+        return Image.new("RGB", size, (100, 150, 200))
+
+    def _patched_convert_tracking(self, closed):
+        """Return a patched Image.convert that tracks close() on the RGBA copy."""
+        orig_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *args, **kwargs):
+            real_result = orig_convert(self_img, mode, *args, **kwargs)
+            if mode == "RGBA":
+                orig_close = real_result.close
+                def tracking_close(bound_orig=orig_close):
+                    closed.append(True)
+                    bound_orig()
+                real_result.close = tracking_close
+            return real_result
+
+        return patched_convert
+
+    def test_apply_alpha_preset_closes_converted_on_late_exception(self):
+        """Converted RGBA copy must be closed when Image.fromarray() raises."""
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_alpha_preset
+        from src.core.presets import AlphaPreset
+
+        closed = []
+        raised = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert",
+                                   self._patched_convert_tracking(closed)):
+                with mock.patch("src.core.alpha_processor.Image.fromarray",
+                                side_effect=MemoryError("late OOM")):
+                    apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "apply_alpha_preset: late MemoryError must propagate")
+        self.assertTrue(
+            closed,
+            "apply_alpha_preset: converted RGBA copy must be closed on a late exception",
+        )
+
+    def test_apply_manual_alpha_closes_converted_on_late_exception(self):
+        """Converted RGBA copy must be closed when Image.fromarray() raises."""
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_manual_alpha
+
+        closed = []
+        raised = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert",
+                                   self._patched_convert_tracking(closed)):
+                with mock.patch("src.core.alpha_processor.Image.fromarray",
+                                side_effect=MemoryError("late OOM")):
+                    apply_manual_alpha(img, value=255)
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "apply_manual_alpha: late MemoryError must propagate")
+        self.assertTrue(
+            closed,
+            "apply_manual_alpha: converted RGBA copy must be closed on a late exception",
+        )
+
+    def test_apply_rgba_adjust_closes_converted_on_late_exception(self):
+        """Converted RGBA copy must be closed when Image.fromarray() raises."""
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_rgba_adjust
+
+        closed = []
+        raised = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert",
+                                   self._patched_convert_tracking(closed)):
+                with mock.patch("src.core.alpha_processor.Image.fromarray",
+                                side_effect=MemoryError("late OOM")):
+                    apply_rgba_adjust(img, red_delta=10)
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "apply_rgba_adjust: late MemoryError must propagate")
+        self.assertTrue(
+            closed,
+            "apply_rgba_adjust: converted RGBA copy must be closed on a late exception",
+        )
+
+    # ------------------------------------------------------------------
+    # Behavioural smoke tests — success path
+    # ------------------------------------------------------------------
+
+    def test_apply_alpha_preset_closes_converted_on_success(self):
+        """Converted RGBA copy must be explicitly closed in the success path."""
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_alpha_preset
+        from src.core.presets import AlphaPreset
+
+        closed = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert",
+                                   self._patched_convert_tracking(closed)):
+                result = apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+                result.close()
+        finally:
+            img.close()
+
+        self.assertTrue(
+            closed,
+            "apply_alpha_preset: locally-created RGBA copy must be closed in the success path",
+        )
+
+    def test_apply_manual_alpha_closes_converted_on_success(self):
+        """Converted RGBA copy must be explicitly closed in the success path."""
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_manual_alpha
+
+        closed = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert",
+                                   self._patched_convert_tracking(closed)):
+                result = apply_manual_alpha(img, value=255)
+                result.close()
+        finally:
+            img.close()
+
+        self.assertTrue(
+            closed,
+            "apply_manual_alpha: locally-created RGBA copy must be closed in the success path",
+        )
+
+    def test_apply_rgba_adjust_closes_converted_on_success(self):
+        """Converted RGBA copy must be explicitly closed in the success path."""
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_rgba_adjust
+
+        closed = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert",
+                                   self._patched_convert_tracking(closed)):
+                result = apply_rgba_adjust(img, red_delta=10)
+                result.close()
+        finally:
+            img.close()
+
+        self.assertTrue(
+            closed,
+            "apply_rgba_adjust: locally-created RGBA copy must be closed in the success path",
+        )
+
+    def test_apply_alpha_preset_does_not_close_caller_rgba(self):
+        """When input is already RGBA, apply_alpha_preset must NOT close it."""
+        from src.core.alpha_processor import apply_alpha_preset
+        from src.core.presets import AlphaPreset
+
+        closed = []
+        img = Image.new("RGBA", (4, 4), (100, 150, 200, 128))
+        orig_close = img.close
+
+        def tracking_close():
+            closed.append(True)
+            orig_close()
+
+        img.close = tracking_close
+        result = apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+        result.close()
+
+        self.assertEqual(
+            len(closed), 0,
+            "apply_alpha_preset must NOT close the caller's RGBA image",
+        )
+        orig_close()  # cleanup
+
+    def test_apply_manual_alpha_does_not_close_caller_rgba(self):
+        """When input is already RGBA, apply_manual_alpha must NOT close it."""
+        from src.core.alpha_processor import apply_manual_alpha
+
+        closed = []
+        img = Image.new("RGBA", (4, 4), (100, 150, 200, 128))
+        orig_close = img.close
+
+        def tracking_close():
+            closed.append(True)
+            orig_close()
+
+        img.close = tracking_close
+        result = apply_manual_alpha(img, value=255)
+        result.close()
+
+        self.assertEqual(
+            len(closed), 0,
+            "apply_manual_alpha must NOT close the caller's RGBA image",
+        )
+        orig_close()  # cleanup
+
+    def test_apply_rgba_adjust_does_not_close_caller_rgba(self):
+        """When input is already RGBA, apply_rgba_adjust must NOT close it."""
+        from src.core.alpha_processor import apply_rgba_adjust
+
+        closed = []
+        img = Image.new("RGBA", (4, 4), (100, 150, 200, 128))
+        orig_close = img.close
+
+        def tracking_close():
+            closed.append(True)
+            orig_close()
+
+        img.close = tracking_close
+        result = apply_rgba_adjust(img, red_delta=10)
+        result.close()
+
+        self.assertEqual(
+            len(closed), 0,
+            "apply_rgba_adjust must NOT close the caller's RGBA image",
+        )
+        orig_close()  # cleanup
