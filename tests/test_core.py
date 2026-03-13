@@ -1667,7 +1667,58 @@ class TestAlphaToolUISimplification(unittest.TestCase):
                       "mode_combo must call setCurrentIndex with findData to select "
                       "the normalize mode by default")
 
-    def test_advanced_separator_present(self):
+    def test_switch_to_manual_resets_mode_to_normalize(self):
+        """_switch_to_manual_if_preset_active() must reset mode to normalize.
+
+        Root cause of the 'normalize not working' bug:
+        1. _populate_presets() fires _on_preset_changed() on startup.
+        2. _on_preset_changed() loads the first preset's mode (e.g. 'set') into
+           the mode combo, overriding the normalize default we set in _setup_ui.
+        3. When the user changes a Min/Max spinbox, _switch_to_manual_if_preset_active()
+           unchecks 'Use preset' but left the mode combo at 'set'.
+        4. _build_manual_params() returned mode='set' with value=None.
+        5. apply_manual_alpha(value=None, mode='set') skips the set step entirely
+           and only clips → clamp-only, not normalize.
+
+        Fix: _switch_to_manual_if_preset_active() now also resets mode to
+        'normalize' so that Min/Max spinboxes always produce the expected remap."""
+        src = self._alpha_tool_source()
+        # The helper _reset_mode_to_normalize must exist
+        self.assertIn("def _reset_mode_to_normalize", src,
+                      "_reset_mode_to_normalize helper must be defined")
+        # _switch_to_manual_if_preset_active must call _reset_mode_to_normalize
+        switch_idx = src.find("def _switch_to_manual_if_preset_active")
+        # Find the end of the method body (next def at same indent level)
+        next_def = src.find("\n    def ", switch_idx + 1)
+        switch_body = src[switch_idx:next_def]
+        self.assertIn("_reset_mode_to_normalize", switch_body,
+                      "_switch_to_manual_if_preset_active must call "
+                      "_reset_mode_to_normalize when switching to manual mode")
+
+    def test_only_normalize_and_set_in_mode_combo(self):
+        """Mode combo in manual mode must only expose 'normalize' and 'set'.
+
+        multiply/add/subtract were removed because they're confusing — users
+        can achieve the same results by typing different values.  Processing of
+        existing custom presets that use those modes still works because
+        apply_alpha_preset uses preset.mode directly."""
+        src = self._alpha_tool_source()
+        # Only normalize and set should appear as userData keys in the combo
+        self.assertIn('"normalize"', src,
+                      "mode_combo must include normalize option")
+        self.assertIn('"set"', src,
+                      "mode_combo must include set option")
+        # multiply/add/subtract must NOT be in the mode combo items list
+        # (they may still exist in the processing code — we only check the UI)
+        combo_start = src.find("_MODE_OPTIONS = [")
+        combo_end = src.find("]", combo_start)
+        combo_block = src[combo_start:combo_end]
+        self.assertNotIn('"multiply"', combo_block,
+                         "multiply must not be in the simplified mode combo")
+        self.assertNotIn('"add"', combo_block,
+                         "add must not be in the simplified mode combo")
+        self.assertNotIn('"subtract"', combo_block,
+                         "subtract must not be in the simplified mode combo")
         """An 'Advanced' separator must visually separate basic and advanced
         controls in the Alpha Channel Settings group."""
         src = self._alpha_tool_source()
@@ -1732,13 +1783,13 @@ class TestTooltipCorrectness(unittest.TestCase):
         src = self._tooltip_source()
         self.assertNotIn("clamp_min, clamp_max", src,
                          "mode_combo tips must not list 'clamp_min, clamp_max' as mode names. "
-                         "Modes are: set, multiply, add, subtract, normalize")
+                         "Modes are: normalize, set")
         self.assertNotIn("clamp_min/clamp_max", src,
                          "mode_combo tips must not list 'clamp_min/clamp_max' as mode names. "
-                         "Modes are: set, multiply, add, subtract, normalize")
+                         "Modes are: normalize, set")
         self.assertNotIn("clamp_min/max", src,
                          "mode_combo tips must not list 'clamp_min/max' as mode names. "
-                         "Modes are: set, multiply, add, subtract, normalize")
+                         "Modes are: normalize, set")
 
     def test_mode_combo_normal_mentions_normalize(self):
         """_NORMAL mode_combo tips must mention the 'normalize' mode."""
