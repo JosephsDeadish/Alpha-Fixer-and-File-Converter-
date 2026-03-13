@@ -1270,11 +1270,11 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         self.assertIn("_alpha_delta_spin", self._alpha_tool_source())
 
     def test_alpha_delta_included_in_rgb_params(self):
-        """The rgb dict in alpha_tool.py should include key 'a' for alpha delta."""
+        """The manual params dict in alpha_tool.py should include key 'a' for alpha delta."""
         source = self._alpha_tool_source()
         # Look for the alpha_delta_spin value being assigned under key "a"
         self.assertIn('"a": self._alpha_delta_spin.value()', source,
-                      "rgb dict in alpha_tool.py should include key 'a' for alpha delta")
+                      "manual params dict in alpha_tool.py should include key 'a' for alpha delta")
 
     def test_worker_passes_alpha_delta(self):
         """worker.py should forward alpha_delta from the rgb dict to apply_rgba_adjust."""
@@ -1335,7 +1335,8 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestUsePresetRecheck(unittest.TestCase):
-    """Source-level checks for the simplified alpha tool (no presets, no Force-same)."""
+    """Source-level checks that built-in preset data is self-consistent.
+    (Preset/force-same-value UI was removed; only preset data properties remain.)"""
 
     def _alpha_tool_source(self) -> str:
         path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")

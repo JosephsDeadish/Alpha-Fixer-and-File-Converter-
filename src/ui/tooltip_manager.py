@@ -109,13 +109,6 @@ _NORMAL: dict[str, list[str]] = {
         "Works independently from Min — set any value without affecting Min.",
         "PS2 Normalize: set Max to 128 to produce PS2-accurate alpha values.",
     ],
-    "force_same_value_check": [
-        "When checked, Min and Max are kept equal — changing either one updates both.",
-        "Use this to set every pixel to exactly one alpha value instead of a range.",
-        "Unchecked = Min and Max work completely independently (default).",
-        "Example: check this and set Min to 128 to force all pixels to exactly alpha 128.",
-        "Uncheck to freely set different Min and Max values for a remapped range.",
-    ],
     "invert_check": [
         "Invert the alpha channel after applying the other operations.",
         "Flips opaque ↔ transparent across all processed pixels.",
@@ -725,13 +718,6 @@ _DUMBED: dict[str, list[str]] = {
         "128 = replicate PS2's native 0–128 alpha scale. Very useful.",
         "Works independently from Min. Change Max without touching Min.",
         "Leave at 255 for normal use. Lower it for platform-specific limits.",
-    ],
-    "force_same_value_check": [
-        "Tick this to lock Min = Max so both always have the same value.",
-        "Checked = every pixel gets exactly one alpha value. Unchecked = full range.",
-        "Use this when you want all pixels flat, e.g. force every pixel to 128.",
-        "You can still change the value — just use either spinbox. Both will follow.",
-        "Uncheck it when you want Min and Max to be different (default).",
     ],
     "invert_check": [
         "Check this to flip transparent ↔ opaque. It's like turning inside out.",
@@ -1402,16 +1388,6 @@ _VULGAR: dict[str, list[str]] = {
         "PS2 GS hardware maxes out around 128 for alpha. Set Max to 128 and you're golden.",
         "Lower this to cap the maximum alpha output. No pixel will be more opaque than this number.",
         "Min and Max define your target range. All alpha values in the image are mapped into it.",
-    ],
-    "force_same_value_check": [
-        "Check this and every time you touch Min or Max, the other one follows like a lost puppy.",
-        "Flat alpha mode: Min = Max = whatever the fuck you type. Every pixel gets that value.",
-        "Uncheck it when you want Min and Max to be different. Checked = locked together.",
-        "Use this for the 'set every pixel to exactly 128' or '255' use case. Brute force alpha.",
-        "Unchecked by default because most of the time you want a range, not a flat number.",
-        "Checked = zero range, every pixel gets one alpha value. Unchecked = actual remap range.",
-        "This is the 'I just want one number' checkbox. Check it. Pick a number. Done.",
-        "Toggle this off when you're done being lazy and want a proper min/max range again.",
     ],
     "invert_check": [
         "Invert flips transparent to opaque and back. It's the 'fuck it, reverse everything' option.",
