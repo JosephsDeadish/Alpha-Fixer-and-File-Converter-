@@ -40,7 +40,7 @@ class AlphaPreset:
         mode = d.get("mode", "set")
         clamp_min = int(d.get("clamp_min", 0))
         clamp_max = int(d.get("clamp_max", 255))
-        if alpha_value is not None and mode not in ("normalize",):
+        if alpha_value is not None and mode != "normalize":
             clamp_min = int(alpha_value)
             clamp_max = int(alpha_value)
         # Build with only known fields (drops alpha_value, mode, and any other legacy keys)

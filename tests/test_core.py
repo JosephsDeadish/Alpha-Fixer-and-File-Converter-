@@ -135,7 +135,7 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_invert_alpha(self):
-        # uniform alpha=100 → invert → all 155 → uniform → maps to target_hi=255
+        # uniform alpha=100 → invert → uniform 155 → normalize uniform → maps to target_hi=255
         img = make_rgba_image(alpha=100)
         preset = AlphaPreset("inv", "", invert=True)
         result = apply_alpha_preset(img, preset)
@@ -279,10 +279,11 @@ class TestPresets(unittest.TestCase):
         mock_settings.get_custom_presets.return_value = []
         mgr = PresetManager(mock_settings)
         preset = next(
-            (p for p in mgr.all_presets() if "Clamp 128" in p.name and "255" in p.name),
+            (p for p in mgr.all_presets() if p.clamp_min == 128 and p.clamp_max == 255
+             and not p.binary_cut and not p.invert),
             None,
         )
-        self.assertIsNotNone(preset, "Expected 'Clamp 128–255 (raise floor to 128)' preset")
+        self.assertIsNotNone(preset, "Expected a builtin preset with clamp_min=128, clamp_max=255")
         self.assertEqual(preset.clamp_min, 128)
         self.assertEqual(preset.clamp_max, 255)
         img = make_rgba_image(alpha=50)
@@ -387,14 +388,18 @@ class TestPresets(unittest.TestCase):
         mock_settings = MagicMock()
         mock_settings.get_custom_presets.return_value = []
         mgr = PresetManager(mock_settings)
-        names = [p.name for p in mgr.all_presets()]
+        presets = mgr.all_presets()
+        # PS2 Rescale → 0–128: remap to PS2 native range
         self.assertTrue(
-            any("Rescale" in n and "0–128" in n for n in names),
-            "Expected a PS2 Rescale → 0–128 preset",
+            any(p.clamp_min == 0 and p.clamp_max == 128 and not p.binary_cut and not p.invert
+                for p in presets),
+            "Expected a builtin preset with clamp_min=0, clamp_max=128 (PS2 rescale)",
         )
+        # PS2 Rescale → 0–255: remap back to PC range
         self.assertTrue(
-            any("Rescale" in n and "0–255" in n for n in names),
-            "Expected a PS2 Rescale → 0–255 preset",
+            any(p.clamp_min == 0 and p.clamp_max == 255 and not p.binary_cut and not p.invert
+                for p in presets),
+            "Expected a builtin preset with clamp_min=0, clamp_max=255 (PS2 to PC rescale)",
         )
 
 

@@ -430,7 +430,7 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Set Min and Max alpha below — all pixels are remapped to that range.  "
+            "ℹ  Set Min and Max alpha below — all pixels are remapped to that range. "
             "Set Min = Max to give every pixel the same value."
         )
         hint_lbl.setObjectName("subheader")
@@ -908,7 +908,7 @@ class AlphaFixerTab(QWidget):
     def _clamp_range_label(lo: int, hi: int, raw_lo: int, raw_hi: int) -> str:
         """Return a compact clamp range string with an inverted-range warning."""
         if raw_lo > raw_hi:
-            return f"{lo}–{hi} Warning: inverted (will swap)"
+            return f"{lo}–{hi} Warning: inverted (swapped)"
         return f"{lo}–{hi}"
 
     def _refresh_finetune_label(self) -> None:
