@@ -1081,6 +1081,38 @@ class TestUsePresetRecheck(unittest.TestCase):
             "_on_use_preset_toggled must call _update_compare when unchecked",
         )
 
+    def test_on_preset_changed_guards_spinbox_update_on_use_preset_check(self):
+        """_on_preset_changed must only update fine-tune controls when 'Use preset'
+        is checked.  When in manual mode, changing the preset combo must not
+        overwrite the user's custom Min/Max values (many built-in presets have
+        clamp_min == clamp_max which would silently collapse the range)."""
+        source = self._alpha_tool_source()
+        # Locate _on_preset_changed body
+        start = source.find("def _on_preset_changed")
+        self.assertGreater(start, 0, "_on_preset_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        # The spinbox setValue calls must be inside a use_preset_check.isChecked() guard
+        self.assertIn(
+            "self._use_preset_check.isChecked()",
+            body,
+            "_on_preset_changed must guard fine-tune control updates with "
+            "'_use_preset_check.isChecked()' so manual Min/Max values are "
+            "preserved when browsing presets in manual mode",
+        )
+        # Confirm the setValue calls exist (they must be inside the guard)
+        self.assertIn(
+            "_clamp_min_spin.setValue",
+            body,
+            "_on_preset_changed must still set clamp_min spinbox (inside the guard)",
+        )
+        self.assertIn(
+            "_clamp_max_spin.setValue",
+            body,
+            "_on_preset_changed must still set clamp_max spinbox (inside the guard)",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Dedicated hidden-theme SVG tests

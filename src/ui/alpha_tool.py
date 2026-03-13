@@ -727,23 +727,29 @@ class AlphaFixerTab(QWidget):
             return
         self._settings.set("last_alpha_preset", name)
         self._preset_desc.setText(preset.description)
-        # Block signals on fine-tune controls while we populate them so each
-        # value change doesn't restart the debounce timer individually.
-        finetune_controls = [
-            self._threshold_spin, self._clamp_min_spin, self._clamp_max_spin,
-            self._invert_check, self._binary_cut_check,
-        ]
-        for c in finetune_controls:
-            c.blockSignals(True)
-        self._threshold_spin.setValue(int(preset.threshold))
-        self._clamp_min_spin.setValue(int(preset.clamp_min))
-        self._clamp_max_spin.setValue(int(preset.clamp_max))
-        self._invert_check.setChecked(bool(preset.invert))
-        self._binary_cut_check.setChecked(bool(preset.binary_cut))
-        for c in finetune_controls:
-            c.blockSignals(False)
         self._btn_delete_preset.setEnabled(not preset.builtin)
-        # Refresh live params label to match newly-loaded preset values
+        # Only update the fine-tune controls (Min, Max, etc.) when "Use preset"
+        # is active.  In manual mode the user's custom values must not be
+        # overwritten just because they browsed to a different preset in the
+        # combo — most built-in presets have clamp_min == clamp_max which would
+        # silently force the user's distinct min/max values to the same value.
+        if self._use_preset_check.isChecked():
+            # Block signals on fine-tune controls while we populate them so each
+            # value change doesn't restart the debounce timer individually.
+            finetune_controls = [
+                self._threshold_spin, self._clamp_min_spin, self._clamp_max_spin,
+                self._invert_check, self._binary_cut_check,
+            ]
+            for c in finetune_controls:
+                c.blockSignals(True)
+            self._threshold_spin.setValue(int(preset.threshold))
+            self._clamp_min_spin.setValue(int(preset.clamp_min))
+            self._clamp_max_spin.setValue(int(preset.clamp_max))
+            self._invert_check.setChecked(bool(preset.invert))
+            self._binary_cut_check.setChecked(bool(preset.binary_cut))
+            for c in finetune_controls:
+                c.blockSignals(False)
+        # Refresh live params label to match current state
         self._refresh_finetune_label()
         # Refresh compare preview (via debounce so rapid preset changes don't
         # stack up many simultaneous background threads).
