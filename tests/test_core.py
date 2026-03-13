@@ -5271,3 +5271,215 @@ class TestRound15ResourceHygiene(unittest.TestCase):
             "apply_rgba_adjust must NOT close the caller's RGBA image",
         )
         orig_close()  # cleanup
+
+
+# ---------------------------------------------------------------------------
+# Selective Alpha processor tests
+# ---------------------------------------------------------------------------
+
+class TestSelectiveAlphaProcessor(unittest.TestCase):
+    """Tests for src.core.selective_alpha_processor."""
+
+    def _make_rgba(self, w=8, h=8, alpha=200) -> Image.Image:
+        arr = np.zeros((h, w, 4), dtype=np.uint8)
+        arr[:, :, :3] = 128
+        arr[:, :, 3]  = alpha
+        return Image.fromarray(arr, "RGBA")
+
+    # ---- detect_edges -----------------------------------------------------
+
+    def test_detect_edges_returns_float32(self):
+        from src.core.selective_alpha_processor import detect_edges
+        img = self._make_rgba()
+        e = detect_edges(img)
+        self.assertEqual(e.dtype, np.float32)
+        self.assertEqual(e.shape, (img.height, img.width))
+        img.close()
+
+    def test_detect_edges_uniform_image_is_zero(self):
+        """A completely uniform grey image has no edges."""
+        from src.core.selective_alpha_processor import detect_edges
+        img = Image.new("RGBA", (16, 16), (100, 100, 100, 255))
+        e = detect_edges(img)
+        self.assertAlmostEqual(float(e.max()), 0.0, places=4)
+        img.close()
+
+    def test_detect_edges_checkerboard_has_edges(self):
+        """A 2×2 checkerboard pattern should produce non-zero edges."""
+        from src.core.selective_alpha_processor import detect_edges
+        arr = np.zeros((8, 8, 4), dtype=np.uint8)
+        for r in range(8):
+            for c in range(8):
+                v = 255 if (r + c) % 2 == 0 else 0
+                arr[r, c, :3] = v
+                arr[r, c, 3]  = 255
+        img = Image.fromarray(arr, "RGBA")
+        e = detect_edges(img)
+        self.assertGreater(float(e.max()), 0.1)
+        img.close()
+
+    def test_detect_edges_values_in_range(self):
+        from src.core.selective_alpha_processor import detect_edges
+        img = self._make_rgba()
+        e = detect_edges(img)
+        self.assertGreaterEqual(float(e.min()), 0.0)
+        self.assertLessEqual(float(e.max()), 1.0 + 1e-6)
+        img.close()
+
+    # ---- edge_flood_fill --------------------------------------------------
+
+    def test_flood_fill_uniform_fills_all(self):
+        """On a uniform (zero-edge) image the fill covers the whole image."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        h, w = 10, 10
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        mask = edge_flood_fill((5, 5), edge_map)
+        self.assertEqual(mask.shape, (h, w))
+        self.assertTrue(mask.all(), "Expected the entire image to be filled")
+
+    def test_flood_fill_out_of_bounds_seed_returns_empty(self):
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        mask = edge_flood_fill((20, 20), edge_map)
+        self.assertFalse(mask.any())
+
+    def test_flood_fill_blocked_by_edge(self):
+        """A strong vertical edge should prevent fill from crossing it."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        h, w = 10, 10
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        edge_map[:, 5] = 1.0   # strong vertical barrier
+        mask = edge_flood_fill((2, 2), edge_map, threshold=0.5)
+        # All filled pixels should be to the left of the edge (col < 5)
+        filled_cols = np.where(mask)[1]
+        self.assertTrue(
+            (filled_cols < 5).all(),
+            "Fill should not cross the strong vertical edge"
+        )
+
+    def test_flood_fill_seed_on_edge_returns_empty(self):
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.ones((10, 10), dtype=np.float32)   # all strong edges
+        mask = edge_flood_fill((5, 5), edge_map, threshold=0.5)
+        self.assertFalse(mask.any())
+
+    # ---- autocorrect_mask -------------------------------------------------
+
+    def test_autocorrect_empty_mask_unchanged(self):
+        from src.core.selective_alpha_processor import autocorrect_mask
+        mask = np.zeros((10, 10), dtype=bool)
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        result = autocorrect_mask(mask, edge_map)
+        self.assertFalse(result.any())
+
+    def test_autocorrect_expands_toward_edges(self):
+        """A drawn mask near a strong edge should be expanded to include the edge."""
+        from src.core.selective_alpha_processor import autocorrect_mask
+        h, w = 30, 30
+        mask = np.zeros((h, w), dtype=bool)
+        mask[10:20, 5:10] = True   # drawn region
+
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        edge_map[10:20, 14] = 0.9  # strong edge 4 pixels away
+
+        result = autocorrect_mask(mask, edge_map, search_radius=8, edge_threshold=0.5)
+        # The edge pixels should now be included
+        self.assertTrue(result[10, 14], "Edge pixel should be snapped into mask")
+        # Original drawn region should still be present
+        self.assertTrue(result[10, 5])
+
+    def test_autocorrect_no_edges_unchanged(self):
+        from src.core.selective_alpha_processor import autocorrect_mask
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[2:7, 2:7] = True
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        result = autocorrect_mask(mask, edge_map, edge_threshold=0.5)
+        np.testing.assert_array_equal(result, mask)
+
+    # ---- apply_selective_alpha --------------------------------------------
+
+    def test_apply_sets_zone_alpha(self):
+        """Pixels inside a zone mask must receive the zone's alpha value."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = self._make_rgba(8, 8, alpha=255)
+        zone_masks: list = [None] * NUM_ZONES
+        mask = np.zeros((8, 8), dtype=bool)
+        mask[2:5, 2:5] = True
+        zone_masks[0] = mask
+        zone_alphas = [42] + [255] * (NUM_ZONES - 1)
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        arr = np.array(result, dtype=np.uint8)
+        self.assertEqual(int(arr[3, 3, 3]), 42, "Zone alpha should be 42")
+        self.assertEqual(int(arr[0, 0, 3]), 255, "Unpainted pixel keeps original alpha")
+        result.close()
+        img.close()
+
+    def test_apply_zone0_wins_on_overlap(self):
+        """Zone 0 has highest priority and wins when zones overlap."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = self._make_rgba(8, 8, alpha=200)
+        # Both zone 0 and zone 1 cover the same pixels
+        full_mask = np.ones((8, 8), dtype=bool)
+        zone_masks = [full_mask, full_mask] + [None] * (NUM_ZONES - 2)
+        zone_alphas = [10, 99] + [200] * (NUM_ZONES - 2)
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        arr = np.array(result, dtype=np.uint8)
+        self.assertEqual(int(arr[0, 0, 3]), 10, "Zone 0 (alpha=10) should win over zone 1")
+        result.close()
+        img.close()
+
+    def test_apply_empty_zones_keeps_original_alpha(self):
+        """If no zones are painted, the alpha channel must not change."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        original_alpha = 77
+        img = self._make_rgba(6, 6, alpha=original_alpha)
+        zone_masks = [None] * NUM_ZONES
+        zone_alphas = [0] * NUM_ZONES
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        arr = np.array(result, dtype=np.uint8)
+        self.assertTrue(
+            (arr[:, :, 3] == original_alpha).all(),
+            "All alphas should remain unchanged when no zones are painted"
+        )
+        result.close()
+        img.close()
+
+    def test_apply_returns_rgba(self):
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGB", (4, 4), (100, 100, 100))
+        zone_masks = [None] * NUM_ZONES
+        zone_alphas = [128] * NUM_ZONES
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        self.assertEqual(result.mode, "RGBA")
+        result.close()
+        img.close()
+
+    # ---- composite_zones --------------------------------------------------
+
+    def test_composite_zones_output_shape(self):
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES
+        h, w = 8, 8
+        src = np.zeros((h, w, 4), dtype=np.uint8)
+        src[:, :] = [100, 100, 100, 255]
+        zone_masks = [None] * NUM_ZONES
+        out = composite_zones(src, zone_masks)
+        self.assertEqual(out.shape, (h, w, 4))
+        self.assertEqual(out.dtype, np.uint8)
+
+    def test_composite_zones_tints_zone_area(self):
+        """Pixels covered by a zone should be blended with the zone colour."""
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES, ZONE_COLORS
+        h, w = 8, 8
+        src = np.zeros((h, w, 4), dtype=np.uint8)
+        src[:, :] = [200, 200, 200, 255]
+        mask = np.zeros((h, w), dtype=bool)
+        mask[2:6, 2:6] = True
+        zone_masks = [mask] + [None] * (NUM_ZONES - 1)
+        out = composite_zones(src, zone_masks)
+        # The top-left corner (not in zone) should be unchanged
+        np.testing.assert_array_equal(out[0, 0], src[0, 0])
+        # The zone area should be tinted (different from original)
+        self.assertFalse(
+            np.array_equal(out[3, 3], src[3, 3]),
+            "Zone area should be blended with zone colour"
+        )

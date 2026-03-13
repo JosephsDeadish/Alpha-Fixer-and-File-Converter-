@@ -17,6 +17,7 @@ from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
+from .selective_alpha_tool import SelectiveAlphaTool
 from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
@@ -381,15 +382,17 @@ class MainWindow(QMainWindow):
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
+        self._selective_alpha_tab = SelectiveAlphaTool()
         self._tabs.addTab(self._alpha_tab, "🖼  Alpha Fixer")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
         self._tabs.addTab(self._history_tab, "📋  History")
+        self._tabs.addTab(self._selective_alpha_tab, "🎨  Selective Alpha")
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
 
-        # Keyboard shortcuts for tab switching: Ctrl+1/2/3
-        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3")):
+        # Keyboard shortcuts for tab switching: Ctrl+1/2/3/4
+        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4")):
             sc = QShortcut(QKeySequence(key), self)
             sc.activated.connect(lambda i=idx: self._tabs.setCurrentIndex(i))
 
