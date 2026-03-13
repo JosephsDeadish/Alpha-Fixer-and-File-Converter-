@@ -135,12 +135,12 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_invert_alpha(self):
-        # uniform alpha=100 → invert → uniform 155 → normalize uniform → maps to target_hi=255
+        # uniform alpha=100 → invert → uniform 155 → clamp to [0, 255] → stays 155
         img = make_rgba_image(alpha=100)
         preset = AlphaPreset("inv", "", invert=True)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 255))  # uniform after invert → target_hi
+        self.assertTrue(np.all(arr[:, :, 3] == 155))  # within [0,255] → unchanged
 
     def test_invert_alpha_varied(self):
         """invert then normalize on varied alpha preserves inverted proportions."""
@@ -200,13 +200,13 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_clamp_min_preset(self):
-        """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        """Preset: uniform alpha below target_lo is raised to target_lo (min floor)."""
         img = make_rgba_image(alpha=50)
         preset = AlphaPreset("clamp", "", clamp_min=100, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # uniform → target_hi=max(100,255)=255
-        self.assertTrue(np.all(arr[:, :, 3] == 255))
+        # 50 < target_lo=100 → raised to floor (100), not pushed to target_hi (255)
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
 
     def test_clamp_max_preset(self):
         """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
@@ -264,15 +264,15 @@ class TestPresets(unittest.TestCase):
                            "clamp-only mode must produce a range, not a single value")
 
     def test_clamp_min_manual_alpha(self):
-        """apply_manual_alpha: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        """apply_manual_alpha: uniform alpha below target_lo is raised to target_lo."""
         img = make_rgba_image(alpha=50)
         result = apply_manual_alpha(img, clamp_min=128, clamp_max=255)
         arr = np.array(result)
-        # uniform → target_hi=max(128,255)=255
-        self.assertTrue(np.all(arr[:, :, 3] == 255))
+        # 50 < target_lo=128 → raised to floor (128), not pushed to target_hi (255)
+        self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_builtin_clamp_128_255_preset(self):
-        """The built-in 'Clamp 128-255' preset should raise all alpha below 128."""
+        """The built-in 'Clamp 128-255' preset raises uniform alpha below 128 to 128."""
         from unittest.mock import MagicMock
         from src.core.presets import PresetManager
         mock_settings = MagicMock()
@@ -289,10 +289,45 @@ class TestPresets(unittest.TestCase):
         img = make_rgba_image(alpha=50)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 255),
-                        f"Expected 255, got {arr[0, 0, 3]}")
+        # alpha=50 < clamp_min=128 → raised to floor (128)
+        self.assertTrue(np.all(arr[:, :, 3] == 128),
+                        f"Expected 128, got {arr[0, 0, 3]}")
 
-    def test_binary_cut_preset(self):
+    def test_uniform_below_floor_raises_to_min(self):
+        """Uniform alpha below target_lo must be raised to target_lo.
+        This regression test proves the Min spinbox is effective for
+        transparent (or low-alpha) images even when all pixels share
+        the same source value."""
+        img = make_rgba_image(alpha=0)   # fully transparent
+        result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 50),
+                        f"Expected 50 (raised to floor), got {arr[0, 0, 3]}")
+
+    def test_uniform_within_range_min_is_live(self):
+        """For a uniform-alpha image whose value is inside [target_lo, target_hi],
+        changing the Min spinbox must visibly shift the output value.
+        This is the core regression: both Min and Max must be effective
+        for any image regardless of whether its source alpha is varied."""
+        img = make_rgba_image(alpha=128)  # uniform mid-value
+
+        result_a = apply_manual_alpha(img, clamp_min=50,  clamp_max=200)
+        result_b = apply_manual_alpha(img, clamp_min=100, clamp_max=200)
+        val_a = int(np.array(result_a)[0, 0, 3])
+        val_b = int(np.array(result_b)[0, 0, 3])
+
+        # Both must be within [50, 200] / [100, 200]
+        self.assertGreaterEqual(val_a, 50)
+        self.assertLessEqual(val_a, 200)
+        self.assertGreaterEqual(val_b, 100)
+        self.assertLessEqual(val_b, 200)
+
+        # The CRITICAL check: changing Min must change the output value
+        self.assertNotEqual(val_a, val_b,
+            "Raising Min from 50→100 on a uniform-128 image must change the "
+            "output — both Min and Max must be live controls")
+
+
         """binary_cut=True should give hard 0/255 split at threshold.
         Uses a two-row image so normalize maps 50→0 and 200→255, then
         binary_cut at threshold=128 gives 0 and 255 respectively."""
@@ -349,11 +384,11 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
 
     def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
-        """normalize on uniform alpha (all same value) should map to clamp_max."""
+        """Uniform alpha above target_hi is clamped to target_hi (clamp_max)."""
         img = make_rgba_image(alpha=200)
         result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
         out = np.array(result)
-        # All pixels are the same → no range → map to target_hi (clamp_max)
+        # 200 > target_hi=128 → clamped to 128
         self.assertTrue(np.all(out[:, :, 3] == 128))
 
     def test_manual_alpha_normalize_preserves_proportions(self):
