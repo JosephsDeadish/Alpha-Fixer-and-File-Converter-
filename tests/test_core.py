@@ -559,7 +559,90 @@ class TestPresets(unittest.TestCase):
         self.assertNotEqual(int(out[0, 0, 3]), int(out[0, 1, 3]),
                             "Floor-raised preset must produce different output values — not forced to same")
 
-class TestCollectFiles(unittest.TestCase):
+    # ------------------------------------------------------------------
+    # Threshold-as-pixel-filter tests  (threshold > 0, binary_cut=False)
+    # ------------------------------------------------------------------
+
+    def test_manual_alpha_threshold_protects_high_alpha_pixels(self):
+        """When threshold=128 and binary_cut=False, pixels with alpha >= 128 must
+        keep their original value; only pixels below 128 are normalized."""
+        # Row 0: low alpha (will be processed)
+        # Row 1: high alpha (must be left untouched)
+        arr = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr[0, :, 3] = 60    # below threshold → processed
+        arr[1, :, 3] = 200   # at/above threshold → protected
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, threshold=128, clamp_min=0, clamp_max=64)
+        out = np.array(result)
+        # Processed row: uniform at 60, maps proportionally in [0, 64] → round(60/255*64)=15
+        self.assertEqual(int(out[0, 0, 3]), round(60 / 255.0 * 64),
+                         "Low-alpha pixel should be normalized into [0, 64]")
+        # Protected row: must stay at 200 (not clipped to 64)
+        self.assertTrue(np.all(out[1, :, 3] == 200),
+                        "Pixels with alpha >= threshold must keep their original value")
+
+    def test_manual_alpha_threshold_zero_processes_all(self):
+        """threshold=0 (default) must process every pixel — backward-compatible."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 200   # would be 'protected' if threshold=128, but threshold=0
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, threshold=0, clamp_min=0, clamp_max=64)
+        out = np.array(result)
+        # Both pixels are processed: [0, 200] → [0, 64]
+        self.assertEqual(int(out[0, 0, 3]), 0,   "alpha=0 → 0 (min)")
+        self.assertEqual(int(out[0, 1, 3]), 64,  "alpha=200 → 64 (max of range)")
+
+    def test_manual_alpha_threshold_mixed_range_partial_protect(self):
+        """threshold=128 protects the top half while remapping the bottom half."""
+        arr = np.zeros((1, 4, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 64
+        arr[0, 2, 3] = 128   # exactly at threshold → protected
+        arr[0, 3, 3] = 200   # above threshold → protected
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, threshold=128, clamp_min=0, clamp_max=100)
+        out = np.array(result)
+        # Processed pixels: [0, 64] normalized to [0, 100]
+        self.assertEqual(int(out[0, 0, 3]), 0,    "alpha=0 → 0 (min of range)")
+        self.assertEqual(int(out[0, 1, 3]), 100,  "alpha=64 → 100 (max of processed range)")
+        # Protected pixels: original values must be preserved
+        self.assertEqual(int(out[0, 2, 3]), 128,  "alpha=128 >= threshold → unchanged")
+        self.assertEqual(int(out[0, 3, 3]), 200,  "alpha=200 >= threshold → unchanged")
+
+    def test_preset_threshold_protects_high_alpha_pixels(self):
+        """apply_alpha_preset: threshold > 0 with binary_cut=False protects
+        pixels at/above threshold from being normalized."""
+        arr = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr[0, :, 3] = 50    # below threshold=100 → processed
+        arr[1, :, 3] = 150   # at/above threshold=100 → protected
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("protect_test", "", clamp_min=0, clamp_max=64,
+                             threshold=100, binary_cut=False)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        # Processed row: uniform 50 → proportional in [0, 64] → round(50/255*64)=12 or 13
+        self.assertLess(int(out[0, 0, 3]), 64,
+                        "Low-alpha pixel must be normalized, not clipped to target_hi")
+        # Protected row: must stay at 150
+        self.assertTrue(np.all(out[1, :, 3] == 150),
+                        "Pixels with original alpha >= threshold must be left unchanged")
+
+    def test_preset_binary_cut_with_threshold_still_processes_all(self):
+        """When binary_cut=True, threshold is the SPLIT POINT (not a pixel filter).
+        All pixels participate in normalize + binary_cut regardless of threshold."""
+        arr = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr[0, :, 3] = 50    # below threshold
+        arr[1, :, 3] = 200   # above threshold
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("cut", "", threshold=128, binary_cut=True)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        # binary_cut: normalizes [50,200]→[0,255], then 50→≈0<128→0, 200→≈255≥128→255
+        self.assertTrue(np.all(out[0, :, 3] == 0),   "50 normalized then binary-cut → 0")
+        self.assertTrue(np.all(out[1, :, 3] == 255),  "200 normalized then binary-cut → 255")
+
+
 
     def test_collect_single_file(self):
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
@@ -1957,6 +2040,60 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         self.assertNotIn("process almost NONE", src,
                          "threshold_spin tips must not say 'process almost NONE' for threshold=255 — "
                          "threshold=255 processes everything except fully opaque pixels")
+
+    # ── _on_force_same_value_toggled must NOT call _switch_to_manual_if_preset_active ──
+
+    def test_force_same_toggled_does_not_call_switch_to_manual(self):
+        """_on_force_same_value_toggled must NOT delegate to
+        _switch_to_manual_if_preset_active().  That helper unconditionally releases
+        the force_same lock when a preset is active, making it impossible for the
+        user to intentionally check force_same while in preset mode.  The handler
+        must implement its own inline preset-exit guard that preserves the user's
+        explicit force_same choice."""
+        src = self._alpha_tool_source()
+        start = src.find("def _on_force_same_value_toggled")
+        self.assertGreater(start, 0, "_on_force_same_value_toggled not found")
+        next_def = src.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(src)
+        body = src[start:end]
+        self.assertNotIn(
+            "_switch_to_manual_if_preset_active",
+            body,
+            "_on_force_same_value_toggled must not call _switch_to_manual_if_preset_active — "
+            "that helper releases force_same which overrides the user's explicit toggle",
+        )
+
+    def test_force_same_toggled_still_exits_preset_mode(self):
+        """_on_force_same_value_toggled must still switch to manual mode (uncheck
+        _use_preset_check) when a preset is active, just without releasing force_same."""
+        src = self._alpha_tool_source()
+        start = src.find("def _on_force_same_value_toggled")
+        self.assertGreater(start, 0, "_on_force_same_value_toggled not found")
+        next_def = src.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(src)
+        body = src[start:end]
+        # Must check whether a preset is currently active
+        self.assertIn("_use_preset_check.isChecked()", body,
+                      "_on_force_same_value_toggled must check _use_preset_check.isChecked()")
+        # Must uncheck use_preset when active
+        self.assertIn("_use_preset_check.setChecked(False)", body,
+                      "_on_force_same_value_toggled must uncheck _use_preset_check when preset active")
+
+    def test_threshold_tooltip_describes_protect_behavior(self):
+        """The threshold label tooltip must describe the 'protect above threshold'
+        behavior now that threshold actually filters pixels when binary_cut is off."""
+        src = self._alpha_tool_source()
+        # Find the threshold tooltip block
+        thresh_pos = src.find("lbl_thresh = QLabel")
+        self.assertGreater(thresh_pos, 0, "lbl_thresh not found in alpha_tool.py")
+        # Look for the tooltip content nearby
+        tooltip_pos = src.find(".setToolTip(", thresh_pos)
+        next_widget = src.find("gt_layout.addWidget", thresh_pos)
+        block = src[thresh_pos:next_widget]
+        self.assertIn("protect", block.lower(),
+                      "threshold tooltip must describe the 'protect' behavior for pixels above threshold")
+
+
 
 
 # ---------------------------------------------------------------------------

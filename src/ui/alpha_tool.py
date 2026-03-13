@@ -471,7 +471,7 @@ class AlphaFixerTab(QWidget):
 
         # ── Force same value checkbox ───────────────────────────────────────────
         self._force_same_value_check = QCheckBox(
-            "Force same value  (Min = Max — set every pixel to one alpha)"
+            "Force same value (Min = Max — set every pixel to one alpha)"
         )
         self._force_same_value_check.setToolTip(
             "When checked, Min and Max are kept in sync.\n"
@@ -515,10 +515,12 @@ class AlphaFixerTab(QWidget):
         lbl_thresh = QLabel("Threshold (0 = all pixels):")
         lbl_thresh.setMinimumHeight(24)
         lbl_thresh.setToolTip(
-            "Only pixels with alpha BELOW this value are changed.\n"
-            "0 (default) means every pixel is affected regardless of its current alpha.\n"
+            "When set above 0 (and Binary cut is OFF): pixels with alpha >= threshold\n"
+            "are protected and kept at their original value — only pixels with alpha\n"
+            "below this value are inverted/normalized.\n"
+            "0 (default) means every pixel is processed regardless of its current alpha.\n"
             "Example: threshold=128 leaves already-opaque areas unchanged.\n"
-            "Required by Binary cut."
+            "When Binary cut is ON: sets the hard split point (>= threshold → 255, else → 0)."
         )
         gt_layout.addWidget(lbl_thresh, 8, 0)
         self._threshold_spin = QSpinBox()
@@ -1042,8 +1044,17 @@ class AlphaFixerTab(QWidget):
         from the same baseline.  After that, editing either spinbox keeps them
         in lock-step via _on_clamp_min_changed / _on_clamp_max_changed.
         When unchecked, both spinboxes become independent again.
+
+        Always switches to manual mode when a preset is active, but preserves
+        the user's explicit force_same choice (does NOT release the lock if the
+        user just checked it — only the spinbox edit handlers release it).
         """
-        self._switch_to_manual_if_preset_active()
+        # Switch to manual mode if a preset is active, but do NOT release
+        # force_same — the user has explicitly set its state and we must honour it.
+        if not self._preset_combo.signalsBlocked() and self._use_preset_check.isChecked():
+            was_blocked = self._use_preset_check.blockSignals(True)
+            self._use_preset_check.setChecked(False)
+            self._use_preset_check.blockSignals(was_blocked)
         if checked:
             # Sync Max to match Min immediately on check.
             self._clamp_max_spin.blockSignals(True)
