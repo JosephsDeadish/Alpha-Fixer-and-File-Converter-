@@ -5483,3 +5483,193 @@ class TestSelectiveAlphaProcessor(unittest.TestCase):
             np.array_equal(out[3, 3], src[3, 3]),
             "Zone area should be blended with zone colour"
         )
+
+
+# ---------------------------------------------------------------------------
+# Selective Alpha canvas unit tests (no Qt display required)
+# ---------------------------------------------------------------------------
+
+class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
+    """
+    Tests for the non-Qt helper logic on SelectiveAlphaCanvas:
+      _snapshot / _restore_snapshot / _push_history / undo_mask / redo_mask
+      _erase_brush / _erase_brush_move
+    These tests bypass the Qt paint/event system by calling internal helpers
+    directly and inspecting the resulting masks.
+    """
+
+    def _make_canvas_with_image(self):
+        """
+        Return a canvas instance that has a 16x16 RGBA image loaded without
+        ever calling Qt rendering (we skip load_image and set internals
+        directly to avoid QApplication dependency in headless CI).
+        """
+        import sys, types
+
+        # Build a minimal stub PyQt6 environment if Qt is not available.
+        # If PyQt6 IS importable we use it; otherwise we create stubs.
+        try:
+            from PyQt6.QtWidgets import QApplication
+            # Store on self to prevent premature garbage collection.
+            self._qapp = QApplication.instance() or QApplication(sys.argv)
+            from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
+            canvas = SelectiveAlphaCanvas.__new__(SelectiveAlphaCanvas)
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
+
+        # Initialise just the attributes used by the history/eraser helpers.
+        canvas._src_img   = Image.new("RGBA", (16, 16), (100, 100, 100, 200))
+        canvas._src_arr   = np.array(canvas._src_img, dtype=np.uint8)
+        canvas._masks     = [None] * 7
+        canvas._history   = []
+        canvas._redo_stack = []
+        canvas._brush_size  = 3
+        canvas._eraser_size = 3
+        canvas._active_zone = 0
+        canvas._edge_map    = None
+        canvas._composite_dirty = True
+        return canvas
+
+    # ---- snapshot helpers -------------------------------------------------
+
+    def test_snapshot_all_none(self):
+        canvas = self._make_canvas_with_image()
+        snap = canvas._snapshot()
+        self.assertEqual(len(snap), 7)
+        self.assertTrue(all(s is None for s in snap))
+
+    def test_snapshot_captures_mask(self):
+        canvas = self._make_canvas_with_image()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+        snap = canvas._snapshot()
+        self.assertIsNotNone(snap[0])
+        self.assertTrue((snap[0] == 255).all())
+        canvas._masks[0].close()
+
+    def test_restore_snapshot_restores_mask(self):
+        canvas = self._make_canvas_with_image()
+        arr = np.full((16, 16), 200, dtype=np.uint8)
+        snap = [arr.copy()] + [None] * 6
+
+        # Manually stub update() so it doesn't try to paint
+        canvas.update = lambda: None
+        canvas._restore_snapshot(snap)
+
+        m = canvas._masks[0]
+        self.assertIsNotNone(m)
+        result = np.array(m, dtype=np.uint8)
+        self.assertTrue((result == 200).all())
+        m.close()
+
+    # ---- push / undo / redo -----------------------------------------------
+
+    def _stub_signals(self, canvas):
+        """Replace pyqtSignal emitters with no-ops for headless testing."""
+        canvas.undo_available = types.SimpleNamespace(emit=lambda v: None)
+        canvas.redo_available = types.SimpleNamespace(emit=lambda v: None)
+        canvas.mask_changed   = types.SimpleNamespace(emit=lambda v: None)
+        canvas.update = lambda: None
+
+    def test_push_history_adds_entry(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+        self.assertEqual(len(canvas._history), 0)
+        canvas._push_history()
+        self.assertEqual(len(canvas._history), 1)
+
+    def test_undo_restores_previous_state(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+
+        # Start empty, push history, then paint zone 0
+        canvas._push_history()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+
+        self.assertIsNotNone(canvas._masks[0])
+        result = canvas.undo_mask()
+        self.assertTrue(result)
+        self.assertIsNone(canvas._masks[0])   # restored to pre-paint state
+
+    def test_redo_restores_forward_state(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+
+        canvas._push_history()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 128, dtype=np.uint8), "L"
+        )
+        canvas.undo_mask()
+        self.assertIsNone(canvas._masks[0])
+
+        result = canvas.redo_mask()
+        self.assertTrue(result)
+        self.assertIsNotNone(canvas._masks[0])
+        arr = np.array(canvas._masks[0], dtype=np.uint8)
+        self.assertTrue((arr == 128).all())
+        canvas._masks[0].close()
+
+    def test_push_clears_redo_stack(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+
+        canvas._push_history()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+        canvas.undo_mask()
+        self.assertEqual(len(canvas._redo_stack), 1)
+
+        # Push new history: redo stack should be cleared
+        canvas._push_history()
+        self.assertEqual(len(canvas._redo_stack), 0)
+
+    # ---- eraser -----------------------------------------------------------
+
+    def test_erase_brush_clears_all_zones(self):
+        canvas = self._make_canvas_with_image()
+
+        # Paint two zones with full white masks
+        for i in range(3):
+            canvas._masks[i] = Image.fromarray(
+                np.full((16, 16), 255, dtype=np.uint8), "L"
+            )
+
+        # Erase at centre
+        canvas._erase_brush(8, 8)
+
+        # The erased region should be 0 in all three painted zones
+        for i in range(3):
+            arr = np.array(canvas._masks[i], dtype=np.uint8)
+            # Centre pixel must be 0 after erasing
+            self.assertEqual(
+                arr[8, 8], 0,
+                f"Zone {i} centre pixel should be erased"
+            )
+            canvas._masks[i].close()
+            canvas._masks[i] = None
+
+    def test_erase_brush_no_effect_on_none_zone(self):
+        canvas = self._make_canvas_with_image()
+        canvas._erase_brush(8, 8)   # all masks are None – must not raise
+
+    def test_eraser_size_applies(self):
+        canvas = self._make_canvas_with_image()
+        canvas._eraser_size = 1
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+        canvas._erase_brush(8, 8)
+        arr = np.array(canvas._masks[0], dtype=np.uint8)
+        # Centre should be erased; corner should not
+        self.assertEqual(arr[8, 8], 0)
+        self.assertEqual(arr[0, 0], 255)
+        canvas._masks[0].close()
+        canvas._masks[0] = None

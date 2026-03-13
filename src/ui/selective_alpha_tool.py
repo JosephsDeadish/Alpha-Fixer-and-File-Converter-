@@ -84,6 +84,9 @@ def _zone_qcolor(zone_idx: int, alpha: int = 200) -> QColor:
 # Drawing canvas
 # ---------------------------------------------------------------------------
 
+_MAX_HISTORY = 50   # maximum number of undo steps kept
+
+
 class SelectiveAlphaCanvas(QWidget):
     """
     Interactive canvas that shows the source image with coloured mask
@@ -91,10 +94,14 @@ class SelectiveAlphaCanvas(QWidget):
 
     Signals
     -------
-    mask_changed : int – emitted with the zone index whenever a mask is edited.
+    mask_changed     : int  – emitted with the zone index whenever a mask is edited.
+    undo_available   : bool – True when there is at least one undo step available.
+    redo_available   : bool – True when there is at least one redo step available.
     """
 
-    mask_changed = pyqtSignal(int)
+    mask_changed   = pyqtSignal(int)
+    undo_available = pyqtSignal(bool)
+    redo_available = pyqtSignal(bool)
 
     # ------------------------------------------------------------------ init
 
@@ -128,11 +135,17 @@ class SelectiveAlphaCanvas(QWidget):
         self._active_zone: int = 0
 
         # ---- Current tool -------------------------------------------------
-        # "freehand" | "line" | "rect" | "ellipse" | "fill" | "polygon"
+        # "freehand" | "line" | "rect" | "ellipse" | "fill" | "polygon" | "eraser"
         self._tool: str = "freehand"
 
-        # ---- Brush size (radius for freehand/line) -----------------------
-        self._brush_size: int = 10
+        # ---- Brush / eraser sizes (radius in image pixels) ---------------
+        self._brush_size: int  = 10
+        self._eraser_size: int = 10
+
+        # ---- Drawing history (undo/redo) ----------------------------------
+        # Each entry is a snapshot: list[Optional[np.ndarray]] (one per zone).
+        self._history:    list[list] = []
+        self._redo_stack: list[list] = []
 
         # ---- Auto-correct -------------------------------------------------
         self._autocorrect: bool = False
@@ -173,14 +186,19 @@ class SelectiveAlphaCanvas(QWidget):
             self._pan_x    = 0.0
             self._pan_y    = 0.0
             self._poly_pts = []
+            self._history.clear()
+            self._redo_stack.clear()
             self._composite_dirty = True
             self.update()
+            self.undo_available.emit(False)
+            self.redo_available.emit(False)
             return True
         except Exception:
             return False
 
     def clear_mask(self, zone_idx: int) -> None:
         """Erase the mask for zone *zone_idx*."""
+        self._push_history()
         old = self._masks[zone_idx]
         if old is not None:
             old.close()
@@ -191,6 +209,7 @@ class SelectiveAlphaCanvas(QWidget):
 
     def clear_all_masks(self) -> None:
         """Erase all zone masks."""
+        self._push_history()
         for i in range(NUM_ZONES):
             m = self._masks[i]
             if m is not None:
@@ -211,6 +230,9 @@ class SelectiveAlphaCanvas(QWidget):
 
     def set_brush_size(self, size: int) -> None:
         self._brush_size = max(1, size)
+
+    def set_eraser_size(self, size: int) -> None:
+        self._eraser_size = max(1, size)
 
     def set_autocorrect(self, enabled: bool) -> None:
         self._autocorrect = enabled
@@ -237,6 +259,7 @@ class SelectiveAlphaCanvas(QWidget):
         """Close and fill the in-progress polygon, optionally auto-correcting."""
         pts = self._poly_pts
         if len(pts) >= 3:
+            self._push_history()
             self._paint_polygon_on_mask(pts)
             if self._autocorrect:
                 self._apply_autocorrect(self._active_zone)
@@ -259,6 +282,72 @@ class SelectiveAlphaCanvas(QWidget):
         self._pan_y = 0.0
         self._composite_dirty = True
         self.update()
+
+    # ----------------------------------------------------------- undo / redo
+
+    def undo_mask(self) -> bool:
+        """Undo the last drawing action.  Returns True if something was undone."""
+        if not self._history:
+            return False
+        self._redo_stack.append(self._snapshot())
+        self._restore_snapshot(self._history.pop())
+        self.undo_available.emit(bool(self._history))
+        self.redo_available.emit(True)
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
+        return True
+
+    def redo_mask(self) -> bool:
+        """Redo a previously undone drawing action.  Returns True if done."""
+        if not self._redo_stack:
+            return False
+        self._history.append(self._snapshot())
+        self._restore_snapshot(self._redo_stack.pop())
+        self.undo_available.emit(True)
+        self.redo_available.emit(bool(self._redo_stack))
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
+        return True
+
+    def has_undo(self) -> bool:
+        return bool(self._history)
+
+    def has_redo(self) -> bool:
+        return bool(self._redo_stack)
+
+    # ----------------------------------------------------------- history helpers
+
+    def _snapshot(self) -> list:
+        """Capture a copy of all zone masks as numpy arrays."""
+        result = []
+        for m in self._masks:
+            if m is None:
+                result.append(None)
+            else:
+                result.append(np.array(m, dtype=np.uint8).copy())
+        return result
+
+    def _restore_snapshot(self, state: list) -> None:
+        """Restore all zone masks from a snapshot."""
+        for i, arr in enumerate(state):
+            old = self._masks[i]
+            if old is not None:
+                old.close()
+            if arr is None:
+                self._masks[i] = None
+            else:
+                self._masks[i] = Image.fromarray(arr, "L")
+        self._composite_dirty = True
+        self.update()
+
+    def _push_history(self) -> None:
+        """Push current mask state onto the undo stack and clear redo."""
+        self._history.append(self._snapshot())
+        if len(self._history) > _MAX_HISTORY:
+            self._history.pop(0)
+        self._redo_stack.clear()
+        self.undo_available.emit(True)
+        self.redo_available.emit(False)
 
     # ----------------------------------------------------------- edge map
 
@@ -366,6 +455,29 @@ class SelectiveAlphaCanvas(QWidget):
         draw = ImageDraw.Draw(mask)
         draw.polygon(pts, fill=255)
         del draw
+        self._composite_dirty = True
+
+    def _erase_brush(self, ix: int, iy: int) -> None:
+        """Erase a circle from ALL zone masks at the given image position."""
+        r = self._eraser_size
+        for zone_idx, mask in enumerate(self._masks):
+            if mask is None:
+                continue
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse([(ix - r, iy - r), (ix + r, iy + r)], fill=0)
+            del draw
+        self._composite_dirty = True
+
+    def _erase_brush_move(self, x0: int, y0: int, x1: int, y1: int) -> None:
+        """Erase a line+cap from ALL zone masks (fills gaps during fast moves)."""
+        r = self._eraser_size
+        for zone_idx, mask in enumerate(self._masks):
+            if mask is None:
+                continue
+            draw = ImageDraw.Draw(mask)
+            draw.line([(x0, y0), (x1, y1)], fill=0, width=r * 2)
+            draw.ellipse([(x1 - r, y1 - r), (x1 + r, y1 + r)], fill=0)
+            del draw
         self._composite_dirty = True
 
     def _apply_autocorrect(self, zone_idx: int) -> None:
@@ -513,15 +625,25 @@ class SelectiveAlphaCanvas(QWidget):
         self._preview_end  = pt
 
         if self._tool == "freehand":
+            self._push_history()
             self._drawing = True
             self._paint_brush(ix, iy)
             self.mask_changed.emit(self._active_zone)
+            self.update()
+
+        elif self._tool == "eraser":
+            self._push_history()
+            self._drawing = True
+            self._erase_brush(ix, iy)
+            for i in range(NUM_ZONES):
+                self.mask_changed.emit(i)
             self.update()
 
         elif self._tool in ("line", "rect", "ellipse"):
             self._drawing = True
 
         elif self._tool == "fill":
+            self._push_history()
             edge_map = self._get_edge_map()
             if edge_map is not None:
                 filled = edge_flood_fill((ix, iy), edge_map)
@@ -545,6 +667,7 @@ class SelectiveAlphaCanvas(QWidget):
             # Single-click adds a point; double-click closes the polygon.
             if event.type() == QEvent.Type.MouseButtonDblClick:
                 if len(self._poly_pts) >= 3:
+                    self._push_history()
                     self._poly_pts.append((ix, iy))
                     self._paint_polygon_on_mask(self._poly_pts)
                     if self._autocorrect:
@@ -595,6 +718,13 @@ class SelectiveAlphaCanvas(QWidget):
             self._last_img_pt = (ix, iy)
             self.mask_changed.emit(self._active_zone)
             self.update()
+        elif self._tool == "eraser":
+            lx, ly = self._last_img_pt
+            self._erase_brush_move(lx, ly, ix, iy)
+            self._last_img_pt = (ix, iy)
+            for i in range(NUM_ZONES):
+                self.mask_changed.emit(i)
+            self.update()
         else:
             # Just update rubber-band preview
             self.update()
@@ -624,17 +754,23 @@ class SelectiveAlphaCanvas(QWidget):
                 self._apply_autocorrect(self._active_zone)
                 self._composite_dirty = True
 
+        elif self._tool == "eraser":
+            pass  # history already pushed at press; nothing extra needed
+
         elif self._tool == "line":
+            self._push_history()
             self._paint_line_on_mask(sx, sy, ix, iy)
             if self._autocorrect:
                 self._apply_autocorrect(self._active_zone)
             self.mask_changed.emit(self._active_zone)
 
         elif self._tool == "rect":
+            self._push_history()
             self._paint_rect_on_mask(sx, sy, ix, iy)
             self.mask_changed.emit(self._active_zone)
 
         elif self._tool == "ellipse":
+            self._push_history()
             self._paint_ellipse_on_mask(sx, sy, ix, iy)
             self.mask_changed.emit(self._active_zone)
 
@@ -779,6 +915,12 @@ class SelectiveAlphaTool(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._src_path: str = ""
+        # Current applied result and history stack for the Undo Process feature.
+        # _result_img holds the most recently applied image; _result_history
+        # is a capped stack of prior results that can be restored via Undo Process.
+        self._result_img: Image.Image | None = None
+        # Stack of previously applied result images for Undo Process
+        self._result_history: list[Image.Image] = []
         self._setup_ui()
 
     # ----------------------------------------------------------------- setup
@@ -820,6 +962,7 @@ class SelectiveAlphaTool(QWidget):
             ("ellipse",  "◯  Ellipse",   1, 1),
             ("fill",     "🪣  Fill",      2, 0),
             ("polygon",  "⬠  Polygon",   2, 1),
+            ("eraser",   "⌫  Eraser",    3, 0),
         ]
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
@@ -841,22 +984,33 @@ class SelectiveAlphaTool(QWidget):
         self._btn_close_poly.setToolTip("Close and fill the in-progress polygon")
         self._btn_close_poly.setVisible(False)
         self._btn_close_poly.clicked.connect(self._on_close_polygon)
-        tg.addWidget(self._btn_close_poly, 3, 0, 1, 2)
+        tg.addWidget(self._btn_close_poly, 4, 0, 1, 2)
 
         lv.addWidget(tools_box)
 
-        # Brush size
-        brush_box = QGroupBox("Brush Size")
-        bh = QHBoxLayout(brush_box)
-        bh.addWidget(QLabel("Radius (px):"))
+        # Tool sizes
+        size_box = QGroupBox("Tool Size")
+        sg = QGridLayout(size_box)
+        sg.setSpacing(4)
+        sg.addWidget(QLabel("Highlighter (px):"), 0, 0)
         self._brush_spin = QSpinBox()
         self._brush_spin.setRange(1, 200)
         self._brush_spin.setValue(10)
+        self._brush_spin.setToolTip("Radius of the freehand / line / shape brush in image pixels.")
         self._brush_spin.valueChanged.connect(
             lambda v: self._canvas.set_brush_size(v)
         )
-        bh.addWidget(self._brush_spin)
-        lv.addWidget(brush_box)
+        sg.addWidget(self._brush_spin, 0, 1)
+        sg.addWidget(QLabel("Eraser (px):"), 1, 0)
+        self._eraser_spin = QSpinBox()
+        self._eraser_spin.setRange(1, 200)
+        self._eraser_spin.setValue(10)
+        self._eraser_spin.setToolTip("Radius of the eraser brush in image pixels.")
+        self._eraser_spin.valueChanged.connect(
+            lambda v: self._canvas.set_eraser_size(v)
+        )
+        sg.addWidget(self._eraser_spin, 1, 1)
+        lv.addWidget(size_box)
 
         # Auto-correct
         self._autocorrect_chk = QCheckBox("Auto-correct (snap to edges)")
@@ -900,6 +1054,21 @@ class SelectiveAlphaTool(QWidget):
         self._zone_rows[0].set_selected(True)
         lv.addWidget(zones_box)
 
+        # Drawing history (undo / redo)
+        hist_box = QGroupBox("Drawing History")
+        hh = QHBoxLayout(hist_box)
+        self._btn_undo = QPushButton("↩  Undo")
+        self._btn_undo.setEnabled(False)
+        self._btn_undo.setToolTip("Undo the last highlight / erase action.")
+        self._btn_undo.clicked.connect(self._on_undo_mask)
+        hh.addWidget(self._btn_undo)
+        self._btn_redo = QPushButton("↪  Redo")
+        self._btn_redo.setEnabled(False)
+        self._btn_redo.setToolTip("Redo the last undone action.")
+        self._btn_redo.clicked.connect(self._on_redo_mask)
+        hh.addWidget(self._btn_redo)
+        lv.addWidget(hist_box)
+
         # Apply button
         self._btn_apply = QPushButton("✅  Apply Alpha Zones")
         self._btn_apply.setEnabled(False)
@@ -908,6 +1077,15 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_apply.clicked.connect(self._on_apply)
         lv.addWidget(self._btn_apply)
+
+        # Undo Process button
+        self._btn_undo_process = QPushButton("↩  Undo Process")
+        self._btn_undo_process.setEnabled(False)
+        self._btn_undo_process.setToolTip(
+            "Undo the last Apply operation and restore the previous result."
+        )
+        self._btn_undo_process.clicked.connect(self._on_undo_process)
+        lv.addWidget(self._btn_undo_process)
 
         # Clear all
         btn_clear_all = QPushButton("🗑  Clear All Zones")
@@ -920,6 +1098,8 @@ class SelectiveAlphaTool(QWidget):
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas = SelectiveAlphaCanvas()
         self._canvas.mask_changed.connect(self._on_mask_changed)
+        self._canvas.undo_available.connect(self._btn_undo.setEnabled)
+        self._canvas.redo_available.connect(self._btn_redo.setEnabled)
         root.addWidget(self._canvas, 1)
 
         # Sync initial tool to canvas
@@ -938,6 +1118,8 @@ class SelectiveAlphaTool(QWidget):
             "fill":     "Click to flood-fill a region.  Stops at image edges.",
             "polygon":  "Click to add vertices; double-click to close & fill.\n"
                         "Press Esc to cancel.",
+            "eraser":   "Erase painted highlights from all zones.\n"
+                        "Hold & drag to remove previously painted areas.",
         }
         return tips.get(key, "")
 
@@ -960,11 +1142,18 @@ class SelectiveAlphaTool(QWidget):
             return
         self._src_path = path
         self._btn_apply.setEnabled(True)
-        self._btn_save.setEnabled(False)   # need to apply first
-        self._result_img: Image.Image | None = None
+        self._btn_save.setEnabled(False)
+        # Clear result history
+        if self._result_img is not None:
+            self._result_img.close()
+            self._result_img = None
+        for img in self._result_history:
+            img.close()
+        self._result_history.clear()
+        self._btn_undo_process.setEnabled(False)
 
     def _on_save(self) -> None:
-        if not hasattr(self, "_result_img") or self._result_img is None:
+        if self._result_img is None:
             QMessageBox.information(
                 self, "Nothing to save",
                 "Press 'Apply Alpha Zones' first to generate the result."
@@ -1004,8 +1193,13 @@ class SelectiveAlphaTool(QWidget):
             result = apply_selective_alpha(
                 src_img, bool_masks, zone_alphas
             )
-            if hasattr(self, "_result_img") and self._result_img is not None:
-                self._result_img.close()
+            # Push previous result onto the undo-process history stack (capped).
+            if self._result_img is not None:
+                self._result_history.append(self._result_img)
+                # Cap the process-undo stack to the same depth as drawing history.
+                if len(self._result_history) > _MAX_HISTORY:
+                    self._result_history.pop(0).close()
+                self._btn_undo_process.setEnabled(True)
             self._result_img = result
             self._btn_save.setEnabled(True)
             QMessageBox.information(
@@ -1019,6 +1213,26 @@ class SelectiveAlphaTool(QWidget):
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
         pass  # canvas handles dirty flag internally
+
+    def _on_undo_mask(self) -> None:
+        """Undo the last drawing / erase action on the canvas."""
+        self._canvas.undo_mask()
+
+    def _on_redo_mask(self) -> None:
+        """Redo the last undone drawing / erase action."""
+        self._canvas.redo_mask()
+
+    def _on_undo_process(self) -> None:
+        """Undo the last Apply operation."""
+        if not self._result_history:
+            self._btn_undo_process.setEnabled(False)
+            return
+        # Close the current result without pushing it forward (discard).
+        if self._result_img is not None:
+            self._result_img.close()
+        self._result_img = self._result_history.pop()
+        self._btn_save.setEnabled(True)
+        self._btn_undo_process.setEnabled(bool(self._result_history))
 
     def _on_zone_action(self, val: int) -> None:
         """val >= 0 → select zone; val < 0 → clear zone -(val+1)."""
