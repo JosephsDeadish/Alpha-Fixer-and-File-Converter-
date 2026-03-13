@@ -267,6 +267,9 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
 
         # Step 3: Normalize — remap masked [img_min, img_max] → [target_lo, target_hi].
         # When target_lo == target_hi every masked pixel becomes that value.
+        # When the source is uniform (all processed pixels share one alpha value),
+        # that value is clamped into [target_lo, target_hi] so the result is always
+        # within the user's specified range.
         alpha_sel = alpha[proc_mask]
         if alpha_sel.size > 0:
             img_min = int(alpha_sel.min())
@@ -279,9 +282,10 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
                     / (img_max - img_min)
                 ).astype(np.int32)
             else:
-                # Uniform selection: map proportionally on the absolute [0, 255] scale.
-                out_val = int(round(target_lo + img_min / 255.0 * (target_hi - target_lo)))
-                alpha[proc_mask] = out_val
+                # Uniform source: clamp the single value into [target_lo, target_hi].
+                # This guarantees the output is always within the user's Min/Max range
+                # regardless of where the uniform value falls on the 0-255 scale.
+                alpha[proc_mask] = max(target_lo, min(target_hi, img_min))
 
         # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
         # threshold is the split point here, not a selection gate).
@@ -324,9 +328,9 @@ def apply_manual_alpha(
          fill [clamp_min, clamp_max], so the output minimum is always clamp_min and
          the output maximum is always clamp_max when the source has varied alpha.
          When clamp_min == clamp_max every processed pixel gets that exact value.
-         When the source is uniform (all processed pixels have the same alpha), the
-         value is mapped proportionally on the full [0, 255] scale so that both Min
-         and Max controls remain effective even for flat-alpha images.
+         When the source is uniform (all processed pixels have the same alpha), that
+         value is clamped into [clamp_min, clamp_max] — guaranteeing the output is
+         always within the user's specified range regardless of the source value.
       4. Binary threshold cut (if binary_cut is True): pixels >= threshold → 255,
          else → 0 (applied to ALL pixels; threshold is the hard-cut split point here).
       5. Clamp to [clamp_min, clamp_max] (safety net).
@@ -337,9 +341,11 @@ def apply_manual_alpha(
                     the hard-cut split point instead.
         invert:     Invert alpha before normalizing (applied to processed pixels).
         clamp_min:  Target range minimum (0–255).  The darkest processed pixel maps
-                    to this value; for uniform sources it acts as the proportional base.
+                    to this value; for uniform sources the value is clamped to this
+                    floor if it falls below it.
         clamp_max:  Target range maximum (0–255).  The brightest processed pixel maps
-                    to this value; for uniform sources it acts as the proportional ceiling.
+                    to this value; for uniform sources the value is clamped to this
+                    ceiling if it exceeds it.
         binary_cut: When True, apply a hard 0/255 split at the threshold after normalizing.
     """
     _converted = img.mode != "RGBA"
@@ -375,9 +381,9 @@ def apply_manual_alpha(
         # the output minimum is always target_lo and the output maximum is always
         # target_hi whenever the source has varied alpha (img_min < img_max).
         # When target_lo == target_hi every processed pixel gets that exact value.
-        # When img_min == img_max (uniform source), fall back to proportional
-        # mapping on the full [0, 255] scale so that both Min and Max spinboxes
-        # remain live controls (changing either one shifts the output value).
+        # When img_min == img_max (uniform source), the single value is clamped
+        # into [target_lo, target_hi] so the output is always within the user's
+        # specified range (above-Max → Max, below-Min → Min, in-range → unchanged).
         target_lo = min(clamp_min, clamp_max)
         target_hi = max(clamp_min, clamp_max)
         alpha_sel = alpha[proc_mask]
@@ -394,9 +400,10 @@ def apply_manual_alpha(
                     / (img_max - img_min)
                 ).astype(np.int32)
             else:
-                # Uniform source: fall back to proportional mapping on [0, 255].
-                out_val = int(round(target_lo + img_min / 255.0 * (target_hi - target_lo)))
-                alpha[proc_mask] = out_val
+                # Uniform source: clamp the single value into [target_lo, target_hi].
+                # This guarantees the output is always within the user's Min/Max range
+                # regardless of where the uniform value falls on the 0-255 scale.
+                alpha[proc_mask] = max(target_lo, min(target_hi, img_min))
 
         # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
         # threshold is the split point here, not a selection gate).
