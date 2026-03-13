@@ -252,15 +252,16 @@ class HistoryTab(QWidget):
             return
 
         try:
-            buf = io.StringIO(newline="")
-            writer = csv.writer(buf)
-            writer.writerow(headers)
-            root = tree.invisibleRootItem()
-            for row in range(root.childCount()):
-                item = root.child(row)
-                writer.writerow([item.text(col) for col in range(tree.columnCount())])
+            with io.StringIO(newline="") as buf:
+                writer = csv.writer(buf)
+                writer.writerow(headers)
+                root = tree.invisibleRootItem()
+                for row in range(root.childCount()):
+                    item = root.child(row)
+                    writer.writerow([item.text(col) for col in range(tree.columnCount())])
+                content = buf.getvalue()
             with open(path, "w", newline="", encoding="utf-8") as f:
-                f.write(buf.getvalue())
+                f.write(content)
             QMessageBox.information(
                 self, "Export Complete",
                 f"History exported to:\n{path}",

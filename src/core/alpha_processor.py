@@ -52,7 +52,13 @@ def _load_dds(path: str) -> Image.Image:
             with WandImage(filename=path) as wimg:
                 wimg.format = "png"
                 blob = wimg.make_blob()
-            return Image.open(io.BytesIO(blob)).convert("RGBA")
+            _tmp = Image.open(io.BytesIO(blob))
+            try:
+                return _tmp.convert("RGBA")
+            finally:
+                _tmp.close()
+        except MemoryError:
+            raise
         except Exception as exc:
             logger.warning("Wand failed to load DDS %s: %s", path, exc)
     # Fallback: minimal DDS reader using raw BGRA or RGBA data
@@ -78,13 +84,19 @@ def _load_dds_raw(path: str) -> Image.Image:
         # Most common: BGRA → RGBA
         img = Image.fromarray(arr[:, :, [2, 1, 0, 3]], "RGBA")
     else:
-        img = Image.fromarray(arr[:, :, [2, 1, 0]], "RGB").convert("RGBA")
+        _rgb = Image.fromarray(arr[:, :, [2, 1, 0]], "RGB")
+        try:
+            img = _rgb.convert("RGBA")
+        finally:
+            _rgb.close()
     return img
 
 
 def _save_dds(img: Image.Image, path: str):
     """Save a PIL Image as DDS (BGRA uncompressed) via Wand, or fall back to raw."""
     if _has_wand():
+        img_rgba = None
+        buf = None
         try:
             from wand.image import Image as WandImage
             img_rgba = img.convert("RGBA")
@@ -95,16 +107,26 @@ def _save_dds(img: Image.Image, path: str):
                 wimg.format = "dds"
                 wimg.save(filename=path)
             return
+        except MemoryError:
+            raise
         except Exception as exc:
             logger.warning("Wand failed to save DDS %s: %s", path, exc)
+        finally:
+            if img_rgba is not None:
+                img_rgba.close()
+            if buf is not None:
+                buf.close()
     _save_dds_raw(img, path)
 
 
 def _save_dds_raw(img: Image.Image, path: str):
     """Write a minimal uncompressed BGRA DDS file."""
     img_rgba = img.convert("RGBA")
-    w, h = img_rgba.size
-    arr = np.array(img_rgba, dtype=np.uint8)
+    try:
+        w, h = img_rgba.size
+        arr = np.array(img_rgba, dtype=np.uint8)
+    finally:
+        img_rgba.close()
     # Convert RGBA → BGRA
     bgra = arr[:, :, [2, 1, 0, 3]]
     pixel_data = bgra.tobytes()
@@ -143,7 +165,18 @@ def load_image(path: str) -> Image.Image:
         return _load_dds(path)
     img = Image.open(path)
     if img.mode != "RGBA":
-        img = img.convert("RGBA")
+        w, h = img.size
+        try:
+            img_rgba = img.convert("RGBA")
+        except MemoryError:
+            img.close()
+            raise MemoryError(
+                f"Not enough memory to load {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) as RGBA. "
+                "Try processing a smaller file."
+            )
+        img.close()
+        return img_rgba
     return img
 
 
@@ -153,8 +186,35 @@ def save_image(img: Image.Image, path: str, original_ext: str):
         _save_dds(img, path)
         return
     if ext in (".jpg", ".jpeg", ".bmp"):
-        img = img.convert("RGB")
-    img.save(path)
+        w, h = img.size
+        try:
+            img_rgb = img.convert("RGB")
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to convert {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to RGB for {ext}. "
+                "Try processing a smaller file."
+            )
+        try:
+            img_rgb.save(path)
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to write {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+                "Try processing a smaller file."
+            )
+        finally:
+            img_rgb.close()
+        return
+    w, h = img.size
+    try:
+        img.save(path)
+    except MemoryError:
+        raise MemoryError(
+            f"Not enough memory to write {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+            "Try processing a smaller file."
+        )
 
 
 def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
@@ -168,49 +228,63 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
       3. Binary threshold cut (if preset.binary_cut is True): pixels >= threshold → 255, else → 0
       4. Clamp to [clamp_min, clamp_max]
     """
-    if img.mode != "RGBA":
+    _converted = img.mode != "RGBA"
+    if _converted:
+        _orig = img
         img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
-    alpha = arr[:, :, 3].copy()
-
-    # Step 1: Invert
-    if preset.invert:
-        alpha = 255 - alpha
-
-    mode = getattr(preset, "mode", "set")
-    target_lo = min(preset.clamp_min, preset.clamp_max)
-    target_hi = max(preset.clamp_min, preset.clamp_max)
-
-    # Step 2: Apply value/mode
-    if mode == "normalize":
-        # Linearly remap the image's actual alpha range to [clamp_min, clamp_max].
-        img_min = int(alpha.min())
-        img_max = int(alpha.max())
-        if img_max > img_min:
-            alpha = (
-                target_lo
-                + (alpha - img_min).astype(np.float32)
-                * (target_hi - target_lo)
-                / (img_max - img_min)
+        _orig.close()
+    try:
+        try:
+            arr = np.array(img, dtype=np.int32)
+        except MemoryError:
+            w, h = img.size
+            raise MemoryError(
+                f"Not enough memory to process {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
             )
-            alpha = np.round(alpha).astype(np.int32)
-        else:
-            alpha = np.full_like(alpha, target_hi)
-    elif preset.alpha_value is not None:
-        # Set fixed value (only if alpha_value is specified)
-        if preset.threshold > 0:
-            mask = alpha < preset.threshold
-            alpha[mask] = preset.alpha_value
-        else:
-            alpha[:] = preset.alpha_value
+        alpha = arr[:, :, 3].copy()
 
-    # Step 3: Binary threshold cut (hard 0/255 split)
-    if preset.binary_cut and preset.threshold > 0:
-        alpha = np.where(alpha >= preset.threshold, 255, 0)
+        # Step 1: Invert
+        if preset.invert:
+            alpha = 255 - alpha
 
-    # Step 4: Clamp
-    arr[:, :, 3] = np.clip(alpha, preset.clamp_min, preset.clamp_max).astype(np.uint8)
-    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+        mode = getattr(preset, "mode", "set")
+        target_lo = min(preset.clamp_min, preset.clamp_max)
+        target_hi = max(preset.clamp_min, preset.clamp_max)
+
+        # Step 2: Apply value/mode
+        if mode == "normalize":
+            # Linearly remap the image's actual alpha range to [clamp_min, clamp_max].
+            img_min = int(alpha.min())
+            img_max = int(alpha.max())
+            if img_max > img_min:
+                alpha = (
+                    target_lo
+                    + (alpha - img_min).astype(np.float32)
+                    * (target_hi - target_lo)
+                    / (img_max - img_min)
+                )
+                alpha = np.round(alpha).astype(np.int32)
+            else:
+                alpha = np.full_like(alpha, target_hi)
+        elif preset.alpha_value is not None:
+            # Set fixed value (only if alpha_value is specified)
+            if preset.threshold > 0:
+                mask = alpha < preset.threshold
+                alpha[mask] = preset.alpha_value
+            else:
+                alpha[:] = preset.alpha_value
+
+        # Step 3: Binary threshold cut (hard 0/255 split)
+        if preset.binary_cut and preset.threshold > 0:
+            alpha = np.where(alpha >= preset.threshold, 255, 0)
+
+        # Step 4: Clamp
+        arr[:, :, 3] = np.clip(alpha, preset.clamp_min, preset.clamp_max).astype(np.uint8)
+        return Image.fromarray(arr.astype(np.uint8), "RGBA")
+    finally:
+        if _converted:
+            img.close()
 
 
 def apply_manual_alpha(
@@ -241,70 +315,84 @@ def apply_manual_alpha(
                Defaults to 'set' for backward-compatibility.
         binary_cut: When True, apply a hard 0/255 split at the threshold.
     """
-    if img.mode != "RGBA":
+    _converted = img.mode != "RGBA"
+    if _converted:
+        _orig = img
         img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
-    alpha = arr[:, :, 3].copy()
-
-    # Step 1: Invert
-    if invert:
-        alpha = 255 - alpha
-
-    # Step 2: Apply value according to mode
-    if mode == "normalize":
-        # Linearly remap the image's actual alpha range to [clamp_min, clamp_max].
-        # This is independent of `value` and threshold — all pixels are remapped.
-        img_min = int(alpha.min())
-        img_max = int(alpha.max())
-        target_lo = min(clamp_min, clamp_max)
-        target_hi = max(clamp_min, clamp_max)
-        if img_max > img_min:
-            alpha = (
-                target_lo
-                + (alpha - img_min).astype(np.float32)
-                * (target_hi - target_lo)
-                / (img_max - img_min)
+        _orig.close()
+    try:
+        try:
+            arr = np.array(img, dtype=np.int32)
+        except MemoryError:
+            w, h = img.size
+            raise MemoryError(
+                f"Not enough memory to process {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
             )
-            alpha = np.round(alpha).astype(np.int32)
-        else:
-            # All pixels share the same alpha value; map to top of target range.
-            alpha = np.full_like(alpha, target_hi)
-    elif value is not None:
-        if mode == "multiply":
-            # raw_value is the 0-255 scale; actual multiplier = raw_value / 255.
-            # Integer floor division avoids float rounding.
-            raw_value = int(value)
-            if threshold > 0:
-                mask = alpha < threshold
-                alpha = np.where(mask, np.clip(alpha * raw_value // 255, 0, 255), alpha)
-            else:
-                alpha = np.clip(alpha * raw_value // 255, 0, 255)
-        elif mode == "add":
-            if threshold > 0:
-                mask = alpha < threshold
-                alpha = np.where(mask, np.clip(alpha + int(value), 0, 255), alpha)
-            else:
-                alpha = np.clip(alpha + int(value), 0, 255)
-        elif mode == "subtract":
-            if threshold > 0:
-                mask = alpha < threshold
-                alpha = np.where(mask, np.clip(alpha - int(value), 0, 255), alpha)
-            else:
-                alpha = np.clip(alpha - int(value), 0, 255)
-        else:  # 'set' (default)
-            if threshold > 0:
-                mask = alpha < threshold
-                alpha[mask] = int(value)
-            else:
-                alpha[:] = int(value)
+        alpha = arr[:, :, 3].copy()
 
-    # Step 3: Binary threshold cut (hard 0/255 split)
-    if binary_cut and threshold > 0:
-        alpha = np.where(alpha >= threshold, 255, 0)
+        # Step 1: Invert
+        if invert:
+            alpha = 255 - alpha
 
-    # Step 4: Clamp
-    arr[:, :, 3] = np.clip(alpha, clamp_min, clamp_max).astype(np.uint8)
-    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+        # Step 2: Apply value according to mode
+        if mode == "normalize":
+            # Linearly remap the image's actual alpha range to [clamp_min, clamp_max].
+            # This is independent of `value` and threshold — all pixels are remapped.
+            img_min = int(alpha.min())
+            img_max = int(alpha.max())
+            target_lo = min(clamp_min, clamp_max)
+            target_hi = max(clamp_min, clamp_max)
+            if img_max > img_min:
+                alpha = (
+                    target_lo
+                    + (alpha - img_min).astype(np.float32)
+                    * (target_hi - target_lo)
+                    / (img_max - img_min)
+                )
+                alpha = np.round(alpha).astype(np.int32)
+            else:
+                # All pixels share the same alpha value; map to top of target range.
+                alpha = np.full_like(alpha, target_hi)
+        elif value is not None:
+            if mode == "multiply":
+                # raw_value is the 0-255 scale; actual multiplier = raw_value / 255.
+                # Integer floor division avoids float rounding.
+                raw_value = int(value)
+                if threshold > 0:
+                    mask = alpha < threshold
+                    alpha = np.where(mask, np.clip(alpha * raw_value // 255, 0, 255), alpha)
+                else:
+                    alpha = np.clip(alpha * raw_value // 255, 0, 255)
+            elif mode == "add":
+                if threshold > 0:
+                    mask = alpha < threshold
+                    alpha = np.where(mask, np.clip(alpha + int(value), 0, 255), alpha)
+                else:
+                    alpha = np.clip(alpha + int(value), 0, 255)
+            elif mode == "subtract":
+                if threshold > 0:
+                    mask = alpha < threshold
+                    alpha = np.where(mask, np.clip(alpha - int(value), 0, 255), alpha)
+                else:
+                    alpha = np.clip(alpha - int(value), 0, 255)
+            else:  # 'set' (default)
+                if threshold > 0:
+                    mask = alpha < threshold
+                    alpha[mask] = int(value)
+                else:
+                    alpha[:] = int(value)
+
+        # Step 3: Binary threshold cut (hard 0/255 split)
+        if binary_cut and threshold > 0:
+            alpha = np.where(alpha >= threshold, 255, 0)
+
+        # Step 4: Clamp
+        arr[:, :, 3] = np.clip(alpha, clamp_min, clamp_max).astype(np.uint8)
+        return Image.fromarray(arr.astype(np.uint8), "RGBA")
+    finally:
+        if _converted:
+            img.close()
 
 
 # ---------------------------------------------------------------------------
@@ -328,14 +416,28 @@ def apply_rgba_adjust(
     Clamp tuples define the allowed output range for each channel.
     Returns the modified image in RGBA mode.
     """
-    if img.mode != "RGBA":
+    _converted = img.mode != "RGBA"
+    if _converted:
+        _orig = img
         img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
-    arr[:, :, 0] = np.clip(arr[:, :, 0] + red_delta,   *red_clamp)
-    arr[:, :, 1] = np.clip(arr[:, :, 1] + green_delta, *green_clamp)
-    arr[:, :, 2] = np.clip(arr[:, :, 2] + blue_delta,  *blue_clamp)
-    arr[:, :, 3] = np.clip(arr[:, :, 3] + alpha_delta, *alpha_clamp)
-    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+        _orig.close()
+    try:
+        try:
+            arr = np.array(img, dtype=np.int32)
+        except MemoryError:
+            w, h = img.size
+            raise MemoryError(
+                f"Not enough memory to adjust {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
+            )
+        arr[:, :, 0] = np.clip(arr[:, :, 0] + red_delta,   *red_clamp)
+        arr[:, :, 1] = np.clip(arr[:, :, 1] + green_delta, *green_clamp)
+        arr[:, :, 2] = np.clip(arr[:, :, 2] + blue_delta,  *blue_clamp)
+        arr[:, :, 3] = np.clip(arr[:, :, 3] + alpha_delta, *alpha_clamp)
+        return Image.fromarray(arr.astype(np.uint8), "RGBA")
+    finally:
+        if _converted:
+            img.close()
 
 
 def collect_files(

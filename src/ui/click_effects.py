@@ -771,10 +771,19 @@ class ClickEffectsOverlay(QWidget):
     # Paint
     # ------------------------------------------------------------------
 
+    # Maximum number of QFont objects to keep in the per-size font cache.
+    # Each entry is ~1 KB; 32 entries = ~32 KB, comfortably bounded.
+    # Eviction uses insertion-order (Python 3.7+ dict guarantee) to remove
+    # the oldest (least recently inserted) entry when the limit is reached.
+    _FONT_CACHE_MAX = 32
+
     def _get_font(self, size: int) -> QFont:
         """Return a cached QFont for *size* points (avoids per-particle mutation)."""
         size = max(6, size)
         if size not in self._font_cache:
+            if len(self._font_cache) >= self._FONT_CACHE_MAX:
+                # Evict the least-recently-inserted entry to keep the cache bounded.
+                self._font_cache.pop(next(iter(self._font_cache)))
             f = QFont(_EMOJI_FONT_FAMILIES, size)
             self._font_cache[size] = f
         return self._font_cache[size]

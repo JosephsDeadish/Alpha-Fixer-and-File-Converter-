@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
@@ -19,7 +19,7 @@ from ..core.alpha_processor import collect_files
 from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
-from .preview_pane import ImagePreviewPane
+from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader
 
 
 class ConverterTab(QWidget):
@@ -47,6 +47,9 @@ class ConverterTab(QWidget):
         # Cached aspect ratio (w, h) of the currently selected file
         # to avoid re-opening the image on every width spinbox tick.
         self._cached_aspect: tuple[int, int] | None = None
+        # Active preview loader (kept so signals can be disconnected when
+        # a new file or format is selected before the old thread finishes).
+        self._preview_loader: _ConverterPreviewLoader | None = None
         # Debounce timer: waits 150 ms after the last format/quality change
         # before refreshing the preview so rapid spin-box steps don't each
         # kick off a separate background conversion.
@@ -190,9 +193,49 @@ class ConverterTab(QWidget):
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
-        # ---- Preview pane (outside scroll area, always visible) ----
-        self._preview = ImagePreviewPane()
-        self._preview.setMinimumHeight(220)
+        # ---- Preview area (outside scroll area, always visible) ----
+        # Mirrors the Alpha Fixer tab's before/after compare layout:
+        # [source info panel] [BeforeAfterWidget] [output info panel]
+        preview_area = QWidget()
+        pa_layout = QVBoxLayout(preview_area)
+        pa_layout.setContentsMargins(0, 0, 0, 0)
+        pa_layout.setSpacing(2)
+
+        preview_lbl = QLabel("Source / Output Preview  ◀▶ drag to compare")
+        preview_lbl.setObjectName("section")
+        preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview_lbl = preview_lbl
+        pa_layout.addWidget(preview_lbl)
+
+        # Row: [Source info panel] [BeforeAfterWidget] [Output info panel]
+        preview_row = QHBoxLayout()
+        preview_row.setContentsMargins(0, 0, 0, 0)
+        preview_row.setSpacing(4)
+
+        def _make_info_panel() -> QLabel:
+            """Return a small fixed-width label for source/output metadata."""
+            lbl = QLabel()
+            lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            lbl.setFixedWidth(84)
+            lbl.setWordWrap(True)
+            lbl.setObjectName("stats_panel")
+            lbl.setContentsMargins(2, 4, 2, 4)
+            return lbl
+
+        self._source_info_lbl = _make_info_panel()
+        self._output_info_lbl = _make_info_panel()
+
+        self._compare = BeforeAfterWidget()
+        self._compare.setMinimumHeight(180)
+        self._compare.setToolTip(
+            "Drag the ◀▶ handle to compare the source image with the converted output.\n"
+            "Left side = source (original format).  Right side = output (target format)."
+        )
+
+        preview_row.addWidget(self._source_info_lbl, 0)
+        preview_row.addWidget(self._compare, 1)
+        preview_row.addWidget(self._output_info_lbl, 0)
+        pa_layout.addLayout(preview_row, 1)
 
         # Left column: vertical splitter – controls/file-list on top
         # (scrollable), preview on the bottom (always fully visible).
@@ -201,7 +244,7 @@ class ConverterTab(QWidget):
         left_vsplit.setChildrenCollapsible(False)
         left_vsplit.setMinimumWidth(320)
         left_vsplit.addWidget(left_scroll)
-        left_vsplit.addWidget(self._preview)
+        left_vsplit.addWidget(preview_area)
         left_vsplit.setSizes([420, 280])
         splitter.addWidget(left_vsplit)
 
@@ -426,7 +469,7 @@ class ConverterTab(QWidget):
         self._grp_out.setTitle(f"{icon}  Output")
         self._grp_fmt.setTitle(f"{icon}  Output Format")
         self._grp_resize.setTitle(f"{icon}  Resize (optional)")
-        self._preview.update_theme(icon)
+        self._preview_lbl.setText(f"{icon}  Source / Output Preview  ◀▶ drag to compare")
 
     # ------------------------------------------------------------------
     # File management
@@ -473,7 +516,9 @@ class ConverterTab(QWidget):
         if item:
             self._refresh_preview(item.text())
         else:
-            self._preview.clear()
+            self._compare.clear()
+            self._source_info_lbl.setText("")
+            self._output_info_lbl.setText("")
 
     @pyqtSlot(int)
     def _on_format_changed(self, _index: int):
@@ -553,18 +598,66 @@ class ConverterTab(QWidget):
             self._refresh_preview(item.text())
 
     def _refresh_preview(self, path: str) -> None:
-        """Show *path* in the preview pane using the current format and quality."""
+        """Show *path* in the compare pane using the current format and quality.
+
+        Loads the source image and an in-memory converted version in a
+        background thread, then sets both sides of the BeforeAfterWidget
+        so the user can see exactly how the format conversion changes the image.
+        """
+        if not path or not os.path.isfile(path):
+            self._compare.clear()
+            self._source_info_lbl.setText("")
+            self._output_info_lbl.setText("")
+            return
+
+        # Disconnect any stale previous loader to prevent it from overwriting
+        # the current preview after the selection or format has changed.
+        # Also ask the thread to abandon work so it doesn't waste CPU.
+        if self._preview_loader is not None:
+            self._preview_loader.stop()
+            try:
+                self._preview_loader.ready.disconnect()
+                self._preview_loader.failed.disconnect()
+            except RuntimeError:
+                pass
+
         fmt_data = self._fmt_combo.currentData()
-        if fmt_data:
-            self._preview.show_converted(path, fmt_data[0], self._quality_spin.value())
-        else:
-            self._preview.show_file(path)
+        target_fmt = fmt_data[0] if fmt_data else "PNG"
+        quality = self._quality_spin.value()
+
+        self._compare.set_loading()
+        self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality)
+        self._preview_loader.ready.connect(self._on_preview_ready)
+        self._preview_loader.failed.connect(self._on_preview_failed)
+        self._preview_loader.start()
 
     def _browse_out_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")
         if folder:
             self._out_dir_edit.setText(folder)
             self._settings.set("converter_output_dir", folder)
+
+    @pyqtSlot(QImage, QImage, str, str)
+    def _on_preview_ready(self, src_qi: QImage, out_qi: QImage, src_meta: str, out_meta: str):
+        """Called when the converter preview loader finishes loading both images."""
+        self._compare.set_before(src_qi)
+        self._compare.set_after(out_qi)
+
+        def _info_text(label: str, meta: str) -> str:
+            lines = meta.strip().splitlines()
+            # First line is filename – omit it from the side panel to save space.
+            body = "<br>".join(lines[1:]) if len(lines) > 1 else meta
+            return f"<b>{label}</b><br>{body}"
+
+        self._source_info_lbl.setText(_info_text("SRC", src_meta))
+        self._output_info_lbl.setText(_info_text("OUT", out_meta))
+
+    @pyqtSlot(str)
+    def _on_preview_failed(self, err: str):
+        """Called when the converter preview loader encounters an error."""
+        self._compare.clear()
+        self._source_info_lbl.setText("")
+        self._output_info_lbl.setText(f"Preview\nunavailable\n{err[:40]}")
 
     def _save_format_setting(self):
         fmt_data = self._fmt_combo.currentData()
@@ -621,6 +714,17 @@ class ConverterTab(QWidget):
         self._status_lbl.setText("Converting…")
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
+
+        # Disconnect the previous worker's signals before replacing it to
+        # prevent the signal connection table from growing across multiple
+        # run → stop → run cycles in a long session.
+        if self._worker is not None:
+            try:
+                self._worker.progress.disconnect()
+                self._worker.file_done.disconnect()
+                self._worker.finished.disconnect()
+            except RuntimeError:
+                pass  # already disconnected
 
         self._worker = ConverterWorker(
             files=expanded,

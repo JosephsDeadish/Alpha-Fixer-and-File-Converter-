@@ -26,11 +26,18 @@ from PyQt6.QtWidgets import (
 
 def _pil_to_qimage(img) -> QImage:
     """Convert any PIL Image to a detached RGBA QImage."""
+    # Only create a new RGBA image when the mode is not already RGBA so we
+    # can close the temporary conversion image and release its backing store
+    # early instead of relying on the garbage collector.
     img_rgba = img.convert("RGBA") if img.mode != "RGBA" else img
-    data = img_rgba.tobytes("raw", "RGBA")
-    qimg = QImage(data, img_rgba.width, img_rgba.height,
-                  QImage.Format.Format_RGBA8888)
-    return qimg.copy()  # detach from the bytes buffer
+    try:
+        data = img_rgba.tobytes("raw", "RGBA")
+        qimg = QImage(data, img_rgba.width, img_rgba.height,
+                      QImage.Format.Format_RGBA8888)
+        return qimg.copy()  # detach from the bytes buffer
+    finally:
+        if img_rgba is not img:
+            img_rgba.close()
 
 
 def _make_checker(w: int, h: int, sq: int = 12) -> QPixmap:
@@ -78,14 +85,24 @@ class _ThumbLoader(QThread):
         super().__init__()
         self._path = path
         self._max_size = max_size
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
 
     def run(self):
+        img = None
         try:
             from PIL import Image
             img = Image.open(self._path)
             mode = img.mode
             width, height = img.size
             file_size = os.path.getsize(self._path)
+
+            # Bail out if a newer file has been selected before we decoded.
+            if self._abort:
+                return
 
             # Check for alpha channel
             has_alpha = mode in ("RGBA", "LA", "PA") or (
@@ -106,7 +123,6 @@ class _ThumbLoader(QThread):
 
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
-            img.close()
 
             meta_text = (
                 f"{Path(self._path).name}\n"
@@ -116,6 +132,9 @@ class _ThumbLoader(QThread):
             self.loaded.emit(qimg, meta_text)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            if img is not None:
+                img.close()
 
 
 class _ConvertedThumbLoader(QThread):
@@ -135,8 +154,14 @@ class _ConvertedThumbLoader(QThread):
         self._target_fmt = target_fmt.upper()
         self._quality = quality
         self._max_size = max_size
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
 
     def run(self):
+        img = None
         try:
             import io
             from PIL import Image
@@ -144,6 +169,13 @@ class _ConvertedThumbLoader(QThread):
             img = Image.open(self._path)
             orig_mode = img.mode
             orig_w, orig_h = img.size
+
+            # Bail out early if a newer format/file was selected before the
+            # image header was even decoded.
+            if self._abort:
+                img.close()
+                img = None
+                return
 
             # Convert to target format in-memory so the preview reflects
             # actual encoding artefacts (e.g. JPEG chroma subsampling).
@@ -166,18 +198,27 @@ class _ConvertedThumbLoader(QThread):
             if fmt in _QUALITY_FORMATS:
                 save_kwargs["quality"] = self._quality
 
+            preview_img = None
             try:
                 save_img.save(buf, format=fmt, **save_kwargs)
                 converted_size = buf.tell()
                 buf.seek(0)
                 preview_img = Image.open(buf)
-                preview_img.load()  # fully decode before buf goes out of scope
+                preview_img.load()  # fully decode into memory; buf can be closed now
+                buf.close()
             except Exception:
                 # Fallback: show the source image if in-memory conversion fails
                 # (e.g. unsupported format like DDS which requires wand).
+                buf.close()
+                if preview_img is not None:
+                    preview_img.close()
+                    preview_img = None
+                if save_img is not img:
+                    save_img.close()
                 img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
                 qimg = _pil_to_qimage(img)
                 img.close()
+                img = None
                 meta = (
                     f"{Path(self._path).name}\n"
                     f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
@@ -186,7 +227,10 @@ class _ConvertedThumbLoader(QThread):
                 self.loaded.emit(qimg, meta)
                 return
 
+            if save_img is not img:
+                save_img.close()
             img.close()
+            img = None
             preview_img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(preview_img)
             preview_img.close()
@@ -200,6 +244,9 @@ class _ConvertedThumbLoader(QThread):
             self.loaded.emit(qimg, meta)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            if img is not None:
+                img.close()
 
 
 # ---------------------------------------------------------------------------
@@ -476,7 +523,151 @@ class BeforeAfterWidget(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# Simple thumbnail preview pane (used by Converter tab)
+# Before/After preview loader for the Converter tab
+# ---------------------------------------------------------------------------
+
+class _ConverterPreviewLoader(QThread):
+    """Load the source image AND an in-memory converted version.
+
+    Emits both images as QImages together with compact metadata strings
+    so the Converter tab can display a side-by-side before/after view
+    matching the Alpha Fixer tab's preview style.
+    """
+    ready = pyqtSignal(QImage, QImage, str, str)   # (src_qi, out_qi, src_meta, out_meta)
+    failed = pyqtSignal(str)
+
+    def __init__(self, path: str, target_fmt: str, quality: int, max_size: int = 512):
+        super().__init__()
+        self._path = path
+        self._target_fmt = target_fmt.upper()
+        self._quality = quality
+        self._max_size = max_size
+        self._abort = False
+
+    def stop(self) -> None:
+        """Request that the thread abandon work as soon as it can check."""
+        self._abort = True
+
+    def run(self):
+        img = None
+        try:
+            import io
+            from PIL import Image
+
+            img = Image.open(self._path)
+            orig_mode = img.mode
+            orig_w, orig_h = img.size
+            src_file_size = os.path.getsize(self._path)
+
+            # Early abort: if the request is already stale (user moved to a
+            # different file before we even decoded the header), skip all work.
+            if self._abort:
+                img.close()
+                img = None
+                return
+
+            # --- Source side ---
+            src_thumb = img.copy()
+            try:
+                src_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+                src_qi = _pil_to_qimage(src_thumb)
+            finally:
+                src_thumb.close()
+            src_meta = (
+                f"{Path(self._path).name}\n"
+                f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
+                f"{_fmt_size(src_file_size)}"
+            )
+
+            # If a newer selection or format change arrived, bail out before
+            # running the expensive in-memory conversion step.
+            if self._abort:
+                img.close()
+                img = None
+                return
+
+            # --- Output side: convert in-memory to see encoding artefacts ---
+            fmt = self._target_fmt
+            save_img = img
+            if fmt == "JPEG":
+                if save_img.mode != "RGB":
+                    save_img = save_img.convert("RGB")
+            elif fmt == "BMP":
+                if save_img.mode == "RGBA":
+                    save_img = save_img.convert("RGB")
+            elif fmt == "GIF":
+                save_img = save_img.convert("P")
+            elif fmt == "ICO":
+                save_img = save_img.convert("RGBA")
+
+            save_kwargs: dict = {}
+            if fmt in _QUALITY_FORMATS:
+                save_kwargs["quality"] = self._quality
+
+            # Allocate the buffer outside the try so it is always in scope for
+            # the except block and can be closed on both success and error paths.
+            buf = io.BytesIO()
+            out_img = None
+            try:
+                save_img.save(buf, format=fmt, **save_kwargs)
+                converted_size = buf.tell()
+                buf.seek(0)
+                out_img = Image.open(buf)
+                out_img.load()  # fully decode into memory; buf can be closed now
+                buf.close()
+            except Exception:
+                # Fallback: show source image again if conversion fails
+                buf.close()
+                if out_img is not None:
+                    out_img.close()
+                    out_img = None
+                if save_img is not img:
+                    save_img.close()
+                out_qi = src_qi
+                quality_note = (
+                    f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
+                )
+                out_meta = (
+                    f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
+                    f"Preview as {fmt}{quality_note}\n"
+                    f"(source shown – conversion unsupported)"
+                )
+                img.close()
+                img = None
+                self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+                return
+
+            if save_img is not img:
+                save_img.close()
+            img.close()
+            img = None
+            out_mode = out_img.mode
+            out_thumb = None
+            try:
+                out_thumb = out_img.copy()
+                out_thumb.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
+                out_qi = _pil_to_qimage(out_thumb)
+            finally:
+                if out_thumb is not None:
+                    out_thumb.close()
+                out_img.close()
+
+            quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
+            out_meta = (
+                f"{orig_w} × {orig_h}  ·  {out_mode}\n"
+                f"Preview as {fmt}{quality_note}\n"
+                f"~{_fmt_size(converted_size)}"
+            )
+            self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
+            if img is not None:
+                img.close()
+
+
+# ---------------------------------------------------------------------------
+# Simple thumbnail preview pane (kept for backward compatibility)
 # ---------------------------------------------------------------------------
 
 class ImagePreviewPane(QWidget):
@@ -597,8 +788,9 @@ class ImagePreviewPane(QWidget):
         self._start_loader(_ConvertedThumbLoader(path, target_fmt, quality))
 
     def _start_loader(self, loader):
-        """Disconnect any stale loader and start *loader*."""
+        """Disconnect and stop any stale loader, then start *loader*."""
         if self._loader is not None:
+            self._loader.stop()
             try:
                 self._loader.loaded.disconnect()
                 self._loader.failed.disconnect()

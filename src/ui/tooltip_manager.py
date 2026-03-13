@@ -74,7 +74,7 @@ _NORMAL: dict[str, list[str]] = {
         "Custom presets you save also appear here and have their description as a tooltip.",
     ],
     "save_preset": [
-        "Save the current fine-tune settings (alpha value, mode, clamp min & max) as a named preset.",
+        "Save all current Alpha Channel Settings (alpha value, mode, threshold, clamp min/max, invert, binary cut) as a named preset.",
         "Custom presets are stored in the app settings and persist between sessions.",
         "If you've edited a custom preset, clicking Save pre-fills the name — just press Enter to update it in-place.",
         "Name it something descriptive so you remember what it does.",
@@ -89,32 +89,32 @@ _NORMAL: dict[str, list[str]] = {
         "You can save it again with a different name if you change your mind.",
     ],
     "alpha_slider": [
-        "Drag to set the alpha value (0 = transparent, 255 = opaque).",
-        "This slider and the number box above are linked – they stay in sync.",
-        "Only applies when 'Use preset' is unchecked.",
-        "Mode 'set' replaces all alpha with this value.",
-        "Mode 'multiply' scales existing alpha by (this / 255).",
+        "Drag to set the alpha value (0 = fully transparent, 255 = fully opaque).",
+        "This slider and the number box above are always in sync — they move together.",
+        "Type an exact number in the spinbox above for precise control.",
+        "Selecting a preset auto-fills this slider.  Edit it to switch to manual mode.",
+        "255 = fully opaque (most game textures).  128 = PS2 native.  0 = fully transparent.",
     ],
     "threshold_spin": [
-        "Only process pixels with alpha below this threshold.",
-        "0 = process every pixel regardless of current alpha.",
-        "Useful for preserving already-transparent areas.",
-        "128 = only adjust pixels less than 50% opaque.",
-        "255 = process only fully transparent pixels.",
+        "Advanced: only process pixels with alpha strictly below this value (0 = process all pixels).",
+        "0 = process every pixel regardless of its current alpha (default — affects the whole image).",
+        "Useful for preserving already-opaque areas: set to 128 to leave fully-opaque pixels untouched.",
+        "128 = only adjust pixels that are less than 50% opaque; fully opaque pixels are skipped.",
+        "255 = process all pixels except those that are already fully opaque (alpha=255).",
     ],
     "clamp_min_spin": [
-        "Clamp Min: pixels with alpha below this value are raised to this value.",
-        "Used with clamp_min/clamp_max modes to enforce a minimum alpha floor.",
+        "Output floor: any pixel alpha below this value is raised to this value after processing.",
+        "0 = no minimum (default). Raise to ensure no pixel goes below a certain transparency.",
         "Example: set to 128 to ensure no pixel is more than 50% transparent.",
-        "0 = no lower clamp (default). Increase to raise transparency floor.",
-        "PS2 textures: set to 0 to preserve full transparency range.",
+        "In 'normalize' mode this becomes the target minimum of the remapped output range.",
+        "PS2 textures: typically leave at 0 to preserve the full transparency range.",
     ],
     "clamp_max_spin": [
-        "Clamp Max: pixels with alpha above this value are lowered to this value.",
-        "Used with clamp_max mode to cap the maximum alpha of the image.",
+        "Output ceiling: any pixel alpha above this value is capped to this value after processing.",
+        "255 = no ceiling (default). Lower to cap the maximum opacity of the image.",
         "Example: set to 128 to replicate PS2's 0–128 alpha scale.",
-        "255 = no upper clamp (default). Decrease to cap opacity.",
-        "PS2 Normalize: set max to 128 if targeting PS2-accurate renderers.",
+        "In 'normalize' mode this becomes the target maximum of the remapped output range.",
+        "PS2 Normalize: set Max to 128 if targeting PS2-accurate renderers.",
     ],
     "invert_check": [
         "Invert the alpha channel after applying the other operations.",
@@ -126,7 +126,7 @@ _NORMAL: dict[str, list[str]] = {
     "binary_cut_check": [
         "Binary cut: pixels at or above the threshold become 255 (fully opaque); below become 0 (fully transparent).",
         "Produces hard-edge transparency with no soft gradients or anti-aliasing.",
-        "The threshold spinbox above determines the cut point for binary mode.",
+        "The Threshold spinbox (in Advanced Options below) sets the cut point.",
         "Useful for sprite textures that require crisp, clean alpha edges.",
         "Result: every pixel's alpha is either 0 or 255 — nothing in between.",
     ],
@@ -540,26 +540,40 @@ _NORMAL: dict[str, list[str]] = {
         "After reset, start clicking or processing files to re-unlock themes.",
         "Does not erase history, custom themes, or any other preference.",
     ],
+    "apply_alpha_check": [
+        "Checked (default): the alpha value above is applied to every processed pixel.",
+        "Uncheck for clamp-only mode: pixel alpha values are preserved; only Min/Max clamping is applied.",
+        "Not relevant in 'normalize' mode — normalize always remaps the full alpha range.",
+        "Editing any control automatically switches to manual mode, so your changes always take effect.",
+        "Re-enable after unchecking to switch back to active alpha replacement.",
+    ],
+    "finetune_params_lbl": [
+        "Live summary of the exact settings that will be applied when you click ▶ Process.",
+        "Shows mode, alpha value, clamp range, threshold, invert, and binary-cut status at a glance.",
+        "Updates instantly as you change any control — no guessing what will happen.",
+        "Example: 'set=128  ·  clamp=0–128  ·  thresh=64' means set mode, value 128, clamped to 0–128, threshold 64.",
+        "If it shows 'normalize → [0–255]' then normalize mode is active — no fixed value needed, only the range matters.",
+    ],
     "mode_combo": [
-        "Choose how the alpha value is applied to each pixel.",
-        "'set' replaces every pixel's alpha with the exact value specified.",
-        "'multiply' scales existing alpha: new = old × (value / 255).",
-        "'add' increases alpha by the value, clamping at 255.",
-        "'subtract' decreases alpha by the value, clamping at 0.",
+        "Advanced: choose how the alpha value is applied to each pixel.",
+        "'set' replaces every pixel's alpha with the exact value you typed (default, most common).",
+        "'multiply' scales existing alpha: new = old × (value ÷ 255).  255 = no change.",
+        "'add' / 'subtract' shift each pixel's alpha up or down by the value (clamped 0–255).",
+        "'normalize' remaps the image's actual alpha range to [Min output, Max output] — no fixed value needed.",
     ],
     "alpha_spin": [
-        "Set the alpha value (0 = fully transparent, 255 = fully opaque).",
-        "This box and the slider below are linked — they always stay in sync.",
-        "In 'set' mode, all pixels get this exact alpha value.",
-        "In 'multiply' mode, 255 = no change; lower values dim transparency.",
-        "In 'add'/'subtract' mode, this amount is added to or removed from each pixel's alpha.",
+        "Type the target alpha value (0 = fully transparent, 255 = fully opaque).",
+        "This box and the slider below it are always in sync — changing one updates the other.",
+        "In 'set' mode (default), every processed pixel is set to exactly this value.",
+        "In 'multiply' mode, 255 = no change; 128 = halve every pixel's existing alpha.",
+        "In 'add'/'subtract' mode this is the amount added to / removed from each pixel's alpha.",
     ],
     "use_preset_check": [
-        "When checked, the preset settings override the manual fine-tune controls.",
-        "Uncheck to fine-tune alpha manually using the mode, value, and threshold controls.",
-        "Useful for quick platform-specific targets like PS2 or N64.",
-        "The preset and fine-tune controls are mutually exclusive — only one applies at a time.",
-        "Custom presets can be saved from the fine-tune settings using the Save button.",
+        "When checked, the selected preset auto-fills all the controls and its settings are used when processing.",
+        "Editing any control above automatically switches to manual mode (unchecks this) so your changes take effect.",
+        "Re-check to reload the preset values into the controls at any time.",
+        "Useful for quick platform-specific targets like PS2 or N64 — pick a preset and hit Process.",
+        "Custom presets can be saved from the current control values using the Save button above.",
     ],
     "red_spin": [
         "Adjust the Red channel of every pixel by this delta (\u2013255 to +255).",
@@ -721,8 +735,8 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "threshold_spin": [
         "Higher number = more pixels get processed. Lower = fewer. Simple math.",
-        "Set to 0 to process ALL pixels. Set to 255 to process almost NONE.",
-        "Threshold means 'the line you draw'. Pixels above it are ignored.",
+        "Set to 0 to process ALL pixels. Set to 255 to skip only fully opaque pixels.",
+        "Threshold means 'the line you draw'. Pixels at or above it are left alone.",
         "If you're confused, just leave it at 0. It works fine.",
         "Yes, you can type a number in there. No, it won't break anything.",
     ],
@@ -750,7 +764,7 @@ _DUMBED: dict[str, list[str]] = {
     "binary_cut_check": [
         "Binary cut: pixels above the threshold get set to 255 (solid). Below get set to 0 (invisible).",
         "Check this when you need hard edges with no soft transparent bits in between.",
-        "The threshold value above determines who lives (255) and who dies (0).",
+        "The Threshold value (under Advanced Options below) determines who lives (255) and who dies (0).",
         "Great for retro sprites and game textures that need clean crisp edges.",
         "On = binary mode. Off = soft gradients allowed. Pick based on your texture needs.",
     ],
@@ -854,7 +868,7 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "save_preset": [
         "Click Save, type a name. Wow, technology.",
-        "Save your settings (alpha value, mode, clamp min & max) as a preset. It'll be there next time. Magic.",
+        "Saves ALL current settings (value, mode, threshold, clamps, invert, binary cut) as a named preset. Everything.",
         "If you've tweaked a custom preset, Save pre-fills the name. Just press Enter to update it.",
         "Name it something memorable. 'aaa' works but you'll regret it.",
         "Saved presets show in the dropdown. Very useful. Very exciting.",
@@ -1175,12 +1189,26 @@ _DUMBED: dict[str, list[str]] = {
         "Keeps your colours, sounds, and presets. Just forgets which themes you already unlocked.",
         "Useful for re-testing hidden theme unlocks without torching everything else.",
     ],
+    "apply_alpha_check": [
+        "Checked = the alpha value above gets applied to pixels. That's usually what you want.",
+        "Uncheck it and the value does nothing — only the Min/Max clamp kicks in. Niche but valid.",
+        "Leave it checked unless a preset turned it off and you're now confused. Then check it.",
+        "Not relevant in normalize mode. Normalize ignores this entirely. Different rules.",
+        "Advanced checkbox for advanced people. The rest of you: leave it checked.",
+    ],
+    "finetune_params_lbl": [
+        "Live summary of what's active. Tells you exactly what will happen when you hit Process.",
+        "It updates the second you change anything. No surprises.",
+        "If it says 'clamp only', the alpha value slider is off — only floor/ceiling clamping applies.",
+        "'normalize → [0–128]' = normalize mode is on. The range in the brackets is your output range.",
+        "Check this label before clicking Process. It's the whole settings summary in one line.",
+    ],
     "mode_combo": [
         "Pick how the alpha gets applied. 'set' is probably the one you want.",
         "Alpha mode. It changes how alpha is calculated. Science!",
-        "You have: set, multiply, add, subtract, clamp_min, clamp_max. Fun times.",
+        "Five options: set, multiply, add, subtract, normalize. 'set' is the safe default.",
         "'set' = everyone gets the same alpha. Very democratic.",
-        "'multiply' = math happens. Less democratic. Still useful.",
+        "'multiply' = math happens. 'normalize' = remaps the whole range. Both valid.",
     ],
     "alpha_spin": [
         "Type a number here. 0 = invisible. 255 = visible. Easy math!",
@@ -1190,11 +1218,11 @@ _DUMBED: dict[str, list[str]] = {
         "This number applies to every pixel in the image. That's a lot of pixels.",
     ],
     "use_preset_check": [
-        "Check this to use the preset above. Uncheck to do it manually. Wow.",
+        "Check this and the preset auto-fills all the controls. Easy mode.",
         "Preset = someone already did the thinking for you. Lucky you.",
-        "Unchecked = you're in charge of the alpha. No pressure.",
-        "If you checked this and nothing changed, try clicking Process first.",
-        "This just decides which settings win: the preset up top or the sliders below.",
+        "Unchecked = you're in charge of the alpha. No pressure. The controls stay unlocked.",
+        "Edit any control and this unchecks itself automatically. The app does the thinking.",
+        "This decides which settings win: the preset up top or whatever you typed.",
     ],
     "red_spin": [
         "This makes the image more red (positive) or less red (negative). Colors!",
@@ -1367,7 +1395,7 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "save_preset": [
         "Save your damn preset so you don't have to redo this every time.",
-        "Saves alpha value + clamp min/max + processing mode. Every important number immortalized in the INI file with one click.",
+        "Saves EVERYTHING: alpha value, mode, threshold, clamp min/max, invert, binary cut. All of it. Immortalized.",
         "Name it something useful, not 'aaaa'. Future you will be grateful.",
         "If you've changed a custom preset, Save pre-fills the name — just hit Enter to overwrite it.",
         "This button saves your exact current settings as a named preset. Has been patiently waiting for you to click it this whole time.",
@@ -1392,37 +1420,37 @@ _VULGAR: dict[str, list[str]] = {
         "The slider and the number box are the same fucking thing. Use whichever.",
         "'set' mode carpet-bombs every pixel's alpha with your chosen value. 'multiply' scales them proportionally. Start with 'set'. Experiment with multiply later.",
         "Alpha is just how see-through a pixel is. 0 = glass. 255 = brick wall.",
-        "Only matters when 'Use preset' is UNCHECKED. Check that first, genius.",
+        "Edit this and the app automatically switches to manual mode. No checkbox required, genius.",
         "Sliding to 128 = 50% transparent. Sliding to 0 = completely gone. 255 = solid.",
         "This slider controls alpha, which is the fancy word for 'how see-through is this pixel'. Drag it.",
         "Linked to the number box. Change one, they both change. Not two separate things, smartass.",
     ],
     "threshold_spin": [
         "Threshold: only process pixels with alpha BELOW this number. 0 = process all the shit.",
-        "Set to 255 and you'll process almost nothing. Set to 0 and everything gets the treatment.",
+        "Set to 255 and only fully opaque pixels (alpha=255) get skipped. Everything else gets the treatment.",
         "Leave this at 0 to process every single fucking pixel in the image. That's almost always what you want. 0. Done.",
-        "It's a filter. Below the threshold: processed. Above: left the fuck alone.",
+        "It's a filter. Below the threshold: processed. At or above: left the fuck alone.",
         "128 = only touch the semi-transparent half. Advanced stuff for fancy people.",
-        "Think of threshold as a bouncer. Only alphas below this value get processed.",
-        "0 = everyone gets in, every pixel processed. 255 = basically nobody processed. You decide.",
+        "Think of threshold as a bouncer. Only alphas BELOW this value get processed.",
+        "0 = everyone gets in, every pixel processed. 255 = only fully opaque pixels skip. You decide.",
         "Useful when you need surgical precision — fix only the semi-transparent parts and leave the fully opaque pixels the hell alone.",
     ],
     "clamp_min_spin": [
-        "Clamp Min: no pixel's alpha can go BELOW this. 0 = no floor. Very fucking simple.",
+        "Min output: no pixel's alpha can go BELOW this after processing. 0 = no floor. Very fucking simple.",
         "Raise it above 0 and you're saying 'nothing gets more transparent than this'. Power move.",
         "Set to 128 and no pixel is more than 50% see-through. Good for PS2 stuff.",
         "Leave this at 0 unless you have a very specific reason to enforce a minimum alpha floor. Most people don't. You might be special.",
-        "Only does a goddamn thing in clamp modes. In 'set' or 'multiply' mode it just sits there looking decorative. READ THE MODE LABEL.",
+        "Works in every mode — always applied as a final floor AFTER the main alpha operation. Not mode-specific.",
         "Minimum alpha value enforced across all pixels. Like a speed limit for transparency.",
         "If your texture keeps going to zero alpha where it shouldn't, bump this up. Fixes it.",
         "Setting a floor for alpha values. No pixel will be more transparent than this. Transparency budget.",
     ],
     "clamp_max_spin": [
-        "Clamp Max: no pixel's alpha can go ABOVE this. 255 = no cap. Default. Boring but correct.",
+        "Max output: no pixel's alpha can go ABOVE this after processing. 255 = no cap. Default. Boring but correct.",
         "Lower it and you're saying 'nothing gets more opaque than this'. That's the PS2 range.",
         "128 = mimics PS2 GS alpha ceiling. Useful for targeting old-ass hardware.",
         "255 = no ceiling, pixels can go fully opaque. Lower this if you're targeting PS2 hardware that caps out around 128. Most people don't need to touch it.",
-        "Works with clamp_max mode. Pair it with clamp_min for a tight alpha sandwich.",
+        "Works in every mode — always applied as a final ceiling AFTER the main alpha operation.",
         "Setting a ceiling for opacity. No pixel will be more opaque than this number.",
         "PS2 GS hardware maxes out around 128 for alpha. Set this to 128 and you're golden.",
         "The maximum alpha value enforced across all pixels. A speed limit for opacity.",
@@ -1440,7 +1468,7 @@ _VULGAR: dict[str, list[str]] = {
     "binary_cut_check": [
         "Binary cut: pixels above threshold go to 255 (solid). Below go to 0 (invisible). No in-between.",
         "Check this for hard-edge transparency. Every pixel is either fully opaque or completely gone.",
-        "Threshold value above determines the cut point. Binary cut enforces it with extreme prejudice.",
+        "Threshold (in Advanced Options below) determines the cut point. Binary cut enforces it with extreme prejudice.",
         "Great for sprites that need crisp, no-aliasing alpha edges. Retro game shit.",
         "The nuclear option for alpha values. No soft edges. Pure binary. Pixels choose a side.",
         "This turns your smooth alpha gradient into hard yes/no transparency. Old-school game vibes.",
@@ -1807,14 +1835,34 @@ _VULGAR: dict[str, list[str]] = {
         "Re-earn your hidden themes. Some people do this repeatedly for fun. We love those people.",
         "The unlock adventure starts fresh. Blood Moon. Ice Cave. All of them waiting to be re-unlocked.",
     ],
+    "apply_alpha_check": [
+        "Checked = your alpha value gets slapped onto the pixels. That's the point. Leave it checked.",
+        "Uncheck it and the value does absolutely nothing — only clamping applies. Niche power user shit.",
+        "Not relevant in normalize mode. Normalize has its own rules. It does what it wants.",
+        "It's checked by default. For good reason. Don't uncheck it unless you know exactly what you're doing.",
+        "Unchecked = clamp-only mode. Pixels keep their existing alpha, just squeezed between Min and Max.",
+        "Checked = active alpha replacement. Unchecked = passive clamping only. Two different operations.",
+        "If your alpha isn't changing at all, this might be unchecked. Check it. That's probably why.",
+        "Advanced option. If you're confused, leave it checked and everything works normally.",
+    ],
+    "finetune_params_lbl": [
+        "This label tells you exactly what the fuck is about to happen to your pixels. Read it before clicking Process.",
+        "Live summary. 'set=255' = every pixel gets alpha 255. 'thresh=128' = only pixels below 128 are touched.",
+        "'clamp only' = apply-value checkbox is off. Alpha values stay the same; only the floor/ceiling clamps.",
+        "'normalize → [0–128]' = you're remapping the full alpha range to 0–128. No fixed value needed.",
+        "If this is blank or says nothing interesting, double-check your settings. Something might be off.",
+        "It updates instantly. Change any control. Watch this label. It's your one-line sanity check.",
+        "Before you click Process and wonder why the result looks wrong — read this label first. It tells you.",
+        "The entire active settings config, summarized in one line. Use it. It's literally there for you.",
+    ],
     "mode_combo": [
         "'set' replaces all alpha values with your number. Use this one first, genius.",
         "'multiply' does math on your alpha. Useful if you want to scale transparency.",
         "'add' cranks alpha values up by your set amount. 'subtract' drags them down. Great for nudging existing alpha without nuking it entirely.",
-        "Six processing modes and they all do completely different shit. 'set' = safest and most used. 'multiply' = PS2 magic. 'clamp_min/max' = advanced precision fuckery.",
-        "Six options: set, multiply, add, subtract, clamp_min, clamp_max. 'set' is safe.",
+        "Five modes: set, multiply, add, subtract, normalize. 'set' is safest and most used. 'multiply' = PS2 math. 'normalize' = range remapping.",
+        "Five options: set, multiply, add, subtract, normalize. 'set' is the safe default.",
         "'multiply' at 128 = 50% of original alpha. The classic PS2 trick.",
-        "clamp_min/clamp_max enforce a floor or ceiling on alpha values. Advanced shit.",
+        "'normalize' remaps the whole image's alpha range to [Min, Max]. No fixed value needed.",
         "Start with 'set' mode. Get comfortable. Then experiment with the others.",
     ],
     "alpha_spin": [
@@ -1822,19 +1870,19 @@ _VULGAR: dict[str, list[str]] = {
         "0 to 255. Your image's transparency depends on this number. Don't type 256.",
         "This and the slider below are linked. Move one, the other follows.",
         "In 'multiply' mode, 255 = no change. Less = dimmer. More math = more misery.",
-        "Type your target alpha value here. The mode above determines HOW this value gets applied, so make sure you've set that correctly too, genius.",
+        "Type your target alpha value here. The mode in the Advanced section determines HOW it gets applied.",
         "128 = 50% opacity. 64 = 25% opacity. 255 = solid. 0 = ghost. Pick your level.",
         "PS2 textures often need around 128-130. N64 wants 255. Type accordingly.",
         "This number is THE alpha value that gets applied to your pixels. 0 = invisible. 255 = opaque wall. Everything between = varying levels of see-through.",
     ],
     "use_preset_check": [
-        "Check this to use the preset instead of the manual crap below. Quick and easy.",
+        "Check this and the preset auto-fills every control. Uncheck to type your own values. Simple.",
         "Uncheck this if you think you know better than the preset. Maybe you do.",
-        "The preset and fine-tune controls don't play nice together. Pick one.",
-        "When checked, the sliders below are grayed out. They just sit there, useless.",
+        "Preset and manual modes work together now — edit any control and it switches to manual automatically.",
+        "When checked, the preset's values are loaded into the controls so you can see exactly what applies.",
         "Presets are pre-configured by someone who already figured this out. Use them.",
         "Preset mode: fast, easy, reliable. Manual mode: more control, more responsibility.",
-        "Checking this tells the app to ignore every manual slider below and use the preset instead. The sliders grey out. The preset takes over. Chain of command.",
+        "Checking this reloads the preset values into the controls. Unchecking lets you type freely.",
         "Preset = fast, trusted, battle-tested. Manual = you control everything and own every mistake. Choose based on how confident you feel today.",
     ],
     "red_spin": [
@@ -2316,6 +2364,15 @@ class TooltipManager(QObject):
         # Keep a strong Python reference so id(tab_bar) stays stable.
         self._tab_bar_refs[bar_id] = tab_bar
         tab_bar.setToolTip("")
+        # When the QTabBar is destroyed, remove its refs so the O(N) scan
+        # in eventFilter does not accumulate stale entries over time.
+        # Use a default-argument to capture bar_id by value; a bare `lambda`
+        # would capture it by reference which can give the wrong id if the
+        # variable is ever reassigned.
+        try:
+            tab_bar.destroyed.connect(lambda bid=bar_id: self._cleanup_tab_bar(bid))
+        except Exception:
+            pass
         # Also clear per-tab native tooltips
         for i in range(len(tip_keys)):
             try:
@@ -2335,6 +2392,18 @@ class TooltipManager(QObject):
     def mode(self) -> str:
         default = _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
         return self._settings.get("tooltip_mode", default)
+
+    def _cleanup_tab_bar(self, bar_id: int) -> None:
+        """Remove all refs for a destroyed QTabBar to prevent stale-ref scans."""
+        self._tab_bar_keys.pop(bar_id, None)
+        self._tab_bar_refs.pop(bar_id, None)
+        # Remove matching parent-widget entries
+        dead_parents = [
+            wid for wid, bar_ref in self._tab_widget_to_bar.items()
+            if id(bar_ref) == bar_id
+        ]
+        for wid in dead_parents:
+            self._tab_widget_to_bar.pop(wid, None)
 
     # ------------------------------------------------------------------
     # Event filter

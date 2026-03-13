@@ -614,8 +614,16 @@ class MainWindow(QMainWindow):
         if self._unlock_timer is None:
             self._unlock_timer = QTimer(self)
             self._unlock_timer.setSingleShot(True)
-            self._unlock_timer.timeout.connect(lambda: self._unlock_lbl.setText(""))
+            # Use a named method instead of a lambda so the callback is safe
+            # even if the window starts closing before the 6-second timeout fires.
+            self._unlock_timer.timeout.connect(self._clear_unlock_label)
         self._unlock_timer.start(6000)
+
+    def _clear_unlock_label(self) -> None:
+        """Clear the unlock notification label.  Guards against the label being
+        None (destroyed) if the timer fires during window teardown."""
+        if self._unlock_lbl is not None:
+            self._unlock_lbl.setText("")
 
     def _apply_cursor(self):
         use_theme = self._settings.get("use_theme_cursor", False)
@@ -1101,11 +1109,35 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event):
+        # Disable overlays first so their event filters are unregistered and
+        # their internal timers (animation, bat/fairy flock, etc.) are stopped
+        # before any Qt objects start being torn down.
+        if self._click_effects is not None:
+            self._click_effects.set_enabled(False)
+        if self._trail_overlay is not None:
+            self._trail_overlay.set_enabled(False)
         # Stop any running workers gracefully
         for tab in (self._alpha_tab, self._converter_tab):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
                 tab._worker.stop()
                 tab._worker.wait(3000)
+            # Cancel any in-flight preview loaders so their threads don't
+            # try to emit signals into already-destroyed Qt objects.
+            if hasattr(tab, "_preview_loader") and tab._preview_loader is not None:
+                tab._preview_loader.stop()
+            # Stop preview debounce timers so pending timeouts don't fire
+            # after the tab widgets have been torn down.
+            if hasattr(tab, "_preview_debounce") and tab._preview_debounce is not None:
+                tab._preview_debounce.stop()
+        # Stop main-window timers before the window is destroyed
+        for timer in (
+            self._settings_apply_timer,
+            self._resize_timer,
+            self._unlock_timer,
+            self._anim_timer,
+        ):
+            if timer is not None:
+                timer.stop()
         # Clean up temp sound file
         if self._sound is not None:
             self._sound.cleanup()
