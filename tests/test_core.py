@@ -688,6 +688,67 @@ class TestPresets(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_fully_opaque_image_max_reduces_alpha(self):
+        """A fully-opaque image (all alpha=255) must have its alpha reduced to Max
+        when Max < 255.  This is the primary use-case: the user sets Max=128 to cap
+        a game texture at PS2 full-opacity.  Min is also tested to confirm it does
+        not prevent the change."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 128),
+            f"Fully-opaque image with max=128 must output 128, got {arr[0, 0, 3]}",
+        )
+
+    def test_fully_opaque_image_force_same_value(self):
+        """Force-same-value mode (min==max) must set every pixel to exactly that
+        value regardless of the source alpha."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=128, clamp_max=128)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 128),
+            f"Force-same 128 on fully-opaque image must give 128, got {arr[0, 0, 3]}",
+        )
+
+    def test_fully_opaque_max_0_gives_transparent(self):
+        """Setting Max=0 on a fully-opaque image must produce a fully-transparent
+        result — the tool must be able to zero-out alpha regardless of source."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=0)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 0),
+            f"Fully-opaque image with max=0 must output 0, got {arr[0, 0, 3]}",
+        )
+
+    def test_fully_opaque_min_0_max_255_unchanged(self):
+        """With min=0 and max=255 a fully-opaque image stays at 255.
+        This is expected — the old 'Full Opacity' preset range produces no change.
+        The UX fix ensures users are auto-given max=128 when they first edit Min
+        from this state, but the algorithm itself is correct."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=255)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 255),
+            "min=0 max=255 on fully-opaque image should leave alpha at 255",
+        )
+
+    def test_fully_opaque_preset_max_128(self):
+        """apply_alpha_preset with clamp_max=128 must also reduce a fully-opaque
+        image to 128, confirming preset mode works the same as manual mode."""
+        from src.core.presets import AlphaPreset
+        img = make_rgba_image(alpha=255)
+        preset = AlphaPreset("test", "", clamp_min=0, clamp_max=128)
+        result = apply_alpha_preset(img, preset)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 128),
+            f"Preset max=128 on fully-opaque image must output 128, got {arr[0, 0, 3]}",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Save / load round-trip

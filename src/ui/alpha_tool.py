@@ -430,8 +430,10 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Set Min and Max alpha below — all pixels are remapped to that range. "
-            "Check 'Force same value' to lock Min = Max."
+            "ℹ  Set Min and Max alpha below.  All pixels are normalized into that range "
+            "(the image's darkest alpha → Min, brightest → Max).  "
+            "For a fully-opaque image every pixel maps to Max — lower Max to see a change.  "
+            "Check 'Force same value' to lock Min = Max and set every pixel to one value."
         )
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)
@@ -448,7 +450,11 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Minimum alpha value in the output.\n"
-            "All pixels are remapped so the lowest alpha in the image becomes this value.\n"
+            "The image's lowest alpha value is mapped to this number; all other\n"
+            "pixels are scaled proportionally above it.\n"
+            "Note: for a fully-opaque image (all alpha = 255) every pixel maps to Max,\n"
+            "so Min only has an effect when there are pixels below Max.  Lower Max first\n"
+            "to see the image change, then raise Min to set the transparency floor.\n"
             "0 = fully transparent minimum (most common).\n"
             "Use 'Force same value' checkbox below to lock Min = Max."
         )
@@ -463,8 +469,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_max_spin.setMinimumHeight(26)
         self._clamp_max_spin.setToolTip(
             "Maximum alpha value in the output.\n"
-            "All pixels are remapped so the highest alpha in the image becomes this value.\n"
-            "Example: set to 128 to cap maximum alpha at 128 (PS2 native full opacity).\n"
+            "The image's highest alpha value is mapped to this number; all other\n"
+            "pixels are scaled proportionally below it.\n"
+            "For a fully-opaque image (all alpha = 255) every pixel becomes exactly Max.\n"
+            "Example: set Max to 128 to cap maximum alpha at 128 (PS2 native full opacity).\n"
             "Use 'Force same value' checkbox below to lock Max = Min."
         )
         gt_layout.addWidget(self._clamp_max_spin, 2, 1)
@@ -996,10 +1004,27 @@ class AlphaFixerTab(QWidget):
             # is consistent with what "Process" will actually apply.
             self._on_preset_changed(self._preset_combo.currentText())
         else:
+            # Detect whether we are leaving a flat-255 preset (e.g. "Full Opacity"
+            # where both spinboxes show 255) BEFORE releasing force_same.
+            _reset_range = (
+                self._force_same_value_check.isChecked()
+                and self._clamp_max_spin.value() == 255
+            )
             # Release the force-same lock so Min and Max are independent in manual mode.
             self._force_same_value_check.blockSignals(True)
             self._force_same_value_check.setChecked(False)
             self._force_same_value_check.blockSignals(False)
+            # If both spinboxes were locked at 255 (Full Opacity or similar),
+            # reset them to a useful default range [0, 128] so the user
+            # immediately sees a change on a fully-opaque image.
+            if _reset_range:
+                for spin, val in [
+                    (self._clamp_min_spin, 0),
+                    (self._clamp_max_spin, 128),
+                ]:
+                    spin.blockSignals(True)
+                    spin.setValue(val)
+                    spin.blockSignals(False)
             self._refresh_finetune_label()
             self._update_compare()
 
@@ -1013,8 +1038,28 @@ class AlphaFixerTab(QWidget):
         inverted state (min > max) with the checkbox unchecked, the values are
         swapped automatically at the point of use (see _update_compare / _run)
         so numpy.clip always receives a valid range.
+
+        When editing Min while a flat-255 preset is active (e.g. "Full Opacity"
+        where both spinboxes show 255), Max stays at 255 after the preset is
+        released.  With target [user_min, 255] a fully-opaque image still
+        outputs 255 — no visible change.  We reset Max to 128 in that case so
+        the user immediately has a useful range to work with.
         """
+        # Capture state BEFORE switching out of the preset so we can decide
+        # whether to reset Max.
+        _came_from_flat_255 = (
+            self._use_preset_check.isChecked()
+            and self._force_same_value_check.isChecked()
+            and self._clamp_max_spin.value() == 255
+        )
         self._switch_to_manual_if_preset_active()
+        if _came_from_flat_255:
+            # Max is still at 255 (inherited from the preset).  Reset it to
+            # 128 so there is a meaningful gap between Min and Max and a
+            # fully-opaque image actually changes.
+            self._clamp_max_spin.blockSignals(True)
+            self._clamp_max_spin.setValue(128)
+            self._clamp_max_spin.blockSignals(False)
         if self._force_same_value_check.isChecked():
             self._clamp_max_spin.blockSignals(True)
             self._clamp_max_spin.setValue(self._clamp_min_spin.value())
@@ -1027,8 +1072,25 @@ class AlphaFixerTab(QWidget):
         """Trigger the normal fine-tune update when Clamp Max changes.
 
         When 'Force same value' is checked, changing Max also updates Min.
+
+        Symmetrically to _on_clamp_min_changed: when editing Max while a
+        flat-255 preset is active, Min stays at 255 after the preset is
+        released.  We reset Min to 0 so the resulting range [0, user_max]
+        is meaningful.
         """
+        # Capture state BEFORE switching out of the preset.
+        _came_from_flat_255 = (
+            self._use_preset_check.isChecked()
+            and self._force_same_value_check.isChecked()
+            and self._clamp_min_spin.value() == 255
+        )
         self._switch_to_manual_if_preset_active()
+        if _came_from_flat_255:
+            # Min is still at 255 (inherited from the preset).  Reset it to
+            # 0 so there is a meaningful gap between Min and Max.
+            self._clamp_min_spin.blockSignals(True)
+            self._clamp_min_spin.setValue(0)
+            self._clamp_min_spin.blockSignals(False)
         if self._force_same_value_check.isChecked():
             self._clamp_min_spin.blockSignals(True)
             self._clamp_min_spin.setValue(self._clamp_max_spin.value())
@@ -1079,6 +1141,11 @@ class AlphaFixerTab(QWidget):
             and self._use_preset_check.isChecked()
         ):
             # Silently uncheck "Use preset" so fine-tune values take effect.
+            # Detect flat-255 preset BEFORE releasing force_same.
+            _reset_range = (
+                self._force_same_value_check.isChecked()
+                and self._clamp_max_spin.value() == 255
+            )
             was_blocked = self._use_preset_check.blockSignals(True)
             self._use_preset_check.setChecked(False)
             self._use_preset_check.blockSignals(was_blocked)
@@ -1089,6 +1156,16 @@ class AlphaFixerTab(QWidget):
                 self._force_same_value_check.blockSignals(True)
                 self._force_same_value_check.setChecked(False)
                 self._force_same_value_check.blockSignals(False)
+            # If both spinboxes were at 255 (flat Full-Opacity preset), reset to
+            # a useful [0, 128] range so processing produces a visible change.
+            if _reset_range:
+                for spin, val in [
+                    (self._clamp_min_spin, 0),
+                    (self._clamp_max_spin, 128),
+                ]:
+                    spin.blockSignals(True)
+                    spin.setValue(val)
+                    spin.blockSignals(False)
         self._refresh_finetune_label()
         self._preview_debounce.start()
 
@@ -1328,7 +1405,13 @@ class AlphaFixerTab(QWidget):
     def _on_file_done(self, src: str, ok: bool, msg: str):
         icon = "✔" if ok else "✘"
         name = Path(src).name
-        self._log_msg(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
+        if ok and msg:
+            # Success but with a warning (e.g. JPEG/BMP discards alpha).
+            self._log_msg(f"{icon} {name}  ⚠ {msg}")
+        elif ok:
+            self._log_msg(f"{icon} {name}")
+        else:
+            self._log_msg(f"{icon} {name}" + (f"  →  {msg.splitlines()[-1] if msg else ''}"))
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):

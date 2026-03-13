@@ -122,10 +122,19 @@ class AlphaWorker(QThread):
                     ext = Path(src).suffix.lower()
                     save_image(img, dest, ext)
                     success += 1
+                    # Warn when saving to a format that does not support alpha so
+                    # the user knows their alpha changes were silently discarded.
+                    warn = ""
+                    if ext in (".jpg", ".jpeg", ".bmp"):
+                        warn = (
+                            f"{ext[1:].upper()} does not support an alpha channel — "
+                            "alpha changes were discarded. Save as PNG to preserve alpha."
+                        )
                     # In large-batch mode suppress per-file success messages to keep
-                    # the UI log from accumulating 50 000 lines.
-                    if not large_batch:
-                        self.file_done.emit(src, True, dest)
+                    # the UI log from accumulating 50 000 lines, but always surface
+                    # the alpha-loss warning so the user is not silently misled.
+                    if not large_batch or warn:
+                        self.file_done.emit(src, True, warn)
                 finally:
                     img.close()
             except MemoryError as exc:
