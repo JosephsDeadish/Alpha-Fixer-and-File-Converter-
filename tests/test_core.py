@@ -1443,6 +1443,54 @@ class TestUsePresetRecheck(unittest.TestCase):
                 f"the 'Force same value' checkbox for a flat preset",
             )
 
+    def test_switch_to_manual_releases_force_same_via_spinbox_edit(self):
+        """_switch_to_manual_if_preset_active must uncheck force_same_value_check
+        when it switches from 'Use preset' to manual mode.  Without this, editing
+        a spinbox while force_same is checked (auto-set by a flat preset) keeps Min
+        and Max locked together and the user cannot change them independently."""
+        source = self._alpha_tool_source()
+        start = source.find("def _switch_to_manual_if_preset_active")
+        self.assertGreater(start, 0, "_switch_to_manual_if_preset_active not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_force_same_value_check",
+            body,
+            "_switch_to_manual_if_preset_active must uncheck _force_same_value_check "
+            "when switching to manual mode so the user can freely edit Min and Max",
+        )
+        self.assertIn(
+            "setChecked(False)",
+            body,
+            "_switch_to_manual_if_preset_active must call setChecked(False) on "
+            "_force_same_value_check to release the lock",
+        )
+
+    def test_on_use_preset_toggled_false_releases_force_same(self):
+        """_on_use_preset_toggled must uncheck force_same_value_check when the
+        checkbox is unchecked (checked=False).  Without this, explicitly clicking
+        'Use preset' off while a flat preset is active leaves force_same checked,
+        preventing the user from having different Min and Max values."""
+        source = self._alpha_tool_source()
+        start = source.find("def _on_use_preset_toggled")
+        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_force_same_value_check",
+            body,
+            "_on_use_preset_toggled must reference _force_same_value_check so the "
+            "lock is released when the user switches to manual mode",
+        )
+        self.assertIn(
+            "setChecked(False)",
+            body,
+            "_on_use_preset_toggled must call setChecked(False) on "
+            "_force_same_value_check when unchecked",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Dedicated hidden-theme SVG tests

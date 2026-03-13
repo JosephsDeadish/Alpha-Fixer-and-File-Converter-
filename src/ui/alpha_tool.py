@@ -962,11 +962,20 @@ class AlphaFixerTab(QWidget):
         preventing the automatic "Use preset → manual" switch from firing.
         This helper performs that switch explicitly so clamp edits always take
         effect regardless of how the handler was invoked.
+
+        Also releases the 'Force same value' lock so Min and Max can be edited
+        independently in manual mode.  Presets with equal min/max auto-check that
+        lock; leaving preset mode must undo it so the user regains full control.
         """
         if not self._preset_combo.signalsBlocked() and self._use_preset_check.isChecked():
             was_blocked = self._use_preset_check.blockSignals(True)
             self._use_preset_check.setChecked(False)
             self._use_preset_check.blockSignals(was_blocked)
+            # Release the force-same lock so Min and Max are independent in manual mode.
+            if self._force_same_value_check.isChecked():
+                self._force_same_value_check.blockSignals(True)
+                self._force_same_value_check.setChecked(False)
+                self._force_same_value_check.blockSignals(False)
 
     @pyqtSlot(bool)
     def _on_use_preset_toggled(self, checked: bool) -> None:
@@ -976,13 +985,19 @@ class AlphaFixerTab(QWidget):
         fine-tune controls so the display always matches what will be processed.
 
         When unchecked: switch to manual mode so the current Min/Max values are
-        used directly.
+        used directly.  The 'Force same value' lock is also released so the user
+        can edit Min and Max independently — presets with equal min/max auto-check
+        that lock, and it must not persist after leaving preset mode.
         """
         if checked:
             # Reload preset values into the fine-tune controls so the display
             # is consistent with what "Process" will actually apply.
             self._on_preset_changed(self._preset_combo.currentText())
         else:
+            # Release the force-same lock so Min and Max are independent in manual mode.
+            self._force_same_value_check.blockSignals(True)
+            self._force_same_value_check.setChecked(False)
+            self._force_same_value_check.blockSignals(False)
             self._refresh_finetune_label()
             self._update_compare()
 
