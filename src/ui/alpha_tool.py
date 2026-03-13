@@ -1071,6 +1071,13 @@ class AlphaFixerTab(QWidget):
             was_blocked = self._use_preset_check.blockSignals(True)
             self._use_preset_check.setChecked(False)
             self._use_preset_check.blockSignals(was_blocked)
+            # Release the force-same lock so Min and Max are independent in manual
+            # mode.  Flat presets (min == max) auto-check this lock; leaving preset
+            # mode via any code path must undo it so the user regains full control.
+            if self._force_same_value_check.isChecked():
+                self._force_same_value_check.blockSignals(True)
+                self._force_same_value_check.setChecked(False)
+                self._force_same_value_check.blockSignals(False)
         self._refresh_finetune_label()
         self._preview_debounce.start()
 

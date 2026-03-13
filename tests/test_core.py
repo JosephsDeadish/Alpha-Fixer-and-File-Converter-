@@ -1491,6 +1491,36 @@ class TestUsePresetRecheck(unittest.TestCase):
             "_force_same_value_check when unchecked",
         )
 
+    def test_on_finetune_changed_releases_force_same_when_switching_to_manual(self):
+        """_on_finetune_changed must uncheck force_same_value_check when it
+        auto-switches from 'Use preset' to manual mode.
+
+        If threshold/invert/binary_cut are changed while a flat preset is active,
+        _on_finetune_changed silently unchecks 'Use preset'.  Without also releasing
+        force_same_value_check, subsequent edits to the Min/Max spinboxes can no
+        longer free the lock (because _switch_to_manual_if_preset_active only acts
+        when 'Use preset' is still checked).  This leaves Min and Max permanently
+        locked together until the user explicitly unchecks 'Use preset' again.
+        """
+        source = self._alpha_tool_source()
+        start = source.find("def _on_finetune_changed")
+        self.assertGreater(start, 0, "_on_finetune_changed not found")
+        next_def = source.find("\n    def ", start + 1)
+        end = next_def if next_def > start else len(source)
+        body = source[start:end]
+        self.assertIn(
+            "_force_same_value_check",
+            body,
+            "_on_finetune_changed must reference _force_same_value_check so the "
+            "lock is released when it auto-switches from preset to manual mode",
+        )
+        self.assertIn(
+            "setChecked(False)",
+            body,
+            "_on_finetune_changed must call setChecked(False) on "
+            "_force_same_value_check to release the lock when switching to manual",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Dedicated hidden-theme SVG tests
