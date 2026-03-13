@@ -1640,11 +1640,32 @@ class TestAlphaToolUISimplification(unittest.TestCase):
     def test_hint_label_in_setup_ui(self):
         """_setup_ui must add an explanatory hint label to guide new users."""
         src = self._alpha_tool_source()
-        # The hint should mention the Min/Max output range and presets
+        # The hint should mention Min/Max
         self.assertIn("Min/Max", src,
                       "Fine-tune section should have a hint label mentioning 'Min/Max'")
-        self.assertIn("preset", src.lower(),
-                      "Hint label should mention presets")
+
+    def test_normalize_is_default_mode(self):
+        """The mode combo must default to 'normalize' so that setting Min/Max
+        immediately remaps the image alpha range to [Min, Max] — i.e., sets new
+        alphas rather than just clamping existing ones.
+
+        When mode='set' was the default: all pixels were set to alpha_spin=255
+        first, then clamped.  Because 255 ≥ any min floor, clamp_min never fired.
+
+        When mode='clamp-only' (apply_alpha_check=False) was the default: existing
+        per-pixel alpha values were preserved, which the user also didn't want.
+
+        Normalize is the correct default: it proportionally remaps every pixel's
+        alpha into [Min output, Max output] — this is 'setting new alphas'."""
+        src = self._alpha_tool_source()
+        # After all mode items are added, findData("normalize") must be called
+        # to set the default selection.
+        self.assertIn('findData("normalize")', src,
+                      "mode_combo must call findData('normalize') to set normalize "
+                      "as the default mode after items are added")
+        self.assertIn("setCurrentIndex(self._mode_combo.findData", src,
+                      "mode_combo must call setCurrentIndex with findData to select "
+                      "the normalize mode by default")
 
     def test_advanced_separator_present(self):
         """An 'Advanced' separator must visually separate basic and advanced

@@ -432,8 +432,7 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Set Min/Max output range below OR pick a preset — then click ▶ Process.  "
-            "To set a fixed alpha value, enable 'Apply value' in Advanced Options."
+            "ℹ  Set Min/Max below to remap alpha to that range — then click ▶ Process."
         )
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)
@@ -464,7 +463,7 @@ class AlphaFixerTab(QWidget):
         gt_layout.addWidget(self._alpha_slider, 2, 0, 1, 2)
 
         # ── Output range clamps ─────────────────────────────────────────────────
-        lbl_cmin = QLabel("Min output (0 = no floor):")
+        lbl_cmin = QLabel("Min output (target range min):")
         lbl_cmin.setMinimumHeight(24)
         gt_layout.addWidget(lbl_cmin, 3, 0)
         self._clamp_min_spin = QSpinBox()
@@ -472,17 +471,16 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setValue(0)
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
-            "Floor: any pixel alpha below this value is raised to this value.\n"
-            "0 = no minimum (default). In 'normalize' mode this is the target minimum.\n"
+            "In normalize mode (default): the minimum of the target alpha range.\n"
+            "All pixels are remapped so the lowest alpha in the image becomes this value.\n"
+            "0 = fully transparent minimum (most common).\n"
             "\n"
-            "⚠ In 'set' mode this floor only activates when the set value is below it.\n"
-            "For a true output range [min, max] that preserves existing alpha variation,\n"
-            "uncheck 'Apply value to pixels' in Advanced Options (clamp-only mode)\n"
-            "or switch to 'normalize' mode."
+            "In other modes: floor — any pixel alpha below this is raised to this value.\n"
+            "0 = no minimum floor."
         )
         gt_layout.addWidget(self._clamp_min_spin, 3, 1)
 
-        lbl_cmax = QLabel("Max output (255 = no ceiling):")
+        lbl_cmax = QLabel("Max output (target range max):")
         lbl_cmax.setMinimumHeight(24)
         gt_layout.addWidget(lbl_cmax, 4, 0)
         self._clamp_max_spin = QSpinBox()
@@ -490,9 +488,12 @@ class AlphaFixerTab(QWidget):
         self._clamp_max_spin.setValue(255)
         self._clamp_max_spin.setMinimumHeight(26)
         self._clamp_max_spin.setToolTip(
-            "Ceiling: any pixel alpha above this value is capped to this value.\n"
-            "255 = no maximum (default). Set to 128 for PS2 native textures.\n"
-            "In 'normalize' mode this is the target maximum."
+            "In normalize mode (default): the maximum of the target alpha range.\n"
+            "All pixels are remapped so the highest alpha in the image becomes this value.\n"
+            "Example: set to 155 to cap the maximum alpha at 155, remapping all values.\n"
+            "\n"
+            "In other modes: ceiling — any pixel alpha above this is capped to this value.\n"
+            "255 = no ceiling."
         )
         gt_layout.addWidget(self._clamp_max_spin, 4, 1)
 
@@ -556,7 +557,7 @@ class AlphaFixerTab(QWidget):
         _MODE_TIPS = {
             "set": (
                 "Replace every pixel's alpha with the exact value above.\n"
-                "This is the default and most common mode: just type a number and process."
+                "Useful when you want every pixel to have a single flat alpha value."
             ),
             "multiply": (
                 "Scale each pixel's existing alpha by (value ÷ 255).\n"
@@ -571,9 +572,10 @@ class AlphaFixerTab(QWidget):
                 "Lowers transparency across the whole image by the amount you enter."
             ),
             "normalize": (
-                "Linearly remap the image's existing alpha range to [Min output, Max output].\n"
-                "Example: PS2 textures with alpha 0–128 remapped to standard 0–255.\n"
-                "The alpha value spinbox above is not used in this mode."
+                "DEFAULT mode: linearly remap the image's full alpha range to [Min output, Max output].\n"
+                "Example: set Min=0 Max=155 to remap all alpha values so max becomes 155.\n"
+                "Works regardless of what the original alpha values were.\n"
+                "The alpha value spinbox is not used in this mode."
             ),
         }
         for key, label in _MODE_OPTIONS:
@@ -581,13 +583,17 @@ class AlphaFixerTab(QWidget):
             idx = self._mode_combo.count() - 1
             self._mode_combo.setItemData(idx, _MODE_TIPS[key], Qt.ItemDataRole.ToolTipRole)
         self._mode_combo.setToolTip(
-            "How the alpha value is applied to each pixel.\n"
-            "• set: replaces every pixel's alpha with the value (most common)\n"
+            "How the alpha values are changed.\n"
+            "• normalize (default): remaps the full alpha range to [Min, Max] — sets new alphas\n"
+            "• set: replaces every pixel's alpha with a fixed value\n"
             "• multiply/add/subtract: adjusts existing alpha values\n"
-            "• normalize: rescales the image's alpha range to [Min, Max]"
         )
         self._mode_combo.setMinimumHeight(26)
         gt_layout.addWidget(self._mode_combo, 10, 1)
+        # Default to normalize: remaps the image alpha range to [Min output, Max output]
+        # so that setting min=0 and max=155 immediately gives every pixel a new alpha
+        # in [0, 155] — this is the most intuitive "set new alphas" behavior.
+        self._mode_combo.setCurrentIndex(self._mode_combo.findData("normalize"))
 
         # ── Apply-value checkbox (advanced) ─────────────────────────────────────
         # Default is UNCHECKED (clamp-only): only Min/Max output range is applied
@@ -1043,7 +1049,7 @@ class AlphaFixerTab(QWidget):
     def _clamp_range_label(lo: int, hi: int, raw_lo: int, raw_hi: int) -> str:
         """Return a compact clamp range string with an inverted-range warning."""
         if raw_lo > raw_hi:
-            return f"{lo}–{hi} ⚠ inverted (will swap)"
+            return f"{lo}–{hi} Warning: inverted (will swap)"
         return f"{lo}–{hi}"
 
     def _refresh_finetune_label(self) -> None:
