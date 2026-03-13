@@ -228,7 +228,8 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
       3. Binary threshold cut (if preset.binary_cut is True): pixels >= threshold → 255, else → 0
       4. Clamp to [clamp_min, clamp_max]
     """
-    if img.mode != "RGBA":
+    _converted = img.mode != "RGBA"
+    if _converted:
         _orig = img
         img = img.convert("RGBA")
         _orig.close()
@@ -236,6 +237,8 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
         arr = np.array(img, dtype=np.int32)
     except MemoryError:
         w, h = img.size
+        if _converted:
+            img.close()
         raise MemoryError(
             f"Not enough memory to process {w}×{h} image "
             f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
@@ -310,7 +313,8 @@ def apply_manual_alpha(
                Defaults to 'set' for backward-compatibility.
         binary_cut: When True, apply a hard 0/255 split at the threshold.
     """
-    if img.mode != "RGBA":
+    _converted = img.mode != "RGBA"
+    if _converted:
         _orig = img
         img = img.convert("RGBA")
         _orig.close()
@@ -318,6 +322,8 @@ def apply_manual_alpha(
         arr = np.array(img, dtype=np.int32)
     except MemoryError:
         w, h = img.size
+        if _converted:
+            img.close()
         raise MemoryError(
             f"Not enough memory to process {w}×{h} image "
             f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."
@@ -406,7 +412,8 @@ def apply_rgba_adjust(
     Clamp tuples define the allowed output range for each channel.
     Returns the modified image in RGBA mode.
     """
-    if img.mode != "RGBA":
+    _converted = img.mode != "RGBA"
+    if _converted:
         _orig = img
         img = img.convert("RGBA")
         _orig.close()
@@ -414,6 +421,8 @@ def apply_rgba_adjust(
         arr = np.array(img, dtype=np.int32)
     except MemoryError:
         w, h = img.size
+        if _converted:
+            img.close()
         raise MemoryError(
             f"Not enough memory to adjust {w}×{h} image "
             f"({w * h / 1_000_000:.1f} megapixels). Try a smaller image."

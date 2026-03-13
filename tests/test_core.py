@@ -4492,3 +4492,237 @@ class TestRound12ResourceHygiene(unittest.TestCase):
 
         self.assertTrue(raised, "_flatten_alpha LA: MemoryError must propagate")
         self.assertTrue(closed, "_flatten_alpha LA: base must be closed when paste raises")
+
+
+class TestRound13ResourceHygiene(unittest.TestCase):
+    """Round-13: converted RGBA image leaks when np.array() raises MemoryError.
+
+    Bug (all three processing functions: apply_alpha_preset, apply_manual_alpha,
+    apply_rgba_adjust):
+
+    When ``img.mode != "RGBA"`` the function converts the caller-supplied image
+    to RGBA and re-assigns the local ``img`` variable to the new image.  If the
+    subsequent ``np.array(img, dtype=np.int32)`` call raises ``MemoryError``,
+    the original code re-raised without closing the newly-created RGBA image.
+    The caller's ``finally`` block only closes the *original* image, so the
+    converted RGBA image was silently leaked.
+
+    Fix: add a ``_converted = img.mode != "RGBA"`` flag before the conversion
+    and close ``img`` inside the ``MemoryError`` handler when ``_converted``
+    is True.
+    """
+
+    # ------------------------------------------------------------------
+    # Source-level structural tests (guard against regression)
+    # ------------------------------------------------------------------
+
+    _AP_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "alpha_processor.py"
+    )
+
+    def _read_ap(self) -> str:
+        with open(self._AP_SRC) as f:
+            return f.read()
+
+    def _fn_src(self, fn_name: str) -> str:
+        """Return the source of a top-level function in alpha_processor.py."""
+        src = self._read_ap()
+        start = src.find(f"\ndef {fn_name}(")
+        self.assertGreater(start, 0, f"{fn_name} not found")
+        next_def = src.find("\ndef ", start + 1)
+        return src[start:next_def] if next_def > 0 else src[start:]
+
+    def _assert_converted_flag_and_close(self, fn_name: str) -> None:
+        """Assert that fn_name uses _converted flag and closes img in MemoryError."""
+        fn = self._fn_src(fn_name)
+        self.assertIn(
+            "_converted = img.mode != \"RGBA\"",
+            fn,
+            f"{fn_name}: must set _converted = img.mode != 'RGBA' before conversion",
+        )
+        mem_pos = fn.find("except MemoryError:")
+        self.assertGreater(mem_pos, 0,
+                           f"{fn_name}: must have an 'except MemoryError:' block")
+        close_pos = fn.find("img.close()", mem_pos)
+        self.assertGreater(
+            close_pos, mem_pos,
+            f"{fn_name}: img.close() must appear inside the except MemoryError block",
+        )
+        converted_guard_pos = fn.find("if _converted:", mem_pos)
+        self.assertGreater(
+            converted_guard_pos, mem_pos,
+            f"{fn_name}: 'if _converted:' guard must appear before img.close() "
+            "in the MemoryError handler",
+        )
+        self.assertLess(
+            converted_guard_pos, close_pos,
+            f"{fn_name}: 'if _converted:' must precede img.close() in the handler",
+        )
+
+    def test_apply_alpha_preset_has_converted_flag_and_close(self):
+        """apply_alpha_preset must use _converted flag and close img on MemoryError."""
+        self._assert_converted_flag_and_close("apply_alpha_preset")
+
+    def test_apply_manual_alpha_has_converted_flag_and_close(self):
+        """apply_manual_alpha must use _converted flag and close img on MemoryError."""
+        self._assert_converted_flag_and_close("apply_manual_alpha")
+
+    def test_apply_rgba_adjust_has_converted_flag_and_close(self):
+        """apply_rgba_adjust must use _converted flag and close img on MemoryError."""
+        self._assert_converted_flag_and_close("apply_rgba_adjust")
+
+    # ------------------------------------------------------------------
+    # Behavioural smoke tests
+    # ------------------------------------------------------------------
+
+    def _make_rgb_img(self, size=(4, 4)):
+        from PIL import Image
+        return Image.new("RGB", size, (100, 150, 200))
+
+    def test_apply_alpha_preset_closes_converted_rgba_on_memory_error(self):
+        """When np.array() raises on a converted RGBA image, apply_alpha_preset
+        must close that image before propagating the error."""
+        from PIL import Image
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_alpha_preset
+        from src.core.presets import AlphaPreset
+
+        closed = []
+
+        class _FakeRGBA:
+            mode = "RGBA"
+            size = (4, 4)
+
+            def close(self):
+                closed.append(True)
+
+        orig_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *args, **kwargs):
+            if mode == "RGBA":
+                return _FakeRGBA()
+            return orig_convert(self_img, mode, *args, **kwargs)
+
+        raised = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert", patched_convert):
+                with mock.patch("src.core.alpha_processor.np.array",
+                                side_effect=MemoryError("simulated OOM")):
+                    apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "apply_alpha_preset: MemoryError must propagate")
+        self.assertTrue(closed, "apply_alpha_preset: converted RGBA img must be closed on MemoryError")
+
+    def test_apply_manual_alpha_closes_converted_rgba_on_memory_error(self):
+        """When np.array() raises on a converted RGBA image, apply_manual_alpha
+        must close that image before propagating the error."""
+        from PIL import Image
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_manual_alpha
+
+        closed = []
+
+        class _FakeRGBA:
+            mode = "RGBA"
+            size = (4, 4)
+
+            def close(self):
+                closed.append(True)
+
+        orig_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *args, **kwargs):
+            if mode == "RGBA":
+                return _FakeRGBA()
+            return orig_convert(self_img, mode, *args, **kwargs)
+
+        raised = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert", patched_convert):
+                with mock.patch("src.core.alpha_processor.np.array",
+                                side_effect=MemoryError("simulated OOM")):
+                    apply_manual_alpha(img, value=255)
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "apply_manual_alpha: MemoryError must propagate")
+        self.assertTrue(closed, "apply_manual_alpha: converted RGBA img must be closed on MemoryError")
+
+    def test_apply_rgba_adjust_closes_converted_rgba_on_memory_error(self):
+        """When np.array() raises on a converted RGBA image, apply_rgba_adjust
+        must close that image before propagating the error."""
+        from PIL import Image
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_rgba_adjust
+
+        closed = []
+
+        class _FakeRGBA:
+            mode = "RGBA"
+            size = (4, 4)
+
+            def close(self):
+                closed.append(True)
+
+        orig_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *args, **kwargs):
+            if mode == "RGBA":
+                return _FakeRGBA()
+            return orig_convert(self_img, mode, *args, **kwargs)
+
+        raised = []
+        img = self._make_rgb_img()
+        try:
+            with mock.patch.object(Image.Image, "convert", patched_convert):
+                with mock.patch("src.core.alpha_processor.np.array",
+                                side_effect=MemoryError("simulated OOM")):
+                    apply_rgba_adjust(img, red_delta=10)
+        except MemoryError:
+            raised.append(True)
+        finally:
+            img.close()
+
+        self.assertTrue(raised, "apply_rgba_adjust: MemoryError must propagate")
+        self.assertTrue(closed, "apply_rgba_adjust: converted RGBA img must be closed on MemoryError")
+
+    def test_apply_alpha_preset_already_rgba_not_double_closed_on_memory_error(self):
+        """When the image is already RGBA, apply_alpha_preset must NOT close it
+        in the MemoryError handler (caller's finally will do that)."""
+        from PIL import Image
+        import unittest.mock as mock
+        from src.core.alpha_processor import apply_alpha_preset
+        from src.core.presets import AlphaPreset
+
+        close_count = [0]
+        orig_close = Image.Image.close
+
+        def counting_close(self_img):
+            close_count[0] += 1
+            orig_close(self_img)
+
+        img = Image.new("RGBA", (4, 4), (100, 150, 200, 128))
+        raised = []
+        try:
+            with mock.patch.object(Image.Image, "close", counting_close):
+                with mock.patch("src.core.alpha_processor.np.array",
+                                side_effect=MemoryError("simulated OOM")):
+                    apply_alpha_preset(img, AlphaPreset("test", 255, 0, False, ""))
+        except MemoryError:
+            raised.append(True)
+
+        self.assertTrue(raised, "apply_alpha_preset: MemoryError must propagate for RGBA input")
+        self.assertEqual(
+            close_count[0], 0,
+            "apply_alpha_preset: img must NOT be closed inside the function "
+            "when it was already RGBA (no double-close)",
+        )
+        img.close()  # caller's responsibility
