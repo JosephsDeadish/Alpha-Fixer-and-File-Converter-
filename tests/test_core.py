@@ -246,29 +246,34 @@ class TestPresets(unittest.TestCase):
                          "alpha=100 normalizes to ~129")
 
     def test_clamp_only_manual_preserves_range(self):
-        """apply_manual_alpha scales alpha from the full [0,255] range to [clamp_min, clamp_max].
-        pixel=0→Min, pixel=255→Max, others scale linearly.
-        The min and max of the output MUST differ when the source has varied alpha.
-        This tests the core 'new min and max' use-case."""
+        """apply_manual_alpha normalizes alpha from [img_min, img_max] to [clamp_min, clamp_max].
+        The source range is stretched to exactly fill the target so that img_min→clamp_min
+        and img_max→clamp_max.  The min and max of the output MUST differ when the source
+        has varied alpha.  This tests the core 'new min and max' use-case."""
         arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
-        arr_in[0, 0] = [0, 0, 0, 30]    # low alpha
+        arr_in[0, 0] = [0, 0, 0, 30]    # source_min → target_lo
         arr_in[0, 1] = [0, 0, 0, 150]   # mid alpha
-        arr_in[1, 0] = [0, 0, 0, 230]   # high alpha
+        arr_in[1, 0] = [0, 0, 0, 230]   # source_max → target_hi
         arr_in[1, 1] = [0, 0, 0, 80]    # low-mid alpha
         img = Image.fromarray(arr_in, "RGBA")
         result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
         out = np.array(result)
-        # new formula: round(50 + pixel/255 * 150)
-        # pixel=30  → round(50 + 30/255*150)  = round(67.65) = 68
-        # pixel=150 → round(50 + 150/255*150) = round(138.24) = 138
-        # pixel=230 → round(50 + 230/255*150) = round(185.29) = 185
-        # pixel=80  → round(50 + 80/255*150)  = round(97.06) = 97
-        self.assertEqual(int(out[0, 0, 3]), 68,  "alpha=30 → 68")
-        self.assertEqual(int(out[0, 1, 3]), 138, "alpha=150 → 138")
-        self.assertEqual(int(out[1, 0, 3]), 185, "alpha=230 → 185")
-        self.assertEqual(int(out[1, 1, 3]), 97,  "alpha=80 → 97")
-        # Crucially: min ≠ max in the output (the user gets a true range)
+        # normalize formula: round(50 + (pixel - img_min) / (img_max - img_min) * 150)
+        # img_min=30, img_max=230, span=200, target_span=150
+        # pixel=30  → 50  (source_min → target_lo)
+        # pixel=150 → round(50 + 120/200 * 150) = round(140) = 140
+        # pixel=230 → 200 (source_max → target_hi)
+        # pixel=80  → round(50 + 50/200  * 150) = round(87.5) = 88
+        self.assertEqual(int(out[0, 0, 3]), 50,  "source_min=30 → target_lo=50")
+        self.assertEqual(int(out[0, 1, 3]), 140, "alpha=150 → 140")
+        self.assertEqual(int(out[1, 0, 3]), 200, "source_max=230 → target_hi=200")
+        self.assertEqual(int(out[1, 1, 3]), 88,  "alpha=80 → 88")
+        # Crucially: min == target_lo and max == target_hi (guaranteed by normalize)
         alpha_out = out[:, :, 3]
+        self.assertEqual(int(alpha_out.min()), 50,
+                         "output minimum must equal clamp_min=50")
+        self.assertEqual(int(alpha_out.max()), 200,
+                         "output maximum must equal clamp_max=200")
         self.assertGreater(int(alpha_out.max()), int(alpha_out.min()),
                            "output must have a range, not a single value")
 
@@ -405,18 +410,17 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(int(out[2:, :, 3].min()), 128, "max pixels should map to 128")
 
     def test_manual_alpha_normalize_half_range_to_full(self):
-        """apply_manual_alpha scales alpha linearly from [0,255] to [target_lo, target_hi].
-        pixel=0 → target_lo, pixel=255 → target_hi, others scale proportionally."""
+        """apply_manual_alpha normalizes alpha from [img_min, img_max] to [target_lo, target_hi].
+        Source [0, 128] stretched to [0, 255]: img_min=0→0, img_max=128→255."""
         arr = np.zeros((4, 4, 4), dtype=np.uint8)
         arr[:2, :, 3] = 0
         arr[2:, :, 3] = 128
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, clamp_min=0, clamp_max=255)
         out = np.array(result)
-        # pixel=0 → round(0/255*255) = 0
-        self.assertEqual(int(out[:2, :, 3].max()), 0,   "min pixels should stay 0")
-        # pixel=128 → round(128/255*255) = 128 (not 255 — no source-range stretch)
-        self.assertEqual(int(out[2:, :, 3].min()), 128, "pixel=128 stays at 128")
+        # normalize: img_min=0→0, img_max=128→255
+        self.assertEqual(int(out[:2, :, 3].max()), 0,   "source_min=0 stays at 0")
+        self.assertEqual(int(out[2:, :, 3].min()), 255, "source_max=128 stretches to 255")
 
     def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
         """Uniform alpha above target_hi is proportionally mapped, not hard-capped.
@@ -591,20 +595,22 @@ class TestPresets(unittest.TestCase):
                         "Pixels with alpha >= threshold must keep their original value")
 
     def test_manual_alpha_threshold_zero_processes_all(self):
-        """threshold=0 (default) must process every pixel — backward-compatible."""
+        """threshold=0 (default) must process every pixel — normalize maps
+        [img_min, img_max] → [clamp_min, clamp_max] exactly."""
         arr = np.zeros((1, 2, 4), dtype=np.uint8)
         arr[0, 0, 3] = 0
         arr[0, 1, 3] = 200
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, threshold=0, clamp_min=0, clamp_max=64)
         out = np.array(result)
-        # pixel=0 → round(0/255*64) = 0
-        # pixel=200 → round(200/255*64) = round(50.2) = 50  (NOT 64; no source-range stretch)
-        self.assertEqual(int(out[0, 0, 3]), 0,  "alpha=0 → 0")
-        self.assertEqual(int(out[0, 1, 3]), 50, "alpha=200 → 50 (proportional on [0,255])")
+        # normalize: img_min=0 → target_lo=0, img_max=200 → target_hi=64
+        self.assertEqual(int(out[0, 0, 3]), 0,  "source_min=0 → target_lo=0")
+        self.assertEqual(int(out[0, 1, 3]), 64, "source_max=200 → target_hi=64")
 
     def test_manual_alpha_threshold_mixed_range_partial_protect(self):
-        """threshold=128 protects the top half while remapping the bottom half."""
+        """threshold=128 protects the top half while normalizing the bottom half.
+        Only pixels with alpha < 128 are processed; normalize is applied to
+        [img_min, img_max] of those pixels only."""
         arr = np.zeros((1, 4, 4), dtype=np.uint8)
         arr[0, 0, 3] = 0
         arr[0, 1, 3] = 64
@@ -613,11 +619,12 @@ class TestPresets(unittest.TestCase):
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, threshold=128, clamp_min=0, clamp_max=100)
         out = np.array(result)
-        # Processed pixels: use proportional formula on [0,255] → [0,100]
-        # pixel=0  → round(0/255*100) = 0
-        # pixel=64 → round(64/255*100) = round(25.1) = 25  (NOT 100)
-        self.assertEqual(int(out[0, 0, 3]), 0,   "alpha=0 → 0")
-        self.assertEqual(int(out[0, 1, 3]), 25,  "alpha=64 → 25 (proportional on [0,255])")
+        # Processed pixels (alpha < 128): {0, 64}
+        # normalize: img_min=0 → target_lo=0, img_max=64 → target_hi=100
+        # pixel=0  → 0
+        # pixel=64 → 100
+        self.assertEqual(int(out[0, 0, 3]), 0,   "source_min=0 → target_lo=0")
+        self.assertEqual(int(out[0, 1, 3]), 100, "source_max=64 → target_hi=100")
         # Protected pixels: original values must be preserved
         self.assertEqual(int(out[0, 2, 3]), 128, "alpha=128 >= threshold → unchanged")
         self.assertEqual(int(out[0, 3, 3]), 200, "alpha=200 >= threshold → unchanged")
