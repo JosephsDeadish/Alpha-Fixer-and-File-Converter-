@@ -1557,6 +1557,54 @@ class TestAlphaToolUISimplification(unittest.TestCase):
                         "_apply_alpha_check must appear after _alpha_spin "
                         "in the source (it lives in the Advanced section)")
 
+    def test_apply_alpha_check_defaults_to_unchecked(self):
+        """_apply_alpha_check must default to UNCHECKED (False) so that Min/Max
+        output clamping works immediately out of the box without the user needing
+        to know about the Advanced 'Apply value' option.
+
+        When apply_alpha_check=True (old default), the tool first sets every pixel
+        to the alpha spinbox value (255), then clamps to [min, max].  Because 255
+        is always ≥ any min floor, clamp_min has zero visible effect — the output
+        is just a flat max-ceiling value.
+
+        With apply_alpha_check=False (new default), only clamping is applied:
+        pixels above max are capped, pixels below min are raised, everything else
+        keeps its original value.  This is what users intuitively expect when they
+        set min=0, max=155."""
+        src = self._alpha_tool_source()
+        # Find the block where _apply_alpha_check is created and setChecked
+        check_pos = src.find("self._apply_alpha_check = QCheckBox(")
+        self.assertGreater(check_pos, 0, "_apply_alpha_check not found")
+        # Look for setChecked near the widget definition (within 800 chars)
+        nearby = src[check_pos:check_pos + 800]
+        self.assertIn("setChecked(False)", nearby,
+                      "_apply_alpha_check must default to setChecked(False) so that "
+                      "Min/Max clamping works immediately without side effects from the "
+                      "set-value step")
+        self.assertNotIn("setChecked(True)", nearby,
+                         "_apply_alpha_check must NOT default to setChecked(True); "
+                         "that silently converts clamp-only mode to set+clamp and makes "
+                         "clamp_min ineffective when the set value (255) ≥ min floor")
+
+    def test_alpha_spin_disabled_by_default(self):
+        """_alpha_spin and _alpha_slider must be created in the disabled state.
+
+        They are only meaningful when 'Apply value to pixels' is checked.
+        Disabling them by default gives a clear visual signal that the Min/Max
+        spinboxes are the primary controls and the alpha value input is optional."""
+        src = self._alpha_tool_source()
+        # After _alpha_spin is created, setEnabled(False) must appear before
+        # the next widget is added (i.e., close to the spin definition)
+        spin_pos = src.find("self._alpha_spin = QSpinBox()")
+        self.assertGreater(spin_pos, 0, "_alpha_spin not found")
+        nearby = src[spin_pos:spin_pos + 600]
+        self.assertIn("_alpha_spin.setEnabled(False)", nearby,
+                      "_alpha_spin must call setEnabled(False) immediately after "
+                      "creation so it is disabled by default (Min/Max are primary)")
+        self.assertIn("_alpha_slider.setEnabled(False)", nearby,
+                      "_alpha_slider must call setEnabled(False) immediately after "
+                      "creation so it is disabled by default")
+
     def test_use_preset_renamed_auto_fills(self):
         """The 'Use preset' checkbox label must mention 'auto-fills' to make
         its purpose obvious to users who don't use presets."""
@@ -1592,10 +1640,9 @@ class TestAlphaToolUISimplification(unittest.TestCase):
     def test_hint_label_in_setup_ui(self):
         """_setup_ui must add an explanatory hint label to guide new users."""
         src = self._alpha_tool_source()
-        # The hint should mention both entering a value and picking a preset
-        self.assertIn("Type an alpha value", src,
-                      "Fine-tune section should have a hint label mentioning "
-                      "typing a value")
+        # The hint should mention the Min/Max output range and presets
+        self.assertIn("Min/Max", src,
+                      "Fine-tune section should have a hint label mentioning 'Min/Max'")
         self.assertIn("preset", src.lower(),
                       "Hint label should mention presets")
 

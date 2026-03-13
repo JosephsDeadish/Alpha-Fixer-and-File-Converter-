@@ -432,19 +432,21 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Type an alpha value below OR pick a preset above — then click ▶ Process"
+            "ℹ  Set Min/Max output range below OR pick a preset — then click ▶ Process.  "
+            "To set a fixed alpha value, enable 'Apply value' in Advanced Options."
         )
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)
         hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gt_layout.addWidget(hint_lbl, 0, 0, 1, 2)
 
-        # ── Alpha value (primary control – shown first so it's obvious) ────────
+        # ── Alpha value (only active when 'Apply value' is checked) ───────────
         lbl_alpha_val = QLabel("Alpha value (0–255):")
         lbl_alpha_val.setMinimumHeight(24)
         lbl_alpha_val.setToolTip(
-            "The alpha value to apply to every pixel  (0 = fully transparent, 255 = fully opaque).\n"
-            "Type any number 0–255 or drag the slider.\n"
+            "The alpha value to apply to every pixel (0 = fully transparent, 255 = fully opaque).\n"
+            "Only active when 'Apply value to pixels' is checked in Advanced Options.\n"
+            "Disabled by default — Min/Max output range is the primary control.\n"
             "Selecting a preset fills this in automatically."
         )
         gt_layout.addWidget(lbl_alpha_val, 1, 0)
@@ -452,11 +454,13 @@ class AlphaFixerTab(QWidget):
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(255)
         self._alpha_spin.setMinimumHeight(26)
+        self._alpha_spin.setEnabled(False)   # disabled until 'Apply value' is checked
         gt_layout.addWidget(self._alpha_spin, 1, 1)
 
         self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
         self._alpha_slider.setRange(0, 255)
         self._alpha_slider.setValue(255)
+        self._alpha_slider.setEnabled(False)  # disabled until 'Apply value' is checked
         gt_layout.addWidget(self._alpha_slider, 2, 0, 1, 2)
 
         # ── Output range clamps ─────────────────────────────────────────────────
@@ -586,16 +590,22 @@ class AlphaFixerTab(QWidget):
         gt_layout.addWidget(self._mode_combo, 10, 1)
 
         # ── Apply-value checkbox (advanced) ─────────────────────────────────────
-        # Moved to Advanced so it doesn't confuse basic users.  The default
-        # (checked) means the alpha value above is applied to pixels; unchecked
-        # means only clamping is applied and existing pixel alpha is preserved.
+        # Default is UNCHECKED (clamp-only): only Min/Max output range is applied
+        # and existing per-pixel alpha variation is preserved.  Check this box to
+        # also set every pixel to the fixed alpha value above (set/multiply/etc.).
+        # Keeping clamp-only as the default means Min output and Max output always
+        # have an immediate, visible effect without needing to understand the
+        # interaction between the set-value step and the clamp step.
         self._apply_alpha_check = QCheckBox(
-            "Apply value to pixels  (uncheck = clamp only, preserve existing alpha)"
+            "Apply value to pixels  (sets a fixed alpha, then clamps to Min/Max)"
         )
-        self._apply_alpha_check.setChecked(True)
+        self._apply_alpha_check.setChecked(False)  # clamp-only by default
         self._apply_alpha_check.setToolTip(
-            "Checked (default): pixels are set/adjusted to the alpha value above.\n"
-            "Unchecked: pixel alpha values are kept as-is; only Min/Max clamping is applied.\n"
+            "Unchecked (default): existing per-pixel alpha values are kept;\n"
+            "only Min/Max output clamping is applied.  Min/Max always work in this mode.\n"
+            "Checked: every pixel's alpha is first set/adjusted to the value above,\n"
+            "then clamped to [Min, Max].  Note: if the set value ≥ Min, the Min floor\n"
+            "has no visible effect (the set value already satisfies the floor).\n"
             "Not used in 'normalize' mode (normalize always remaps the full range)."
         )
         gt_layout.addWidget(self._apply_alpha_check, 11, 0, 1, 2)
@@ -1060,7 +1070,7 @@ class AlphaFixerTab(QWidget):
                     # the user can see that clamp_min has no effect on the output.
                     # (clamp_min only raises the output when the set value < floor.)
                     if lo > 0 and val >= lo:
-                        parts.append(f"⚠ floor={lo} unused (set {val} ≥ floor)")
+                        parts.append(f"Warning ⚠: floor={lo} unused (set {val} ≥ floor)")
             else:
                 parts.append("clamp only")
                 if cmin > 0 or cmax < 255:
