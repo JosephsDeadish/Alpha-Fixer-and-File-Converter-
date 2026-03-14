@@ -36,6 +36,18 @@ _TRAIL_INTENSITY_MIN = 10
 _TRAIL_INTENSITY_MAX = 100
 _TRAIL_INTENSITY_DEFAULT = 100
 
+
+def _label_width(text_sample: str) -> int:
+    """Return a minimum pixel width wide enough for *text_sample* at the
+    current application font, plus a small 4-pixel margin.  This replaces
+    ``setFixedWidth(N)`` hard-codes so slider value labels scale with the
+    system font size and HiDPI settings.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QFontMetrics
+    fm = QFontMetrics(QApplication.font())
+    return fm.horizontalAdvance(text_sample) + 4
+
 # Human-friendly labels for click-effect keys, in display order
 _EFFECT_OPTIONS = [
     ("default",      "Default — Pink sparks ✨"),
@@ -70,7 +82,13 @@ class ColorButton(QPushButton):
         self._color = color
         self._update_style()
         self.clicked.connect(self._pick)
-        self.setFixedSize(50, 26)
+        # Size is font-relative so it scales correctly on HiDPI / large-font
+        # systems.  em ≈ point size of the application font in pixels.
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QFontMetrics
+        fm = QFontMetrics(QApplication.font())
+        em = fm.height()
+        self.setFixedSize(int(em * 3.2), int(em * 1.6))
 
     def color(self) -> str:
         return self._color
@@ -105,7 +123,7 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        self.setMinimumSize(800, 660)
+        self.setMinimumSize(800, 600)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:
@@ -459,7 +477,7 @@ class SettingsDialog(QDialog):
             "Short = snappy; Long = lingering ghost trail."
         )
         self._trail_length_val_lbl = QLabel(str(_TRAIL_LENGTH_DEFAULT))
-        self._trail_length_val_lbl.setFixedWidth(30)
+        self._trail_length_val_lbl.setMinimumWidth(_label_width("200"))
         length_row = QHBoxLayout()
         length_row.addWidget(self._trail_length_slider)
         length_row.addWidget(self._trail_length_val_lbl)
@@ -479,7 +497,7 @@ class SettingsDialog(QDialog):
             "1 = very slow (long ghost), 10 = very fast (sharp snap)."
         )
         self._trail_fade_val_lbl = QLabel(str(_TRAIL_FADE_DEFAULT))
-        self._trail_fade_val_lbl.setFixedWidth(30)
+        self._trail_fade_val_lbl.setMinimumWidth(_label_width("10"))
         fade_row = QHBoxLayout()
         fade_row.addWidget(self._trail_fade_slider)
         fade_row.addWidget(self._trail_fade_val_lbl)
@@ -498,7 +516,7 @@ class SettingsDialog(QDialog):
             "Maximum opacity of the trail (10 % = very faint, 100 % = fully bright)."
         )
         self._trail_intensity_val_lbl = QLabel(f"{_TRAIL_INTENSITY_DEFAULT}%")
-        self._trail_intensity_val_lbl.setFixedWidth(40)
+        self._trail_intensity_val_lbl.setMinimumWidth(_label_width("100%"))
         intensity_row = QHBoxLayout()
         intensity_row.addWidget(self._trail_intensity_slider)
         intensity_row.addWidget(self._trail_intensity_val_lbl)
@@ -581,7 +599,7 @@ class SettingsDialog(QDialog):
             "Only affects the Qt Multimedia backend; subprocess fallback ignores this."
         )
         self._sound_volume_lbl = QLabel("50%")
-        self._sound_volume_lbl.setFixedWidth(36)
+        self._sound_volume_lbl.setMinimumWidth(_label_width("100%"))
         self._sound_volume_slider.valueChanged.connect(
             lambda v: self._sound_volume_lbl.setText(f"{v}%")
         )

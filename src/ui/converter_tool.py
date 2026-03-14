@@ -220,10 +220,15 @@ class ConverterTab(QWidget):
         preview_row.setSpacing(4)
 
         def _make_info_panel() -> QLabel:
-            """Return a small fixed-width label for source/output metadata."""
+            """Return a small label for source/output metadata."""
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-            lbl.setFixedWidth(84)
+            # Font-metric width so the panel stays wide enough at any DPI /
+            # font-size combination.
+            from PyQt6.QtGui import QFontMetrics
+            from PyQt6.QtWidgets import QApplication
+            fm = QFontMetrics(QApplication.font())
+            lbl.setMinimumWidth(fm.horizontalAdvance("9999×9999") + 8)
             lbl.setWordWrap(True)
             lbl.setObjectName("stats_panel")
             lbl.setContentsMargins(2, 4, 2, 4)

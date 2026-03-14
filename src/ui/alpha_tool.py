@@ -337,10 +337,15 @@ class AlphaFixerTab(QWidget):
         compare_row.setSpacing(4)
 
         def _make_stats_panel() -> QLabel:
-            """Return a small fixed-width label used for alpha statistics."""
+            """Return a small label used for alpha statistics."""
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-            lbl.setFixedWidth(84)
+            # Use font metrics so the panel stays wide enough regardless of
+            # system font size or DPI.  "Min: 255" is the widest typical text.
+            from PyQt6.QtGui import QFontMetrics
+            from PyQt6.QtWidgets import QApplication
+            fm = QFontMetrics(QApplication.font())
+            lbl.setMinimumWidth(fm.horizontalAdvance("Min: 255") + 8)
             lbl.setWordWrap(True)
             lbl.setObjectName("stats_panel")
             lbl.setContentsMargins(2, 4, 2, 4)

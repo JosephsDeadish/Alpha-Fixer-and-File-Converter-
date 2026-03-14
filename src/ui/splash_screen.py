@@ -33,9 +33,17 @@ class ThemeSplashScreen(QSplashScreen):
     HEIGHT = 300
 
     def __init__(self, settings) -> None:
-        # Build a blank pixmap – we paint everything ourselves
+        # Determine the device-pixel ratio of the primary screen so we can
+        # create a high-resolution pixmap for crisp HiDPI rendering.
+        screen = QApplication.primaryScreen()
+        self._dpr: float = screen.devicePixelRatio() if screen else 1.0
+
+        # Build a blank pixmap – we paint everything ourselves.
+        # Physical size = logical size × device-pixel ratio so the splash
+        # renders at full resolution on HiDPI / Retina displays.
         from PyQt6.QtGui import QPixmap
-        pix = QPixmap(self.WIDTH, self.HEIGHT)
+        pix = QPixmap(int(self.WIDTH * self._dpr), int(self.HEIGHT * self._dpr))
+        pix.setDevicePixelRatio(self._dpr)
         pix.fill(Qt.GlobalColor.transparent)
         super().__init__(pix)
 
@@ -111,7 +119,8 @@ class ThemeSplashScreen(QSplashScreen):
 
     def _repaint_pixmap(self) -> None:
         from PyQt6.QtGui import QPixmap
-        pix = QPixmap(self.WIDTH, self.HEIGHT)
+        pix = QPixmap(int(self.WIDTH * self._dpr), int(self.HEIGHT * self._dpr))
+        pix.setDevicePixelRatio(self._dpr)
         pix.fill(Qt.GlobalColor.transparent)
         self._paint_background(pix)
         self.setPixmap(pix)

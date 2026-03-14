@@ -354,7 +354,7 @@ class MainWindow(QMainWindow):
 
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}")
-        self.setMinimumSize(1000, 780)
+        self.setMinimumSize(900, 700)
         # Set the panda SVG as the window / taskbar icon (initial default).
         # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
         # which contains all shell sizes (16 → 256 px) for crisp display at
@@ -840,6 +840,26 @@ class MainWindow(QMainWindow):
         y = self._settings.get("window_y")
         w = self._settings.get("window_w")
         h = self._settings.get("window_h")
+        # Guard against the window being positioned entirely off-screen
+        # (e.g. after a secondary monitor is disconnected).  We check that at
+        # least a strip of the title bar is visible on *some* available screen.
+        _MIN_VISIBLE_W = 100   # minimum logical pixels of title bar that must be visible
+        _MIN_VISIBLE_H = 50    # height of the title-bar strip we check
+        title_bar_strip = QRect(x, y, max(w, _MIN_VISIBLE_W), _MIN_VISIBLE_H)
+        screens = QApplication.screens()
+        on_screen = any(
+            scr.availableGeometry().intersects(title_bar_strip)
+            for scr in screens
+        )
+        if not on_screen:
+            # Centre on the primary (or first available) screen instead.
+            primary = QApplication.primaryScreen()
+            if primary is None and screens:
+                primary = screens[0]
+            if primary is not None:
+                ag = primary.availableGeometry()
+                x = ag.x() + max(0, (ag.width()  - w) // 2)
+                y = ag.y() + max(0, (ag.height() - h) // 2)
         self.setGeometry(x, y, w, h)
 
     def _save_geometry(self):
