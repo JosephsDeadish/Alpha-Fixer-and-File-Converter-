@@ -1078,6 +1078,35 @@ class TestSettingsManagerDefaults(unittest.TestCase):
         export_section = source[source.find("EXPORT_KEYS"):]
         self.assertIn('"converter_keep_metadata"', export_section)
 
+    def test_banner_anim_style_in_export_keys(self):
+        """banner_anim_style should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        self.assertIn('"banner_anim_style"', export_section)
+
+    def test_banner_use_theme_anim_in_export_keys(self):
+        """banner_use_theme_anim should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        self.assertIn('"banner_use_theme_anim"', export_section)
+
+    def test_button_anim_settings_in_export_keys(self):
+        """button_anim_enabled, button_anim_style, use_theme_button_anim should be in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        for key in ("button_anim_enabled", "button_anim_style", "use_theme_button_anim"):
+            self.assertIn(f'"{key}"', export_section,
+                          f"{key} missing from EXPORT_KEYS")
+
+    def test_selective_alpha_settings_in_export_keys(self):
+        """All sa_* user preferences should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        for key in ("sa_zone_alphas", "sa_brush_size", "sa_eraser_size",
+                    "sa_autocorrect", "sa_last_tool"):
+            self.assertIn(f'"{key}"', export_section,
+                          f"{key} missing from EXPORT_KEYS")
+
     def test_splash_screen_uses_banner_frames(self):
         """splash_screen.py should use get_theme_banner_frames, not just get_theme_banner."""
         splash_path = os.path.join(

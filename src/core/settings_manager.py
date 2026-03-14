@@ -427,12 +427,16 @@ class SettingsManager:
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
-        "animated_banner_enabled", "show_splash_screen",
+        "animated_banner_enabled", "banner_anim_style", "banner_use_theme_anim",
+        "show_splash_screen",
+        "button_anim_enabled", "button_anim_style", "use_theme_button_anim",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
         "custom_presets",
+        # Selective Alpha Tool
+        "sa_zone_alphas", "sa_brush_size", "sa_eraser_size", "sa_autocorrect", "sa_last_tool",
     ]
 
     def export_settings(self, path: str) -> None:
