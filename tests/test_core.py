@@ -6269,3 +6269,95 @@ class TestRound18CanvasAndSaveHygiene(unittest.TestCase):
         # val = -100 → zone_idx = 99 (out of range)
         idx, valid = compute_zone_idx_and_valid(-100)
         self.assertFalse(valid)
+
+
+# ---------------------------------------------------------------------------
+# Round-19: _on_apply ownership-transfer fix (result = None after assignment)
+# ---------------------------------------------------------------------------
+
+class TestRound19OnApplyOwnershipTransfer(unittest.TestCase):
+    """Verify that result is nulled out after ownership transfer to _result_img."""
+
+    def test_on_apply_nulls_result_after_ownership_transfer(self):
+        """After self._result_img = result, result must be set to None so the
+        except handlers cannot close the image that is now owned by _result_img."""
+        import re
+        src_text = open(
+            "src/ui/selective_alpha_tool.py", encoding="utf-8"
+        ).read()
+        match = re.search(
+            r"def _on_apply\(self\).*?\n(?=    def )", src_text, re.S
+        )
+        self.assertIsNotNone(match, "_on_apply method not found")
+        body = match.group(0)
+
+        # Verify the sequence: assignment to _result_img followed immediately
+        # by result = None (ownership transfer pattern).
+        self.assertIn(
+            "self._result_img = result",
+            body,
+            "_on_apply must assign result to self._result_img",
+        )
+        # After the assignment, result must be reset to None
+        idx_assign = body.index("self._result_img = result")
+        idx_null   = body.find("result = None", idx_assign)
+        self.assertGreater(
+            idx_null, idx_assign,
+            "result = None must appear AFTER self._result_img = result "
+            "to prevent except handlers from closing the owned image",
+        )
+
+    def test_on_apply_ownership_transfer_logic(self):
+        """Verify that setting result=None after ownership transfer prevents
+        the except handler from closing an already-owned image."""
+        # Simulate the ownership-transfer pattern
+        class MockImage:
+            def __init__(self):
+                self.closed = False
+            def close(self):
+                self.closed = True
+
+        _result_img = None
+        result = MockImage()
+        img = result  # alias to track the object
+
+        # --- Fixed pattern ---
+        _result_img = result
+        result = None           # ownership transferred: nulled out
+
+        # If an exception occurs here:
+        if result is not None:  # ← result is None, so this is skipped
+            result.close()
+
+        # Image must NOT be closed — it is now owned by _result_img
+        self.assertFalse(img.closed, "Image must not be closed after ownership transfer")
+        self.assertIs(_result_img, img, "_result_img must hold the image")
+
+    def test_on_apply_without_null_would_close_owned_image(self):
+        """Regression test: without result=None, except handler would close owned image."""
+        class MockImage:
+            def __init__(self):
+                self.closed = False
+            def close(self):
+                self.closed = True
+
+        _result_img = None
+        result = MockImage()
+        img = result
+
+        # --- OLD (buggy) pattern: no result = None ---
+        _result_img = result
+        # Do NOT null result here (simulating the old code)
+
+        # Simulate what the except handler would do if dialog raised
+        if result is not None:
+            result.close()  # ← This closes self._result_img too!
+
+        # This shows the problem: the owned image was closed
+        self.assertTrue(
+            img.closed,
+            "Demonstrates the bug: without result=None the except handler "
+            "closes the image now owned by _result_img"
+        )
+        # _result_img now holds a closed image (dangling reference)
+        self.assertIs(_result_img, img)

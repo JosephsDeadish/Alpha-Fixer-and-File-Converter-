@@ -1460,6 +1460,9 @@ class SelectiveAlphaTool(QWidget):
                     self._result_history.pop(0).close()
                 self._btn_undo_process.setEnabled(True)
             self._result_img = result
+            # Null out the local so the except handlers below do not
+            # accidentally close the image that is now owned by _result_img.
+            result = None
             self._btn_save.setEnabled(True)
             QMessageBox.information(
                 self, "Done",
