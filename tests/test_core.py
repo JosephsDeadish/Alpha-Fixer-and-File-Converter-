@@ -5806,3 +5806,154 @@ class TestSelectiveAlphaZoomFormula(unittest.TestCase):
         )
         self.assertAlmostEqual(ix1, ix0, places=6)
         self.assertAlmostEqual(iy1, iy0, places=6)
+
+
+# ---------------------------------------------------------------------------
+# Round-16 improvements: _dilate_mask edge cases, threshold validation,
+# autocorrect identity check fix, settings persistence helpers
+# ---------------------------------------------------------------------------
+
+class TestRound16SelectiveAlphaImprovements(unittest.TestCase):
+    """Tests for the Round-16 improvements to selective_alpha_processor and settings."""
+
+    # ---- _dilate_mask edge cases ------------------------------------------
+
+    def test_dilate_mask_radius_zero_returns_copy(self):
+        """radius=0 should return a copy of the input unchanged."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.array([[False, True], [True, False]])
+        result = _dilate_mask(mask, 0)
+        np.testing.assert_array_equal(result, mask)
+        # Must be a copy, not the same object
+        self.assertIsNot(result, mask)
+
+    def test_dilate_mask_empty_mask_stays_empty(self):
+        """An all-False mask should remain all-False after dilation."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.zeros((8, 8), dtype=bool)
+        result = _dilate_mask(mask, 3)
+        self.assertFalse(result.any())
+
+    def test_dilate_mask_expands_by_one_per_iteration(self):
+        """A single True pixel dilated by radius 1 should give a + shape (5 pixels)."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.zeros((7, 7), dtype=bool)
+        mask[3, 3] = True
+        result = _dilate_mask(mask, 1)
+        # Centre + 4-connected neighbours
+        expected_count = 5
+        self.assertEqual(int(result.sum()), expected_count)
+        self.assertTrue(result[3, 3])   # centre still set
+        self.assertTrue(result[2, 3])   # up
+        self.assertTrue(result[4, 3])   # down
+        self.assertTrue(result[3, 2])   # left
+        self.assertTrue(result[3, 4])   # right
+
+    def test_dilate_mask_full_mask_stays_full(self):
+        """A fully-set mask should remain fully set after any dilation."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.ones((6, 6), dtype=bool)
+        result = _dilate_mask(mask, 2)
+        self.assertTrue(result.all())
+
+    def test_dilate_mask_radius_negative_returns_copy(self):
+        """Negative radius should be treated the same as 0 (no expansion)."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.zeros((4, 4), dtype=bool)
+        mask[1, 1] = True
+        result = _dilate_mask(mask, -1)
+        np.testing.assert_array_equal(result, mask)
+
+    # ---- edge_flood_fill threshold validation ----------------------------
+
+    def test_flood_fill_invalid_threshold_warns_and_clamps(self):
+        """Threshold outside [0, 1] should emit a UserWarning and be clamped."""
+        import warnings
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            mask = edge_flood_fill((5, 5), edge_map, threshold=50.0)
+        self.assertTrue(any(issubclass(x.category, UserWarning) for x in w),
+                        "Expected a UserWarning for out-of-range threshold")
+        # With threshold clamped to 1.0 all pixels are below it → fills all
+        self.assertTrue(mask.all(), "All pixels should be filled when threshold=1.0")
+
+    def test_flood_fill_threshold_zero_only_fills_seed(self):
+        """threshold=0.0 means any edge value >= 0 blocks (blocks everywhere).
+        The seed itself is below threshold only if edge_map[seed]==-epsilon,
+        which is impossible for a float32 >= 0 array.
+        Seed is on edge_map=0.0 which is NOT < threshold=0.0, so result is empty."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        mask = edge_flood_fill((5, 5), edge_map, threshold=0.0)
+        # seed pixel (5, 5) has edge_map=0.0 >= threshold=0.0 → blocked immediately
+        self.assertFalse(mask.any(), "threshold=0.0 blocks every pixel")
+
+    def test_flood_fill_threshold_exactly_one(self):
+        """threshold=1.0 blocks only pixels at edge strength exactly 1.0."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        h, w = 8, 8
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        edge_map[:, 4] = 1.0   # full-strength barrier at col 4
+        mask = edge_flood_fill((0, 0), edge_map, threshold=1.0)
+        # Left side should be filled, right of barrier should not
+        self.assertTrue(mask[0, 0])
+        self.assertFalse(mask.any() and mask[:, 5:].any(),
+                         "Fill should not cross full-strength barrier")
+
+    # ---- autocorrect identity-check fix (np.array_equal vs `is`) ---------
+
+    def test_autocorrect_returns_same_pixels_when_no_improvement(self):
+        """When autocorrect adds no new pixels the result should equal the input."""
+        from src.core.selective_alpha_processor import autocorrect_mask
+        mask = np.zeros((20, 20), dtype=bool)
+        mask[5:15, 5:15] = True
+        # No strong edges anywhere → nothing to snap to
+        edge_map = np.zeros((20, 20), dtype=np.float32)
+        result = autocorrect_mask(mask, edge_map, search_radius=4, edge_threshold=0.5)
+        np.testing.assert_array_equal(result, mask,
+            "No-improvement result should equal the original mask element-wise")
+
+    # ---- settings persistence helpers ------------------------------------
+
+    def _make_sm(self):
+        """Return a SettingsManager with an in-memory dict backing _qs."""
+        try:
+            from src.core.settings_manager import SettingsManager
+        except (ImportError, ModuleNotFoundError):
+            self.skipTest("PyQt6 not available in this environment")
+        store: dict = {}
+
+        class _FakeQS:
+            def value(self, key, default=None):
+                return store.get(key, default)
+            def setValue(self, key, value):
+                store[key] = value
+
+        sm = SettingsManager.__new__(SettingsManager)
+        sm._qs = _FakeQS()
+        return sm
+
+    def test_sa_zone_alphas_round_trip(self):
+        """get_sa_zone_alphas / set_sa_zone_alphas round-trip preserves values."""
+        sm = self._make_sm()
+        alphas = [10, 20, 30, 40, 50, 60, 70]
+        sm.set_sa_zone_alphas(alphas)
+        result = sm.get_sa_zone_alphas()
+        self.assertEqual(result, alphas)
+
+    def test_sa_zone_alphas_clamps_values(self):
+        """Values outside [0, 255] should be clamped silently."""
+        sm = self._make_sm()
+        sm.set_sa_zone_alphas([-10, 300, 128, 128, 128, 128, 128])
+        result = sm.get_sa_zone_alphas()
+        self.assertEqual(result[0], 0,   "Negative value should clamp to 0")
+        self.assertEqual(result[1], 255, "Value > 255 should clamp to 255")
+
+    def test_sa_zone_alphas_returns_default_on_corrupt_data(self):
+        """Corrupt JSON should fall back to the default [128]*7."""
+        sm = self._make_sm()
+        sm._qs.setValue("sa_zone_alphas", "not_valid_json")
+        result = sm.get_sa_zone_alphas()
+        self.assertEqual(result, [128] * 7)

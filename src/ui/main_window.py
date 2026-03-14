@@ -371,7 +371,7 @@ class MainWindow(QMainWindow):
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
-        self._selective_alpha_tab = SelectiveAlphaTool()
+        self._selective_alpha_tab = SelectiveAlphaTool(self._settings)
         self._tabs.addTab(self._alpha_tab, "🖼  Alpha & RGBA Adjuster")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
         self._tabs.addTab(self._history_tab, "📋  History")

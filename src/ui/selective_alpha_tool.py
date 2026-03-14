@@ -493,7 +493,7 @@ class SelectiveAlphaCanvas(QWidget):
             return
         bool_mask = np.array(mask, dtype=np.uint8) > 127
         snapped   = autocorrect_mask(bool_mask, edge_map)
-        if snapped is bool_mask:
+        if np.array_equal(snapped, bool_mask):
             return
         # Write result back to the PIL mask
         new_pil = Image.fromarray((snapped * 255).astype(np.uint8), "L")
@@ -797,11 +797,15 @@ class SelectiveAlphaCanvas(QWidget):
         elif self._tool == "rect":
             self._push_history()
             self._paint_rect_on_mask(sx, sy, ix, iy)
+            if self._autocorrect:
+                self._apply_autocorrect(self._active_zone)
             self.mask_changed.emit(self._active_zone)
 
         elif self._tool == "ellipse":
             self._push_history()
             self._paint_ellipse_on_mask(sx, sy, ix, iy)
+            if self._autocorrect:
+                self._apply_autocorrect(self._active_zone)
             self.mask_changed.emit(self._active_zone)
 
         self._drawing      = False
@@ -946,6 +950,12 @@ class _ZoneRow(QWidget):
     def alpha_value(self) -> int:
         return self._alpha_spin.value()
 
+    def set_alpha(self, value: int) -> None:
+        """Set the alpha spinbox value (0-255) without emitting extra signals."""
+        self._alpha_spin.blockSignals(True)
+        self._alpha_spin.setValue(max(0, min(255, value)))
+        self._alpha_spin.blockSignals(False)
+
     def set_selected(self, selected: bool) -> None:
         self._sel_btn.setChecked(selected)
         self.setProperty("active", str(selected).lower())
@@ -967,8 +977,9 @@ class _ZoneRow(QWidget):
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, settings_manager=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._settings = settings_manager
         self._src_path: str = ""
         # Current applied result and history stack for the Undo Process feature.
         # _result_img holds the most recently applied image; _result_history
@@ -977,6 +988,7 @@ class SelectiveAlphaTool(QWidget):
         # Stack of previously applied result images for Undo Process
         self._result_history: list[Image.Image] = []
         self._setup_ui()
+        self._restore_settings()
 
     # ----------------------------------------------------------------- setup
 
@@ -1202,6 +1214,13 @@ class SelectiveAlphaTool(QWidget):
         self._brush_spin.valueChanged.connect(lambda _: self._update_status())
         self._eraser_spin.valueChanged.connect(lambda _: self._update_status())
 
+        # Auto-save settings when the user adjusts tool options.
+        self._brush_spin.valueChanged.connect(lambda _: self._save_settings())
+        self._eraser_spin.valueChanged.connect(lambda _: self._save_settings())
+        self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
+        for row in self._zone_rows:
+            row._alpha_spin.valueChanged.connect(lambda _: self._save_settings())
+
         # Keyboard shortcuts
         self._setup_shortcuts()
 
@@ -1213,6 +1232,49 @@ class SelectiveAlphaTool(QWidget):
         QShortcut(QKeySequence("Ctrl+O"),       self).activated.connect(self._on_open)
         QShortcut(QKeySequence("Ctrl+S"),       self).activated.connect(self._on_save)
         QShortcut(QKeySequence("Ctrl+Return"),  self).activated.connect(self._on_apply)
+
+    def _restore_settings(self) -> None:
+        """Restore previously saved Selective Alpha Tool settings."""
+        if self._settings is None:
+            return
+        # Restore zone alpha values
+        alphas = self._settings.get_sa_zone_alphas()
+        for row, alpha in zip(self._zone_rows, alphas):
+            row.set_alpha(alpha)
+        # Restore brush / eraser sizes
+        self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
+        self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
+        # Restore autocorrect toggle
+        self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
+        # Restore last-used drawing tool
+        last_tool = str(self._settings.get("sa_last_tool", "freehand"))
+        if last_tool in self._tool_btns:
+            self._tool_btns[last_tool].setChecked(True)
+            self._on_tool_selected(last_tool)
+
+    def _save_settings(self) -> None:
+        """Persist the current Selective Alpha Tool settings."""
+        if self._settings is None:
+            return
+        self._settings.set_sa_zone_alphas(
+            [row.alpha_value() for row in self._zone_rows]
+        )
+        self._settings.set("sa_brush_size",  self._brush_spin.value())
+        self._settings.set("sa_eraser_size", self._eraser_spin.value())
+        self._settings.set("sa_autocorrect", self._autocorrect_chk.isChecked())
+        self._settings.set("sa_last_tool",   self._canvas._tool)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        """Save settings and release canvas PIL images on widget close."""
+        self._save_settings()
+        self._canvas.clear_all_masks()
+        if self._result_img is not None:
+            self._result_img.close()
+            self._result_img = None
+        for img in self._result_history:
+            img.close()
+        self._result_history.clear()
+        super().closeEvent(event)
 
     # ---------------------------------------------------------------- helpers
 
@@ -1409,6 +1471,7 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.set_tool(key)
         self._btn_close_poly.setVisible(key == "polygon")
         self._update_status()
+        self._save_settings()
 
     def _on_close_polygon(self) -> None:
         """Programmatically close the in-progress polygon."""

@@ -116,11 +116,22 @@ def edge_flood_fill(
     seed      : ``(x, y)`` pixel coordinate in image space (col, row).
     edge_map  : float32 (h, w) array from :func:`detect_edges`.
     threshold : pixels with edge strength >= threshold block expansion.
+                Must be in [0.0, 1.0].
 
     Returns
     -------
     bool ndarray, shape (h, w)
     """
+    if not (0.0 <= threshold <= 1.0):
+        import warnings
+        warnings.warn(
+            f"edge_flood_fill: threshold={threshold!r} is outside [0.0, 1.0]; "
+            "clamping to valid range.",
+            UserWarning,
+            stacklevel=2,
+        )
+        threshold = max(0.0, min(1.0, threshold))
+
     h, w = edge_map.shape
     x0, y0 = int(seed[0]), int(seed[1])
     result = np.zeros((h, w), dtype=bool)
@@ -165,7 +176,8 @@ def _dilate_mask(mask: np.ndarray, radius: int) -> np.ndarray:
     for _ in range(radius):
         padded = np.pad(result, 1, constant_values=False)
         result = (
-            padded[:-2, 1:-1] | padded[2:, 1:-1]
+            padded[1:-1, 1:-1]              # original pixels (keep existing set)
+            | padded[:-2, 1:-1] | padded[2:, 1:-1]
             | padded[1:-1, :-2] | padded[1:-1, 2:]
         )
     return result
