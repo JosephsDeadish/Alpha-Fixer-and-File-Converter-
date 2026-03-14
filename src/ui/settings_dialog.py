@@ -556,26 +556,77 @@ class SettingsDialog(QDialog):
         sound_gl.setColumnStretch(1, 1)
         sound_gl.setHorizontalSpacing(10)
         sound_gl.setVerticalSpacing(6)
-        self._sound_check = QCheckBox("Enable click sounds (off by default)")
+        self._sound_check = QCheckBox("Enable sounds (off by default)")
         self._sound_check.setToolTip(
-            "Play a sound on each click. Off by default.\n"
-            "Your choice is remembered between sessions."
+            "Master switch — enables all application sounds.\n"
+            "Off by default. Individual events can still be muted below."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
-        self._use_theme_sound_check = QCheckBox("Use theme sound (each theme has its own click sound)")
+        self._use_theme_sound_check = QCheckBox("Use theme sound (click sound follows the active theme)")
         self._use_theme_sound_check.setToolTip(
             "When enabled the click sound changes to match the active theme.\n"
             "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc."
         )
         sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
-        sound_gl.addWidget(QLabel("Custom .wav:"), 2, 0)
+
+        # Volume slider
+        sound_gl.addWidget(QLabel("Volume:"), 2, 0)
+        vol_row = QHBoxLayout()
+        self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self._sound_volume_slider.setRange(0, 100)
+        self._sound_volume_slider.setValue(50)
+        self._sound_volume_slider.setToolTip(
+            "Master volume for all application sounds (0 = silent, 100 = full).\n"
+            "Only affects the Qt Multimedia backend; subprocess fallback ignores this."
+        )
+        self._sound_volume_lbl = QLabel("50%")
+        self._sound_volume_lbl.setFixedWidth(36)
+        self._sound_volume_slider.valueChanged.connect(
+            lambda v: self._sound_volume_lbl.setText(f"{v}%")
+        )
+        vol_row.addWidget(self._sound_volume_slider, 1)
+        vol_row.addWidget(self._sound_volume_lbl)
+        sound_gl.addLayout(vol_row, 2, 1)
+
+        sound_gl.addWidget(QLabel("Custom click .wav:"), 3, 0)
         sound_row = QHBoxLayout()
         self._click_sound_edit = QLineEdit()
         self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
         self._btn_sound_browse = QPushButton("Browse…")
         sound_row.addWidget(self._click_sound_edit, 1)
         sound_row.addWidget(self._btn_sound_browse)
-        sound_gl.addLayout(sound_row, 2, 1)
+        sound_gl.addLayout(sound_row, 3, 1)
+
+        # Per-event sound toggles
+        sound_gl.addWidget(QLabel("Event sounds:"), 4, 0)
+        events_row = QHBoxLayout()
+        self._sound_success_check = QCheckBox("Completion")
+        self._sound_success_check.setToolTip(
+            "Play a cheerful chime when a batch finishes with no errors."
+        )
+        self._sound_error_check = QCheckBox("Error")
+        self._sound_error_check.setToolTip(
+            "Play a descending buzz when a batch finishes with file errors."
+        )
+        self._sound_unlock_check = QCheckBox("Unlock")
+        self._sound_unlock_check.setToolTip(
+            "Play an ascending fanfare when a secret theme is unlocked."
+        )
+        self._sound_file_add_check = QCheckBox("File added")
+        self._sound_file_add_check.setToolTip(
+            "Play a soft thunk when files are dropped into the queue."
+        )
+        self._sound_preview_check = QCheckBox("Preview")
+        self._sound_preview_check.setToolTip(
+            "Play a subtle ping every time the live preview image refreshes.\n"
+            "Off by default — can be distracting during rapid parameter changes."
+        )
+        for chk in (self._sound_success_check, self._sound_error_check,
+                    self._sound_unlock_check, self._sound_file_add_check,
+                    self._sound_preview_check):
+            events_row.addWidget(chk)
+        sound_gl.addLayout(events_row, 4, 1)
+
         tv.addWidget(grp_sound)
 
         # ---- Button Press Animation GroupBox ----
@@ -834,6 +885,12 @@ class SettingsDialog(QDialog):
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
         self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
+        self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
+        self._sound_success_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_error_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_unlock_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_file_add_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_preview_check.toggled.connect(self._on_sound_event_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
@@ -939,6 +996,9 @@ class SettingsDialog(QDialog):
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
+            self._sound_volume_slider,
+            self._sound_success_check, self._sound_error_check, self._sound_unlock_check,
+            self._sound_file_add_check, self._sound_preview_check,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -962,6 +1022,14 @@ class SettingsDialog(QDialog):
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
         self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
+        vol = int(self._settings.get("sound_volume", 50))
+        self._sound_volume_slider.setValue(max(0, min(100, vol)))
+        self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
+        self._sound_success_check.setChecked(self._settings.get("sound_success", True))
+        self._sound_error_check.setChecked(self._settings.get("sound_error", True))
+        self._sound_unlock_check.setChecked(self._settings.get("sound_unlock", True))
+        self._sound_file_add_check.setChecked(self._settings.get("sound_file_add", True))
+        self._sound_preview_check.setChecked(self._settings.get("sound_preview", False))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1057,6 +1125,12 @@ class SettingsDialog(QDialog):
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
+        mgr.register(self._sound_volume_slider, "sound_volume_slider")
+        mgr.register(self._sound_success_check, "sound_success_check")
+        mgr.register(self._sound_error_check, "sound_error_check")
+        mgr.register(self._sound_unlock_check, "sound_unlock_check")
+        mgr.register(self._sound_file_add_check, "sound_file_add_check")
+        mgr.register(self._sound_preview_check, "sound_preview_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -1359,6 +1433,18 @@ class SettingsDialog(QDialog):
     def _on_sound_path_changed(self) -> None:
         self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
         self.settings_changed.emit()
+
+    def _on_sound_volume_changed(self, value: int) -> None:
+        self._settings.set("sound_volume", value)
+        # No settings_changed emit needed — volume is read at play time.
+
+    def _on_sound_event_changed(self) -> None:
+        """Save per-event sound toggle states."""
+        self._settings.set("sound_success", self._sound_success_check.isChecked())
+        self._settings.set("sound_error", self._sound_error_check.isChecked())
+        self._settings.set("sound_unlock", self._sound_unlock_check.isChecked())
+        self._settings.set("sound_file_add", self._sound_file_add_check.isChecked())
+        self._settings.set("sound_preview", self._sound_preview_check.isChecked())
 
     def _on_trail_changed(self) -> None:
         self._settings.set("trail_enabled", self._trail_check.isChecked())

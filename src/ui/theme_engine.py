@@ -32,6 +32,7 @@ DEFAULT_THEME = {
     "_trail_color": "#e94560",
     "_banner_anim": "spin",
     "_button_anim": "press",
+    "_trail": "dots",
 }
 
 LIGHT_THEME = {
@@ -60,6 +61,7 @@ LIGHT_THEME = {
     "_trail_color": "#e94560",
     "_banner_anim": "spin",
     "_button_anim": "press",
+    "_trail": "dots",
 }
 
 NEON_THEME = {
@@ -88,6 +90,7 @@ NEON_THEME = {
     "_trail_color": "#00ff88",
     "_banner_anim": "shake",
     "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 GORE_THEME = {
@@ -116,6 +119,7 @@ GORE_THEME = {
     "_trail_color": "#cc0000",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
+    "_trail": "dots",
 }
 
 BAT_THEME = {
@@ -144,6 +148,7 @@ BAT_THEME = {
     "_trail_color": "#7b2dff",
     "_banner_anim": "flock",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 RAINBOW_THEME = {
@@ -172,6 +177,7 @@ RAINBOW_THEME = {
     "_trail_color": "#ffff00",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 OTTER_THEME = {
@@ -200,6 +206,7 @@ OTTER_THEME = {
     "_trail_color": "#e8a040",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "ribbon",
 }
 
 GALAXY_THEME = {
@@ -228,6 +235,7 @@ GALAXY_THEME = {
     "_trail_color": "#4477ff",
     "_banner_anim": "flock",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 GALAXY_OTTER_THEME = {
@@ -256,6 +264,7 @@ GALAXY_OTTER_THEME = {
     "_trail_color": "#a06aff",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 GOTH_THEME = {
@@ -284,6 +293,7 @@ GOTH_THEME = {
     "_trail_color": "#8800aa",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 VOLCANO_THEME = {
@@ -312,6 +322,7 @@ VOLCANO_THEME = {
     "_trail_color": "#ff4400",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
+    "_trail": "comet",
 }
 
 ARCTIC_THEME = {
@@ -340,6 +351,7 @@ ARCTIC_THEME = {
     "_trail_color": "#44aaff",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
@@ -370,6 +382,7 @@ SECRET_SKELETON_THEME = {
     "_unlock": "skeleton",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "dots",
 }
 
 SECRET_SAKURA_THEME = {
@@ -399,6 +412,7 @@ SECRET_SAKURA_THEME = {
     "_unlock": "sakura",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 FAIRY_THEME = {
@@ -427,6 +441,7 @@ FAIRY_THEME = {
     "_trail_color": "#ffccee",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_DEEP_OCEAN_THEME = {
@@ -456,6 +471,7 @@ SECRET_DEEP_OCEAN_THEME = {
     "_unlock": "ocean",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 PRESET_THEMES = {
@@ -504,6 +520,7 @@ MERMAID_THEME = {
     "_trail_color": "#00ccaa",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 SHARK_BAIT_THEME = {
@@ -532,6 +549,7 @@ SHARK_BAIT_THEME = {
     "_trail_color": "#1177cc",
     "_banner_anim": "shake",
     "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 ALIEN_THEME = {
@@ -560,6 +578,7 @@ ALIEN_THEME = {
     "_trail_color": "#00ff88",
     "_banner_anim": "bounce",
     "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 PRESET_THEMES.update({
@@ -598,6 +617,7 @@ NOODLE_THEME = {
     "_trail_color": "#ffdd44",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "ribbon",
 }
 
 # ---------------------------------------------------------------------------
@@ -630,6 +650,7 @@ PANCAKE_THEME = {
     "_trail_color": "#d4860a",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "ribbon",
 }
 
 PRESET_THEMES.update({
@@ -664,6 +685,7 @@ SECRET_BLOOD_MOON_THEME = {
     "_unlock": "blood_moon",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
+    "_trail": "dots",
 }
 
 SECRET_ICE_CAVE_THEME = {
@@ -693,6 +715,7 @@ SECRET_ICE_CAVE_THEME = {
     "_unlock": "ice_cave",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_CYBER_OTTER_THEME = {
@@ -722,6 +745,7 @@ SECRET_CYBER_OTTER_THEME = {
     "_unlock": "cyber_otter",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_TOXIC_NEON_THEME = {
@@ -751,6 +775,7 @@ SECRET_TOXIC_NEON_THEME = {
     "_unlock": "toxic_neon",
     "_banner_anim": "shake",
     "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 SECRET_LAVA_CAVE_THEME = {
@@ -780,6 +805,7 @@ SECRET_LAVA_CAVE_THEME = {
     "_unlock": "lava_cave",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
+    "_trail": "comet",
 }
 
 SECRET_SUNSET_BEACH_THEME = {
@@ -809,6 +835,7 @@ SECRET_SUNSET_BEACH_THEME = {
     "_unlock": "sunset_beach",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "wave",
 }
 
 SECRET_MIDNIGHT_FOREST_THEME = {
@@ -838,6 +865,7 @@ SECRET_MIDNIGHT_FOREST_THEME = {
     "_unlock": "midnight_forest",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 HIDDEN_THEMES = {
@@ -884,6 +912,7 @@ SECRET_CANDY_LAND_THEME = {
     "_unlock": "candy_land",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_ZOMBIE_THEME = {
@@ -913,6 +942,7 @@ SECRET_ZOMBIE_THEME = {
     "_unlock": "zombie",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
+    "_trail": "dots",
 }
 
 SECRET_DRAGON_THEME = {
@@ -942,6 +972,7 @@ SECRET_DRAGON_THEME = {
     "_unlock": "dragon_fire",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
+    "_trail": "comet",
 }
 
 SECRET_BUBBLEGUM_THEME = {
@@ -971,6 +1002,7 @@ SECRET_BUBBLEGUM_THEME = {
     "_unlock": "bubblegum",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "wave",
 }
 
 SECRET_THUNDER_THEME = {
@@ -1000,6 +1032,7 @@ SECRET_THUNDER_THEME = {
     "_unlock": "thunder_storm",
     "_banner_anim": "shake",
     "_button_anim": "shake",
+    "_trail": "comet",
 }
 
 SECRET_ROSE_GOLD_THEME = {
@@ -1029,6 +1062,7 @@ SECRET_ROSE_GOLD_THEME = {
     "_unlock": "rose_gold",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_SPACE_CAT_THEME = {
@@ -1058,6 +1092,7 @@ SECRET_SPACE_CAT_THEME = {
     "_unlock": "space_cat",
     "_banner_anim": "flock",
     "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_MUSHROOM_THEME = {
@@ -1087,6 +1122,7 @@ SECRET_MUSHROOM_THEME = {
     "_unlock": "magic_mushroom",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_ABYSSAL_THEME = {
@@ -1116,6 +1152,7 @@ SECRET_ABYSSAL_THEME = {
     "_unlock": "abyssal_void",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 SECRET_SPRING_THEME = {
@@ -1145,6 +1182,7 @@ SECRET_SPRING_THEME = {
     "_unlock": "spring_bloom",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_GOLD_RUSH_THEME = {
@@ -1174,6 +1212,7 @@ SECRET_GOLD_RUSH_THEME = {
     "_unlock": "gold_rush",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "sparkle",
 }
 
 SECRET_NEBULA_THEME = {
@@ -1203,6 +1242,7 @@ SECRET_NEBULA_THEME = {
     "_unlock": "nebula",
     "_banner_anim": "flock",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 HIDDEN_THEMES.update({
@@ -1251,6 +1291,7 @@ SECRET_CRYSTAL_CAVE_THEME = {
     "_unlock": "crystal_cave",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_GLITCH_THEME = {
@@ -1280,6 +1321,7 @@ SECRET_GLITCH_THEME = {
     "_unlock": "glitch",
     "_banner_anim": "shake",
     "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 SECRET_WILD_WEST_THEME = {
@@ -1309,6 +1351,7 @@ SECRET_WILD_WEST_THEME = {
     "_unlock": "wild_west",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "dots",
 }
 
 SECRET_PIRATE_THEME = {
@@ -1338,6 +1381,7 @@ SECRET_PIRATE_THEME = {
     "_unlock": "pirate",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 SECRET_DEEP_SPACE_THEME = {
@@ -1367,6 +1411,7 @@ SECRET_DEEP_SPACE_THEME = {
     "_unlock": "deep_space",
     "_banner_anim": "flock",
     "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 SECRET_WITCHS_BREW_THEME = {
@@ -1396,6 +1441,7 @@ SECRET_WITCHS_BREW_THEME = {
     "_unlock": "witchs_brew",
     "_banner_anim": "pendulum",
     "_button_anim": "bounce",
+    "_trail": "sparkle",
 }
 
 SECRET_LAVA_LAMP_THEME = {
@@ -1425,6 +1471,7 @@ SECRET_LAVA_LAMP_THEME = {
     "_unlock": "lava_lamp",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "ribbon",
 }
 
 SECRET_CORAL_REEF_THEME = {
@@ -1454,6 +1501,7 @@ SECRET_CORAL_REEF_THEME = {
     "_unlock": "coral_reef",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 SECRET_STORM_CLOUD_THEME = {
@@ -1483,6 +1531,7 @@ SECRET_STORM_CLOUD_THEME = {
     "_unlock": "storm_cloud",
     "_banner_anim": "shake",
     "_button_anim": "shake",
+    "_trail": "comet",
 }
 
 SECRET_GOLDEN_HOUR_THEME = {
@@ -1512,6 +1561,7 @@ SECRET_GOLDEN_HOUR_THEME = {
     "_unlock": "golden_hour",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 HIDDEN_THEMES.update({

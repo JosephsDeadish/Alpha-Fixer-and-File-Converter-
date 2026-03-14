@@ -1103,16 +1103,21 @@ class MainWindow(QMainWindow):
         if use_theme:
             theme = self._settings.get_theme()
             color = theme.get("_trail_color", "#e94560")
-            effect = theme.get("_effect", "default")
-            # Map effect → trail style
-            if effect == "fairy":
-                style = "fairy"
-            elif effect in ("ocean", "mermaid", "ripple"):
-                style = "wave"
-            elif effect in ("sparkle", "ice"):
-                style = "sparkle"
+            # Use the explicit _trail key added to every theme dict.
+            # Fall back to the legacy _effect → style mapping for any custom
+            # themes that were saved before the _trail key was introduced.
+            if "_trail" in theme:
+                style = theme["_trail"]
             else:
-                style = "dots"
+                effect = theme.get("_effect", "default")
+                if effect == "fairy":
+                    style = "fairy"
+                elif effect in ("ocean", "mermaid", "ripple"):
+                    style = "wave"
+                elif effect in ("sparkle", "ice"):
+                    style = "sparkle"
+                else:
+                    style = "dots"
         else:
             color = self._settings.get("trail_color", "#e94560")
             style = self._settings.get("trail_style", "dots")

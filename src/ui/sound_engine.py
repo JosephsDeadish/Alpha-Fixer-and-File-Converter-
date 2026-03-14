@@ -365,6 +365,14 @@ class SoundEngine(QObject):
     # Public API
     # ------------------------------------------------------------------
 
+    def _volume(self) -> float:
+        """Return the current master volume as a 0.0–1.0 float."""
+        raw = self._settings.get("sound_volume", 50)
+        try:
+            return max(0.0, min(1.0, int(raw) / 100.0))
+        except (TypeError, ValueError):
+            return 0.45
+
     def install_on_app(self, app: QObject) -> None:
         """Install event filter so every button click triggers a sound."""
         self._filter = _ButtonClickFilter(self)
@@ -405,12 +413,16 @@ class SoundEngine(QObject):
         """Play the success chime after a batch completes cleanly."""
         if not self._settings.get("sound_enabled", False):
             return
+        if not self._settings.get("sound_success", True):
+            return
         if self._success_wav:
             self._play(self._success_wav)
 
     def play_error(self) -> None:
         """Play the error buzz when a batch finishes with failures."""
         if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_error", True):
             return
         if self._error_wav:
             self._play(self._error_wav)
@@ -419,6 +431,8 @@ class SoundEngine(QObject):
         """Play the unlock fanfare when a hidden theme is revealed."""
         if not self._settings.get("sound_enabled", False):
             return
+        if not self._settings.get("sound_unlock", True):
+            return
         if self._unlock_wav:
             self._play(self._unlock_wav)
 
@@ -426,12 +440,16 @@ class SoundEngine(QObject):
         """Play a soft 'thunk' when a file is added to the queue."""
         if not self._settings.get("sound_enabled", False):
             return
+        if not self._settings.get("sound_file_add", True):
+            return
         if self._file_add_wav:
             self._play(self._file_add_wav)
 
     def play_preview(self) -> None:
         """Play a subtle ping when the live preview refreshes."""
         if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_preview", False):
             return
         if self._preview_wav:
             self._play(self._preview_wav)
@@ -447,6 +465,8 @@ class SoundEngine(QObject):
                 current_src = self._effect.source().toLocalFile()
                 if current_src != wav_path:
                     self._effect.setSource(QUrl.fromLocalFile(wav_path))
+                # Apply master volume (0.0–1.0) from settings
+                self._effect.setVolume(self._volume())
                 if not self._effect.isPlaying():
                     self._effect.play()
             except Exception as exc:
