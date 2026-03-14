@@ -64,7 +64,7 @@ _NORMAL: dict[str, list[str]] = {
         "In-progress file will finish; queued files will be skipped.",
         "Shortcut: Esc stops processing from anywhere.",
         "Files already processed will keep their changes.",
-        "You can resume by clicking Process again.",
+        "You can start a new batch by clicking the run button again.",
     ],
     "preset_combo": [
         "Choose a preset alpha profile for common platforms.",
@@ -110,7 +110,7 @@ _NORMAL: dict[str, list[str]] = {
         "PS2 Normalize: set Max to 128 to produce PS2-accurate alpha values.",
     ],
     "invert_check": [
-        "Invert the alpha channel after applying the other operations.",
+        "Invert the alpha channel before the min/max remapping is applied.",
         "Flips opaque ↔ transparent across all processed pixels.",
         "Combine with threshold for creative masking effects.",
         "Useful for converting 'transparency maps' to 'opacity maps'.",
@@ -126,7 +126,7 @@ _NORMAL: dict[str, list[str]] = {
     "out_dir": [
         "Specify a custom output folder for processed files.",
         "Leave blank to save output alongside each source file.",
-        "Processed files get a '_fixed' suffix by default.",
+        "Use the suffix field to add a string like '_fixed' to output filenames.",
         "Use the Browse button to pick the folder visually.",
         "The folder will be created automatically if it doesn't exist.",
     ],
@@ -145,7 +145,7 @@ _NORMAL: dict[str, list[str]] = {
         "Works for any image format supported by the app.",
     ],
     "file_list": [
-        "Files queued for alpha processing. Drag & drop files or folders here.",
+        "Files queued for processing. Drag & drop files or folders here.",
         "Right-click any item to remove it from the queue.",
         "Press Delete to remove selected items.",
         "Select a file to see a before/after preview below.",
@@ -600,7 +600,7 @@ _NORMAL: dict[str, list[str]] = {
         "Enable RGBA channel adjustments in addition to the alpha processing.",
         "When unchecked, the Red/Green/Blue/Alpha delta spinboxes have no effect.",
         "Tick this to colour-correct textures while also fine-tuning their alpha.",
-        "Alpha preset runs first, then the RGBA deltas are applied on top.",
+        "Alpha processing runs first, then the RGBA deltas are applied on top.",
         "Leave unchecked if you only need to fix transparency, not colours.",
     ],
     "suffix_edit": [
@@ -1432,7 +1432,7 @@ _DUMBED: dict[str, list[str]] = {
         "Check this to make the Red/Green/Blue/Alpha adjustments actually do something.",
         "Without this checked those RGBA spinboxes are just decoration.",
         "Enables color AND alpha correction on top of the alpha fix. Double the fun.",
-        "Alpha preset runs first, then the RGBA deltas kick in. Order matters.",
+        "Alpha processing runs first, then the RGBA deltas kick in. Order matters.",
         "If nothing looks different, check this box first. Yeah, that's why.",
     ],
     "suffix_edit": [
@@ -2272,7 +2272,7 @@ _VULGAR: dict[str, list[str]] = {
         "Flip this on or the RGBA spinboxes do absolutely nothing. Not a bug.",
         "Enable RGBA adjustments. Without this, all four channel changes = void.",
         "Check it. Apply it. Watch colors AND alpha shift. Feel the power.",
-        "Alpha preset runs first, then the RGBA fuckery. Order of operations.",
+        "Alpha processing runs first, then the RGBA fuckery. Order of operations.",
         "Turn this off if you just want alpha fixed and don't need channels messed with.",
         "This checkbox activates the entire R/G/B/A delta system. Off = none of those sliders do anything.",
         "For color correction ON TOP of your alpha fix, check this. Without it, every single RGBA spinbox is decorative furniture. Absolutely useless.",
