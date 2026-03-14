@@ -1174,6 +1174,11 @@ class MainWindow(QMainWindow):
         # Flush any buffered QSettings writes to disk before closing.
         # This is the one place we explicitly sync since set() no longer
         # calls sync() after every write (which caused per-click disk I/O).
+        # Save Selective Alpha Tool state first so it is included in the sync.
+        try:
+            self._selective_alpha_tab._save_settings()
+        except Exception:
+            pass
         try:
             self._settings.sync()
         except Exception:

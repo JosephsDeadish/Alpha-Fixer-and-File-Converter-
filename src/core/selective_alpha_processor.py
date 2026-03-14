@@ -262,7 +262,23 @@ def apply_selective_alpha(
     Returns
     -------
     A new RGBA PIL Image.
+
+    Raises
+    ------
+    ValueError
+        If ``zone_masks`` or ``zone_alphas`` do not each have exactly
+        :data:`NUM_ZONES` elements.
     """
+    if len(zone_masks) != NUM_ZONES:
+        raise ValueError(
+            f"zone_masks must have exactly {NUM_ZONES} elements, "
+            f"got {len(zone_masks)}"
+        )
+    if len(zone_alphas) != NUM_ZONES:
+        raise ValueError(
+            f"zone_alphas must have exactly {NUM_ZONES} elements, "
+            f"got {len(zone_alphas)}"
+        )
     out = img.convert("RGBA")
     try:
         arr = np.array(out, dtype=np.uint8)
@@ -295,7 +311,17 @@ def composite_zones(
     Returns
     -------
     uint8 ndarray (h, w, 4) – blended composite.
+
+    Raises
+    ------
+    ValueError
+        If ``zone_masks`` does not have exactly :data:`NUM_ZONES` elements.
     """
+    if len(zone_masks) != NUM_ZONES:
+        raise ValueError(
+            f"zone_masks must have exactly {NUM_ZONES} elements, "
+            f"got {len(zone_masks)}"
+        )
     out = src_rgba.astype(np.float32, copy=True)
     for mask, (r, g, b, oa) in zip(zone_masks, ZONE_COLORS):
         if mask is None or not mask.any():

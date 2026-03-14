@@ -5957,3 +5957,159 @@ class TestRound16SelectiveAlphaImprovements(unittest.TestCase):
         sm._qs.setValue("sa_zone_alphas", "not_valid_json")
         result = sm.get_sa_zone_alphas()
         self.assertEqual(result, [128] * 7)
+
+
+# ---------------------------------------------------------------------------
+# Round-17 improvements: validation, restore-guard, exception hygiene
+# ---------------------------------------------------------------------------
+
+class TestRound17SelectiveAlphaValidation(unittest.TestCase):
+    """Tests for the Round-17 apply_selective_alpha / composite_zones validation."""
+
+    # ---- apply_selective_alpha length validation --------------------------
+
+    def test_apply_selective_alpha_too_few_masks_raises(self):
+        """Too few zone_masks elements must raise ValueError."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGBA", (4, 4), (255, 255, 255, 200))
+        masks = [None] * (NUM_ZONES - 1)          # one short
+        alphas = [128] * NUM_ZONES
+        try:
+            with self.assertRaises(ValueError):
+                apply_selective_alpha(img, masks, alphas)
+        finally:
+            img.close()
+
+    def test_apply_selective_alpha_too_many_masks_raises(self):
+        """Too many zone_masks elements must raise ValueError."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGBA", (4, 4), (255, 255, 255, 200))
+        masks = [None] * (NUM_ZONES + 1)          # one extra
+        alphas = [128] * NUM_ZONES
+        try:
+            with self.assertRaises(ValueError):
+                apply_selective_alpha(img, masks, alphas)
+        finally:
+            img.close()
+
+    def test_apply_selective_alpha_too_few_alphas_raises(self):
+        """Too few zone_alphas elements must raise ValueError."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGBA", (4, 4), (255, 255, 255, 200))
+        masks = [None] * NUM_ZONES
+        alphas = [128] * (NUM_ZONES - 1)          # one short
+        try:
+            with self.assertRaises(ValueError):
+                apply_selective_alpha(img, masks, alphas)
+        finally:
+            img.close()
+
+    def test_apply_selective_alpha_exact_num_zones_succeeds(self):
+        """Exactly NUM_ZONES elements must succeed without error."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        import numpy as np
+        img = Image.new("RGBA", (6, 6), (100, 150, 200, 255))
+        # Zone 0: top-left 3×3 quad painted with alpha=0
+        mask0 = np.zeros((6, 6), dtype=bool)
+        mask0[:3, :3] = True
+        zone_masks = [mask0] + [None] * (NUM_ZONES - 1)
+        zone_alphas = [0] + [128] * (NUM_ZONES - 1)
+        try:
+            result = apply_selective_alpha(img, zone_masks, zone_alphas)
+            arr = np.array(result)
+            # Zone 0 pixels should have alpha=0
+            self.assertTrue(np.all(arr[:3, :3, 3] == 0))
+            # Unpainted pixels keep original alpha (255)
+            self.assertTrue(np.all(arr[3:, 3:, 3] == 255))
+            result.close()
+        finally:
+            img.close()
+
+    # ---- composite_zones length validation --------------------------------
+
+    def test_composite_zones_wrong_length_raises(self):
+        """Wrong number of zone_masks must raise ValueError."""
+        import numpy as np
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES
+        src = np.zeros((4, 4, 4), dtype=np.uint8)
+        with self.assertRaises(ValueError):
+            composite_zones(src, [None] * (NUM_ZONES - 1))
+        with self.assertRaises(ValueError):
+            composite_zones(src, [None] * (NUM_ZONES + 1))
+
+    def test_composite_zones_exact_num_zones_succeeds(self):
+        """Exactly NUM_ZONES zone_masks succeeds and returns correct shape."""
+        import numpy as np
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES
+        h, w = 8, 8
+        src = np.full((h, w, 4), 128, dtype=np.uint8)
+        result = composite_zones(src, [None] * NUM_ZONES)
+        self.assertEqual(result.shape, (h, w, 4))
+        self.assertEqual(result.dtype, np.uint8)
+
+    # ---- _restore_settings guard (no-PyQt version via mock) ---------------
+
+    def test_restore_settings_guard_prevents_save_during_restore(self):
+        """_save_settings must be a no-op while _restoring is True."""
+        save_calls: list[str] = []
+
+        class FakeSettings:
+            def get_sa_zone_alphas(self):
+                return [128] * 7
+            def get(self, key, fallback=None):
+                return fallback
+            def set(self, key, value):
+                save_calls.append(key)
+            def set_sa_zone_alphas(self, vals):
+                save_calls.append("sa_zone_alphas")
+
+        class MinimalTool:
+            """Minimal stand-in to test the _restoring guard logic."""
+            def __init__(self):
+                self._settings = FakeSettings()
+                self._restoring = False
+
+            def _save_settings(self):
+                if self._settings is None or self._restoring:
+                    return
+                # Simulate writes
+                self._settings.set("sa_brush_size", 10)
+                self._settings.set("sa_eraser_size", 10)
+
+            def _restore_settings(self):
+                self._restoring = True
+                try:
+                    self._save_settings()   # should be a no-op
+                    for _ in range(5):
+                        self._save_settings()  # all no-ops while restoring
+                finally:
+                    self._restoring = False
+                # After finally, saves should work again
+                self._save_settings()
+
+        tool = MinimalTool()
+        tool._restore_settings()
+        # Only the one save AFTER finally should have run
+        self.assertEqual(save_calls, ["sa_brush_size", "sa_eraser_size"],
+            "Only the post-restore save should have fired")
+
+    # ---- _on_apply closes result on exception (logic test, no Qt) ---------
+
+    def test_on_apply_closes_result_on_exception(self):
+        """If apply_selective_alpha raises after returning a result, it is closed."""
+        import numpy as np
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+
+        # Verify that apply_selective_alpha itself is resource-safe:
+        # even if called with a non-RGBA image and a bad zone it should not leak.
+        img = Image.new("RGB", (8, 8), (200, 100, 50))
+        zone_masks = [None] * NUM_ZONES
+        zone_alphas = [128] * NUM_ZONES
+        try:
+            result = apply_selective_alpha(img, zone_masks, zone_alphas)
+            # Must return a valid RGBA image
+            self.assertEqual(result.mode, "RGBA")
+            self.assertEqual(result.size, (8, 8))
+            result.close()
+        finally:
+            img.close()

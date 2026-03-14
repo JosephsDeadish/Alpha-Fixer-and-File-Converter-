@@ -987,6 +987,8 @@ class SelectiveAlphaTool(QWidget):
         self._result_img: Image.Image | None = None
         # Stack of previously applied result images for Undo Process
         self._result_history: list[Image.Image] = []
+        # Flag set during settings restoration to suppress spurious auto-saves.
+        self._restoring: bool = False
         self._setup_ui()
         self._restore_settings()
 
@@ -1237,24 +1239,28 @@ class SelectiveAlphaTool(QWidget):
         """Restore previously saved Selective Alpha Tool settings."""
         if self._settings is None:
             return
-        # Restore zone alpha values
-        alphas = self._settings.get_sa_zone_alphas()
-        for row, alpha in zip(self._zone_rows, alphas):
-            row.set_alpha(alpha)
-        # Restore brush / eraser sizes
-        self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
-        self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
-        # Restore autocorrect toggle
-        self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
-        # Restore last-used drawing tool
-        last_tool = str(self._settings.get("sa_last_tool", "freehand"))
-        if last_tool in self._tool_btns:
-            self._tool_btns[last_tool].setChecked(True)
-            self._on_tool_selected(last_tool)
+        self._restoring = True
+        try:
+            # Restore zone alpha values
+            alphas = self._settings.get_sa_zone_alphas()
+            for row, alpha in zip(self._zone_rows, alphas):
+                row.set_alpha(alpha)
+            # Restore brush / eraser sizes
+            self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
+            self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
+            # Restore autocorrect toggle
+            self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
+            # Restore last-used drawing tool
+            last_tool = str(self._settings.get("sa_last_tool", "freehand"))
+            if last_tool in self._tool_btns:
+                self._tool_btns[last_tool].setChecked(True)
+                self._on_tool_selected(last_tool)
+        finally:
+            self._restoring = False
 
     def _save_settings(self) -> None:
         """Persist the current Selective Alpha Tool settings."""
-        if self._settings is None:
+        if self._settings is None or self._restoring:
             return
         self._settings.set_sa_zone_alphas(
             [row.alpha_value() for row in self._zone_rows]
@@ -1412,6 +1418,9 @@ class SelectiveAlphaTool(QWidget):
 
         try:
             src_img = self._canvas.get_source_image()
+            # Initialise to None so the except handlers can safely close it
+            # if apply_selective_alpha raises after allocating an intermediate image.
+            result = None
             result = apply_selective_alpha(
                 src_img, bool_masks, zone_alphas
             )
@@ -1429,7 +1438,17 @@ class SelectiveAlphaTool(QWidget):
                 "Alpha zones applied successfully.\n"
                 "Click 'Save Result…' to export the image."
             )
+        except MemoryError:
+            if result is not None:
+                result.close()
+            QMessageBox.critical(
+                self, "Apply Error",
+                "Not enough memory to apply alpha zones to this image.\n"
+                "Try reducing the image size or closing other applications."
+            )
         except Exception as exc:
+            if result is not None:
+                result.close()
             QMessageBox.critical(self, "Apply Error", str(exc))
 
     def _on_mask_changed(self, zone_idx: int) -> None:
