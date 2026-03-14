@@ -29,7 +29,7 @@ from ..core.settings_manager import SettingsManager as _SettingsManager
 # Tip variant database
 # ---------------------------------------------------------------------------
 
-# Normal – 5 helpful variants per key
+# Normal – up to 6 helpful variants per key (commonly-used keys have 6; others may have 5 or more)
 _NORMAL: dict[str, list[str]] = {
     "add_files": [
         "Click to add image files to the processing queue.",
@@ -37,6 +37,7 @@ _NORMAL: dict[str, list[str]] = {
         "You can also drag and drop files directly into the list below.",
         "Hold Ctrl in the file dialog to select multiple files at once.",
         "Shortcut: Ctrl+O opens the Add Files dialog.",
+        "Tip: you can add the same file multiple times for batch preset testing.",
     ],
     "add_folder": [
         "Click to add an entire folder of images at once.",
@@ -44,6 +45,7 @@ _NORMAL: dict[str, list[str]] = {
         "Only supported image formats are picked up automatically.",
         "Great for batch-processing large game asset folders.",
         "Shortcut: Ctrl+Shift+O opens the Add Folder dialog.",
+        "Files added from a folder follow your 'Include subfolders' setting.",
     ],
     "clear_list": [
         "Removes all files from the queue. Does not delete files on disk.",
@@ -51,6 +53,7 @@ _NORMAL: dict[str, list[str]] = {
         "Useful when you want to start fresh without restarting the app.",
         "You can also right-click individual items to remove just one.",
         "Press Delete to remove selected items from the list.",
+        "Tip: add files again straight after clearing to rebuild the queue.",
     ],
     "process_btn": [
         "Start processing all queued files with the current settings.",
@@ -58,6 +61,7 @@ _NORMAL: dict[str, list[str]] = {
         "Check the log below for per-file results after processing.",
         "Shortcut: F5 starts processing from anywhere in the Alpha & RGBA Adjuster tab.",
         "Large batches? The progress bar shows completion %. You can stop with Esc.",
+        "Processing each file also counts toward unlocking hidden themes!",
     ],
     "stop_btn": [
         "Stop processing after the current file completes.",
@@ -65,6 +69,7 @@ _NORMAL: dict[str, list[str]] = {
         "Shortcut: Esc stops processing from anywhere.",
         "Files already processed will keep their changes.",
         "You can start a new batch by clicking the run button again.",
+        "The stop is graceful — the current file finishes before halting.",
     ],
     "preset_combo": [
         "Choose a preset alpha profile for common platforms.",
@@ -72,6 +77,7 @@ _NORMAL: dict[str, list[str]] = {
         "PS2 Force Opaque: uses alpha=128 (PS2 GS max).  PC Full Opacity: alpha=255 for PC/PCSX2.",
         "N64 / GameCube / Wii / PSP all expect fully opaque textures (alpha=255).",
         "Custom presets you save also appear here and have their description as a tooltip.",
+        "Select 'Manual' to bypass presets and set alpha values directly.",
     ],
     "save_preset": [
         "Save all current Alpha Channel Settings (alpha value, mode, threshold, clamp min/max, invert, binary cut) as a named preset.",
@@ -87,6 +93,7 @@ _NORMAL: dict[str, list[str]] = {
         "Don't worry – you can always recreate a preset with the same settings.",
         "This action cannot be undone, so be sure before clicking.",
         "You can save it again with a different name if you change your mind.",
+        "Only custom (user-created) presets are deletable — built-ins are permanent.",
     ],
     "threshold_spin": [
         "Advanced: only process pixels with alpha strictly below this value (0 = process all pixels).",
@@ -94,6 +101,7 @@ _NORMAL: dict[str, list[str]] = {
         "Useful for preserving already-opaque areas: set to 128 to leave fully-opaque pixels untouched.",
         "128 = only adjust pixels that are less than 50% opaque; fully opaque pixels are skipped.",
         "255 = process all pixels except those that are already fully opaque (alpha=255).",
+        "Combine with Binary Cut to create a hard-edge transparency mask at the threshold value.",
     ],
     "clamp_min_spin": [
         "Minimum alpha output: all pixels are remapped so the lowest alpha becomes this value.",
@@ -101,6 +109,7 @@ _NORMAL: dict[str, list[str]] = {
         "Example: set to 128 to ensure the minimum alpha output is 128.",
         "Works independently from Max — set any value without affecting Max.",
         "PS2 textures: typically leave at 0 to preserve the full transparency range.",
+        "Note: when Min equals Max, every pixel gets the same alpha value.",
     ],
     "clamp_max_spin": [
         "Maximum alpha output: all pixels are remapped so the highest alpha becomes this value.",
@@ -108,6 +117,7 @@ _NORMAL: dict[str, list[str]] = {
         "Example: set to 128 to remap all alpha so maximum becomes 128 (PS2 native full opacity).",
         "Works independently from Min — set any value without affecting Min.",
         "PS2 Normalize: set Max to 128 to produce PS2-accurate alpha values.",
+        "128 is the PS2 hardware maximum — the GPU interprets 128 as fully opaque.",
     ],
     "invert_check": [
         "Invert the alpha channel before the min/max remapping is applied.",
@@ -115,6 +125,7 @@ _NORMAL: dict[str, list[str]] = {
         "Combine with threshold for creative masking effects.",
         "Useful for converting 'transparency maps' to 'opacity maps'.",
         "The result is: new_alpha = 255 − computed_alpha.",
+        "Applied before clamp: invert first, then remap to [Min, Max].",
     ],
     "binary_cut_check": [
         "Binary cut: pixels at or above the threshold become 255 (fully opaque); below become 0 (fully transparent).",
@@ -122,6 +133,7 @@ _NORMAL: dict[str, list[str]] = {
         "The Threshold spinbox (in Advanced Options below) sets the cut point.",
         "Useful for sprite textures that require crisp, clean alpha edges.",
         "Result: every pixel's alpha is either 0 or 255 — nothing in between.",
+        "Binary cut ignores Min/Max remapping — alpha is simply 0 or 255.",
     ],
     "out_dir": [
         "Specify a custom output folder for processed files.",
@@ -129,6 +141,7 @@ _NORMAL: dict[str, list[str]] = {
         "Use the suffix field to add a string like '_fixed' to output filenames.",
         "Use the Browse button to pick the folder visually.",
         "The folder will be created automatically if it doesn't exist.",
+        "Relative paths are resolved relative to each source file's directory.",
     ],
     "recursive_check": [
         "When enabled, subfolders inside the selected folder are also scanned.",
@@ -136,6 +149,7 @@ _NORMAL: dict[str, list[str]] = {
         "Disable if you only want images directly in the selected folder.",
         "Works for both Add Folder in Alpha & RGBA Adjuster and the Converter tab.",
         "Deep nested directories are all included when this is checked.",
+        "The file counter updates to reflect all images found recursively.",
     ],
     "compare_widget": [
         "Drag the red ◀▶ handle left or right to compare before and after.",
@@ -143,6 +157,7 @@ _NORMAL: dict[str, list[str]] = {
         "The comparison updates automatically when you change settings.",
         "Select a file from the list above to start comparing.",
         "Works for any image format supported by the app.",
+        "Double-click the compare widget to zoom to fit the current preview.",
     ],
     "file_list": [
         "Files queued for processing. Drag & drop files or folders here.",
@@ -150,6 +165,7 @@ _NORMAL: dict[str, list[str]] = {
         "Press Delete to remove selected items.",
         "Select a file to see a before/after preview below.",
         "The counter shows how many files are in the queue.",
+        "Sort order: files are processed in the order they appear in this list.",
     ],
     "convert_btn": [
         "Convert all queued files to the selected output format.",
@@ -157,6 +173,7 @@ _NORMAL: dict[str, list[str]] = {
         "Output files are placed in the configured output folder.",
         "Quality setting affects JPEG/WEBP output; ignored for lossless formats.",
         "Progress is shown in the bar below.",
+        "Each converted file also counts toward hidden theme unlocks!",
     ],
     "format_combo": [
         "Choose the target image format for conversion.",
@@ -164,6 +181,7 @@ _NORMAL: dict[str, list[str]] = {
         "PNG: lossless with alpha.  JPEG: lossy, no alpha, small file.  WEBP: modern, small.",
         "DDS: DirectX GPU textures.  TGA: classic game/3D format with alpha.",
         "AVIF: cutting-edge, excellent compression.  QOI: fast lossless with alpha.",
+        "GIF: animated support (palette-only, 256 colours max).  BMP: uncompressed, always compatible.",
     ],
     "quality_spin": [
         "Quality percentage for lossy formats (JPEG, WEBP).",
@@ -171,6 +189,7 @@ _NORMAL: dict[str, list[str]] = {
         "100 = maximum quality (near-lossless for WEBP).",
         "85 is a good balance of quality and size for most uses.",
         "Ignored for lossless formats like PNG, BMP, and TGA.",
+        "For DDS, quality affects the level of compression detail retained.",
     ],
     "settings_btn": [
         "Open the Settings dialog to customize themes, effects, and behavior.",
@@ -178,6 +197,7 @@ _NORMAL: dict[str, list[str]] = {
         "Settings are saved automatically and persist between sessions.",
         "You can also export/import your settings via the Settings menu.",
         "Shortcut: Ctrl+, opens Settings.",
+        "Tip: hover over settings controls to get detailed tooltips explaining each option.",
     ],
     "theme_combo": [
         "Choose a visual theme for the application.",
@@ -209,10 +229,11 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "tooltip_mode_combo": [
         "Controls how tooltips appear throughout the application.",
-        "Normal: cycles through 5 helpful tips per widget.",
+        "Normal: cycles through up to 6 helpful tips per widget.",
         "Off: disables all tooltips.",
         "Dumbed Down: simplified tips with some light roasting.",
         "No Filter 🤬: extremely vulgar, funny, and still helpful.",
+        "Tip: changing this mode for the first time can unlock a hidden theme!",
     ],
     "tooltip_style_combo": [
         "Controls the visual shape of tooltip boxes — separate from their text content.",
@@ -610,12 +631,14 @@ _NORMAL: dict[str, list[str]] = {
         "Off by default — gives an audio cue that work has begun.",
         "Useful when you start a long batch and want to know it has kicked off.",
         "The sound is two quick beeps going up in pitch (440 Hz then 660 Hz).",
+        "Pair with the success sound for a full audio start-to-finish workflow.",
     ],
     "sound_file_remove_check": [
         "Play a short descending pop when files are removed from the processing queue.",
         "Off by default — audible confirmation that files have been removed.",
         "Fires when you press Delete or use the right-click Remove option.",
         "The sound is a quick downward pitch sweep — distinct from the file-add sound.",
+        "Useful in headphone workflows to confirm you removed the right file.",
     ],
     "reset_all_settings": [
         "Reset ALL application settings to their factory defaults.",

@@ -288,8 +288,27 @@ class MainWindow(QMainWindow):
         (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
     ]
 
+    # Alternative unlock path: number of *alpha-fix files processed* required.
+    # Uses the same settings keys as _UNLOCK_TABLE so the first path to fire wins
+    # and no duplicate notification is shown.
+    _ALPHA_MILESTONES = [
+        (10,   "unlock_ice_cave",     "❄ 'Ice Cave' theme unlocked! (10 alpha fixes done)"),
+        (50,   "unlock_ocean",        "🌊 'Deep Ocean' theme unlocked! (50 alpha fixes done)"),
+        (250,  "unlock_midnight_forest", "🌲 'Midnight Forest' theme unlocked! (250 alpha fixes done)"),
+        (1000, "unlock_nebula",       "🌌 'Nebula' theme unlocked! (1 000 alpha fixes done)"),
+        (5000, "unlock_golden_hour",  "🌇 'Golden Hour' theme unlocked! (5 000 alpha fixes done)"),
+    ]
+
+    # Alternative unlock path: number of *converted files* required.
+    _CONV_MILESTONES = [
+        (10,   "unlock_blood_moon",   "🩸 'Blood Moon' theme unlocked! (10 conversions done)"),
+        (50,   "unlock_dragon_fire",  "🐉 'Dragon Fire' theme unlocked! (50 conversions done)"),
+        (250,  "unlock_spring_bloom", "🌷 'Spring Bloom' theme unlocked! (250 conversions done)"),
+        (1000, "unlock_crystal_cave", "💎 'Crystal Cave' theme unlocked! (1 000 conversions done)"),
+        (5000, "unlock_coral_reef",   "🪸 'Coral Reef' theme unlocked! (5 000 conversions done)"),
+    ]
+
     def __init__(self, settings: SettingsManager):
-        super().__init__()
         self._settings = settings
         self._preset_mgr = PresetManager(settings)
         self._trail_overlay = None
@@ -543,6 +562,9 @@ class MainWindow(QMainWindow):
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
         self._converter_tab.processing_done.connect(self._on_processing_done)
+        # Additional connections for per-tool milestone unlocks
+        self._alpha_tab.processing_done.connect(self._on_alpha_processing_done)
+        self._converter_tab.processing_done.connect(self._on_conv_processing_done)
         # Processing-error sounds
         self._alpha_tab.processing_error.connect(self._on_processing_error)
         self._converter_tab.processing_error.connect(self._on_processing_error)
@@ -1134,7 +1156,54 @@ class MainWindow(QMainWindow):
                 pass
             self._schedule_unlock_clear()
 
-    def _apply_trail(self):
+    def _run_milestone_checks(self, total: int,
+                              table: list[tuple[int, str, str]]) -> None:
+        """Evaluate *table* against *total* and fire any newly reached milestones.
+
+        Re-uses the existing unlock-notification infrastructure so milestone
+        unlocks look identical to click-based ones.
+        """
+        newly_unlocked = False
+        for threshold, key, message in table:
+            if threshold > total:
+                break
+            if not self._settings.get(key, False):
+                self._settings.set(key, True)
+                self._unlock_lbl.setText(message)
+                try:
+                    self._sound.play_unlock()
+                except Exception:
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
+                newly_unlocked = True
+        if newly_unlocked:
+            self._schedule_unlock_clear()
+
+    def _on_alpha_processing_done(self, file_count: int) -> None:
+        """Track cumulative alpha fixes and check alpha-milestone unlocks."""
+        if file_count <= 0:
+            return
+        try:
+            total = self._settings.get("alpha_fixes_total", 0) + file_count
+            self._settings.set("alpha_fixes_total", total)
+            self._run_milestone_checks(total, self._ALPHA_MILESTONES)
+        except Exception:
+            pass
+
+    def _on_conv_processing_done(self, file_count: int) -> None:
+        """Track cumulative conversions and check conversion-milestone unlocks."""
+        if file_count <= 0:
+            return
+        try:
+            total = self._settings.get("conversions_total", 0) + file_count
+            self._settings.set("conversions_total", total)
+            self._run_milestone_checks(total, self._CONV_MILESTONES)
+        except Exception:
+            pass
+
+
         """Apply trail color, style, length, fade speed, intensity and enabled state."""
         if self._trail_overlay is None:
             return

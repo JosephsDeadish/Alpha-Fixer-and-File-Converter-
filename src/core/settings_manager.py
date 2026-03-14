@@ -146,6 +146,9 @@ class SettingsManager:
         "unlock_gold_rush": False,
         "unlock_nebula": False,
         "total_clicks": 0,
+        # Counters for alternative unlock paths
+        "alpha_fixes_total": 0,
+        "conversions_total": 0,
         # Tooltip visual style (separate from tooltip text mode)
         "tooltip_style": "Auto (follow theme)",
         # Animated banner SVGs / spinning emojis (off by default for performance)
@@ -399,7 +402,8 @@ class SettingsManager:
         """
         _unlock_keys = [k for k in self._DEFAULTS if k.startswith("unlock_")]
         _progress_keys = [k for k in self._DEFAULTS if k in (
-            "total_clicks", "alpha_fix_done_once", "conversion_done_once",
+            "total_clicks", "alpha_fixes_total", "conversions_total",
+            "alpha_fix_done_once", "conversion_done_once",
         )]
         for key in _unlock_keys + _progress_keys:
             self._qs.setValue(key, self._DEFAULTS[key])
