@@ -279,7 +279,7 @@ def apply_selective_alpha(
             f"zone_alphas must have exactly {NUM_ZONES} elements, "
             f"got {len(zone_alphas)}"
         )
-    out = img.convert("RGBA")
+    out = img.convert("RGBA") if img.mode != "RGBA" else img
     try:
         arr = np.array(out, dtype=np.uint8)
         # Apply from lowest priority to highest so zone 0 is written last
@@ -289,7 +289,8 @@ def apply_selective_alpha(
                 arr[mask, 3] = np.uint8(np.clip(alpha_val, 0, 255))
         return Image.fromarray(arr, "RGBA")
     finally:
-        out.close()
+        if out is not img:
+            out.close()
 
 
 # ---------------------------------------------------------------------------

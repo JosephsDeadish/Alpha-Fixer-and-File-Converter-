@@ -183,7 +183,11 @@ class SelectiveAlphaCanvas(QWidget):
         try:
             img = Image.open(path)
             img.load()
-            rgba = img.convert("RGBA")
+            try:
+                rgba = img.convert("RGBA")
+            except MemoryError:
+                img.close()
+                raise
             if rgba is not img:
                 img.close()
             if self._src_img is not None:
@@ -233,6 +237,8 @@ class SelectiveAlphaCanvas(QWidget):
             self._masks[i] = None
         self._composite_dirty = True
         self.update()
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
 
     def set_active_zone(self, idx: int) -> None:
         self._active_zone = max(0, min(NUM_ZONES - 1, idx))

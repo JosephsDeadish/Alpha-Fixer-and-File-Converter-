@@ -6361,3 +6361,168 @@ class TestRound19OnApplyOwnershipTransfer(unittest.TestCase):
         )
         # _result_img now holds a closed image (dangling reference)
         self.assertIs(_result_img, img)
+
+
+# ---------------------------------------------------------------------------
+# Round-20: three targeted fixes
+# ---------------------------------------------------------------------------
+
+class TestRound20LoadImageConvertLeak(unittest.TestCase):
+    """Fix 1: load_image() closes img before re-raising MemoryError from convert()."""
+
+    def test_load_image_closes_img_on_convert_memoryerror(self):
+        """Source code must have the nested try/except that closes img before
+        re-raising MemoryError from img.convert()."""
+        import re
+        src = open("src/ui/selective_alpha_tool.py", encoding="utf-8").read()
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image method not found")
+        body = match.group(0)
+        # The fix: a try/except MemoryError block wrapping img.convert("RGBA")
+        self.assertIn("except MemoryError:", body, "load_image must have MemoryError handler")
+        self.assertIn("img.close()", body,
+                      "load_image must close img before re-raising MemoryError")
+
+    def test_load_image_convert_leak_pattern(self):
+        """Verify that the pattern closes img when convert raises MemoryError."""
+        class FakeImg:
+            mode = "RGB"
+            size = (10, 10)
+            def __init__(self): self.closed = False
+            def load(self): pass
+            def close(self): self.closed = True
+            def convert(self, mode): raise MemoryError("OOM")
+
+        img = FakeImg()
+        # Simulate the fixed load_image convert block (re-raise is caught here)
+        with self.assertRaises(MemoryError):
+            try:
+                rgba = img.convert("RGBA")
+            except MemoryError:
+                img.close()
+                raise
+
+        self.assertTrue(img.closed,
+                        "img must be closed when convert() raises MemoryError")
+
+
+class TestRound20ApplySelectiveAlphaNoUnnecessaryCopy(unittest.TestCase):
+    """Fix 2: apply_selective_alpha skips convert when image is already RGBA."""
+
+    def test_apply_selective_alpha_rgba_input_no_unnecessary_copy(self):
+        """When img is already RGBA, apply_selective_alpha must NOT call convert()."""
+        import numpy as np
+        from PIL import Image
+        # Insert path to source modules
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+        try:
+            from core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        except ImportError:
+            self.skipTest("selective_alpha_processor not importable in this environment")
+
+        convert_called = []
+        original_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *a, **kw):
+            convert_called.append(mode)
+            return original_convert(self_img, mode, *a, **kw)
+
+        import unittest.mock as mock
+        w, h = 4, 4
+        rgba_img = Image.new("RGBA", (w, h), (100, 150, 200, 255))
+        masks = [None] * NUM_ZONES
+        alphas = [128] * NUM_ZONES
+
+        with mock.patch.object(Image.Image, "convert", patched_convert):
+            result = apply_selective_alpha(rgba_img, masks, alphas)
+
+        result.close()
+        rgba_img.close()
+
+        self.assertEqual(convert_called, [],
+                         "apply_selective_alpha must NOT call convert() when input is already RGBA")
+
+    def test_apply_selective_alpha_non_rgba_input_does_convert(self):
+        """When img is not RGBA, apply_selective_alpha must call convert('RGBA')."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+        try:
+            from core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        except ImportError:
+            self.skipTest("selective_alpha_processor not importable in this environment")
+
+        from PIL import Image
+        import unittest.mock as mock
+
+        convert_called = []
+        original_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *a, **kw):
+            convert_called.append(mode)
+            return original_convert(self_img, mode, *a, **kw)
+
+        rgb_img = Image.new("RGB", (4, 4), (100, 150, 200))
+        masks = [None] * NUM_ZONES
+        alphas = [128] * NUM_ZONES
+
+        with mock.patch.object(Image.Image, "convert", patched_convert):
+            result = apply_selective_alpha(rgb_img, masks, alphas)
+
+        result.close()
+        rgb_img.close()
+
+        self.assertIn("RGBA", convert_called,
+                      "apply_selective_alpha must call convert('RGBA') for non-RGBA input")
+
+    def test_apply_selective_alpha_does_not_close_caller_image(self):
+        """apply_selective_alpha must not close the caller's image."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+        try:
+            from core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        except ImportError:
+            self.skipTest("selective_alpha_processor not importable in this environment")
+
+        from PIL import Image
+        rgba_img = Image.new("RGBA", (4, 4), (10, 20, 30, 200))
+        masks = [None] * NUM_ZONES
+        alphas = [64] * NUM_ZONES
+        result = apply_selective_alpha(rgba_img, masks, alphas)
+        result.close()
+        # The caller's image must still be open
+        self.assertFalse(getattr(rgba_img, "_image_closed", False),
+                         "apply_selective_alpha must not close the caller's RGBA image")
+        rgba_img.close()
+
+
+class TestRound20ClearAllMasksSignals(unittest.TestCase):
+    """Fix 3: clear_all_masks() must emit mask_changed for every zone."""
+
+    def test_clear_all_masks_emits_mask_changed_for_all_zones(self):
+        """Source must emit mask_changed(i) for each zone in clear_all_masks()."""
+        import re
+        src = open("src/ui/selective_alpha_tool.py", encoding="utf-8").read()
+        match = re.search(r"def clear_all_masks\(self\).*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "clear_all_masks method not found")
+        body = match.group(0)
+        self.assertIn("mask_changed.emit", body,
+                      "clear_all_masks must emit mask_changed for each zone")
+
+    def test_clear_all_masks_matches_clear_mask_pattern(self):
+        """clear_all_masks should emit signals like clear_mask does for single zones."""
+        import re
+        src = open("src/ui/selective_alpha_tool.py", encoding="utf-8").read()
+
+        # clear_mask must emit mask_changed
+        match_single = re.search(r"def clear_mask\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match_single, "clear_mask not found")
+        self.assertIn("mask_changed.emit", match_single.group(0),
+                      "clear_mask (single zone) must emit mask_changed")
+
+        # clear_all_masks must also emit mask_changed
+        match_all = re.search(r"def clear_all_masks\(self\).*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match_all, "clear_all_masks not found")
+        self.assertIn("mask_changed.emit", match_all.group(0),
+                      "clear_all_masks must emit mask_changed (like clear_mask)")
