@@ -166,6 +166,9 @@ class SelectiveAlphaCanvas(QWidget):
         self._composite_dirty: bool             = True
         self._composite_qimg:  QImage | None    = None
 
+        # ---- Cursor position for brush-size preview circle ---------------
+        self._cursor_pos: QPointF | None = None
+
     # ---------------------------------------------------------------- public
 
     def load_image(self, path: str) -> bool:
@@ -551,6 +554,9 @@ class SelectiveAlphaCanvas(QWidget):
         if self._tool == "polygon" and len(self._poly_pts) > 0:
             self._draw_polygon_preview(p)
 
+        # Draw brush / eraser size preview circle at the cursor position.
+        self._draw_cursor_circle(p)
+
         p.end()
 
     def _draw_preview(self, painter: QPainter) -> None:
@@ -597,6 +603,26 @@ class SelectiveAlphaCanvas(QWidget):
                 QRectF(pw.x() - 4, pw.y() - 4, 8, 8),
                 QBrush(zc),
             )
+
+    def _draw_cursor_circle(self, painter: QPainter) -> None:
+        """Draw a circle showing the current brush or eraser radius."""
+        if self._cursor_pos is None or self._src_img is None:
+            return
+        if self._tool not in ("freehand", "eraser", "line"):
+            return
+        s, _ox, _oy = self._transform()
+        if self._tool == "eraser":
+            r = self._eraser_size * s
+            # White dashed circle for eraser
+            pen = QPen(QColor(255, 255, 255, 200), 1.5, Qt.PenStyle.DashLine)
+        else:
+            r = self._brush_size * s
+            zc = _zone_qcolor(self._active_zone, 220)
+            pen = QPen(zc, 1.5)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        cx, cy = self._cursor_pos.x(), self._cursor_pos.y()
+        painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
     # --------------------------------------------------- mouse events
 
@@ -685,6 +711,7 @@ class SelectiveAlphaCanvas(QWidget):
         if self._src_img is None:
             return
         pt = event.position()
+        self._cursor_pos = pt
 
         if self._panning:
             dx = pt.x() - self._pan_start_w.x()
@@ -698,7 +725,8 @@ class SelectiveAlphaCanvas(QWidget):
         if not self._drawing:
             if self._tool == "polygon" and len(self._poly_pts) > 0:
                 self._preview_end = pt
-                self.update()
+            # Always repaint so the cursor circle follows the mouse.
+            self.update()
             return
 
         ix, iy = self._w2i(pt.x(), pt.y())
@@ -789,18 +817,17 @@ class SelectiveAlphaCanvas(QWidget):
         self._zoom = max(0.1, min(20.0, self._zoom * factor))
 
         # Adjust pan so the image point under the cursor stays fixed.
+        # Derivation: the image point under cursor (ix, iy) must satisfy
+        #   ix = (pt.x - ox) / s   before and after the zoom.
+        # Solving for pan_x_new gives:
+        #   pan_x_new = (1 - ratio) * (pt.x - cw/2) + pan_x_old * ratio
+        # where ratio = s_new / s_old = new_zoom / old_zoom.
         pt = event.position()
-        s_old, ox_old, oy_old = self._transform()
-        # After zoom, without pan adjustment:
-        s_new = s_old / old_zoom * self._zoom
-        ox_new = (self.width()  - self._src_img.width  * s_new) / 2.0 + self._pan_x
-        oy_new = (self.height() - self._src_img.height * s_new) / 2.0 + self._pan_y
-        # Image point under cursor before: (pt - old_offset) / s_old
-        # Same point after: (pt - new_offset) / s_new
-        # => new_pan = old_pan + pt*(1 - s_new/s_old)
-        ratio = s_new / s_old
-        self._pan_x += pt.x() * (1.0 - ratio)
-        self._pan_y += pt.y() * (1.0 - ratio)
+        ratio = self._zoom / old_zoom
+        cw_f  = float(self.width())
+        ch_f  = float(self.height())
+        self._pan_x = (1.0 - ratio) * (pt.x() - cw_f / 2.0) + self._pan_x * ratio
+        self._pan_y = (1.0 - ratio) * (pt.y() - ch_f / 2.0) + self._pan_y * ratio
 
         self._composite_dirty = True
         self.update()
@@ -812,6 +839,12 @@ class SelectiveAlphaCanvas(QWidget):
             self._preview_end = None
             self.update()
         super().keyPressEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        """Clear cursor circle when the mouse leaves the canvas."""
+        self._cursor_pos = None
+        self.update()
+        super().leaveEvent(event)
 
 
 # ---------------------------------------------------------------------------
@@ -1010,9 +1043,7 @@ class SelectiveAlphaTool(QWidget):
             lambda v: self._canvas.set_eraser_size(v)
         )
         sg.addWidget(self._eraser_spin, 1, 1)
-        lv.addWidget(size_box)
-
-        # Auto-correct
+        lv.addWidget(size_box)        # Auto-correct
         self._autocorrect_chk = QCheckBox("Auto-correct (snap to edges)")
         self._autocorrect_chk.setToolTip(
             "When checked, freehand and line strokes are automatically snapped\n"
@@ -1100,11 +1131,27 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.mask_changed.connect(self._on_mask_changed)
         self._canvas.undo_available.connect(self._btn_undo.setEnabled)
         self._canvas.redo_available.connect(self._btn_redo.setEnabled)
-        root.addWidget(self._canvas, 1)
+
+        # Wrap canvas + status label in a vertical layout.
+        right_widget = QWidget()
+        rv = QVBoxLayout(right_widget)
+        rv.setContentsMargins(0, 0, 0, 0)
+        rv.setSpacing(2)
+        rv.addWidget(self._canvas, 1)
+        self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px")
+        self._status_lbl.setStyleSheet(
+            "color: #999; font-size: 10px; padding: 2px 4px;"
+        )
+        rv.addWidget(self._status_lbl)
+        root.addWidget(right_widget, 1)
 
         # Sync initial tool to canvas
         self._canvas.set_tool("freehand")
         self._canvas.set_active_zone(0)
+
+        # Connect spinboxes to status updates (after _status_lbl is created).
+        self._brush_spin.valueChanged.connect(lambda _: self._update_status())
+        self._eraser_spin.valueChanged.connect(lambda _: self._update_status())
 
     # ---------------------------------------------------------------- helpers
 
@@ -1122,6 +1169,30 @@ class SelectiveAlphaTool(QWidget):
                         "Hold & drag to remove previously painted areas.",
         }
         return tips.get(key, "")
+
+    def _update_status(self) -> None:
+        """Refresh the status label with current tool / zone / size info."""
+        tool_names = {
+            "freehand": "Freehand",
+            "line":     "Line",
+            "rect":     "Rectangle",
+            "ellipse":  "Ellipse",
+            "fill":     "Fill",
+            "polygon":  "Polygon",
+            "eraser":   "Eraser",
+        }
+        tool_key  = self._canvas._tool
+        tool_name = tool_names.get(tool_key, tool_key.title())
+        zone_idx  = self._canvas._active_zone
+        from ..core.selective_alpha_processor import ZONE_NAMES
+        zone_name = ZONE_NAMES[zone_idx] if 0 <= zone_idx < len(ZONE_NAMES) else f"Zone {zone_idx + 1}"
+        if tool_key == "eraser":
+            size_txt = f"Eraser: {self._eraser_spin.value()} px"
+        else:
+            size_txt = f"Brush: {self._brush_spin.value()} px"
+        self._status_lbl.setText(
+            f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}"
+        )
 
     def _set_btn_save_enabled(self, v: bool) -> None:
         self._btn_save.setEnabled(v)
@@ -1240,6 +1311,7 @@ class SelectiveAlphaTool(QWidget):
             self._canvas.set_active_zone(val)
             for i, row in enumerate(self._zone_rows):
                 row.set_selected(i == val)
+            self._update_status()
         else:
             zone_idx = -(val + 1)
             self._canvas.clear_mask(zone_idx)
@@ -1247,6 +1319,7 @@ class SelectiveAlphaTool(QWidget):
     def _on_tool_selected(self, key: str) -> None:
         self._canvas.set_tool(key)
         self._btn_close_poly.setVisible(key == "polygon")
+        self._update_status()
 
     def _on_close_polygon(self) -> None:
         """Programmatically close the in-progress polygon."""

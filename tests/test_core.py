@@ -5673,3 +5673,136 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
         self.assertEqual(arr[0, 0], 255)
         canvas._masks[0].close()
         canvas._masks[0] = None
+
+    # ---- cursor position --------------------------------------------------
+
+    def test_cursor_pos_initialises_to_none(self):
+        canvas = self._make_canvas_with_image()
+        self.assertIsNone(canvas._cursor_pos)
+
+
+# ---------------------------------------------------------------------------
+# Zoom-to-cursor pan formula tests (pure math, no Qt required)
+# ---------------------------------------------------------------------------
+
+class TestSelectiveAlphaZoomFormula(unittest.TestCase):
+    """Validate the zoom-to-cursor pan formula used in SelectiveAlphaCanvas.
+
+    The formula is:
+        pan_new = (1 - ratio) * (pt - cw/2) + pan_old * ratio
+    where ratio = new_zoom / old_zoom.
+    """
+
+    @staticmethod
+    def _apply_zoom_formula(pt_x, pt_y, cw, ch, pan_x, pan_y, ratio):
+        new_pan_x = (1.0 - ratio) * (pt_x - cw / 2.0) + pan_x * ratio
+        new_pan_y = (1.0 - ratio) * (pt_y - ch / 2.0) + pan_y * ratio
+        return new_pan_x, new_pan_y
+
+    @staticmethod
+    def _image_pixel_under_cursor(pt_x, pt_y, cw, ch, iw, ih, zoom, pan_x, pan_y):
+        """Return the (fractional) image pixel coordinates under the cursor."""
+        scale = min(cw / iw, ch / ih) * zoom
+        ox = (cw - iw * scale) / 2.0 + pan_x
+        oy = (ch - ih * scale) / 2.0 + pan_y
+        return (pt_x - ox) / scale, (pt_y - oy) / scale
+
+    def test_zoom_at_centre_leaves_pan_zero(self):
+        """Zooming at the canvas centre from pan=0 must not shift the image."""
+        cw = ch = 400.0
+        pan_x = pan_y = 0.0
+        ratio = 1.1   # zoom in
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            cw / 2, ch / 2, cw, ch, pan_x, pan_y, ratio
+        )
+        self.assertAlmostEqual(new_pan_x, 0.0, places=9)
+        self.assertAlmostEqual(new_pan_y, 0.0, places=9)
+
+    def test_zoom_at_centre_large_zoom_leaves_pan_zero(self):
+        cw = ch = 800.0
+        pan_x = pan_y = 0.0
+        ratio = 5.0
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            cw / 2, ch / 2, cw, ch, pan_x, pan_y, ratio
+        )
+        self.assertAlmostEqual(new_pan_x, 0.0, places=9)
+        self.assertAlmostEqual(new_pan_y, 0.0, places=9)
+
+    def test_zoom_fixes_image_pixel_under_cursor(self):
+        """The image pixel under the cursor must be the same before and after zoom."""
+        iw = ih = 16
+        cw = ch = 400.0
+        pan_x = pan_y = 0.0
+        zoom_old = 1.0
+        pt_x, pt_y = 100.0, 80.0
+
+        ix_before, iy_before = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_old, pan_x, pan_y
+        )
+
+        ratio = 1.1
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+        )
+        zoom_new = zoom_old * ratio
+
+        ix_after, iy_after = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_new, new_pan_x, new_pan_y
+        )
+        self.assertAlmostEqual(ix_after, ix_before, places=9)
+        self.assertAlmostEqual(iy_after, iy_before, places=9)
+
+    def test_zoom_out_fixes_image_pixel_under_cursor(self):
+        iw = ih = 32
+        cw, ch = 640.0, 480.0
+        pan_x, pan_y = 20.0, -10.0
+        zoom_old = 2.0
+        pt_x, pt_y = 320.0, 240.0
+
+        ix_before, iy_before = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_old, pan_x, pan_y
+        )
+
+        ratio = 1.0 / 1.1   # zoom out
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+        )
+        zoom_new = zoom_old * ratio
+
+        ix_after, iy_after = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_new, new_pan_x, new_pan_y
+        )
+        self.assertAlmostEqual(ix_after, ix_before, places=9)
+        self.assertAlmostEqual(iy_after, iy_before, places=9)
+
+    def test_multiple_successive_zooms_stay_stable(self):
+        """Repeated zoom-in / zoom-out at the same point should return to origin."""
+        iw = ih = 64
+        cw = ch = 512.0
+        pan_x = pan_y = 0.0
+        zoom = 1.0
+        pt_x, pt_y = 200.0, 150.0
+
+        # Zoom in 5 times then out 5 times
+        for _ in range(5):
+            ratio = 1.1
+            pan_x, pan_y = self._apply_zoom_formula(
+                pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+            )
+            zoom *= ratio
+        for _ in range(5):
+            ratio = 1.0 / 1.1
+            pan_x, pan_y = self._apply_zoom_formula(
+                pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+            )
+            zoom *= ratio
+
+        # Image pixel under cursor should match the original
+        ix0, iy0 = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, 1.0, 0.0, 0.0
+        )
+        ix1, iy1 = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom, pan_x, pan_y
+        )
+        self.assertAlmostEqual(ix1, ix0, places=6)
+        self.assertAlmostEqual(iy1, iy0, places=6)
