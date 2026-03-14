@@ -172,7 +172,14 @@ class SelectiveAlphaCanvas(QWidget):
     # ---------------------------------------------------------------- public
 
     def load_image(self, path: str) -> bool:
-        """Load *path* into the canvas.  Returns True on success."""
+        """Load *path* into the canvas.  Returns True on success.
+
+        Raises
+        ------
+        MemoryError
+            Re-raised without modification so callers can distinguish an
+            out-of-memory condition from other load failures.
+        """
         try:
             img = Image.open(path)
             img.load()
@@ -184,6 +191,10 @@ class SelectiveAlphaCanvas(QWidget):
             self._src_img  = rgba
             self._src_arr  = np.array(rgba, dtype=np.uint8)
             self._edge_map = None   # recomputed lazily
+            # Close any existing mask images before discarding them.
+            for m in self._masks:
+                if m is not None:
+                    m.close()
             self._masks    = [None] * NUM_ZONES
             self._zoom     = 1.0
             self._pan_x    = 0.0
@@ -196,6 +207,8 @@ class SelectiveAlphaCanvas(QWidget):
             self.undo_available.emit(False)
             self.redo_available.emit(False)
             return True
+        except MemoryError:
+            raise
         except Exception:
             return False
 
@@ -1365,7 +1378,16 @@ class SelectiveAlphaTool(QWidget):
         )
         if not path:
             return
-        if not self._canvas.load_image(path):
+        try:
+            loaded = self._canvas.load_image(path)
+        except MemoryError:
+            QMessageBox.critical(
+                self, "Load Error",
+                "Not enough memory to load this image.\n"
+                "Try a smaller file or close other applications."
+            )
+            return
+        if not loaded:
             QMessageBox.warning(self, "Load Error", f"Could not load:\n{path}")
             return
         self._src_path = path
@@ -1399,6 +1421,12 @@ class SelectiveAlphaTool(QWidget):
             return
         try:
             self._result_img.save(path)
+        except MemoryError:
+            QMessageBox.critical(
+                self, "Save Error",
+                "Not enough memory to save the image.\n"
+                "Try closing other applications and try again."
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Save Error", str(exc))
 
@@ -1484,7 +1512,8 @@ class SelectiveAlphaTool(QWidget):
             self._update_status()
         else:
             zone_idx = -(val + 1)
-            self._canvas.clear_mask(zone_idx)
+            if 0 <= zone_idx < NUM_ZONES:
+                self._canvas.clear_mask(zone_idx)
 
     def _on_tool_selected(self, key: str) -> None:
         self._canvas.set_tool(key)
