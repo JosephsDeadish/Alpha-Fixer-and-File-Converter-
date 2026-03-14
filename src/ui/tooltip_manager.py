@@ -3312,8 +3312,11 @@ class TooltipManager(QObject):
         # Use a default-argument to capture bar_id by value; a bare `lambda`
         # would capture it by reference which can give the wrong id if the
         # variable is ever reassigned.
+        # The destroyed signal passes the dying QObject as a positional argument;
+        # we accept it with a leading dummy parameter so it does not accidentally
+        # override the `bid` default and call cleanup with the wrong value.
         try:
-            tab_bar.destroyed.connect(lambda bid=bar_id: self._cleanup_tab_bar(bid))
+            tab_bar.destroyed.connect(lambda _dead=None, bid=bar_id: self._cleanup_tab_bar(bid))
         except Exception:
             pass
         # Also clear per-tab native tooltips

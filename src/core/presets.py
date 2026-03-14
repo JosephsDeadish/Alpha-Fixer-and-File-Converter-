@@ -24,7 +24,7 @@ class AlphaPreset:
     clamp_min: int = 0
     clamp_max: int = 255
     # Advanced operations applied independently of the range remap.
-    threshold: int = 0        # only process pixels with alpha < this (0 = all)
+    threshold: int = 0        # protect pixels with alpha >= this from remapping (0 = all); when binary_cut is True this is the hard-cut split point
     invert: bool = False      # invert alpha before range remap
     binary_cut: bool = False  # hard 0/255 split at threshold after remap
 
@@ -34,15 +34,18 @@ class AlphaPreset:
     @classmethod
     def from_dict(cls, d: dict) -> "AlphaPreset":
         # Backward compat: old presets stored alpha_value + mode fields.
-        # Convert: if a fixed alpha_value was set with a non-normalize mode,
-        # translate to clamp_min=clamp_max=alpha_value so behavior is preserved.
+        # Only translate alpha_value → clamp_min=clamp_max when the legacy mode
+        # was "set" (fixed-value assignment) or the mode key is absent entirely.
+        # For other legacy modes (multiply, add, subtract, etc.) the alpha_value
+        # had a different meaning that cannot be mapped to a range remap; in those
+        # cases keep the stored clamp_min/clamp_max as-is.
         alpha_value = d.get("alpha_value")
         mode = d.get("mode", "set")
         raw_min = d.get("clamp_min", 0)
         raw_max = d.get("clamp_max", 255)
         clamp_min = int(raw_min) if raw_min is not None else 0
         clamp_max = int(raw_max) if raw_max is not None else 255
-        if alpha_value is not None and mode != "normalize":
+        if alpha_value is not None and (mode == "set" or "mode" not in d):
             clamp_min = int(alpha_value)
             clamp_max = int(alpha_value)
         # Build with only known fields (drops alpha_value, mode, and any other legacy keys)
