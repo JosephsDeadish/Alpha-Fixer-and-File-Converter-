@@ -510,11 +510,12 @@ class MainWindow(QMainWindow):
         # Register per-tab tooltips on the QTabBar
         mgr.register_tab_bar(
             self._tabs.tabBar(),
-            ["alpha_fixer_tab", "converter_tab", "history_tab"],
+            ["alpha_fixer_tab", "converter_tab", "history_tab", "selective_alpha_tab"],
         )
         self._alpha_tab.register_tooltips(mgr)
         self._converter_tab.register_tooltips(mgr)
         self._history_tab.register_tooltips(mgr)
+        self._selective_alpha_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""

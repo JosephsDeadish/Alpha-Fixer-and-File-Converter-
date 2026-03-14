@@ -915,11 +915,11 @@ class _ZoneRow(QWidget):
         lay.addWidget(self._sel_btn)
 
         # Clear button
-        clear_btn = QPushButton("Clear")
-        clear_btn.setFixedWidth(50)
-        clear_btn.setToolTip("Erase this zone's mask")
-        clear_btn.clicked.connect(self._on_clear)
-        lay.addWidget(clear_btn)
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setFixedWidth(50)
+        self._clear_btn.setToolTip("Erase this zone's mask")
+        self._clear_btn.clicked.connect(self._on_clear)
+        lay.addWidget(self._clear_btn)
 
         lay.addStretch()
 
@@ -935,6 +935,12 @@ class _ZoneRow(QWidget):
         self.setProperty("active", str(selected).lower())
         self.style().unpolish(self)
         self.style().polish(self)
+
+    def register_tooltips(self, mgr) -> None:
+        """Register zone-row widgets with the TooltipManager for cycling tips."""
+        mgr.register(self._alpha_spin, "sa_zone_alpha_spin")
+        mgr.register(self._sel_btn,   "sa_zone_select")
+        mgr.register(self._clear_btn, "sa_zone_clear")
 
 
 # ---------------------------------------------------------------------------
@@ -973,9 +979,9 @@ class SelectiveAlphaTool(QWidget):
         # Open / Save
         io_box = QGroupBox("Image")
         io_lay = QVBoxLayout(io_box)
-        btn_open = QPushButton("📂  Open Image…")
-        btn_open.clicked.connect(self._on_open)
-        io_lay.addWidget(btn_open)
+        self._btn_open = QPushButton("📂  Open Image…")
+        self._btn_open.clicked.connect(self._on_open)
+        io_lay.addWidget(self._btn_open)
         self._btn_save = QPushButton("💾  Save Result…")
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
@@ -1058,18 +1064,18 @@ class SelectiveAlphaTool(QWidget):
         # Zoom controls
         zoom_box = QGroupBox("Zoom")
         zh = QHBoxLayout(zoom_box)
-        btn_zi = QPushButton("＋")
-        btn_zi.setFixedWidth(36)
-        btn_zi.clicked.connect(self._zoom_in)
-        btn_zo = QPushButton("－")
-        btn_zo.setFixedWidth(36)
-        btn_zo.clicked.connect(self._zoom_out)
-        btn_zr = QPushButton("Fit")
-        btn_zr.setFixedWidth(40)
-        btn_zr.clicked.connect(self._zoom_reset)
-        zh.addWidget(btn_zo)
-        zh.addWidget(btn_zr)
-        zh.addWidget(btn_zi)
+        self._btn_zoom_in = QPushButton("＋")
+        self._btn_zoom_in.setFixedWidth(36)
+        self._btn_zoom_in.clicked.connect(self._zoom_in)
+        self._btn_zoom_out = QPushButton("－")
+        self._btn_zoom_out.setFixedWidth(36)
+        self._btn_zoom_out.clicked.connect(self._zoom_out)
+        self._btn_zoom_fit = QPushButton("Fit")
+        self._btn_zoom_fit.setFixedWidth(40)
+        self._btn_zoom_fit.clicked.connect(self._zoom_reset)
+        zh.addWidget(self._btn_zoom_out)
+        zh.addWidget(self._btn_zoom_fit)
+        zh.addWidget(self._btn_zoom_in)
         lv.addWidget(zoom_box)
 
         # Zone rows
@@ -1119,9 +1125,9 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(self._btn_undo_process)
 
         # Clear all
-        btn_clear_all = QPushButton("🗑  Clear All Zones")
-        btn_clear_all.clicked.connect(self._on_clear_all)
-        lv.addWidget(btn_clear_all)
+        self._btn_clear_all = QPushButton("🗑  Clear All Zones")
+        self._btn_clear_all.clicked.connect(self._on_clear_all)
+        lv.addWidget(self._btn_clear_all)
 
         lv.addStretch()
         root.addWidget(left_panel)
@@ -1154,6 +1160,34 @@ class SelectiveAlphaTool(QWidget):
         self._eraser_spin.valueChanged.connect(lambda _: self._update_status())
 
     # ---------------------------------------------------------------- helpers
+
+    def register_tooltips(self, mgr) -> None:
+        """Register all Selective Alpha tab widgets with the TooltipManager."""
+        mgr.register(self._btn_open,         "sa_open_btn")
+        mgr.register(self._btn_save,         "sa_save_btn")
+        mgr.register(self._tool_btns["freehand"], "sa_tool_freehand")
+        mgr.register(self._tool_btns["line"],     "sa_tool_line")
+        mgr.register(self._tool_btns["rect"],     "sa_tool_rect")
+        mgr.register(self._tool_btns["ellipse"],  "sa_tool_ellipse")
+        mgr.register(self._tool_btns["fill"],     "sa_tool_fill")
+        mgr.register(self._tool_btns["polygon"],  "sa_tool_polygon")
+        mgr.register(self._tool_btns["eraser"],   "sa_tool_eraser")
+        mgr.register(self._btn_close_poly,   "sa_close_poly")
+        mgr.register(self._brush_spin,       "sa_brush_spin")
+        mgr.register(self._eraser_spin,      "sa_eraser_spin")
+        mgr.register(self._autocorrect_chk,  "sa_autocorrect")
+        mgr.register(self._btn_zoom_in,      "sa_zoom_in")
+        mgr.register(self._btn_zoom_out,     "sa_zoom_out")
+        mgr.register(self._btn_zoom_fit,     "sa_zoom_fit")
+        for row in self._zone_rows:
+            row.register_tooltips(mgr)
+        mgr.register(self._btn_undo,         "sa_undo")
+        mgr.register(self._btn_redo,         "sa_redo")
+        mgr.register(self._btn_apply,        "sa_apply")
+        mgr.register(self._btn_undo_process, "sa_undo_process")
+        mgr.register(self._btn_clear_all,    "sa_clear_all")
+        mgr.register(self._canvas,           "sa_canvas")
+        mgr.register(self._status_lbl,       "sa_status_lbl")
 
     @staticmethod
     def _tool_tooltip(key: str) -> str:
