@@ -421,6 +421,7 @@ class SettingsDialog(QDialog):
             ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
             ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
             ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
+            ("Rainbow 🌈",        "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
         ]
         for label, tip in _TRAIL_STYLE_OPTIONS:
             self._trail_style_combo.addItem(label)
@@ -1038,7 +1039,7 @@ class SettingsDialog(QDialog):
         self._trail_style_combo.setEnabled(not use_theme_trail)
         # Load persisted trail style into combo
         _TRAIL_STYLE_MAP = {
-            "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5,
+            "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5, "rainbow": 6,
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
@@ -1452,7 +1453,7 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
-        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle"]
+        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow"]
         idx = self._trail_style_combo.currentIndex()
         style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
         self._settings.set("trail_style", style)

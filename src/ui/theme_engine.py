@@ -177,7 +177,7 @@ RAINBOW_THEME = {
     "_trail_color": "#ffff00",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "fairy",
+    "_trail": "rainbow",
 }
 
 OTTER_THEME = {

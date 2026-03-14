@@ -420,6 +420,7 @@ _NORMAL: dict[str, list[str]] = {
         "Comet draws a tapered tail — bright head, fading end.",
         "Fairy/Wave/Sparkle use themed emoji that float and fade along the trail.",
         "Dots is the classic default — small fading circles.",
+        "Rainbow cycles through the full colour spectrum — tail to head sweeps the whole hue wheel.",
     ],
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
@@ -1311,10 +1312,10 @@ _DUMBED: dict[str, list[str]] = {
         "The color only shows if Trail is enabled. You did check that, right?",
     ],
     "trail_style": [
-        "This lets you change what the trail looks like. Dots, ribbon, comet, emoji.",
+        "This lets you change what the trail looks like. Dots, ribbon, comet, emoji, rainbow.",
         "Ribbon = connected squiggle. Comet = bright head, fading tail. Dots = dots.",
         "Fairy/Wave/Sparkle use emoji that float around. They're cute. You're welcome.",
-        "Pick whichever style you like. They all follow your mouse. That's the whole deal.",
+        "Rainbow cycles through every colour in the spectrum as you move. Very flashy.",
         "Use theme trail (below) to skip this and auto-pick the right style for your theme.",
     ],
     "use_theme_trail": [
@@ -2132,10 +2133,11 @@ _VULGAR: dict[str, list[str]] = {
         "Trail color + matching theme + emoji trail style = most visually unhinged setup possible.",
     ],
     "trail_style": [
-        "Pick what your mouse trail looks like. Dots, comet, ribbon, emoji — your call.",
+        "Pick what your mouse trail looks like. Dots, comet, ribbon, emoji, rainbow — your call.",
         "Ribbon = smooth squiggly noodle following your cursor. Comet = tapered glow tail.",
         "Fairy/Wave/Sparkle gives you floating emoji trailing your cursor. It's unhinged. We love it.",
         "Dots is the boring default. You're better than dots. Use comet or ribbon at least.",
+        "Rainbow trail: full fucking spectrum hue cycle. Tail is red, middle is green, head is blue. All the colours. All of them. 🌈",
         "If 'Use Theme Trail' checkbox is on, this dropdown gets completely ignored. The theme is in charge and making your trail decisions. Let it be great.",
         "Wave trail: ocean-themed emoji floating behind your cursor. 🫧💧🌊🐠 Perfection.",
         "Sparkle trail: ✦❄✧💎 trailing behind you. Ice cave theme + sparkle = aesthetic af.",
