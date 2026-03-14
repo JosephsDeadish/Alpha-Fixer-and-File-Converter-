@@ -6555,3 +6555,106 @@ class TestRound20ClearAllMasksSignals(unittest.TestCase):
         self.assertIsNotNone(match_all, "clear_all_masks not found")
         self.assertIn("mask_changed.emit", match_all.group(0),
                       "clear_all_masks must emit mask_changed (like clear_mask)")
+
+
+class TestRound21RomDetectorAndPresetBugFixes(unittest.TestCase):
+    """
+    Round-21 fixes:
+    1. _PS2_ID_PATTERN had duplicate alternatives (SCES, SCED, SLUS appeared twice).
+    2. _scan_for_ps2_id used re.match() — misses disc IDs not at the start of a
+       filename (e.g. 'v2-SLUS_20626.bin').  Fixed to re.search().
+    3. AlphaPreset.from_dict() called int() on None clamp values from JSON
+       (when JSON contains "clamp_min": null), crashing with TypeError.
+    """
+
+    # ------------------------------------------------------------------
+    # 1. _PS2_ID_PATTERN deduplication
+    # ------------------------------------------------------------------
+
+    def test_ps2_id_pattern_has_no_duplicate_alternatives(self):
+        """_PS2_ID_PATTERN must not contain repeated prefix alternatives."""
+        from src.core.rom_detector import _PS2_ID_PATTERN
+        # Extract the full pattern string and find the alternation group
+        import re as _re
+        pattern_str = _PS2_ID_PATTERN.pattern
+        alts_m = _re.search(r"\(([A-Z|]+)\)", pattern_str)
+        self.assertIsNotNone(alts_m, "Could not parse alternation group from pattern")
+        alts = alts_m.group(1).split("|")
+        duplicates = [a for a in alts if alts.count(a) > 1]
+        self.assertEqual(
+            duplicates, [],
+            f"Duplicate alternatives in _PS2_ID_PATTERN: {list(set(duplicates))}",
+        )
+
+    # ------------------------------------------------------------------
+    # 2. _scan_for_ps2_id: .search() not .match()
+    # ------------------------------------------------------------------
+
+    def test_scan_for_ps2_id_uses_search_not_match(self):
+        """_scan_for_ps2_id must call .search() so disc IDs not at filename
+        start are still detected (e.g. 'v2-SLUS_20626.bin')."""
+        import re as _re
+        src = open("src/core/rom_detector.py", encoding="utf-8").read()
+        # Isolate the _scan_for_ps2_id function body
+        m = _re.search(
+            r"def _scan_for_ps2_id\b.*?\n(?=def |\Z)", src, _re.S
+        )
+        self.assertIsNotNone(m, "_scan_for_ps2_id not found in rom_detector.py")
+        body = m.group(0)
+        self.assertIn(".search(", body,
+                      "_scan_for_ps2_id must use .search() to find disc IDs "
+                      "anywhere in a filename, not just at the start")
+        self.assertNotIn(".match(", body,
+                         "_scan_for_ps2_id must not use .match() (only matches "
+                         "at start of string, misses IDs after prefixes)")
+
+    def test_scan_for_ps2_id_detects_id_after_non_word_prefix(self):
+        """Disc ID preceded by a non-word character (dash, paren, space) in a
+        filename must be detected by _scan_for_ps2_id."""
+        from pathlib import Path
+        import tempfile, os
+        from src.core.rom_detector import _scan_for_ps2_id
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Files whose names have a disc ID after a non-word character
+            prefixed_names = [
+                "v2-slus_20626.bin",    # dash prefix
+                "(slus_20626).tim",     # parenthesis prefix
+            ]
+            names_lower = set(prefixed_names)
+            result = _scan_for_ps2_id(Path(tmp), names_lower)
+            self.assertNotEqual(
+                result, "",
+                "Disc ID after a non-word prefix in a filename should be detected",
+            )
+            self.assertIn("SLUS", result)
+
+    # ------------------------------------------------------------------
+    # 3. AlphaPreset.from_dict() null clamp_min / clamp_max
+    # ------------------------------------------------------------------
+
+    def test_from_dict_null_clamp_min_uses_default(self):
+        """from_dict must not raise TypeError when clamp_min is null (None)."""
+        from src.core.presets import AlphaPreset
+        d = {"name": "test", "description": "desc", "clamp_min": None, "clamp_max": 200}
+        p = AlphaPreset.from_dict(d)
+        self.assertEqual(p.clamp_min, 0,
+                         "null clamp_min should fall back to default 0")
+        self.assertEqual(p.clamp_max, 200)
+
+    def test_from_dict_null_clamp_max_uses_default(self):
+        """from_dict must not raise TypeError when clamp_max is null (None)."""
+        from src.core.presets import AlphaPreset
+        d = {"name": "test", "description": "desc", "clamp_min": 50, "clamp_max": None}
+        p = AlphaPreset.from_dict(d)
+        self.assertEqual(p.clamp_min, 50)
+        self.assertEqual(p.clamp_max, 255,
+                         "null clamp_max should fall back to default 255")
+
+    def test_from_dict_both_null_clamp_values_use_defaults(self):
+        """from_dict with both clamp values null should return (0, 255) defaults."""
+        from src.core.presets import AlphaPreset
+        d = {"name": "test", "description": "desc", "clamp_min": None, "clamp_max": None}
+        p = AlphaPreset.from_dict(d)
+        self.assertEqual(p.clamp_min, 0)
+        self.assertEqual(p.clamp_max, 255)

@@ -68,8 +68,8 @@ class RomDetectionResult:
 
 # PS2 disc IDs
 _PS2_ID_PATTERN = re.compile(
-    r"\b(SLUS|SCUS|SLES|SCES|SLPS|SLPM|SLPN|SLAJ|SCES|SCED"
-    r"|SLUS|SCAJ|SCED)[_-]?\d{5}\b",
+    r"\b(SLUS|SCUS|SLES|SCES|SLPS|SLPM|SLPN|SLAJ|SCED"
+    r"|SCAJ)[_-]?\d{5}\b",
     re.IGNORECASE,
 )
 
@@ -303,7 +303,7 @@ def _extract_ps2_id(d: Path) -> tuple[str, str]:
 def _scan_for_ps2_id(d: Path, names_lower: set[str]) -> str:
     """Check file names inside *d* for PS2 disc IDs (SLUS_xxx etc)."""
     for name in names_lower:
-        m = _PS2_ID_PATTERN.match(name.upper())
+        m = _PS2_ID_PATTERN.search(name.upper())
         if m:
             raw = m.group(0).replace("_", "-")
             norm = re.sub(r"([A-Z]+)(\d+)", r"\1-\2", raw)

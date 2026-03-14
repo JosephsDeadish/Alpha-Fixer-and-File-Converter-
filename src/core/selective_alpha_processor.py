@@ -108,7 +108,7 @@ def edge_flood_fill(
 ) -> np.ndarray:
     """Return a boolean mask from *seed* that stops at strong edges.
 
-    Uses an iterative BFS (depth-first stack) so it never hits Python
+    Uses an iterative DFS (depth-first stack) so it never hits Python
     recursion limits on large images.
 
     Parameters

@@ -38,8 +38,10 @@ class AlphaPreset:
         # translate to clamp_min=clamp_max=alpha_value so behavior is preserved.
         alpha_value = d.get("alpha_value")
         mode = d.get("mode", "set")
-        clamp_min = int(d.get("clamp_min", 0))
-        clamp_max = int(d.get("clamp_max", 255))
+        raw_min = d.get("clamp_min", 0)
+        raw_max = d.get("clamp_max", 255)
+        clamp_min = int(raw_min) if raw_min is not None else 0
+        clamp_max = int(raw_max) if raw_max is not None else 255
         if alpha_value is not None and mode != "normalize":
             clamp_min = int(alpha_value)
             clamp_max = int(alpha_value)
