@@ -194,7 +194,7 @@ class ConverterTab(QWidget):
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
         # ---- Preview area (outside scroll area, always visible) ----
-        # Mirrors the Alpha Fixer tab's before/after compare layout:
+        # Mirrors the Alpha & RGBA Adjuster tab's before/after compare layout:
         # [source info panel] [BeforeAfterWidget] [output info panel]
         preview_area = QWidget()
         pa_layout = QVBoxLayout(preview_area)
@@ -239,7 +239,7 @@ class ConverterTab(QWidget):
 
         # Left column: vertical splitter – controls/file-list on top
         # (scrollable), preview on the bottom (always fully visible).
-        # This matches the layout structure used by the Alpha Fixer tab.
+        # This matches the layout structure used by the Alpha & RGBA Adjuster tab.
         left_vsplit = QSplitter(Qt.Orientation.Vertical)
         left_vsplit.setChildrenCollapsible(False)
         left_vsplit.setMinimumWidth(320)
@@ -644,11 +644,11 @@ class ConverterTab(QWidget):
         self._compare.set_after(out_qi)
 
         def _info_text(label: str, meta: str, skip_first: bool = False) -> str:
-            """Format metadata as label+bold-value pairs, matching the alpha fixer style.
+            """Format metadata as label+bold-value pairs, matching the Alpha & RGBA Adjuster style.
 
             Each data line becomes a label row followed by a bold-value row (e.g.
             ``size<br><b>640 × 480</b>``), mirroring the BEFORE/AFTER stats panels
-            in the alpha fixer tab.  Lines containing ``  ·  `` are split into two
+            in the Alpha & RGBA Adjuster tab.  Lines containing ``  ·  `` are split into two
             rows (size + mode).  Lines starting with ``Preview as`` become a ``fmt``
             row.  All other lines are shown as plain bold values.
             """
