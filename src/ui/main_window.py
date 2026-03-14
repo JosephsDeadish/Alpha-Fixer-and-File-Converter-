@@ -963,6 +963,7 @@ class MainWindow(QMainWindow):
         """
         QTimer.singleShot(250, self._clamp_to_screen)
         QTimer.singleShot(250, self._update_minimum_size)
+        QTimer.singleShot(250, self._apply_font_size)
 
     # ------------------------------------------------------------------
     # Theme
@@ -1499,12 +1500,16 @@ class MainWindow(QMainWindow):
         In response we:
         1. Recalculate the adaptive minimum size for the new screen's geometry.
         2. Clamp the window so it remains visible and fits within the new area.
+        3. Re-apply the saved font size so point-size metrics are correct on
+           the new display (the font family/size stays the same, but Qt must
+           recalculate layout metrics after a DPI change).
         """
         super().changeEvent(event)
         if event.type() == QEvent.Type.ScreenChangeInternal:
             # Defer slightly so Qt has updated screen/geometry data first.
             QTimer.singleShot(150, self._update_minimum_size)
             QTimer.singleShot(150, self._clamp_to_screen)
+            QTimer.singleShot(150, self._apply_font_size)
 
     def _reposition_overlays(self) -> None:
         """Reposition both overlays to fill the window after a resize burst."""

@@ -7,7 +7,7 @@ import os
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QCompleter, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
@@ -123,7 +123,18 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        self.setMinimumSize(800, 600)
+        # Adaptive minimum size: cap at 800×600 but shrink proportionally on
+        # small or low-resolution screens so the dialog is never forced off the
+        # visible area (e.g. 1280×720 laptop with a large taskbar at 125% DPI).
+        screen = (self.parent().screen() if self.parent() is not None
+                  else None) or QApplication.primaryScreen()
+        if screen is not None:
+            ag = screen.availableGeometry()
+            min_w = min(800, max(560, int(ag.width()  * 0.85)))
+            min_h = min(600, max(420, int(ag.height() * 0.85)))
+        else:
+            min_w, min_h = 800, 600
+        self.setMinimumSize(min_w, min_h)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:

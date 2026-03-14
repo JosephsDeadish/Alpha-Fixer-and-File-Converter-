@@ -277,6 +277,7 @@ def main():
 
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtCore import QCoreApplication, Qt
+    from PyQt6.QtGui import QFont
 
     QCoreApplication.setApplicationName("AlphaFixerConverter")
     QCoreApplication.setOrganizationName("PandaTools")
@@ -297,12 +298,6 @@ def main():
     # The returned lock object MUST stay alive until the process exits.
     _instance_lock = _acquire_single_instance_lock()
 
-    # Enable smooth font rendering
-    from PyQt6.QtGui import QFont
-    font = QFont("Segoe UI", 10)
-    font.setHintingPreference(QFont.HintingPreference.PreferDefaultHinting)
-    app.setFont(font)
-
     logger.info("Starting Alpha Fixer & File Converter")
 
     from src.core.settings_manager import SettingsManager
@@ -310,6 +305,14 @@ def main():
     from src.ui.splash_screen import ThemeSplashScreen
 
     settings = SettingsManager()
+
+    # Apply the user's saved font-size preference before the main window
+    # appears so every widget (including the splash) inherits the correct size.
+    _saved_font_size = settings.get("font_size", 10)
+    _saved_font_size = max(8, min(24, int(_saved_font_size)))
+    font = QFont("Segoe UI", _saved_font_size)
+    font.setHintingPreference(QFont.HintingPreference.PreferDefaultHinting)
+    app.setFont(font)
 
     # Show animated themed splash screen only when enabled in settings
     splash = None
