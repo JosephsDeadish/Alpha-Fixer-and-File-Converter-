@@ -639,7 +639,31 @@ class SettingsDialog(QDialog):
             events_row.addWidget(chk)
         sound_gl.addLayout(events_row, 4, 1)
 
-        tv.addWidget(grp_sound)
+        # Additional event sounds (second row)
+        events_row2 = QHBoxLayout()
+        self._sound_theme_change_check = QCheckBox("Theme change")
+        self._sound_theme_change_check.setToolTip(
+            "Play a soft whoosh when switching to a different theme.\n"
+            "Off by default."
+        )
+        self._sound_tab_switch_check = QCheckBox("Tab switch")
+        self._sound_tab_switch_check.setToolTip(
+            "Play a quick soft tick when switching tabs.\n"
+            "Off by default."
+        )
+        self._sound_drag_enter_check = QCheckBox("Drag enter")
+        self._sound_drag_enter_check.setToolTip(
+            "Play a gentle rising ping when files are dragged over the drop zone.\n"
+            "Off by default."
+        )
+        for chk in (self._sound_theme_change_check,
+                    self._sound_tab_switch_check,
+                    self._sound_drag_enter_check):
+            events_row2.addWidget(chk)
+        events_row2.addStretch()
+        sound_gl.addLayout(events_row2, 5, 1)
+
+
 
         # ---- Button Press Animation GroupBox ----
         grp_btn_anim = QGroupBox("Button Press Animation")
@@ -905,6 +929,9 @@ class SettingsDialog(QDialog):
         self._sound_preview_check.toggled.connect(self._on_sound_event_changed)
         self._sound_process_start_check.toggled.connect(self._on_sound_event_changed)
         self._sound_file_remove_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_theme_change_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_tab_switch_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_drag_enter_check.toggled.connect(self._on_sound_event_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
@@ -1014,6 +1041,8 @@ class SettingsDialog(QDialog):
             self._sound_success_check, self._sound_error_check, self._sound_unlock_check,
             self._sound_file_add_check, self._sound_preview_check,
             self._sound_process_start_check, self._sound_file_remove_check,
+            self._sound_theme_change_check, self._sound_tab_switch_check,
+            self._sound_drag_enter_check,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -1047,6 +1076,9 @@ class SettingsDialog(QDialog):
         self._sound_preview_check.setChecked(self._settings.get("sound_preview", False))
         self._sound_process_start_check.setChecked(self._settings.get("sound_process_start", False))
         self._sound_file_remove_check.setChecked(self._settings.get("sound_file_remove", False))
+        self._sound_theme_change_check.setChecked(self._settings.get("sound_theme_change", False))
+        self._sound_tab_switch_check.setChecked(self._settings.get("sound_tab_switch", False))
+        self._sound_drag_enter_check.setChecked(self._settings.get("sound_drag_enter", False))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1150,6 +1182,9 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_preview_check, "sound_preview_check")
         mgr.register(self._sound_process_start_check, "sound_process_start_check")
         mgr.register(self._sound_file_remove_check, "sound_file_remove_check")
+        mgr.register(self._sound_theme_change_check, "sound_theme_change_check")
+        mgr.register(self._sound_tab_switch_check, "sound_tab_switch_check")
+        mgr.register(self._sound_drag_enter_check, "sound_drag_enter_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -1466,6 +1501,9 @@ class SettingsDialog(QDialog):
         self._settings.set("sound_preview", self._sound_preview_check.isChecked())
         self._settings.set("sound_process_start", self._sound_process_start_check.isChecked())
         self._settings.set("sound_file_remove", self._sound_file_remove_check.isChecked())
+        self._settings.set("sound_theme_change", self._sound_theme_change_check.isChecked())
+        self._settings.set("sound_tab_switch", self._sound_tab_switch_check.isChecked())
+        self._settings.set("sound_drag_enter", self._sound_drag_enter_check.isChecked())
 
     def _on_trail_changed(self) -> None:
         self._settings.set("trail_enabled", self._trail_check.isChecked())

@@ -580,6 +580,9 @@ class MainWindow(QMainWindow):
         # File-remove sounds
         self._alpha_tab.files_removed.connect(self._on_files_removed)
         self._converter_tab.files_removed.connect(self._on_files_removed)
+        # Drag-enter sounds
+        self._alpha_tab.drag_entered.connect(self._on_drag_entered)
+        self._converter_tab.drag_entered.connect(self._on_drag_entered)
         # Preview-refresh sounds
         self._alpha_tab.preview_refreshed.connect(self._on_preview_refreshed)
 
@@ -735,6 +738,13 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _on_drag_entered(self) -> None:
+        """Play a gentle ping when files are dragged over either tab's drop zone."""
+        try:
+            self._sound.play_drag_enter()
+        except Exception:
+            pass
+
     def _on_processing_started(self) -> None:
         """Play an ascending two-tone cue when a batch starts processing."""
         try:
@@ -753,6 +763,13 @@ class MainWindow(QMainWindow):
         """Play a subtle ping when the live preview refreshes (opt-in, off by default)."""
         try:
             self._sound.play_preview()
+        except Exception:
+            pass
+
+    def _on_theme_changed_sound(self) -> None:
+        """Play a soft whoosh when the user switches to a different theme."""
+        try:
+            self._sound.play_theme_change()
         except Exception:
             pass
 
@@ -1065,6 +1082,10 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, index: int):
         if self._tabs.widget(index) is self._history_tab:
             self._history_tab.refresh()
+        try:
+            self._sound.play_tab_switch()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Settings
@@ -1073,6 +1094,7 @@ class MainWindow(QMainWindow):
     def _open_settings(self):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._on_settings_changed())
+        dlg.theme_changed.connect(lambda t: self._on_theme_changed_sound())
         dlg.settings_changed.connect(self._on_settings_changed)
         # First tooltip mode change unlocks Secret Skeleton (independent of click count)
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)

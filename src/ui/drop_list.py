@@ -125,6 +125,7 @@ class DropFileList(QListWidget):
     paths_dropped = pyqtSignal(list)   # list[str] – new paths dragged in
     count_changed = pyqtSignal(int)    # emitted after any add/remove
     file_removed  = pyqtSignal()       # emitted when items are explicitly removed by the user
+    drag_entered  = pyqtSignal()       # emitted when files are first dragged over the list
 
     # Icon shown in the centre of the list when no files have been added yet
     _EMPTY_STATE_ICON = "📂"
@@ -320,6 +321,7 @@ class DropFileList(QListWidget):
             self.setProperty("drag_active", True)
             self.style().unpolish(self)
             self.style().polish(self)
+            self.drag_entered.emit()
             event.acceptProposedAction()
         else:
             event.ignore()

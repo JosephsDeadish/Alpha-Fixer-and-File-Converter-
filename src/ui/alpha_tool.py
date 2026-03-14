@@ -159,7 +159,8 @@ class AlphaFixerTab(QWidget):
     files_added = pyqtSignal()
     # Emitted whenever files are removed from the queue.
     files_removed = pyqtSignal()
-    # Emitted whenever the live preview refreshes (before/after images ready).
+    # Emitted when files are first dragged over the drop zone.
+    drag_entered = pyqtSignal()
     preview_refreshed = pyqtSignal()
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
@@ -584,6 +585,7 @@ class AlphaFixerTab(QWidget):
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
         self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.drag_entered.connect(self.drag_entered)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label

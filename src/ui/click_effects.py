@@ -36,7 +36,7 @@ _EMOJI_FONT_FAMILIES = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji"
 class _Particle:
     """A single animated particle."""
     __slots__ = ("x", "y", "vx", "vy", "life", "max_life",
-                 "kind", "size", "color", "text")
+                 "kind", "size", "base_size", "color", "text")
 
     def __init__(self, x, y, vx, vy, life, kind, size, color, text=""):
         self.x = float(x)
@@ -47,6 +47,7 @@ class _Particle:
         self.max_life = float(life)
         self.kind = kind
         self.size = float(size)
+        self.base_size = float(size)  # original size used for wing-flap animation
         self.color = color
         self.text = text  # emoji / char for text-type particles
 
@@ -834,6 +835,15 @@ class ClickEffectsOverlay(QWidget):
             if p.kind not in ("bat_fly", "fairy_fly"):
                 p.vy += self._GRAVITY
             p.life -= 0.05   # slightly faster decay → shorter burst, fewer frames rendered
+            # Wing-flap animation: oscillate particle size for flying bat/fairy
+            # particles to simulate wing movement.  Uses a sine wave at ~3 Hz
+            # (0.6 π rad per 20fps frame = 6 rad/s ≈ ~1 Hz, noticeable flutter)
+            # so the apparent "wingspan" pulses visibly without requiring extra
+            # emoji assets.
+            if p.kind in ("bat_fly", "fairy_fly"):
+                elapsed = (p.max_life - p.life) / 0.05  # frame counter
+                flap = math.sin(elapsed * math.pi * 0.55)  # ~0.9 Hz at 20 fps
+                p.size = p.base_size * (1.0 + 0.28 * flap)
             # Cull ambient (bat/fairy) particles that have completely left the
             # window so they never accumulate off-screen indefinitely.
             if p.kind in ("bat_fly", "fairy_fly"):

@@ -39,9 +39,10 @@ class ConverterTab(QWidget):
     files_added = pyqtSignal()
     # Emitted whenever files are removed from the queue.
     files_removed = pyqtSignal()
+    # Emitted when files are first dragged over the drop zone.
+    drag_entered = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None):
-        super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
         # ETA tracking for large batch runs
@@ -408,6 +409,7 @@ class ConverterTab(QWidget):
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
         self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.drag_entered.connect(self.drag_entered)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
