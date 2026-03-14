@@ -141,6 +141,13 @@ class SettingsManager:
         "tooltip_style": "Auto (follow theme)",
         # Animated banner SVGs / spinning emojis (off by default for performance)
         "animated_banner_enabled": False,
+        # Banner animation style when animated_banner_enabled is True.
+        # Valid values: "spin", "bounce", "shake", "pendulum", "flock".
+        # "flock" spawns themed emoji flying across the top of the window.
+        "banner_anim_style": "spin",
+        # When True the banner animation mode comes from the active theme's
+        # _banner_anim key rather than the manual banner_anim_style setting.
+        "banner_use_theme_anim": True,
         # Splash screen on startup (off by default)
         "show_splash_screen": False,
         # New hidden theme unlock flags

@@ -108,6 +108,7 @@ GORE_THEME = {
     "_effect": "gore",
     "_cursor": "emoji:💀",
     "_trail_color": "#cc0000",
+    "_banner_anim": "shake",
 }
 
 BAT_THEME = {
@@ -134,6 +135,7 @@ BAT_THEME = {
     "_effect": "bat",
     "_cursor": "emoji:🦇",
     "_trail_color": "#7b2dff",
+    "_banner_anim": "flock",
 }
 
 RAINBOW_THEME = {
@@ -160,6 +162,7 @@ RAINBOW_THEME = {
     "_effect": "rainbow",
     "_cursor": "emoji:🌈",
     "_trail_color": "#ffff00",
+    "_banner_anim": "bounce",
 }
 
 OTTER_THEME = {
@@ -264,6 +267,7 @@ GOTH_THEME = {
     "_effect": "goth",
     "_cursor": "emoji:💀",
     "_trail_color": "#8800aa",
+    "_banner_anim": "pendulum",
 }
 
 VOLCANO_THEME = {
@@ -290,6 +294,7 @@ VOLCANO_THEME = {
     "_effect": "fire",
     "_cursor": "emoji:🌋",
     "_trail_color": "#ff4400",
+    "_banner_anim": "shake",
 }
 
 ARCTIC_THEME = {
@@ -316,6 +321,7 @@ ARCTIC_THEME = {
     "_effect": "ice",
     "_cursor": "emoji:❄",
     "_trail_color": "#44aaff",
+    "_banner_anim": "pendulum",
 }
 
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
@@ -397,6 +403,7 @@ FAIRY_THEME = {
     "_effect": "fairy",
     "_cursor": "emoji:🪄",
     "_trail_color": "#ffccee",
+    "_banner_anim": "bounce",
 }
 
 SECRET_DEEP_OCEAN_THEME = {
@@ -470,6 +477,7 @@ MERMAID_THEME = {
     "_effect": "mermaid",
     "_cursor": "emoji:🧜",
     "_trail_color": "#00ccaa",
+    "_banner_anim": "bounce",
 }
 
 SHARK_BAIT_THEME = {
@@ -496,6 +504,7 @@ SHARK_BAIT_THEME = {
     "_effect": "shark",
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
+    "_banner_anim": "shake",
 }
 
 ALIEN_THEME = {
@@ -522,6 +531,7 @@ ALIEN_THEME = {
     "_effect": "alien",
     "_cursor": "emoji:🛸",
     "_trail_color": "#00ff88",
+    "_banner_anim": "bounce",
 }
 
 PRESET_THEMES.update({

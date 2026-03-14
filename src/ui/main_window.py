@@ -1,6 +1,7 @@
 """
 Main application window.
 """
+import math
 import sys
 import webbrowser
 
@@ -109,28 +110,64 @@ def _make_emoji_cursor(emoji: str, size: int = 40) -> QCursor:
 
 
 class _SpinningEmojiLabel(QWidget):
-    """Renders a single emoji character and rotates it continuously.
+    """Renders a single emoji with one of several animation modes.
 
-    This provides the per-theme "animated banner" effect: each theme's
-    representative emoji (🐼, 🩸, 🦇, etc.) appears to spin like a gear,
-    giving a genuine visual animation without cycling through different emojis.
+    Modes
+    -----
+    "spin"      Continuous 360° rotation (original behaviour).
+    "bounce"    Vertical bobbing using a sine wave.
+    "shake"     Rapid horizontal quiver.
+    "pendulum"  Oscillating swing (±30°) like a metronome.
+    "static"    No motion; used when an external flock effect is active.
+
+    The active mode is set via ``set_mode()``.  The animation is toggled
+    via ``set_animated()`` exactly as before so all callers stay compatible.
     """
 
-    _DEGREES_PER_FRAME = 2.0   # rotation speed per ~33 ms tick ≈ 1 full turn / ~6 s
-    _INTERVAL_MS = 33           # ~30 fps
+    _INTERVAL_MS = 33  # ~30 fps
+
+    # Per-mode speed constants
+    _SPIN_DEG_PER_FRAME = 2.0   # full rotation ≈ 6 s
+    _BOUNCE_STEP        = 0.12  # rad/tick ≈ full cycle / ~4 s
+    _SHAKE_STEP         = 0.40  # rad/tick ≈ full cycle / ~0.5 s
+    _PENDULUM_STEP      = 0.06  # rad/tick ≈ full cycle / ~10 s
+
+    _BOUNCE_AMPLITUDE   = 6     # pixels
+    _SHAKE_AMPLITUDE    = 5     # pixels
+    _PENDULUM_MAX_ANGLE = 30.0  # degrees
+
+    _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "static"})
 
     def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
         super().__init__(parent)
         self._emoji = emoji
         self._font_size = font_size
-        self._angle = 0.0
-        sz = font_size + 16
-        self.setFixedSize(sz, sz)
+        self._mode = "spin"
+        self._angle = 0.0     # degrees – used by spin / pendulum
+        self._phase = 0.0     # radians – used by bounce / shake / pendulum
+        self._offset_x = 0.0  # pixel offset for bounce / shake
+        self._offset_y = 0.0
+        self._update_size()
         self._timer = QTimer(self)
         self._timer.setInterval(self._INTERVAL_MS)
         self._timer.timeout.connect(self._tick)
         # Timer is NOT started by default; set_animated(True) starts it.
-        # This matches the animated_banner_enabled default of False.
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_mode(self, mode: str) -> None:
+        """Change the animation mode and reset all motion state."""
+        if mode not in self._VALID_MODES:
+            mode = "spin"
+        self._mode = mode
+        self._angle = 0.0
+        self._phase = 0.0
+        self._offset_x = 0.0
+        self._offset_y = 0.0
+        self._update_size()
+        self.update()
 
     def set_emoji(self, emoji: str) -> None:
         """Change the displayed emoji; takes effect on the next paint."""
@@ -138,29 +175,56 @@ class _SpinningEmojiLabel(QWidget):
         self.update()
 
     def set_animated(self, enabled: bool) -> None:
-        """Start or stop the rotation animation.
+        """Start or stop the animation timer.
 
-        When *enabled* is False the emoji is rendered at a fixed angle (0°)
-        without consuming CPU on the timer tick.  When re-enabled the rotation
-        resumes from angle zero.
+        In "static" mode the timer is never started even when *enabled* is
+        True — the emoji is always rendered without motion (the caller may
+        activate an external flock effect instead).
         """
-        if enabled:
+        if enabled and self._mode != "static":
             if not self._timer.isActive():
                 self._timer.start()
         else:
             if self._timer.isActive():
                 self._timer.stop()
             self._angle = 0.0
+            self._phase = 0.0
+            self._offset_x = 0.0
+            self._offset_y = 0.0
             self.update()
 
     def set_font_size(self, size: int) -> None:
         self._font_size = size
-        sz = size + 16
-        self.setFixedSize(sz, sz)
+        self._update_size()
         self.update()
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _update_size(self) -> None:
+        """Resize the widget to fit the emoji plus any animation headroom."""
+        base = self._font_size + 16
+        if self._mode == "bounce":
+            self.setFixedSize(base, base + self._BOUNCE_AMPLITUDE * 2)
+        elif self._mode == "shake":
+            self.setFixedSize(base + self._SHAKE_AMPLITUDE * 2, base)
+        else:
+            self.setFixedSize(base, base)
+
     def _tick(self) -> None:
-        self._angle = (self._angle + self._DEGREES_PER_FRAME) % 360.0
+        mode = self._mode
+        if mode == "spin":
+            self._angle = (self._angle + self._SPIN_DEG_PER_FRAME) % 360.0
+        elif mode == "bounce":
+            self._phase = (self._phase + self._BOUNCE_STEP) % (2 * math.pi)
+            self._offset_y = math.sin(self._phase) * self._BOUNCE_AMPLITUDE
+        elif mode == "shake":
+            self._phase = (self._phase + self._SHAKE_STEP) % (2 * math.pi)
+            self._offset_x = math.sin(self._phase) * self._SHAKE_AMPLITUDE
+        elif mode == "pendulum":
+            self._phase = (self._phase + self._PENDULUM_STEP) % (2 * math.pi)
+            self._angle = math.sin(self._phase) * self._PENDULUM_MAX_ANGLE
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
@@ -169,8 +233,11 @@ class _SpinningEmojiLabel(QWidget):
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         w, h = self.width(), self.height()
-        painter.translate(w / 2.0, h / 2.0)
-        painter.rotate(self._angle)
+        # Translate to widget centre plus any per-mode positional offset.
+        painter.translate(w / 2.0 + self._offset_x, h / 2.0 + self._offset_y)
+        # Apply rotation for spin / pendulum modes.
+        if self._angle != 0.0:
+            painter.rotate(self._angle)
 
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
@@ -695,16 +762,41 @@ class MainWindow(QMainWindow):
         QApplication.instance().setStyleSheet(build_stylesheet(theme, tooltip_style))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
-        # Update the spinning banner emoji to the theme's representative icon.
-        # The emoji rotates only when animated_banner_enabled is True.
+        # Update the banner emoji widget to the theme's representative icon.
         icon = get_theme_icon(theme_name)
         animated = self._settings.get("animated_banner_enabled", False)
-        if self._banner_emoji_left is not None:
-            self._banner_emoji_left.set_emoji(icon)
-            self._banner_emoji_left.set_animated(animated)
-        if self._banner_emoji_right is not None:
-            self._banner_emoji_right.set_emoji(icon)
-            self._banner_emoji_right.set_animated(animated)
+        # Determine the animation mode: use theme's _banner_anim if the
+        # "Use theme animation" setting is on, otherwise the manual setting.
+        if self._settings.get("banner_use_theme_anim", True):
+            anim_mode = theme.get("_banner_anim", "spin")
+        else:
+            anim_mode = self._settings.get("banner_anim_style", "spin")
+        # "flock" mode: keep emoji widgets static; activate a banner flock on
+        # the click-effects overlay so themed emoji fly across the top of the
+        # window periodically (independent of click-effect enable state).
+        if anim_mode == "flock":
+            if self._banner_emoji_left is not None:
+                self._banner_emoji_left.set_emoji(icon)
+                self._banner_emoji_left.set_mode("static")
+                self._banner_emoji_left.set_animated(False)
+            if self._banner_emoji_right is not None:
+                self._banner_emoji_right.set_emoji(icon)
+                self._banner_emoji_right.set_mode("static")
+                self._banner_emoji_right.set_animated(False)
+            if self._click_effects is not None:
+                trail_color = theme.get("_trail_color", "#e94560")
+                self._click_effects.set_banner_flock(animated, icon, trail_color)
+        else:
+            if self._banner_emoji_left is not None:
+                self._banner_emoji_left.set_emoji(icon)
+                self._banner_emoji_left.set_mode(anim_mode)
+                self._banner_emoji_left.set_animated(animated)
+            if self._banner_emoji_right is not None:
+                self._banner_emoji_right.set_emoji(icon)
+                self._banner_emoji_right.set_mode(anim_mode)
+                self._banner_emoji_right.set_animated(animated)
+            if self._click_effects is not None:
+                self._click_effects.set_banner_flock(False, icon, "#e94560")
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
             self._banner_lbl.setText("Alpha & RGBA Adjuster  |  File Converter")

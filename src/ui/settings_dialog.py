@@ -654,11 +654,54 @@ class SettingsDialog(QDialog):
             "Enable animated banner emojis && SVG badge (off by default)"
         )
         self._animated_banner_check.setToolTip(
-            "When enabled: the spinning emoji in the header rotates continuously\n"
+            "When enabled: the banner emoji in the header animates continuously\n"
             "and the theme SVG badge in the tab bar plays its built-in animation.\n"
             "When disabled: both are rendered statically, saving CPU/GPU resources."
         )
         misc_gl.addWidget(self._animated_banner_check, 3, 0, 1, 2)
+
+        # Banner animation style (spin / bounce / shake / pendulum / flock)
+        misc_gl.addWidget(QLabel("Banner animation:"), 4, 0)
+        self._banner_anim_combo = QComboBox()
+        _BANNER_ANIM_OPTIONS = [
+            ("spin",     "Spin – continuous 360° rotation"),
+            ("bounce",   "Bounce – gentle vertical bobbing"),
+            ("shake",    "Shake – rapid horizontal quiver"),
+            ("pendulum", "Pendulum – swinging back and forth"),
+            ("flock",    "Flock – emoji fly across the top of the window"),
+        ]
+        _BANNER_ANIM_TIPS = {
+            "spin":     "The emoji rotates continuously like a gear (~6 s per full turn).",
+            "bounce":   "The emoji bobs up and down with a smooth sine-wave motion.",
+            "shake":    "The emoji vibrates rapidly side to side — great for aggressive themes.",
+            "pendulum": "The emoji swings back and forth like a pendulum clock.",
+            "flock":    "A small group of themed emoji periodically flies across the top of\n"
+                        "the window (similar to the bat flock in Bat Cave theme).",
+        }
+        for key, label in _BANNER_ANIM_OPTIONS:
+            self._banner_anim_combo.addItem(label, userData=key)
+            idx = self._banner_anim_combo.count() - 1
+            tip = _BANNER_ANIM_TIPS.get(key, "")
+            if tip:
+                self._banner_anim_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._banner_anim_combo.setToolTip(
+            "Choose the animation style for the banner emoji when animation is enabled.\n"
+            "Greyed out (non-interactive) while 'Use theme animation' is checked —\n"
+            "uncheck that box to override with your own style."
+        )
+        self._banner_anim_combo.setMaximumWidth(280)
+        misc_gl.addWidget(self._banner_anim_combo, 4, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Use-theme animation checkbox
+        self._banner_use_theme_anim_check = QCheckBox(
+            "Use theme animation (each theme has its own style)"
+        )
+        self._banner_use_theme_anim_check.setToolTip(
+            "When checked the animation style is chosen automatically by the active\n"
+            "theme (e.g. Bat Cave uses flock, Alien uses bounce, Goth uses pendulum).\n"
+            "Uncheck to override with your own style from the dropdown above."
+        )
+        misc_gl.addWidget(self._banner_use_theme_anim_check, 5, 0, 1, 2)
 
         # Splash screen on startup (off by default)
         self._show_splash_check = QCheckBox(
@@ -668,7 +711,7 @@ class SettingsDialog(QDialog):
             "When enabled: an animated themed splash screen is shown while the\n"
             "app loads on startup.  Disable to skip straight to the main window."
         )
-        misc_gl.addWidget(self._show_splash_check, 4, 0, 1, 2)
+        misc_gl.addWidget(self._show_splash_check, 6, 0, 1, 2)
 
         gv.addWidget(grp_misc)
 
@@ -735,6 +778,8 @@ class SettingsDialog(QDialog):
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
         self._tooltip_style_combo.currentTextChanged.connect(self._on_tooltip_style_changed)
         self._animated_banner_check.toggled.connect(self._on_animated_banner_changed)
+        self._banner_anim_combo.currentIndexChanged.connect(self._on_banner_anim_style_changed)
+        self._banner_use_theme_anim_check.toggled.connect(self._on_banner_use_theme_anim_changed)
         self._show_splash_check.toggled.connect(self._on_show_splash_changed)
 
     # ------------------------------------------------------------------
@@ -816,7 +861,8 @@ class SettingsDialog(QDialog):
             self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
-            self._animated_banner_check, self._show_splash_check,
+            self._animated_banner_check, self._banner_anim_combo,
+            self._banner_use_theme_anim_check, self._show_splash_check,
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
@@ -888,6 +934,19 @@ class SettingsDialog(QDialog):
         self._animated_banner_check.setChecked(
             self._settings.get("animated_banner_enabled", False)
         )
+        # Load banner animation style combo
+        _BANNER_ANIM_IDX_MAP = {
+            "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3, "flock": 4,
+        }
+        saved_banner_anim = self._settings.get("banner_anim_style", "spin")
+        self._banner_anim_combo.setCurrentIndex(
+            _BANNER_ANIM_IDX_MAP.get(saved_banner_anim, 0)
+        )
+        banner_use_theme = self._settings.get("banner_use_theme_anim", True)
+        self._banner_use_theme_anim_check.setChecked(banner_use_theme)
+        banner_enabled = self._settings.get("animated_banner_enabled", False)
+        self._banner_anim_combo.setEnabled(banner_enabled and not banner_use_theme)
+        self._banner_use_theme_anim_check.setEnabled(banner_enabled)
         self._show_splash_check.setChecked(
             self._settings.get("show_splash_screen", False)
         )
@@ -922,6 +981,8 @@ class SettingsDialog(QDialog):
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
         mgr.register(self._animated_banner_check, "animated_banner_check")
+        mgr.register(self._banner_anim_combo, "banner_anim_combo")
+        mgr.register(self._banner_use_theme_anim_check, "banner_use_theme_anim_check")
         mgr.register(self._show_splash_check, "show_splash_check")
         # Additional widget registrations
         mgr.register(self._btn_save_theme, "save_custom_theme")
@@ -1272,7 +1333,24 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_animated_banner_changed(self) -> None:
-        self._settings.set("animated_banner_enabled", self._animated_banner_check.isChecked())
+        enabled = self._animated_banner_check.isChecked()
+        self._settings.set("animated_banner_enabled", enabled)
+        # Enable/disable the subordinate controls based on the new state.
+        use_theme = self._banner_use_theme_anim_check.isChecked()
+        self._banner_anim_combo.setEnabled(enabled and not use_theme)
+        self._banner_use_theme_anim_check.setEnabled(enabled)
+        self.settings_changed.emit()
+
+    def _on_banner_anim_style_changed(self) -> None:
+        key = self._banner_anim_combo.currentData() or "spin"
+        self._settings.set("banner_anim_style", key)
+        self.settings_changed.emit()
+
+    def _on_banner_use_theme_anim_changed(self) -> None:
+        use_theme = self._banner_use_theme_anim_check.isChecked()
+        self._settings.set("banner_use_theme_anim", use_theme)
+        banner_enabled = self._animated_banner_check.isChecked()
+        self._banner_anim_combo.setEnabled(banner_enabled and not use_theme)
         self.settings_changed.emit()
 
     def _on_show_splash_changed(self) -> None:

@@ -546,6 +546,57 @@ class _FairyFlock(QObject):
             self._overlay._add_particle(fairy)
 
 
+class _BannerFlock(QObject):
+    """Spawns themed emoji flying across the top band of the window periodically.
+
+    Unlike *_BatFlock* and *_FairyFlock* (which are activated by the click
+    effect key), this class is driven by the **banner animation mode**.  It is
+    configured with the theme's representative icon emoji and accent colour so
+    it complements whatever theme is active.  It works independently of whether
+    click effects are enabled.
+    """
+
+    def __init__(self, overlay: "ClickEffectsOverlay",
+                 emoji: str = "🐼", color: str = "#e94560"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._emoji = emoji
+        self._color = QColor(color)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._launch)
+        self._timer.setInterval(random.randint(4000, 8000))
+
+    def start(self) -> None:
+        self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def set_emoji(self, emoji: str, color: str) -> None:
+        """Update the emoji and accent colour used for spawned particles."""
+        self._emoji = emoji
+        self._color = QColor(color)
+
+    def _launch(self) -> None:
+        self._timer.setInterval(random.randint(4000, 9000))
+        w = self._overlay.width()
+        if w <= 0:
+            return
+        count = random.randint(2, 4)
+        for i in range(count):
+            y_start = random.randint(8, 55)
+            x_start = random.randint(-20, 20)
+            speed = random.uniform(2.5, 6.0)
+            life = (w + 60) / max(speed, 1) * 0.05 + random.uniform(0.2, 0.8)
+            p = _Particle(
+                x_start + i * 28, y_start,
+                speed, random.uniform(-0.4, 0.4), life,
+                "bat_fly", random.uniform(18, 26),
+                QColor(self._color), self._emoji,
+            )
+            self._overlay._add_particle(p)
+
+
 # ---------------------------------------------------------------------------
 # Main overlay widget
 # ---------------------------------------------------------------------------
@@ -588,6 +639,8 @@ class ClickEffectsOverlay(QWidget):
         self._click_count = 0
         self._bat_flock: _BatFlock | None = None
         self._fairy_flock: _FairyFlock | None = None
+        self._banner_flock: _BannerFlock | None = None
+        self._banner_flock_active: bool = False
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
         # Cache QFont objects per integer point-size to avoid repeated
         # mutations and implicit font-metric recalculations each frame.
@@ -634,7 +687,43 @@ class ClickEffectsOverlay(QWidget):
                 self._bat_flock.stop()
             if self._fairy_flock:
                 self._fairy_flock.stop()
-            self.hide()
+            # Only hide the overlay if the banner flock is also inactive.
+            # When banner flock is running we still need the overlay visible
+            # so flying particles can be rendered even without click effects.
+            if not self._banner_flock_active:
+                self.hide()
+            else:
+                # Ensure the banner-flock timer keeps running even though
+                # the click-effect timer was stopped above.
+                if not self._timer.isActive():
+                    self._timer.start()
+
+    def set_banner_flock(self, enabled: bool,
+                         emoji: str = "🐼", color: str = "#e94560") -> None:
+        """Activate or deactivate the banner flock animation.
+
+        The banner flock flies themed emoji across the top area of the window
+        at regular intervals.  It is independent of the click-effects enabled
+        state — the overlay stays visible (but transparent) whenever the banner
+        flock is running, even if click effects are off.
+        """
+        self._banner_flock_active = enabled
+        if enabled:
+            if self._banner_flock is None:
+                self._banner_flock = _BannerFlock(self, emoji, color)
+            else:
+                self._banner_flock.set_emoji(emoji, color)
+            self.show()
+            if not self._timer.isActive():
+                self._timer.start()
+            self._banner_flock.start()
+        else:
+            if self._banner_flock is not None:
+                self._banner_flock.stop()
+            # If click effects are also disabled, stop the timer and hide.
+            if not self._enabled:
+                self._timer.stop()
+                self.hide()
 
     def set_effect(self, effect_key: str) -> None:
         self._effect_key = effect_key if effect_key in _SPAWNERS else "default"
