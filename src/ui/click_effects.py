@@ -805,6 +805,15 @@ class ClickEffectsOverlay(QWidget):
     # render in the next frame once earlier ones have faded).
     _MAX_TEXT_PER_FRAME = 8
 
+    # Wing-flap animation constants for bat_fly / fairy_fly particles.
+    # Each tick decrements life by 0.05, so the elapsed frame counter is
+    # (max_life - life) / 0.05.  Multiplying by π * _FLAP_FREQ_MULT gives
+    # the phase argument to sin(); at 20 fps this produces approximately
+    # _FLAP_FREQ_MULT * 10 flap cycles per second.  0.55 ≈ 0.9 Hz — one
+    # visible wing stroke every ~1.1 s, natural-looking without being jittery.
+    _FLAP_FREQ_MULT  = 0.55   # radians-per-frame phase multiplier (~0.9 Hz @ 20 fps)
+    _FLAP_AMPLITUDE  = 0.28   # ±28 % size oscillation (wings spread vs. folded)
+
     def _particle_rect(self, p: _Particle):
         """Return the approximate bounding QRect for a single particle."""
         r = max(6, int(p.size + self._DIRTY_MARGIN))
@@ -842,8 +851,8 @@ class ClickEffectsOverlay(QWidget):
             # emoji assets.
             if p.kind in ("bat_fly", "fairy_fly"):
                 elapsed = (p.max_life - p.life) / 0.05  # frame counter
-                flap = math.sin(elapsed * math.pi * 0.55)  # ~0.9 Hz at 20 fps
-                p.size = p.base_size * (1.0 + 0.28 * flap)
+                flap = math.sin(elapsed * math.pi * self._FLAP_FREQ_MULT)
+                p.size = p.base_size * (1.0 + self._FLAP_AMPLITUDE * flap)
             # Cull ambient (bat/fairy) particles that have completely left the
             # window so they never accumulate off-screen indefinitely.
             if p.kind in ("bat_fly", "fairy_fly"):

@@ -418,9 +418,10 @@ class SettingsManager:
 
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
+        # Sound settings
         "sound_enabled", "sound_volume", "click_sound_path", "use_theme_sound",
-        "sound_success", "sound_error", "sound_unlock", "sound_file_add", "sound_preview",
-        "sound_process_start", "sound_file_remove",
+        "sound_success", "sound_error", "sound_unlock", "sound_file_add",
+        "sound_preview", "sound_process_start", "sound_file_remove",
         "sound_theme_change", "sound_tab_switch", "sound_drag_enter",
         "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
