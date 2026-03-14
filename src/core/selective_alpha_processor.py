@@ -282,8 +282,8 @@ def apply_selective_alpha(
     out = img.convert("RGBA") if img.mode != "RGBA" else img
     try:
         arr = np.array(out, dtype=np.uint8)
-        # Apply from lowest priority to highest so zone 0 is written last
-        # and therefore wins on overlap.
+        # Apply from the highest zone index down to zone 0 so that zone 0 is
+        # written last and therefore wins on overlap (zone 0 has highest priority).
         for mask, alpha_val in zip(reversed(zone_masks), reversed(zone_alphas)):
             if mask is not None and mask.any():
                 arr[mask, 3] = np.uint8(np.clip(alpha_val, 0, 255))
