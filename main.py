@@ -276,12 +276,17 @@ def main():
         sys.path.insert(0, parent_dir)
 
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtCore import QCoreApplication
+    from PyQt6.QtCore import QCoreApplication, Qt
 
     QCoreApplication.setApplicationName("AlphaFixerConverter")
     QCoreApplication.setOrganizationName("PandaTools")
     # AA_UseHighDpiPixmaps was removed in Qt6; high-DPI pixmaps are always
     # enabled by default in Qt6/PyQt6 so no setAttribute call is needed.
+    # Enable per-monitor DPI awareness so each window rescales correctly when
+    # dragged between monitors with different scale factors.
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # Consistent baseline across all platforms

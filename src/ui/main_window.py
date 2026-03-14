@@ -5,7 +5,7 @@ import math
 import sys
 import webbrowser
 
-from PyQt6.QtCore import Qt, QRect, QTimer
+from PyQt6.QtCore import Qt, QEvent, QRect, QTimer
 from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
@@ -347,14 +347,42 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
         self._apply_theme()
         self._setup_effects()
+        # Connect to screen-topology and DPI-change signals so the window
+        # geometry stays valid when the user plugs in / removes a monitor or
+        # changes the system display-scale setting.
+        app = QApplication.instance()
+        if app is not None:
+            app.screenAdded.connect(self._on_screens_changed)
+            app.screenRemoved.connect(self._on_screens_changed)
+            app.primaryScreenChanged.connect(self._on_screens_changed)
 
     # ------------------------------------------------------------------
-    # Window setup
+    # Window setup / minimum-size helpers (screen-adaptive)
     # ------------------------------------------------------------------
+
+    def _update_minimum_size(self) -> None:
+        """Recompute and apply the window's minimum size based on the current
+        screen's available geometry.
+
+        The cap of 900×700 is the design-target minimum.  On displays where
+        the available area is smaller (e.g. 1280×720 laptops with a taskbar)
+        we shrink the minimum proportionally so the window can still be shown
+        without the OS forcing it to overflow the working area.
+        """
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            ag = screen.availableGeometry()
+            # Use at most 88 % of the available width/height, but never below
+            # a sensible floor that still allows the interface to be usable.
+            min_w = min(900, max(640, int(ag.width()  * 0.88)))
+            min_h = min(700, max(520, int(ag.height() * 0.88)))
+        else:
+            min_w, min_h = 900, 700
+        self.setMinimumSize(min_w, min_h)
 
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}")
-        self.setMinimumSize(900, 700)
+        self._update_minimum_size()
         # Set the panda SVG as the window / taskbar icon (initial default).
         # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
         # which contains all shell sizes (16 → 256 px) for crisp display at
@@ -851,15 +879,21 @@ class MainWindow(QMainWindow):
             scr.availableGeometry().intersects(title_bar_strip)
             for scr in screens
         )
+        primary = QApplication.primaryScreen()
+        if primary is None and screens:
+            primary = screens[0]
         if not on_screen:
             # Centre on the primary (or first available) screen instead.
-            primary = QApplication.primaryScreen()
-            if primary is None and screens:
-                primary = screens[0]
             if primary is not None:
                 ag = primary.availableGeometry()
                 x = ag.x() + max(0, (ag.width()  - w) // 2)
                 y = ag.y() + max(0, (ag.height() - h) // 2)
+        # Clamp saved size so it doesn't exceed the available area
+        # (e.g. the user previously ran on a larger monitor or higher resolution)
+        if primary is not None:
+            ag = primary.availableGeometry()
+            w = min(w, ag.width())
+            h = min(h, ag.height())
         self.setGeometry(x, y, w, h)
 
     def _save_geometry(self):
@@ -870,6 +904,65 @@ class MainWindow(QMainWindow):
             self._settings.set("window_y", g.y())
             self._settings.set("window_w", g.width())
             self._settings.set("window_h", g.height())
+
+    def _clamp_to_screen(self) -> None:
+        """Ensure the window is visible on *some* available screen.
+
+        Called after the user:
+        • Moves the window to a different monitor
+        • Changes the system DPI / display-scale setting
+        • Connects or disconnects a monitor
+
+        If the title bar is entirely off-screen the window is centred on the
+        primary (or first available) screen.  The window size is also clamped
+        so it never exceeds the available screen area.
+        """
+        if self.isMaximized() or self.isFullScreen():
+            return
+        g = self.geometry()
+        x, y, w, h = g.x(), g.y(), g.width(), g.height()
+        _MIN_VISIBLE_W = 100
+        _MIN_VISIBLE_H = 50
+        title_bar_strip = QRect(x, y, max(w, _MIN_VISIBLE_W), _MIN_VISIBLE_H)
+        screens = QApplication.screens()
+        on_screen = any(
+            scr.availableGeometry().intersects(title_bar_strip)
+            for scr in screens
+        )
+        primary = QApplication.primaryScreen()
+        if primary is None and screens:
+            primary = screens[0]
+        if primary is not None:
+            ag = primary.availableGeometry()
+            # Clamp size to available area
+            w = min(w, ag.width())
+            h = min(h, ag.height())
+            if not on_screen:
+                x = ag.x() + max(0, (ag.width()  - w) // 2)
+                y = ag.y() + max(0, (ag.height() - h) // 2)
+            self.setGeometry(x, y, w, h)
+        elif not on_screen and screens:
+            # No primary screen object – just re-centre on the first screen
+            ag = screens[0].availableGeometry()
+            w = min(w, ag.width())
+            h = min(h, ag.height())
+            self.setGeometry(
+                ag.x() + max(0, (ag.width()  - w) // 2),
+                ag.y() + max(0, (ag.height() - h) // 2),
+                w, h,
+            )
+
+    def _on_screens_changed(self, *_args) -> None:
+        """Handle monitor added/removed or primary-screen change.
+
+        Deferred 250 ms so the OS has time to finish updating screen geometry
+        before we query it.  Two timers coalesce into one callback even when
+        multiple signals fire in quick succession (e.g. a resolution change
+        can emit both ``screenRemoved`` and ``screenAdded`` for the same
+        physical monitor).
+        """
+        QTimer.singleShot(250, self._clamp_to_screen)
+        QTimer.singleShot(250, self._update_minimum_size)
 
     # ------------------------------------------------------------------
     # Theme
@@ -1394,6 +1487,24 @@ class MainWindow(QMainWindow):
         # the immediate fine-grained correction; the timer fires for any cases
         # where the eventFilter is not installed (e.g., effects disabled).
         self._resize_timer.start()
+
+    def changeEvent(self, event: "QEvent") -> None:
+        """Handle runtime display/DPI changes.
+
+        Qt fires ``QEvent.Type.ScreenChangeInternal`` whenever:
+        • The window is dragged to a monitor with a different device-pixel ratio
+        • The user changes the system display-scale setting (e.g. 100 % → 150 %)
+        • Windows sends a WM_DPICHANGED message (per-monitor DPI awareness)
+
+        In response we:
+        1. Recalculate the adaptive minimum size for the new screen's geometry.
+        2. Clamp the window so it remains visible and fits within the new area.
+        """
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ScreenChangeInternal:
+            # Defer slightly so Qt has updated screen/geometry data first.
+            QTimer.singleShot(150, self._update_minimum_size)
+            QTimer.singleShot(150, self._clamp_to_screen)
 
     def _reposition_overlays(self) -> None:
         """Reposition both overlays to fill the window after a resize burst."""
