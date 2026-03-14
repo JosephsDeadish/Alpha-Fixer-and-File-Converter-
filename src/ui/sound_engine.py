@@ -273,6 +273,34 @@ def _make_preview_wav(sample_rate: int = 22050) -> str:
     return _write_wav(samples, sample_rate)
 
 
+def _make_process_start_wav(sample_rate: int = 22050) -> str:
+    """Short ascending two-tone 'launch' cue played when a batch starts."""
+    # Two quick beeps going up: 440 Hz then 660 Hz, each 40 ms with a soft envelope
+    notes = [(440, 0.04), (660, 0.04)]
+    samples: list = []
+    pause = int(sample_rate * 0.015)  # 15 ms silence between notes
+    for freq, dur in notes:
+        n = int(sample_rate * dur)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.sin(math.pi * i / n)  # half-sine envelope
+            samples.append(int(20000 * math.sin(2 * math.pi * freq * t) * env))
+        samples.extend([0] * pause)
+    return _write_wav(samples, sample_rate)
+
+
+def _make_file_remove_wav(sample_rate: int = 22050) -> str:
+    """Short descending 'pop' played when files are removed from the queue."""
+    n = int(sample_rate * 0.05)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        # Slightly descending pitch: start at 500 Hz, end near 350 Hz
+        freq = 500 - 3000 * t
+        env = math.exp(-t * 50) * (1 - math.exp(-t * 300))
+        samples.append(int(16000 * math.sin(2 * math.pi * freq * t) * env))
+    return _write_wav(samples, sample_rate)
+
 
 # ---------------------------------------------------------------------------
 # Click-filter that plays a sound on every QAbstractButton press
@@ -324,6 +352,8 @@ class SoundEngine(QObject):
         self._unlock_wav: str = ""
         self._file_add_wav: str = ""
         self._preview_wav: str = ""
+        self._process_start_wav: str = ""
+        self._file_remove_wav: str = ""
         # Per-profile click WAVs keyed by profile name
         self._theme_click_wavs: dict[str, str] = {}
         self._filter: _ButtonClickFilter | None = None
@@ -341,6 +371,8 @@ class SoundEngine(QObject):
             self._unlock_wav  = _make_unlock_wav()
             self._file_add_wav = _make_file_add_wav()
             self._preview_wav  = _make_preview_wav()
+            self._process_start_wav = _make_process_start_wav()
+            self._file_remove_wav   = _make_file_remove_wav()
             # Generate one WAV per sound profile (12 profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
                             "growl", "bubble", "chirp", "crunch", "purr"):
@@ -454,6 +486,24 @@ class SoundEngine(QObject):
         if self._preview_wav:
             self._play(self._preview_wav)
 
+    def play_process_start(self) -> None:
+        """Play a short ascending cue when a batch starts processing."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_process_start", False):
+            return
+        if self._process_start_wav:
+            self._play(self._process_start_wav)
+
+    def play_file_remove(self) -> None:
+        """Play a short descending pop when files are removed from the queue."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_file_remove", False):
+            return
+        if self._file_remove_wav:
+            self._play(self._file_remove_wav)
+
     # ------------------------------------------------------------------
     # Internal playback
     # ------------------------------------------------------------------
@@ -508,7 +558,8 @@ class SoundEngine(QObject):
         """Remove temp WAV files on application exit."""
         all_wavs = [self._click_wav, self._success_wav,
                     self._error_wav, self._unlock_wav,
-                    self._file_add_wav, self._preview_wav]
+                    self._file_add_wav, self._preview_wav,
+                    self._process_start_wav, self._file_remove_wav]
         all_wavs.extend(self._theme_click_wavs.values())
         for path in all_wavs:
             if path and os.path.isfile(path):

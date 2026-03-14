@@ -543,12 +543,23 @@ class MainWindow(QMainWindow):
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
         self._converter_tab.processing_done.connect(self._on_processing_done)
+        # Processing-error sounds
+        self._alpha_tab.processing_error.connect(self._on_processing_error)
+        self._converter_tab.processing_error.connect(self._on_processing_error)
+        # Processing-started sounds
+        self._alpha_tab.processing_started.connect(self._on_processing_started)
+        self._converter_tab.processing_started.connect(self._on_processing_started)
         # First-use unlock triggers
         self._alpha_tab.first_alpha_fix.connect(self._on_first_alpha_fix)
         self._converter_tab.first_conversion.connect(self._on_first_conversion)
         # File-add sounds
         self._alpha_tab.files_added.connect(self._on_files_added)
         self._converter_tab.files_added.connect(self._on_files_added)
+        # File-remove sounds
+        self._alpha_tab.files_removed.connect(self._on_files_removed)
+        self._converter_tab.files_removed.connect(self._on_files_removed)
+        # Preview-refresh sounds
+        self._alpha_tab.preview_refreshed.connect(self._on_preview_refreshed)
 
         # Cursor
         self._apply_cursor()
@@ -692,6 +703,34 @@ class MainWindow(QMainWindow):
         """Play a soft sound when files are added to either tab's queue."""
         try:
             self._sound.play_file_add()
+        except Exception:
+            pass
+
+    def _on_files_removed(self) -> None:
+        """Play a short pop when files are removed from either tab's queue."""
+        try:
+            self._sound.play_file_remove()
+        except Exception:
+            pass
+
+    def _on_processing_started(self) -> None:
+        """Play an ascending two-tone cue when a batch starts processing."""
+        try:
+            self._sound.play_process_start()
+        except Exception:
+            pass
+
+    def _on_processing_error(self, error_count: int) -> None:
+        """Play an error buzz when a batch finishes with failures."""
+        try:
+            self._sound.play_error()
+        except Exception:
+            pass
+
+    def _on_preview_refreshed(self) -> None:
+        """Play a subtle ping when the live preview refreshes (opt-in, off by default)."""
+        try:
+            self._sound.play_preview()
         except Exception:
             pass
 

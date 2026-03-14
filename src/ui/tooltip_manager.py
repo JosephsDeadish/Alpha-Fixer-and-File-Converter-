@@ -605,6 +605,18 @@ _NORMAL: dict[str, list[str]] = {
         "The ping is very soft (lower volume than the click sound).",
         "Useful when using the Alpha Fixer with headphones for eyes-free monitoring.",
     ],
+    "sound_process_start_check": [
+        "Play a short ascending two-tone cue when a batch starts processing.",
+        "Off by default — gives an audio cue that work has begun.",
+        "Useful when you start a long batch and want to know it has kicked off.",
+        "The sound is two quick beeps going up in pitch (440 Hz then 660 Hz).",
+    ],
+    "sound_file_remove_check": [
+        "Play a short descending pop when files are removed from the processing queue.",
+        "Off by default — audible confirmation that files have been removed.",
+        "Fires when you press Delete or use the right-click Remove option.",
+        "The sound is a quick downward pitch sweep — distinct from the file-add sound.",
+    ],
     "reset_all_settings": [
         "Reset ALL application settings to their factory defaults.",
         "This includes theme, cursor, trail, sound, presets, and click effects.",
@@ -1500,6 +1512,18 @@ _DUMBED: dict[str, list[str]] = {
         "Turn on if you want to hear the preview update. Niche but useful.",
         "Soft ping = preview refreshed. Very quiet. Barely noticeable.",
         "Useful with headphones. Not useful with loud speakers unless you enjoy chaos.",
+    ],
+    "sound_process_start_check": [
+        "Two quick beeps upward when a batch kicks off. Off by default.",
+        "Ascending boop boop = processing started. Good audio cue.",
+        "Useful if you tab away and want to know the job has begun.",
+        "Short two-note ascending sequence. Tasteful. Informative.",
+    ],
+    "sound_file_remove_check": [
+        "Pop sound when you remove files from the queue. Off by default.",
+        "Little downward swoosh when files leave. Satisfying deletion noise.",
+        "Fires on Delete key or right-click Remove. Confirms the file is gone.",
+        "Short pitch-down sweep. Clean. Distinct from the add sound.",
     ],
     "reset_all_settings": [
         "This resets EVERYTHING. Theme, sound, cursors, presets, all of it. Nuclear option.",
@@ -2406,6 +2430,24 @@ _VULGAR: dict[str, list[str]] = {
         "Preview ping: the sound that seemed like a good idea until you actually turned it on.",
         "Technically useful for confirming live preview is working without looking at the screen.",
         "Enable this if you live on the edge. Disable it if you value your sanity. Your call entirely.",
+    ],
+    "sound_process_start_check": [
+        "Two ascending beeps when a batch starts. Off by default.",
+        "Boop boop upward = batch is running. Go tab away. Come back when it's done.",
+        "Short. Informative. Two notes. First 440 Hz, then 660 Hz. Musical starting gun.",
+        "Pairs nicely with the completion chime. Start sound + end sound. Full lifecycle feedback.",
+        "Useful for long batches where you want audio confirmation it actually started and didn't hang.",
+        "Without this: silent start. Could have silently crashed. With this: confirmed audio launch.",
+        "The sound fires the moment you hit Process. Immediate feedback. Batch is in motion.",
+    ],
+    "sound_file_remove_check": [
+        "Descending pop when files are removed from the queue. Off by default.",
+        "Quick pitch-down swoosh when a file leaves. Audio deletion confirmation.",
+        "Fires on Delete key, right-click Remove, or the Clear All action.",
+        "Distinct from the add sound (which goes up). This one goes down. Intuitive.",
+        "Short sound. Not annoying. Just a little 'gone' noise to confirm the file left.",
+        "Pairs with the file-add thunk for a complete queue-management sound system.",
+        "Enable if you want to know a file was actually removed and not just visually hidden.",
     ],
     "reset_all_settings": [
         "RESET EVERYTHING. Factory defaults. The nuclear option. You absolutely sure about this?",

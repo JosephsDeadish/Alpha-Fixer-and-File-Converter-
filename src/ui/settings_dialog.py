@@ -622,9 +622,20 @@ class SettingsDialog(QDialog):
             "Play a subtle ping every time the live preview image refreshes.\n"
             "Off by default — can be distracting during rapid parameter changes."
         )
+        self._sound_process_start_check = QCheckBox("Process start")
+        self._sound_process_start_check.setToolTip(
+            "Play a short ascending two-tone cue when a batch starts processing.\n"
+            "Off by default."
+        )
+        self._sound_file_remove_check = QCheckBox("File removed")
+        self._sound_file_remove_check.setToolTip(
+            "Play a short descending pop when files are removed from the queue.\n"
+            "Off by default."
+        )
         for chk in (self._sound_success_check, self._sound_error_check,
                     self._sound_unlock_check, self._sound_file_add_check,
-                    self._sound_preview_check):
+                    self._sound_preview_check, self._sound_process_start_check,
+                    self._sound_file_remove_check):
             events_row.addWidget(chk)
         sound_gl.addLayout(events_row, 4, 1)
 
@@ -892,6 +903,8 @@ class SettingsDialog(QDialog):
         self._sound_unlock_check.toggled.connect(self._on_sound_event_changed)
         self._sound_file_add_check.toggled.connect(self._on_sound_event_changed)
         self._sound_preview_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_process_start_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_file_remove_check.toggled.connect(self._on_sound_event_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
@@ -1000,6 +1013,7 @@ class SettingsDialog(QDialog):
             self._sound_volume_slider,
             self._sound_success_check, self._sound_error_check, self._sound_unlock_check,
             self._sound_file_add_check, self._sound_preview_check,
+            self._sound_process_start_check, self._sound_file_remove_check,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -1031,6 +1045,8 @@ class SettingsDialog(QDialog):
         self._sound_unlock_check.setChecked(self._settings.get("sound_unlock", True))
         self._sound_file_add_check.setChecked(self._settings.get("sound_file_add", True))
         self._sound_preview_check.setChecked(self._settings.get("sound_preview", False))
+        self._sound_process_start_check.setChecked(self._settings.get("sound_process_start", False))
+        self._sound_file_remove_check.setChecked(self._settings.get("sound_file_remove", False))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1132,6 +1148,8 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_unlock_check, "sound_unlock_check")
         mgr.register(self._sound_file_add_check, "sound_file_add_check")
         mgr.register(self._sound_preview_check, "sound_preview_check")
+        mgr.register(self._sound_process_start_check, "sound_process_start_check")
+        mgr.register(self._sound_file_remove_check, "sound_file_remove_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -1446,6 +1464,8 @@ class SettingsDialog(QDialog):
         self._settings.set("sound_unlock", self._sound_unlock_check.isChecked())
         self._settings.set("sound_file_add", self._sound_file_add_check.isChecked())
         self._settings.set("sound_preview", self._sound_preview_check.isChecked())
+        self._settings.set("sound_process_start", self._sound_process_start_check.isChecked())
+        self._settings.set("sound_file_remove", self._sound_file_remove_check.isChecked())
 
     def _on_trail_changed(self) -> None:
         self._settings.set("trail_enabled", self._trail_check.isChecked())

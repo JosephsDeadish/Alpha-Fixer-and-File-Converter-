@@ -148,11 +148,19 @@ class AlphaFixerTab(QWidget):
     # Emitted after every successful batch: carries the count of files processed.
     # MainWindow connects this to check for processing-based theme unlocks.
     processing_done = pyqtSignal(int)
+    # Emitted when a batch finishes with at least one error (carries error count).
+    processing_error = pyqtSignal(int)
+    # Emitted when a batch starts (before the worker thread is launched).
+    processing_started = pyqtSignal()
     # Emitted the very first time a batch completes successfully.
     # MainWindow uses this to trigger the 'first alpha fix' theme unlock.
     first_alpha_fix = pyqtSignal()
     # Emitted whenever at least one file is added to the queue.
     files_added = pyqtSignal()
+    # Emitted whenever files are removed from the queue.
+    files_removed = pyqtSignal()
+    # Emitted whenever the live preview refreshes (before/after images ready).
+    preview_refreshed = pyqtSignal()
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -575,6 +583,7 @@ class AlphaFixerTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
+        self._file_list.file_removed.connect(self.files_removed)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label
@@ -830,6 +839,8 @@ class AlphaFixerTab(QWidget):
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
         self._compare.set_before(before_qi)
         self._compare.set_after(after_qi)
+        # Notify main window so it can play the preview sound (opt-in, off by default)
+        self.preview_refreshed.emit()
 
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
@@ -919,6 +930,8 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setText("Processing…")
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
+        # Notify main window so it can play the process-start sound
+        self.processing_started.emit()
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -1004,6 +1017,8 @@ class AlphaFixerTab(QWidget):
             if not self._settings.get("alpha_fix_done_once", False):
                 self._settings.set("alpha_fix_done_once", True)
                 self.first_alpha_fix.emit()
+        if errors > 0:
+            self.processing_error.emit(errors)
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

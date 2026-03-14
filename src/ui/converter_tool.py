@@ -28,11 +28,17 @@ class ConverterTab(QWidget):
     # Emitted after every successful batch: carries the count of files converted.
     # MainWindow connects this to check for processing-based theme unlocks.
     processing_done = pyqtSignal(int)
+    # Emitted when a batch finishes with at least one error (carries error count).
+    processing_error = pyqtSignal(int)
+    # Emitted when a batch starts (before the worker thread is launched).
+    processing_started = pyqtSignal()
     # Emitted the very first time a conversion batch completes successfully.
     # MainWindow uses this to trigger the 'first conversion' theme unlock.
     first_conversion = pyqtSignal()
     # Emitted whenever at least one file is added to the queue.
     files_added = pyqtSignal()
+    # Emitted whenever files are removed from the queue.
+    files_removed = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -401,6 +407,7 @@ class ConverterTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
+        self._file_list.file_removed.connect(self.files_removed)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
@@ -743,6 +750,8 @@ class ConverterTab(QWidget):
         self._status_lbl.setText("Converting…")
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
+        # Notify main window so it can play the process-start sound
+        self.processing_started.emit()
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -829,6 +838,8 @@ class ConverterTab(QWidget):
             if not self._settings.get("conversion_done_once", False):
                 self._settings.set("conversion_done_once", True)
                 self.first_conversion.emit()
+        if errors > 0:
+            self.processing_error.emit(errors)
 
     def _log_msg(self, msg: str) -> None:
         self._log.append(msg)
