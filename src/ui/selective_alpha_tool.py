@@ -32,7 +32,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QColor, QCursor, QFont, QImage, QPainter, QPen, QPixmap,
-    QBrush,
+    QBrush, QKeySequence, QShortcut,
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -521,11 +521,13 @@ class SelectiveAlphaCanvas(QWidget):
             p = QPainter(self)
             p.fillRect(self.rect(), QColor(40, 40, 40))
             p.setPen(QColor(120, 120, 120))
-            p.setFont(QFont("Arial", 14))
+            p.setFont(QFont("Arial", 13))
             p.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
-                "Open an image to start editing",
+                "📂  Open an image to start painting\n\n"
+                "  Ctrl+O  Open    Ctrl+Z  Undo    Ctrl+Y  Redo\n"
+                "  Ctrl+S  Save    Ctrl+Enter  Apply",
             )
             p.end()
             return
@@ -890,14 +892,16 @@ class _ZoneRow(QWidget):
         r, g, b, _ = ZONE_COLORS[zone_idx]
         swatch = QLabel()
         swatch.setFixedSize(18, 18)
+        color_name = ZONE_NAMES[zone_idx]
         swatch.setStyleSheet(
             f"background:{QColor(r,g,b).name()};"
             "border:1px solid #666; border-radius:3px;"
         )
+        swatch.setToolTip(color_name)
         top.addWidget(swatch)
 
-        # Name
-        name_lbl = QLabel(f"Zone {zone_idx + 1}")
+        # Name — use the full "Zone N – Colour" label from ZONE_NAMES
+        name_lbl = QLabel(color_name)
         name_lbl.setMinimumWidth(52)
         top.addWidget(name_lbl)
 
@@ -923,13 +927,13 @@ class _ZoneRow(QWidget):
         self._sel_btn = QPushButton("🖌  Paint")
         self._sel_btn.setCheckable(True)
         self._sel_btn.setMinimumHeight(26)
-        self._sel_btn.setToolTip(f"Activate Zone {zone_idx + 1} for painting")
+        self._sel_btn.setToolTip(f"Activate {color_name} for painting")
         self._sel_btn.clicked.connect(lambda: self.selected.emit(self._idx))
         bot.addWidget(self._sel_btn)
 
         self._clear_btn = QPushButton("✕  Clear")
         self._clear_btn.setMinimumHeight(26)
-        self._clear_btn.setToolTip("Erase all painted pixels in this zone")
+        self._clear_btn.setToolTip(f"Erase all painted pixels in {color_name}")
         self._clear_btn.clicked.connect(self._on_clear)
         bot.addWidget(self._clear_btn)
 
@@ -993,10 +997,12 @@ class SelectiveAlphaTool(QWidget):
         io_lay = QVBoxLayout(io_box)
         self._btn_open = QPushButton("📂  Open Image…")
         self._btn_open.setMinimumHeight(30)
+        self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
         io_lay.addWidget(self._btn_open)
         self._btn_save = QPushButton("💾  Save Result…")
         self._btn_save.setMinimumHeight(30)
+        self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
         io_lay.addWidget(self._btn_save)
@@ -1097,13 +1103,21 @@ class SelectiveAlphaTool(QWidget):
         # Zone rows
         zones_box = QGroupBox("Alpha Zones  (🖌 Paint to assign alpha per zone)")
         zv = QVBoxLayout(zones_box)
-        zv.setSpacing(4)
+        zv.setSpacing(2)
         self._zone_rows: list[_ZoneRow] = []
         for i in range(NUM_ZONES):
             row = _ZoneRow(i)
             row.selected.connect(self._on_zone_action)
             zv.addWidget(row)
             self._zone_rows.append(row)
+            # Thin separator between rows (not after the last one)
+            if i < NUM_ZONES - 1:
+                sep = QFrame()
+                sep.setFrameShape(QFrame.Shape.HLine)
+                sep.setFrameShadow(QFrame.Shadow.Sunken)
+                sep.setFixedHeight(1)
+                sep.setStyleSheet("color: #3a3a5a; background: #3a3a5a;")
+                zv.addWidget(sep)
         self._zone_rows[0].set_selected(True)
         lv.addWidget(zones_box)
 
@@ -1113,13 +1127,13 @@ class SelectiveAlphaTool(QWidget):
         self._btn_undo = QPushButton("↩  Undo")
         self._btn_undo.setEnabled(False)
         self._btn_undo.setMinimumHeight(28)
-        self._btn_undo.setToolTip("Undo the last highlight / erase action.")
+        self._btn_undo.setToolTip("Undo the last highlight / erase action.  (Ctrl+Z)")
         self._btn_undo.clicked.connect(self._on_undo_mask)
         hh.addWidget(self._btn_undo)
         self._btn_redo = QPushButton("↪  Redo")
         self._btn_redo.setEnabled(False)
         self._btn_redo.setMinimumHeight(28)
-        self._btn_redo.setToolTip("Redo the last undone action.")
+        self._btn_redo.setToolTip("Redo the last undone action.  (Ctrl+Y)")
         self._btn_redo.clicked.connect(self._on_redo_mask)
         hh.addWidget(self._btn_redo)
         lv.addWidget(hist_box)
@@ -1129,7 +1143,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_apply.setEnabled(False)
         self._btn_apply.setMinimumHeight(32)
         self._btn_apply.setToolTip(
-            "Apply the painted zones to the image and make the result ready to save."
+            "Apply the painted zones to the image and make the result ready to save.  (Ctrl+Enter)"
         )
         self._btn_apply.clicked.connect(self._on_apply)
         lv.addWidget(self._btn_apply)
@@ -1151,7 +1165,15 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(self._btn_clear_all)
 
         lv.addStretch()
-        root.addWidget(left_panel)
+
+        # ── Wrap left panel in a scroll area so controls remain accessible
+        # on smaller windows (same pattern as alpha_tool.py / converter_tool.py).
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_panel)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        left_scroll.setFixedWidth(310)  # panel 290 + scroll bar ~20
+        root.addWidget(left_scroll)
 
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas = SelectiveAlphaCanvas()
@@ -1179,6 +1201,18 @@ class SelectiveAlphaTool(QWidget):
         # Connect spinboxes to status updates (after _status_lbl is created).
         self._brush_spin.valueChanged.connect(lambda _: self._update_status())
         self._eraser_spin.valueChanged.connect(lambda _: self._update_status())
+
+        # Keyboard shortcuts
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self) -> None:
+        """Bind common keyboard shortcuts for the Selective Alpha editor."""
+        QShortcut(QKeySequence("Ctrl+Z"),       self).activated.connect(self._on_undo_mask)
+        QShortcut(QKeySequence("Ctrl+Y"),       self).activated.connect(self._on_redo_mask)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self).activated.connect(self._on_redo_mask)
+        QShortcut(QKeySequence("Ctrl+O"),       self).activated.connect(self._on_open)
+        QShortcut(QKeySequence("Ctrl+S"),       self).activated.connect(self._on_save)
+        QShortcut(QKeySequence("Ctrl+Return"),  self).activated.connect(self._on_apply)
 
     # ---------------------------------------------------------------- helpers
 

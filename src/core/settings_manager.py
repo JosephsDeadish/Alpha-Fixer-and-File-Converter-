@@ -292,7 +292,7 @@ class SettingsManager:
         self._qs.sync()
 
     # ------------------------------------------------------------------
-    # Alpha Fixer history
+    # Alpha & RGBA Adjuster history
     # ------------------------------------------------------------------
 
     def get_alpha_history(self) -> list:

@@ -1,5 +1,5 @@
 """
-Background worker threads for the Alpha Fixer and Converter tools.
+Background worker threads for the Alpha & RGBA Adjuster and Converter tools.
 
 Uses QThread + signals for safe UI communication without blocking the main thread.
 

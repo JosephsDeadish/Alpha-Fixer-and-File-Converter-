@@ -1,5 +1,5 @@
 """
-Preset definitions and manager for the Alpha Fixer tool.
+Preset definitions and manager for the Alpha & RGBA Adjuster tool.
 
 Built-in presets cover common game-console alpha conventions.
 Users can create, save, and delete their own presets.
