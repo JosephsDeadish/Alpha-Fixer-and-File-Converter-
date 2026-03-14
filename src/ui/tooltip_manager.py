@@ -232,6 +232,13 @@ _NORMAL: dict[str, list[str]] = {
         "Even $1/month helps keep the panda well-fed 🐼",
         "Visit patreon.com/c/DeadOnTheInside",
     ],
+    "help_btn": [
+        "Open the Help menu: keyboard shortcuts, About, and settings export/import.",
+        "Click to see all keyboard shortcuts (F1 for quick access).",
+        "Also has About info and Export/Import Settings options.",
+        "Keyboard shortcuts, about the app, and settings backup — all here.",
+        "F1 opens the shortcuts dialog directly.",
+    ],
     "use_theme_sound": [
         "Play a click sound that matches the active theme.",
         "Gore theme gets a deep thud; Panda gets a soft chime; Alien gets a bright ping.",
@@ -477,6 +484,20 @@ _NORMAL: dict[str, list[str]] = {
         "Disable to pick your own effect style regardless of the active theme.",
         "Each of the 40 themes has its own default effect hard-coded to match its vibe.",
     ],
+    "animated_banner_check": [
+        "Toggle the spinning emoji banner and animated SVG badge on or off.",
+        "When enabled, the emoji in the header bar slowly rotates and the theme SVG plays its animation.",
+        "Disable to keep the banner static and stop the SVG badge from animating.",
+        "Off by default — saves CPU/GPU resources on lower-powered machines.",
+        "Re-enable anytime to enjoy the spinning theme mascot in the header.",
+    ],
+    "show_splash_check": [
+        "Show or hide the animated splash screen when the app starts.",
+        "When enabled, a themed splash screen appears for ~3 seconds on startup.",
+        "Off by default — skips straight to the main window for faster access.",
+        "The splash uses the current theme's colours and SVG artwork.",
+        "Re-enable anytime if you want the fancy startup animation back.",
+    ],
     "save_custom_theme": [
         "Save the current colour values as a new custom theme.",
         "Give it a name and it will appear in the theme dropdown for future use.",
@@ -570,9 +591,9 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "alpha_delta_spin": [
         "Shift the Alpha channel of every pixel by this delta (\u2013255 to +255).",
-        "Positive values increase transparency; negative values decrease it.",
+        "Positive values increase opacity (alpha); negative values decrease it.",
         "Requires 'Apply RGBA adjustments' checkbox to be ticked.",
-        "Use this to globally brighten or darken transparency across a texture.",
+        "Use this to globally brighten or darken the alpha channel across a texture.",
         "Works alongside R/G/B deltas — all four channels adjust in one pass.",
     ],
     "apply_rgb_check": [
@@ -1043,6 +1064,13 @@ _DUMBED: dict[str, list[str]] = {
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
     ],
+    "help_btn": [
+        "Click here to open the Help menu. Shocking, I know.",
+        "Shortcuts, About, Export/Import settings. All in here. It's a whole menu.",
+        "Press F1 and skip this button entirely for keyboard shortcuts. You're welcome.",
+        "Export and Import settings are in here too, buried under Help like nature intended.",
+        "It's a dropdown menu. Click it. Read the options. Pick one. Complicated stuff.",
+    ],
     "use_theme_sound": [
         "Tick this. Theme plays its own sound. Untick. Normal sound. That's it.",
         "Theme sound = each theme gets its own click noise. Gore = thud. Panda = ping. Simple.",
@@ -1287,6 +1315,20 @@ _DUMBED: dict[str, list[str]] = {
         "Checked = app picks the right particles for you. Unchecked = your problem now.",
         "Gore theme? Blood. Bat Cave? Bats. You get it. This just does it automatically.",
         "Turn it off if you want to mix themes up. A panda theme with bat effects? Sure.",
+    ],
+    "animated_banner_check": [
+        "This controls whether the little emoji in the header spins and the badge animates.",
+        "Ticked = spinning emoji + animated SVG badge. Unticked = they just sit there being boring.",
+        "Turn it off if your computer is struggling. Animation uses some CPU/GPU.",
+        "It is off by default because not everyone wants things spinning all the time.",
+        "Turn it back on to enjoy the theme mascot spinning like it's having a great time.",
+    ],
+    "show_splash_check": [
+        "Controls whether a fancy splash screen shows up when you open the app.",
+        "Ticked = you get a pretty themed loading screen for about 3 seconds on startup.",
+        "Unticked = app just opens directly, no waiting, no fanfare, straight to business.",
+        "Off by default so the app feels snappy and instant.",
+        "Enable it if you want the theatrical intro experience every time you launch.",
     ],
     "save_custom_theme": [
         "Saves the current colors as a custom theme. Name it something clever.",
@@ -2061,6 +2103,23 @@ _VULGAR: dict[str, list[str]] = {
         "Mixing effects and themes manually is fun but chaotic. Auto-mode keeps it cohesive.",
         "Galaxy auto-picks galaxy particles. Shark auto-picks shark effects. Clean.",
     ],
+    "animated_banner_check": [
+        "The little spinning emoji in the header and the animated SVG badge — this toggle controls those.",
+        "ON = the emoji spins like it's having a goddamn seizure and the SVG plays its animation. OFF = everything just sits there like a normal, boring UI.",
+        "It's off by default because not everyone wants spinning bullshit eating their CPU at idle.",
+        "Enable it if you want the full theatrical rotating-mascot experience. It does look cool.",
+        "If your computer sounds like a jet engine with it on, turn it off. It's just decoration.",
+        "The SVG badge has theme-specific animations built in — Gore drips blood, Bats have flying bats, etc. Very extra.",
+        "Honestly one of the cooler features. Just costs a few cycles. Worth it on most machines.",
+    ],
+    "show_splash_check": [
+        "The splash screen is the fancy intro that shows when you open the app. This toggle controls it.",
+        "ON = you wait 3 seconds watching a themed loading screen every single time you open the app.",
+        "OFF = app just opens. No bullshit. No waiting. Straight to work. Much better default.",
+        "It's off by default because nobody wants to stare at a loading screen they've already seen a thousand times.",
+        "Enable it if you love the themed intro and want to see it every time. No judgment. It IS pretty.",
+        "The splash uses the current theme's colors and SVG art. Changes if you switch themes. Nice touch.",
+    ],
     "save_custom_theme": [
         "Saves your fucking color choices as a named custom theme. Very important button.",
         "Your masterpiece gets a name and lives in the INI file next to the app. Congratulations.",
@@ -2510,6 +2569,14 @@ _VULGAR: dict[str, list[str]] = {
         "The developer spent actual months of their actual life building this ridiculous beautiful app. patreon.com/c/DeadOnTheInside — throw them a few bucks, you absolute cheapskate.",
         "Patreon support = more features, more themes, more everything. Good karma too.",
         "Link opens to DeadOnTheInside on Patreon. No payment required to follow. Just click.",
+    ],
+    "help_btn": [
+        "Opens the Help menu. Shortcuts, About, Export/Import settings are all in there.",
+        "A dropdown. With options. Groundbreaking UI concept. Click it and find out.",
+        "Keyboard shortcuts: F1. About: explains what the fuck this app even is. Export/Import: backup your shit.",
+        "Press F1 instead of hunting for this button like an animal. Just F1. It's one key.",
+        "The Help menu. Because apparently things need to be explained. Everything is in here.",
+        "Click → menu appears → read options → click one. Somehow we needed a tooltip for this.",
     ],
     "use_theme_sound": [
         "Enable this and your click sounds will be as themed as the rest of this shit.",

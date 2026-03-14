@@ -648,6 +648,28 @@ class SettingsDialog(QDialog):
         )
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Animated banner emojis and SVG badge (off by default – saves CPU/GPU)
+        self._animated_banner_check = QCheckBox(
+            "Enable animated banner emojis && SVG badge (off by default)"
+        )
+        self._animated_banner_check.setToolTip(
+            "When enabled: the spinning emoji in the header rotates continuously\n"
+            "and the theme SVG badge in the tab bar plays its built-in animation.\n"
+            "When disabled: both are rendered statically, saving CPU/GPU resources."
+        )
+        misc_gl.addWidget(self._animated_banner_check, 3, 0, 1, 2)
+
+        # Splash screen on startup (off by default)
+        self._show_splash_check = QCheckBox(
+            "Show themed splash screen on startup (off by default)"
+        )
+        self._show_splash_check.setToolTip(
+            "When enabled: an animated themed splash screen is shown while the\n"
+            "app loads on startup.  Disable to skip straight to the main window."
+        )
+        misc_gl.addWidget(self._show_splash_check, 4, 0, 1, 2)
+
         gv.addWidget(grp_misc)
 
         # Wrap the general tab contents in a scroll area so checkboxes
@@ -712,6 +734,8 @@ class SettingsDialog(QDialog):
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
         self._tooltip_style_combo.currentTextChanged.connect(self._on_tooltip_style_changed)
+        self._animated_banner_check.toggled.connect(self._on_animated_banner_changed)
+        self._show_splash_check.toggled.connect(self._on_show_splash_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -792,6 +816,7 @@ class SettingsDialog(QDialog):
             self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
+            self._animated_banner_check, self._show_splash_check,
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
@@ -860,6 +885,12 @@ class SettingsDialog(QDialog):
         style_val = self._settings.get("tooltip_style", "Auto (follow theme)")
         idx_s = self._tooltip_style_combo.findText(style_val)
         self._tooltip_style_combo.setCurrentIndex(max(idx_s, 0))
+        self._animated_banner_check.setChecked(
+            self._settings.get("animated_banner_enabled", False)
+        )
+        self._show_splash_check.setChecked(
+            self._settings.get("show_splash_screen", False)
+        )
 
         for c in controls:
             c.blockSignals(False)
@@ -890,6 +921,8 @@ class SettingsDialog(QDialog):
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
+        mgr.register(self._animated_banner_check, "animated_banner_check")
+        mgr.register(self._show_splash_check, "show_splash_check")
         # Additional widget registrations
         mgr.register(self._btn_save_theme, "save_custom_theme")
         mgr.register(self._btn_delete_theme, "delete_custom_theme")
@@ -1237,3 +1270,12 @@ class SettingsDialog(QDialog):
     def _on_tooltip_style_changed(self) -> None:
         self._settings.set("tooltip_style", self._tooltip_style_combo.currentText())
         self.settings_changed.emit()
+
+    def _on_animated_banner_changed(self) -> None:
+        self._settings.set("animated_banner_enabled", self._animated_banner_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_show_splash_changed(self) -> None:
+        self._settings.set("show_splash_screen", self._show_splash_check.isChecked())
+        self.settings_changed.emit()
+

@@ -139,6 +139,10 @@ class SettingsManager:
         "total_clicks": 0,
         # Tooltip visual style (separate from tooltip text mode)
         "tooltip_style": "Auto (follow theme)",
+        # Animated banner SVGs / spinning emojis (off by default for performance)
+        "animated_banner_enabled": False,
+        # Splash screen on startup (off by default)
+        "show_splash_screen": False,
         # New hidden theme unlock flags
         "unlock_crystal_cave": False,
         "unlock_glitch": False,
@@ -351,6 +355,7 @@ class SettingsManager:
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
+        "animated_banner_enabled", "show_splash_screen",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",

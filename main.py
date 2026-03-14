@@ -249,16 +249,19 @@ def main():
 
     settings = SettingsManager()
 
-    # Show animated themed splash screen
-    splash = ThemeSplashScreen(settings)
-    splash.show()
-    app.processEvents()
+    # Show animated themed splash screen only when enabled in settings
+    splash = None
+    if settings.get("show_splash_screen", False):
+        splash = ThemeSplashScreen(settings)
+        splash.show()
+        app.processEvents()
 
     window = MainWindow(settings)
 
     # Close splash and reveal main window after the splash duration
     from PyQt6.QtCore import QTimer
-    QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
+    if splash is not None:
+        QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
 
     window.show()
 
