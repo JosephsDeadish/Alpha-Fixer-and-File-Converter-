@@ -401,10 +401,12 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Set Min and Max alpha values.  Pixels are scaled from the full 0–255 range: "
-            "fully opaque (255) → Max, fully transparent (0) → Min, "
-            "values in between scale proportionally.  "
-            "To make every pixel the same value, set Min = Max."
+            "ℹ  Normalize the alpha channel to a new range.  "
+            "The image's darkest pixel maps to Min, the brightest maps to Max — "
+            "all others scale proportionally in between.  "
+            "For images where every pixel shares the same alpha value, the value is "
+            "clamped: below Min → Min, above Max → Max, within [Min, Max] → unchanged.  "
+            "Set Min = Max to force every pixel to exactly that value."
         )
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)

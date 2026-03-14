@@ -63,7 +63,7 @@ class AlphaWorker(QThread):
         super().__init__(parent)
         self._files = list(files)
         self._preset = preset
-        self._manual = manual_params        # dict with keys: mode, value, threshold, invert
+        self._manual = manual_params        # dict with keys: threshold, invert, clamp_min, clamp_max, binary_cut
         self._output_dir = output_dir
         self._input_root = input_root
         self._overwrite = overwrite

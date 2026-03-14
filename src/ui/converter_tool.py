@@ -643,21 +643,50 @@ class ConverterTab(QWidget):
         self._compare.set_before(src_qi)
         self._compare.set_after(out_qi)
 
-        def _info_text(label: str, meta: str) -> str:
-            lines = meta.strip().splitlines()
-            # First line is filename – omit it from the side panel to save space.
-            body = "<br>".join(lines[1:]) if len(lines) > 1 else meta
-            return f"<b>{label}</b><br>{body}"
+        def _info_text(label: str, meta: str, skip_first: bool = False) -> str:
+            """Format metadata as label+bold-value pairs, matching the alpha fixer style.
 
-        self._source_info_lbl.setText(_info_text("SRC", src_meta))
-        self._output_info_lbl.setText(_info_text("OUT", out_meta))
+            Each data line becomes a label row followed by a bold-value row (e.g.
+            ``size<br><b>640 × 480</b>``), mirroring the BEFORE/AFTER stats panels
+            in the alpha fixer tab.  Lines containing ``  ·  `` are split into two
+            rows (size + mode).  Lines starting with ``Preview as`` become a ``fmt``
+            row.  All other lines are shown as plain bold values.
+            """
+            lines = meta.strip().splitlines()
+            # src_meta starts with the filename – skip it; out_meta has no such line.
+            data_lines = lines[1:] if skip_first and len(lines) > 1 else lines
+            parts = []
+            for raw in data_lines:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                if raw.startswith("Preview as "):
+                    # e.g. "Preview as PNG" or "Preview as JPEG  ·  Q 90"
+                    rest = raw[len("Preview as "):]
+                    parts.append(f"fmt<br><b>{rest.strip()}</b>")
+                elif "  ·  " in raw:
+                    # "W × H  ·  MODE" → split into a size row and a mode row.
+                    left, right = raw.split("  ·  ", 1)
+                    parts.append(f"size<br><b>{left.strip()}</b>")
+                    parts.append(f"mode<br><b>{right.strip()}</b>")
+                else:
+                    parts.append(f"<b>{raw}</b>")
+            return f"<b>{label}</b><br>" + "<br>".join(parts)
+
+        # src_meta: filename \n dims·mode \n filesize  → skip the filename line.
+        # out_meta: dims·mode \n fmt \n estsize        → all lines are data.
+        self._source_info_lbl.setText(_info_text("SRC", src_meta, skip_first=True))
+        self._output_info_lbl.setText(_info_text("OUT", out_meta, skip_first=False))
 
     @pyqtSlot(str)
     def _on_preview_failed(self, err: str):
         """Called when the converter preview loader encounters an error."""
         self._compare.clear()
         self._source_info_lbl.setText("")
-        self._output_info_lbl.setText(f"Preview\nunavailable\n{err[:40]}")
+        err_snippet = err.strip()[:40] if err.strip() else "unknown error"
+        self._output_info_lbl.setText(
+            f"<b>OUT</b><br>Preview<br><b>unavailable</b><br><b>{err_snippet}</b>"
+        )
 
     def _save_format_setting(self):
         fmt_data = self._fmt_combo.currentData()
