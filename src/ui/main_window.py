@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _setup_window(self):
-        self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
+        self.setWindowTitle(f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}")
         self.setMinimumSize(1000, 780)
         # Set the panda SVG as the window / taskbar icon (initial default).
         # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
@@ -354,7 +354,7 @@ class MainWindow(QMainWindow):
         self._banner_emoji_left = _SpinningEmojiLabel("🐼", font_size=20)
         banner_layout.addWidget(self._banner_emoji_left)
 
-        banner_text = QLabel("Alpha Fixer  &  File Converter")
+        banner_text = QLabel("Alpha & RGBA Adjuster  |  File Converter")
         banner_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         banner_text.setObjectName("header")
         banner_text.setStyleSheet("padding: 0; font-size: 20px; background: transparent; border: none;")
@@ -372,7 +372,7 @@ class MainWindow(QMainWindow):
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
         self._selective_alpha_tab = SelectiveAlphaTool()
-        self._tabs.addTab(self._alpha_tab, "🖼  Alpha Fixer")
+        self._tabs.addTab(self._alpha_tab, "🖼  Alpha & RGBA Adjuster")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
         self._tabs.addTab(self._history_tab, "📋  History")
         self._tabs.addTab(self._selective_alpha_tab, "🎨  Selective Alpha")
@@ -707,7 +707,7 @@ class MainWindow(QMainWindow):
             self._banner_emoji_right.set_animated(animated)
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
-            self._banner_lbl.setText("Alpha Fixer  &  File Converter")
+            self._banner_lbl.setText("Alpha & RGBA Adjuster  |  File Converter")
         # Stop any legacy animation timer (banner no longer cycles emojis)
         if self._anim_timer is not None:
             self._anim_timer.stop()
@@ -773,7 +773,7 @@ class MainWindow(QMainWindow):
                     painter.end()
                     lbl = QLabel()
                     lbl.setPixmap(pix)
-                    lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+                    lbl.setToolTip("Alpha && RGBA Adjuster  |  File Converter 🐼")
                     lbl.setContentsMargins(4, 0, 4, 0)
                     return lbl
                 except Exception:
@@ -781,7 +781,7 @@ class MainWindow(QMainWindow):
                 break
         # Fallback: plain text panda emoji
         lbl = QLabel("🐼")
-        lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+        lbl.setToolTip("Alpha && RGBA Adjuster  |  File Converter 🐼")
         lbl.setContentsMargins(4, 0, 4, 0)
         return lbl
 
@@ -1065,11 +1065,11 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         QMessageBox.about(
             self,
-            "About 🐼 Alpha Fixer & File Converter",
-            f"<h2>🐼 Alpha Fixer & File Converter  v{__version__}</h2>"
+            "About 🐼 Alpha & RGBA Adjuster  |  File Converter",
+            f"<h2>🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}</h2>"
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
-            "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
+            "<li><b>Alpha &amp; RGBA Adjuster:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
             "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI and more</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"

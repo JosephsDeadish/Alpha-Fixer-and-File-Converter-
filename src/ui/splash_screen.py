@@ -160,7 +160,7 @@ class ThemeSplashScreen(QSplashScreen):
         title_font = QFont("Segoe UI", 22, QFont.Weight.Bold)
         p.setFont(title_font)
         p.setPen(self._text)
-        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Alpha Fixer & File Converter")
+        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Alpha & RGBA Adjuster  |  File Converter")
 
         # Theme banner / subtitle
         sub_font = QFont("Segoe UI", 11)

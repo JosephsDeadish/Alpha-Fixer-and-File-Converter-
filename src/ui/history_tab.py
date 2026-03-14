@@ -44,7 +44,7 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
 
 
 class HistoryTab(QWidget):
-    """View of the last 50 sessions for both the Converter and the Alpha Fixer."""
+    """View of the last 50 sessions for both the Converter and the Alpha & RGBA Adjuster."""
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -72,7 +72,7 @@ class HistoryTab(QWidget):
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
 
-        # Sub-tabs: Converter | Alpha Fixer
+        # Sub-tabs: Converter | Alpha & RGBA Adjuster
         self._sub_tabs = QTabWidget()
 
         # --- Converter sub-tab ---
@@ -96,7 +96,7 @@ class HistoryTab(QWidget):
         conv_layout.addWidget(self._conv_summary)
         self._sub_tabs.addTab(conv_widget, "🔄  Converter")
 
-        # --- Alpha Fixer sub-tab ---
+        # --- Alpha & RGBA Adjuster sub-tab ---
         alpha_widget = QWidget()
         alpha_layout = QVBoxLayout(alpha_widget)
         alpha_layout.setContentsMargins(0, 6, 0, 0)
@@ -115,7 +115,7 @@ class HistoryTab(QWidget):
         self._alpha_summary = QLabel("")
         self._alpha_summary.setObjectName("subheader")
         alpha_layout.addWidget(self._alpha_summary)
-        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha Fixer")
+        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha & RGBA Adjuster")
 
         layout.addWidget(self._sub_tabs, 1)
 
@@ -156,7 +156,7 @@ class HistoryTab(QWidget):
         # Decorate the converter/alpha-fixer sub-tab labels with the theme icon.
         icon = get_theme_icon(theme_name)
         self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
-        self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha Fixer")
+        self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha & RGBA Adjuster")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -209,7 +209,7 @@ class HistoryTab(QWidget):
         self._alpha_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
             + ("  (most recent first)" if total > 0 else
-               " — run the Alpha Fixer to see history here.")
+               " — run the Alpha & RGBA Adjuster to see history here.")
         )
 
     # ------------------------------------------------------------------

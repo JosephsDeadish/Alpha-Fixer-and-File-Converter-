@@ -56,7 +56,7 @@ _NORMAL: dict[str, list[str]] = {
         "Start processing all queued files with the current settings.",
         "Alpha adjustments are applied non-destructively (unless overwrite is on).",
         "Check the log below for per-file results after processing.",
-        "Shortcut: F5 starts processing from anywhere in the Alpha Fixer tab.",
+        "Shortcut: F5 starts processing from anywhere in the Alpha & RGBA Adjuster tab.",
         "Large batches? The progress bar shows completion %. You can stop with Esc.",
     ],
     "stop_btn": [
@@ -134,7 +134,7 @@ _NORMAL: dict[str, list[str]] = {
         "When enabled, subfolders inside the selected folder are also scanned.",
         "Useful for processing entire project trees of images in one go.",
         "Disable if you only want images directly in the selected folder.",
-        "Works for both Add Folder in Alpha Fixer and the Converter tab.",
+        "Works for both Add Folder in Alpha & RGBA Adjuster and the Converter tab.",
         "Deep nested directories are all included when this is checked.",
     ],
     "compare_widget": [
@@ -247,7 +247,7 @@ _NORMAL: dict[str, list[str]] = {
         "Enable 'Use theme sound' for the full immersive themed experience.",
     ],
     "alpha_fixer_tab": [
-        "The Alpha Fixer tab — fix and adjust transparency in image files.",
+        "The Alpha & RGBA Adjuster tab — fix and adjust transparency in image files.",
         "Add files, pick a preset or manual mode, then hit Process (F5). Ctrl+1 to jump here.",
         "Live preview shows you the before/after side by side.",
         "Presets include PS2, GameCube, N64, and PSP alpha corrections.",
@@ -278,11 +278,11 @@ _NORMAL: dict[str, list[str]] = {
         "Export the currently visible history sub-tab to a CSV file.",
         "Saves Time, Format/Preset, file counts, and file names to a .csv file.",
         "Useful for auditing batch runs, tracking files processed, or making a backup log.",
-        "Only the active sub-tab is exported — switch to Converter or Alpha Fixer first.",
+        "Only the active sub-tab is exported — switch to Converter or Alpha & RGBA Adjuster first.",
         "The CSV is standard format and can be opened in Excel, Google Sheets, or any text editor.",
     ],
     "history_clear_btn": [
-        "Clear all history entries for both the Converter and Alpha Fixer tabs.",
+        "Clear all history entries for both the Converter and Alpha & RGBA Adjuster tabs.",
         "This permanently removes past session records — there's no undo.",
         "Use this to clean up after testing or to reset your session log.",
         "Only clears the history list, not any processed files on disk.",
@@ -296,7 +296,7 @@ _NORMAL: dict[str, list[str]] = {
         "History entries are kept for the last 50 sessions.",
     ],
     "history_alpha_sub": [
-        "The Alpha Fixer sub-tab lists every alpha-fixing batch session you have run.",
+        "The Alpha & RGBA Adjuster sub-tab lists every alpha-fixing batch session you have run.",
         "Each row shows the timestamp, preset or mode used, file count, and error count.",
         "Rows with errors are highlighted in yellow — click to review what went wrong.",
         "The first 10 file names are shown for quick reference.",
@@ -373,7 +373,7 @@ _NORMAL: dict[str, list[str]] = {
         "Jumps ahead quickly for small files; slower for large images.",
     ],
     "alpha_status_lbl": [
-        "Shows the current status of the Alpha Fixer — Ready, processing, or a done summary.",
+        "Shows the current status of the Alpha & RGBA Adjuster — Ready, processing, or a done summary.",
         "After a batch finishes this shows the count of successes and failures.",
         "Reads 'Ready.' when no batch is running and files can be added or settings changed.",
         "Shows '✔ N succeeded, ✘ M failed' after each completed batch.",
@@ -1079,16 +1079,16 @@ _DUMBED: dict[str, list[str]] = {
         "It's just sounds. The button says 'theme sound'. It plays theme sounds. You're overthinking.",
     ],
     "alpha_fixer_tab": [
-        "This is the Alpha Fixer tab. You click on it. You were already on it. Ctrl+1 also works.",
-        "Alpha Fixer: fixing transparency since whenever this app was made.",
+        "This is the Alpha & RGBA Adjuster tab. You click on it. You were already on it. Ctrl+1 also works.",
+        "Alpha & RGBA Adjuster: fixing transparency since whenever this app was made.",
         "The tab with the picture frame icon. Pretty self-explanatory, no?",
         "Presets, sliders, batch processing — all the exciting alpha-fixing action lives here.",
-        "If you needed a tooltip to find the Alpha Fixer tab you might be in trouble.",
+        "If you needed a tooltip to find the Alpha & RGBA Adjuster tab you might be in trouble.",
     ],
     "converter_tab": [
         "The Converter tab converts files. Mind-blowing, I know. Press Ctrl+2 to jump here.",
         "You put files in, you pick a format, and… it converts them. Shocker.",
-        "For when Alpha Fixer is too exciting and you just want boring format changes.",
+        "For when Alpha & RGBA Adjuster is too exciting and you just want boring format changes.",
         "Supports like a dozen formats. PNG, JPEG, WEBP, etc. Click it already.",
         "Converter. Con-vert-er. Files go in one format, come out another. There you go.",
     ],
@@ -1108,7 +1108,7 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "history_export_btn": [
         "Export the current history to a CSV file. Opens a save dialog. Very intuitive.",
-        "Saves the visible sub-tab (Converter or Alpha Fixer) as a spreadsheet-friendly CSV.",
+        "Saves the visible sub-tab (Converter or Alpha & RGBA Adjuster) as a spreadsheet-friendly CSV.",
         "Open in Excel. Google Sheets. Notepad. Whatever. It's just a CSV.",
         "Exports only the currently active sub-tab. Switch tabs to export the other one.",
         "Good for auditing big batches or sending logs to someone who doesn't have this app.",
@@ -1128,7 +1128,7 @@ _DUMBED: dict[str, list[str]] = {
         "Converter sub-tab. Conversion logs. That's it.",
     ],
     "history_alpha_sub": [
-        "Alpha Fixer history sub-tab. Lists your alpha-fixing sessions. Very niche, very useful.",
+        "Alpha & RGBA Adjuster history sub-tab. Lists your alpha-fixing sessions. Very niche, very useful.",
         "Shows what preset was used, how many files, how many errors. Pretty handy.",
         "If it's yellow, there were errors. Click Refresh to make sure it's up to date.",
         "Up to 50 sessions are logged. After 50, the oldest ones are removed.",
@@ -1205,14 +1205,14 @@ _DUMBED: dict[str, list[str]] = {
         "ETA appears in the file count label above this. For the truly impatient.",
     ],
     "alpha_status_lbl": [
-        "Status label. Tells you what the Alpha Fixer is currently doing.",
+        "Status label. Tells you what the Alpha & RGBA Adjuster is currently doing.",
         "'Ready.' means nothing is running. Congratulations on your free time.",
         "Shows ✔ and ✘ counts after each batch. Green numbers are good. Red are bad.",
         "Check the log below if errors appear here. The log has the details.",
         "It changes during processing too. Watch it update in real time. Exciting.",
     ],
     "conv_status_lbl": [
-        "Status label for the Converter. Like the one in Alpha Fixer but for converting.",
+        "Status label for the Converter. Like the one in Alpha & RGBA Adjuster but for converting.",
         "'Ready.' = idle. Numbers after = batch results.",
         "Shows how many converted successfully vs how many exploded.",
         "Log panel below has the per-file breakdown if anything went wrong.",
@@ -2339,14 +2339,14 @@ _VULGAR: dict[str, list[str]] = {
         "The browse button exists so you don't have to type long paths. Use it.",
     ],
     "alpha_fixer_tab": [
-        "Alpha Fixer tab: where broken-ass alpha channels go to get fixed. Click it. Or press Ctrl+1.",
+        "Alpha & RGBA Adjuster tab: where broken-ass alpha channels go to get fixed. Click it. Or press Ctrl+1.",
         "This is the tab that actually does the real work, unlike you apparently.",
         "Alpha channels, presets, batch processing — stop reading tooltips and use it.",
         "If your textures look like shit, THIS is where you fix that. You're welcome.",
         "The image frame icon. The main tab. The whole damn point of the app.",
-        "Alpha Fixer: the reason this app exists. The main event. The big kahuna.",
+        "Alpha & RGBA Adjuster: the reason this app exists. The main event. The big kahuna.",
         "Broken transparency in your game textures? This tab fixes it. That's the whole thing.",
-        "Hovering on the Alpha Fixer tab instead of being IN the Alpha Fixer tab. Interesting life choice.",
+        "Hovering on the Alpha & RGBA Adjuster tab instead of being IN the Alpha & RGBA Adjuster tab. Interesting life choice.",
     ],
     "converter_tab": [
         "Converter tab: turn your PNG into a WEBP or whatever the fuck you need. Ctrl+2 to jump here.",
@@ -2382,7 +2382,7 @@ _VULGAR: dict[str, list[str]] = {
         "Export to CSV. Because sometimes you need to prove to yourself that you actually worked.",
         "Saves the history as a spreadsheet CSV. Excel will open it. Google Sheets will open it.",
         "Click it, save a file, send it to someone, look professional. Three easy steps.",
-        "Exports only the current sub-tab. Converter or Alpha Fixer. Your choice. Your file.",
+        "Exports only the current sub-tab. Converter or Alpha & RGBA Adjuster. Your choice. Your file.",
         "A CSV file of everything you've ever processed. For auditing purposes, archiving obsessively, or flexing on people who don't batch process.",
         "It makes a CSV. You can open it in anything. It has all your session data in it.",
         "100 conversions and want a receipt? Export CSV. There's your receipt.",
@@ -2409,7 +2409,7 @@ _VULGAR: dict[str, list[str]] = {
         "Converter history. For when you need receipts on your format crimes.",
     ],
     "history_alpha_sub": [
-        "Alpha Fixer history. Every session where you attempted to unfuck your alpha channels. Logged.",
+        "Alpha & RGBA Adjuster history. Every session where you attempted to unfuck your alpha channels. Logged.",
         "Preset name, file count, errors — all here so you know exactly what broke and when.",
         "Yellow rows have errors. The universe is telling you something. Listen to it.",
         "Up to 50 sessions logged. Like your own personal hall of alpha-fixing shame and glory.",
@@ -2529,7 +2529,7 @@ _VULGAR: dict[str, list[str]] = {
         "Full progress bar. Job done. You did that. You processing legend.",
     ],
     "alpha_status_lbl": [
-        "Status label for the Alpha Fixer. Tells you what the hell is happening.",
+        "Status label for the Alpha & RGBA Adjuster. Tells you what the hell is happening.",
         "'Ready.' = idle and ready to destroy some alpha channels. Click run.",
         "Batch results appear here: ✔ N succeeded, ✘ M failed. Pretty self-explanatory.",
         "If errors appear, scroll the log. The log knows what went wrong. It was there.",
@@ -2540,7 +2540,7 @@ _VULGAR: dict[str, list[str]] = {
         "It says 'Done.' and you feel... something. Pride? Relief? Existential uncertainty? All valid.",
     ],
     "conv_status_lbl": [
-        "Status label for the Converter. Like the Alpha Fixer one but for converting formats.",
+        "Status label for the Converter. Like the Alpha & RGBA Adjuster one but for converting formats.",
         "'Ready.' = nothing happening. Could be worse. Could be crashing.",
         "Shows success/error counts after each batch. Numbers don't lie. Files don't care.",
         "Errors? Check the log below. It has the full story. All the gory details.",
@@ -2826,7 +2826,7 @@ _VULGAR: dict[str, list[str]] = {
 
 # Fallback tips when a key isn't in the specific mode dict
 _FALLBACK_NORMAL = ["Hover for more info.", "Check the docs for details.",
-                    "Click to interact.", "Part of the Alpha Fixer interface.",
+                    "Click to interact.", "Part of the Alpha & RGBA Adjuster interface.",
                     "Contact support if you need help."]
 _FALLBACK_DUMBED = ["It does a thing. Click it.", "Hover longer next time.",
                     "Looks important. Probably is.", "Just try clicking it.",

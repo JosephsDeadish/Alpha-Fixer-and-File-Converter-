@@ -1565,48 +1565,48 @@ def get_theme_svg_path(theme_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 THEME_BANNER = {
-    "Panda Dark":      "🐼  Alpha Fixer  &  File Converter",
-    "Panda Light":     "🐼  Alpha Fixer  &  File Converter  🤍",
-    "Neon Panda":      "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
-    "Gore":            "🩸  Alpha Fixer  &  File Converter  🩸",
-    "Bat Cave":        "🦇  Alpha Fixer  &  File Converter  🦇",
-    "Rainbow Chaos":   "🌈  Alpha Fixer  &  File Converter  🌈",
-    "Otter Cove":      "🦦🤘  Alpha Fixer  &  File Converter  🤘🦦",
-    "Galaxy":          "✦  Alpha Fixer  &  File Converter  ✦",
-    "Galaxy Otter":    "🦦✦  Alpha Fixer  &  File Converter  ✦🦦",
-    "Goth":            "💀  Alpha Fixer  &  File Converter  💀",
-    "Volcano":         "🌋  Alpha Fixer  &  File Converter  🔥",
-    "Arctic":          "❄  Alpha Fixer  &  File Converter  ❄",
-    "Fairy Garden":    "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
-    "Secret Skeleton": "☠  Alpha Fixer  &  File Converter  ☠",
-    "Secret Sakura":   "🌸  Alpha Fixer  &  File Converter  🌸",
-    "Deep Ocean":      "🌊🦑  Alpha Fixer  &  File Converter  🦑🌊",
-    "Blood Moon":      "🩸🌕  Alpha Fixer  &  File Converter  🌕🩸",
-    "Ice Cave":        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
-    "Cyber Otter":     "🦦💻  Alpha Fixer  &  File Converter  💻🦦",
-    "Toxic Neon":      "☢⚡  Alpha Fixer  &  File Converter  ⚡☢",
-    "Lava Cave":       "🌋🔥  Alpha Fixer  &  File Converter  🔥🌋",
-    "Sunset Beach":    "🌅🏖  Alpha Fixer  &  File Converter  🏖🌅",
-    "Midnight Forest": "🌲🌙  Alpha Fixer  &  File Converter  🌙🌲",
+    "Panda Dark":      "🐼  Alpha & RGBA Adjuster  |  File Converter",
+    "Panda Light":     "🐼  Alpha & RGBA Adjuster  |  File Converter  🤍",
+    "Neon Panda":      "⚡🐼  Alpha & RGBA Adjuster  |  File Converter  🐼⚡",
+    "Gore":            "🩸  Alpha & RGBA Adjuster  |  File Converter  🩸",
+    "Bat Cave":        "🦇  Alpha & RGBA Adjuster  |  File Converter  🦇",
+    "Rainbow Chaos":   "🌈  Alpha & RGBA Adjuster  |  File Converter  🌈",
+    "Otter Cove":      "🦦🤘  Alpha & RGBA Adjuster  |  File Converter  🤘🦦",
+    "Galaxy":          "✦  Alpha & RGBA Adjuster  |  File Converter  ✦",
+    "Galaxy Otter":    "🦦✦  Alpha & RGBA Adjuster  |  File Converter  ✦🦦",
+    "Goth":            "💀  Alpha & RGBA Adjuster  |  File Converter  💀",
+    "Volcano":         "🌋  Alpha & RGBA Adjuster  |  File Converter  🔥",
+    "Arctic":          "❄  Alpha & RGBA Adjuster  |  File Converter  ❄",
+    "Fairy Garden":    "🧚✨🪄  Alpha & RGBA Adjuster  |  File Converter  🪄✨🧚",
+    "Secret Skeleton": "☠  Alpha & RGBA Adjuster  |  File Converter  ☠",
+    "Secret Sakura":   "🌸  Alpha & RGBA Adjuster  |  File Converter  🌸",
+    "Deep Ocean":      "🌊🦑  Alpha & RGBA Adjuster  |  File Converter  🦑🌊",
+    "Blood Moon":      "🩸🌕  Alpha & RGBA Adjuster  |  File Converter  🌕🩸",
+    "Ice Cave":        "❄🧊  Alpha & RGBA Adjuster  |  File Converter  🧊❄",
+    "Cyber Otter":     "🦦💻  Alpha & RGBA Adjuster  |  File Converter  💻🦦",
+    "Toxic Neon":      "☢⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡☢",
+    "Lava Cave":       "🌋🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🌋",
+    "Sunset Beach":    "🌅🏖  Alpha & RGBA Adjuster  |  File Converter  🏖🌅",
+    "Midnight Forest": "🌲🌙  Alpha & RGBA Adjuster  |  File Converter  🌙🌲",
     # New preset themes
-    "Mermaid":         "🧜🐚  Alpha Fixer  &  File Converter  🐚🧜",
-    "Shark Bait":      "🦈🩸  Alpha Fixer  &  File Converter  🩸🦈",
-    "Alien":           "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
-    "Noodle":          "🍜🥢  Alpha Fixer  &  File Converter  🥢🍜",
-    "Pancake":         "🥞🍯  Alpha Fixer  &  File Converter  🍯🥞",
+    "Mermaid":         "🧜🐚  Alpha & RGBA Adjuster  |  File Converter  🐚🧜",
+    "Shark Bait":      "🦈🩸  Alpha & RGBA Adjuster  |  File Converter  🩸🦈",
+    "Alien":           "🛸👽  Alpha & RGBA Adjuster  |  File Converter  👽🛸",
+    "Noodle":          "🍜🥢  Alpha & RGBA Adjuster  |  File Converter  🥢🍜",
+    "Pancake":         "🥞🍯  Alpha & RGBA Adjuster  |  File Converter  🍯🥞",
     # New hidden themes
-    "Candy Land":        "🍭🌈  Alpha Fixer  &  File Converter  🌈🍭",
-    "Zombie Apocalypse": "🧟💀  Alpha Fixer  &  File Converter  💀🧟",
-    "Dragon Fire":       "🐉🔥  Alpha Fixer  &  File Converter  🔥🐉",
-    "Bubblegum":         "🫧🍬  Alpha Fixer  &  File Converter  🍬🫧",
-    "Thunder Storm":     "⚡🌩  Alpha Fixer  &  File Converter  🌩⚡",
-    "Rose Gold":         "🌹✨  Alpha Fixer  &  File Converter  ✨🌹",
-    "Space Cat":         "🐱🚀  Alpha Fixer  &  File Converter  🚀🐱",
-    "Magic Mushroom":    "🍄✨  Alpha Fixer  &  File Converter  ✨🍄",
-    "Abyssal Void":      "🕳🌑  Alpha Fixer  &  File Converter  🌑🕳",
-    "Spring Bloom":      "🌷🌿  Alpha Fixer  &  File Converter  🌿🌷",
-    "Gold Rush":         "💰✦  Alpha Fixer  &  File Converter  ✦💰",
-    "Nebula":            "🌌💫  Alpha Fixer  &  File Converter  💫🌌",
+    "Candy Land":        "🍭🌈  Alpha & RGBA Adjuster  |  File Converter  🌈🍭",
+    "Zombie Apocalypse": "🧟💀  Alpha & RGBA Adjuster  |  File Converter  💀🧟",
+    "Dragon Fire":       "🐉🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🐉",
+    "Bubblegum":         "🫧🍬  Alpha & RGBA Adjuster  |  File Converter  🍬🫧",
+    "Thunder Storm":     "⚡🌩  Alpha & RGBA Adjuster  |  File Converter  🌩⚡",
+    "Rose Gold":         "🌹✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌹",
+    "Space Cat":         "🐱🚀  Alpha & RGBA Adjuster  |  File Converter  🚀🐱",
+    "Magic Mushroom":    "🍄✨  Alpha & RGBA Adjuster  |  File Converter  ✨🍄",
+    "Abyssal Void":      "🕳🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🕳",
+    "Spring Bloom":      "🌷🌿  Alpha & RGBA Adjuster  |  File Converter  🌿🌷",
+    "Gold Rush":         "💰✦  Alpha & RGBA Adjuster  |  File Converter  ✦💰",
+    "Nebula":            "🌌💫  Alpha & RGBA Adjuster  |  File Converter  💫🌌",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -1657,7 +1657,7 @@ THEME_STATUS_MESSAGES = {
 
 def get_theme_banner(theme_name: str) -> str:
     """Return the header banner text for *theme_name*, falling back to default."""
-    return THEME_BANNER.get(theme_name, "🐼  Alpha Fixer  &  File Converter")
+    return THEME_BANNER.get(theme_name, "🐼  Alpha & RGBA Adjuster  |  File Converter")
 
 
 # Single representative emoji for each theme — used for the animated banner icon.
@@ -1774,7 +1774,7 @@ def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
     """
     e = _THEME_TAB_EMOJIS.get(theme_name, _DEFAULT_TAB_EMOJIS)
     return (
-        f"{e[0]}  Alpha Fixer",
+        f"{e[0]}  Alpha & RGBA Adjuster",
         f"{e[1]}  Converter",
         f"{e[2]}  History",
     )
@@ -1788,274 +1788,274 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
     # Original preset themes
     # ---------------------------------------------------------------------------
     "Panda Dark": [
-        "🐼  Alpha Fixer  &  File Converter",
-        "🐼🎋  Alpha Fixer  &  File Converter  🎋🐼",
-        "🐼✨  Alpha Fixer  &  File Converter  ✨🐼",
+        "🐼  Alpha & RGBA Adjuster  |  File Converter",
+        "🐼🎋  Alpha & RGBA Adjuster  |  File Converter  🎋🐼",
+        "🐼✨  Alpha & RGBA Adjuster  |  File Converter  ✨🐼",
     ],
     "Panda Light": [
-        "🐼  Alpha Fixer  &  File Converter  🤍",
-        "🤍🐼  Alpha Fixer  &  File Converter  🐼🤍",
-        "🐼🌸🤍  Alpha Fixer  &  File Converter  🤍🌸🐼",
+        "🐼  Alpha & RGBA Adjuster  |  File Converter  🤍",
+        "🤍🐼  Alpha & RGBA Adjuster  |  File Converter  🐼🤍",
+        "🐼🌸🤍  Alpha & RGBA Adjuster  |  File Converter  🤍🌸🐼",
     ],
     "Neon Panda": [
-        "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
-        "🐼⚡🌟  Alpha Fixer  &  File Converter  🌟⚡🐼",
-        "⚡✦🐼  Alpha Fixer  &  File Converter  🐼✦⚡",
+        "⚡🐼  Alpha & RGBA Adjuster  |  File Converter  🐼⚡",
+        "🐼⚡🌟  Alpha & RGBA Adjuster  |  File Converter  🌟⚡🐼",
+        "⚡✦🐼  Alpha & RGBA Adjuster  |  File Converter  🐼✦⚡",
     ],
     "Gore": [
-        "🩸  Alpha Fixer  &  File Converter  🩸",
-        "💀🩸  Alpha Fixer  &  File Converter  🩸💀",
-        "🩸☠💀  Alpha Fixer  &  File Converter  💀☠🩸",
+        "🩸  Alpha & RGBA Adjuster  |  File Converter  🩸",
+        "💀🩸  Alpha & RGBA Adjuster  |  File Converter  🩸💀",
+        "🩸☠💀  Alpha & RGBA Adjuster  |  File Converter  💀☠🩸",
     ],
     "Bat Cave": [
-        "🦇🌙💜  Alpha Fixer  &  File Converter  💜🌙🦇",
-        "🌙🦇  Alpha Fixer  &  File Converter  🦇🌙",
-        "💜🦇🌙  Alpha Fixer  &  File Converter  🌙🦇💜",
+        "🦇🌙💜  Alpha & RGBA Adjuster  |  File Converter  💜🌙🦇",
+        "🌙🦇  Alpha & RGBA Adjuster  |  File Converter  🦇🌙",
+        "💜🦇🌙  Alpha & RGBA Adjuster  |  File Converter  🌙🦇💜",
     ],
     "Rainbow Chaos": [
-        "🌈  Alpha Fixer  &  File Converter  🌈",
-        "🌈🦄  Alpha Fixer  &  File Converter  🦄🌈",
-        "🌈✨🦄  Alpha Fixer  &  File Converter  🦄✨🌈",
+        "🌈  Alpha & RGBA Adjuster  |  File Converter  🌈",
+        "🌈🦄  Alpha & RGBA Adjuster  |  File Converter  🦄🌈",
+        "🌈✨🦄  Alpha & RGBA Adjuster  |  File Converter  🦄✨🌈",
     ],
     "Otter Cove": [
-        "🦦🤘  Alpha Fixer  &  File Converter  🤘🦦",
-        "🤘🦦🐟  Alpha Fixer  &  File Converter  🐟🦦🤘",
-        "🦦💧🤘  Alpha Fixer  &  File Converter  🤘💧🦦",
+        "🦦🤘  Alpha & RGBA Adjuster  |  File Converter  🤘🦦",
+        "🤘🦦🐟  Alpha & RGBA Adjuster  |  File Converter  🐟🦦🤘",
+        "🦦💧🤘  Alpha & RGBA Adjuster  |  File Converter  🤘💧🦦",
     ],
     "Galaxy": [
-        "✦  Alpha Fixer  &  File Converter  ✦",
-        "⭐✦  Alpha Fixer  &  File Converter  ✦⭐",
-        "✦🌌⭐  Alpha Fixer  &  File Converter  ⭐🌌✦",
+        "✦  Alpha & RGBA Adjuster  |  File Converter  ✦",
+        "⭐✦  Alpha & RGBA Adjuster  |  File Converter  ✦⭐",
+        "✦🌌⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌌✦",
     ],
     "Galaxy Otter": [
-        "🦦✦  Alpha Fixer  &  File Converter  ✦🦦",
-        "✦🦦⭐  Alpha Fixer  &  File Converter  ⭐🦦✦",
-        "🦦🌌✦  Alpha Fixer  &  File Converter  ✦🌌🦦",
+        "🦦✦  Alpha & RGBA Adjuster  |  File Converter  ✦🦦",
+        "✦🦦⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🦦✦",
+        "🦦🌌✦  Alpha & RGBA Adjuster  |  File Converter  ✦🌌🦦",
     ],
     "Goth": [
-        "💀  Alpha Fixer  &  File Converter  💀",
-        "💀🕷  Alpha Fixer  &  File Converter  🕷💀",
-        "💀🖤🕷  Alpha Fixer  &  File Converter  🕷🖤💀",
+        "💀  Alpha & RGBA Adjuster  |  File Converter  💀",
+        "💀🕷  Alpha & RGBA Adjuster  |  File Converter  🕷💀",
+        "💀🖤🕷  Alpha & RGBA Adjuster  |  File Converter  🕷🖤💀",
     ],
     "Volcano": [
-        "🌋  Alpha Fixer  &  File Converter  🔥",
-        "🔥🌋  Alpha Fixer  &  File Converter  🌋🔥",
-        "🌋💥🔥  Alpha Fixer  &  File Converter  🔥💥🌋",
+        "🌋  Alpha & RGBA Adjuster  |  File Converter  🔥",
+        "🔥🌋  Alpha & RGBA Adjuster  |  File Converter  🌋🔥",
+        "🌋💥🔥  Alpha & RGBA Adjuster  |  File Converter  🔥💥🌋",
     ],
     "Arctic": [
-        "❄  Alpha Fixer  &  File Converter  ❄",
-        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
-        "❄✦🧊  Alpha Fixer  &  File Converter  🧊✦❄",
+        "❄  Alpha & RGBA Adjuster  |  File Converter  ❄",
+        "❄🧊  Alpha & RGBA Adjuster  |  File Converter  🧊❄",
+        "❄✦🧊  Alpha & RGBA Adjuster  |  File Converter  🧊✦❄",
     ],
     "Fairy Garden": [
-        "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
-        "✨🌟🧚  Alpha Fixer  &  File Converter  🧚🌟✨",
-        "🪄💜✨  Alpha Fixer  &  File Converter  ✨💜🪄",
-        "🌸🧚🌟  Alpha Fixer  &  File Converter  🌟🧚🌸",
+        "🧚✨🪄  Alpha & RGBA Adjuster  |  File Converter  🪄✨🧚",
+        "✨🌟🧚  Alpha & RGBA Adjuster  |  File Converter  🧚🌟✨",
+        "🪄💜✨  Alpha & RGBA Adjuster  |  File Converter  ✨💜🪄",
+        "🌸🧚🌟  Alpha & RGBA Adjuster  |  File Converter  🌟🧚🌸",
     ],
     # ---------------------------------------------------------------------------
     # New preset themes
     # ---------------------------------------------------------------------------
     "Mermaid": [
-        "🧜🐚  Alpha Fixer  &  File Converter  🐚🧜",
-        "🐚🌊🧜  Alpha Fixer  &  File Converter  🧜🌊🐚",
-        "🧜🐠🐚  Alpha Fixer  &  File Converter  🐚🐠🧜",
-        "🌊🧜✨  Alpha Fixer  &  File Converter  ✨🧜🌊",
+        "🧜🐚  Alpha & RGBA Adjuster  |  File Converter  🐚🧜",
+        "🐚🌊🧜  Alpha & RGBA Adjuster  |  File Converter  🧜🌊🐚",
+        "🧜🐠🐚  Alpha & RGBA Adjuster  |  File Converter  🐚🐠🧜",
+        "🌊🧜✨  Alpha & RGBA Adjuster  |  File Converter  ✨🧜🌊",
     ],
     "Shark Bait": [
-        "🦈🩸  Alpha Fixer  &  File Converter  🩸🦈",
-        "🩸🦈💦  Alpha Fixer  &  File Converter  💦🦈🩸",
-        "🦈💥🩸  Alpha Fixer  &  File Converter  🩸💥🦈",
+        "🦈🩸  Alpha & RGBA Adjuster  |  File Converter  🩸🦈",
+        "🩸🦈💦  Alpha & RGBA Adjuster  |  File Converter  💦🦈🩸",
+        "🦈💥🩸  Alpha & RGBA Adjuster  |  File Converter  🩸💥🦈",
     ],
     "Alien": [
-        "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
-        "👽🌌🛸  Alpha Fixer  &  File Converter  🛸🌌👽",
-        "🛸⭐👽  Alpha Fixer  &  File Converter  👽⭐🛸",
+        "🛸👽  Alpha & RGBA Adjuster  |  File Converter  👽🛸",
+        "👽🌌🛸  Alpha & RGBA Adjuster  |  File Converter  🛸🌌👽",
+        "🛸⭐👽  Alpha & RGBA Adjuster  |  File Converter  👽⭐🛸",
     ],
     "Noodle": [
-        "🍜🥢  Alpha Fixer  &  File Converter  🥢🍜",
-        "🥢🍜♨  Alpha Fixer  &  File Converter  ♨🍜🥢",
-        "🍜🫕🥢  Alpha Fixer  &  File Converter  🥢🫕🍜",
+        "🍜🥢  Alpha & RGBA Adjuster  |  File Converter  🥢🍜",
+        "🥢🍜♨  Alpha & RGBA Adjuster  |  File Converter  ♨🍜🥢",
+        "🍜🫕🥢  Alpha & RGBA Adjuster  |  File Converter  🥢🫕🍜",
     ],
     "Pancake": [
-        "🥞🍯  Alpha Fixer  &  File Converter  🍯🥞",
-        "🥞🧈🍯  Alpha Fixer  &  File Converter  🍯🧈🥞",
-        "🥞💛🍯  Alpha Fixer  &  File Converter  🍯💛🥞",
+        "🥞🍯  Alpha & RGBA Adjuster  |  File Converter  🍯🥞",
+        "🥞🧈🍯  Alpha & RGBA Adjuster  |  File Converter  🍯🧈🥞",
+        "🥞💛🍯  Alpha & RGBA Adjuster  |  File Converter  🍯💛🥞",
     ],
     # ---------------------------------------------------------------------------
     # Hidden / unlockable themes
     # ---------------------------------------------------------------------------
     "Secret Skeleton": [
-        "☠  Alpha Fixer  &  File Converter  ☠",
-        "☠💀  Alpha Fixer  &  File Converter  💀☠",
-        "💀☠🦴  Alpha Fixer  &  File Converter  🦴☠💀",
+        "☠  Alpha & RGBA Adjuster  |  File Converter  ☠",
+        "☠💀  Alpha & RGBA Adjuster  |  File Converter  💀☠",
+        "💀☠🦴  Alpha & RGBA Adjuster  |  File Converter  🦴☠💀",
     ],
     "Secret Sakura": [
-        "🌸  Alpha Fixer  &  File Converter  🌸",
-        "🌸🌺  Alpha Fixer  &  File Converter  🌺🌸",
-        "🌺🌸🌷  Alpha Fixer  &  File Converter  🌷🌸🌺",
+        "🌸  Alpha & RGBA Adjuster  |  File Converter  🌸",
+        "🌸🌺  Alpha & RGBA Adjuster  |  File Converter  🌺🌸",
+        "🌺🌸🌷  Alpha & RGBA Adjuster  |  File Converter  🌷🌸🌺",
     ],
     "Deep Ocean": [
-        "🌊🦑  Alpha Fixer  &  File Converter  🦑🌊",
-        "🦑🐙🌊  Alpha Fixer  &  File Converter  🌊🐙🦑",
-        "🌊🐠🦑  Alpha Fixer  &  File Converter  🦑🐠🌊",
-        "🐙🌊🐟  Alpha Fixer  &  File Converter  🐟🌊🐙",
+        "🌊🦑  Alpha & RGBA Adjuster  |  File Converter  🦑🌊",
+        "🦑🐙🌊  Alpha & RGBA Adjuster  |  File Converter  🌊🐙🦑",
+        "🌊🐠🦑  Alpha & RGBA Adjuster  |  File Converter  🦑🐠🌊",
+        "🐙🌊🐟  Alpha & RGBA Adjuster  |  File Converter  🐟🌊🐙",
     ],
     "Blood Moon": [
-        "🩸🌕  Alpha Fixer  &  File Converter  🌕🩸",
-        "🌕🩸🌑  Alpha Fixer  &  File Converter  🌑🩸🌕",
-        "🩸🌑💀  Alpha Fixer  &  File Converter  💀🌑🩸",
+        "🩸🌕  Alpha & RGBA Adjuster  |  File Converter  🌕🩸",
+        "🌕🩸🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🩸🌕",
+        "🩸🌑💀  Alpha & RGBA Adjuster  |  File Converter  💀🌑🩸",
     ],
     "Ice Cave": [
-        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
-        "🧊❄💎  Alpha Fixer  &  File Converter  💎❄🧊",
-        "❄✦🧊  Alpha Fixer  &  File Converter  🧊✦❄",
+        "❄🧊  Alpha & RGBA Adjuster  |  File Converter  🧊❄",
+        "🧊❄💎  Alpha & RGBA Adjuster  |  File Converter  💎❄🧊",
+        "❄✦🧊  Alpha & RGBA Adjuster  |  File Converter  🧊✦❄",
     ],
     "Cyber Otter": [
-        "🦦💻  Alpha Fixer  &  File Converter  💻🦦",
-        "💻🦦⚡  Alpha Fixer  &  File Converter  ⚡🦦💻",
-        "🦦✦💻  Alpha Fixer  &  File Converter  💻✦🦦",
+        "🦦💻  Alpha & RGBA Adjuster  |  File Converter  💻🦦",
+        "💻🦦⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡🦦💻",
+        "🦦✦💻  Alpha & RGBA Adjuster  |  File Converter  💻✦🦦",
     ],
     "Toxic Neon": [
-        "☢⚡  Alpha Fixer  &  File Converter  ⚡☢",
-        "⚡☢💚  Alpha Fixer  &  File Converter  💚☢⚡",
-        "☢✦⚡  Alpha Fixer  &  File Converter  ⚡✦☢",
+        "☢⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡☢",
+        "⚡☢💚  Alpha & RGBA Adjuster  |  File Converter  💚☢⚡",
+        "☢✦⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡✦☢",
     ],
     "Lava Cave": [
-        "🌋🔥  Alpha Fixer  &  File Converter  🔥🌋",
-        "🔥🌋💥  Alpha Fixer  &  File Converter  💥🌋🔥",
-        "🌋🔴🔥  Alpha Fixer  &  File Converter  🔥🔴🌋",
+        "🌋🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🌋",
+        "🔥🌋💥  Alpha & RGBA Adjuster  |  File Converter  💥🌋🔥",
+        "🌋🔴🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🔴🌋",
     ],
     "Sunset Beach": [
-        "🌅🏖  Alpha Fixer  &  File Converter  🏖🌅",
-        "🏖🌅🌊  Alpha Fixer  &  File Converter  🌊🌅🏖",
-        "🌅🌴🏖  Alpha Fixer  &  File Converter  🏖🌴🌅",
+        "🌅🏖  Alpha & RGBA Adjuster  |  File Converter  🏖🌅",
+        "🏖🌅🌊  Alpha & RGBA Adjuster  |  File Converter  🌊🌅🏖",
+        "🌅🌴🏖  Alpha & RGBA Adjuster  |  File Converter  🏖🌴🌅",
     ],
     "Midnight Forest": [
-        "🌲🌙  Alpha Fixer  &  File Converter  🌙🌲",
-        "🌙🌲🦉  Alpha Fixer  &  File Converter  🦉🌲🌙",
-        "🌲✨🌙  Alpha Fixer  &  File Converter  🌙✨🌲",
+        "🌲🌙  Alpha & RGBA Adjuster  |  File Converter  🌙🌲",
+        "🌙🌲🦉  Alpha & RGBA Adjuster  |  File Converter  🦉🌲🌙",
+        "🌲✨🌙  Alpha & RGBA Adjuster  |  File Converter  🌙✨🌲",
     ],
     "Candy Land": [
-        "🍭🌈  Alpha Fixer  &  File Converter  🌈🍭",
-        "🌈🍭🍬  Alpha Fixer  &  File Converter  🍬🍭🌈",
-        "🍭✨🌈  Alpha Fixer  &  File Converter  🌈✨🍭",
+        "🍭🌈  Alpha & RGBA Adjuster  |  File Converter  🌈🍭",
+        "🌈🍭🍬  Alpha & RGBA Adjuster  |  File Converter  🍬🍭🌈",
+        "🍭✨🌈  Alpha & RGBA Adjuster  |  File Converter  🌈✨🍭",
     ],
     "Zombie Apocalypse": [
-        "🧟💀  Alpha Fixer  &  File Converter  💀🧟",
-        "💀🧟🦠  Alpha Fixer  &  File Converter  🦠🧟💀",
-        "🧟☣💀  Alpha Fixer  &  File Converter  💀☣🧟",
+        "🧟💀  Alpha & RGBA Adjuster  |  File Converter  💀🧟",
+        "💀🧟🦠  Alpha & RGBA Adjuster  |  File Converter  🦠🧟💀",
+        "🧟☣💀  Alpha & RGBA Adjuster  |  File Converter  💀☣🧟",
     ],
     "Dragon Fire": [
-        "🐉🔥  Alpha Fixer  &  File Converter  🔥🐉",
-        "🔥🐉💥  Alpha Fixer  &  File Converter  💥🐉🔥",
-        "🐉🔥🌋  Alpha Fixer  &  File Converter  🌋🔥🐉",
+        "🐉🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🐉",
+        "🔥🐉💥  Alpha & RGBA Adjuster  |  File Converter  💥🐉🔥",
+        "🐉🔥🌋  Alpha & RGBA Adjuster  |  File Converter  🌋🔥🐉",
     ],
     "Bubblegum": [
-        "🫧🍬  Alpha Fixer  &  File Converter  🍬🫧",
-        "🍬🫧💜  Alpha Fixer  &  File Converter  💜🫧🍬",
-        "🫧✨🍬  Alpha Fixer  &  File Converter  🍬✨🫧",
+        "🫧🍬  Alpha & RGBA Adjuster  |  File Converter  🍬🫧",
+        "🍬🫧💜  Alpha & RGBA Adjuster  |  File Converter  💜🫧🍬",
+        "🫧✨🍬  Alpha & RGBA Adjuster  |  File Converter  🍬✨🫧",
     ],
     "Thunder Storm": [
-        "⚡🌩  Alpha Fixer  &  File Converter  🌩⚡",
-        "🌩⚡🌪  Alpha Fixer  &  File Converter  🌪⚡🌩",
-        "⚡🌑🌩  Alpha Fixer  &  File Converter  🌩🌑⚡",
+        "⚡🌩  Alpha & RGBA Adjuster  |  File Converter  🌩⚡",
+        "🌩⚡🌪  Alpha & RGBA Adjuster  |  File Converter  🌪⚡🌩",
+        "⚡🌑🌩  Alpha & RGBA Adjuster  |  File Converter  🌩🌑⚡",
     ],
     "Rose Gold": [
-        "🌹✨  Alpha Fixer  &  File Converter  ✨🌹",
-        "✨🌹💫  Alpha Fixer  &  File Converter  💫🌹✨",
-        "🌹🌸✨  Alpha Fixer  &  File Converter  ✨🌸🌹",
+        "🌹✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌹",
+        "✨🌹💫  Alpha & RGBA Adjuster  |  File Converter  💫🌹✨",
+        "🌹🌸✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌸🌹",
     ],
     "Space Cat": [
-        "🐱🚀  Alpha Fixer  &  File Converter  🚀🐱",
-        "🚀🐱⭐  Alpha Fixer  &  File Converter  ⭐🐱🚀",
-        "🐱🌌🚀  Alpha Fixer  &  File Converter  🚀🌌🐱",
+        "🐱🚀  Alpha & RGBA Adjuster  |  File Converter  🚀🐱",
+        "🚀🐱⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🐱🚀",
+        "🐱🌌🚀  Alpha & RGBA Adjuster  |  File Converter  🚀🌌🐱",
     ],
     "Magic Mushroom": [
-        "🍄✨  Alpha Fixer  &  File Converter  ✨🍄",
-        "✨🍄🌟  Alpha Fixer  &  File Converter  🌟🍄✨",
-        "🍄🌈✨  Alpha Fixer  &  File Converter  ✨🌈🍄",
+        "🍄✨  Alpha & RGBA Adjuster  |  File Converter  ✨🍄",
+        "✨🍄🌟  Alpha & RGBA Adjuster  |  File Converter  🌟🍄✨",
+        "🍄🌈✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌈🍄",
     ],
     "Abyssal Void": [
-        "🕳🌑  Alpha Fixer  &  File Converter  🌑🕳",
-        "🌑🕳💜  Alpha Fixer  &  File Converter  💜🕳🌑",
-        "🕳✦🌑  Alpha Fixer  &  File Converter  🌑✦🕳",
+        "🕳🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🕳",
+        "🌑🕳💜  Alpha & RGBA Adjuster  |  File Converter  💜🕳🌑",
+        "🕳✦🌑  Alpha & RGBA Adjuster  |  File Converter  🌑✦🕳",
     ],
     "Spring Bloom": [
-        "🌷🌿  Alpha Fixer  &  File Converter  🌿🌷",
-        "🌿🌷🌸  Alpha Fixer  &  File Converter  🌸🌷🌿",
-        "🌷✨🌿  Alpha Fixer  &  File Converter  🌿✨🌷",
+        "🌷🌿  Alpha & RGBA Adjuster  |  File Converter  🌿🌷",
+        "🌿🌷🌸  Alpha & RGBA Adjuster  |  File Converter  🌸🌷🌿",
+        "🌷✨🌿  Alpha & RGBA Adjuster  |  File Converter  🌿✨🌷",
     ],
     "Gold Rush": [
-        "💰✦  Alpha Fixer  &  File Converter  ✦💰",
-        "✦💰⭐  Alpha Fixer  &  File Converter  ⭐💰✦",
-        "💰🌟✦  Alpha Fixer  &  File Converter  ✦🌟💰",
+        "💰✦  Alpha & RGBA Adjuster  |  File Converter  ✦💰",
+        "✦💰⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐💰✦",
+        "💰🌟✦  Alpha & RGBA Adjuster  |  File Converter  ✦🌟💰",
     ],
     "Nebula": [
-        "🌌💫  Alpha Fixer  &  File Converter  💫🌌",
-        "💫🌌✦  Alpha Fixer  &  File Converter  ✦🌌💫",
-        "🌌⭐💫  Alpha Fixer  &  File Converter  💫⭐🌌",
-        "💫🔮🌌  Alpha Fixer  &  File Converter  🌌🔮💫",
+        "🌌💫  Alpha & RGBA Adjuster  |  File Converter  💫🌌",
+        "💫🌌✦  Alpha & RGBA Adjuster  |  File Converter  ✦🌌💫",
+        "🌌⭐💫  Alpha & RGBA Adjuster  |  File Converter  💫⭐🌌",
+        "💫🔮🌌  Alpha & RGBA Adjuster  |  File Converter  🌌🔮💫",
     ],
     "Crystal Cave": [
-        "💎❄  Alpha Fixer  &  File Converter  ❄💎",
-        "✦💎🔷  Alpha Fixer  &  File Converter  🔷💎✦",
-        "❄💎✨  Alpha Fixer  &  File Converter  ✨💎❄",
-        "🔷✦💎  Alpha Fixer  &  File Converter  💎✦🔷",
+        "💎❄  Alpha & RGBA Adjuster  |  File Converter  ❄💎",
+        "✦💎🔷  Alpha & RGBA Adjuster  |  File Converter  🔷💎✦",
+        "❄💎✨  Alpha & RGBA Adjuster  |  File Converter  ✨💎❄",
+        "🔷✦💎  Alpha & RGBA Adjuster  |  File Converter  💎✦🔷",
     ],
     "Glitch": [
-        "📡⚡  Alpha Fixer  &  File Converter  ⚡📡",
-        "⚡📡💀  Alpha Fixer  &  File Converter  💀📡⚡",
-        "📡🔴⚡  Alpha Fixer  &  File Converter  ⚡🔴📡",
-        "⚡💜📡  Alpha Fixer  &  File Converter  📡💜⚡",
+        "📡⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡📡",
+        "⚡📡💀  Alpha & RGBA Adjuster  |  File Converter  💀📡⚡",
+        "📡🔴⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡🔴📡",
+        "⚡💜📡  Alpha & RGBA Adjuster  |  File Converter  📡💜⚡",
     ],
     "Wild West": [
-        "🤠⭐  Alpha Fixer  &  File Converter  ⭐🤠",
-        "⭐🤠🌵  Alpha Fixer  &  File Converter  🌵🤠⭐",
-        "🤠🌟⭐  Alpha Fixer  &  File Converter  ⭐🌟🤠",
-        "🌵⭐🤠  Alpha Fixer  &  File Converter  🤠⭐🌵",
+        "🤠⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🤠",
+        "⭐🤠🌵  Alpha & RGBA Adjuster  |  File Converter  🌵🤠⭐",
+        "🤠🌟⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌟🤠",
+        "🌵⭐🤠  Alpha & RGBA Adjuster  |  File Converter  🤠⭐🌵",
     ],
     "Pirate": [
-        "🏴‍☠️⚓  Alpha Fixer  &  File Converter  ⚓🏴‍☠️",
-        "⚓🏴‍☠️💀  Alpha Fixer  &  File Converter  💀🏴‍☠️⚓",
-        "🏴‍☠️⚔️⚓  Alpha Fixer  &  File Converter  ⚓⚔️🏴‍☠️",
-        "💀⚓🏴‍☠️  Alpha Fixer  &  File Converter  🏴‍☠️⚓💀",
+        "🏴‍☠️⚓  Alpha & RGBA Adjuster  |  File Converter  ⚓🏴‍☠️",
+        "⚓🏴‍☠️💀  Alpha & RGBA Adjuster  |  File Converter  💀🏴‍☠️⚓",
+        "🏴‍☠️⚔️⚓  Alpha & RGBA Adjuster  |  File Converter  ⚓⚔️🏴‍☠️",
+        "💀⚓🏴‍☠️  Alpha & RGBA Adjuster  |  File Converter  🏴‍☠️⚓💀",
     ],
     "Deep Space": [
-        "🛸🌑  Alpha Fixer  &  File Converter  🌑🛸",
-        "🌑🛸⭐  Alpha Fixer  &  File Converter  ⭐🛸🌑",
-        "🛸🪐🌑  Alpha Fixer  &  File Converter  🌑🪐🛸",
-        "⭐🌑🛸  Alpha Fixer  &  File Converter  🛸🌑⭐",
+        "🛸🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🛸",
+        "🌑🛸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🛸🌑",
+        "🛸🪐🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🪐🛸",
+        "⭐🌑🛸  Alpha & RGBA Adjuster  |  File Converter  🛸🌑⭐",
     ],
     "Witch's Brew": [
-        "🧙🫧  Alpha Fixer  &  File Converter  🫧🧙",
-        "🫧🧙🍄  Alpha Fixer  &  File Converter  🍄🧙🫧",
-        "🧙🌿🫧  Alpha Fixer  &  File Converter  🫧🌿🧙",
-        "🍄🫧🧙  Alpha Fixer  &  File Converter  🧙🫧🍄",
+        "🧙🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🧙",
+        "🫧🧙🍄  Alpha & RGBA Adjuster  |  File Converter  🍄🧙🫧",
+        "🧙🌿🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🌿🧙",
+        "🍄🫧🧙  Alpha & RGBA Adjuster  |  File Converter  🧙🫧🍄",
     ],
     "Lava Lamp": [
-        "🪔🔥  Alpha Fixer  &  File Converter  🔥🪔",
-        "🔥🪔🫧  Alpha Fixer  &  File Converter  🫧🪔🔥",
-        "🪔✨🔥  Alpha Fixer  &  File Converter  🔥✨🪔",
-        "🫧🔥🪔  Alpha Fixer  &  File Converter  🪔🔥🫧",
+        "🪔🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🪔",
+        "🔥🪔🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🪔🔥",
+        "🪔✨🔥  Alpha & RGBA Adjuster  |  File Converter  🔥✨🪔",
+        "🫧🔥🪔  Alpha & RGBA Adjuster  |  File Converter  🪔🔥🫧",
     ],
     "Coral Reef": [
-        "🪸🐠  Alpha Fixer  &  File Converter  🐠🪸",
-        "🐠🪸🌊  Alpha Fixer  &  File Converter  🌊🪸🐠",
-        "🪸🫧🐠  Alpha Fixer  &  File Converter  🐠🫧🪸",
-        "🌊🐠🪸  Alpha Fixer  &  File Converter  🪸🐠🌊",
+        "🪸🐠  Alpha & RGBA Adjuster  |  File Converter  🐠🪸",
+        "🐠🪸🌊  Alpha & RGBA Adjuster  |  File Converter  🌊🪸🐠",
+        "🪸🫧🐠  Alpha & RGBA Adjuster  |  File Converter  🐠🫧🪸",
+        "🌊🐠🪸  Alpha & RGBA Adjuster  |  File Converter  🪸🐠🌊",
     ],
     "Storm Cloud": [
-        "⛈⚡  Alpha Fixer  &  File Converter  ⚡⛈",
-        "⚡⛈🌧  Alpha Fixer  &  File Converter  🌧⛈⚡",
-        "⛈💨⚡  Alpha Fixer  &  File Converter  ⚡💨⛈",
-        "🌧⚡⛈  Alpha Fixer  &  File Converter  ⛈⚡🌧",
+        "⛈⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡⛈",
+        "⚡⛈🌧  Alpha & RGBA Adjuster  |  File Converter  🌧⛈⚡",
+        "⛈💨⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡💨⛈",
+        "🌧⚡⛈  Alpha & RGBA Adjuster  |  File Converter  ⛈⚡🌧",
     ],
     "Golden Hour": [
-        "🌇✨  Alpha Fixer  &  File Converter  ✨🌇",
-        "✨🌇🌅  Alpha Fixer  &  File Converter  🌅🌇✨",
-        "🌇🌟✨  Alpha Fixer  &  File Converter  ✨🌟🌇",
-        "🌅✨🌇  Alpha Fixer  &  File Converter  🌇✨🌅",
+        "🌇✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌇",
+        "✨🌇🌅  Alpha & RGBA Adjuster  |  File Converter  🌅🌇✨",
+        "🌇🌟✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌟🌇",
+        "🌅✨🌇  Alpha & RGBA Adjuster  |  File Converter  🌇✨🌅",
     ],
 }
 
@@ -2311,7 +2311,7 @@ QPushButton {
 QPushButton:hover { border-color: #00ffff; }
 QTabBar::tab {
     border-radius: 16px 16px 0px 0px;
-    min-width: 110px;
+    min-width: 80px;
 }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
 QGroupBox { border-radius: 14px; }
@@ -2737,7 +2737,7 @@ QPushButton {
 QPushButton:hover { border-color: #ff88cc; }
 QLineEdit, QComboBox, QSpinBox { border-radius: 16px; }
 QGroupBox { border-radius: 16px; border: 2px solid #ff44aa; }
-QTabBar::tab { border-radius: 16px 16px 0px 0px; min-width: 110px; }
+QTabBar::tab { border-radius: 16px 16px 0px 0px; min-width: 80px; }
 """
 
     # --------------------------------------------------------------- Zombie Apocalypse
@@ -3046,16 +3046,16 @@ QTabBar[objectName="qt_tabwidget_tabbar"] {{
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
-    padding: 8px 20px;
-    min-width: 90px;
-    min-height: 28px;
+    padding: 5px 14px;
+    min-width: 80px;
+    min-height: 22px;
     margin-right: 3px;
     border: 2px solid {t['border']};
     border-bottom: none;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 11px;
 }}
 QTabBar::tab:selected {{
     background: {t['tab_selected']};

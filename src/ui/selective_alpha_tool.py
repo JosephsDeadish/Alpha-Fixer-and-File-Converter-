@@ -868,8 +868,8 @@ def _draw_checker(painter: QPainter, w: int, h: int, sq: int = 10) -> None:
 
 
 class _ZoneRow(QWidget):
-    """A compact row showing zone colour swatch, name, alpha spinbox and
-    Clear/Select buttons for one zone."""
+    """A two-row widget showing zone colour swatch, name, alpha spinbox and
+    Paint/Clear buttons for one zone."""
 
     selected = pyqtSignal(int)   # zone_idx
 
@@ -877,51 +877,63 @@ class _ZoneRow(QWidget):
         super().__init__(parent)
         self._idx = zone_idx
 
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(2, 2, 2, 2)
-        lay.setSpacing(4)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(2, 3, 2, 3)
+        outer.setSpacing(3)
+
+        # ── Row 1: swatch + name + alpha spinbox ─────────────────────────
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(6)
 
         # Colour swatch
         r, g, b, _ = ZONE_COLORS[zone_idx]
         swatch = QLabel()
-        swatch.setFixedSize(16, 16)
+        swatch.setFixedSize(18, 18)
         swatch.setStyleSheet(
             f"background:{QColor(r,g,b).name()};"
             "border:1px solid #666; border-radius:3px;"
         )
-        lay.addWidget(swatch)
+        top.addWidget(swatch)
 
         # Name
         name_lbl = QLabel(f"Zone {zone_idx + 1}")
-        name_lbl.setMinimumWidth(50)
-        lay.addWidget(name_lbl)
+        name_lbl.setMinimumWidth(52)
+        top.addWidget(name_lbl)
 
-        # Alpha spinbox
-        lay.addWidget(QLabel("α:"))
+        top.addStretch()
+
+        # Alpha label + spinbox
+        top.addWidget(QLabel("α:"))
         self._alpha_spin = QSpinBox()
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(128)
-        self._alpha_spin.setFixedWidth(58)
+        self._alpha_spin.setMinimumWidth(62)
         self._alpha_spin.setToolTip(
             "Alpha value applied to all pixels painted in this zone (0=transparent, 255=opaque)."
         )
-        lay.addWidget(self._alpha_spin)
+        top.addWidget(self._alpha_spin)
+        outer.addLayout(top)
 
-        # Select button
-        self._sel_btn = QPushButton("Select")
+        # ── Row 2: Paint + Clear buttons ─────────────────────────────────
+        bot = QHBoxLayout()
+        bot.setContentsMargins(0, 0, 0, 0)
+        bot.setSpacing(6)
+
+        self._sel_btn = QPushButton("🖌  Paint")
         self._sel_btn.setCheckable(True)
-        self._sel_btn.setFixedWidth(58)
+        self._sel_btn.setMinimumHeight(26)
+        self._sel_btn.setToolTip(f"Activate Zone {zone_idx + 1} for painting")
         self._sel_btn.clicked.connect(lambda: self.selected.emit(self._idx))
-        lay.addWidget(self._sel_btn)
+        bot.addWidget(self._sel_btn)
 
-        # Clear button
-        self._clear_btn = QPushButton("Clear")
-        self._clear_btn.setFixedWidth(50)
-        self._clear_btn.setToolTip("Erase this zone's mask")
+        self._clear_btn = QPushButton("✕  Clear")
+        self._clear_btn.setMinimumHeight(26)
+        self._clear_btn.setToolTip("Erase all painted pixels in this zone")
         self._clear_btn.clicked.connect(self._on_clear)
-        lay.addWidget(self._clear_btn)
+        bot.addWidget(self._clear_btn)
 
-        lay.addStretch()
+        outer.addLayout(bot)
 
     def _on_clear(self) -> None:
         # Bubbles up to SelectiveAlphaTool via canvas
@@ -971,7 +983,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Left panel (controls) ─────────────────────────────────────────
         left_panel = QWidget()
-        left_panel.setFixedWidth(230)
+        left_panel.setFixedWidth(290)
         lv = QVBoxLayout(left_panel)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
@@ -980,9 +992,11 @@ class SelectiveAlphaTool(QWidget):
         io_box = QGroupBox("Image")
         io_lay = QVBoxLayout(io_box)
         self._btn_open = QPushButton("📂  Open Image…")
+        self._btn_open.setMinimumHeight(30)
         self._btn_open.clicked.connect(self._on_open)
         io_lay.addWidget(self._btn_open)
         self._btn_save = QPushButton("💾  Save Result…")
+        self._btn_save.setMinimumHeight(30)
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
         io_lay.addWidget(self._btn_save)
@@ -1009,6 +1023,7 @@ class SelectiveAlphaTool(QWidget):
         for key, label, row, col in tool_defs:
             btn = QPushButton(label)
             btn.setCheckable(True)
+            btn.setMinimumHeight(28)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)
@@ -1021,6 +1036,7 @@ class SelectiveAlphaTool(QWidget):
         # Close Polygon button
         self._btn_close_poly = QPushButton("⬠ Close Polygon")
         self._btn_close_poly.setToolTip("Close and fill the in-progress polygon")
+        self._btn_close_poly.setMinimumHeight(28)
         self._btn_close_poly.setVisible(False)
         self._btn_close_poly.clicked.connect(self._on_close_polygon)
         tg.addWidget(self._btn_close_poly, 4, 0, 1, 2)
@@ -1064,14 +1080,14 @@ class SelectiveAlphaTool(QWidget):
         # Zoom controls
         zoom_box = QGroupBox("Zoom")
         zh = QHBoxLayout(zoom_box)
-        self._btn_zoom_in = QPushButton("＋")
-        self._btn_zoom_in.setFixedWidth(36)
+        self._btn_zoom_in = QPushButton("＋  In")
+        self._btn_zoom_in.setMinimumHeight(26)
         self._btn_zoom_in.clicked.connect(self._zoom_in)
-        self._btn_zoom_out = QPushButton("－")
-        self._btn_zoom_out.setFixedWidth(36)
+        self._btn_zoom_out = QPushButton("－  Out")
+        self._btn_zoom_out.setMinimumHeight(26)
         self._btn_zoom_out.clicked.connect(self._zoom_out)
-        self._btn_zoom_fit = QPushButton("Fit")
-        self._btn_zoom_fit.setFixedWidth(40)
+        self._btn_zoom_fit = QPushButton("⊡  Fit")
+        self._btn_zoom_fit.setMinimumHeight(26)
         self._btn_zoom_fit.clicked.connect(self._zoom_reset)
         zh.addWidget(self._btn_zoom_out)
         zh.addWidget(self._btn_zoom_fit)
@@ -1079,9 +1095,9 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(zoom_box)
 
         # Zone rows
-        zones_box = QGroupBox("Alpha Zones  (click Select to paint)")
+        zones_box = QGroupBox("Alpha Zones  (🖌 Paint to assign alpha per zone)")
         zv = QVBoxLayout(zones_box)
-        zv.setSpacing(2)
+        zv.setSpacing(4)
         self._zone_rows: list[_ZoneRow] = []
         for i in range(NUM_ZONES):
             row = _ZoneRow(i)
@@ -1096,11 +1112,13 @@ class SelectiveAlphaTool(QWidget):
         hh = QHBoxLayout(hist_box)
         self._btn_undo = QPushButton("↩  Undo")
         self._btn_undo.setEnabled(False)
+        self._btn_undo.setMinimumHeight(28)
         self._btn_undo.setToolTip("Undo the last highlight / erase action.")
         self._btn_undo.clicked.connect(self._on_undo_mask)
         hh.addWidget(self._btn_undo)
         self._btn_redo = QPushButton("↪  Redo")
         self._btn_redo.setEnabled(False)
+        self._btn_redo.setMinimumHeight(28)
         self._btn_redo.setToolTip("Redo the last undone action.")
         self._btn_redo.clicked.connect(self._on_redo_mask)
         hh.addWidget(self._btn_redo)
@@ -1109,6 +1127,7 @@ class SelectiveAlphaTool(QWidget):
         # Apply button
         self._btn_apply = QPushButton("✅  Apply Alpha Zones")
         self._btn_apply.setEnabled(False)
+        self._btn_apply.setMinimumHeight(32)
         self._btn_apply.setToolTip(
             "Apply the painted zones to the image and make the result ready to save."
         )
@@ -1118,6 +1137,7 @@ class SelectiveAlphaTool(QWidget):
         # Undo Process button
         self._btn_undo_process = QPushButton("↩  Undo Process")
         self._btn_undo_process.setEnabled(False)
+        self._btn_undo_process.setMinimumHeight(28)
         self._btn_undo_process.setToolTip(
             "Undo the last Apply operation and restore the previous result."
         )
@@ -1126,6 +1146,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Clear all
         self._btn_clear_all = QPushButton("🗑  Clear All Zones")
+        self._btn_clear_all.setMinimumHeight(28)
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         lv.addWidget(self._btn_clear_all)
 

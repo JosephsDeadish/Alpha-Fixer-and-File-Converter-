@@ -1,5 +1,5 @@
 """
-Alpha Fixer tab widget.
+Alpha & RGBA Adjuster tab widget.
 """
 import datetime
 import logging
@@ -644,7 +644,7 @@ class AlphaFixerTab(QWidget):
         """Update inner header, section labels and group-box titles to match the active theme."""
         from .theme_engine import get_theme_tab_labels, get_theme_icon
         labels = get_theme_tab_labels(theme_name)
-        # labels[0] is e.g. "🩸🖼  Alpha Fixer" – use it directly as the header
+        # labels[0] is e.g. "🩸🖼  Alpha & RGBA Adjuster" – use it directly as the header
         self._hdr.setText(labels[0])
         # Decorate section labels and group-box titles with the theme's representative icon.
         icon = get_theme_icon(theme_name)
