@@ -5530,23 +5530,26 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
     def _make_canvas_with_image(self):
         """
         Return a canvas instance that has a 16x16 RGBA image loaded without
-        ever calling Qt rendering (we skip load_image and set internals
-        directly to avoid QApplication dependency in headless CI).
+        ever calling Qt rendering (we construct it normally then stub update()
+        to avoid actual painting in headless CI).
         """
-        import sys, types
+        import sys
 
-        # Build a minimal stub PyQt6 environment if Qt is not available.
-        # If PyQt6 IS importable we use it; otherwise we create stubs.
         try:
             from PyQt6.QtWidgets import QApplication
             # Store on self to prevent premature garbage collection.
             self._qapp = QApplication.instance() or QApplication(sys.argv)
             from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
-            canvas = SelectiveAlphaCanvas.__new__(SelectiveAlphaCanvas)
+            canvas = SelectiveAlphaCanvas()
         except ImportError:
             self.skipTest("PyQt6 not available in this environment")
 
-        # Initialise just the attributes used by the history/eraser helpers.
+        # Stub out paint/update so no actual rendering happens in CI.
+        canvas.update = lambda: None
+
+        # Override with a known test image so tests are deterministic.
+        if canvas._src_img is not None:
+            canvas._src_img.close()
         canvas._src_img   = Image.new("RGBA", (16, 16), (100, 100, 100, 200))
         canvas._src_arr   = np.array(canvas._src_img, dtype=np.uint8)
         canvas._masks     = [None] * 7

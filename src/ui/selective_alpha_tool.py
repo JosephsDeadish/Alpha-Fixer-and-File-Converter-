@@ -180,16 +180,14 @@ class SelectiveAlphaCanvas(QWidget):
             Re-raised without modification so callers can distinguish an
             out-of-memory condition from other load failures.
         """
+        img = None
         try:
             img = Image.open(path)
             img.load()
-            try:
-                rgba = img.convert("RGBA")
-            except MemoryError:
-                img.close()
-                raise
+            rgba = img.convert("RGBA")
             if rgba is not img:
                 img.close()
+                img = None
             if self._src_img is not None:
                 self._src_img.close()
             self._src_img  = rgba
@@ -212,8 +210,12 @@ class SelectiveAlphaCanvas(QWidget):
             self.redo_available.emit(False)
             return True
         except MemoryError:
+            if img is not None:
+                img.close()
             raise
         except Exception:
+            if img is not None:
+                img.close()
             return False
 
     def clear_mask(self, zone_idx: int) -> None:
@@ -294,7 +296,6 @@ class SelectiveAlphaCanvas(QWidget):
     def zoom_by(self, factor: float) -> None:
         """Multiply the current zoom level by *factor* (clamped to [0.1, 20])."""
         self._zoom = max(0.1, min(20.0, self._zoom * factor))
-        self._composite_dirty = True
         self.update()
 
     def zoom_reset(self) -> None:
@@ -302,7 +303,6 @@ class SelectiveAlphaCanvas(QWidget):
         self._zoom  = 1.0
         self._pan_x = 0.0
         self._pan_y = 0.0
-        self._composite_dirty = True
         self.update()
 
     # ----------------------------------------------------------- undo / redo
@@ -739,7 +739,6 @@ class SelectiveAlphaCanvas(QWidget):
             dy = pt.y() - self._pan_start_w.y()
             self._pan_x = self._pan_start_off[0] + dx
             self._pan_y = self._pan_start_off[1] + dy
-            self._composite_dirty = True
             self.update()
             return
 
@@ -854,7 +853,6 @@ class SelectiveAlphaCanvas(QWidget):
         self._pan_x = (1.0 - ratio) * (pt.x() - cw_f / 2.0) + self._pan_x * ratio
         self._pan_y = (1.0 - ratio) * (pt.y() - ch_f / 2.0) + self._pan_y * ratio
 
-        self._composite_dirty = True
         self.update()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
