@@ -578,6 +578,74 @@ class SettingsDialog(QDialog):
         sound_gl.addLayout(sound_row, 2, 1)
         tv.addWidget(grp_sound)
 
+        # ---- Button Press Animation GroupBox ----
+        grp_btn_anim = QGroupBox("Button Press Animation")
+        btn_anim_gl = QGridLayout(grp_btn_anim)
+        btn_anim_gl.setColumnStretch(1, 1)
+        btn_anim_gl.setHorizontalSpacing(10)
+        btn_anim_gl.setVerticalSpacing(6)
+        self._button_anim_check = QCheckBox(
+            "Enable button press animations (off by default)"
+        )
+        self._button_anim_check.setToolTip(
+            "When enabled every QPushButton in the app plays a short animation\n"
+            "when clicked — a subtle slide, bounce, shake, or particle burst.\n"
+            "Off by default for maximum performance."
+        )
+        btn_anim_gl.addWidget(self._button_anim_check, 0, 0, 1, 2)
+
+        self._use_theme_button_anim_check = QCheckBox(
+            "Use theme animation (each theme picks its own style)"
+        )
+        self._use_theme_button_anim_check.setToolTip(
+            "When checked the animation style is chosen automatically by the\n"
+            "active theme — e.g. Gore/Zombie/Dragon gets 'Shatter', Alien/Neon\n"
+            "gets 'Shake', Fairy/Sakura gets 'Bounce'.\n"
+            "Uncheck to force a fixed style from the dropdown below."
+        )
+        btn_anim_gl.addWidget(self._use_theme_button_anim_check, 1, 0, 1, 2)
+
+        btn_anim_gl.addWidget(QLabel("Animation style:"), 2, 0)
+        self._button_anim_style_combo = QComboBox()
+        _BUTTON_ANIM_OPTIONS = [
+            ("none",    "None — no animation"),
+            ("press",   "Press — subtle 2 px downward nudge"),
+            ("fall",    "Fall — 8 px drop and spring back"),
+            ("bounce",  "Bounce — button leaps up and bounces back"),
+            ("shake",   "Shake — rapid left/right vibration"),
+            ("shatter", "Shatter — particle burst from button centre"),
+        ]
+        _BUTTON_ANIM_TIPS = {
+            "none":    "No animation. Buttons respond instantly with no visual movement.",
+            "press":   "The button shifts 2 pixels down on press then springs back.\n"
+                       "Subtle and satisfying — closest to a real physical button.",
+            "fall":    "The button slides 8 pixels down over ~220 ms then springs back.\n"
+                       "Heavier feel, great for ocean/cave/goth themes.",
+            "bounce":  "The button shoots up 6 pixels then bounces back down.\n"
+                       "Playful and energetic — great for fairy/candy/sakura themes.",
+            "shake":   "Rapid left/right vibration (~5 px over ~300 ms).\n"
+                       "Aggressive energy — great for neon/alien/storm themes.",
+            "shatter": "Spawns themed click-effect particles from the button centre.\n"
+                       "Requires click effects to be enabled for best results.\n"
+                       "Dramatic — great for gore/volcano/dragon themes.",
+        }
+        for key, label in _BUTTON_ANIM_OPTIONS:
+            self._button_anim_style_combo.addItem(label, userData=key)
+            idx = self._button_anim_style_combo.count() - 1
+            tip = _BUTTON_ANIM_TIPS.get(key, "")
+            if tip:
+                self._button_anim_style_combo.setItemData(
+                    idx, tip, Qt.ItemDataRole.ToolTipRole
+                )
+        self._button_anim_style_combo.setToolTip(
+            "Choose the press-animation style applied to every button.\n"
+            "Greyed out while 'Use theme animation' is checked."
+        )
+        self._button_anim_style_combo.setMaximumWidth(280)
+        btn_anim_gl.addWidget(self._button_anim_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+
+        tv.addWidget(grp_btn_anim)
+
         # Wrap the theme tab contents in a scroll area so all controls are always
         # reachable regardless of screen/window size.
         theme_scroll = QScrollArea()
@@ -781,6 +849,9 @@ class SettingsDialog(QDialog):
         self._banner_anim_combo.currentIndexChanged.connect(self._on_banner_anim_style_changed)
         self._banner_use_theme_anim_check.toggled.connect(self._on_banner_use_theme_anim_changed)
         self._show_splash_check.toggled.connect(self._on_show_splash_changed)
+        self._button_anim_check.toggled.connect(self._on_button_anim_changed)
+        self._button_anim_style_combo.currentIndexChanged.connect(self._on_button_anim_style_changed)
+        self._use_theme_button_anim_check.toggled.connect(self._on_use_theme_button_anim_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -863,6 +934,8 @@ class SettingsDialog(QDialog):
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
             self._animated_banner_check, self._banner_anim_combo,
             self._banner_use_theme_anim_check, self._show_splash_check,
+            self._button_anim_check, self._button_anim_style_combo,
+            self._use_theme_button_anim_check,
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
@@ -950,6 +1023,22 @@ class SettingsDialog(QDialog):
         self._show_splash_check.setChecked(
             self._settings.get("show_splash_screen", False)
         )
+        # Load button animation settings
+        btn_anim_enabled = self._settings.get("button_anim_enabled", False)
+        self._button_anim_check.setChecked(btn_anim_enabled)
+        use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
+        self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
+        _BUTTON_ANIM_IDX_MAP = {
+            "none": 0, "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
+        }
+        saved_btn_anim = self._settings.get("button_anim_style", "press")
+        self._button_anim_style_combo.setCurrentIndex(
+            _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 1)
+        )
+        self._button_anim_style_combo.setEnabled(
+            btn_anim_enabled and not use_theme_btn_anim
+        )
+        self._use_theme_button_anim_check.setEnabled(btn_anim_enabled)
 
         for c in controls:
             c.blockSignals(False)
@@ -984,6 +1073,9 @@ class SettingsDialog(QDialog):
         mgr.register(self._banner_anim_combo, "banner_anim_combo")
         mgr.register(self._banner_use_theme_anim_check, "banner_use_theme_anim_check")
         mgr.register(self._show_splash_check, "show_splash_check")
+        mgr.register(self._button_anim_check, "button_anim_check")
+        mgr.register(self._button_anim_style_combo, "button_anim_style_combo")
+        mgr.register(self._use_theme_button_anim_check, "use_theme_button_anim_check")
         # Additional widget registrations
         mgr.register(self._btn_save_theme, "save_custom_theme")
         mgr.register(self._btn_delete_theme, "delete_custom_theme")
@@ -1355,5 +1447,25 @@ class SettingsDialog(QDialog):
 
     def _on_show_splash_changed(self) -> None:
         self._settings.set("show_splash_screen", self._show_splash_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_button_anim_changed(self) -> None:
+        enabled = self._button_anim_check.isChecked()
+        self._settings.set("button_anim_enabled", enabled)
+        use_theme = self._use_theme_button_anim_check.isChecked()
+        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
+        self._use_theme_button_anim_check.setEnabled(enabled)
+        self.settings_changed.emit()
+
+    def _on_button_anim_style_changed(self) -> None:
+        key = self._button_anim_style_combo.currentData() or "press"
+        self._settings.set("button_anim_style", key)
+        self.settings_changed.emit()
+
+    def _on_use_theme_button_anim_changed(self) -> None:
+        use_theme = self._use_theme_button_anim_check.isChecked()
+        self._settings.set("use_theme_button_anim", use_theme)
+        enabled = self._button_anim_check.isChecked()
+        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 

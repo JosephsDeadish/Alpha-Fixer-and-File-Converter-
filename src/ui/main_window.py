@@ -294,6 +294,7 @@ class MainWindow(QMainWindow):
         self._preset_mgr = PresetManager(settings)
         self._trail_overlay = None
         self._click_effects = None
+        self._button_anim = None
         self._tooltip_mgr = None
         self._sound = None
         self._svg_badge = None
@@ -534,6 +535,11 @@ class MainWindow(QMainWindow):
         self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
 
+        # Button press animator
+        from .click_effects import ButtonPressAnimator
+        self._button_anim = ButtonPressAnimator(self, self._click_effects)
+        self._apply_button_anim()
+
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
         self._converter_tab.processing_done.connect(self._on_processing_done)
@@ -600,6 +606,21 @@ class MainWindow(QMainWindow):
         custom_raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
         custom_emoji = custom_raw.split() if custom_raw.strip() else DEFAULT_CUSTOM_EMOJI.split()
         self._click_effects.set_custom_emoji(custom_emoji)
+
+    def _apply_button_anim(self) -> None:
+        """Enable or disable button press animations to match the active settings."""
+        if self._button_anim is None:
+            return
+        enabled = self._settings.get("button_anim_enabled", False)
+        if not enabled:
+            self._button_anim.set_enabled(False)
+            return
+        theme = self._settings.get_theme()
+        if self._settings.get("use_theme_button_anim", True):
+            mode = theme.get("_button_anim", "press")
+        else:
+            mode = self._settings.get("button_anim_style", "press")
+        self._button_anim.set_enabled(True, mode)
 
     # ------------------------------------------------------------------
     # Unlock hidden themes based on click count
@@ -828,6 +849,8 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
+        if self._button_anim is not None:
+            self._apply_button_anim()
         # On Windows 11+, colour the native title bar to match the theme's
         # primary/surface colour so the window chrome integrates with the theme.
         try:
@@ -1033,6 +1056,7 @@ class MainWindow(QMainWindow):
         self._apply_font_size()
         self._apply_theme_effect()
         self._apply_trail()
+        self._apply_button_anim()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
                 self._settings.get("click_effects_enabled", False)
@@ -1237,6 +1261,8 @@ class MainWindow(QMainWindow):
             self._click_effects.set_enabled(False)
         if self._trail_overlay is not None:
             self._trail_overlay.set_enabled(False)
+        if self._button_anim is not None:
+            self._button_anim.set_enabled(False)
         # Stop any running workers gracefully
         for tab in (self._alpha_tab, self._converter_tab):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():

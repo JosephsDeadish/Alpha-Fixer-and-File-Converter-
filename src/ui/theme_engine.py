@@ -30,6 +30,8 @@ DEFAULT_THEME = {
     "_effect": "panda",
     "_cursor": "Pointing Hand",
     "_trail_color": "#e94560",
+    "_banner_anim": "spin",
+    "_button_anim": "press",
 }
 
 LIGHT_THEME = {
@@ -56,6 +58,8 @@ LIGHT_THEME = {
     "_effect": "panda",
     "_cursor": "Pointing Hand",
     "_trail_color": "#e94560",
+    "_banner_anim": "spin",
+    "_button_anim": "press",
 }
 
 NEON_THEME = {
@@ -82,6 +86,8 @@ NEON_THEME = {
     "_effect": "neon",
     "_cursor": "emoji:⚡",
     "_trail_color": "#00ff88",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
 }
 
 GORE_THEME = {
@@ -109,6 +115,7 @@ GORE_THEME = {
     "_cursor": "emoji:💀",
     "_trail_color": "#cc0000",
     "_banner_anim": "shake",
+    "_button_anim": "shatter",
 }
 
 BAT_THEME = {
@@ -136,6 +143,7 @@ BAT_THEME = {
     "_cursor": "emoji:🦇",
     "_trail_color": "#7b2dff",
     "_banner_anim": "flock",
+    "_button_anim": "fall",
 }
 
 RAINBOW_THEME = {
@@ -163,6 +171,7 @@ RAINBOW_THEME = {
     "_cursor": "emoji:🌈",
     "_trail_color": "#ffff00",
     "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 OTTER_THEME = {
@@ -189,6 +198,8 @@ OTTER_THEME = {
     "_effect": "otter",
     "_cursor": "emoji:🤘",
     "_trail_color": "#e8a040",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 GALAXY_THEME = {
@@ -215,6 +226,8 @@ GALAXY_THEME = {
     "_effect": "galaxy",
     "_cursor": "emoji:🌟",
     "_trail_color": "#4477ff",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
 }
 
 GALAXY_OTTER_THEME = {
@@ -241,6 +254,8 @@ GALAXY_OTTER_THEME = {
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🤘",
     "_trail_color": "#a06aff",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 GOTH_THEME = {
@@ -268,6 +283,7 @@ GOTH_THEME = {
     "_cursor": "emoji:💀",
     "_trail_color": "#8800aa",
     "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 VOLCANO_THEME = {
@@ -295,6 +311,7 @@ VOLCANO_THEME = {
     "_cursor": "emoji:🌋",
     "_trail_color": "#ff4400",
     "_banner_anim": "shake",
+    "_button_anim": "shatter",
 }
 
 ARCTIC_THEME = {
@@ -322,6 +339,7 @@ ARCTIC_THEME = {
     "_cursor": "emoji:❄",
     "_trail_color": "#44aaff",
     "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
@@ -350,6 +368,8 @@ SECRET_SKELETON_THEME = {
     "_cursor": "emoji:💀",
     "_trail_color": "#1a1a1a",
     "_unlock": "skeleton",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 SECRET_SAKURA_THEME = {
@@ -377,6 +397,8 @@ SECRET_SAKURA_THEME = {
     "_cursor": "emoji:🌸",
     "_trail_color": "#ff6699",
     "_unlock": "sakura",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 FAIRY_THEME = {
@@ -404,6 +426,7 @@ FAIRY_THEME = {
     "_cursor": "emoji:🪄",
     "_trail_color": "#ffccee",
     "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_DEEP_OCEAN_THEME = {
@@ -431,6 +454,8 @@ SECRET_DEEP_OCEAN_THEME = {
     "_cursor": "emoji:🦑",
     "_trail_color": "#00d4ff",
     "_unlock": "ocean",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 PRESET_THEMES = {
@@ -478,6 +503,7 @@ MERMAID_THEME = {
     "_cursor": "emoji:🧜",
     "_trail_color": "#00ccaa",
     "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 SHARK_BAIT_THEME = {
@@ -505,6 +531,7 @@ SHARK_BAIT_THEME = {
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
     "_banner_anim": "shake",
+    "_button_anim": "fall",
 }
 
 ALIEN_THEME = {
@@ -532,6 +559,7 @@ ALIEN_THEME = {
     "_cursor": "emoji:🛸",
     "_trail_color": "#00ff88",
     "_banner_anim": "bounce",
+    "_button_anim": "shake",
 }
 
 PRESET_THEMES.update({
@@ -568,6 +596,8 @@ NOODLE_THEME = {
     "_effect": "default",
     "_cursor": "emoji:🍜",
     "_trail_color": "#ffdd44",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 # ---------------------------------------------------------------------------
@@ -598,6 +628,8 @@ PANCAKE_THEME = {
     "_effect": "default",
     "_cursor": "emoji:🥞",
     "_trail_color": "#d4860a",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 PRESET_THEMES.update({
@@ -630,6 +662,8 @@ SECRET_BLOOD_MOON_THEME = {
     "_cursor": "emoji:🩸",
     "_trail_color": "#cc1133",
     "_unlock": "blood_moon",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
 }
 
 SECRET_ICE_CAVE_THEME = {
@@ -657,6 +691,8 @@ SECRET_ICE_CAVE_THEME = {
     "_cursor": "emoji:❄",
     "_trail_color": "#88ddff",
     "_unlock": "ice_cave",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 SECRET_CYBER_OTTER_THEME = {
@@ -684,6 +720,8 @@ SECRET_CYBER_OTTER_THEME = {
     "_cursor": "emoji:🦦",
     "_trail_color": "#00ffcc",
     "_unlock": "cyber_otter",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 SECRET_TOXIC_NEON_THEME = {
@@ -711,6 +749,8 @@ SECRET_TOXIC_NEON_THEME = {
     "_cursor": "emoji:☢",
     "_trail_color": "#aaff00",
     "_unlock": "toxic_neon",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
 }
 
 SECRET_LAVA_CAVE_THEME = {
@@ -738,6 +778,8 @@ SECRET_LAVA_CAVE_THEME = {
     "_cursor": "emoji:🌋",
     "_trail_color": "#ff6600",
     "_unlock": "lava_cave",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
 }
 
 SECRET_SUNSET_BEACH_THEME = {
@@ -765,6 +807,8 @@ SECRET_SUNSET_BEACH_THEME = {
     "_cursor": "emoji:🌅",
     "_trail_color": "#ff9944",
     "_unlock": "sunset_beach",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_MIDNIGHT_FOREST_THEME = {
@@ -792,6 +836,8 @@ SECRET_MIDNIGHT_FOREST_THEME = {
     "_cursor": "emoji:🌲",
     "_trail_color": "#44cc66",
     "_unlock": "midnight_forest",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 HIDDEN_THEMES = {
@@ -836,6 +882,8 @@ SECRET_CANDY_LAND_THEME = {
     "_cursor": "emoji:🍭",
     "_trail_color": "#ff55bb",
     "_unlock": "candy_land",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_ZOMBIE_THEME = {
@@ -863,6 +911,8 @@ SECRET_ZOMBIE_THEME = {
     "_cursor": "emoji:🧟",
     "_trail_color": "#55cc00",
     "_unlock": "zombie",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
 }
 
 SECRET_DRAGON_THEME = {
@@ -890,6 +940,8 @@ SECRET_DRAGON_THEME = {
     "_cursor": "emoji:🐉",
     "_trail_color": "#ff6600",
     "_unlock": "dragon_fire",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
 }
 
 SECRET_BUBBLEGUM_THEME = {
@@ -917,6 +969,8 @@ SECRET_BUBBLEGUM_THEME = {
     "_cursor": "emoji:🫧",
     "_trail_color": "#ff77ff",
     "_unlock": "bubblegum",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_THUNDER_THEME = {
@@ -944,6 +998,8 @@ SECRET_THUNDER_THEME = {
     "_cursor": "emoji:⚡",
     "_trail_color": "#aaaaff",
     "_unlock": "thunder_storm",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
 }
 
 SECRET_ROSE_GOLD_THEME = {
@@ -971,6 +1027,8 @@ SECRET_ROSE_GOLD_THEME = {
     "_cursor": "emoji:🌹",
     "_trail_color": "#cc7766",
     "_unlock": "rose_gold",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_SPACE_CAT_THEME = {
@@ -998,6 +1056,8 @@ SECRET_SPACE_CAT_THEME = {
     "_cursor": "emoji:🐱",
     "_trail_color": "#ff99ff",
     "_unlock": "space_cat",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
 }
 
 SECRET_MUSHROOM_THEME = {
@@ -1025,6 +1085,8 @@ SECRET_MUSHROOM_THEME = {
     "_cursor": "emoji:🍄",
     "_trail_color": "#ff5599",
     "_unlock": "magic_mushroom",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_ABYSSAL_THEME = {
@@ -1052,6 +1114,8 @@ SECRET_ABYSSAL_THEME = {
     "_cursor": "emoji:🕳",
     "_trail_color": "#5500aa",
     "_unlock": "abyssal_void",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 SECRET_SPRING_THEME = {
@@ -1079,6 +1143,8 @@ SECRET_SPRING_THEME = {
     "_cursor": "emoji:🌷",
     "_trail_color": "#88dd44",
     "_unlock": "spring_bloom",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_GOLD_RUSH_THEME = {
@@ -1106,6 +1172,8 @@ SECRET_GOLD_RUSH_THEME = {
     "_cursor": "emoji:💰",
     "_trail_color": "#ffcc00",
     "_unlock": "gold_rush",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_NEBULA_THEME = {
@@ -1133,6 +1201,8 @@ SECRET_NEBULA_THEME = {
     "_cursor": "emoji:🌌",
     "_trail_color": "#cc44ff",
     "_unlock": "nebula",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
 }
 
 HIDDEN_THEMES.update({
@@ -1179,6 +1249,8 @@ SECRET_CRYSTAL_CAVE_THEME = {
     "_cursor": "emoji:💎",
     "_trail_color": "#99aaff",
     "_unlock": "crystal_cave",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 SECRET_GLITCH_THEME = {
@@ -1206,6 +1278,8 @@ SECRET_GLITCH_THEME = {
     "_cursor": "emoji:📡",
     "_trail_color": "#ff00ff",
     "_unlock": "glitch",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
 }
 
 SECRET_WILD_WEST_THEME = {
@@ -1233,6 +1307,8 @@ SECRET_WILD_WEST_THEME = {
     "_cursor": "emoji:🤠",
     "_trail_color": "#cc8833",
     "_unlock": "wild_west",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 SECRET_PIRATE_THEME = {
@@ -1260,6 +1336,8 @@ SECRET_PIRATE_THEME = {
     "_cursor": "emoji:🏴‍☠️",
     "_trail_color": "#ddaa22",
     "_unlock": "pirate",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
 }
 
 SECRET_DEEP_SPACE_THEME = {
@@ -1287,6 +1365,8 @@ SECRET_DEEP_SPACE_THEME = {
     "_cursor": "emoji:🛸",
     "_trail_color": "#4466ff",
     "_unlock": "deep_space",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
 }
 
 SECRET_WITCHS_BREW_THEME = {
@@ -1314,6 +1394,8 @@ SECRET_WITCHS_BREW_THEME = {
     "_cursor": "emoji:🧙",
     "_trail_color": "#44ff88",
     "_unlock": "witchs_brew",
+    "_banner_anim": "pendulum",
+    "_button_anim": "bounce",
 }
 
 SECRET_LAVA_LAMP_THEME = {
@@ -1341,6 +1423,8 @@ SECRET_LAVA_LAMP_THEME = {
     "_cursor": "emoji:🪔",
     "_trail_color": "#ff7700",
     "_unlock": "lava_lamp",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 SECRET_CORAL_REEF_THEME = {
@@ -1368,6 +1452,8 @@ SECRET_CORAL_REEF_THEME = {
     "_cursor": "emoji:🪸",
     "_trail_color": "#ff6655",
     "_unlock": "coral_reef",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
 }
 
 SECRET_STORM_CLOUD_THEME = {
@@ -1395,6 +1481,8 @@ SECRET_STORM_CLOUD_THEME = {
     "_cursor": "emoji:⛈",
     "_trail_color": "#8899cc",
     "_unlock": "storm_cloud",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
 }
 
 SECRET_GOLDEN_HOUR_THEME = {
@@ -1422,6 +1510,8 @@ SECRET_GOLDEN_HOUR_THEME = {
     "_cursor": "emoji:🌇",
     "_trail_color": "#ffaa00",
     "_unlock": "golden_hour",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
 }
 
 HIDDEN_THEMES.update({

@@ -162,6 +162,15 @@ class SettingsManager:
         "unlock_storm_cloud": False,
         "unlock_golden_hour": False,
         # ------------------------------------------------------------------
+        # Button press animation settings
+        # ------------------------------------------------------------------
+        # When True button presses are animated (off by default).
+        "button_anim_enabled": False,
+        # Animation style: "none", "press", "fall", "shake", "shatter", "bounce"
+        "button_anim_style": "press",
+        # When True the animation mode comes from the active theme's _button_anim key.
+        "use_theme_button_anim": True,
+        # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
         # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)

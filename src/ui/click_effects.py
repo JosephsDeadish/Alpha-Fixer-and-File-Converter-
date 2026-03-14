@@ -925,3 +925,234 @@ class ClickEffectsOverlay(QWidget):
                 painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
         painter.end()
+
+
+# ---------------------------------------------------------------------------
+# Button press animation
+# ---------------------------------------------------------------------------
+
+class ButtonPressAnimator(QObject):
+    """Installs lightweight press animations on ``QPushButton`` widgets.
+
+    This class works as an application-level event filter: when a left mouse
+    press is detected on a ``QPushButton`` the configured animation is run on
+    that button.  The button is never re-parented or removed from its layout;
+    all animations restore the button's original geometry when they finish.
+
+    Modes
+    -----
+    ``"none"``     – no animation (disabled).
+    ``"press"``    – button shifts 2 px down on press, springs back.
+    ``"fall"``     – button slides 8 px down then springs back.
+    ``"shake"``    – button vibrates left/right rapidly.
+    ``"shatter"``  – triggers click-effect particles from the button centre.
+    ``"bounce"``   – button bounces up then falls back.
+
+    Usage
+    -----
+        animator = ButtonPressAnimator(main_window, click_effects_overlay)
+        animator.set_enabled(True, "press")
+    """
+
+    # How many simultaneous animations we allow.  Each takes a negligible
+    # amount of memory; this just caps runaway accumulation during rapid
+    # clicking.
+    _MAX_ACTIVE = 20
+
+    def __init__(self, main_window: QWidget,
+                 click_effects: "ClickEffectsOverlay | None" = None):
+        super().__init__(main_window)
+        self._main_window = main_window
+        self._click_effects: "ClickEffectsOverlay | None" = click_effects
+        self._mode = "none"
+        self._enabled = False
+        # Keep references to running animation groups so they are not
+        # garbage-collected before they finish.
+        self._active: list = []
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_enabled(self, enabled: bool, mode: str = "press") -> None:
+        """Enable or disable button animations with the given *mode*."""
+        if self._enabled == enabled and self._mode == mode:
+            return
+        self._mode = mode
+        app = QApplication.instance()
+        if enabled and not self._enabled:
+            if app is not None:
+                app.installEventFilter(self)
+        elif not enabled and self._enabled:
+            if app is not None:
+                app.removeEventFilter(self)
+        self._enabled = enabled
+
+    def set_mode(self, mode: str) -> None:
+        """Change the animation mode without altering the enabled state."""
+        self._mode = mode
+
+    # ------------------------------------------------------------------
+    # Event filter
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+        from PyQt6.QtWidgets import QPushButton
+        if (self._enabled
+                and isinstance(obj, QPushButton)
+                and event.type() == QEvent.Type.MouseButtonPress
+                and hasattr(event, "button")
+                and event.button() == Qt.MouseButton.LeftButton
+                and len(self._active) < self._MAX_ACTIVE):
+            self._animate(obj)
+        return False  # always pass the event through
+
+    # ------------------------------------------------------------------
+    # Animation dispatch
+    # ------------------------------------------------------------------
+
+    def _animate(self, btn: QWidget) -> None:
+        mode = self._mode
+        if mode == "none":
+            return
+        elif mode == "press":
+            self._do_slide(btn, dy=2, duration=100)
+        elif mode == "fall":
+            self._do_slide(btn, dy=8, duration=220)
+        elif mode == "bounce":
+            self._do_bounce(btn)
+        elif mode == "shake":
+            self._do_shake(btn)
+        elif mode == "shatter":
+            self._do_shatter(btn)
+
+    # ------------------------------------------------------------------
+    # Individual animation implementations
+    # ------------------------------------------------------------------
+
+    def _do_slide(self, btn: QWidget, dy: int = 5, duration: int = 160) -> None:
+        """Slide button down by *dy* pixels then spring back."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect,
+        )
+        orig = QRect(btn.geometry())
+        fallen = QRect(orig.translated(0, dy))
+
+        half = max(30, duration // 2)
+        anim_down = QPropertyAnimation(btn, b"geometry", self)
+        anim_down.setDuration(half)
+        anim_down.setStartValue(orig)
+        anim_down.setEndValue(fallen)
+        anim_down.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        anim_up = QPropertyAnimation(btn, b"geometry", self)
+        anim_up.setDuration(half)
+        anim_up.setStartValue(fallen)
+        anim_up.setEndValue(orig)
+        anim_up.setEasingCurve(QEasingCurve.Type.InQuad)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(anim_down)
+        group.addAnimation(anim_up)
+        self._start(group)
+
+    def _do_bounce(self, btn: QWidget) -> None:
+        """Button shoots 6 px *up* then falls back with a slight overshoot."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect,
+        )
+        orig = QRect(btn.geometry())
+        up = QRect(orig.translated(0, -6))
+        over = QRect(orig.translated(0, 3))
+
+        a_up = QPropertyAnimation(btn, b"geometry", self)
+        a_up.setDuration(100)
+        a_up.setStartValue(orig)
+        a_up.setEndValue(up)
+        a_up.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        a_down = QPropertyAnimation(btn, b"geometry", self)
+        a_down.setDuration(80)
+        a_down.setStartValue(up)
+        a_down.setEndValue(over)
+        a_down.setEasingCurve(QEasingCurve.Type.InQuad)
+
+        a_restore = QPropertyAnimation(btn, b"geometry", self)
+        a_restore.setDuration(60)
+        a_restore.setStartValue(over)
+        a_restore.setEndValue(orig)
+        a_restore.setEasingCurve(QEasingCurve.Type.OutBounce)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(a_up)
+        group.addAnimation(a_down)
+        group.addAnimation(a_restore)
+        self._start(group)
+
+    def _do_shake(self, btn: QWidget) -> None:
+        """Rapid left/right vibration."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup, QRect,
+        )
+        orig = QRect(btn.geometry())
+        dx = 5
+        offsets = [-dx, dx, -dx, dx, 0]
+
+        group = QSequentialAnimationGroup(self)
+        prev = orig
+        for target_dx in offsets:
+            a = QPropertyAnimation(btn, b"geometry", self)
+            a.setDuration(38)
+            a.setStartValue(prev)
+            target = QRect(orig.translated(target_dx, 0))
+            a.setEndValue(target)
+            group.addAnimation(a)
+            prev = target
+
+        # Final explicit restore
+        restore = QPropertyAnimation(btn, b"geometry", self)
+        restore.setDuration(38)
+        restore.setStartValue(prev)
+        restore.setEndValue(orig)
+        group.addAnimation(restore)
+        self._start(group)
+
+    def _do_shatter(self, btn: QWidget) -> None:
+        """Spawn click-effect particles emanating from the button centre."""
+        if self._click_effects is None:
+            return
+        # Map the button's visual centre to main-window coordinates.
+        centre_local = btn.rect().center()
+        centre_global = btn.mapToGlobal(centre_local)
+        centre_mw = self._main_window.mapFromGlobal(centre_global)
+        x, y = centre_mw.x(), centre_mw.y()
+
+        # Spawn particles using the currently active effect spawner.
+        key = self._click_effects._effect_key
+        spawner = _SPAWNERS.get(key, _spawn_default)
+        new_particles = spawner(x, y)
+        self._click_effects._particles.extend(new_particles)
+
+        # Ensure the overlay is visible and the timer is running.
+        if not self._click_effects._timer.isActive():
+            self._click_effects._timer.start()
+        if not self._click_effects.isVisible():
+            self._click_effects.show()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _start(self, group) -> None:
+        """Register *group* in the active list and start it.
+
+        The finished signal removes the group from the active list so it can
+        be garbage-collected once the animation is complete.
+        """
+        self._active.append(group)
+        # Use a default-argument capture to avoid closure-over-loop issues.
+        group.finished.connect(lambda g=group: self._active.remove(g)
+                               if g in self._active else None)
+        group.start()
