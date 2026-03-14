@@ -61,8 +61,8 @@ class TestPresets(unittest.TestCase):
                         "Expected a transparent preset")
 
     # Use the current preset names
-    _FULL_OPACITY_NAME = "Full Opacity  (N64 · DS · Wii · GameCube · Xbox 360 · PSP · PS2 BG)"
-    _PS2_FULL_OPAQUE_NAME = "PS2 Full Opaque  (native GS α=128)"
+    _FULL_OPACITY_NAME = "PC Full Opacity  (α=255)"
+    _PS2_FULL_OPAQUE_NAME = "PS2 Force Opaque  (α=128)"
 
     def test_ps2_preset_values(self):
         p = self._mgr.get_preset(self._PS2_FULL_OPAQUE_NAME)
@@ -71,10 +71,10 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(p.clamp_max, 128)
 
     def test_ps2_clamp_presets(self):
-        # PS2 clamp at native max 128 must exist
+        # There must be at least one PS2-related preset that caps alpha at 128
         matched = [p for p in self._mgr.all_presets()
-                   if "Clamp" in p.name and "128" in p.name and "PS2" in p.name]
-        self.assertTrue(matched, "Expected a PS2 clamp-max-128 preset")
+                   if "PS2" in p.name and p.clamp_max == 128 and not p.binary_cut]
+        self.assertTrue(matched, "Expected a PS2 preset with clamp_max=128")
         p = matched[0]
         self.assertEqual(p.clamp_max, 128)
 
@@ -135,12 +135,12 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_invert_alpha(self):
-        # uniform alpha=100 → invert → uniform 155 → normalize uniform → maps to target_hi=255
+        # uniform alpha=100 → invert → uniform 155 → clamp to [0, 255] → stays 155
         img = make_rgba_image(alpha=100)
         preset = AlphaPreset("inv", "", invert=True)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 255))  # uniform after invert → target_hi
+        self.assertTrue(np.all(arr[:, :, 3] == 155))  # within [0,255] → unchanged
 
     def test_invert_alpha_varied(self):
         """invert then normalize on varied alpha preserves inverted proportions."""
@@ -192,29 +192,32 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 200))
 
     def test_manual_alpha_clamp_only(self):
-        """Uniform alpha with clamp_max clamped to target_hi."""
+        """Uniform alpha above the target ceiling is clamped to clamp_max.
+        alpha=200 with range [0, 128] → clamp(200, 0, 128) = 128."""
         img = make_rgba_image(alpha=200)
         result = apply_manual_alpha(img, clamp_max=128)
         arr = np.array(result)
-        # 200 clamped to 128
+        # 200 exceeds the ceiling of 128, so every pixel is clamped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_clamp_min_preset(self):
-        """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        """Preset: uniform alpha below the target floor is clamped to target_lo.
+        alpha=50 with target=[100, 255] → clamp(50, 100, 255) = 100."""
         img = make_rgba_image(alpha=50)
         preset = AlphaPreset("clamp", "", clamp_min=100, clamp_max=255)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # uniform → target_hi=max(100,255)=255
-        self.assertTrue(np.all(arr[:, :, 3] == 255))
+        # 50 is below the floor of 100, so every pixel is clamped to 100
+        self.assertTrue(np.all(arr[:, :, 3] == 100))
 
     def test_clamp_max_preset(self):
-        """Preset normalizes: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        """Preset: uniform alpha above the target ceiling is clamped to target_hi.
+        alpha=200 with target=[0, 128] → clamp(200, 0, 128) = 128."""
         img = make_rgba_image(alpha=200)
         preset = AlphaPreset("clamp", "", clamp_min=0, clamp_max=128)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        # 200 capped to 128
+        # 200 exceeds the ceiling of 128, so every pixel is clamped to 128
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_inverted_clamp_preset(self):
@@ -243,36 +246,49 @@ class TestPresets(unittest.TestCase):
                          "alpha=100 normalizes to ~129")
 
     def test_clamp_only_manual_preserves_range(self):
-        """apply_manual_alpha normalizes alpha into [clamp_min, clamp_max].
-        The min and max of the output MUST differ when the source has varied alpha.
-        This tests the core 'new min and max' use-case."""
+        """apply_manual_alpha normalizes alpha from [img_min, img_max] to [clamp_min, clamp_max].
+        The source range is stretched to exactly fill the target so that img_min→clamp_min
+        and img_max→clamp_max.  The min and max of the output MUST differ when the source
+        has varied alpha.  This tests the core 'new min and max' use-case."""
         arr_in = np.zeros((2, 2, 4), dtype=np.uint8)
-        arr_in[0, 0] = [0, 0, 0, 30]    # below floor
-        arr_in[0, 1] = [0, 0, 0, 150]   # within range
-        arr_in[1, 0] = [0, 0, 0, 230]   # above ceiling
-        arr_in[1, 1] = [0, 0, 0, 80]    # within range
+        arr_in[0, 0] = [0, 0, 0, 30]    # source_min → target_lo
+        arr_in[0, 1] = [0, 0, 0, 150]   # mid alpha
+        arr_in[1, 0] = [0, 0, 0, 230]   # source_max → target_hi
+        arr_in[1, 1] = [0, 0, 0, 80]    # low-mid alpha
         img = Image.fromarray(arr_in, "RGBA")
         result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
         out = np.array(result)
-        self.assertEqual(int(out[0, 0, 3]), 50,  "below floor → raised to floor")
-        self.assertEqual(int(out[0, 1, 3]), 140, "alpha=150 normalizes to 140")
-        self.assertEqual(int(out[1, 0, 3]), 200, "above ceiling → capped")
-        self.assertEqual(int(out[1, 1, 3]), 88,  "alpha=80 normalizes to 88")
-        # Crucially: min ≠ max in the output (the user gets a true range)
+        # normalize formula: round(50 + (pixel - img_min) / (img_max - img_min) * 150)
+        # img_min=30, img_max=230, span=200, target_span=150
+        # pixel=30  → 50  (source_min → target_lo)
+        # pixel=150 → round(50 + 120/200 * 150) = round(140) = 140
+        # pixel=230 → 200 (source_max → target_hi)
+        # pixel=80  → round(50 + 50/200  * 150) = round(87.5) = 88
+        self.assertEqual(int(out[0, 0, 3]), 50,  "source_min=30 → target_lo=50")
+        self.assertEqual(int(out[0, 1, 3]), 140, "alpha=150 → 140")
+        self.assertEqual(int(out[1, 0, 3]), 200, "source_max=230 → target_hi=200")
+        self.assertEqual(int(out[1, 1, 3]), 88,  "alpha=80 → 88")
+        # Crucially: min == target_lo and max == target_hi (guaranteed by normalize)
         alpha_out = out[:, :, 3]
+        self.assertEqual(int(alpha_out.min()), 50,
+                         "output minimum must equal clamp_min=50")
+        self.assertEqual(int(alpha_out.max()), 200,
+                         "output maximum must equal clamp_max=200")
         self.assertGreater(int(alpha_out.max()), int(alpha_out.min()),
-                           "clamp-only mode must produce a range, not a single value")
+                           "output must have a range, not a single value")
 
     def test_clamp_min_manual_alpha(self):
-        """apply_manual_alpha: uniform alpha maps to target_hi=max(clamp_min,clamp_max)."""
+        """apply_manual_alpha: uniform alpha below the target floor is clamped to target_lo.
+        alpha=50 with target=[128, 255] → clamp(50, 128, 255) = 128."""
         img = make_rgba_image(alpha=50)
         result = apply_manual_alpha(img, clamp_min=128, clamp_max=255)
         arr = np.array(result)
-        # uniform → target_hi=max(128,255)=255
-        self.assertTrue(np.all(arr[:, :, 3] == 255))
+        # 50 is below the floor of 128, so every pixel is clamped up to 128
+        self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_builtin_clamp_128_255_preset(self):
-        """The built-in 'Clamp 128-255' preset should raise all alpha below 128."""
+        """The built-in 'Clamp 128-255' preset clamps uniform alpha below the floor to 128.
+        alpha=50 with target=[128, 255] → clamp(50, 128, 255) = 128."""
         from unittest.mock import MagicMock
         from src.core.presets import PresetManager
         mock_settings = MagicMock()
@@ -289,10 +305,63 @@ class TestPresets(unittest.TestCase):
         img = make_rgba_image(alpha=50)
         result = apply_alpha_preset(img, preset)
         arr = np.array(result)
-        self.assertTrue(np.all(arr[:, :, 3] == 255),
-                        f"Expected 255, got {arr[0, 0, 3]}")
+        # 50 is below the floor of 128, so every pixel is clamped to 128
+        self.assertTrue(np.all(arr[:, :, 3] == 128),
+                        f"Expected 128, got {arr[0, 0, 3]}")
 
-    def test_binary_cut_preset(self):
+    def test_uniform_below_floor_raises_to_min(self):
+        """Uniform alpha=0 must map to exactly target_lo.
+        With the proportional formula: round(target_lo + 0/255 * span) = target_lo.
+        This proves the Min spinbox is effective for fully-transparent images."""
+        img = make_rgba_image(alpha=0)   # fully transparent
+        result = apply_manual_alpha(img, clamp_min=50, clamp_max=200)
+        arr = np.array(result)
+        self.assertTrue(np.all(arr[:, :, 3] == 50),
+                        f"Expected 50 (alpha=0 maps to target_lo), got {arr[0, 0, 3]}")
+
+    def test_uniform_within_range_min_is_live(self):
+        """For a uniform-alpha image whose value is inside [target_lo, target_hi],
+        the value is already within the user's bounds so it is left unchanged by
+        clamping (there is nothing to clamp)."""
+        img = make_rgba_image(alpha=128)  # uniform mid-value
+
+        result_a = apply_manual_alpha(img, clamp_min=50,  clamp_max=200)
+        result_b = apply_manual_alpha(img, clamp_min=100, clamp_max=200)
+        val_a = int(np.array(result_a)[0, 0, 3])
+        val_b = int(np.array(result_b)[0, 0, 3])
+
+        # 128 is within both [50, 200] and [100, 200] → clamping leaves it unchanged
+        self.assertEqual(val_a, 128, "Uniform 128 within [50, 200] must remain 128")
+        self.assertEqual(val_b, 128, "Uniform 128 within [100, 200] must remain 128")
+        # Both outputs are within their respective ranges
+        self.assertGreaterEqual(val_a, 50)
+        self.assertLessEqual(val_a, 200)
+        self.assertGreaterEqual(val_b, 100)
+        self.assertLessEqual(val_b, 200)
+
+    def test_uniform_above_ceiling_min_is_live(self):
+        """For a uniform-alpha image whose value is ABOVE target_hi, the output is
+        clamped to target_hi (Max) — guaranteeing output_max == Max even for
+        flat-alpha images that exceed the user's ceiling."""
+        img = make_rgba_image(alpha=200)  # above target_hi=128
+
+        result_a = apply_manual_alpha(img, clamp_min=0,  clamp_max=128)
+        result_b = apply_manual_alpha(img, clamp_min=50, clamp_max=128)
+        val_a = int(np.array(result_a)[0, 0, 3])
+        val_b = int(np.array(result_b)[0, 0, 3])
+
+        # 200 > target_hi=128 → clamped to exactly 128 in both cases
+        self.assertEqual(val_a, 128,
+            "Uniform 200 above ceiling 128 must be clamped to 128 (output_max == Max)")
+        self.assertEqual(val_b, 128,
+            "Uniform 200 above ceiling 128 must be clamped to 128 regardless of Min")
+        # Both outputs are within their respective [target_lo, target_hi] bounds
+        self.assertGreaterEqual(val_a, 0)
+        self.assertLessEqual(val_a, 128)
+        self.assertGreaterEqual(val_b, 50)
+        self.assertLessEqual(val_b, 128)
+
+    def test_uniform_binary_cut(self):
         """binary_cut=True should give hard 0/255 split at threshold.
         Uses a two-row image so normalize maps 50→0 and 200→255, then
         binary_cut at threshold=128 gives 0 and 255 respectively."""
@@ -338,22 +407,25 @@ class TestPresets(unittest.TestCase):
         self.assertEqual(int(out[2:, :, 3].min()), 128, "max pixels should map to 128")
 
     def test_manual_alpha_normalize_half_range_to_full(self):
-        """normalize: [0, 128] → [0, 255] maps 128→255, 0→0."""
+        """apply_manual_alpha normalizes alpha from [img_min, img_max] to [target_lo, target_hi].
+        Source [0, 128] stretched to [0, 255]: img_min=0→0, img_max=128→255."""
         arr = np.zeros((4, 4, 4), dtype=np.uint8)
         arr[:2, :, 3] = 0
         arr[2:, :, 3] = 128
         img = Image.fromarray(arr, "RGBA")
         result = apply_manual_alpha(img, clamp_min=0, clamp_max=255)
         out = np.array(result)
-        self.assertEqual(int(out[:2, :, 3].max()), 0,   "min pixels should stay 0")
-        self.assertEqual(int(out[2:, :, 3].min()), 255, "max pixels should map to 255")
+        # normalize: img_min=0→0, img_max=128→255
+        self.assertEqual(int(out[:2, :, 3].max()), 0,   "source_min=0 stays at 0")
+        self.assertEqual(int(out[2:, :, 3].min()), 255, "source_max=128 stretches to 255")
 
     def test_manual_alpha_normalize_uniform_image_maps_to_max(self):
-        """normalize on uniform alpha (all same value) should map to clamp_max."""
+        """Uniform alpha above target_hi is clamped to exactly target_hi (Max).
+        alpha=200 with target=[0, 128] → clamp(200, 0, 128) = 128."""
         img = make_rgba_image(alpha=200)
         result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
         out = np.array(result)
-        # All pixels are the same → no range → map to target_hi (clamp_max)
+        # 200 exceeds the ceiling of 128, so every pixel is clamped to 128
         self.assertTrue(np.all(out[:, :, 3] == 128))
 
     def test_manual_alpha_normalize_preserves_proportions(self):
@@ -402,12 +474,191 @@ class TestPresets(unittest.TestCase):
             "Expected a builtin preset with clamp_min=0, clamp_max=255 (PS2 to PC rescale)",
         )
 
+    def test_range_presets_have_different_min_max(self):
+        """Built-in range presets must NOT have clamp_min == clamp_max so
+        they can remap alpha across a span rather than forcing a single value."""
+        from src.core.presets import BUILTIN_PRESETS
+        range_presets = [p for p in BUILTIN_PRESETS if p.clamp_min != p.clamp_max]
+        self.assertGreaterEqual(
+            len(range_presets), 3,
+            "Expected at least 3 built-in presets with different clamp_min and clamp_max; "
+            f"found {len(range_presets)}: {[p.name for p in range_presets]}",
+        )
 
-# ---------------------------------------------------------------------------
-# collect_files tests
-# ---------------------------------------------------------------------------
+    def test_ps2_rescale_0_128_has_different_min_max(self):
+        """'PS2 Rescale → 0–128' preset must have clamp_min=0, clamp_max=128."""
+        from src.core.presets import BUILTIN_PRESETS
+        # Match by exact values rather than fragile name substring checks
+        preset = next(
+            (p for p in BUILTIN_PRESETS
+             if p.clamp_min == 0 and p.clamp_max == 128 and not p.invert and not p.binary_cut),
+            None,
+        )
+        self.assertIsNotNone(preset, "PS2 Rescale 0-128 preset not found (expected clamp_min=0, clamp_max=128)")
+        self.assertNotEqual(preset.clamp_min, preset.clamp_max,
+                            "PS2 Rescale preset must have different min and max")
 
-class TestCollectFiles(unittest.TestCase):
+    def test_clamp_128_255_preset_has_different_min_max(self):
+        """'Clamp 128–255' preset must have clamp_min=128, clamp_max=255."""
+        from src.core.presets import BUILTIN_PRESETS
+        preset = next((p for p in BUILTIN_PRESETS
+                       if p.clamp_min == 128 and p.clamp_max == 255
+                       and not p.binary_cut and not p.invert), None)
+        self.assertIsNotNone(preset, "Clamp 128-255 preset not found")
+        self.assertNotEqual(preset.clamp_min, preset.clamp_max,
+                            "Clamp 128-255 preset must have different min and max")
+
+    def test_alpha_preset_from_dict_preserves_range_min_max(self):
+        """AlphaPreset.from_dict() must faithfully preserve different clamp_min and
+        clamp_max values.  Custom presets with a range (e.g. min=0, max=128) must
+        survive a to_dict() / from_dict() round-trip without collapsing to min==max."""
+        from src.core.presets import AlphaPreset as _AP
+        original = _AP(name="Range Test", description="test range", builtin=False,
+                       clamp_min=0, clamp_max=128)
+        d = original.to_dict()
+        loaded = _AP.from_dict(d)
+        self.assertEqual(loaded.clamp_min, 0,
+                         f"clamp_min changed after round-trip: {loaded.clamp_min}")
+        self.assertEqual(loaded.clamp_max, 128,
+                         f"clamp_max changed after round-trip: {loaded.clamp_max}")
+        self.assertNotEqual(loaded.clamp_min, loaded.clamp_max,
+                            "from_dict must NOT collapse min==max for a range preset")
+
+    def test_alpha_preset_from_dict_preserves_raised_floor(self):
+        """A custom preset with clamp_min=128, clamp_max=255 (raised floor) must
+        survive from_dict round-trip with both values intact."""
+        from src.core.presets import AlphaPreset as _AP
+        original = _AP(name="Floor Test", description="test floor", builtin=False,
+                       clamp_min=128, clamp_max=255)
+        loaded = _AP.from_dict(original.to_dict())
+        self.assertEqual(loaded.clamp_min, 128)
+        self.assertEqual(loaded.clamp_max, 255)
+
+    def test_apply_alpha_preset_range_produces_varied_output(self):
+        """apply_alpha_preset with a range preset (clamp_min=0, clamp_max=128) on a
+        two-alpha image must produce at least two distinct output values — proving
+        the range mapping actually spans [0, 128] and is not collapsed to a single value."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0] = [128, 128, 128, 0]    # fully transparent
+        arr[0, 1] = [128, 128, 128, 255]  # fully opaque
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("ps2_rescale", "", clamp_min=0, clamp_max=128)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 0,
+                         "alpha=0 must stay at 0 with clamp_min=0")
+        self.assertEqual(int(out[0, 1, 3]), 128,
+                         "alpha=255 must map to 128 with clamp_max=128")
+        self.assertNotEqual(int(out[0, 0, 3]), int(out[0, 1, 3]),
+                            "Range preset must produce different output values — not forced to same")
+
+    def test_apply_alpha_preset_range_floor_raised(self):
+        """apply_alpha_preset with clamp_min=128, clamp_max=255 must map source [0,255]
+        to target [128,255], confirming both endpoints differ and the floor is enforced."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0] = [0, 0, 0, 0]
+        arr[0, 1] = [0, 0, 0, 255]
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("floor_raised", "", clamp_min=128, clamp_max=255)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        self.assertEqual(int(out[0, 0, 3]), 128,
+                         "alpha=0 must map to clamp_min=128 (floor raised)")
+        self.assertEqual(int(out[0, 1, 3]), 255,
+                         "alpha=255 must map to clamp_max=255")
+        self.assertNotEqual(int(out[0, 0, 3]), int(out[0, 1, 3]),
+                            "Floor-raised preset must produce different output values — not forced to same")
+
+    # ------------------------------------------------------------------
+    # Threshold-as-pixel-filter tests  (threshold > 0, binary_cut=False)
+    # ------------------------------------------------------------------
+
+    def test_manual_alpha_threshold_protects_high_alpha_pixels(self):
+        """When threshold=128 and binary_cut=False, pixels with alpha >= 128 must
+        keep their original value; only pixels below 128 are normalized."""
+        # Row 0: low alpha (will be processed)
+        # Row 1: high alpha (must be left untouched)
+        arr = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr[0, :, 3] = 60    # below threshold → processed
+        arr[1, :, 3] = 200   # at/above threshold → protected
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, threshold=128, clamp_min=0, clamp_max=64)
+        out = np.array(result)
+        # Processed row: uniform at 60, clamp(60, 0, 64)=60 (already within range)
+        self.assertEqual(int(out[0, 0, 3]), 60,
+                         "Uniform low-alpha pixel within [0, 64] is clamped (stays at 60)")
+        # Protected row: must stay at 200 (not clipped to 64)
+        self.assertTrue(np.all(out[1, :, 3] == 200),
+                        "Pixels with alpha >= threshold must keep their original value")
+
+    def test_manual_alpha_threshold_zero_processes_all(self):
+        """threshold=0 (default) must process every pixel — normalize maps
+        [img_min, img_max] → [clamp_min, clamp_max] exactly."""
+        arr = np.zeros((1, 2, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 200
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, threshold=0, clamp_min=0, clamp_max=64)
+        out = np.array(result)
+        # normalize: img_min=0 → target_lo=0, img_max=200 → target_hi=64
+        self.assertEqual(int(out[0, 0, 3]), 0,  "source_min=0 → target_lo=0")
+        self.assertEqual(int(out[0, 1, 3]), 64, "source_max=200 → target_hi=64")
+
+    def test_manual_alpha_threshold_mixed_range_partial_protect(self):
+        """threshold=128 protects the top half while normalizing the bottom half.
+        Only pixels with alpha < 128 are processed; normalize is applied to
+        [img_min, img_max] of those pixels only."""
+        arr = np.zeros((1, 4, 4), dtype=np.uint8)
+        arr[0, 0, 3] = 0
+        arr[0, 1, 3] = 64
+        arr[0, 2, 3] = 128   # exactly at threshold → protected
+        arr[0, 3, 3] = 200   # above threshold → protected
+        img = Image.fromarray(arr, "RGBA")
+        result = apply_manual_alpha(img, threshold=128, clamp_min=0, clamp_max=100)
+        out = np.array(result)
+        # Processed pixels (alpha < 128): {0, 64}
+        # normalize: img_min=0 → target_lo=0, img_max=64 → target_hi=100
+        # pixel=0  → 0
+        # pixel=64 → 100
+        self.assertEqual(int(out[0, 0, 3]), 0,   "source_min=0 → target_lo=0")
+        self.assertEqual(int(out[0, 1, 3]), 100, "source_max=64 → target_hi=100")
+        # Protected pixels: original values must be preserved
+        self.assertEqual(int(out[0, 2, 3]), 128, "alpha=128 >= threshold → unchanged")
+        self.assertEqual(int(out[0, 3, 3]), 200, "alpha=200 >= threshold → unchanged")
+
+    def test_preset_threshold_protects_high_alpha_pixels(self):
+        """apply_alpha_preset: threshold > 0 with binary_cut=False protects
+        pixels at/above threshold from being normalized."""
+        arr = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr[0, :, 3] = 50    # below threshold=100 → processed
+        arr[1, :, 3] = 150   # at/above threshold=100 → protected
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("protect_test", "", clamp_min=0, clamp_max=64,
+                             threshold=100, binary_cut=False)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        # Processed row: uniform 50 → proportional in [0, 64] → round(50/255*64)=12 or 13
+        self.assertLess(int(out[0, 0, 3]), 64,
+                        "Low-alpha pixel must be normalized, not clipped to target_hi")
+        # Protected row: must stay at 150
+        self.assertTrue(np.all(out[1, :, 3] == 150),
+                        "Pixels with original alpha >= threshold must be left unchanged")
+
+    def test_preset_binary_cut_with_threshold_still_processes_all(self):
+        """When binary_cut=True, threshold is the SPLIT POINT (not a pixel filter).
+        All pixels participate in normalize + binary_cut regardless of threshold."""
+        arr = np.zeros((2, 4, 4), dtype=np.uint8)
+        arr[0, :, 3] = 50    # below threshold
+        arr[1, :, 3] = 200   # above threshold
+        img = Image.fromarray(arr, "RGBA")
+        preset = AlphaPreset("cut", "", threshold=128, binary_cut=True)
+        result = apply_alpha_preset(img, preset)
+        out = np.array(result)
+        # binary_cut: normalizes [50,200]→[0,255], then 50→≈0<128→0, 200→≈255≥128→255
+        self.assertTrue(np.all(out[0, :, 3] == 0),   "50 normalized then binary-cut → 0")
+        self.assertTrue(np.all(out[1, :, 3] == 255),  "200 normalized then binary-cut → 255")
+
+
 
     def test_collect_single_file(self):
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
@@ -452,6 +703,67 @@ class TestCollectFiles(unittest.TestCase):
             self.assertNotIn(path, result)
         finally:
             os.unlink(path)
+
+    def test_fully_opaque_image_max_reduces_alpha(self):
+        """A fully-opaque image (all alpha=255) must have its alpha reduced to Max
+        when Max < 255.  This is the primary use-case: the user sets Max=128 to cap
+        a game texture at PS2 full-opacity.  Min is also tested to confirm it does
+        not prevent the change."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=128)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 128),
+            f"Fully-opaque image with max=128 must output 128, got {arr[0, 0, 3]}",
+        )
+
+    def test_fully_opaque_image_force_same_value(self):
+        """Force-same-value mode (min==max) must set every pixel to exactly that
+        value regardless of the source alpha."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=128, clamp_max=128)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 128),
+            f"Force-same 128 on fully-opaque image must give 128, got {arr[0, 0, 3]}",
+        )
+
+    def test_fully_opaque_max_0_gives_transparent(self):
+        """Setting Max=0 on a fully-opaque image must produce a fully-transparent
+        result — the tool must be able to zero-out alpha regardless of source."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=0)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 0),
+            f"Fully-opaque image with max=0 must output 0, got {arr[0, 0, 3]}",
+        )
+
+    def test_fully_opaque_min_0_max_255_unchanged(self):
+        """With min=0 and max=255 a fully-opaque image stays at 255.
+        This is expected — the old 'Full Opacity' preset range produces no change.
+        The UX fix ensures users are auto-given max=128 when they first edit Min
+        from this state, but the algorithm itself is correct."""
+        img = make_rgba_image(alpha=255)
+        result = apply_manual_alpha(img, clamp_min=0, clamp_max=255)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 255),
+            "min=0 max=255 on fully-opaque image should leave alpha at 255",
+        )
+
+    def test_fully_opaque_preset_max_128(self):
+        """apply_alpha_preset with clamp_max=128 must also reduce a fully-opaque
+        image to 128, confirming preset mode works the same as manual mode."""
+        from src.core.presets import AlphaPreset
+        img = make_rgba_image(alpha=255)
+        preset = AlphaPreset("test", "", clamp_min=0, clamp_max=128)
+        result = apply_alpha_preset(img, preset)
+        arr = np.array(result)
+        self.assertTrue(
+            np.all(arr[:, :, 3] == 128),
+            f"Preset max=128 on fully-opaque image must output 128, got {arr[0, 0, 3]}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -962,14 +1274,11 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
         self.assertIn("_alpha_delta_spin", self._alpha_tool_source())
 
     def test_alpha_delta_included_in_rgb_params(self):
-        """The rgb_params dict in alpha_tool.py should include key 'a' for alpha delta."""
+        """The manual params dict in alpha_tool.py should include key 'a' for alpha delta."""
         source = self._alpha_tool_source()
-        # Look for 'a': self._alpha_delta_spin near rgb_params
-        rgb_idx = source.find("rgb_params")
-        self.assertGreater(rgb_idx, 0, "rgb_params not found in alpha_tool.py")
-        rgb_section = source[rgb_idx:]
-        self.assertIn('"a"', rgb_section,
-                      "rgb_params in alpha_tool.py should include key 'a' for alpha delta")
+        # Look for the alpha_delta_spin value being assigned under key "a"
+        self.assertIn('"a": self._alpha_delta_spin.value()', source,
+                      "manual params dict in alpha_tool.py should include key 'a' for alpha delta")
 
     def test_worker_passes_alpha_delta(self):
         """worker.py should forward alpha_delta from the rgb dict to apply_rgba_adjust."""
@@ -1030,56 +1339,44 @@ class TestAlphaDeltaSpinbox(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestUsePresetRecheck(unittest.TestCase):
-    """When the user manually re-checks 'Use preset', fine-tune controls must
-    be reloaded from the preset so the display matches what will be processed."""
+    """Source-level checks that built-in preset data is self-consistent.
+    (Preset/force-same-value UI was removed; only preset data properties remain.)"""
 
     def _alpha_tool_source(self) -> str:
         path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "alpha_tool.py")
         with open(path) as f:
             return f.read()
 
-    def test_on_use_preset_toggled_handler_defined(self):
-        """alpha_tool.py must define the _on_use_preset_toggled slot."""
-        self.assertIn("def _on_use_preset_toggled", self._alpha_tool_source(),
-                      "_on_use_preset_toggled slot must be defined in alpha_tool.py")
+    def test_on_preset_changed_range_preset_force_same_evaluates_false(self):
+        """For any built-in preset with clamp_min != clamp_max, the expression
+        `preset.clamp_min == preset.clamp_max` evaluates to False."""
+        from src.core.presets import BUILTIN_PRESETS
+        range_presets = [p for p in BUILTIN_PRESETS if p.clamp_min != p.clamp_max]
+        self.assertGreaterEqual(len(range_presets), 3,
+                                "Need at least 3 range presets to test against")
+        for p in range_presets:
+            result = (p.clamp_min == p.clamp_max)
+            self.assertFalse(
+                result,
+                f"Preset '{p.name}' has clamp_min={p.clamp_min}, clamp_max={p.clamp_max} "
+                f"(different), but clamp_min == clamp_max evaluates to True",
+            )
 
-    def test_use_preset_check_connected_to_on_use_preset_toggled(self):
-        """_use_preset_check.toggled must be connected to _on_use_preset_toggled,
-        not directly to _update_compare."""
-        source = self._alpha_tool_source()
-        self.assertIn(
-            "_use_preset_check.toggled.connect(self._on_use_preset_toggled)",
-            source,
-            "_use_preset_check.toggled must connect to _on_use_preset_toggled",
-        )
-        # The old direct-to-_update_compare connection must no longer exist
-        self.assertNotIn(
-            "_use_preset_check.toggled.connect(self._update_compare)",
-            source,
-            "_use_preset_check.toggled must NOT connect directly to _update_compare",
-        )
-
-    def test_on_use_preset_toggled_calls_on_preset_changed_when_checked(self):
-        """_on_use_preset_toggled must call _on_preset_changed when checked=True."""
-        source = self._alpha_tool_source()
-        # Find the handler body
-        start = source.find("def _on_use_preset_toggled")
-        self.assertGreater(start, 0, "_on_use_preset_toggled not found")
-        # Find the next method definition to scope the search; fall back to
-        # end-of-file if this is the last method (avoids a -1 index).
-        next_def = source.find("\n    def ", start + 1)
-        end = next_def if next_def > start else len(source)
-        body = source[start:end]
-        self.assertIn(
-            "_on_preset_changed",
-            body,
-            "_on_use_preset_toggled must call _on_preset_changed when checked",
-        )
-        self.assertIn(
-            "_update_compare",
-            body,
-            "_on_use_preset_toggled must call _update_compare when unchecked",
-        )
+    def test_on_preset_changed_flat_preset_force_same_evaluates_true(self):
+        """For built-in flat presets with clamp_min == clamp_max, the expression
+        evaluates to True."""
+        from src.core.presets import BUILTIN_PRESETS
+        flat_presets = [p for p in BUILTIN_PRESETS
+                        if p.clamp_min == p.clamp_max and not p.binary_cut]
+        self.assertGreaterEqual(len(flat_presets), 3,
+                                "Need at least 3 flat presets to test against")
+        for p in flat_presets:
+            result = (p.clamp_min == p.clamp_max)
+            self.assertTrue(
+                result,
+                f"Preset '{p.name}' has clamp_min == clamp_max == {p.clamp_min} "
+                f"but the expression evaluates to False",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1401,19 +1698,12 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         with open(path) as f:
             return f.read()
 
-    def test_use_preset_renamed_auto_fills(self):
-        """The 'Use preset' checkbox label must mention 'auto-fills' to make
-        its purpose obvious to users who don't use presets."""
-        src = self._alpha_tool_source()
-        self.assertIn("auto-fills", src,
-                      "Use-preset checkbox label must contain 'auto-fills'")
-
     def test_hint_label_in_setup_ui(self):
         """_setup_ui must add an explanatory hint label to guide new users."""
         src = self._alpha_tool_source()
-        # The hint should mention Min/Max
-        self.assertIn("Min/Max", src,
-                      "Fine-tune section should have a hint label mentioning 'Min/Max'")
+        # The hint should describe the scaling behavior
+        self.assertIn("0–255", src,
+                      "Fine-tune section should have a hint label describing the 0–255 scale")
 
     def _tooltip_source(self) -> str:
         path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
@@ -1517,6 +1807,24 @@ class TestAlphaToolUISimplification(unittest.TestCase):
         self.assertNotIn("process almost NONE", src,
                          "threshold_spin tips must not say 'process almost NONE' for threshold=255 — "
                          "threshold=255 processes everything except fully opaque pixels")
+
+    # ── _on_force_same_value_toggled must NOT call _switch_to_manual_if_preset_active ──
+
+    def test_threshold_tooltip_describes_protect_behavior(self):
+        """The threshold label tooltip must describe the 'protect above threshold'
+        behavior now that threshold actually filters pixels when binary_cut is off."""
+        src = self._alpha_tool_source()
+        # Find the threshold tooltip block
+        thresh_pos = src.find("lbl_thresh = QLabel")
+        self.assertGreater(thresh_pos, 0, "lbl_thresh not found in alpha_tool.py")
+        # Look for the tooltip content nearby
+        tooltip_pos = src.find(".setToolTip(", thresh_pos)
+        next_widget = src.find("gt_layout.addWidget", thresh_pos)
+        block = src[thresh_pos:next_widget]
+        self.assertIn("protect", block.lower(),
+                      "threshold tooltip must describe the 'protect' behavior for pixels above threshold")
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -4963,3 +5271,538 @@ class TestRound15ResourceHygiene(unittest.TestCase):
             "apply_rgba_adjust must NOT close the caller's RGBA image",
         )
         orig_close()  # cleanup
+
+
+# ---------------------------------------------------------------------------
+# Selective Alpha processor tests
+# ---------------------------------------------------------------------------
+
+class TestSelectiveAlphaProcessor(unittest.TestCase):
+    """Tests for src.core.selective_alpha_processor."""
+
+    def _make_rgba(self, w=8, h=8, alpha=200) -> Image.Image:
+        arr = np.zeros((h, w, 4), dtype=np.uint8)
+        arr[:, :, :3] = 128
+        arr[:, :, 3]  = alpha
+        return Image.fromarray(arr, "RGBA")
+
+    # ---- detect_edges -----------------------------------------------------
+
+    def test_detect_edges_returns_float32(self):
+        from src.core.selective_alpha_processor import detect_edges
+        img = self._make_rgba()
+        e = detect_edges(img)
+        self.assertEqual(e.dtype, np.float32)
+        self.assertEqual(e.shape, (img.height, img.width))
+        img.close()
+
+    def test_detect_edges_uniform_image_is_zero(self):
+        """A completely uniform grey image has no edges."""
+        from src.core.selective_alpha_processor import detect_edges
+        img = Image.new("RGBA", (16, 16), (100, 100, 100, 255))
+        e = detect_edges(img)
+        self.assertAlmostEqual(float(e.max()), 0.0, places=4)
+        img.close()
+
+    def test_detect_edges_checkerboard_has_edges(self):
+        """A 2×2 checkerboard pattern should produce non-zero edges."""
+        from src.core.selective_alpha_processor import detect_edges
+        arr = np.zeros((8, 8, 4), dtype=np.uint8)
+        for r in range(8):
+            for c in range(8):
+                v = 255 if (r + c) % 2 == 0 else 0
+                arr[r, c, :3] = v
+                arr[r, c, 3]  = 255
+        img = Image.fromarray(arr, "RGBA")
+        e = detect_edges(img)
+        self.assertGreater(float(e.max()), 0.1)
+        img.close()
+
+    def test_detect_edges_values_in_range(self):
+        from src.core.selective_alpha_processor import detect_edges
+        img = self._make_rgba()
+        e = detect_edges(img)
+        self.assertGreaterEqual(float(e.min()), 0.0)
+        self.assertLessEqual(float(e.max()), 1.0 + 1e-6)
+        img.close()
+
+    # ---- edge_flood_fill --------------------------------------------------
+
+    def test_flood_fill_uniform_fills_all(self):
+        """On a uniform (zero-edge) image the fill covers the whole image."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        h, w = 10, 10
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        mask = edge_flood_fill((5, 5), edge_map)
+        self.assertEqual(mask.shape, (h, w))
+        self.assertTrue(mask.all(), "Expected the entire image to be filled")
+
+    def test_flood_fill_out_of_bounds_seed_returns_empty(self):
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        mask = edge_flood_fill((20, 20), edge_map)
+        self.assertFalse(mask.any())
+
+    def test_flood_fill_blocked_by_edge(self):
+        """A strong vertical edge should prevent fill from crossing it."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        h, w = 10, 10
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        edge_map[:, 5] = 1.0   # strong vertical barrier
+        mask = edge_flood_fill((2, 2), edge_map, threshold=0.5)
+        # All filled pixels should be to the left of the edge (col < 5)
+        filled_cols = np.where(mask)[1]
+        self.assertTrue(
+            (filled_cols < 5).all(),
+            "Fill should not cross the strong vertical edge"
+        )
+
+    def test_flood_fill_seed_on_edge_returns_empty(self):
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.ones((10, 10), dtype=np.float32)   # all strong edges
+        mask = edge_flood_fill((5, 5), edge_map, threshold=0.5)
+        self.assertFalse(mask.any())
+
+    # ---- autocorrect_mask -------------------------------------------------
+
+    def test_autocorrect_empty_mask_unchanged(self):
+        from src.core.selective_alpha_processor import autocorrect_mask
+        mask = np.zeros((10, 10), dtype=bool)
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        result = autocorrect_mask(mask, edge_map)
+        self.assertFalse(result.any())
+
+    def test_autocorrect_expands_toward_edges(self):
+        """A drawn mask near a strong edge should be expanded to include the edge."""
+        from src.core.selective_alpha_processor import autocorrect_mask
+        h, w = 30, 30
+        mask = np.zeros((h, w), dtype=bool)
+        mask[10:20, 5:10] = True   # drawn region
+
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        edge_map[10:20, 14] = 0.9  # strong edge 4 pixels away
+
+        result = autocorrect_mask(mask, edge_map, search_radius=8, edge_threshold=0.5)
+        # The edge pixels should now be included
+        self.assertTrue(result[10, 14], "Edge pixel should be snapped into mask")
+        # Original drawn region should still be present
+        self.assertTrue(result[10, 5])
+
+    def test_autocorrect_no_edges_unchanged(self):
+        from src.core.selective_alpha_processor import autocorrect_mask
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[2:7, 2:7] = True
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        result = autocorrect_mask(mask, edge_map, edge_threshold=0.5)
+        np.testing.assert_array_equal(result, mask)
+
+    # ---- apply_selective_alpha --------------------------------------------
+
+    def test_apply_sets_zone_alpha(self):
+        """Pixels inside a zone mask must receive the zone's alpha value."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = self._make_rgba(8, 8, alpha=255)
+        zone_masks: list = [None] * NUM_ZONES
+        mask = np.zeros((8, 8), dtype=bool)
+        mask[2:5, 2:5] = True
+        zone_masks[0] = mask
+        zone_alphas = [42] + [255] * (NUM_ZONES - 1)
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        arr = np.array(result, dtype=np.uint8)
+        self.assertEqual(int(arr[3, 3, 3]), 42, "Zone alpha should be 42")
+        self.assertEqual(int(arr[0, 0, 3]), 255, "Unpainted pixel keeps original alpha")
+        result.close()
+        img.close()
+
+    def test_apply_zone0_wins_on_overlap(self):
+        """Zone 0 has highest priority and wins when zones overlap."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = self._make_rgba(8, 8, alpha=200)
+        # Both zone 0 and zone 1 cover the same pixels
+        full_mask = np.ones((8, 8), dtype=bool)
+        zone_masks = [full_mask, full_mask] + [None] * (NUM_ZONES - 2)
+        zone_alphas = [10, 99] + [200] * (NUM_ZONES - 2)
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        arr = np.array(result, dtype=np.uint8)
+        self.assertEqual(int(arr[0, 0, 3]), 10, "Zone 0 (alpha=10) should win over zone 1")
+        result.close()
+        img.close()
+
+    def test_apply_empty_zones_keeps_original_alpha(self):
+        """If no zones are painted, the alpha channel must not change."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        original_alpha = 77
+        img = self._make_rgba(6, 6, alpha=original_alpha)
+        zone_masks = [None] * NUM_ZONES
+        zone_alphas = [0] * NUM_ZONES
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        arr = np.array(result, dtype=np.uint8)
+        self.assertTrue(
+            (arr[:, :, 3] == original_alpha).all(),
+            "All alphas should remain unchanged when no zones are painted"
+        )
+        result.close()
+        img.close()
+
+    def test_apply_returns_rgba(self):
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGB", (4, 4), (100, 100, 100))
+        zone_masks = [None] * NUM_ZONES
+        zone_alphas = [128] * NUM_ZONES
+        result = apply_selective_alpha(img, zone_masks, zone_alphas)
+        self.assertEqual(result.mode, "RGBA")
+        result.close()
+        img.close()
+
+    # ---- composite_zones --------------------------------------------------
+
+    def test_composite_zones_output_shape(self):
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES
+        h, w = 8, 8
+        src = np.zeros((h, w, 4), dtype=np.uint8)
+        src[:, :] = [100, 100, 100, 255]
+        zone_masks = [None] * NUM_ZONES
+        out = composite_zones(src, zone_masks)
+        self.assertEqual(out.shape, (h, w, 4))
+        self.assertEqual(out.dtype, np.uint8)
+
+    def test_composite_zones_tints_zone_area(self):
+        """Pixels covered by a zone should be blended with the zone colour."""
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES, ZONE_COLORS
+        h, w = 8, 8
+        src = np.zeros((h, w, 4), dtype=np.uint8)
+        src[:, :] = [200, 200, 200, 255]
+        mask = np.zeros((h, w), dtype=bool)
+        mask[2:6, 2:6] = True
+        zone_masks = [mask] + [None] * (NUM_ZONES - 1)
+        out = composite_zones(src, zone_masks)
+        # The top-left corner (not in zone) should be unchanged
+        np.testing.assert_array_equal(out[0, 0], src[0, 0])
+        # The zone area should be tinted (different from original)
+        self.assertFalse(
+            np.array_equal(out[3, 3], src[3, 3]),
+            "Zone area should be blended with zone colour"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Selective Alpha canvas unit tests (no Qt display required)
+# ---------------------------------------------------------------------------
+
+class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
+    """
+    Tests for the non-Qt helper logic on SelectiveAlphaCanvas:
+      _snapshot / _restore_snapshot / _push_history / undo_mask / redo_mask
+      _erase_brush / _erase_brush_move
+    These tests bypass the Qt paint/event system by calling internal helpers
+    directly and inspecting the resulting masks.
+    """
+
+    def _make_canvas_with_image(self):
+        """
+        Return a canvas instance that has a 16x16 RGBA image loaded without
+        ever calling Qt rendering (we skip load_image and set internals
+        directly to avoid QApplication dependency in headless CI).
+        """
+        import sys, types
+
+        # Build a minimal stub PyQt6 environment if Qt is not available.
+        # If PyQt6 IS importable we use it; otherwise we create stubs.
+        try:
+            from PyQt6.QtWidgets import QApplication
+            # Store on self to prevent premature garbage collection.
+            self._qapp = QApplication.instance() or QApplication(sys.argv)
+            from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
+            canvas = SelectiveAlphaCanvas.__new__(SelectiveAlphaCanvas)
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
+
+        # Initialise just the attributes used by the history/eraser helpers.
+        canvas._src_img   = Image.new("RGBA", (16, 16), (100, 100, 100, 200))
+        canvas._src_arr   = np.array(canvas._src_img, dtype=np.uint8)
+        canvas._masks     = [None] * 7
+        canvas._history   = []
+        canvas._redo_stack = []
+        canvas._brush_size  = 3
+        canvas._eraser_size = 3
+        canvas._active_zone = 0
+        canvas._edge_map    = None
+        canvas._composite_dirty = True
+        return canvas
+
+    # ---- snapshot helpers -------------------------------------------------
+
+    def test_snapshot_all_none(self):
+        canvas = self._make_canvas_with_image()
+        snap = canvas._snapshot()
+        self.assertEqual(len(snap), 7)
+        self.assertTrue(all(s is None for s in snap))
+
+    def test_snapshot_captures_mask(self):
+        canvas = self._make_canvas_with_image()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+        snap = canvas._snapshot()
+        self.assertIsNotNone(snap[0])
+        self.assertTrue((snap[0] == 255).all())
+        canvas._masks[0].close()
+
+    def test_restore_snapshot_restores_mask(self):
+        canvas = self._make_canvas_with_image()
+        arr = np.full((16, 16), 200, dtype=np.uint8)
+        snap = [arr.copy()] + [None] * 6
+
+        # Manually stub update() so it doesn't try to paint
+        canvas.update = lambda: None
+        canvas._restore_snapshot(snap)
+
+        m = canvas._masks[0]
+        self.assertIsNotNone(m)
+        result = np.array(m, dtype=np.uint8)
+        self.assertTrue((result == 200).all())
+        m.close()
+
+    # ---- push / undo / redo -----------------------------------------------
+
+    def _stub_signals(self, canvas):
+        """Replace pyqtSignal emitters with no-ops for headless testing."""
+        canvas.undo_available = types.SimpleNamespace(emit=lambda v: None)
+        canvas.redo_available = types.SimpleNamespace(emit=lambda v: None)
+        canvas.mask_changed   = types.SimpleNamespace(emit=lambda v: None)
+        canvas.update = lambda: None
+
+    def test_push_history_adds_entry(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+        self.assertEqual(len(canvas._history), 0)
+        canvas._push_history()
+        self.assertEqual(len(canvas._history), 1)
+
+    def test_undo_restores_previous_state(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+
+        # Start empty, push history, then paint zone 0
+        canvas._push_history()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+
+        self.assertIsNotNone(canvas._masks[0])
+        result = canvas.undo_mask()
+        self.assertTrue(result)
+        self.assertIsNone(canvas._masks[0])   # restored to pre-paint state
+
+    def test_redo_restores_forward_state(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+
+        canvas._push_history()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 128, dtype=np.uint8), "L"
+        )
+        canvas.undo_mask()
+        self.assertIsNone(canvas._masks[0])
+
+        result = canvas.redo_mask()
+        self.assertTrue(result)
+        self.assertIsNotNone(canvas._masks[0])
+        arr = np.array(canvas._masks[0], dtype=np.uint8)
+        self.assertTrue((arr == 128).all())
+        canvas._masks[0].close()
+
+    def test_push_clears_redo_stack(self):
+        import types
+        canvas = self._make_canvas_with_image()
+        self._stub_signals(canvas)
+
+        canvas._push_history()
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+        canvas.undo_mask()
+        self.assertEqual(len(canvas._redo_stack), 1)
+
+        # Push new history: redo stack should be cleared
+        canvas._push_history()
+        self.assertEqual(len(canvas._redo_stack), 0)
+
+    # ---- eraser -----------------------------------------------------------
+
+    def test_erase_brush_clears_all_zones(self):
+        canvas = self._make_canvas_with_image()
+
+        # Paint two zones with full white masks
+        for i in range(3):
+            canvas._masks[i] = Image.fromarray(
+                np.full((16, 16), 255, dtype=np.uint8), "L"
+            )
+
+        # Erase at centre
+        canvas._erase_brush(8, 8)
+
+        # The erased region should be 0 in all three painted zones
+        for i in range(3):
+            arr = np.array(canvas._masks[i], dtype=np.uint8)
+            # Centre pixel must be 0 after erasing
+            self.assertEqual(
+                arr[8, 8], 0,
+                f"Zone {i} centre pixel should be erased"
+            )
+            canvas._masks[i].close()
+            canvas._masks[i] = None
+
+    def test_erase_brush_no_effect_on_none_zone(self):
+        canvas = self._make_canvas_with_image()
+        canvas._erase_brush(8, 8)   # all masks are None – must not raise
+
+    def test_eraser_size_applies(self):
+        canvas = self._make_canvas_with_image()
+        canvas._eraser_size = 1
+        canvas._masks[0] = Image.fromarray(
+            np.full((16, 16), 255, dtype=np.uint8), "L"
+        )
+        canvas._erase_brush(8, 8)
+        arr = np.array(canvas._masks[0], dtype=np.uint8)
+        # Centre should be erased; corner should not
+        self.assertEqual(arr[8, 8], 0)
+        self.assertEqual(arr[0, 0], 255)
+        canvas._masks[0].close()
+        canvas._masks[0] = None
+
+    # ---- cursor position --------------------------------------------------
+
+    def test_cursor_pos_initialises_to_none(self):
+        canvas = self._make_canvas_with_image()
+        self.assertIsNone(canvas._cursor_pos)
+
+
+# ---------------------------------------------------------------------------
+# Zoom-to-cursor pan formula tests (pure math, no Qt required)
+# ---------------------------------------------------------------------------
+
+class TestSelectiveAlphaZoomFormula(unittest.TestCase):
+    """Validate the zoom-to-cursor pan formula used in SelectiveAlphaCanvas.
+
+    The formula is:
+        pan_new = (1 - ratio) * (pt - cw/2) + pan_old * ratio
+    where ratio = new_zoom / old_zoom.
+    """
+
+    @staticmethod
+    def _apply_zoom_formula(pt_x, pt_y, cw, ch, pan_x, pan_y, ratio):
+        new_pan_x = (1.0 - ratio) * (pt_x - cw / 2.0) + pan_x * ratio
+        new_pan_y = (1.0 - ratio) * (pt_y - ch / 2.0) + pan_y * ratio
+        return new_pan_x, new_pan_y
+
+    @staticmethod
+    def _image_pixel_under_cursor(pt_x, pt_y, cw, ch, iw, ih, zoom, pan_x, pan_y):
+        """Return the (fractional) image pixel coordinates under the cursor."""
+        scale = min(cw / iw, ch / ih) * zoom
+        ox = (cw - iw * scale) / 2.0 + pan_x
+        oy = (ch - ih * scale) / 2.0 + pan_y
+        return (pt_x - ox) / scale, (pt_y - oy) / scale
+
+    def test_zoom_at_centre_leaves_pan_zero(self):
+        """Zooming at the canvas centre from pan=0 must not shift the image."""
+        cw = ch = 400.0
+        pan_x = pan_y = 0.0
+        ratio = 1.1   # zoom in
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            cw / 2, ch / 2, cw, ch, pan_x, pan_y, ratio
+        )
+        self.assertAlmostEqual(new_pan_x, 0.0, places=9)
+        self.assertAlmostEqual(new_pan_y, 0.0, places=9)
+
+    def test_zoom_at_centre_large_zoom_leaves_pan_zero(self):
+        cw = ch = 800.0
+        pan_x = pan_y = 0.0
+        ratio = 5.0
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            cw / 2, ch / 2, cw, ch, pan_x, pan_y, ratio
+        )
+        self.assertAlmostEqual(new_pan_x, 0.0, places=9)
+        self.assertAlmostEqual(new_pan_y, 0.0, places=9)
+
+    def test_zoom_fixes_image_pixel_under_cursor(self):
+        """The image pixel under the cursor must be the same before and after zoom."""
+        iw = ih = 16
+        cw = ch = 400.0
+        pan_x = pan_y = 0.0
+        zoom_old = 1.0
+        pt_x, pt_y = 100.0, 80.0
+
+        ix_before, iy_before = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_old, pan_x, pan_y
+        )
+
+        ratio = 1.1
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+        )
+        zoom_new = zoom_old * ratio
+
+        ix_after, iy_after = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_new, new_pan_x, new_pan_y
+        )
+        self.assertAlmostEqual(ix_after, ix_before, places=9)
+        self.assertAlmostEqual(iy_after, iy_before, places=9)
+
+    def test_zoom_out_fixes_image_pixel_under_cursor(self):
+        iw = ih = 32
+        cw, ch = 640.0, 480.0
+        pan_x, pan_y = 20.0, -10.0
+        zoom_old = 2.0
+        pt_x, pt_y = 320.0, 240.0
+
+        ix_before, iy_before = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_old, pan_x, pan_y
+        )
+
+        ratio = 1.0 / 1.1   # zoom out
+        new_pan_x, new_pan_y = self._apply_zoom_formula(
+            pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+        )
+        zoom_new = zoom_old * ratio
+
+        ix_after, iy_after = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom_new, new_pan_x, new_pan_y
+        )
+        self.assertAlmostEqual(ix_after, ix_before, places=9)
+        self.assertAlmostEqual(iy_after, iy_before, places=9)
+
+    def test_multiple_successive_zooms_stay_stable(self):
+        """Repeated zoom-in / zoom-out at the same point should return to origin."""
+        iw = ih = 64
+        cw = ch = 512.0
+        pan_x = pan_y = 0.0
+        zoom = 1.0
+        pt_x, pt_y = 200.0, 150.0
+
+        # Zoom in 5 times then out 5 times
+        for _ in range(5):
+            ratio = 1.1
+            pan_x, pan_y = self._apply_zoom_formula(
+                pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+            )
+            zoom *= ratio
+        for _ in range(5):
+            ratio = 1.0 / 1.1
+            pan_x, pan_y = self._apply_zoom_formula(
+                pt_x, pt_y, cw, ch, pan_x, pan_y, ratio
+            )
+            zoom *= ratio
+
+        # Image pixel under cursor should match the original
+        ix0, iy0 = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, 1.0, 0.0, 0.0
+        )
+        ix1, iy1 = self._image_pixel_under_cursor(
+            pt_x, pt_y, cw, ch, iw, ih, zoom, pan_x, pan_y
+        )
+        self.assertAlmostEqual(ix1, ix0, places=6)
+        self.assertAlmostEqual(iy1, iy0, places=6)

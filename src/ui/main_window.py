@@ -4,10 +4,10 @@ Main application window.
 import sys
 import webbrowser
 
-from PyQt6.QtCore import Qt, QSize, QRect, QTimer
-from PyQt6.QtGui import QAction, QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
+from PyQt6.QtCore import Qt, QRect, QTimer
+from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
 from PyQt6.QtWidgets import (
-    QMainWindow, QTabWidget, QStatusBar, QToolBar,
+    QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
     QMessageBox, QFileDialog,
 )
@@ -17,6 +17,7 @@ from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
 from .history_tab import HistoryTab
+from .selective_alpha_tool import SelectiveAlphaTool
 from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
@@ -128,12 +129,29 @@ class _SpinningEmojiLabel(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(self._INTERVAL_MS)
         self._timer.timeout.connect(self._tick)
-        self._timer.start()
+        # Timer is NOT started by default; set_animated(True) starts it.
+        # This matches the animated_banner_enabled default of False.
 
     def set_emoji(self, emoji: str) -> None:
         """Change the displayed emoji; takes effect on the next paint."""
         self._emoji = emoji
         self.update()
+
+    def set_animated(self, enabled: bool) -> None:
+        """Start or stop the rotation animation.
+
+        When *enabled* is False the emoji is rendered at a fixed angle (0°)
+        without consuming CPU on the timer tick.  When re-enabled the rotation
+        resumes from angle zero.
+        """
+        if enabled:
+            if not self._timer.isActive():
+                self._timer.start()
+        else:
+            if self._timer.isActive():
+                self._timer.stop()
+            self._angle = 0.0
+            self.update()
 
     def set_font_size(self, size: int) -> None:
         self._font_size = size
@@ -309,42 +327,14 @@ class MainWindow(QMainWindow):
                 return
 
     def _setup_ui(self):
-        # Menu bar
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu("File")
-        act_quit = QAction("Quit", self)
-        act_quit.setShortcut("Ctrl+Q")
-        act_quit.triggered.connect(self.close)
-        file_menu.addAction(act_quit)
-
-        settings_menu = menubar.addMenu("Settings")
-        act_settings = QAction("Preferences…", self)
-        act_settings.setShortcut("Ctrl+,")
-        act_settings.triggered.connect(self._open_settings)
-        settings_menu.addAction(act_settings)
-
-        settings_menu.addSeparator()
-
-        act_export = QAction("Export Settings…", self)
-        act_export.triggered.connect(self._export_settings)
-        settings_menu.addAction(act_export)
-
-        act_import = QAction("Import Settings…", self)
-        act_import.triggered.connect(self._import_settings)
-        settings_menu.addAction(act_import)
-
-        help_menu = menubar.addMenu("Help")
-        act_shortcuts = QAction("Keyboard Shortcuts", self)
-        act_shortcuts.setShortcut("F1")
-        act_shortcuts.triggered.connect(self._show_shortcuts)
-        help_menu.addAction(act_shortcuts)
-        act_about = QAction("About", self)
-        act_about.triggered.connect(self._show_about)
-        help_menu.addAction(act_about)
-        help_menu.addSeparator()
-        act_patreon = QAction("❤  Support on Patreon…", self)
-        act_patreon.triggered.connect(self._open_patreon)
-        help_menu.addAction(act_patreon)
+        # Keep keyboard shortcuts that were previously tied to menu actions
+        from PyQt6.QtGui import QShortcut
+        sc_quit = QShortcut(QKeySequence("Ctrl+Q"), self)
+        sc_quit.activated.connect(self.close)
+        sc_settings = QShortcut(QKeySequence("Ctrl+,"), self)
+        sc_settings.activated.connect(self._open_settings)
+        sc_help = QShortcut(QKeySequence("F1"), self)
+        sc_help.activated.connect(self._show_shortcuts)
 
         # Central widget with tabs
         central = QWidget()
@@ -381,17 +371,68 @@ class MainWindow(QMainWindow):
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
+        self._selective_alpha_tab = SelectiveAlphaTool()
         self._tabs.addTab(self._alpha_tab, "🖼  Alpha Fixer")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
         self._tabs.addTab(self._history_tab, "📋  History")
+        self._tabs.addTab(self._selective_alpha_tab, "🎨  Selective Alpha")
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
 
-        # Keyboard shortcuts for tab switching: Ctrl+1/2/3
-        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3")):
+        # Keyboard shortcuts for tab switching: Ctrl+1/2/3/4
+        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4")):
             sc = QShortcut(QKeySequence(key), self)
             sc.activated.connect(lambda i=idx: self._tabs.setCurrentIndex(i))
+
+        # Corner widget: Settings / Help / Patreon buttons on the right of the tab bar.
+        # This puts all tool controls in one row, freeing vertical space for content.
+        corner = QWidget()
+        corner_layout = QHBoxLayout(corner)
+        corner_layout.setContentsMargins(2, 2, 6, 2)
+        corner_layout.setSpacing(4)
+
+        # Unlock status label (shown briefly when a secret theme unlocks)
+        self._unlock_lbl = QLabel("")
+        self._unlock_lbl.setObjectName("subheader")
+        self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 6px;")
+        corner_layout.addWidget(self._unlock_lbl)
+
+        # Current theme label
+        self._theme_label = QLabel("  Theme: Panda Dark  ")
+        self._theme_label.setObjectName("subheader")
+        corner_layout.addWidget(self._theme_label)
+
+        # SVG theme badge (decorative – shows animated SVG for the active theme)
+        self._svg_badge = self._make_svg_badge()
+        if self._svg_badge is not None:
+            corner_layout.addWidget(self._svg_badge)
+
+        # ⚙ Settings button
+        btn_settings = QPushButton("⚙ Settings")
+        btn_settings.setToolTip("Open Settings (Ctrl+,)")
+        btn_settings.clicked.connect(self._open_settings)
+        corner_layout.addWidget(btn_settings)
+        self._btn_settings = btn_settings
+
+        # ❓ Help button – opens a dropdown with shortcuts/about/export/import
+        btn_help = QPushButton("❓ Help")
+        btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
+        btn_help.clicked.connect(self._show_help_menu)
+        corner_layout.addWidget(btn_help)
+        self._btn_help = btn_help
+
+        # ❤ Patreon button
+        btn_patreon = QPushButton("❤ Patreon")
+        btn_patreon.setToolTip(
+            "Support development on Patreon!\n"
+            "patreon.com/c/DeadOnTheInside"
+        )
+        btn_patreon.clicked.connect(self._open_patreon)
+        corner_layout.addWidget(btn_patreon)
+        self._btn_patreon = btn_patreon
+
+        self._tabs.setCornerWidget(corner, Qt.Corner.TopRightCorner)
 
         self.setCentralWidget(central)
 
@@ -400,53 +441,9 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status_bar)
         self._status_bar.showMessage("Ready  🐼")
 
-        # Toolbar
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-        toolbar.setFloatable(False)
-        toolbar.setIconSize(QSize(24, 24))
-        self.addToolBar(toolbar)
-
-        # Panda icon on the far left of the toolbar
-        panda_lbl = self._make_toolbar_panda_icon()
-        self._toolbar_panda_lbl = panda_lbl
-        if panda_lbl is not None:
-            toolbar.addWidget(panda_lbl)
-            toolbar.addSeparator()
-
-        btn_settings = QPushButton("⚙ Settings")
-        btn_settings.clicked.connect(self._open_settings)
-        toolbar.addWidget(btn_settings)
-        self._btn_settings = btn_settings
-        toolbar.addSeparator()
-
-        self._theme_label = QLabel("  Theme: Panda Dark  ")
-        self._theme_label.setObjectName("subheader")
-        self._theme_label.setMinimumWidth(220)  # wide enough for long hidden theme names
-        toolbar.addWidget(self._theme_label)
-
-        toolbar.addSeparator()
-        btn_patreon = QPushButton("❤ Patreon")
-        btn_patreon.setToolTip(
-            "Support development on Patreon!\n"
-            "patreon.com/c/DeadOnTheInside"
-        )
-        btn_patreon.clicked.connect(self._open_patreon)
-        toolbar.addWidget(btn_patreon)
-        self._btn_patreon = btn_patreon
-
-        # Unlock status label (shown when a secret theme unlocks)
-        self._unlock_lbl = QLabel("")
-        self._unlock_lbl.setObjectName("subheader")
-        self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 8px;")
-        toolbar.addWidget(self._unlock_lbl)
-
-        # SVG theme badge (uses QSvgWidget when QtSvg is available, else text fallback)
-        toolbar.addSeparator()
-        self._svg_badge = self._make_svg_badge()
-        if self._svg_badge is not None:
-            toolbar.addWidget(self._svg_badge)
-        self._svg_badge_toolbar = toolbar  # keep ref for badge refresh
+        # Toolbar panda label no longer used (toolbar removed); keep None so
+        # _refresh_toolbar_icon() early-returns without errors.
+        self._toolbar_panda_lbl = None
 
     # ------------------------------------------------------------------
     # Visual / audio effects (trail, cursor, sound, click effects, tooltips)
@@ -503,15 +500,17 @@ class MainWindow(QMainWindow):
         if mgr is None:
             return
         mgr.register(self._btn_settings, "settings_btn")
+        mgr.register(self._btn_help, "help_btn")
         mgr.register(self._btn_patreon, "patreon_btn")
         # Register per-tab tooltips on the QTabBar
         mgr.register_tab_bar(
             self._tabs.tabBar(),
-            ["alpha_fixer_tab", "converter_tab", "history_tab"],
+            ["alpha_fixer_tab", "converter_tab", "history_tab", "selective_alpha_tab"],
         )
         self._alpha_tab.register_tooltips(mgr)
         self._converter_tab.register_tooltips(mgr)
         self._history_tab.register_tooltips(mgr)
+        self._selective_alpha_tab.register_tooltips(mgr)
 
     def _apply_theme_effect(self):
         """Set the click-effects overlay to match the active theme's effect key."""
@@ -697,12 +696,15 @@ class MainWindow(QMainWindow):
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
         # Update the spinning banner emoji to the theme's representative icon.
-        # The emoji rotates continuously — no cycling between different emojis.
+        # The emoji rotates only when animated_banner_enabled is True.
         icon = get_theme_icon(theme_name)
+        animated = self._settings.get("animated_banner_enabled", False)
         if self._banner_emoji_left is not None:
             self._banner_emoji_left.set_emoji(icon)
+            self._banner_emoji_left.set_animated(animated)
         if self._banner_emoji_right is not None:
             self._banner_emoji_right.set_emoji(icon)
+            self._banner_emoji_right.set_animated(animated)
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
             self._banner_lbl.setText("Alpha Fixer  &  File Converter")
@@ -795,8 +797,17 @@ class MainWindow(QMainWindow):
             return None
 
     def _refresh_svg_badge(self):
-        """Update the SVG badge to show the decoration for the current theme."""
+        """Update the SVG badge to show the decoration for the current theme.
+
+        The badge is hidden when animated_banner_enabled is False because the
+        SVG files themselves contain <animate> elements – showing them while
+        animations are disabled would be misleading.
+        """
         if self._svg_badge is None:
+            return
+        # Hide badge entirely when animations are disabled
+        if not self._settings.get("animated_banner_enabled", False):
+            self._svg_badge.hide()
             return
         try:
             from PyQt6.QtSvgWidgets import QSvgWidget
@@ -1079,9 +1090,27 @@ class MainWindow(QMainWindow):
     def _open_patreon(self):
         webbrowser.open(PATREON_URL)
 
-    # ------------------------------------------------------------------
-    # Resize – keep the trail overlay covering the whole window
-    # ------------------------------------------------------------------
+    def _show_help_menu(self):
+        """Show a popup menu from the Help button with shortcuts, about, and I/O options."""
+        menu = QMenu(self)
+        act_shortcuts = menu.addAction("⌨  Keyboard Shortcuts  (F1)")
+        act_shortcuts.triggered.connect(self._show_shortcuts)
+        act_about = menu.addAction("ℹ  About")
+        act_about.triggered.connect(self._show_about)
+        menu.addSeparator()
+        act_patreon = menu.addAction("❤  Support on Patreon…")
+        act_patreon.triggered.connect(self._open_patreon)
+        menu.addSeparator()
+        act_export = menu.addAction("📤  Export Settings…")
+        act_export.triggered.connect(self._export_settings)
+        act_import = menu.addAction("📥  Import Settings…")
+        act_import.triggered.connect(self._import_settings)
+        # Show the menu just below the Help button
+        btn = self._btn_help
+        pos = btn.mapToGlobal(btn.rect().bottomLeft())
+        menu.exec(pos)
+
+
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

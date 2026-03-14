@@ -221,11 +221,18 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
     """Apply an AlphaPreset to a PIL RGBA image and return the result.
 
     Processing pipeline (in order):
-      1. Invert alpha (if preset.invert is True)
-      2. Normalize: remap image's actual [img_min, img_max] to [clamp_min, clamp_max].
-         When clamp_min == clamp_max every pixel gets that exact value.
-      3. Binary threshold cut (if preset.binary_cut is True): pixels >= threshold → 255, else → 0
-      4. Clamp to [clamp_min, clamp_max] (safety net)
+      1. Build processing mask: when preset.threshold > 0 and preset.binary_cut is
+         False, only pixels with alpha strictly below the threshold are processed.
+         Pixels at or above the threshold keep their original alpha (they are
+         protected).  When threshold == 0 or binary_cut is True, all pixels are
+         processed.
+      2. Invert alpha (if preset.invert is True, applied to masked pixels only).
+      3. Normalize: remap masked [img_min, img_max] → [clamp_min, clamp_max].
+         When clamp_min == clamp_max every masked pixel gets that exact value.
+      4. Binary threshold cut (if preset.binary_cut is True): pixels >= threshold → 255,
+         else → 0 (applied to ALL pixels; threshold is the hard-cut split point here).
+      5. Clamp to [clamp_min, clamp_max] (applied to processed pixels only when a
+         threshold filter is active, so protected pixels keep their original values).
     """
     _converted = img.mode != "RGBA"
     if _converted:
@@ -243,34 +250,57 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
             )
         alpha = arr[:, :, 3].copy()
 
-        # Step 1: Invert
-        if preset.invert:
-            alpha = 255 - alpha
+        # Step 1: Build processing mask.
+        # When threshold > 0 with no binary_cut, protect pixels at/above threshold.
+        # When threshold == 0 or binary_cut is True, process all pixels.
+        if preset.threshold > 0 and not preset.binary_cut:
+            proc_mask = alpha < preset.threshold
+        else:
+            proc_mask = np.ones(alpha.shape, dtype=bool)
 
         target_lo = min(preset.clamp_min, preset.clamp_max)
         target_hi = max(preset.clamp_min, preset.clamp_max)
 
-        # Step 2: Normalize — remap [img_min, img_max] → [target_lo, target_hi].
-        # When target_lo == target_hi every pixel becomes that value.
-        img_min = int(alpha.min())
-        img_max = int(alpha.max())
-        if img_max > img_min:
-            alpha = (
-                target_lo
-                + (alpha - img_min).astype(np.float32)
-                * (target_hi - target_lo)
-                / (img_max - img_min)
-            )
-            alpha = np.round(alpha).astype(np.int32)
-        else:
-            alpha = np.full_like(alpha, target_hi)
+        # Step 2: Invert (apply to masked pixels only)
+        if preset.invert:
+            alpha[proc_mask] = 255 - alpha[proc_mask]
 
-        # Step 3: Binary threshold cut (hard 0/255 split)
+        # Step 3: Normalize — remap masked [img_min, img_max] → [target_lo, target_hi].
+        # When target_lo == target_hi every masked pixel becomes that value.
+        # When the source is uniform (all processed pixels share one alpha value),
+        # that value is clamped into [target_lo, target_hi] so the result is always
+        # within the user's specified range.
+        alpha_sel = alpha[proc_mask]
+        if alpha_sel.size > 0:
+            img_min = int(alpha_sel.min())
+            img_max = int(alpha_sel.max())
+            if img_max > img_min:
+                alpha[proc_mask] = np.round(
+                    target_lo
+                    + (alpha_sel - img_min).astype(np.float32)
+                    * (target_hi - target_lo)
+                    / (img_max - img_min)
+                ).astype(np.int32)
+            else:
+                # Uniform source: clamp the single value into [target_lo, target_hi].
+                # This guarantees the output is always within the user's Min/Max range
+                # regardless of where the uniform value falls on the 0-255 scale.
+                alpha[proc_mask] = max(target_lo, min(target_hi, img_min))
+
+        # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
+        # threshold is the split point here, not a selection gate).
         if preset.binary_cut and preset.threshold > 0:
             alpha = np.where(alpha >= preset.threshold, 255, 0)
 
-        # Step 4: Clamp (safety net)
-        arr[:, :, 3] = np.clip(alpha, target_lo, target_hi).astype(np.uint8)
+        # Step 5: Clamp (safety net).
+        # When a threshold filter is active, only clamp the processed pixels so
+        # that protected pixels keep their original values (which may exceed target_hi).
+        if preset.threshold > 0 and not preset.binary_cut:
+            alpha[proc_mask] = np.clip(alpha[proc_mask], target_lo, target_hi)
+        else:
+            alpha = np.clip(alpha, target_lo, target_hi)
+
+        arr[:, :, 3] = alpha.astype(np.uint8)
         return Image.fromarray(arr.astype(np.uint8), "RGBA")
     finally:
         if _converted:
@@ -287,14 +317,35 @@ def apply_manual_alpha(
 ) -> Image.Image:
     """Apply alpha changes without a preset.
 
-    Always normalizes: remaps the image's actual alpha range to [clamp_min, clamp_max].
-    When clamp_min == clamp_max every pixel gets that exact value.
+    Processing pipeline (in order):
+      1. Build processing mask: when threshold > 0 and binary_cut is False, only
+         pixels with alpha strictly below threshold are processed.  Pixels at or
+         above threshold keep their original alpha (they are protected from change).
+         When threshold == 0 (default) or binary_cut is True, all pixels are processed.
+      2. Invert alpha (if invert is True, applied to masked pixels only).
+      3. Normalize: remap [img_min, img_max] → [clamp_min, clamp_max].
+         The existing alpha range of the processed pixels is stretched to exactly
+         fill [clamp_min, clamp_max], so the output minimum is always clamp_min and
+         the output maximum is always clamp_max when the source has varied alpha.
+         When clamp_min == clamp_max every processed pixel gets that exact value.
+         When the source is uniform (all processed pixels have the same alpha), that
+         value is clamped into [clamp_min, clamp_max] — guaranteeing the output is
+         always within the user's specified range regardless of the source value.
+      4. Binary threshold cut (if binary_cut is True): pixels >= threshold → 255,
+         else → 0 (applied to ALL pixels; threshold is the hard-cut split point here).
+      5. Clamp to [clamp_min, clamp_max] (safety net).
 
     Args:
-        threshold:  Only process pixels with alpha < this value (0 = all pixels).
-        invert:     Invert alpha before normalizing.
-        clamp_min:  Target range minimum (0–255).
-        clamp_max:  Target range maximum (0–255).
+        threshold:  Protect pixels with alpha >= this value from being changed
+                    (0 = process all pixels).  When binary_cut is True this becomes
+                    the hard-cut split point instead.
+        invert:     Invert alpha before normalizing (applied to processed pixels).
+        clamp_min:  Target range minimum (0–255).  The darkest processed pixel maps
+                    to this value; for uniform sources the value is clamped to this
+                    floor if it falls below it.
+        clamp_max:  Target range maximum (0–255).  The brightest processed pixel maps
+                    to this value; for uniform sources the value is clamped to this
+                    ceiling if it exceeds it.
         binary_cut: When True, apply a hard 0/255 split at the threshold after normalizing.
     """
     _converted = img.mode != "RGBA"
@@ -313,33 +364,61 @@ def apply_manual_alpha(
             )
         alpha = arr[:, :, 3].copy()
 
-        # Step 1: Invert
-        if invert:
-            alpha = 255 - alpha
+        # Step 1: Build processing mask.
+        # When threshold > 0 with no binary_cut, protect pixels at/above threshold.
+        # When threshold == 0 or binary_cut is True, process all pixels.
+        if threshold > 0 and not binary_cut:
+            proc_mask = alpha < threshold
+        else:
+            proc_mask = np.ones(alpha.shape, dtype=bool)
 
-        # Step 2: Normalize — remap [img_min, img_max] → [target_lo, target_hi].
-        # When target_lo == target_hi every pixel becomes that value.
+        # Step 2: Invert (apply to masked pixels only)
+        if invert:
+            alpha[proc_mask] = 255 - alpha[proc_mask]
+
+        # Step 3: Normalize — remap [img_min, img_max] → [target_lo, target_hi].
+        # The source range is stretched to exactly fill the target range so that
+        # the output minimum is always target_lo and the output maximum is always
+        # target_hi whenever the source has varied alpha (img_min < img_max).
+        # When target_lo == target_hi every processed pixel gets that exact value.
+        # When img_min == img_max (uniform source), the single value is clamped
+        # into [target_lo, target_hi] so the output is always within the user's
+        # specified range (above-Max → Max, below-Min → Min, in-range → unchanged).
         target_lo = min(clamp_min, clamp_max)
         target_hi = max(clamp_min, clamp_max)
-        img_min = int(alpha.min())
-        img_max = int(alpha.max())
-        if img_max > img_min:
-            alpha = (
-                target_lo
-                + (alpha - img_min).astype(np.float32)
-                * (target_hi - target_lo)
-                / (img_max - img_min)
-            )
-            alpha = np.round(alpha).astype(np.int32)
-        else:
-            alpha = np.full_like(alpha, target_hi)
+        alpha_sel = alpha[proc_mask]
+        if alpha_sel.size > 0:
+            img_min = int(alpha_sel.min())
+            img_max = int(alpha_sel.max())
+            if target_lo == target_hi:
+                alpha[proc_mask] = target_lo
+            elif img_max > img_min:
+                alpha[proc_mask] = np.round(
+                    target_lo
+                    + (alpha_sel - img_min).astype(np.float32)
+                    * (target_hi - target_lo)
+                    / (img_max - img_min)
+                ).astype(np.int32)
+            else:
+                # Uniform source: clamp the single value into [target_lo, target_hi].
+                # This guarantees the output is always within the user's Min/Max range
+                # regardless of where the uniform value falls on the 0-255 scale.
+                alpha[proc_mask] = max(target_lo, min(target_hi, img_min))
 
-        # Step 3: Binary threshold cut (hard 0/255 split)
+        # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
+        # threshold is the split point here, not a selection gate).
         if binary_cut and threshold > 0:
             alpha = np.where(alpha >= threshold, 255, 0)
 
-        # Step 4: Clamp (safety net)
-        arr[:, :, 3] = np.clip(alpha, target_lo, target_hi).astype(np.uint8)
+        # Step 5: Clamp (safety net).
+        # When a threshold filter is active, only clamp the processed pixels so
+        # that protected pixels keep their original values (which may exceed target_hi).
+        if threshold > 0 and not binary_cut:
+            alpha[proc_mask] = np.clip(alpha[proc_mask], target_lo, target_hi)
+        else:
+            alpha = np.clip(alpha, target_lo, target_hi)
+
+        arr[:, :, 3] = alpha.astype(np.uint8)
         return Image.fromarray(arr.astype(np.uint8), "RGBA")
     finally:
         if _converted:
