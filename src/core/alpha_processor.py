@@ -175,6 +175,9 @@ def load_image(path: str) -> Image.Image:
                 f"({w * h / 1_000_000:.1f} megapixels) as RGBA. "
                 "Try processing a smaller file."
             )
+        except Exception:
+            img.close()
+            raise
         img.close()
         return img_rgba
     return img
