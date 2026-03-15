@@ -187,11 +187,27 @@ os.environ.setdefault("QT_OPENGL", "software")
 # Global exception handler
 # ---------------------------------------------------------------------------
 
+# Reentrancy guard: prevents infinite dialog cascades when an exception
+# occurs inside a Qt event handler that fires repeatedly (e.g. changeEvent).
+# Without this guard, QMessageBox.exec() starts a nested event loop which
+# can re-trigger the same faulting handler, producing an endless stack of
+# error dialogs that the user cannot close.
+_excepthook_active = False
+
+
 def _excepthook(exc_type, exc_value, exc_tb):
     """Log uncaught exceptions and show a friendly dialog instead of crashing silently."""
+    global _excepthook_active
+
     msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     logger.critical("Uncaught exception:\n%s", msg)
 
+    # If we're already inside _excepthook (i.e. an error occurred while the
+    # previous error dialog was open), only log – do not open another dialog.
+    if _excepthook_active:
+        return
+
+    _excepthook_active = True
     try:
         from PyQt6.QtWidgets import QApplication, QMessageBox
         app = QApplication.instance()
@@ -207,6 +223,8 @@ def _excepthook(exc_type, exc_value, exc_tb):
             box.exec()
     except Exception:
         pass
+    finally:
+        _excepthook_active = False
 
 
 sys.excepthook = _excepthook

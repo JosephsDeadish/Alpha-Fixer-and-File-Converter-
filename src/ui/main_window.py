@@ -986,6 +986,8 @@ class MainWindow(QMainWindow):
         size = self._settings.get("font_size", 10)
         size = max(8, min(24, int(size)))
         app = QApplication.instance()
+        if app is None:
+            return
         font = QFont(app.font())
         font.setPointSize(size)
         app.setFont(font)
@@ -1106,7 +1108,9 @@ class MainWindow(QMainWindow):
     def _apply_theme(self):
         theme = self._settings.get_theme()
         tooltip_style = self._settings.get("tooltip_style", "Auto (follow theme)")
-        QApplication.instance().setStyleSheet(build_stylesheet(theme, tooltip_style))
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(build_stylesheet(theme, tooltip_style))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
         # Update the banner emoji widget to the theme's representative icon.
