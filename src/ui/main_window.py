@@ -371,6 +371,7 @@ class MainWindow(QMainWindow):
     ]
 
     def __init__(self, settings: SettingsManager):
+        super().__init__()
         self._settings = settings
         self._preset_mgr = PresetManager(settings)
         self._trail_overlay = None
