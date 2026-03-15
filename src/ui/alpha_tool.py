@@ -1,5 +1,5 @@
 """
-Alpha Fixer tab widget.
+Alpha & RGBA Adjuster tab widget.
 """
 import datetime
 import logging
@@ -148,11 +148,20 @@ class AlphaFixerTab(QWidget):
     # Emitted after every successful batch: carries the count of files processed.
     # MainWindow connects this to check for processing-based theme unlocks.
     processing_done = pyqtSignal(int)
+    # Emitted when a batch finishes with at least one error (carries error count).
+    processing_error = pyqtSignal(int)
+    # Emitted when a batch starts (before the worker thread is launched).
+    processing_started = pyqtSignal()
     # Emitted the very first time a batch completes successfully.
     # MainWindow uses this to trigger the 'first alpha fix' theme unlock.
     first_alpha_fix = pyqtSignal()
     # Emitted whenever at least one file is added to the queue.
     files_added = pyqtSignal()
+    # Emitted whenever files are removed from the queue.
+    files_removed = pyqtSignal()
+    # Emitted when files are first dragged over the drop zone.
+    drag_entered = pyqtSignal()
+    preview_refreshed = pyqtSignal()
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -328,10 +337,15 @@ class AlphaFixerTab(QWidget):
         compare_row.setSpacing(4)
 
         def _make_stats_panel() -> QLabel:
-            """Return a small fixed-width label used for alpha statistics."""
+            """Return a small label used for alpha statistics."""
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-            lbl.setFixedWidth(84)
+            # Use font metrics so the panel stays wide enough regardless of
+            # system font size or DPI.  "Min: 255" is the widest typical text.
+            from PyQt6.QtGui import QFontMetrics
+            from PyQt6.QtWidgets import QApplication
+            fm = QFontMetrics(QApplication.font())
+            lbl.setMinimumWidth(fm.horizontalAdvance("Min: 255") + 8)
             lbl.setWordWrap(True)
             lbl.setObjectName("stats_panel")
             lbl.setContentsMargins(2, 4, 2, 4)
@@ -401,10 +415,12 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Set Min and Max alpha values.  Pixels are scaled from the full 0–255 range: "
-            "fully opaque (255) → Max, fully transparent (0) → Min, "
-            "values in between scale proportionally.  "
-            "To make every pixel the same value, set Min = Max."
+            "ℹ  Normalize the alpha channel to a new range.  "
+            "The image's darkest pixel maps to Min, the brightest maps to Max — "
+            "all others scale proportionally in between.  "
+            "For images where every pixel shares the same alpha value, the value is "
+            "clamped: below Min → Min, above Max → Max, within [Min, Max] → unchanged.  "
+            "Set Min = Max to force every pixel to exactly that value."
         )
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)
@@ -421,8 +437,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Minimum alpha in the output.\n"
-            "The darkest pixel in the source will become this value.\n"
-            "All other pixels are stretched proportionally above it.\n"
+            "For images with a range of alpha values: the darkest pixel maps to this\n"
+            "value and all others are stretched proportionally above it.\n"
+            "For uniform-alpha images (every pixel already the same value): the single\n"
+            "value is clamped — below-Min → Min, above-Max → Max, in-range → unchanged.\n"
             "0 = fully transparent minimum (most common).\n"
             "Set Min = Max to force every pixel to the same alpha value."
         )
@@ -437,8 +455,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_max_spin.setMinimumHeight(26)
         self._clamp_max_spin.setToolTip(
             "Maximum alpha in the output.\n"
-            "The brightest pixel in the source will become this value.\n"
-            "All other pixels are stretched proportionally below it.\n"
+            "For images with a range of alpha values: the brightest pixel maps to this\n"
+            "value and all others are stretched proportionally below it.\n"
+            "For uniform-alpha images (every pixel already the same value): the single\n"
+            "value is clamped — below-Min → Min, above-Max → Max, in-range → unchanged.\n"
             "Example: set Max to 128 to cap maximum alpha at 128 (PS2 native full opacity).\n"
             "Set Min = Max to force every pixel to the same alpha value."
         )
@@ -573,6 +593,8 @@ class AlphaFixerTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
+        self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.drag_entered.connect(self.drag_entered)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label
@@ -642,7 +664,7 @@ class AlphaFixerTab(QWidget):
         """Update inner header, section labels and group-box titles to match the active theme."""
         from .theme_engine import get_theme_tab_labels, get_theme_icon
         labels = get_theme_tab_labels(theme_name)
-        # labels[0] is e.g. "🩸🖼  Alpha Fixer" – use it directly as the header
+        # labels[0] is e.g. "🩸🖼  Alpha & RGBA Adjuster" – use it directly as the header
         self._hdr.setText(labels[0])
         # Decorate section labels and group-box titles with the theme's representative icon.
         icon = get_theme_icon(theme_name)
@@ -828,6 +850,8 @@ class AlphaFixerTab(QWidget):
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
         self._compare.set_before(before_qi)
         self._compare.set_after(after_qi)
+        # Notify main window so it can play the preview sound (opt-in, off by default)
+        self.preview_refreshed.emit()
 
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
@@ -917,6 +941,8 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setText("Processing…")
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
+        # Notify main window so it can play the process-start sound
+        self.processing_started.emit()
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -1002,6 +1028,8 @@ class AlphaFixerTab(QWidget):
             if not self._settings.get("alpha_fix_done_once", False):
                 self._settings.set("alpha_fix_done_once", True)
                 self.first_alpha_fix.emit()
+        if errors > 0:
+            self.processing_error.emit(errors)
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

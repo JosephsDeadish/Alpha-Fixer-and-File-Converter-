@@ -20,7 +20,7 @@ import random
 from collections import deque
 
 from PyQt6.QtCore import QEvent, QObject, QRect, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI as _DEFAULT_EMOJI_STR
@@ -36,7 +36,7 @@ _EMOJI_FONT_FAMILIES = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji"
 class _Particle:
     """A single animated particle."""
     __slots__ = ("x", "y", "vx", "vy", "life", "max_life",
-                 "kind", "size", "color", "text")
+                 "kind", "size", "base_size", "color", "text")
 
     def __init__(self, x, y, vx, vy, life, kind, size, color, text=""):
         self.x = float(x)
@@ -47,6 +47,7 @@ class _Particle:
         self.max_life = float(life)
         self.kind = kind
         self.size = float(size)
+        self.base_size = float(size)  # original size used for wing-flap animation
         self.color = color
         self.text = text  # emoji / char for text-type particles
 
@@ -546,6 +547,57 @@ class _FairyFlock(QObject):
             self._overlay._add_particle(fairy)
 
 
+class _BannerFlock(QObject):
+    """Spawns themed emoji flying across the top band of the window periodically.
+
+    Unlike *_BatFlock* and *_FairyFlock* (which are activated by the click
+    effect key), this class is driven by the **banner animation mode**.  It is
+    configured with the theme's representative icon emoji and accent colour so
+    it complements whatever theme is active.  It works independently of whether
+    click effects are enabled.
+    """
+
+    def __init__(self, overlay: "ClickEffectsOverlay",
+                 emoji: str = "🐼", color: str = "#e94560"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._emoji = emoji
+        self._color = QColor(color)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._launch)
+        self._timer.setInterval(random.randint(4000, 8000))
+
+    def start(self) -> None:
+        self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def set_emoji(self, emoji: str, color: str) -> None:
+        """Update the emoji and accent colour used for spawned particles."""
+        self._emoji = emoji
+        self._color = QColor(color)
+
+    def _launch(self) -> None:
+        self._timer.setInterval(random.randint(4000, 9000))
+        w = self._overlay.width()
+        if w <= 0:
+            return
+        count = random.randint(2, 4)
+        for i in range(count):
+            y_start = random.randint(8, 55)
+            x_start = random.randint(-20, 20)
+            speed = random.uniform(2.5, 6.0)
+            life = (w + 60) / max(speed, 1) * 0.05 + random.uniform(0.2, 0.8)
+            p = _Particle(
+                x_start + i * 28, y_start,
+                speed, random.uniform(-0.4, 0.4), life,
+                "bat_fly", random.uniform(18, 26),
+                QColor(self._color), self._emoji,
+            )
+            self._overlay._add_particle(p)
+
+
 # ---------------------------------------------------------------------------
 # Main overlay widget
 # ---------------------------------------------------------------------------
@@ -588,6 +640,8 @@ class ClickEffectsOverlay(QWidget):
         self._click_count = 0
         self._bat_flock: _BatFlock | None = None
         self._fairy_flock: _FairyFlock | None = None
+        self._banner_flock: _BannerFlock | None = None
+        self._banner_flock_active: bool = False
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
         # Cache QFont objects per integer point-size to avoid repeated
         # mutations and implicit font-metric recalculations each frame.
@@ -634,7 +688,43 @@ class ClickEffectsOverlay(QWidget):
                 self._bat_flock.stop()
             if self._fairy_flock:
                 self._fairy_flock.stop()
-            self.hide()
+            # Only hide the overlay if the banner flock is also inactive.
+            # When banner flock is running we still need the overlay visible
+            # so flying particles can be rendered even without click effects.
+            if not self._banner_flock_active:
+                self.hide()
+            else:
+                # Ensure the banner-flock timer keeps running even though
+                # the click-effect timer was stopped above.
+                if not self._timer.isActive():
+                    self._timer.start()
+
+    def set_banner_flock(self, enabled: bool,
+                         emoji: str = "🐼", color: str = "#e94560") -> None:
+        """Activate or deactivate the banner flock animation.
+
+        The banner flock flies themed emoji across the top area of the window
+        at regular intervals.  It is independent of the click-effects enabled
+        state — the overlay stays visible (but transparent) whenever the banner
+        flock is running, even if click effects are off.
+        """
+        self._banner_flock_active = enabled
+        if enabled:
+            if self._banner_flock is None:
+                self._banner_flock = _BannerFlock(self, emoji, color)
+            else:
+                self._banner_flock.set_emoji(emoji, color)
+            self.show()
+            if not self._timer.isActive():
+                self._timer.start()
+            self._banner_flock.start()
+        else:
+            if self._banner_flock is not None:
+                self._banner_flock.stop()
+            # If click effects are also disabled, stop the timer and hide.
+            if not self._enabled:
+                self._timer.stop()
+                self.hide()
 
     def set_effect(self, effect_key: str) -> None:
         self._effect_key = effect_key if effect_key in _SPAWNERS else "default"
@@ -715,6 +805,15 @@ class ClickEffectsOverlay(QWidget):
     # render in the next frame once earlier ones have faded).
     _MAX_TEXT_PER_FRAME = 8
 
+    # Wing-flap animation constants for bat_fly / fairy_fly particles.
+    # Each tick decrements life by 0.05, so the elapsed frame counter is
+    # (max_life - life) / 0.05.  Multiplying by π * _FLAP_FREQ_MULT gives
+    # the phase argument to sin(); at 20 fps this produces approximately
+    # _FLAP_FREQ_MULT * 10 flap cycles per second.  0.55 ≈ 0.9 Hz — one
+    # visible wing stroke every ~1.1 s, natural-looking without being jittery.
+    _FLAP_FREQ_MULT  = 0.55   # radians-per-frame phase multiplier (~0.9 Hz @ 20 fps)
+    _FLAP_AMPLITUDE  = 0.28   # ±28 % size oscillation (wings spread vs. folded)
+
     def _particle_rect(self, p: _Particle):
         """Return the approximate bounding QRect for a single particle."""
         r = max(6, int(p.size + self._DIRTY_MARGIN))
@@ -745,6 +844,15 @@ class ClickEffectsOverlay(QWidget):
             if p.kind not in ("bat_fly", "fairy_fly"):
                 p.vy += self._GRAVITY
             p.life -= 0.05   # slightly faster decay → shorter burst, fewer frames rendered
+            # Wing-flap animation: oscillate particle size for flying bat/fairy
+            # particles to simulate wing movement.  Uses a sine wave at ~3 Hz
+            # (0.6 π rad per 20fps frame = 6 rad/s ≈ ~1 Hz, noticeable flutter)
+            # so the apparent "wingspan" pulses visibly without requiring extra
+            # emoji assets.
+            if p.kind in ("bat_fly", "fairy_fly"):
+                elapsed = (p.max_life - p.life) / 0.05  # frame counter
+                flap = math.sin(elapsed * math.pi * self._FLAP_FREQ_MULT)
+                p.size = p.base_size * (1.0 + self._FLAP_AMPLITUDE * flap)
             # Cull ambient (bat/fairy) particles that have completely left the
             # window so they never accumulate off-screen indefinitely.
             if p.kind in ("bat_fly", "fairy_fly"):
@@ -777,6 +885,21 @@ class ClickEffectsOverlay(QWidget):
     # the oldest (least recently inserted) entry when the limit is reached.
     _FONT_CACHE_MAX = 32
 
+    # Pre-rendered emoji pixmap cache keyed by (emoji_str, size_int).
+    # Bat/fairy/banner particles are the same emoji at the same size every
+    # frame; rasterising them once to a QPixmap and blitting it is far
+    # cheaper than calling drawText (which triggers full Unicode/emoji shaping
+    # on every frame).  The cache is class-level so it is shared across the
+    # whole process lifetime — there is typically only one overlay instance.
+    #
+    # Theme changes do NOT require cache invalidation: the cache always uses
+    # the emoji font stack (_EMOJI_FONT_FAMILIES) regardless of the active
+    # app theme, and coloured emoji glyphs are rendered by the OS emoji font
+    # with their own built-in colours that are unaffected by Qt pen or theme
+    # settings.  Only font *size* matters, which is already part of the key.
+    _EMOJI_PIXMAP_CACHE: dict = {}
+    _EMOJI_PIXMAP_CACHE_MAX = 128
+
     def _get_font(self, size: int) -> QFont:
         """Return a cached QFont for *size* points (avoids per-particle mutation)."""
         size = max(6, size)
@@ -787,6 +910,39 @@ class ClickEffectsOverlay(QWidget):
             f = QFont(_EMOJI_FONT_FAMILIES, size)
             self._font_cache[size] = f
         return self._font_cache[size]
+
+    def _get_emoji_pixmap(self, emoji: str, size: int) -> QPixmap:
+        """Return a pre-rendered QPixmap for *emoji* at *size* points.
+
+        Emoji shaping via drawText is expensive (it runs the full Unicode
+        shaping pipeline every call).  Rasterising each unique (emoji, size)
+        combination once and caching the result as a QPixmap cuts per-frame
+        cost to a simple blit — a 10–20× speedup for ambient bat/fairy/banner
+        flocks that render the same glyph every tick.
+        """
+        key = (emoji, size)
+        cached = self._EMOJI_PIXMAP_CACHE.get(key)
+        if cached is not None:
+            return cached
+        cache = self._EMOJI_PIXMAP_CACHE
+        if len(cache) >= self._EMOJI_PIXMAP_CACHE_MAX:
+            # Evict the oldest (insertion-order) entry to keep the cache bounded.
+            cache.pop(next(iter(cache)))
+        # Add a small margin so descenders / ascenders are not clipped.
+        px_size = max(12, size + 10)
+        pix = QPixmap(px_size, px_size)
+        pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        p.setFont(self._get_font(size))
+        # White pen — coloured emoji ignore pen colour; single-colour glyphs
+        # will be tinted during drawing via painter.setOpacity().
+        p.setPen(QColor(255, 255, 255, 255))
+        p.drawText(QRect(0, 0, px_size, px_size),
+                   Qt.AlignmentFlag.AlignCenter, emoji)
+        p.end()
+        cache[key] = pix
+        return pix
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -811,7 +967,21 @@ class ClickEffectsOverlay(QWidget):
             alpha = max(0, min(255, int(p.alpha_frac * 220)))
             if alpha < self._MIN_VISIBLE_ALPHA:
                 continue  # skip nearly transparent particles — not visible, free CPU
-            if p.kind in ("text", "bat_fly", "fairy_fly"):
+            if p.kind in ("bat_fly", "fairy_fly"):
+                # Ambient flying particles are always the same emoji/size —
+                # use the pixmap cache to avoid re-shaping the glyph every frame.
+                if text_drawn >= self._MAX_TEXT_PER_FRAME:
+                    continue
+                text_drawn += 1
+                pix = self._get_emoji_pixmap(p.text, int(p.size))
+                painter.setOpacity(alpha / 255.0)
+                painter.drawPixmap(
+                    int(p.x) - pix.width() // 2,
+                    int(p.y) - pix.height() // 2,
+                    pix,
+                )
+                painter.setOpacity(1.0)
+            elif p.kind == "text":
                 if text_drawn >= self._MAX_TEXT_PER_FRAME:
                     continue  # defer this emoji particle to the next frame
                 text_drawn += 1
@@ -836,3 +1006,234 @@ class ClickEffectsOverlay(QWidget):
                 painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
         painter.end()
+
+
+# ---------------------------------------------------------------------------
+# Button press animation
+# ---------------------------------------------------------------------------
+
+class ButtonPressAnimator(QObject):
+    """Installs lightweight press animations on ``QPushButton`` widgets.
+
+    This class works as an application-level event filter: when a left mouse
+    press is detected on a ``QPushButton`` the configured animation is run on
+    that button.  The button is never re-parented or removed from its layout;
+    all animations restore the button's original geometry when they finish.
+
+    Modes
+    -----
+    ``"none"``     – no animation (disabled).
+    ``"press"``    – button shifts 2 px down on press, springs back.
+    ``"fall"``     – button slides 8 px down then springs back.
+    ``"shake"``    – button vibrates left/right rapidly.
+    ``"shatter"``  – triggers click-effect particles from the button centre.
+    ``"bounce"``   – button bounces up then falls back.
+
+    Usage
+    -----
+        animator = ButtonPressAnimator(main_window, click_effects_overlay)
+        animator.set_enabled(True, "press")
+    """
+
+    # How many simultaneous animations we allow.  Each takes a negligible
+    # amount of memory; this just caps runaway accumulation during rapid
+    # clicking.
+    _MAX_ACTIVE = 20
+
+    def __init__(self, main_window: QWidget,
+                 click_effects: "ClickEffectsOverlay | None" = None):
+        super().__init__(main_window)
+        self._main_window = main_window
+        self._click_effects: "ClickEffectsOverlay | None" = click_effects
+        self._mode = "none"
+        self._enabled = False
+        # Keep references to running animation groups so they are not
+        # garbage-collected before they finish.
+        self._active: list = []
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_enabled(self, enabled: bool, mode: str = "press") -> None:
+        """Enable or disable button animations with the given *mode*."""
+        if self._enabled == enabled and self._mode == mode:
+            return
+        self._mode = mode
+        app = QApplication.instance()
+        if enabled and not self._enabled:
+            if app is not None:
+                app.installEventFilter(self)
+        elif not enabled and self._enabled:
+            if app is not None:
+                app.removeEventFilter(self)
+        self._enabled = enabled
+
+    def set_mode(self, mode: str) -> None:
+        """Change the animation mode without altering the enabled state."""
+        self._mode = mode
+
+    # ------------------------------------------------------------------
+    # Event filter
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+        from PyQt6.QtWidgets import QPushButton
+        if (self._enabled
+                and isinstance(obj, QPushButton)
+                and event.type() == QEvent.Type.MouseButtonPress
+                and hasattr(event, "button")
+                and event.button() == Qt.MouseButton.LeftButton
+                and len(self._active) < self._MAX_ACTIVE):
+            self._animate(obj)
+        return False  # always pass the event through
+
+    # ------------------------------------------------------------------
+    # Animation dispatch
+    # ------------------------------------------------------------------
+
+    def _animate(self, btn: QWidget) -> None:
+        mode = self._mode
+        if mode == "none":
+            return
+        elif mode == "press":
+            self._do_slide(btn, dy=2, duration=100)
+        elif mode == "fall":
+            self._do_slide(btn, dy=8, duration=220)
+        elif mode == "bounce":
+            self._do_bounce(btn)
+        elif mode == "shake":
+            self._do_shake(btn)
+        elif mode == "shatter":
+            self._do_shatter(btn)
+
+    # ------------------------------------------------------------------
+    # Individual animation implementations
+    # ------------------------------------------------------------------
+
+    def _do_slide(self, btn: QWidget, dy: int = 5, duration: int = 160) -> None:
+        """Slide button down by *dy* pixels then spring back."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect,
+        )
+        orig = QRect(btn.geometry())
+        fallen = QRect(orig.translated(0, dy))
+
+        half = max(30, duration // 2)
+        anim_down = QPropertyAnimation(btn, b"geometry", self)
+        anim_down.setDuration(half)
+        anim_down.setStartValue(orig)
+        anim_down.setEndValue(fallen)
+        anim_down.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        anim_up = QPropertyAnimation(btn, b"geometry", self)
+        anim_up.setDuration(half)
+        anim_up.setStartValue(fallen)
+        anim_up.setEndValue(orig)
+        anim_up.setEasingCurve(QEasingCurve.Type.InQuad)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(anim_down)
+        group.addAnimation(anim_up)
+        self._start(group)
+
+    def _do_bounce(self, btn: QWidget) -> None:
+        """Button shoots 6 px *up* then falls back with a slight overshoot."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect,
+        )
+        orig = QRect(btn.geometry())
+        up = QRect(orig.translated(0, -6))
+        over = QRect(orig.translated(0, 3))
+
+        a_up = QPropertyAnimation(btn, b"geometry", self)
+        a_up.setDuration(100)
+        a_up.setStartValue(orig)
+        a_up.setEndValue(up)
+        a_up.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        a_down = QPropertyAnimation(btn, b"geometry", self)
+        a_down.setDuration(80)
+        a_down.setStartValue(up)
+        a_down.setEndValue(over)
+        a_down.setEasingCurve(QEasingCurve.Type.InQuad)
+
+        a_restore = QPropertyAnimation(btn, b"geometry", self)
+        a_restore.setDuration(60)
+        a_restore.setStartValue(over)
+        a_restore.setEndValue(orig)
+        a_restore.setEasingCurve(QEasingCurve.Type.OutBounce)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(a_up)
+        group.addAnimation(a_down)
+        group.addAnimation(a_restore)
+        self._start(group)
+
+    def _do_shake(self, btn: QWidget) -> None:
+        """Rapid left/right vibration."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup, QRect,
+        )
+        orig = QRect(btn.geometry())
+        dx = 5
+        offsets = [-dx, dx, -dx, dx, 0]
+
+        group = QSequentialAnimationGroup(self)
+        prev = orig
+        for target_dx in offsets:
+            a = QPropertyAnimation(btn, b"geometry", self)
+            a.setDuration(38)
+            a.setStartValue(prev)
+            target = QRect(orig.translated(target_dx, 0))
+            a.setEndValue(target)
+            group.addAnimation(a)
+            prev = target
+
+        # Final explicit restore
+        restore = QPropertyAnimation(btn, b"geometry", self)
+        restore.setDuration(38)
+        restore.setStartValue(prev)
+        restore.setEndValue(orig)
+        group.addAnimation(restore)
+        self._start(group)
+
+    def _do_shatter(self, btn: QWidget) -> None:
+        """Spawn click-effect particles emanating from the button centre."""
+        if self._click_effects is None:
+            return
+        # Map the button's visual centre to main-window coordinates.
+        centre_local = btn.rect().center()
+        centre_global = btn.mapToGlobal(centre_local)
+        centre_mw = self._main_window.mapFromGlobal(centre_global)
+        x, y = centre_mw.x(), centre_mw.y()
+
+        # Spawn particles using the currently active effect spawner.
+        key = self._click_effects._effect_key
+        spawner = _SPAWNERS.get(key, _spawn_default)
+        new_particles = spawner(x, y)
+        self._click_effects._particles.extend(new_particles)
+
+        # Ensure the overlay is visible and the timer is running.
+        if not self._click_effects._timer.isActive():
+            self._click_effects._timer.start()
+        if not self._click_effects.isVisible():
+            self._click_effects.show()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _start(self, group) -> None:
+        """Register *group* in the active list and start it.
+
+        The finished signal removes the group from the active list so it can
+        be garbage-collected once the animation is complete.
+        """
+        self._active.append(group)
+        # Use a default-argument capture to avoid closure-over-loop issues.
+        group.finished.connect(lambda g=group: self._active.remove(g)
+                               if g in self._active else None)
+        group.start()

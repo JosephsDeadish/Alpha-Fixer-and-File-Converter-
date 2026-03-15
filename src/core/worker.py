@@ -1,11 +1,11 @@
 """
-Background worker threads for the Alpha Fixer and Converter tools.
+Background worker threads for the Alpha & RGBA Adjuster and Converter tools.
 
 Uses QThread + signals for safe UI communication without blocking the main thread.
 
 For large batches (>= _LARGE_BATCH_THRESHOLD files) the workers suppress
 per-file success log messages and emit progress updates at most every
-_PROGRESS_INTERVAL files to prevent flooding the UI event queue.
+_PROGRESS_MIN_INTERVAL seconds to prevent flooding the UI event queue.
 """
 import os
 import time
@@ -63,7 +63,7 @@ class AlphaWorker(QThread):
         super().__init__(parent)
         self._files = list(files)
         self._preset = preset
-        self._manual = manual_params        # dict with keys: mode, value, threshold, invert
+        self._manual = manual_params        # dict with keys: threshold, invert, clamp_min, clamp_max, binary_cut
         self._output_dir = output_dir
         self._input_root = input_root
         self._overwrite = overwrite
@@ -82,9 +82,10 @@ class AlphaWorker(QThread):
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
-            # Throttle progress signal in large-batch mode
+            # Throttle progress signal in large-batch mode, but always emit
+            # for the last file so the UI reaches 100% progress.
             now = time.monotonic()
-            if not large_batch or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
+            if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
                 self.progress.emit(idx, total, src)
                 last_progress_time = now
             try:
@@ -229,7 +230,7 @@ class ConverterWorker(QThread):
             if self._abort:
                 break
             now = time.monotonic()
-            if not large_batch or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
+            if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
                 self.progress.emit(idx, total, src)
                 last_progress_time = now
             try:

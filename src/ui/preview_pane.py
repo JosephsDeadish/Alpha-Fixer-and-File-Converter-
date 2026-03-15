@@ -3,7 +3,7 @@ preview_pane.py – image preview components.
 
 • ImagePreviewPane   – compact thumbnail + metadata panel (used by Converter tab).
 • BeforeAfterWidget  – side-by-side comparison with a draggable divider
-                       (used by Alpha Fixer tab).
+                       (used by Alpha & RGBA Adjuster tab).
 
 All image loading is done in background QThreads so the UI is never blocked.
 """
@@ -531,7 +531,7 @@ class _ConverterPreviewLoader(QThread):
 
     Emits both images as QImages together with compact metadata strings
     so the Converter tab can display a side-by-side before/after view
-    matching the Alpha Fixer tab's preview style.
+    matching the Alpha & RGBA Adjuster tab's preview style.
     """
     ready = pyqtSignal(QImage, QImage, str, str)   # (src_qi, out_qi, src_meta, out_meta)
     failed = pyqtSignal(str)

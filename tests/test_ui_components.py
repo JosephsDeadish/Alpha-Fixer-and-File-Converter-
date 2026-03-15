@@ -1663,7 +1663,7 @@ class TestThemeBannerMessages(unittest.TestCase):
     def test_get_theme_banner_fallback(self):
         from src.ui.theme_engine import get_theme_banner
         result = get_theme_banner("NonExistentTheme12345")
-        self.assertIn("Alpha Fixer", result)
+        self.assertIn("Alpha & RGBA Adjuster", result)
 
     def test_get_theme_status_fallback(self):
         from src.ui.theme_engine import get_theme_status
@@ -1782,7 +1782,7 @@ class TestBannerAnimationFrames(unittest.TestCase):
         from src.ui.theme_engine import get_theme_banner_frames, get_theme_banner
         frames = get_theme_banner_frames("NoSuchTheme99")
         self.assertEqual(len(frames), 1)
-        self.assertIn("Alpha Fixer", frames[0])
+        self.assertIn("Alpha & RGBA Adjuster", frames[0])
         # The single frame must be consistent with get_theme_banner fallback
         self.assertEqual(frames[0], get_theme_banner("NoSuchTheme99"))
 
@@ -1985,7 +1985,7 @@ class TestThemeTabLabels(unittest.TestCase):
     def test_labels_contain_tab_names(self):
         from src.ui.theme_engine import get_theme_tab_labels
         labels = get_theme_tab_labels("Bat Cave")
-        self.assertIn("Alpha Fixer", labels[0])
+        self.assertIn("Alpha & RGBA Adjuster", labels[0])
         self.assertIn("Converter", labels[1])
         self.assertIn("History", labels[2])
 

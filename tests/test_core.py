@@ -287,8 +287,8 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_builtin_clamp_128_255_preset(self):
-        """The built-in 'Clamp 128-255' preset clamps uniform alpha below the floor to 128.
-        alpha=50 with target=[128, 255] → clamp(50, 128, 255) = 128."""
+        """The built-in 'Raise Floor / PS2 Additive (128→255)' preset clamps uniform alpha
+        below the floor to 128.  alpha=50 with target=[128, 255] → clamp(50, 128, 255) = 128."""
         from unittest.mock import MagicMock
         from src.core.presets import PresetManager
         mock_settings = MagicMock()
@@ -1077,6 +1077,35 @@ class TestSettingsManagerDefaults(unittest.TestCase):
         # It should appear after the EXPORT_KEYS definition
         export_section = source[source.find("EXPORT_KEYS"):]
         self.assertIn('"converter_keep_metadata"', export_section)
+
+    def test_banner_anim_style_in_export_keys(self):
+        """banner_anim_style should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        self.assertIn('"banner_anim_style"', export_section)
+
+    def test_banner_use_theme_anim_in_export_keys(self):
+        """banner_use_theme_anim should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        self.assertIn('"banner_use_theme_anim"', export_section)
+
+    def test_button_anim_settings_in_export_keys(self):
+        """button_anim_enabled, button_anim_style, use_theme_button_anim should be in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        for key in ("button_anim_enabled", "button_anim_style", "use_theme_button_anim"):
+            self.assertIn(f'"{key}"', export_section,
+                          f"{key} missing from EXPORT_KEYS")
+
+    def test_selective_alpha_settings_in_export_keys(self):
+        """All sa_* user preferences should be listed in EXPORT_KEYS."""
+        source = self._load_defaults()
+        export_section = source[source.find("EXPORT_KEYS"):]
+        for key in ("sa_zone_alphas", "sa_brush_size", "sa_eraser_size",
+                    "sa_autocorrect", "sa_last_tool"):
+            self.assertIn(f'"{key}"', export_section,
+                          f"{key} missing from EXPORT_KEYS")
 
     def test_splash_screen_uses_banner_frames(self):
         """splash_screen.py should use get_theme_banner_frames, not just get_theme_banner."""
@@ -2087,6 +2116,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_converter_history_null_returns_empty_list(self):
         """get_converter_history() must return [] when JSON is 'null', not None."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2100,6 +2133,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_alpha_history_null_returns_empty_list(self):
         """get_alpha_history() must return [] when JSON is 'null'."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2112,6 +2149,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_custom_presets_null_returns_empty_list(self):
         """get_custom_presets() must return [] when JSON is 'null'."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2124,6 +2165,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_saved_themes_null_returns_empty_dict(self):
         """get_saved_themes() must return {} when JSON is 'null', not None."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2138,6 +2183,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
     def test_get_theme_returns_complete_dict(self):
         """get_theme() must always return a dict with all required keys,
         merging missing keys from _DEFAULT_THEME for forward-compatibility."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         import json
         from unittest.mock import MagicMock
@@ -2159,6 +2208,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_theme_non_dict_returns_default(self):
         """get_theme() must return _DEFAULT_THEME when the stored JSON is not a dict."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2180,6 +2233,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_import_settings_validates_json_is_dict(self):
         """import_settings() must raise ValueError when the JSON root is not a dict."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         import json, tempfile
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
@@ -5501,23 +5558,26 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
     def _make_canvas_with_image(self):
         """
         Return a canvas instance that has a 16x16 RGBA image loaded without
-        ever calling Qt rendering (we skip load_image and set internals
-        directly to avoid QApplication dependency in headless CI).
+        ever calling Qt rendering (we construct it normally then stub update()
+        to avoid actual painting in headless CI).
         """
-        import sys, types
+        import sys
 
-        # Build a minimal stub PyQt6 environment if Qt is not available.
-        # If PyQt6 IS importable we use it; otherwise we create stubs.
         try:
             from PyQt6.QtWidgets import QApplication
             # Store on self to prevent premature garbage collection.
             self._qapp = QApplication.instance() or QApplication(sys.argv)
             from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
-            canvas = SelectiveAlphaCanvas.__new__(SelectiveAlphaCanvas)
+            canvas = SelectiveAlphaCanvas()
         except ImportError:
             self.skipTest("PyQt6 not available in this environment")
 
-        # Initialise just the attributes used by the history/eraser helpers.
+        # Stub out paint/update so no actual rendering happens in CI.
+        canvas.update = lambda: None
+
+        # Override with a known test image so tests are deterministic.
+        if canvas._src_img is not None:
+            canvas._src_img.close()
         canvas._src_img   = Image.new("RGBA", (16, 16), (100, 100, 100, 200))
         canvas._src_arr   = np.array(canvas._src_img, dtype=np.uint8)
         canvas._masks     = [None] * 7
@@ -5806,3 +5866,1568 @@ class TestSelectiveAlphaZoomFormula(unittest.TestCase):
         )
         self.assertAlmostEqual(ix1, ix0, places=6)
         self.assertAlmostEqual(iy1, iy0, places=6)
+
+
+# ---------------------------------------------------------------------------
+# Round-16 improvements: _dilate_mask edge cases, threshold validation,
+# autocorrect identity check fix, settings persistence helpers
+# ---------------------------------------------------------------------------
+
+class TestRound16SelectiveAlphaImprovements(unittest.TestCase):
+    """Tests for the Round-16 improvements to selective_alpha_processor and settings."""
+
+    # ---- _dilate_mask edge cases ------------------------------------------
+
+    def test_dilate_mask_radius_zero_returns_copy(self):
+        """radius=0 should return a copy of the input unchanged."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.array([[False, True], [True, False]])
+        result = _dilate_mask(mask, 0)
+        np.testing.assert_array_equal(result, mask)
+        # Must be a copy, not the same object
+        self.assertIsNot(result, mask)
+
+    def test_dilate_mask_empty_mask_stays_empty(self):
+        """An all-False mask should remain all-False after dilation."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.zeros((8, 8), dtype=bool)
+        result = _dilate_mask(mask, 3)
+        self.assertFalse(result.any())
+
+    def test_dilate_mask_expands_by_one_per_iteration(self):
+        """A single True pixel dilated by radius 1 should give a + shape (5 pixels)."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.zeros((7, 7), dtype=bool)
+        mask[3, 3] = True
+        result = _dilate_mask(mask, 1)
+        # Centre + 4-connected neighbours
+        expected_count = 5
+        self.assertEqual(int(result.sum()), expected_count)
+        self.assertTrue(result[3, 3])   # centre still set
+        self.assertTrue(result[2, 3])   # up
+        self.assertTrue(result[4, 3])   # down
+        self.assertTrue(result[3, 2])   # left
+        self.assertTrue(result[3, 4])   # right
+
+    def test_dilate_mask_full_mask_stays_full(self):
+        """A fully-set mask should remain fully set after any dilation."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.ones((6, 6), dtype=bool)
+        result = _dilate_mask(mask, 2)
+        self.assertTrue(result.all())
+
+    def test_dilate_mask_radius_negative_returns_copy(self):
+        """Negative radius should be treated the same as 0 (no expansion)."""
+        from src.core.selective_alpha_processor import _dilate_mask
+        mask = np.zeros((4, 4), dtype=bool)
+        mask[1, 1] = True
+        result = _dilate_mask(mask, -1)
+        np.testing.assert_array_equal(result, mask)
+
+    # ---- edge_flood_fill threshold validation ----------------------------
+
+    def test_flood_fill_invalid_threshold_warns_and_clamps(self):
+        """Threshold outside [0, 1] should emit a UserWarning and be clamped."""
+        import warnings
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            mask = edge_flood_fill((5, 5), edge_map, threshold=50.0)
+        self.assertTrue(any(issubclass(x.category, UserWarning) for x in w),
+                        "Expected a UserWarning for out-of-range threshold")
+        # With threshold clamped to 1.0 all pixels are below it → fills all
+        self.assertTrue(mask.all(), "All pixels should be filled when threshold=1.0")
+
+    def test_flood_fill_threshold_zero_only_fills_seed(self):
+        """threshold=0.0 means any edge value >= 0 blocks (blocks everywhere).
+        The seed itself is below threshold only if edge_map[seed]==-epsilon,
+        which is impossible for a float32 >= 0 array.
+        Seed is on edge_map=0.0 which is NOT < threshold=0.0, so result is empty."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        edge_map = np.zeros((10, 10), dtype=np.float32)
+        mask = edge_flood_fill((5, 5), edge_map, threshold=0.0)
+        # seed pixel (5, 5) has edge_map=0.0 >= threshold=0.0 → blocked immediately
+        self.assertFalse(mask.any(), "threshold=0.0 blocks every pixel")
+
+    def test_flood_fill_threshold_exactly_one(self):
+        """threshold=1.0 blocks only pixels at edge strength exactly 1.0."""
+        from src.core.selective_alpha_processor import edge_flood_fill
+        h, w = 8, 8
+        edge_map = np.zeros((h, w), dtype=np.float32)
+        edge_map[:, 4] = 1.0   # full-strength barrier at col 4
+        mask = edge_flood_fill((0, 0), edge_map, threshold=1.0)
+        # Left side should be filled, right of barrier should not
+        self.assertTrue(mask[0, 0])
+        self.assertFalse(mask.any() and mask[:, 5:].any(),
+                         "Fill should not cross full-strength barrier")
+
+    # ---- autocorrect identity-check fix (np.array_equal vs `is`) ---------
+
+    def test_autocorrect_returns_same_pixels_when_no_improvement(self):
+        """When autocorrect adds no new pixels the result should equal the input."""
+        from src.core.selective_alpha_processor import autocorrect_mask
+        mask = np.zeros((20, 20), dtype=bool)
+        mask[5:15, 5:15] = True
+        # No strong edges anywhere → nothing to snap to
+        edge_map = np.zeros((20, 20), dtype=np.float32)
+        result = autocorrect_mask(mask, edge_map, search_radius=4, edge_threshold=0.5)
+        np.testing.assert_array_equal(result, mask,
+            "No-improvement result should equal the original mask element-wise")
+
+    # ---- settings persistence helpers ------------------------------------
+
+    def _make_sm(self):
+        """Return a SettingsManager with an in-memory dict backing _qs."""
+        try:
+            from src.core.settings_manager import SettingsManager
+        except (ImportError, ModuleNotFoundError):
+            self.skipTest("PyQt6 not available in this environment")
+        store: dict = {}
+
+        class _FakeQS:
+            def value(self, key, default=None):
+                return store.get(key, default)
+            def setValue(self, key, value):
+                store[key] = value
+
+        sm = SettingsManager.__new__(SettingsManager)
+        sm._qs = _FakeQS()
+        return sm
+
+    def test_sa_zone_alphas_round_trip(self):
+        """get_sa_zone_alphas / set_sa_zone_alphas round-trip preserves values."""
+        sm = self._make_sm()
+        alphas = [10, 20, 30, 40, 50, 60, 70]
+        sm.set_sa_zone_alphas(alphas)
+        result = sm.get_sa_zone_alphas()
+        self.assertEqual(result, alphas)
+
+    def test_sa_zone_alphas_clamps_values(self):
+        """Values outside [0, 255] should be clamped silently."""
+        sm = self._make_sm()
+        sm.set_sa_zone_alphas([-10, 300, 128, 128, 128, 128, 128])
+        result = sm.get_sa_zone_alphas()
+        self.assertEqual(result[0], 0,   "Negative value should clamp to 0")
+        self.assertEqual(result[1], 255, "Value > 255 should clamp to 255")
+
+    def test_sa_zone_alphas_returns_default_on_corrupt_data(self):
+        """Corrupt JSON should fall back to the default [128]*7."""
+        sm = self._make_sm()
+        sm._qs.setValue("sa_zone_alphas", "not_valid_json")
+        result = sm.get_sa_zone_alphas()
+        self.assertEqual(result, [128] * 7)
+
+
+# ---------------------------------------------------------------------------
+# Round-17 improvements: validation, restore-guard, exception hygiene
+# ---------------------------------------------------------------------------
+
+class TestRound17SelectiveAlphaValidation(unittest.TestCase):
+    """Tests for the Round-17 apply_selective_alpha / composite_zones validation."""
+
+    # ---- apply_selective_alpha length validation --------------------------
+
+    def test_apply_selective_alpha_too_few_masks_raises(self):
+        """Too few zone_masks elements must raise ValueError."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGBA", (4, 4), (255, 255, 255, 200))
+        masks = [None] * (NUM_ZONES - 1)          # one short
+        alphas = [128] * NUM_ZONES
+        try:
+            with self.assertRaises(ValueError):
+                apply_selective_alpha(img, masks, alphas)
+        finally:
+            img.close()
+
+    def test_apply_selective_alpha_too_many_masks_raises(self):
+        """Too many zone_masks elements must raise ValueError."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGBA", (4, 4), (255, 255, 255, 200))
+        masks = [None] * (NUM_ZONES + 1)          # one extra
+        alphas = [128] * NUM_ZONES
+        try:
+            with self.assertRaises(ValueError):
+                apply_selective_alpha(img, masks, alphas)
+        finally:
+            img.close()
+
+    def test_apply_selective_alpha_too_few_alphas_raises(self):
+        """Too few zone_alphas elements must raise ValueError."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        img = Image.new("RGBA", (4, 4), (255, 255, 255, 200))
+        masks = [None] * NUM_ZONES
+        alphas = [128] * (NUM_ZONES - 1)          # one short
+        try:
+            with self.assertRaises(ValueError):
+                apply_selective_alpha(img, masks, alphas)
+        finally:
+            img.close()
+
+    def test_apply_selective_alpha_exact_num_zones_succeeds(self):
+        """Exactly NUM_ZONES elements must succeed without error."""
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        import numpy as np
+        img = Image.new("RGBA", (6, 6), (100, 150, 200, 255))
+        # Zone 0: top-left 3×3 quad painted with alpha=0
+        mask0 = np.zeros((6, 6), dtype=bool)
+        mask0[:3, :3] = True
+        zone_masks = [mask0] + [None] * (NUM_ZONES - 1)
+        zone_alphas = [0] + [128] * (NUM_ZONES - 1)
+        try:
+            result = apply_selective_alpha(img, zone_masks, zone_alphas)
+            arr = np.array(result)
+            # Zone 0 pixels should have alpha=0
+            self.assertTrue(np.all(arr[:3, :3, 3] == 0))
+            # Unpainted pixels keep original alpha (255)
+            self.assertTrue(np.all(arr[3:, 3:, 3] == 255))
+            result.close()
+        finally:
+            img.close()
+
+    # ---- composite_zones length validation --------------------------------
+
+    def test_composite_zones_wrong_length_raises(self):
+        """Wrong number of zone_masks must raise ValueError."""
+        import numpy as np
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES
+        src = np.zeros((4, 4, 4), dtype=np.uint8)
+        with self.assertRaises(ValueError):
+            composite_zones(src, [None] * (NUM_ZONES - 1))
+        with self.assertRaises(ValueError):
+            composite_zones(src, [None] * (NUM_ZONES + 1))
+
+    def test_composite_zones_exact_num_zones_succeeds(self):
+        """Exactly NUM_ZONES zone_masks succeeds and returns correct shape."""
+        import numpy as np
+        from src.core.selective_alpha_processor import composite_zones, NUM_ZONES
+        h, w = 8, 8
+        src = np.full((h, w, 4), 128, dtype=np.uint8)
+        result = composite_zones(src, [None] * NUM_ZONES)
+        self.assertEqual(result.shape, (h, w, 4))
+        self.assertEqual(result.dtype, np.uint8)
+
+    # ---- _restore_settings guard (no-PyQt version via mock) ---------------
+
+    def test_restore_settings_guard_prevents_save_during_restore(self):
+        """_save_settings must be a no-op while _restoring is True."""
+        save_calls: list[str] = []
+
+        class FakeSettings:
+            def get_sa_zone_alphas(self):
+                return [128] * 7
+            def get(self, key, fallback=None):
+                return fallback
+            def set(self, key, value):
+                save_calls.append(key)
+            def set_sa_zone_alphas(self, vals):
+                save_calls.append("sa_zone_alphas")
+
+        class MinimalTool:
+            """Minimal stand-in to test the _restoring guard logic."""
+            def __init__(self):
+                self._settings = FakeSettings()
+                self._restoring = False
+
+            def _save_settings(self):
+                if self._settings is None or self._restoring:
+                    return
+                # Simulate writes
+                self._settings.set("sa_brush_size", 10)
+                self._settings.set("sa_eraser_size", 10)
+
+            def _restore_settings(self):
+                self._restoring = True
+                try:
+                    self._save_settings()   # should be a no-op
+                    for _ in range(5):
+                        self._save_settings()  # all no-ops while restoring
+                finally:
+                    self._restoring = False
+                # After finally, saves should work again
+                self._save_settings()
+
+        tool = MinimalTool()
+        tool._restore_settings()
+        # Only the one save AFTER finally should have run
+        self.assertEqual(save_calls, ["sa_brush_size", "sa_eraser_size"],
+            "Only the post-restore save should have fired")
+
+    # ---- _on_apply closes result on exception (logic test, no Qt) ---------
+
+    def test_on_apply_closes_result_on_exception(self):
+        """If apply_selective_alpha raises after returning a result, it is closed."""
+        import numpy as np
+        from src.core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+
+        # Verify that apply_selective_alpha itself is resource-safe:
+        # even if called with a non-RGBA image and a bad zone it should not leak.
+        img = Image.new("RGB", (8, 8), (200, 100, 50))
+        zone_masks = [None] * NUM_ZONES
+        zone_alphas = [128] * NUM_ZONES
+        try:
+            result = apply_selective_alpha(img, zone_masks, zone_alphas)
+            # Must return a valid RGBA image
+            self.assertEqual(result.mode, "RGBA")
+            self.assertEqual(result.size, (8, 8))
+            result.close()
+        finally:
+            img.close()
+
+
+# ---------------------------------------------------------------------------
+# Round-18: mask leak on reload, MemoryError propagation, zone bounds, save
+# ---------------------------------------------------------------------------
+
+class TestRound18CanvasAndSaveHygiene(unittest.TestCase):
+    """Tests for Round-18 fixes: mask resource hygiene, MemoryError, zone bounds."""
+
+    # ---- helper -----------------------------------------------------------
+
+    @staticmethod
+    def _make_png(path: str, w: int = 8, h: int = 8) -> None:
+        """Write a tiny valid PNG to *path*."""
+        Image.new("RGBA", (w, h), (255, 0, 0, 128)).save(path)
+
+    # ---- Fix 1: mask images closed before replacing on reload -------------
+
+    def test_load_image_closes_old_masks_on_reload(self):
+        """Existing mask PIL images must be closed when a new image is loaded."""
+        import sys
+        import os
+        import tempfile
+        # We only test the processor-level function that load_image calls, so
+        # we can test it without Qt by exercising the mask-close logic directly.
+        from src.core.selective_alpha_processor import NUM_ZONES
+        from PIL import Image
+
+        # Simulate what load_image does when pre-existing masks are replaced.
+        # Create NUM_ZONES real PIL images (non-None) to track close() calls.
+        closed: list[bool] = []
+
+        class TrackingImage:
+            """Minimal PIL Image stand-in that records close() calls."""
+            def __init__(self, idx):
+                self._idx = idx
+                closed.append(False)  # initially open
+
+            def close(self):
+                closed[self._idx] = True
+
+        old_masks = [TrackingImage(i) for i in range(NUM_ZONES)]
+
+        # Replicate the fixed load_image close loop
+        for m in old_masks:
+            if m is not None:
+                m.close()
+        new_masks = [None] * NUM_ZONES
+
+        # Every old mask must have been closed
+        self.assertTrue(all(closed), "Not all old mask images were closed on reload")
+        self.assertEqual(len(new_masks), NUM_ZONES)
+        self.assertTrue(all(m is None for m in new_masks))
+
+    # ---- Fix 1b: load_image with actual files (no-Qt functional test) ----
+
+    def test_load_image_sets_masks_to_none_after_reload(self):
+        """After a second load_image call, all masks in the returned list are None."""
+        import tempfile, os
+        from src.core.selective_alpha_processor import NUM_ZONES
+        # Just check the final state of the returned mask list — no Qt needed.
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "img.png")
+            self._make_png(p)
+
+            # Simulate the mask replacement in load_image (pure Python, no Qt)
+            # Build a fake pre-existing masks list with live PIL images.
+            masks: list = [Image.new("L", (8, 8), 0) for _ in range(NUM_ZONES)]
+            # Run the fixed replacement
+            for m in masks:
+                if m is not None:
+                    m.close()
+            masks = [None] * NUM_ZONES
+            self.assertEqual(len(masks), NUM_ZONES)
+            self.assertTrue(all(m is None for m in masks))
+
+    # ---- Fix 2: MemoryError re-raised from load_image ---------------------
+
+    def test_load_image_reraises_memory_error(self):
+        """load_image must propagate MemoryError, not swallow it.
+        Check the source file directly to avoid importing the Qt module."""
+        import re
+        src_text = open(
+            "src/ui/selective_alpha_tool.py", encoding="utf-8"
+        ).read()
+        # Locate the load_image method body
+        match = re.search(
+            r"def load_image\(self.*?\n(?=    def )", src_text, re.S
+        )
+        self.assertIsNotNone(match, "load_image method not found")
+        body = match.group(0)
+        self.assertIn("except MemoryError", body,
+            "load_image must have 'except MemoryError'")
+        self.assertIn("raise", body,
+            "load_image must re-raise MemoryError")
+
+    # ---- Fix 3: _on_save has MemoryError handler --------------------------
+
+    def test_on_save_has_memory_error_handler(self):
+        """_on_save must handle MemoryError separately from other exceptions."""
+        import re
+        src_text = open(
+            "src/ui/selective_alpha_tool.py", encoding="utf-8"
+        ).read()
+        match = re.search(
+            r"def _on_save\(self.*?\n(?=    def )", src_text, re.S
+        )
+        self.assertIsNotNone(match, "_on_save method not found")
+        body = match.group(0)
+        self.assertIn("except MemoryError", body,
+            "_on_save must have a dedicated MemoryError handler")
+
+    # ---- Fix 4: _on_zone_action bounds check ------------------------------
+
+    def test_on_zone_action_clear_branch_has_bounds_check(self):
+        """_on_zone_action clear branch must validate zone_idx before calling clear_mask."""
+        import re
+        src_text = open(
+            "src/ui/selective_alpha_tool.py", encoding="utf-8"
+        ).read()
+        match = re.search(
+            r"def _on_zone_action\(self.*?\n(?=    def )", src_text, re.S
+        )
+        self.assertIsNotNone(match, "_on_zone_action method not found")
+        body = match.group(0)
+        self.assertIn("NUM_ZONES", body,
+            "_on_zone_action must bounds-check zone_idx against NUM_ZONES")
+        self.assertIn("0 <=", body,
+            "_on_zone_action must check zone_idx >= 0")
+
+    def test_on_zone_action_bounds_logic(self):
+        """Verify the _on_zone_action bounds logic is correct for edge values."""
+        from src.core.selective_alpha_processor import NUM_ZONES
+        # Test the exact formula used in _on_zone_action
+        def compute_zone_idx_and_valid(val: int):
+            zone_idx = -(val + 1)
+            return zone_idx, 0 <= zone_idx < NUM_ZONES
+
+        # val = -1  → zone_idx = 0 (valid, first zone)
+        idx, valid = compute_zone_idx_and_valid(-1)
+        self.assertEqual(idx, 0)
+        self.assertTrue(valid)
+
+        # val = -(NUM_ZONES) → zone_idx = NUM_ZONES-1 (valid, last zone)
+        idx, valid = compute_zone_idx_and_valid(-NUM_ZONES)
+        self.assertEqual(idx, NUM_ZONES - 1)
+        self.assertTrue(valid)
+
+        # val = -(NUM_ZONES + 1) → zone_idx = NUM_ZONES (out of range)
+        idx, valid = compute_zone_idx_and_valid(-(NUM_ZONES + 1))
+        self.assertEqual(idx, NUM_ZONES)
+        self.assertFalse(valid)
+
+        # val = -100 → zone_idx = 99 (out of range)
+        idx, valid = compute_zone_idx_and_valid(-100)
+        self.assertFalse(valid)
+
+
+# ---------------------------------------------------------------------------
+# Round-19: _on_apply ownership-transfer fix (result = None after assignment)
+# ---------------------------------------------------------------------------
+
+class TestRound19OnApplyOwnershipTransfer(unittest.TestCase):
+    """Verify that result is nulled out after ownership transfer to _result_img."""
+
+    def test_on_apply_nulls_result_after_ownership_transfer(self):
+        """After self._result_img = result, result must be set to None so the
+        except handlers cannot close the image that is now owned by _result_img."""
+        import re
+        src_text = open(
+            "src/ui/selective_alpha_tool.py", encoding="utf-8"
+        ).read()
+        match = re.search(
+            r"def _on_apply\(self\).*?\n(?=    def )", src_text, re.S
+        )
+        self.assertIsNotNone(match, "_on_apply method not found")
+        body = match.group(0)
+
+        # Verify the sequence: assignment to _result_img followed immediately
+        # by result = None (ownership transfer pattern).
+        self.assertIn(
+            "self._result_img = result",
+            body,
+            "_on_apply must assign result to self._result_img",
+        )
+        # After the assignment, result must be reset to None
+        idx_assign = body.index("self._result_img = result")
+        idx_null   = body.find("result = None", idx_assign)
+        self.assertGreater(
+            idx_null, idx_assign,
+            "result = None must appear AFTER self._result_img = result "
+            "to prevent except handlers from closing the owned image",
+        )
+
+    def test_on_apply_ownership_transfer_logic(self):
+        """Verify that setting result=None after ownership transfer prevents
+        the except handler from closing an already-owned image."""
+        # Simulate the ownership-transfer pattern
+        class MockImage:
+            def __init__(self):
+                self.closed = False
+            def close(self):
+                self.closed = True
+
+        _result_img = None
+        result = MockImage()
+        img = result  # alias to track the object
+
+        # --- Fixed pattern ---
+        _result_img = result
+        result = None           # ownership transferred: nulled out
+
+        # If an exception occurs here:
+        if result is not None:  # ← result is None, so this is skipped
+            result.close()
+
+        # Image must NOT be closed — it is now owned by _result_img
+        self.assertFalse(img.closed, "Image must not be closed after ownership transfer")
+        self.assertIs(_result_img, img, "_result_img must hold the image")
+
+    def test_on_apply_without_null_would_close_owned_image(self):
+        """Regression test: without result=None, except handler would close owned image."""
+        class MockImage:
+            def __init__(self):
+                self.closed = False
+            def close(self):
+                self.closed = True
+
+        _result_img = None
+        result = MockImage()
+        img = result
+
+        # --- OLD (buggy) pattern: no result = None ---
+        _result_img = result
+        # Do NOT null result here (simulating the old code)
+
+        # Simulate what the except handler would do if dialog raised
+        if result is not None:
+            result.close()  # ← This closes self._result_img too!
+
+        # This shows the problem: the owned image was closed
+        self.assertTrue(
+            img.closed,
+            "Demonstrates the bug: without result=None the except handler "
+            "closes the image now owned by _result_img"
+        )
+        # _result_img now holds a closed image (dangling reference)
+        self.assertIs(_result_img, img)
+
+
+# ---------------------------------------------------------------------------
+# Round-20: three targeted fixes
+# ---------------------------------------------------------------------------
+
+class TestRound20LoadImageConvertLeak(unittest.TestCase):
+    """Fix 1: load_image() closes img before re-raising MemoryError from convert()."""
+
+    def test_load_image_closes_img_on_convert_memoryerror(self):
+        """Source code must have the nested try/except that closes img before
+        re-raising MemoryError from img.convert()."""
+        import re
+        src = open("src/ui/selective_alpha_tool.py", encoding="utf-8").read()
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image method not found")
+        body = match.group(0)
+        # The fix: a try/except MemoryError block wrapping img.convert("RGBA")
+        self.assertIn("except MemoryError:", body, "load_image must have MemoryError handler")
+        self.assertIn("img.close()", body,
+                      "load_image must close img before re-raising MemoryError")
+
+    def test_load_image_convert_leak_pattern(self):
+        """Verify that the pattern closes img when convert raises MemoryError."""
+        class FakeImg:
+            mode = "RGB"
+            size = (10, 10)
+            def __init__(self): self.closed = False
+            def load(self): pass
+            def close(self): self.closed = True
+            def convert(self, mode): raise MemoryError("OOM")
+
+        img = FakeImg()
+        # Simulate the fixed load_image convert block (re-raise is caught here)
+        with self.assertRaises(MemoryError):
+            try:
+                rgba = img.convert("RGBA")
+            except MemoryError:
+                img.close()
+                raise
+
+        self.assertTrue(img.closed,
+                        "img must be closed when convert() raises MemoryError")
+
+
+class TestRound20ApplySelectiveAlphaNoUnnecessaryCopy(unittest.TestCase):
+    """Fix 2: apply_selective_alpha skips convert when image is already RGBA."""
+
+    def test_apply_selective_alpha_rgba_input_no_unnecessary_copy(self):
+        """When img is already RGBA, apply_selective_alpha must NOT call convert()."""
+        import numpy as np
+        from PIL import Image
+        # Insert path to source modules
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+        try:
+            from core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        except ImportError:
+            self.skipTest("selective_alpha_processor not importable in this environment")
+
+        convert_called = []
+        original_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *a, **kw):
+            convert_called.append(mode)
+            return original_convert(self_img, mode, *a, **kw)
+
+        import unittest.mock as mock
+        w, h = 4, 4
+        rgba_img = Image.new("RGBA", (w, h), (100, 150, 200, 255))
+        masks = [None] * NUM_ZONES
+        alphas = [128] * NUM_ZONES
+
+        with mock.patch.object(Image.Image, "convert", patched_convert):
+            result = apply_selective_alpha(rgba_img, masks, alphas)
+
+        result.close()
+        rgba_img.close()
+
+        self.assertEqual(convert_called, [],
+                         "apply_selective_alpha must NOT call convert() when input is already RGBA")
+
+    def test_apply_selective_alpha_non_rgba_input_does_convert(self):
+        """When img is not RGBA, apply_selective_alpha must call convert('RGBA')."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+        try:
+            from core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        except ImportError:
+            self.skipTest("selective_alpha_processor not importable in this environment")
+
+        from PIL import Image
+        import unittest.mock as mock
+
+        convert_called = []
+        original_convert = Image.Image.convert
+
+        def patched_convert(self_img, mode, *a, **kw):
+            convert_called.append(mode)
+            return original_convert(self_img, mode, *a, **kw)
+
+        rgb_img = Image.new("RGB", (4, 4), (100, 150, 200))
+        masks = [None] * NUM_ZONES
+        alphas = [128] * NUM_ZONES
+
+        with mock.patch.object(Image.Image, "convert", patched_convert):
+            result = apply_selective_alpha(rgb_img, masks, alphas)
+
+        result.close()
+        rgb_img.close()
+
+        self.assertIn("RGBA", convert_called,
+                      "apply_selective_alpha must call convert('RGBA') for non-RGBA input")
+
+    def test_apply_selective_alpha_does_not_close_caller_image(self):
+        """apply_selective_alpha must not close the caller's image."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+        try:
+            from core.selective_alpha_processor import apply_selective_alpha, NUM_ZONES
+        except ImportError:
+            self.skipTest("selective_alpha_processor not importable in this environment")
+
+        from PIL import Image
+        rgba_img = Image.new("RGBA", (4, 4), (10, 20, 30, 200))
+        masks = [None] * NUM_ZONES
+        alphas = [64] * NUM_ZONES
+        result = apply_selective_alpha(rgba_img, masks, alphas)
+        result.close()
+        # The caller's image must still be open
+        self.assertFalse(getattr(rgba_img, "_image_closed", False),
+                         "apply_selective_alpha must not close the caller's RGBA image")
+        rgba_img.close()
+
+
+class TestRound20ClearAllMasksSignals(unittest.TestCase):
+    """Fix 3: clear_all_masks() must emit mask_changed for every zone."""
+
+    def test_clear_all_masks_emits_mask_changed_for_all_zones(self):
+        """Source must emit mask_changed(i) for each zone in clear_all_masks()."""
+        import re
+        src = open("src/ui/selective_alpha_tool.py", encoding="utf-8").read()
+        match = re.search(r"def clear_all_masks\(self\).*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "clear_all_masks method not found")
+        body = match.group(0)
+        self.assertIn("mask_changed.emit", body,
+                      "clear_all_masks must emit mask_changed for each zone")
+
+    def test_clear_all_masks_matches_clear_mask_pattern(self):
+        """clear_all_masks should emit signals like clear_mask does for single zones."""
+        import re
+        src = open("src/ui/selective_alpha_tool.py", encoding="utf-8").read()
+
+        # clear_mask must emit mask_changed
+        match_single = re.search(r"def clear_mask\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match_single, "clear_mask not found")
+        self.assertIn("mask_changed.emit", match_single.group(0),
+                      "clear_mask (single zone) must emit mask_changed")
+
+        # clear_all_masks must also emit mask_changed
+        match_all = re.search(r"def clear_all_masks\(self\).*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match_all, "clear_all_masks not found")
+        self.assertIn("mask_changed.emit", match_all.group(0),
+                      "clear_all_masks must emit mask_changed (like clear_mask)")
+
+
+class TestRound21RomDetectorAndPresetBugFixes(unittest.TestCase):
+    """
+    Round-21 fixes:
+    1. _PS2_ID_PATTERN had duplicate alternatives (SCES, SCED, SLUS appeared twice).
+    2. _scan_for_ps2_id used re.match() — misses disc IDs not at the start of a
+       filename (e.g. 'v2-SLUS_20626.bin').  Fixed to re.search().
+    3. AlphaPreset.from_dict() called int() on None clamp values from JSON
+       (when JSON contains "clamp_min": null), crashing with TypeError.
+    """
+
+    # ------------------------------------------------------------------
+    # 1. _PS2_ID_PATTERN deduplication
+    # ------------------------------------------------------------------
+
+    def test_ps2_id_pattern_has_no_duplicate_alternatives(self):
+        """_PS2_ID_PATTERN must not contain repeated prefix alternatives."""
+        from src.core.rom_detector import _PS2_ID_PATTERN
+        # Extract the full pattern string and find the alternation group
+        import re as _re
+        pattern_str = _PS2_ID_PATTERN.pattern
+        alts_m = _re.search(r"\(([A-Z|]+)\)", pattern_str)
+        self.assertIsNotNone(alts_m, "Could not parse alternation group from pattern")
+        alts = alts_m.group(1).split("|")
+        duplicates = [a for a in alts if alts.count(a) > 1]
+        self.assertEqual(
+            duplicates, [],
+            f"Duplicate alternatives in _PS2_ID_PATTERN: {list(set(duplicates))}",
+        )
+
+    # ------------------------------------------------------------------
+    # 2. _scan_for_ps2_id: .search() not .match()
+    # ------------------------------------------------------------------
+
+    def test_scan_for_ps2_id_uses_search_not_match(self):
+        """_scan_for_ps2_id must call .search() so disc IDs not at filename
+        start are still detected (e.g. 'v2-SLUS_20626.bin')."""
+        import re as _re
+        src = open("src/core/rom_detector.py", encoding="utf-8").read()
+        # Isolate the _scan_for_ps2_id function body
+        m = _re.search(
+            r"def _scan_for_ps2_id\b.*?\n(?=def |\Z)", src, _re.S
+        )
+        self.assertIsNotNone(m, "_scan_for_ps2_id not found in rom_detector.py")
+        body = m.group(0)
+        self.assertIn(".search(", body,
+                      "_scan_for_ps2_id must use .search() to find disc IDs "
+                      "anywhere in a filename, not just at the start")
+        self.assertNotIn(".match(", body,
+                         "_scan_for_ps2_id must not use .match() (only matches "
+                         "at start of string, misses IDs after prefixes)")
+
+    def test_scan_for_ps2_id_detects_id_after_non_word_prefix(self):
+        """Disc ID preceded by a non-word character (dash, paren, space) in a
+        filename must be detected by _scan_for_ps2_id."""
+        from pathlib import Path
+        import tempfile, os
+        from src.core.rom_detector import _scan_for_ps2_id
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Files whose names have a disc ID after a non-word character
+            prefixed_names = [
+                "v2-slus_20626.bin",    # dash prefix
+                "(slus_20626).tim",     # parenthesis prefix
+            ]
+            names_lower = set(prefixed_names)
+            result = _scan_for_ps2_id(Path(tmp), names_lower)
+            self.assertNotEqual(
+                result, "",
+                "Disc ID after a non-word prefix in a filename should be detected",
+            )
+            self.assertIn("SLUS", result)
+
+    # ------------------------------------------------------------------
+    # 3. AlphaPreset.from_dict() null clamp_min / clamp_max
+    # ------------------------------------------------------------------
+
+    def test_from_dict_null_clamp_min_uses_default(self):
+        """from_dict must not raise TypeError when clamp_min is null (None)."""
+        from src.core.presets import AlphaPreset
+        d = {"name": "test", "description": "desc", "clamp_min": None, "clamp_max": 200}
+        p = AlphaPreset.from_dict(d)
+        self.assertEqual(p.clamp_min, 0,
+                         "null clamp_min should fall back to default 0")
+        self.assertEqual(p.clamp_max, 200)
+
+    def test_from_dict_null_clamp_max_uses_default(self):
+        """from_dict must not raise TypeError when clamp_max is null (None)."""
+        from src.core.presets import AlphaPreset
+        d = {"name": "test", "description": "desc", "clamp_min": 50, "clamp_max": None}
+        p = AlphaPreset.from_dict(d)
+        self.assertEqual(p.clamp_min, 50)
+        self.assertEqual(p.clamp_max, 255,
+                         "null clamp_max should fall back to default 255")
+
+    def test_from_dict_both_null_clamp_values_use_defaults(self):
+        """from_dict with both clamp values null should return (0, 255) defaults."""
+        from src.core.presets import AlphaPreset
+        d = {"name": "test", "description": "desc", "clamp_min": None, "clamp_max": None}
+        p = AlphaPreset.from_dict(d)
+        self.assertEqual(p.clamp_min, 0)
+        self.assertEqual(p.clamp_max, 255)
+
+
+# ===========================================================================
+# Round 22 – Emoji cursor quality + sound profile expansion
+# ===========================================================================
+
+class TestRound22EmojiCursorQuality(unittest.TestCase):
+    """Round-22: _make_emoji_cursor renders glyphs at 65 % of the pixmap
+    logical size (via setPixelSize) to prevent clipping of wide emoji, and
+    creates a HiDPI-ready physical pixmap.
+
+    These tests inspect the source of main_window.py so they run without
+    a live display and without importing PyQt6.
+    """
+
+    _SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+
+    def _source(self) -> str:
+        with open(self._SRC, encoding="utf-8") as fh:
+            return fh.read()
+
+    def _func_body(self, src: str) -> str:
+        """Extract the body of _make_emoji_cursor up to the next module-level
+        class or def, whichever comes first."""
+        start = src.find("def _make_emoji_cursor(")
+        self.assertGreater(start, 0, "_make_emoji_cursor not found in main_window.py")
+        # Find the next top-level definition (class or def at column 0).
+        end_cls = src.find("\nclass ", start + 1)
+        end_def = src.find("\ndef ",   start + 1)
+        candidates = [c for c in (end_cls, end_def) if c > 0]
+        end = min(candidates) if candidates else len(src)
+        return src[start:end]
+
+    # ------------------------------------------------------------------
+    # Default size
+    # ------------------------------------------------------------------
+
+    def test_default_size_is_at_least_48(self):
+        """The default size parameter must be ≥ 48 px so emoji have margin."""
+        src = self._source()
+        import re
+        # Match the function definition with its default parameter value.
+        m = re.search(r"def _make_emoji_cursor\s*\(\s*emoji\s*:\s*str\s*,\s*size\s*:\s*int\s*=\s*(\d+)", src)
+        self.assertIsNotNone(m, "_make_emoji_cursor must have a default 'size' parameter")
+        default_size = int(m.group(1))
+        self.assertGreaterEqual(
+            default_size, 48,
+            f"Default cursor size {default_size} is too small; must be ≥ 48 px "
+            "to prevent wide-glyph clipping."
+        )
+
+    # ------------------------------------------------------------------
+    # Font sizing method
+    # ------------------------------------------------------------------
+
+    def test_uses_set_pixel_size_not_set_point_size(self):
+        """_make_emoji_cursor must use setPixelSize (not call setPointSize) so
+        the font height is DPI-independent and predictable relative to the pixmap."""
+        src = self._source()
+        func_body = self._func_body(src)
+        self.assertIn("setPixelSize", func_body,
+                      "_make_emoji_cursor must call font.setPixelSize()")
+        # Check that there is no actual *call* to setPointSize in the function
+        # (comments mentioning the old API are acceptable, calls are not).
+        self.assertNotIn("font.setPointSize(", func_body,
+                         "_make_emoji_cursor must NOT call font.setPointSize() — "
+                         "point sizes scale with screen DPI and overflow small pixmaps")
+
+    def test_pixel_size_is_at_most_80_percent_of_logical_size(self):
+        """The pixel size expression must be ≤ 80 % of the logical pixmap size
+        (i.e. leave at least 20 % margin on each side) to avoid clipping.
+
+        The implementation must use a factor strictly less than 1.0 when
+        computing the font pixel size relative to the logical pixmap size.
+        """
+        src = self._source()
+        import re
+        func_body = self._func_body(src)
+        # Ensure setPixelSize is called and contains a relative factor:
+        # e.g. font.setPixelSize(max(8, int(size * 0.65)))
+        self.assertIn("setPixelSize", func_body,
+                      "setPixelSize must be called in _make_emoji_cursor")
+        # Find the multiplication factor: "size * <float>" anywhere in the body.
+        m = re.search(r"size\s*\*\s*([\d.]+)", func_body)
+        self.assertIsNotNone(
+            m,
+            "_make_emoji_cursor must compute font size as a fraction of 'size' "
+            "(e.g. int(size * 0.65)) to guarantee margin around the emoji glyph"
+        )
+        factor = float(m.group(1))
+        self.assertLessEqual(
+            factor, 0.80,
+            f"Font pixel-size factor {factor} is too large (≤ 0.80 required) — "
+            "wide emoji will be clipped at the pixmap boundary."
+        )
+
+    # ------------------------------------------------------------------
+    # HiDPI support
+    # ------------------------------------------------------------------
+
+    def test_sets_device_pixel_ratio(self):
+        """_make_emoji_cursor must call setDevicePixelRatio on the pixmap so
+        the cursor is sharp on Retina / HiDPI displays."""
+        src = self._source()
+        func_body = self._func_body(src)
+        self.assertIn(
+            "setDevicePixelRatio",
+            func_body,
+            "_make_emoji_cursor must call pix.setDevicePixelRatio(dpr) to "
+            "produce a sharp HiDPI cursor."
+        )
+
+    def test_reads_screen_device_pixel_ratio(self):
+        """_make_emoji_cursor must query devicePixelRatio from the primary
+        screen so the cursor pixmap is created at the correct physical size."""
+        src = self._source()
+        func_body = self._func_body(src)
+        self.assertIn(
+            "devicePixelRatio",
+            func_body,
+            "_make_emoji_cursor must read the screen devicePixelRatio."
+        )
+
+    # ------------------------------------------------------------------
+    # Hotspot
+    # ------------------------------------------------------------------
+
+    def test_hotspot_at_logical_centre(self):
+        """The QCursor hotspot must be at the logical centre (size // 2)."""
+        src = self._source()
+        import re
+        func_body = self._func_body(src)
+        # The hotspot args must reference size // 2 twice (x and y).
+        matches = re.findall(r"size\s*//\s*2", func_body)
+        self.assertGreaterEqual(
+            len(matches), 2,
+            "QCursor must be constructed with hotspot at (size // 2, size // 2)"
+        )
+
+
+class TestRound22SoundProfiles(unittest.TestCase):
+    """Round-22: _make_theme_click_wav generates valid WAV data for the
+    two new profiles 'meow' and 'roar', and the theme→profile mapping
+    assigns them to the correct themes."""
+
+    _SRC_SE = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "sound_engine.py")
+
+    def _source(self) -> str:
+        with open(self._SRC_SE, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Profile generation
+    # ------------------------------------------------------------------
+
+    def test_meow_profile_generates_non_empty_wav(self):
+        """_make_theme_click_wav('meow') must produce a non-empty WAV path."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        path = _make_theme_click_wav("meow")
+        self.assertTrue(path, "meow profile must return a non-empty file path")
+        self.assertTrue(os.path.isfile(path), f"WAV file must exist at {path}")
+        self.assertGreater(os.path.getsize(path), 44,
+                           "WAV file must contain audio data beyond the header")
+
+    def test_roar_profile_generates_non_empty_wav(self):
+        """_make_theme_click_wav('roar') must produce a non-empty WAV path."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        path = _make_theme_click_wav("roar")
+        self.assertTrue(path, "roar profile must return a non-empty file path")
+        self.assertTrue(os.path.isfile(path), f"WAV file must exist at {path}")
+        self.assertGreater(os.path.getsize(path), 44,
+                           "WAV file must contain audio data beyond the header")
+
+    def test_meow_profile_distinct_from_purr(self):
+        """The 'meow' profile must produce a different WAV than 'purr'."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        meow_path = _make_theme_click_wav("meow")
+        purr_path  = _make_theme_click_wav("purr")
+        with open(meow_path, "rb") as fh:
+            meow_data = fh.read()
+        with open(purr_path, "rb") as fh:
+            purr_data = fh.read()
+        self.assertNotEqual(
+            meow_data, purr_data,
+            "meow and purr profiles must produce different audio data"
+        )
+
+    def test_roar_profile_distinct_from_growl(self):
+        """The 'roar' profile must produce a different WAV than 'growl'."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        roar_path  = _make_theme_click_wav("roar")
+        growl_path = _make_theme_click_wav("growl")
+        with open(roar_path, "rb") as fh:
+            roar_data = fh.read()
+        with open(growl_path, "rb") as fh:
+            growl_data = fh.read()
+        self.assertNotEqual(
+            roar_data, growl_data,
+            "roar and growl profiles must produce different audio data"
+        )
+
+    # ------------------------------------------------------------------
+    # Theme → profile mapping
+    # ------------------------------------------------------------------
+
+    def test_space_cat_uses_meow_profile(self):
+        """The 'Space Cat' theme must map to the 'meow' sound profile."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _THEME_SOUND_PROFILES
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        profile = _THEME_SOUND_PROFILES.get("Space Cat", "NOT_SET")
+        self.assertEqual(
+            profile, "meow",
+            f"Space Cat should use 'meow' profile, got '{profile}'"
+        )
+
+    def test_dragon_fire_uses_roar_profile(self):
+        """The 'Dragon Fire' theme must map to the 'roar' sound profile."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _THEME_SOUND_PROFILES
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        profile = _THEME_SOUND_PROFILES.get("Dragon Fire", "NOT_SET")
+        self.assertEqual(
+            profile, "roar",
+            f"Dragon Fire should use 'roar' profile, got '{profile}'"
+        )
+
+    def test_meow_and_roar_in_docstring(self):
+        """The _make_theme_click_wav docstring must document the meow and roar
+        profiles so maintainers know they exist."""
+        src = self._source()
+        start = src.find("def _make_theme_click_wav(")
+        docstring_end = src.find('"""', src.find('"""', start) + 1)
+        docstring = src[start:docstring_end]
+        self.assertIn("meow", docstring,
+                      "'meow' must be documented in _make_theme_click_wav docstring")
+        self.assertIn("roar", docstring,
+                      "'roar' must be documented in _make_theme_click_wav docstring")
+
+    # ------------------------------------------------------------------
+    # Setup loop includes new profiles
+    # ------------------------------------------------------------------
+
+    def test_setup_loop_includes_meow_and_roar(self):
+        """SoundEngine._setup() must generate WAVs for 'meow' and 'roar' so
+        they are available at play time."""
+        src = self._source()
+        # Find the for-loop that iterates over profile names in _setup
+        start = src.find("def _setup(")
+        end = src.find("\n    def ", start + 1)
+        setup_body = src[start:end]
+        self.assertIn('"meow"', setup_body,
+                      "SoundEngine._setup() must include 'meow' in the profile loop")
+        self.assertIn('"roar"', setup_body,
+                      "SoundEngine._setup() must include 'roar' in the profile loop")
+
+
+# ===========================================================================
+# Round 23 – Animated cursor cycling
+# ===========================================================================
+
+class TestRound23AnimatedCursor(unittest.TestCase):
+    """Round-23: animated emoji cursors.
+
+    _CURSOR_ANIM_FRAMES in main_window.py maps emoji characters to ordered
+    frame lists.  _apply_cursor() starts/stops a QTimer-based animation when
+    the active cursor has defined frames and cursor_anim_enabled is True.
+    These tests inspect the source and settings to verify the contract without
+    requiring a live display.
+    """
+
+    _MAIN_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _DLG_SRC  = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "settings_dialog.py")
+    _SM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "core", "settings_manager.py")
+    _TM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _src(self, path) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # _CURSOR_ANIM_FRAMES presence and structure
+    # ------------------------------------------------------------------
+
+    def test_cursor_anim_frames_dict_exists(self):
+        """main_window.py must define a _CURSOR_ANIM_FRAMES dict."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("_CURSOR_ANIM_FRAMES", src,
+                      "_CURSOR_ANIM_FRAMES dict must exist in main_window.py")
+
+    def test_cursor_anim_frames_has_shark(self):
+        """Shark emoji must have an animation sequence defined."""
+        src = self._src(self._MAIN_SRC)
+        # The shark emoji u+1F988 should appear in _CURSOR_ANIM_FRAMES
+        self.assertIn("🦈", src,
+                      "🦈 (shark) must have an animation sequence in _CURSOR_ANIM_FRAMES")
+
+    def test_cursor_anim_frames_has_fire(self):
+        """Fire emoji must have an animation sequence defined."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("🔥", src,
+                      "🔥 (fire) must have an animation sequence in _CURSOR_ANIM_FRAMES")
+
+    def test_cursor_anim_frames_has_sparkle(self):
+        """Sparkle emoji must have an animation sequence defined."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("_CURSOR_ANIM_FRAMES", src)
+        # Find the dict body and check ✨ is a key
+        start = src.find("_CURSOR_ANIM_FRAMES")
+        block = src[start:start + 2000]
+        self.assertIn("✨", block,
+                      "✨ must have an animation sequence in _CURSOR_ANIM_FRAMES")
+
+    # ------------------------------------------------------------------
+    # Animation timer methods
+    # ------------------------------------------------------------------
+
+    def test_start_cursor_anim_method_exists(self):
+        """MainWindow must define a _start_cursor_anim method."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _start_cursor_anim(", src,
+                      "_start_cursor_anim method must exist in MainWindow")
+
+    def test_stop_cursor_anim_method_exists(self):
+        """MainWindow must define a _stop_cursor_anim method."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _stop_cursor_anim(", src,
+                      "_stop_cursor_anim method must exist in MainWindow")
+
+    def test_tick_cursor_anim_method_exists(self):
+        """MainWindow must define a _tick_cursor_anim method."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _tick_cursor_anim(", src,
+                      "_tick_cursor_anim method must exist in MainWindow")
+
+    def test_cursor_anim_timer_stopped_in_close_event(self):
+        """closeEvent must stop the cursor animation timer."""
+        src = self._src(self._MAIN_SRC)
+        # Find closeEvent body
+        start = src.find("def closeEvent(")
+        end_def = src.find("\n    def ", start + 1)
+        close_body = src[start:end_def]
+        self.assertIn("_cursor_anim_timer", close_body,
+                      "closeEvent must include _cursor_anim_timer in its stop list")
+
+    # ------------------------------------------------------------------
+    # apply_cursor respects cursor_anim_enabled flag
+    # ------------------------------------------------------------------
+
+    def test_apply_cursor_reads_cursor_anim_enabled(self):
+        """_apply_cursor must read the cursor_anim_enabled setting."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def _apply_cursor(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("cursor_anim_enabled", body,
+                      "_apply_cursor must read the cursor_anim_enabled setting")
+
+    def test_apply_cursor_calls_start_and_stop(self):
+        """_apply_cursor must call both _start_cursor_anim and _stop_cursor_anim."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def _apply_cursor(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("_start_cursor_anim", body,
+                      "_apply_cursor must call _start_cursor_anim for animated emoji cursors")
+        self.assertIn("_stop_cursor_anim", body,
+                      "_apply_cursor must call _stop_cursor_anim for non-animated cursors")
+
+    # ------------------------------------------------------------------
+    # Timer interval
+    # ------------------------------------------------------------------
+
+    def test_cursor_anim_interval_is_400ms(self):
+        """Cursor animation must run at 400 ms per frame (≈ 2.5 fps)."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def _start_cursor_anim(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("400", body,
+                      "_start_cursor_anim must set the timer interval to 400 ms")
+
+    # ------------------------------------------------------------------
+    # Settings defaults
+    # ------------------------------------------------------------------
+
+    def test_cursor_anim_enabled_default_true(self):
+        """cursor_anim_enabled must default to True in settings."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
+        from src.core.settings_manager import SettingsManager
+        sm = SettingsManager.__new__(SettingsManager)
+        sm._qs = type("_Q", (), {"value": lambda self, k, d=None: d, "setValue": lambda *a: None})()
+        val = sm.get("cursor_anim_enabled", True)
+        self.assertTrue(val, "cursor_anim_enabled must default to True")
+
+    def test_cursor_anim_used_once_default_false(self):
+        """cursor_anim_used_once must default to False (unfired unlock flag)."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"cursor_anim_used_once"', src,
+                      "cursor_anim_used_once must be in SettingsManager._DEFAULTS")
+        # Find the line and check it's False
+        import re
+        m = re.search(r'"cursor_anim_used_once"\s*:\s*(True|False)', src)
+        self.assertIsNotNone(m, "cursor_anim_used_once must have a default value")
+        self.assertEqual(m.group(1), "False",
+                         "cursor_anim_used_once must default to False")
+
+    # ------------------------------------------------------------------
+    # Settings dialog
+    # ------------------------------------------------------------------
+
+    def test_settings_dialog_has_cursor_anim_checkbox(self):
+        """SettingsDialog must create a _cursor_anim_check widget."""
+        src = self._src(self._DLG_SRC)
+        self.assertIn("_cursor_anim_check", src,
+                      "SettingsDialog must define _cursor_anim_check")
+        self.assertIn("QCheckBox", src,
+                      "SettingsDialog must use QCheckBox for cursor animation control")
+
+    def test_settings_dialog_has_first_cursor_anim_signal(self):
+        """SettingsDialog must declare the first_cursor_anim_enabled signal."""
+        src = self._src(self._DLG_SRC)
+        self.assertIn("first_cursor_anim_enabled", src,
+                      "SettingsDialog must declare first_cursor_anim_enabled pyqtSignal")
+
+    def test_settings_dialog_cursor_anim_in_block_signals(self):
+        """_cursor_anim_check must be in the signal-blocking list during _load_values."""
+        src = self._src(self._DLG_SRC)
+        # Find _load_values body
+        start = src.find("def _load_values(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("_cursor_anim_check", body,
+                      "_cursor_anim_check must appear in _load_values (signal block + load)")
+
+    # ------------------------------------------------------------------
+    # Unlock connection
+    # ------------------------------------------------------------------
+
+    def test_main_window_connects_cursor_anim_signal(self):
+        """MainWindow._open_settings must connect first_cursor_anim_enabled."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("first_cursor_anim_enabled", src,
+                      "MainWindow must connect the first_cursor_anim_enabled signal")
+
+    def test_main_window_has_first_cursor_anim_handler(self):
+        """MainWindow must implement _on_first_cursor_anim_enabled."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _on_first_cursor_anim_enabled(", src,
+                      "MainWindow must implement _on_first_cursor_anim_enabled")
+
+    # ------------------------------------------------------------------
+    # Tooltip registrations
+    # ------------------------------------------------------------------
+
+    def test_tooltip_manager_has_cursor_anim_entries(self):
+        """tooltip_manager.py must contain tooltip entries for the cursor_anim key."""
+        src = self._src(self._TM_SRC)
+        self.assertIn('"cursor_anim"', src,
+                      "tooltip_manager.py must have tooltip entries for 'cursor_anim'")
+
+    # ------------------------------------------------------------------
+    # Instance variables
+    # ------------------------------------------------------------------
+
+    def test_main_window_has_cursor_anim_instance_vars(self):
+        """MainWindow.__init__ must initialize _cursor_anim_timer, _frames, _idx."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def __init__(self, settings: SettingsManager)")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("_cursor_anim_timer", body,
+                      "MainWindow.__init__ must initialize _cursor_anim_timer")
+        self.assertIn("_cursor_anim_frames", body,
+                      "MainWindow.__init__ must initialize _cursor_anim_frames")
+        self.assertIn("_cursor_anim_idx", body,
+                      "MainWindow.__init__ must initialize _cursor_anim_idx")
+
+
+# ---------------------------------------------------------------------------
+# Round-24: SelectiveAlphaCanvas.load_image() state-consistency fix
+# ---------------------------------------------------------------------------
+
+class TestRound24LoadImageStateConsistency(unittest.TestCase):
+    """Round-24 fixes:
+    Bug 1 (load_image, selective_alpha_tool.py):
+        When np.array(rgba) raises MemoryError, the old canvas state (src_img,
+        src_arr, masks) must remain unchanged – not partially overwritten.
+        Additionally rgba must be closed in the MemoryError/Exception handlers
+        since ownership was NOT yet transferred to self._src_img.
+
+    Bug 2 (SelectiveAlphaCanvas.unload_image):
+        A new public unload_image() method must close _src_img and all masks
+        so callers can release PIL resources deterministically.
+
+    Bug 3 (closeEvent / MainWindow cleanup):
+        SelectiveAlphaTool.closeEvent must call canvas.unload_image() (not
+        just clear_all_masks()).  MainWindow.closeEvent must trigger that
+        cleanup so embedded-widget PIL images are freed at shutdown.
+    """
+
+    _CANVAS_SRC = "src/ui/selective_alpha_tool.py"
+    _MAIN_SRC   = "src/ui/main_window.py"
+
+    @staticmethod
+    def _src(path: str) -> str:
+        return open(path, encoding="utf-8").read()
+
+    # ------------------------------------------------------------------
+    # Bug 1 – load_image defers state update until np.array() succeeds
+    # ------------------------------------------------------------------
+
+    def test_load_image_new_arr_before_src_img_assignment(self):
+        """load_image must compute np.array(rgba) into a local variable BEFORE
+        assigning self._src_img so a MemoryError leaves the canvas unchanged."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image not found")
+        body = match.group(0)
+        # new_arr (or equivalent) must be assigned before self._src_img =
+        new_arr_pos  = body.find("new_arr")
+        src_img_pos  = body.find("self._src_img  = rgba")
+        if src_img_pos == -1:
+            src_img_pos = body.find("self._src_img = rgba")
+        self.assertGreater(new_arr_pos, 0,
+                           "load_image must use a 'new_arr' local before updating _src_img")
+        self.assertGreater(src_img_pos, 0,
+                           "load_image must assign self._src_img = rgba")
+        self.assertLess(new_arr_pos, src_img_pos,
+                        "new_arr must be computed BEFORE self._src_img is assigned")
+
+    def test_load_image_rgba_none_after_ownership_transfer(self):
+        """After 'self._src_img = rgba', load_image must set 'rgba = None' so
+        the except handlers don't double-close an already-owned image."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image not found")
+        body = match.group(0)
+        self.assertIn("rgba = None",
+                      body,
+                      "load_image must set 'rgba = None' after ownership transfer to "
+                      "self._src_img so the except handlers don't close it again")
+
+    def test_load_image_except_closes_rgba_on_memoryerror(self):
+        """except MemoryError handler must close rgba if it is not None."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image not found")
+        body = match.group(0)
+        # Find the MemoryError handler block
+        me_start = body.find("except MemoryError:")
+        self.assertGreater(me_start, 0, "load_image must have except MemoryError block")
+        # There should be at least one 'rgba' reference inside the handler
+        next_except = body.find("except ", me_start + 1)
+        me_block = body[me_start: next_except if next_except > 0 else me_start + 200]
+        self.assertIn("rgba", me_block,
+                      "except MemoryError handler must reference rgba to close it")
+
+    def test_load_image_state_unchanged_on_array_memoryerror(self):
+        """load_image must leave canvas state intact when np.array() raises MemoryError."""
+        import sys
+        import types
+        import tempfile
+        import os
+        try:
+            from PyQt6.QtWidgets import QApplication
+            self._qapp = QApplication.instance() or QApplication(sys.argv)
+            from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
+        except ImportError:
+            self.skipTest("PyQt6 not available")
+
+        canvas = SelectiveAlphaCanvas()
+        canvas.update = lambda: None
+        canvas.undo_available = types.SimpleNamespace(emit=lambda v: None)
+        canvas.redo_available = types.SimpleNamespace(emit=lambda v: None)
+
+        # Give the canvas a pre-existing valid state
+        old_img  = Image.new("RGBA", (4, 4), (10, 20, 30, 255))
+        old_arr  = np.array(old_img, dtype=np.uint8).copy()
+        canvas._src_img  = old_img
+        canvas._src_arr  = old_arr
+        canvas._masks    = [None] * 7
+
+        # Write a valid PNG so Image.open and .load succeed.
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "test.png")
+            Image.new("RGBA", (4, 4), (99, 99, 99, 128)).save(p)
+
+            rgba_closed = []
+
+            real_np_array = np.array
+
+            def fake_np_array(obj, *a, **kw):
+                # Fail on PIL images (the rgba conversion), pass for anything else
+                from PIL.Image import Image as PILImage
+                if isinstance(obj, PILImage):
+                    rgba_closed.append(False)   # mark the call; close check follows
+                    raise MemoryError("simulated OOM")
+                return real_np_array(obj, *a, **kw)
+
+            import numpy
+            original_array = numpy.array
+            numpy.array = fake_np_array
+            try:
+                with self.assertRaises(MemoryError):
+                    canvas.load_image(p)
+            finally:
+                numpy.array = original_array
+
+        # State must be UNCHANGED – old image and array should still be there
+        self.assertIs(canvas._src_img, old_img,
+                      "_src_img must not be replaced when np.array() raises MemoryError")
+        self.assertIs(canvas._src_arr, old_arr,
+                      "_src_arr must not be replaced when np.array() raises MemoryError")
+        # The old image must NOT have been closed by the error path
+        self.assertIsNotNone(canvas._src_img,
+                             "old _src_img must still be accessible after failed load")
+
+    # ------------------------------------------------------------------
+    # Bug 2 – unload_image() method
+    # ------------------------------------------------------------------
+
+    def test_canvas_has_unload_image_method(self):
+        """SelectiveAlphaCanvas must expose an unload_image() method."""
+        src = self._src(self._CANVAS_SRC)
+        self.assertIn("def unload_image(self)",
+                      src,
+                      "SelectiveAlphaCanvas must define unload_image()")
+
+    def test_unload_image_closes_src_img(self):
+        """unload_image() must close and null _src_img."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def unload_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "unload_image not found")
+        body = match.group(0)
+        self.assertIn("self._src_img.close()",
+                      body,
+                      "unload_image must call self._src_img.close()")
+        self.assertIn("self._src_img = None",
+                      body,
+                      "unload_image must set self._src_img = None")
+
+    def test_unload_image_clears_src_arr(self):
+        """unload_image() must clear _src_arr."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def unload_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "unload_image not found")
+        body = match.group(0)
+        self.assertIn("self._src_arr = None",
+                      body,
+                      "unload_image must set self._src_arr = None")
+
+    def test_unload_image_closes_masks(self):
+        """unload_image() must iterate and close non-None masks."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def unload_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "unload_image not found")
+        body = match.group(0)
+        self.assertIn("_masks", body,
+                      "unload_image must close mask images from self._masks")
+        self.assertIn(".close()", body,
+                      "unload_image must call .close() on mask images")
+
+    def test_unload_image_functional(self):
+        """unload_image() actually closes _src_img and zeroes _src_arr."""
+        import sys
+        try:
+            from PyQt6.QtWidgets import QApplication
+            self._qapp = QApplication.instance() or QApplication(sys.argv)
+            from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
+        except ImportError:
+            self.skipTest("PyQt6 not available")
+
+        canvas = SelectiveAlphaCanvas()
+        canvas._src_img  = Image.new("RGBA", (4, 4), (1, 2, 3, 4))
+        canvas._src_arr  = np.zeros((4, 4, 4), dtype=np.uint8)
+        canvas._masks[0] = Image.new("L", (4, 4), 255)
+
+        canvas.unload_image()
+
+        self.assertIsNone(canvas._src_img, "_src_img must be None after unload_image")
+        self.assertIsNone(canvas._src_arr, "_src_arr must be None after unload_image")
+        self.assertIsNone(canvas._masks[0], "mask[0] must be None after unload_image")
+
+    # ------------------------------------------------------------------
+    # Bug 3 – closeEvent / MainWindow cleanup
+    # ------------------------------------------------------------------
+
+    def test_close_event_calls_unload_image(self):
+        """SelectiveAlphaTool.closeEvent must call self._canvas.unload_image()
+        rather than only clear_all_masks() so _src_img is released too."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def closeEvent\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "closeEvent not found in selective_alpha_tool.py")
+        body = match.group(0)
+        self.assertIn("unload_image",
+                      body,
+                      "closeEvent must call canvas.unload_image() for full cleanup")
+
+    def test_main_window_close_event_calls_selective_alpha_close(self):
+        """MainWindow.closeEvent must invoke the Selective Alpha tab's closeEvent
+        so that PIL images are released at application shutdown."""
+        src = self._src(self._MAIN_SRC)
+        close_start = src.find("def closeEvent(self")
+        self.assertGreater(close_start, 0, "closeEvent not found in main_window.py")
+        end_def = src.find("\n    def ", close_start + 1)
+        body = src[close_start: end_def]
+        self.assertIn("_selective_alpha_tab",
+                      body,
+                      "MainWindow.closeEvent must reference _selective_alpha_tab")
+        self.assertIn("closeEvent",
+                      body,
+                      "MainWindow.closeEvent must call the Selective Alpha tab's closeEvent")

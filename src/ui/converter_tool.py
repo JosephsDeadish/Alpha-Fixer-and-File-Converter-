@@ -28,11 +28,19 @@ class ConverterTab(QWidget):
     # Emitted after every successful batch: carries the count of files converted.
     # MainWindow connects this to check for processing-based theme unlocks.
     processing_done = pyqtSignal(int)
+    # Emitted when a batch finishes with at least one error (carries error count).
+    processing_error = pyqtSignal(int)
+    # Emitted when a batch starts (before the worker thread is launched).
+    processing_started = pyqtSignal()
     # Emitted the very first time a conversion batch completes successfully.
     # MainWindow uses this to trigger the 'first conversion' theme unlock.
     first_conversion = pyqtSignal()
     # Emitted whenever at least one file is added to the queue.
     files_added = pyqtSignal()
+    # Emitted whenever files are removed from the queue.
+    files_removed = pyqtSignal()
+    # Emitted when files are first dragged over the drop zone.
+    drag_entered = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -194,7 +202,7 @@ class ConverterTab(QWidget):
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
         # ---- Preview area (outside scroll area, always visible) ----
-        # Mirrors the Alpha Fixer tab's before/after compare layout:
+        # Mirrors the Alpha & RGBA Adjuster tab's before/after compare layout:
         # [source info panel] [BeforeAfterWidget] [output info panel]
         preview_area = QWidget()
         pa_layout = QVBoxLayout(preview_area)
@@ -213,10 +221,15 @@ class ConverterTab(QWidget):
         preview_row.setSpacing(4)
 
         def _make_info_panel() -> QLabel:
-            """Return a small fixed-width label for source/output metadata."""
+            """Return a small label for source/output metadata."""
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-            lbl.setFixedWidth(84)
+            # Font-metric width so the panel stays wide enough at any DPI /
+            # font-size combination.
+            from PyQt6.QtGui import QFontMetrics
+            from PyQt6.QtWidgets import QApplication
+            fm = QFontMetrics(QApplication.font())
+            lbl.setMinimumWidth(fm.horizontalAdvance("9999×9999") + 8)
             lbl.setWordWrap(True)
             lbl.setObjectName("stats_panel")
             lbl.setContentsMargins(2, 4, 2, 4)
@@ -239,7 +252,7 @@ class ConverterTab(QWidget):
 
         # Left column: vertical splitter – controls/file-list on top
         # (scrollable), preview on the bottom (always fully visible).
-        # This matches the layout structure used by the Alpha Fixer tab.
+        # This matches the layout structure used by the Alpha & RGBA Adjuster tab.
         left_vsplit = QSplitter(Qt.Orientation.Vertical)
         left_vsplit.setChildrenCollapsible(False)
         left_vsplit.setMinimumWidth(320)
@@ -401,6 +414,8 @@ class ConverterTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
+        self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.drag_entered.connect(self.drag_entered)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
@@ -643,21 +658,50 @@ class ConverterTab(QWidget):
         self._compare.set_before(src_qi)
         self._compare.set_after(out_qi)
 
-        def _info_text(label: str, meta: str) -> str:
-            lines = meta.strip().splitlines()
-            # First line is filename – omit it from the side panel to save space.
-            body = "<br>".join(lines[1:]) if len(lines) > 1 else meta
-            return f"<b>{label}</b><br>{body}"
+        def _info_text(label: str, meta: str, skip_first: bool = False) -> str:
+            """Format metadata as label+bold-value pairs, matching the Alpha & RGBA Adjuster style.
 
-        self._source_info_lbl.setText(_info_text("SRC", src_meta))
-        self._output_info_lbl.setText(_info_text("OUT", out_meta))
+            Each data line becomes a label row followed by a bold-value row (e.g.
+            ``size<br><b>640 × 480</b>``), mirroring the BEFORE/AFTER stats panels
+            in the Alpha & RGBA Adjuster tab.  Lines containing ``  ·  `` are split into two
+            rows (size + mode).  Lines starting with ``Preview as`` become a ``fmt``
+            row.  All other lines are shown as plain bold values.
+            """
+            lines = meta.strip().splitlines()
+            # src_meta starts with the filename – skip it; out_meta has no such line.
+            data_lines = lines[1:] if skip_first and len(lines) > 1 else lines
+            parts = []
+            for raw in data_lines:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                if raw.startswith("Preview as "):
+                    # e.g. "Preview as PNG" or "Preview as JPEG  ·  Q 90"
+                    rest = raw[len("Preview as "):]
+                    parts.append(f"fmt<br><b>{rest.strip()}</b>")
+                elif "  ·  " in raw:
+                    # "W × H  ·  MODE" → split into a size row and a mode row.
+                    left, right = raw.split("  ·  ", 1)
+                    parts.append(f"size<br><b>{left.strip()}</b>")
+                    parts.append(f"mode<br><b>{right.strip()}</b>")
+                else:
+                    parts.append(f"<b>{raw}</b>")
+            return f"<b>{label}</b><br>" + "<br>".join(parts)
+
+        # src_meta: filename \n dims·mode \n filesize  → skip the filename line.
+        # out_meta: dims·mode \n fmt \n estsize        → all lines are data.
+        self._source_info_lbl.setText(_info_text("SRC", src_meta, skip_first=True))
+        self._output_info_lbl.setText(_info_text("OUT", out_meta, skip_first=False))
 
     @pyqtSlot(str)
     def _on_preview_failed(self, err: str):
         """Called when the converter preview loader encounters an error."""
         self._compare.clear()
         self._source_info_lbl.setText("")
-        self._output_info_lbl.setText(f"Preview\nunavailable\n{err[:40]}")
+        err_snippet = err.strip()[:40] if err.strip() else "unknown error"
+        self._output_info_lbl.setText(
+            f"<b>OUT</b><br>Preview<br><b>unavailable</b><br><b>{err_snippet}</b>"
+        )
 
     def _save_format_setting(self):
         fmt_data = self._fmt_combo.currentData()
@@ -714,6 +758,8 @@ class ConverterTab(QWidget):
         self._status_lbl.setText("Converting…")
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
+        # Notify main window so it can play the process-start sound
+        self.processing_started.emit()
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -800,6 +846,8 @@ class ConverterTab(QWidget):
             if not self._settings.get("conversion_done_once", False):
                 self._settings.set("conversion_done_once", True)
                 self.first_conversion.emit()
+        if errors > 0:
+            self.processing_error.emit(errors)
 
     def _log_msg(self, msg: str) -> None:
         self._log.append(msg)

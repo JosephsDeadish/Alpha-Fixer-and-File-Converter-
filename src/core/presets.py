@@ -1,5 +1,5 @@
 """
-Preset definitions and manager for the Alpha Fixer tool.
+Preset definitions and manager for the Alpha & RGBA Adjuster tool.
 
 Built-in presets cover common game-console alpha conventions.
 Users can create, save, and delete their own presets.
@@ -24,7 +24,7 @@ class AlphaPreset:
     clamp_min: int = 0
     clamp_max: int = 255
     # Advanced operations applied independently of the range remap.
-    threshold: int = 0        # only process pixels with alpha < this (0 = all)
+    threshold: int = 0        # protect pixels with alpha >= this from remapping (0 = all); when binary_cut is True this is the hard-cut split point
     invert: bool = False      # invert alpha before range remap
     binary_cut: bool = False  # hard 0/255 split at threshold after remap
 
@@ -34,13 +34,18 @@ class AlphaPreset:
     @classmethod
     def from_dict(cls, d: dict) -> "AlphaPreset":
         # Backward compat: old presets stored alpha_value + mode fields.
-        # Convert: if a fixed alpha_value was set with a non-normalize mode,
-        # translate to clamp_min=clamp_max=alpha_value so behavior is preserved.
+        # Only translate alpha_value → clamp_min=clamp_max when the legacy mode
+        # was "set" (fixed-value assignment) or the mode key is absent entirely.
+        # For other legacy modes (multiply, add, subtract, etc.) the alpha_value
+        # had a different meaning that cannot be mapped to a range remap; in those
+        # cases keep the stored clamp_min/clamp_max as-is.
         alpha_value = d.get("alpha_value")
         mode = d.get("mode", "set")
-        clamp_min = int(d.get("clamp_min", 0))
-        clamp_max = int(d.get("clamp_max", 255))
-        if alpha_value is not None and mode != "normalize":
+        raw_min = d.get("clamp_min", 0)
+        raw_max = d.get("clamp_max", 255)
+        clamp_min = int(raw_min) if raw_min is not None else 0
+        clamp_max = int(raw_max) if raw_max is not None else 255
+        if alpha_value is not None and (mode == "set" or "mode" not in d):
             clamp_min = int(alpha_value)
             clamp_max = int(alpha_value)
         # Build with only known fields (drops alpha_value, mode, and any other legacy keys)
@@ -93,15 +98,17 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
         ),
     ),
     AlphaPreset(
-        name="PS2 Additive Blend  (128 → 255)",
+        name="Raise Floor / PS2 Additive  (128 → 255)",
         clamp_min=128,
         clamp_max=255,
         description=(
             "Remaps alpha to the 128–255 range. "
-            "On PS2 GS, values above 128 trigger additive/subtractive blending modes "
-            "instead of standard alpha blending. "
             "Source minimum → 128, source maximum → 255. "
-            "Use for lens flares, explosions, and bright glow effects on PS2."
+            "PC / DirectX / OpenGL: all output pixels are at least 50% opaque — "
+            "removes near-transparent fringe pixels and guarantees minimum visibility. "
+            "PS2 GS: values above 128 trigger additive/subtractive blending modes "
+            "instead of standard alpha blending — use for lens flares, explosions, "
+            "and bright glow effects on real PS2 hardware."
         ),
     ),
     # -----------------------------------------------------------------------
@@ -131,17 +138,6 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
             "Also converts PS2 native alpha (0–128) back to standard PC range: "
             "PS2 128 (fully opaque) → 255, PS2 64 (half) → 128. "
             "Use when importing PS2 textures into a PC pipeline or emulator replacement pack."
-        ),
-    ),
-    AlphaPreset(
-        name="PC Raise Floor  (128 → 255)",
-        clamp_min=128,
-        clamp_max=255,
-        description=(
-            "Remaps alpha to the upper half (128–255). "
-            "Source minimum → 128, source maximum → 255. "
-            "All output pixels are at least 50% opaque. "
-            "Use to remove near-transparent fringe pixels or guarantee minimum visibility."
         ),
     ),
     # -----------------------------------------------------------------------

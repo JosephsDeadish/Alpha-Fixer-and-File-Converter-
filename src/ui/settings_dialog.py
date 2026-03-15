@@ -7,7 +7,7 @@ import os
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QCompleter, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
@@ -35,6 +35,18 @@ _TRAIL_FADE_DEFAULT = 5
 _TRAIL_INTENSITY_MIN = 10
 _TRAIL_INTENSITY_MAX = 100
 _TRAIL_INTENSITY_DEFAULT = 100
+
+
+def _label_width(text_sample: str) -> int:
+    """Return a minimum pixel width wide enough for *text_sample* at the
+    current application font, plus a small 4-pixel margin.  This replaces
+    ``setFixedWidth(N)`` hard-codes so slider value labels scale with the
+    system font size and HiDPI settings.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QFontMetrics
+    fm = QFontMetrics(QApplication.font())
+    return fm.horizontalAdvance(text_sample) + 4
 
 # Human-friendly labels for click-effect keys, in display order
 _EFFECT_OPTIONS = [
@@ -70,7 +82,13 @@ class ColorButton(QPushButton):
         self._color = color
         self._update_style()
         self.clicked.connect(self._pick)
-        self.setFixedSize(50, 26)
+        # Size is font-relative so it scales correctly on HiDPI / large-font
+        # systems.  em ≈ point size of the application font in pixels.
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QFontMetrics
+        fm = QFontMetrics(QApplication.font())
+        em = fm.height()
+        self.setFixedSize(int(em * 3.2), int(em * 1.6))
 
     def color(self) -> str:
         return self._color
@@ -98,6 +116,9 @@ class SettingsDialog(QDialog):
     # Emitted the very first time the user changes the tooltip mode.
     # MainWindow connects this to trigger the Secret Skeleton unlock.
     first_tooltip_mode_change = pyqtSignal()
+    # Emitted the very first time the user enables cursor animation.
+    # MainWindow connects this to trigger the Toxic Neon unlock.
+    first_cursor_anim_enabled = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -105,7 +126,18 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        self.setMinimumSize(800, 660)
+        # Adaptive minimum size: cap at 800×600 but shrink proportionally on
+        # small or low-resolution screens so the dialog is never forced off the
+        # visible area (e.g. 1280×720 laptop with a large taskbar at 125% DPI).
+        screen = (self.parent().screen() if self.parent() is not None
+                  else None) or QApplication.primaryScreen()
+        if screen is not None:
+            ag = screen.availableGeometry()
+            min_w = min(800, max(560, int(ag.width()  * 0.85)))
+            min_h = min(600, max(420, int(ag.height() * 0.85)))
+        else:
+            min_w, min_h = 800, 600
+        self.setMinimumSize(min_w, min_h)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:
@@ -421,6 +453,7 @@ class SettingsDialog(QDialog):
             ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
             ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
             ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
+            ("Rainbow 🌈",        "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
         ]
         for label, tip in _TRAIL_STYLE_OPTIONS:
             self._trail_style_combo.addItem(label)
@@ -458,7 +491,7 @@ class SettingsDialog(QDialog):
             "Short = snappy; Long = lingering ghost trail."
         )
         self._trail_length_val_lbl = QLabel(str(_TRAIL_LENGTH_DEFAULT))
-        self._trail_length_val_lbl.setFixedWidth(30)
+        self._trail_length_val_lbl.setMinimumWidth(_label_width("200"))
         length_row = QHBoxLayout()
         length_row.addWidget(self._trail_length_slider)
         length_row.addWidget(self._trail_length_val_lbl)
@@ -478,7 +511,7 @@ class SettingsDialog(QDialog):
             "1 = very slow (long ghost), 10 = very fast (sharp snap)."
         )
         self._trail_fade_val_lbl = QLabel(str(_TRAIL_FADE_DEFAULT))
-        self._trail_fade_val_lbl.setFixedWidth(30)
+        self._trail_fade_val_lbl.setMinimumWidth(_label_width("10"))
         fade_row = QHBoxLayout()
         fade_row.addWidget(self._trail_fade_slider)
         fade_row.addWidget(self._trail_fade_val_lbl)
@@ -497,7 +530,7 @@ class SettingsDialog(QDialog):
             "Maximum opacity of the trail (10 % = very faint, 100 % = fully bright)."
         )
         self._trail_intensity_val_lbl = QLabel(f"{_TRAIL_INTENSITY_DEFAULT}%")
-        self._trail_intensity_val_lbl.setFixedWidth(40)
+        self._trail_intensity_val_lbl.setMinimumWidth(_label_width("100%"))
         intensity_row = QHBoxLayout()
         intensity_row.addWidget(self._trail_intensity_slider)
         intensity_row.addWidget(self._trail_intensity_val_lbl)
@@ -546,6 +579,15 @@ class SettingsDialog(QDialog):
         self._use_theme_cursor_check.toggled.connect(
             lambda checked: self._cursor_combo.setEnabled(not checked)
         )
+        self._cursor_anim_check = QCheckBox(
+            "Animate cursor  (cycles through themed frames for emoji cursors)"
+        )
+        self._cursor_anim_check.setToolTip(
+            "When enabled, emoji cursors with defined animation sequences cycle\n"
+            "through frames at ~2.5 fps (e.g. 🦈 snapping, 🔥 flickering, ✨ sparkling).\n"
+            "Disable if you prefer a static cursor or need to reduce CPU usage."
+        )
+        cursor_gl.addWidget(self._cursor_anim_check, 2, 0, 1, 2)
         mouse_row.addWidget(grp_cursor, 1)
 
         tv.addLayout(mouse_row)
@@ -556,27 +598,181 @@ class SettingsDialog(QDialog):
         sound_gl.setColumnStretch(1, 1)
         sound_gl.setHorizontalSpacing(10)
         sound_gl.setVerticalSpacing(6)
-        self._sound_check = QCheckBox("Enable click sounds (off by default)")
+        self._sound_check = QCheckBox("Enable sounds (off by default)")
         self._sound_check.setToolTip(
-            "Play a sound on each click. Off by default.\n"
-            "Your choice is remembered between sessions."
+            "Master switch — enables all application sounds.\n"
+            "Off by default. Individual events can still be muted below."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
-        self._use_theme_sound_check = QCheckBox("Use theme sound (each theme has its own click sound)")
+        self._use_theme_sound_check = QCheckBox("Use theme sound (click sound follows the active theme)")
         self._use_theme_sound_check.setToolTip(
             "When enabled the click sound changes to match the active theme.\n"
             "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc."
         )
         sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
-        sound_gl.addWidget(QLabel("Custom .wav:"), 2, 0)
+
+        # Volume slider
+        sound_gl.addWidget(QLabel("Volume:"), 2, 0)
+        vol_row = QHBoxLayout()
+        self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self._sound_volume_slider.setRange(0, 100)
+        self._sound_volume_slider.setValue(50)
+        self._sound_volume_slider.setToolTip(
+            "Master volume for all application sounds (0 = silent, 100 = full).\n"
+            "Only affects the Qt Multimedia backend; subprocess fallback ignores this."
+        )
+        self._sound_volume_lbl = QLabel("50%")
+        self._sound_volume_lbl.setMinimumWidth(_label_width("100%"))
+        self._sound_volume_slider.valueChanged.connect(
+            lambda v: self._sound_volume_lbl.setText(f"{v}%")
+        )
+        vol_row.addWidget(self._sound_volume_slider, 1)
+        vol_row.addWidget(self._sound_volume_lbl)
+        sound_gl.addLayout(vol_row, 2, 1)
+
+        sound_gl.addWidget(QLabel("Custom click .wav:"), 3, 0)
         sound_row = QHBoxLayout()
         self._click_sound_edit = QLineEdit()
         self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
         self._btn_sound_browse = QPushButton("Browse…")
         sound_row.addWidget(self._click_sound_edit, 1)
         sound_row.addWidget(self._btn_sound_browse)
-        sound_gl.addLayout(sound_row, 2, 1)
-        tv.addWidget(grp_sound)
+        sound_gl.addLayout(sound_row, 3, 1)
+
+        # Per-event sound toggles
+        sound_gl.addWidget(QLabel("Event sounds:"), 4, 0)
+        events_row = QHBoxLayout()
+        self._sound_success_check = QCheckBox("Completion")
+        self._sound_success_check.setToolTip(
+            "Play a cheerful chime when a batch finishes with no errors."
+        )
+        self._sound_error_check = QCheckBox("Error")
+        self._sound_error_check.setToolTip(
+            "Play a descending buzz when a batch finishes with file errors."
+        )
+        self._sound_unlock_check = QCheckBox("Unlock")
+        self._sound_unlock_check.setToolTip(
+            "Play an ascending fanfare when a secret theme is unlocked."
+        )
+        self._sound_file_add_check = QCheckBox("File added")
+        self._sound_file_add_check.setToolTip(
+            "Play a soft thunk when files are dropped into the queue."
+        )
+        self._sound_preview_check = QCheckBox("Preview")
+        self._sound_preview_check.setToolTip(
+            "Play a subtle ping every time the live preview image refreshes.\n"
+            "Off by default — can be distracting during rapid parameter changes."
+        )
+        self._sound_process_start_check = QCheckBox("Process start")
+        self._sound_process_start_check.setToolTip(
+            "Play a short ascending two-tone cue when a batch starts processing.\n"
+            "Off by default."
+        )
+        self._sound_file_remove_check = QCheckBox("File removed")
+        self._sound_file_remove_check.setToolTip(
+            "Play a short descending pop when files are removed from the queue.\n"
+            "Off by default."
+        )
+        for chk in (self._sound_success_check, self._sound_error_check,
+                    self._sound_unlock_check, self._sound_file_add_check,
+                    self._sound_preview_check, self._sound_process_start_check,
+                    self._sound_file_remove_check):
+            events_row.addWidget(chk)
+        sound_gl.addLayout(events_row, 4, 1)
+
+        # Additional event sounds (second row)
+        events_row2 = QHBoxLayout()
+        self._sound_theme_change_check = QCheckBox("Theme change")
+        self._sound_theme_change_check.setToolTip(
+            "Play a soft whoosh when switching to a different theme.\n"
+            "Off by default."
+        )
+        self._sound_tab_switch_check = QCheckBox("Tab switch")
+        self._sound_tab_switch_check.setToolTip(
+            "Play a quick soft tick when switching tabs.\n"
+            "Off by default."
+        )
+        self._sound_drag_enter_check = QCheckBox("Drag enter")
+        self._sound_drag_enter_check.setToolTip(
+            "Play a gentle rising ping when files are dragged over the drop zone.\n"
+            "Off by default."
+        )
+        for chk in (self._sound_theme_change_check,
+                    self._sound_tab_switch_check,
+                    self._sound_drag_enter_check):
+            events_row2.addWidget(chk)
+        events_row2.addStretch()
+        sound_gl.addLayout(events_row2, 5, 1)
+
+
+
+        # ---- Button Press Animation GroupBox ----
+        grp_btn_anim = QGroupBox("Button Press Animation")
+        btn_anim_gl = QGridLayout(grp_btn_anim)
+        btn_anim_gl.setColumnStretch(1, 1)
+        btn_anim_gl.setHorizontalSpacing(10)
+        btn_anim_gl.setVerticalSpacing(6)
+        self._button_anim_check = QCheckBox(
+            "Enable button press animations (off by default)"
+        )
+        self._button_anim_check.setToolTip(
+            "When enabled every QPushButton in the app plays a short animation\n"
+            "when clicked — a subtle slide, bounce, shake, or particle burst.\n"
+            "Off by default for maximum performance."
+        )
+        btn_anim_gl.addWidget(self._button_anim_check, 0, 0, 1, 2)
+
+        self._use_theme_button_anim_check = QCheckBox(
+            "Use theme animation (each theme picks its own style)"
+        )
+        self._use_theme_button_anim_check.setToolTip(
+            "When checked the animation style is chosen automatically by the\n"
+            "active theme — e.g. Gore/Zombie/Dragon gets 'Shatter', Alien/Neon\n"
+            "gets 'Shake', Fairy/Sakura gets 'Bounce'.\n"
+            "Uncheck to force a fixed style from the dropdown below."
+        )
+        btn_anim_gl.addWidget(self._use_theme_button_anim_check, 1, 0, 1, 2)
+
+        btn_anim_gl.addWidget(QLabel("Animation style:"), 2, 0)
+        self._button_anim_style_combo = QComboBox()
+        _BUTTON_ANIM_OPTIONS = [
+            ("none",    "None — no animation"),
+            ("press",   "Press — subtle 2 px downward nudge"),
+            ("fall",    "Fall — 8 px drop and spring back"),
+            ("bounce",  "Bounce — button leaps up and bounces back"),
+            ("shake",   "Shake — rapid left/right vibration"),
+            ("shatter", "Shatter — particle burst from button centre"),
+        ]
+        _BUTTON_ANIM_TIPS = {
+            "none":    "No animation. Buttons respond instantly with no visual movement.",
+            "press":   "The button shifts 2 pixels down on press then springs back.\n"
+                       "Subtle and satisfying — closest to a real physical button.",
+            "fall":    "The button slides 8 pixels down over ~220 ms then springs back.\n"
+                       "Heavier feel, great for ocean/cave/goth themes.",
+            "bounce":  "The button shoots up 6 pixels then bounces back down.\n"
+                       "Playful and energetic — great for fairy/candy/sakura themes.",
+            "shake":   "Rapid left/right vibration (~5 px over ~300 ms).\n"
+                       "Aggressive energy — great for neon/alien/storm themes.",
+            "shatter": "Spawns themed click-effect particles from the button centre.\n"
+                       "Requires click effects to be enabled for best results.\n"
+                       "Dramatic — great for gore/volcano/dragon themes.",
+        }
+        for key, label in _BUTTON_ANIM_OPTIONS:
+            self._button_anim_style_combo.addItem(label, userData=key)
+            idx = self._button_anim_style_combo.count() - 1
+            tip = _BUTTON_ANIM_TIPS.get(key, "")
+            if tip:
+                self._button_anim_style_combo.setItemData(
+                    idx, tip, Qt.ItemDataRole.ToolTipRole
+                )
+        self._button_anim_style_combo.setToolTip(
+            "Choose the press-animation style applied to every button.\n"
+            "Greyed out while 'Use theme animation' is checked."
+        )
+        self._button_anim_style_combo.setMaximumWidth(280)
+        btn_anim_gl.addWidget(self._button_anim_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+
+        tv.addWidget(grp_btn_anim)
 
         # Wrap the theme tab contents in a scroll area so all controls are always
         # reachable regardless of screen/window size.
@@ -654,11 +850,54 @@ class SettingsDialog(QDialog):
             "Enable animated banner emojis && SVG badge (off by default)"
         )
         self._animated_banner_check.setToolTip(
-            "When enabled: the spinning emoji in the header rotates continuously\n"
+            "When enabled: the banner emoji in the header animates continuously\n"
             "and the theme SVG badge in the tab bar plays its built-in animation.\n"
             "When disabled: both are rendered statically, saving CPU/GPU resources."
         )
         misc_gl.addWidget(self._animated_banner_check, 3, 0, 1, 2)
+
+        # Banner animation style (spin / bounce / shake / pendulum / flock)
+        misc_gl.addWidget(QLabel("Banner animation:"), 4, 0)
+        self._banner_anim_combo = QComboBox()
+        _BANNER_ANIM_OPTIONS = [
+            ("spin",     "Spin – continuous 360° rotation"),
+            ("bounce",   "Bounce – gentle vertical bobbing"),
+            ("shake",    "Shake – rapid horizontal quiver"),
+            ("pendulum", "Pendulum – swinging back and forth"),
+            ("flock",    "Flock – emoji fly across the top of the window"),
+        ]
+        _BANNER_ANIM_TIPS = {
+            "spin":     "The emoji rotates continuously like a gear (~6 s per full turn).",
+            "bounce":   "The emoji bobs up and down with a smooth sine-wave motion.",
+            "shake":    "The emoji vibrates rapidly side to side — great for aggressive themes.",
+            "pendulum": "The emoji swings back and forth like a pendulum clock.",
+            "flock":    "A small group of themed emoji periodically flies across the top of\n"
+                        "the window (similar to the bat flock in Bat Cave theme).",
+        }
+        for key, label in _BANNER_ANIM_OPTIONS:
+            self._banner_anim_combo.addItem(label, userData=key)
+            idx = self._banner_anim_combo.count() - 1
+            tip = _BANNER_ANIM_TIPS.get(key, "")
+            if tip:
+                self._banner_anim_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._banner_anim_combo.setToolTip(
+            "Choose the animation style for the banner emoji when animation is enabled.\n"
+            "Greyed out (non-interactive) while 'Use theme animation' is checked —\n"
+            "uncheck that box to override with your own style."
+        )
+        self._banner_anim_combo.setMaximumWidth(280)
+        misc_gl.addWidget(self._banner_anim_combo, 4, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Use-theme animation checkbox
+        self._banner_use_theme_anim_check = QCheckBox(
+            "Use theme animation (each theme has its own style)"
+        )
+        self._banner_use_theme_anim_check.setToolTip(
+            "When checked the animation style is chosen automatically by the active\n"
+            "theme (e.g. Bat Cave uses flock, Alien uses bounce, Goth uses pendulum).\n"
+            "Uncheck to override with your own style from the dropdown above."
+        )
+        misc_gl.addWidget(self._banner_use_theme_anim_check, 5, 0, 1, 2)
 
         # Splash screen on startup (off by default)
         self._show_splash_check = QCheckBox(
@@ -668,7 +907,7 @@ class SettingsDialog(QDialog):
             "When enabled: an animated themed splash screen is shown while the\n"
             "app loads on startup.  Disable to skip straight to the main window."
         )
-        misc_gl.addWidget(self._show_splash_check, 4, 0, 1, 2)
+        misc_gl.addWidget(self._show_splash_check, 6, 0, 1, 2)
 
         gv.addWidget(grp_misc)
 
@@ -723,19 +962,36 @@ class SettingsDialog(QDialog):
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
         self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
+        self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
+        self._sound_success_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_error_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_unlock_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_file_add_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_preview_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_process_start_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_file_remove_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_theme_change_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_tab_switch_check.toggled.connect(self._on_sound_event_changed)
+        self._sound_drag_enter_check.toggled.connect(self._on_sound_event_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
         self._trail_style_combo.currentIndexChanged.connect(self._on_trail_style_changed)
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
+        self._cursor_anim_check.toggled.connect(self._on_cursor_anim_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
         self._tooltip_style_combo.currentTextChanged.connect(self._on_tooltip_style_changed)
         self._animated_banner_check.toggled.connect(self._on_animated_banner_changed)
+        self._banner_anim_combo.currentIndexChanged.connect(self._on_banner_anim_style_changed)
+        self._banner_use_theme_anim_check.toggled.connect(self._on_banner_use_theme_anim_changed)
         self._show_splash_check.toggled.connect(self._on_show_splash_changed)
+        self._button_anim_check.toggled.connect(self._on_button_anim_changed)
+        self._button_anim_style_combo.currentIndexChanged.connect(self._on_button_anim_style_changed)
+        self._use_theme_button_anim_check.toggled.connect(self._on_use_theme_button_anim_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -813,13 +1069,22 @@ class SettingsDialog(QDialog):
             self._theme_preset_combo, self._effect_combo, self._sound_check,
             self._use_theme_sound_check, self._click_sound_edit, self._trail_check,
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
-            self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
+            self._cursor_combo, self._use_theme_cursor_check, self._cursor_anim_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
-            self._animated_banner_check, self._show_splash_check,
+            self._animated_banner_check, self._banner_anim_combo,
+            self._banner_use_theme_anim_check, self._show_splash_check,
+            self._button_anim_check, self._button_anim_style_combo,
+            self._use_theme_button_anim_check,
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
+            self._sound_volume_slider,
+            self._sound_success_check, self._sound_error_check, self._sound_unlock_check,
+            self._sound_file_add_check, self._sound_preview_check,
+            self._sound_process_start_check, self._sound_file_remove_check,
+            self._sound_theme_change_check, self._sound_tab_switch_check,
+            self._sound_drag_enter_check,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -843,6 +1108,19 @@ class SettingsDialog(QDialog):
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
         self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
         self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
+        vol = int(self._settings.get("sound_volume", 50))
+        self._sound_volume_slider.setValue(max(0, min(100, vol)))
+        self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
+        self._sound_success_check.setChecked(self._settings.get("sound_success", True))
+        self._sound_error_check.setChecked(self._settings.get("sound_error", True))
+        self._sound_unlock_check.setChecked(self._settings.get("sound_unlock", True))
+        self._sound_file_add_check.setChecked(self._settings.get("sound_file_add", True))
+        self._sound_preview_check.setChecked(self._settings.get("sound_preview", False))
+        self._sound_process_start_check.setChecked(self._settings.get("sound_process_start", False))
+        self._sound_file_remove_check.setChecked(self._settings.get("sound_file_remove", False))
+        self._sound_theme_change_check.setChecked(self._settings.get("sound_theme_change", False))
+        self._sound_tab_switch_check.setChecked(self._settings.get("sound_tab_switch", False))
+        self._sound_drag_enter_check.setChecked(self._settings.get("sound_drag_enter", False))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -851,7 +1129,7 @@ class SettingsDialog(QDialog):
         self._trail_style_combo.setEnabled(not use_theme_trail)
         # Load persisted trail style into combo
         _TRAIL_STYLE_MAP = {
-            "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5,
+            "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5, "rainbow": 6,
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
@@ -871,6 +1149,7 @@ class SettingsDialog(QDialog):
         use_theme_cur = self._settings.get("use_theme_cursor", False)
         self._use_theme_cursor_check.setChecked(use_theme_cur)
         self._cursor_combo.setEnabled(not use_theme_cur)
+        self._cursor_anim_check.setChecked(bool(self._settings.get("cursor_anim_enabled", True)))
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         self._click_effects_theme_check.setChecked(
@@ -888,9 +1167,38 @@ class SettingsDialog(QDialog):
         self._animated_banner_check.setChecked(
             self._settings.get("animated_banner_enabled", False)
         )
+        # Load banner animation style combo
+        _BANNER_ANIM_IDX_MAP = {
+            "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3, "flock": 4,
+        }
+        saved_banner_anim = self._settings.get("banner_anim_style", "spin")
+        self._banner_anim_combo.setCurrentIndex(
+            _BANNER_ANIM_IDX_MAP.get(saved_banner_anim, 0)
+        )
+        banner_use_theme = self._settings.get("banner_use_theme_anim", True)
+        self._banner_use_theme_anim_check.setChecked(banner_use_theme)
+        banner_enabled = self._settings.get("animated_banner_enabled", False)
+        self._banner_anim_combo.setEnabled(banner_enabled and not banner_use_theme)
+        self._banner_use_theme_anim_check.setEnabled(banner_enabled)
         self._show_splash_check.setChecked(
             self._settings.get("show_splash_screen", False)
         )
+        # Load button animation settings
+        btn_anim_enabled = self._settings.get("button_anim_enabled", False)
+        self._button_anim_check.setChecked(btn_anim_enabled)
+        use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
+        self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
+        _BUTTON_ANIM_IDX_MAP = {
+            "none": 0, "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
+        }
+        saved_btn_anim = self._settings.get("button_anim_style", "press")
+        self._button_anim_style_combo.setCurrentIndex(
+            _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 1)
+        )
+        self._button_anim_style_combo.setEnabled(
+            btn_anim_enabled and not use_theme_btn_anim
+        )
+        self._use_theme_button_anim_check.setEnabled(btn_anim_enabled)
 
         for c in controls:
             c.blockSignals(False)
@@ -909,6 +1217,17 @@ class SettingsDialog(QDialog):
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
+        mgr.register(self._sound_volume_slider, "sound_volume_slider")
+        mgr.register(self._sound_success_check, "sound_success_check")
+        mgr.register(self._sound_error_check, "sound_error_check")
+        mgr.register(self._sound_unlock_check, "sound_unlock_check")
+        mgr.register(self._sound_file_add_check, "sound_file_add_check")
+        mgr.register(self._sound_preview_check, "sound_preview_check")
+        mgr.register(self._sound_process_start_check, "sound_process_start_check")
+        mgr.register(self._sound_file_remove_check, "sound_file_remove_check")
+        mgr.register(self._sound_theme_change_check, "sound_theme_change_check")
+        mgr.register(self._sound_tab_switch_check, "sound_tab_switch_check")
+        mgr.register(self._sound_drag_enter_check, "sound_drag_enter_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -918,11 +1237,17 @@ class SettingsDialog(QDialog):
         mgr.register(self._trail_intensity_slider, "trail_intensity_slider")
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
+        mgr.register(self._cursor_anim_check, "cursor_anim")
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
         mgr.register(self._animated_banner_check, "animated_banner_check")
+        mgr.register(self._banner_anim_combo, "banner_anim_combo")
+        mgr.register(self._banner_use_theme_anim_check, "banner_use_theme_anim_check")
         mgr.register(self._show_splash_check, "show_splash_check")
+        mgr.register(self._button_anim_check, "button_anim_check")
+        mgr.register(self._button_anim_style_combo, "button_anim_style_combo")
+        mgr.register(self._use_theme_button_anim_check, "use_theme_button_anim_check")
         # Additional widget registrations
         mgr.register(self._btn_save_theme, "save_custom_theme")
         mgr.register(self._btn_delete_theme, "delete_custom_theme")
@@ -1207,13 +1532,30 @@ class SettingsDialog(QDialog):
         self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
         self.settings_changed.emit()
 
+    def _on_sound_volume_changed(self, value: int) -> None:
+        self._settings.set("sound_volume", value)
+        # No settings_changed emit needed — volume is read at play time.
+
+    def _on_sound_event_changed(self) -> None:
+        """Save per-event sound toggle states."""
+        self._settings.set("sound_success", self._sound_success_check.isChecked())
+        self._settings.set("sound_error", self._sound_error_check.isChecked())
+        self._settings.set("sound_unlock", self._sound_unlock_check.isChecked())
+        self._settings.set("sound_file_add", self._sound_file_add_check.isChecked())
+        self._settings.set("sound_preview", self._sound_preview_check.isChecked())
+        self._settings.set("sound_process_start", self._sound_process_start_check.isChecked())
+        self._settings.set("sound_file_remove", self._sound_file_remove_check.isChecked())
+        self._settings.set("sound_theme_change", self._sound_theme_change_check.isChecked())
+        self._settings.set("sound_tab_switch", self._sound_tab_switch_check.isChecked())
+        self._settings.set("sound_drag_enter", self._sound_drag_enter_check.isChecked())
+
     def _on_trail_changed(self) -> None:
         self._settings.set("trail_enabled", self._trail_check.isChecked())
         self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
         self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
-        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle"]
+        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow"]
         idx = self._trail_style_combo.currentIndex()
         style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
         self._settings.set("trail_style", style)
@@ -1239,6 +1581,18 @@ class SettingsDialog(QDialog):
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
         self.settings_changed.emit()
+
+    def _on_cursor_anim_changed(self) -> None:
+        enabled = self._cursor_anim_check.isChecked()
+        # Emit first-enable signal before persisting so the unlock fires once.
+        if enabled and not self._settings.get("cursor_anim_used_once", False):
+            self._settings.set("cursor_anim_used_once", True)
+            self._settings.set("cursor_anim_enabled", enabled)
+            self.settings_changed.emit()
+            self.first_cursor_anim_enabled.emit()
+        else:
+            self._settings.set("cursor_anim_enabled", enabled)
+            self.settings_changed.emit()
 
     def _on_font_size_changed(self, value: int) -> None:
         self._settings.set("font_size", value)
@@ -1272,10 +1626,47 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_animated_banner_changed(self) -> None:
-        self._settings.set("animated_banner_enabled", self._animated_banner_check.isChecked())
+        enabled = self._animated_banner_check.isChecked()
+        self._settings.set("animated_banner_enabled", enabled)
+        # Enable/disable the subordinate controls based on the new state.
+        use_theme = self._banner_use_theme_anim_check.isChecked()
+        self._banner_anim_combo.setEnabled(enabled and not use_theme)
+        self._banner_use_theme_anim_check.setEnabled(enabled)
+        self.settings_changed.emit()
+
+    def _on_banner_anim_style_changed(self) -> None:
+        key = self._banner_anim_combo.currentData() or "spin"
+        self._settings.set("banner_anim_style", key)
+        self.settings_changed.emit()
+
+    def _on_banner_use_theme_anim_changed(self) -> None:
+        use_theme = self._banner_use_theme_anim_check.isChecked()
+        self._settings.set("banner_use_theme_anim", use_theme)
+        banner_enabled = self._animated_banner_check.isChecked()
+        self._banner_anim_combo.setEnabled(banner_enabled and not use_theme)
         self.settings_changed.emit()
 
     def _on_show_splash_changed(self) -> None:
         self._settings.set("show_splash_screen", self._show_splash_check.isChecked())
+        self.settings_changed.emit()
+
+    def _on_button_anim_changed(self) -> None:
+        enabled = self._button_anim_check.isChecked()
+        self._settings.set("button_anim_enabled", enabled)
+        use_theme = self._use_theme_button_anim_check.isChecked()
+        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
+        self._use_theme_button_anim_check.setEnabled(enabled)
+        self.settings_changed.emit()
+
+    def _on_button_anim_style_changed(self) -> None:
+        key = self._button_anim_style_combo.currentData() or "press"
+        self._settings.set("button_anim_style", key)
+        self.settings_changed.emit()
+
+    def _on_use_theme_button_anim_changed(self) -> None:
+        use_theme = self._use_theme_button_anim_check.isChecked()
+        self._settings.set("use_theme_button_anim", use_theme)
+        enabled = self._button_anim_check.isChecked()
+        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 

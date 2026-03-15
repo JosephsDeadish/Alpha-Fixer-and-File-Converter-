@@ -4,9 +4,10 @@ Alpha Fixer & File Converter – Entry Point.
 
 Includes:
   • Pre-flight system-library check (libEGL, libGL) with clear install instructions
+  • Single-instance guard (QLockFile) – warns the user if the app is already open
   • Global exception handling so uncaught errors show a dialog instead of crashing
   • Crash logging with timestamped log files (logs stored next to the exe/main.py)
-  • Qt environment flags for compatibility on both good and bad hardware
+  • Qt environment flags for HiDPI scaling and compatibility on both good and bad hardware
 """
 import sys
 import os
@@ -174,6 +175,10 @@ def _check_system_libs() -> bool:
 # ---------------------------------------------------------------------------
 
 os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+# Preserve fractional DPI scale factors (e.g. 125 %, 150 %) rather than
+# rounding to the nearest integer.  This produces sharper rendering on
+# HiDPI displays that report a non-integer device-pixel ratio.
+os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
 # Software rasterizer fallback for hardware without proper OpenGL / EGL
 os.environ.setdefault("QT_OPENGL", "software")
 
@@ -208,6 +213,52 @@ sys.excepthook = _excepthook
 
 
 # ---------------------------------------------------------------------------
+# Single-instance guard
+# ---------------------------------------------------------------------------
+
+def _acquire_single_instance_lock():
+    """Ensure only one copy of the application runs at a time.
+
+    Uses Qt's cross-platform ``QLockFile`` which stores the PID of the owning
+    process and automatically treats locks from dead processes as *stale*
+    (cleaned up after ``staleLockTime`` ms — default 30 s).
+
+    Returns the ``QLockFile`` object on success.  The caller **must** keep a
+    reference to it for the entire lifetime of the process; releasing it
+    (or letting it go out of scope) removes the lock and would allow a second
+    instance to start.
+
+    If the lock cannot be acquired (i.e. another live instance already holds
+    it), a warning dialog is displayed and the process exits with code 0.
+    """
+    import tempfile
+    from PyQt6.QtCore import QLockFile
+    from PyQt6.QtWidgets import QMessageBox
+
+    lock_path = os.path.join(
+        tempfile.gettempdir(), "AlphaFixerConverter_instance.lock"
+    )
+    lock = QLockFile(lock_path)
+
+    if lock.tryLock(500):          # 500 ms → generous for slow/busy systems
+        return lock
+
+    # Another live instance is running (or the lock file is truly stale —
+    # Qt already attempted an automatic break-and-reacquire above).
+    logger.warning("Another instance is already running; showing notice and exiting.")
+    box = QMessageBox()
+    box.setWindowTitle("Already Running  🐼")
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setText(
+        "<b>Alpha Fixer &amp; File Converter is already open.</b><br><br>"
+        "Only one instance can run at a time.<br>"
+        "Please check your taskbar or bring the existing window to the front."
+    )
+    box.exec()
+    sys.exit(0)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -225,21 +276,27 @@ def main():
         sys.path.insert(0, parent_dir)
 
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtCore import QCoreApplication
+    from PyQt6.QtCore import QCoreApplication, Qt
+    from PyQt6.QtGui import QFont
 
     QCoreApplication.setApplicationName("AlphaFixerConverter")
     QCoreApplication.setOrganizationName("PandaTools")
     # AA_UseHighDpiPixmaps was removed in Qt6; high-DPI pixmaps are always
     # enabled by default in Qt6/PyQt6 so no setAttribute call is needed.
+    # Enable per-monitor DPI awareness so each window rescales correctly when
+    # dragged between monitors with different scale factors.
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # Consistent baseline across all platforms
 
-    # Enable smooth font rendering
-    from PyQt6.QtGui import QFont
-    font = QFont("Segoe UI", 10)
-    font.setHintingPreference(QFont.HintingPreference.PreferDefaultHinting)
-    app.setFont(font)
+    # --- Single-instance guard -------------------------------------------------
+    # Must come *after* QApplication is created so that QLockFile and the
+    # fallback QMessageBox both have a running Qt event loop to work with.
+    # The returned lock object MUST stay alive until the process exits.
+    _instance_lock = _acquire_single_instance_lock()
 
     logger.info("Starting Alpha Fixer & File Converter")
 
@@ -248,6 +305,14 @@ def main():
     from src.ui.splash_screen import ThemeSplashScreen
 
     settings = SettingsManager()
+
+    # Apply the user's saved font-size preference before the main window
+    # appears so every widget (including the splash) inherits the correct size.
+    _saved_font_size = settings.get("font_size", 10)
+    _saved_font_size = max(8, min(24, int(_saved_font_size)))
+    font = QFont("Segoe UI", _saved_font_size)
+    font.setHintingPreference(QFont.HintingPreference.PreferDefaultHinting)
+    app.setFont(font)
 
     # Show animated themed splash screen only when enabled in settings
     splash = None

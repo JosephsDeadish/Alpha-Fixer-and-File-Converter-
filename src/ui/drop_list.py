@@ -51,14 +51,21 @@ class _ThumbRunnable(QRunnable):
     queued or running, the event is set and the runnable bails out early
     without emitting, saving CPU and avoiding work for items that no longer
     exist.
+
+    *thumb_px* is the physical pixel size of the thumbnail cell (logical
+    size × device-pixel-ratio).  The resulting pixmap has its
+    ``devicePixelRatio`` set so Qt scales it correctly on HiDPI displays.
     """
 
     def __init__(self, path: str, signals: _ThumbSignals,
-                 cancel: threading.Event):
+                 cancel: threading.Event, thumb_px: int = _THUMB_SIZE,
+                 dpr: float = 1.0):
         super().__init__()
         self._path = path
         self._signals = signals
         self._cancel = cancel
+        self._thumb_px = thumb_px
+        self._dpr = dpr
         self.setAutoDelete(True)
 
     @pyqtSlot()
@@ -70,7 +77,7 @@ class _ThumbRunnable(QRunnable):
         try:
             from PIL import Image
             img = Image.open(self._path)
-            img.thumbnail((_THUMB_SIZE, _THUMB_SIZE), Image.LANCZOS)
+            img.thumbnail((self._thumb_px, self._thumb_px), Image.LANCZOS)
             if img.mode == "RGBA":
                 data = img.tobytes("raw", "RGBA")
                 qimg = QImage(data, img.width, img.height,
@@ -84,24 +91,28 @@ class _ThumbRunnable(QRunnable):
                 data = img.tobytes("raw", "RGB")
                 qimg = QImage(data, img.width, img.height,
                               QImage.Format.Format_RGB888)
-            # Scale the image to fit within the thumbnail cell while preserving
-            # its aspect ratio, then letterbox it into an exact _THUMB_SIZE square
-            # transparent pixmap so Qt never stretches it to fill the icon slot.
+            # Scale the image to fit within the physical thumbnail cell while
+            # preserving its aspect ratio, then letterbox it into an exact
+            # _thumb_px square transparent pixmap so Qt never stretches it.
+            phys = self._thumb_px
             scaled = QPixmap.fromImage(qimg).scaled(
-                _THUMB_SIZE, _THUMB_SIZE,
+                phys, phys,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            out = QPixmap(_THUMB_SIZE, _THUMB_SIZE)
+            out = QPixmap(phys, phys)
             out.fill(Qt.GlobalColor.transparent)
             painter = QPainter(out)
             if painter.isActive():
                 painter.drawPixmap(
-                    (_THUMB_SIZE - scaled.width()) // 2,
-                    (_THUMB_SIZE - scaled.height()) // 2,
+                    (phys - scaled.width()) // 2,
+                    (phys - scaled.height()) // 2,
                     scaled,
                 )
                 painter.end()
+            # Tag the pixmap with the device-pixel ratio so Qt renders it at
+            # the correct logical size on HiDPI / Retina displays.
+            out.setDevicePixelRatio(self._dpr)
             icon = QIcon(out)
             # Final cancel check before emitting so we don't deliver the icon
             # to a list that was cleared while the thumbnail was being built.
@@ -124,6 +135,8 @@ class DropFileList(QListWidget):
 
     paths_dropped = pyqtSignal(list)   # list[str] – new paths dragged in
     count_changed = pyqtSignal(int)    # emitted after any add/remove
+    file_removed  = pyqtSignal()       # emitted when items are explicitly removed by the user
+    drag_entered  = pyqtSignal()       # emitted when files are first dragged over the list
 
     # Icon shown in the centre of the list when no files have been added yet
     _EMPTY_STATE_ICON = "📂"
@@ -136,6 +149,13 @@ class DropFileList(QListWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.setUniformItemSizes(True)   # critical for scroll performance
         self.setMinimumHeight(160)
+
+        # Compute DPI-aware thumbnail dimensions once at construction time.
+        # Qt uses logical pixels for setIconSize, but the pixmap backing each
+        # icon must be created at physical pixels (logical × DPR) so thumbnails
+        # stay sharp on HiDPI / Retina displays.
+        self._dpr: float = self._current_dpr()
+        self._thumb_px: int = max(1, round(_THUMB_SIZE * self._dpr))
 
         # Thumbnail state
         self._thumb_enabled: bool = True
@@ -167,8 +187,35 @@ class DropFileList(QListWidget):
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
-        # Set icon size
+        # Set icon size (logical pixels – Qt scales to physical automatically)
         self.setIconSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
+
+    @staticmethod
+    def _current_dpr() -> float:
+        """Return the device-pixel ratio of the primary screen (≥ 1.0)."""
+        screen = QApplication.primaryScreen()
+        return screen.devicePixelRatio() if screen is not None else 1.0
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        """Refresh DPI-dependent thumbnail dimensions when the screen changes.
+
+        Qt fires ``QEvent.Type.ScreenChangeInternal`` when the widget moves
+        to a monitor with a different device-pixel ratio or when the user
+        changes the system display-scale setting.  We invalidate the thumbnail
+        cache and recalculate the physical pixel size so newly-loaded thumbs
+        are sharp on the new display.
+        """
+        super().changeEvent(event)
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.ScreenChangeInternal:
+            new_dpr = self._current_dpr()
+            if new_dpr != self._dpr:
+                self._dpr = new_dpr
+                self._thumb_px = max(1, round(_THUMB_SIZE * self._dpr))
+                # Flush cached icons – they were built for the old DPR.
+                self._thumb_cache.clear()
+                # Re-queue visible rows so fresh sharp icons are loaded.
+                QTimer.singleShot(200, self._load_visible_thumbs)
 
     # ------------------------------------------------------------------
     # Empty-state hint overlay
@@ -250,7 +297,8 @@ class DropFileList(QListWidget):
                 continue
             # Kick off background load
             self._pending.add(path)
-            runnable = _ThumbRunnable(path, self._signals, self._cancel_event)
+            runnable = _ThumbRunnable(path, self._signals, self._cancel_event,
+                                       thumb_px=self._thumb_px, dpr=self._dpr)
             self._pool.start(runnable)
             batch += 1
             loaded_any = True
@@ -319,6 +367,7 @@ class DropFileList(QListWidget):
             self.setProperty("drag_active", True)
             self.style().unpolish(self)
             self.style().polish(self)
+            self.drag_entered.emit()
             event.acceptProposedAction()
         else:
             event.ignore()
@@ -464,6 +513,7 @@ class DropFileList(QListWidget):
             self._pending.discard(path)
             self.takeItem(self.row(item))
         self.count_changed.emit(self.count())
+        self.file_removed.emit()
 
     def _clear_all(self):
         if self.count() == 0:

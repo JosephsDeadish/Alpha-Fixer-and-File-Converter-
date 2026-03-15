@@ -32,7 +32,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QColor, QCursor, QFont, QImage, QPainter, QPen, QPixmap,
-    QBrush,
+    QBrush, QKeySequence, QShortcut,
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -172,18 +172,39 @@ class SelectiveAlphaCanvas(QWidget):
     # ---------------------------------------------------------------- public
 
     def load_image(self, path: str) -> bool:
-        """Load *path* into the canvas.  Returns True on success."""
+        """Load *path* into the canvas.  Returns True on success.
+
+        Raises
+        ------
+        MemoryError
+            Re-raised without modification so callers can distinguish an
+            out-of-memory condition from other load failures.
+        """
+        img = None
+        rgba = None
         try:
             img = Image.open(path)
             img.load()
             rgba = img.convert("RGBA")
             if rgba is not img:
                 img.close()
+                img = None
+            # Build the numpy array BEFORE modifying any instance state so
+            # that a MemoryError here leaves the canvas fully unchanged.
+            # rgba is tracked separately so the except handlers can close it
+            # when the array allocation fails (ownership not yet transferred).
+            new_arr = np.array(rgba, dtype=np.uint8)
+            # Both operations succeeded: atomically replace the stored image.
             if self._src_img is not None:
                 self._src_img.close()
             self._src_img  = rgba
-            self._src_arr  = np.array(rgba, dtype=np.uint8)
+            rgba = None   # ownership transferred to self._src_img
+            self._src_arr  = new_arr
             self._edge_map = None   # recomputed lazily
+            # Close any existing mask images before discarding them.
+            for m in self._masks:
+                if m is not None:
+                    m.close()
             self._masks    = [None] * NUM_ZONES
             self._zoom     = 1.0
             self._pan_x    = 0.0
@@ -196,8 +217,35 @@ class SelectiveAlphaCanvas(QWidget):
             self.undo_available.emit(False)
             self.redo_available.emit(False)
             return True
+        except MemoryError:
+            if img is not None:
+                img.close()
+            if rgba is not None:
+                rgba.close()
+            raise
         except Exception:
+            if img is not None:
+                img.close()
+            if rgba is not None:
+                rgba.close()
             return False
+
+    def unload_image(self) -> None:
+        """Release all PIL images held by the canvas (source image and masks).
+
+        Called by :meth:`SelectiveAlphaTool.closeEvent` so that file handles
+        and pixel buffers are freed deterministically rather than waiting for
+        the garbage collector.
+        """
+        if self._src_img is not None:
+            self._src_img.close()
+            self._src_img = None
+        self._src_arr = None
+        self._edge_map = None
+        for i, m in enumerate(self._masks):
+            if m is not None:
+                m.close()
+                self._masks[i] = None
 
     def clear_mask(self, zone_idx: int) -> None:
         """Erase the mask for zone *zone_idx*."""
@@ -220,6 +268,8 @@ class SelectiveAlphaCanvas(QWidget):
             self._masks[i] = None
         self._composite_dirty = True
         self.update()
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
 
     def set_active_zone(self, idx: int) -> None:
         self._active_zone = max(0, min(NUM_ZONES - 1, idx))
@@ -275,7 +325,6 @@ class SelectiveAlphaCanvas(QWidget):
     def zoom_by(self, factor: float) -> None:
         """Multiply the current zoom level by *factor* (clamped to [0.1, 20])."""
         self._zoom = max(0.1, min(20.0, self._zoom * factor))
-        self._composite_dirty = True
         self.update()
 
     def zoom_reset(self) -> None:
@@ -283,7 +332,6 @@ class SelectiveAlphaCanvas(QWidget):
         self._zoom  = 1.0
         self._pan_x = 0.0
         self._pan_y = 0.0
-        self._composite_dirty = True
         self.update()
 
     # ----------------------------------------------------------- undo / redo
@@ -493,7 +541,7 @@ class SelectiveAlphaCanvas(QWidget):
             return
         bool_mask = np.array(mask, dtype=np.uint8) > 127
         snapped   = autocorrect_mask(bool_mask, edge_map)
-        if snapped is bool_mask:
+        if np.array_equal(snapped, bool_mask):
             return
         # Write result back to the PIL mask
         new_pil = Image.fromarray((snapped * 255).astype(np.uint8), "L")
@@ -521,11 +569,13 @@ class SelectiveAlphaCanvas(QWidget):
             p = QPainter(self)
             p.fillRect(self.rect(), QColor(40, 40, 40))
             p.setPen(QColor(120, 120, 120))
-            p.setFont(QFont("Arial", 14))
+            p.setFont(QFont("Arial", 13))
             p.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
-                "Open an image to start editing",
+                "📂  Open an image to start painting\n\n"
+                "  Ctrl+O  Open    Ctrl+Z  Undo    Ctrl+Y  Redo\n"
+                "  Ctrl+S  Save    Ctrl+Enter  Apply",
             )
             p.end()
             return
@@ -718,7 +768,6 @@ class SelectiveAlphaCanvas(QWidget):
             dy = pt.y() - self._pan_start_w.y()
             self._pan_x = self._pan_start_off[0] + dx
             self._pan_y = self._pan_start_off[1] + dy
-            self._composite_dirty = True
             self.update()
             return
 
@@ -795,11 +844,15 @@ class SelectiveAlphaCanvas(QWidget):
         elif self._tool == "rect":
             self._push_history()
             self._paint_rect_on_mask(sx, sy, ix, iy)
+            if self._autocorrect:
+                self._apply_autocorrect(self._active_zone)
             self.mask_changed.emit(self._active_zone)
 
         elif self._tool == "ellipse":
             self._push_history()
             self._paint_ellipse_on_mask(sx, sy, ix, iy)
+            if self._autocorrect:
+                self._apply_autocorrect(self._active_zone)
             self.mask_changed.emit(self._active_zone)
 
         self._drawing      = False
@@ -829,7 +882,6 @@ class SelectiveAlphaCanvas(QWidget):
         self._pan_x = (1.0 - ratio) * (pt.x() - cw_f / 2.0) + self._pan_x * ratio
         self._pan_y = (1.0 - ratio) * (pt.y() - ch_f / 2.0) + self._pan_y * ratio
 
-        self._composite_dirty = True
         self.update()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
@@ -868,8 +920,8 @@ def _draw_checker(painter: QPainter, w: int, h: int, sq: int = 10) -> None:
 
 
 class _ZoneRow(QWidget):
-    """A compact row showing zone colour swatch, name, alpha spinbox and
-    Clear/Select buttons for one zone."""
+    """A two-row widget showing zone colour swatch, name, alpha spinbox and
+    Paint/Clear buttons for one zone."""
 
     selected = pyqtSignal(int)   # zone_idx
 
@@ -877,51 +929,65 @@ class _ZoneRow(QWidget):
         super().__init__(parent)
         self._idx = zone_idx
 
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(2, 2, 2, 2)
-        lay.setSpacing(4)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(2, 3, 2, 3)
+        outer.setSpacing(3)
+
+        # ── Row 1: swatch + name + alpha spinbox ─────────────────────────
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(6)
 
         # Colour swatch
         r, g, b, _ = ZONE_COLORS[zone_idx]
         swatch = QLabel()
-        swatch.setFixedSize(16, 16)
+        swatch.setFixedSize(18, 18)
+        color_name = ZONE_NAMES[zone_idx]
         swatch.setStyleSheet(
             f"background:{QColor(r,g,b).name()};"
             "border:1px solid #666; border-radius:3px;"
         )
-        lay.addWidget(swatch)
+        swatch.setToolTip(color_name)
+        top.addWidget(swatch)
 
-        # Name
-        name_lbl = QLabel(f"Zone {zone_idx + 1}")
-        name_lbl.setMinimumWidth(50)
-        lay.addWidget(name_lbl)
+        # Name — use the full "Zone N – Colour" label from ZONE_NAMES
+        name_lbl = QLabel(color_name)
+        name_lbl.setMinimumWidth(52)
+        top.addWidget(name_lbl)
 
-        # Alpha spinbox
-        lay.addWidget(QLabel("α:"))
+        top.addStretch()
+
+        # Alpha label + spinbox
+        top.addWidget(QLabel("α:"))
         self._alpha_spin = QSpinBox()
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(128)
-        self._alpha_spin.setFixedWidth(58)
+        self._alpha_spin.setMinimumWidth(62)
         self._alpha_spin.setToolTip(
             "Alpha value applied to all pixels painted in this zone (0=transparent, 255=opaque)."
         )
-        lay.addWidget(self._alpha_spin)
+        top.addWidget(self._alpha_spin)
+        outer.addLayout(top)
 
-        # Select button
-        self._sel_btn = QPushButton("Select")
+        # ── Row 2: Paint + Clear buttons ─────────────────────────────────
+        bot = QHBoxLayout()
+        bot.setContentsMargins(0, 0, 0, 0)
+        bot.setSpacing(6)
+
+        self._sel_btn = QPushButton("🖌  Paint")
         self._sel_btn.setCheckable(True)
-        self._sel_btn.setFixedWidth(58)
+        self._sel_btn.setMinimumHeight(26)
+        self._sel_btn.setToolTip(f"Activate {color_name} for painting")
         self._sel_btn.clicked.connect(lambda: self.selected.emit(self._idx))
-        lay.addWidget(self._sel_btn)
+        bot.addWidget(self._sel_btn)
 
-        # Clear button
-        self._clear_btn = QPushButton("Clear")
-        self._clear_btn.setFixedWidth(50)
-        self._clear_btn.setToolTip("Erase this zone's mask")
+        self._clear_btn = QPushButton("✕  Clear")
+        self._clear_btn.setMinimumHeight(26)
+        self._clear_btn.setToolTip(f"Erase all painted pixels in {color_name}")
         self._clear_btn.clicked.connect(self._on_clear)
-        lay.addWidget(self._clear_btn)
+        bot.addWidget(self._clear_btn)
 
-        lay.addStretch()
+        outer.addLayout(bot)
 
     def _on_clear(self) -> None:
         # Bubbles up to SelectiveAlphaTool via canvas
@@ -929,6 +995,12 @@ class _ZoneRow(QWidget):
 
     def alpha_value(self) -> int:
         return self._alpha_spin.value()
+
+    def set_alpha(self, value: int) -> None:
+        """Set the alpha spinbox value (0-255) without emitting extra signals."""
+        self._alpha_spin.blockSignals(True)
+        self._alpha_spin.setValue(max(0, min(255, value)))
+        self._alpha_spin.blockSignals(False)
 
     def set_selected(self, selected: bool) -> None:
         self._sel_btn.setChecked(selected)
@@ -951,8 +1023,9 @@ class _ZoneRow(QWidget):
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, settings_manager=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._settings = settings_manager
         self._src_path: str = ""
         # Current applied result and history stack for the Undo Process feature.
         # _result_img holds the most recently applied image; _result_history
@@ -960,7 +1033,10 @@ class SelectiveAlphaTool(QWidget):
         self._result_img: Image.Image | None = None
         # Stack of previously applied result images for Undo Process
         self._result_history: list[Image.Image] = []
+        # Flag set during settings restoration to suppress spurious auto-saves.
+        self._restoring: bool = False
         self._setup_ui()
+        self._restore_settings()
 
     # ----------------------------------------------------------------- setup
 
@@ -971,7 +1047,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Left panel (controls) ─────────────────────────────────────────
         left_panel = QWidget()
-        left_panel.setFixedWidth(230)
+        left_panel.setFixedWidth(290)
         lv = QVBoxLayout(left_panel)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
@@ -980,9 +1056,13 @@ class SelectiveAlphaTool(QWidget):
         io_box = QGroupBox("Image")
         io_lay = QVBoxLayout(io_box)
         self._btn_open = QPushButton("📂  Open Image…")
+        self._btn_open.setMinimumHeight(30)
+        self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
         io_lay.addWidget(self._btn_open)
         self._btn_save = QPushButton("💾  Save Result…")
+        self._btn_save.setMinimumHeight(30)
+        self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
         io_lay.addWidget(self._btn_save)
@@ -1009,6 +1089,7 @@ class SelectiveAlphaTool(QWidget):
         for key, label, row, col in tool_defs:
             btn = QPushButton(label)
             btn.setCheckable(True)
+            btn.setMinimumHeight(28)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)
@@ -1021,6 +1102,7 @@ class SelectiveAlphaTool(QWidget):
         # Close Polygon button
         self._btn_close_poly = QPushButton("⬠ Close Polygon")
         self._btn_close_poly.setToolTip("Close and fill the in-progress polygon")
+        self._btn_close_poly.setMinimumHeight(28)
         self._btn_close_poly.setVisible(False)
         self._btn_close_poly.clicked.connect(self._on_close_polygon)
         tg.addWidget(self._btn_close_poly, 4, 0, 1, 2)
@@ -1064,14 +1146,14 @@ class SelectiveAlphaTool(QWidget):
         # Zoom controls
         zoom_box = QGroupBox("Zoom")
         zh = QHBoxLayout(zoom_box)
-        self._btn_zoom_in = QPushButton("＋")
-        self._btn_zoom_in.setFixedWidth(36)
+        self._btn_zoom_in = QPushButton("＋  In")
+        self._btn_zoom_in.setMinimumHeight(26)
         self._btn_zoom_in.clicked.connect(self._zoom_in)
-        self._btn_zoom_out = QPushButton("－")
-        self._btn_zoom_out.setFixedWidth(36)
+        self._btn_zoom_out = QPushButton("－  Out")
+        self._btn_zoom_out.setMinimumHeight(26)
         self._btn_zoom_out.clicked.connect(self._zoom_out)
-        self._btn_zoom_fit = QPushButton("Fit")
-        self._btn_zoom_fit.setFixedWidth(40)
+        self._btn_zoom_fit = QPushButton("⊡  Fit")
+        self._btn_zoom_fit.setMinimumHeight(26)
         self._btn_zoom_fit.clicked.connect(self._zoom_reset)
         zh.addWidget(self._btn_zoom_out)
         zh.addWidget(self._btn_zoom_fit)
@@ -1079,7 +1161,7 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(zoom_box)
 
         # Zone rows
-        zones_box = QGroupBox("Alpha Zones  (click Select to paint)")
+        zones_box = QGroupBox("Alpha Zones  (🖌 Paint to assign alpha per zone)")
         zv = QVBoxLayout(zones_box)
         zv.setSpacing(2)
         self._zone_rows: list[_ZoneRow] = []
@@ -1088,6 +1170,14 @@ class SelectiveAlphaTool(QWidget):
             row.selected.connect(self._on_zone_action)
             zv.addWidget(row)
             self._zone_rows.append(row)
+            # Thin separator between rows (not after the last one)
+            if i < NUM_ZONES - 1:
+                sep = QFrame()
+                sep.setFrameShape(QFrame.Shape.HLine)
+                sep.setFrameShadow(QFrame.Shadow.Sunken)
+                sep.setFixedHeight(1)
+                sep.setStyleSheet("color: #3a3a5a; background: #3a3a5a;")
+                zv.addWidget(sep)
         self._zone_rows[0].set_selected(True)
         lv.addWidget(zones_box)
 
@@ -1096,12 +1186,14 @@ class SelectiveAlphaTool(QWidget):
         hh = QHBoxLayout(hist_box)
         self._btn_undo = QPushButton("↩  Undo")
         self._btn_undo.setEnabled(False)
-        self._btn_undo.setToolTip("Undo the last highlight / erase action.")
+        self._btn_undo.setMinimumHeight(28)
+        self._btn_undo.setToolTip("Undo the last highlight / erase action.  (Ctrl+Z)")
         self._btn_undo.clicked.connect(self._on_undo_mask)
         hh.addWidget(self._btn_undo)
         self._btn_redo = QPushButton("↪  Redo")
         self._btn_redo.setEnabled(False)
-        self._btn_redo.setToolTip("Redo the last undone action.")
+        self._btn_redo.setMinimumHeight(28)
+        self._btn_redo.setToolTip("Redo the last undone action.  (Ctrl+Y)")
         self._btn_redo.clicked.connect(self._on_redo_mask)
         hh.addWidget(self._btn_redo)
         lv.addWidget(hist_box)
@@ -1109,8 +1201,9 @@ class SelectiveAlphaTool(QWidget):
         # Apply button
         self._btn_apply = QPushButton("✅  Apply Alpha Zones")
         self._btn_apply.setEnabled(False)
+        self._btn_apply.setMinimumHeight(32)
         self._btn_apply.setToolTip(
-            "Apply the painted zones to the image and make the result ready to save."
+            "Apply the painted zones to the image and make the result ready to save.  (Ctrl+Enter)"
         )
         self._btn_apply.clicked.connect(self._on_apply)
         lv.addWidget(self._btn_apply)
@@ -1118,6 +1211,7 @@ class SelectiveAlphaTool(QWidget):
         # Undo Process button
         self._btn_undo_process = QPushButton("↩  Undo Process")
         self._btn_undo_process.setEnabled(False)
+        self._btn_undo_process.setMinimumHeight(28)
         self._btn_undo_process.setToolTip(
             "Undo the last Apply operation and restore the previous result."
         )
@@ -1126,11 +1220,20 @@ class SelectiveAlphaTool(QWidget):
 
         # Clear all
         self._btn_clear_all = QPushButton("🗑  Clear All Zones")
+        self._btn_clear_all.setMinimumHeight(28)
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         lv.addWidget(self._btn_clear_all)
 
         lv.addStretch()
-        root.addWidget(left_panel)
+
+        # ── Wrap left panel in a scroll area so controls remain accessible
+        # on smaller windows (same pattern as alpha_tool.py / converter_tool.py).
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_panel)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        left_scroll.setFixedWidth(310)  # panel 290 + scroll bar ~20
+        root.addWidget(left_scroll)
 
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas = SelectiveAlphaCanvas()
@@ -1158,6 +1261,72 @@ class SelectiveAlphaTool(QWidget):
         # Connect spinboxes to status updates (after _status_lbl is created).
         self._brush_spin.valueChanged.connect(lambda _: self._update_status())
         self._eraser_spin.valueChanged.connect(lambda _: self._update_status())
+
+        # Auto-save settings when the user adjusts tool options.
+        self._brush_spin.valueChanged.connect(lambda _: self._save_settings())
+        self._eraser_spin.valueChanged.connect(lambda _: self._save_settings())
+        self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
+        for row in self._zone_rows:
+            row._alpha_spin.valueChanged.connect(lambda _: self._save_settings())
+
+        # Keyboard shortcuts
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self) -> None:
+        """Bind common keyboard shortcuts for the Selective Alpha editor."""
+        QShortcut(QKeySequence("Ctrl+Z"),       self).activated.connect(self._on_undo_mask)
+        QShortcut(QKeySequence("Ctrl+Y"),       self).activated.connect(self._on_redo_mask)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self).activated.connect(self._on_redo_mask)
+        QShortcut(QKeySequence("Ctrl+O"),       self).activated.connect(self._on_open)
+        QShortcut(QKeySequence("Ctrl+S"),       self).activated.connect(self._on_save)
+        QShortcut(QKeySequence("Ctrl+Return"),  self).activated.connect(self._on_apply)
+
+    def _restore_settings(self) -> None:
+        """Restore previously saved Selective Alpha Tool settings."""
+        if self._settings is None:
+            return
+        self._restoring = True
+        try:
+            # Restore zone alpha values
+            alphas = self._settings.get_sa_zone_alphas()
+            for row, alpha in zip(self._zone_rows, alphas):
+                row.set_alpha(alpha)
+            # Restore brush / eraser sizes
+            self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
+            self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
+            # Restore autocorrect toggle
+            self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
+            # Restore last-used drawing tool
+            last_tool = str(self._settings.get("sa_last_tool", "freehand"))
+            if last_tool in self._tool_btns:
+                self._tool_btns[last_tool].setChecked(True)
+                self._on_tool_selected(last_tool)
+        finally:
+            self._restoring = False
+
+    def _save_settings(self) -> None:
+        """Persist the current Selective Alpha Tool settings."""
+        if self._settings is None or self._restoring:
+            return
+        self._settings.set_sa_zone_alphas(
+            [row.alpha_value() for row in self._zone_rows]
+        )
+        self._settings.set("sa_brush_size",  self._brush_spin.value())
+        self._settings.set("sa_eraser_size", self._eraser_spin.value())
+        self._settings.set("sa_autocorrect", self._autocorrect_chk.isChecked())
+        self._settings.set("sa_last_tool",   self._canvas._tool)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        """Save settings and release canvas PIL images on widget close."""
+        self._save_settings()
+        self._canvas.unload_image()
+        if self._result_img is not None:
+            self._result_img.close()
+            self._result_img = None
+        for img in self._result_history:
+            img.close()
+        self._result_history.clear()
+        super().closeEvent(event)
 
     # ---------------------------------------------------------------- helpers
 
@@ -1242,7 +1411,16 @@ class SelectiveAlphaTool(QWidget):
         )
         if not path:
             return
-        if not self._canvas.load_image(path):
+        try:
+            loaded = self._canvas.load_image(path)
+        except MemoryError:
+            QMessageBox.critical(
+                self, "Load Error",
+                "Not enough memory to load this image.\n"
+                "Try a smaller file or close other applications."
+            )
+            return
+        if not loaded:
             QMessageBox.warning(self, "Load Error", f"Could not load:\n{path}")
             return
         self._src_path = path
@@ -1276,6 +1454,12 @@ class SelectiveAlphaTool(QWidget):
             return
         try:
             self._result_img.save(path)
+        except MemoryError:
+            QMessageBox.critical(
+                self, "Save Error",
+                "Not enough memory to save the image.\n"
+                "Try closing other applications and try again."
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Save Error", str(exc))
 
@@ -1295,6 +1479,9 @@ class SelectiveAlphaTool(QWidget):
 
         try:
             src_img = self._canvas.get_source_image()
+            # Initialise to None so the except handlers can safely close it
+            # if apply_selective_alpha raises after allocating an intermediate image.
+            result = None
             result = apply_selective_alpha(
                 src_img, bool_masks, zone_alphas
             )
@@ -1306,13 +1493,26 @@ class SelectiveAlphaTool(QWidget):
                     self._result_history.pop(0).close()
                 self._btn_undo_process.setEnabled(True)
             self._result_img = result
+            # Null out the local so the except handlers below do not
+            # accidentally close the image that is now owned by _result_img.
+            result = None
             self._btn_save.setEnabled(True)
             QMessageBox.information(
                 self, "Done",
                 "Alpha zones applied successfully.\n"
                 "Click 'Save Result…' to export the image."
             )
+        except MemoryError:
+            if result is not None:
+                result.close()
+            QMessageBox.critical(
+                self, "Apply Error",
+                "Not enough memory to apply alpha zones to this image.\n"
+                "Try reducing the image size or closing other applications."
+            )
         except Exception as exc:
+            if result is not None:
+                result.close()
             QMessageBox.critical(self, "Apply Error", str(exc))
 
     def _on_mask_changed(self, zone_idx: int) -> None:
@@ -1348,12 +1548,14 @@ class SelectiveAlphaTool(QWidget):
             self._update_status()
         else:
             zone_idx = -(val + 1)
-            self._canvas.clear_mask(zone_idx)
+            if 0 <= zone_idx < NUM_ZONES:
+                self._canvas.clear_mask(zone_idx)
 
     def _on_tool_selected(self, key: str) -> None:
         self._canvas.set_tool(key)
         self._btn_close_poly.setVisible(key == "polygon")
         self._update_status()
+        self._save_settings()
 
     def _on_close_polygon(self) -> None:
         """Programmatically close the in-progress polygon."""

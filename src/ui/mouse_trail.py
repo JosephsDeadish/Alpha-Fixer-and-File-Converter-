@@ -5,13 +5,14 @@ trail following the mouse cursor over the main application window.
 Works on any platform that supports Qt child widgets with transparent
 backgrounds (i.e., all modern Qt6 deployments).
 
-The overlay supports six trail styles:
+The overlay supports seven trail styles:
   • "dots"    – the default: fading coloured dots (original behaviour).
   • "fairy"   – fairy-dust sparkle emoji (✨💫⭐) that float and fade gently.
   • "wave"    – ocean-themed bubbles and sea emoji (🫧💧🌊) for aquatic themes.
   • "sparkle" – icy crystal sparkle emoji (✦❄✧💎) for arctic/ice themes.
   • "comet"   – a long tapered line-segment comet tail following the cursor.
   • "ribbon"  – a smooth connected ribbon/noodle drawn between trail points.
+  • "rainbow" – cycling full-spectrum hue dots, one revolution per trail length.
 """
 from collections import deque
 import random
@@ -32,7 +33,7 @@ _EMOJI_LISTS  = {
     "wave":    _WAVE_DUST,
     "sparkle": _SPARKLE_DUST,
 }
-_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon"}
+_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow"}
 
 
 class MouseTrailOverlay(QWidget):
@@ -248,6 +249,8 @@ class MouseTrailOverlay(QWidget):
             self._paint_comet(painter)
         elif self._style == "ribbon":
             self._paint_ribbon(painter)
+        elif self._style == "rainbow":
+            self._paint_rainbow(painter)
         else:
             self._paint_dots(painter)
 
@@ -325,6 +328,29 @@ class MouseTrailOverlay(QWidget):
             painter.setPen(pen)
             painter.drawLine(x1, y1, x2, y2)
         painter.setPen(Qt.PenStyle.NoPen)
+
+    def _paint_rainbow(self, painter: QPainter) -> None:
+        """Paint rainbow dots — each dot cycles through the full hue spectrum.
+
+        The hue advances by (360 / trail_length) per point so that a full trail
+        sweeps through the entire colour wheel exactly once, creating a smooth
+        rainbow ribbon regardless of mouse speed.
+        """
+        trail_list = list(self._trail)
+        n = len(trail_list)
+        if n == 0:
+            return
+        max_alpha = int(220 * self._intensity / 100)
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i, entry in enumerate(trail_list):
+            x, y, alpha_frac = entry[0], entry[1], entry[2]
+            alpha = max(0, min(255, int(alpha_frac * max_alpha)))
+            # Hue cycles 0→360 from tail (index 0) to head (index n-1)
+            hue = int(i / max(n - 1, 1) * 359)
+            c = QColor.fromHsv(hue, 255, 255, alpha)
+            radius = max(2, int(alpha_frac * 9))
+            painter.setBrush(QBrush(c))
+            painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
 
     def _paint_fairy(self, painter: QPainter) -> None:
         """Legacy alias for _paint_emoji (kept for compatibility)."""

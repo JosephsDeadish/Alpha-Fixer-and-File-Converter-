@@ -70,11 +70,25 @@ class SettingsManager:
         "theme_data": json.dumps(_DEFAULT_THEME),
         # Sound
         "sound_enabled": False,
+        "sound_volume": 50,           # 0–100 master volume
         "click_sound_path": "",
         "use_theme_sound": False,
+        # Per-event sound toggles (all on by default when sound_enabled=True)
+        "sound_success": True,
+        "sound_error": True,
+        "sound_unlock": True,
+        "sound_file_add": True,
+        "sound_preview": False,
+        "sound_process_start": False,
+        "sound_file_remove": False,
+        "sound_theme_change": False,
+        "sound_tab_switch": False,
+        "sound_drag_enter": False,
         # Cursor & trail
         "cursor": "Default",
         "use_theme_cursor": False,
+        "cursor_anim_enabled": True,   # animate emoji cursors that have frame sequences
+        "cursor_anim_used_once": False, # set True the first time cursor animation is enabled
         "trail_enabled": False,
         "trail_color": "#e94560",
         "trail_style": "dots",
@@ -98,10 +112,12 @@ class SettingsManager:
         "converter_recursive": True,
         "converter_keep_metadata": False,
         # Window geometry
+        # Window geometry – default to 1100×800 which comfortably fits on a
+        # typical 1080p display and stays above the 900×700 enforced minimum.
         "window_x": 100,
         "window_y": 100,
-        "window_w": 1024,
-        "window_h": 720,
+        "window_w": 1100,
+        "window_h": 800,
         "window_maximized": False,
         # Tooltip
         "tooltip_mode": "No Filter 🤬",
@@ -137,10 +153,20 @@ class SettingsManager:
         "unlock_gold_rush": False,
         "unlock_nebula": False,
         "total_clicks": 0,
+        # Counters for alternative unlock paths
+        "alpha_fixes_total": 0,
+        "conversions_total": 0,
         # Tooltip visual style (separate from tooltip text mode)
         "tooltip_style": "Auto (follow theme)",
         # Animated banner SVGs / spinning emojis (off by default for performance)
         "animated_banner_enabled": False,
+        # Banner animation style when animated_banner_enabled is True.
+        # Valid values: "spin", "bounce", "shake", "pendulum", "flock".
+        # "flock" spawns themed emoji flying across the top of the window.
+        "banner_anim_style": "spin",
+        # When True the banner animation mode comes from the active theme's
+        # _banner_anim key rather than the manual banner_anim_style setting.
+        "banner_use_theme_anim": True,
         # Splash screen on startup (off by default)
         "show_splash_screen": False,
         # New hidden theme unlock flags
@@ -154,6 +180,27 @@ class SettingsManager:
         "unlock_coral_reef": False,
         "unlock_storm_cloud": False,
         "unlock_golden_hour": False,
+        # ------------------------------------------------------------------
+        # Button press animation settings
+        # ------------------------------------------------------------------
+        # When True button presses are animated (off by default).
+        "button_anim_enabled": False,
+        # Animation style: "none", "press", "fall", "shake", "shatter", "bounce"
+        "button_anim_style": "press",
+        # When True the animation mode comes from the active theme's _button_anim key.
+        "use_theme_button_anim": True,
+        # ------------------------------------------------------------------
+        # Selective Alpha Tool settings
+        # ------------------------------------------------------------------
+        # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)
+        "sa_zone_alphas": "[128,128,128,128,128,128,128]",
+        # Brush and eraser sizes in pixels
+        "sa_brush_size": 10,
+        "sa_eraser_size": 10,
+        # Auto-correct (snap to edges) enabled
+        "sa_autocorrect": False,
+        # Last-used drawing tool key
+        "sa_last_tool": "freehand",
     }
 
     def __init__(self):
@@ -292,7 +339,7 @@ class SettingsManager:
         self._qs.sync()
 
     # ------------------------------------------------------------------
-    # Alpha Fixer history
+    # Alpha & RGBA Adjuster history
     # ------------------------------------------------------------------
 
     def get_alpha_history(self) -> list:
@@ -320,6 +367,30 @@ class SettingsManager:
         self._qs.setValue("alpha_history", "[]")
         self._qs.sync()
 
+    # ------------------------------------------------------------------
+    # Selective Alpha Tool settings
+    # ------------------------------------------------------------------
+
+    def get_sa_zone_alphas(self) -> list[int]:
+        """Return the 7 zone alpha values as a list of ints (0-255)."""
+        raw = self._qs.value(
+            "sa_zone_alphas",
+            self._DEFAULTS["sa_zone_alphas"],
+        )
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list) and len(data) == 7:
+                return [max(0, min(255, int(v))) for v in data]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        return [128] * 7
+
+    def set_sa_zone_alphas(self, alphas: list[int]) -> None:
+        """Persist the 7 zone alpha values."""
+        self._qs.setValue("sa_zone_alphas", json.dumps(
+            [max(0, min(255, int(v))) for v in alphas]
+        ))
+
     def reset_all(self) -> None:
         """Erase every setting and reset to factory defaults.
 
@@ -338,7 +409,8 @@ class SettingsManager:
         """
         _unlock_keys = [k for k in self._DEFAULTS if k.startswith("unlock_")]
         _progress_keys = [k for k in self._DEFAULTS if k in (
-            "total_clicks", "alpha_fix_done_once", "conversion_done_once",
+            "total_clicks", "alpha_fixes_total", "conversions_total",
+            "alpha_fix_done_once", "conversion_done_once",
         )]
         for key in _unlock_keys + _progress_keys:
             self._qs.setValue(key, self._DEFAULTS[key])
@@ -350,17 +422,25 @@ class SettingsManager:
 
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
-        "sound_enabled", "click_sound_path", "use_theme_sound",
-        "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
+        # Sound settings
+        "sound_enabled", "sound_volume", "click_sound_path", "use_theme_sound",
+        "sound_success", "sound_error", "sound_unlock", "sound_file_add",
+        "sound_preview", "sound_process_start", "sound_file_remove",
+        "sound_theme_change", "sound_tab_switch", "sound_drag_enter",
+        "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
-        "animated_banner_enabled", "show_splash_screen",
+        "animated_banner_enabled", "banner_anim_style", "banner_use_theme_anim",
+        "show_splash_screen",
+        "button_anim_enabled", "button_anim_style", "use_theme_button_anim",
         "custom_emoji",
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
         "custom_presets",
+        # Selective Alpha Tool
+        "sa_zone_alphas", "sa_brush_size", "sa_eraser_size", "sa_autocorrect", "sa_last_tool",
     ]
 
     def export_settings(self, path: str) -> None:

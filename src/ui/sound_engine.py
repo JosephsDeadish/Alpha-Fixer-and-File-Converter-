@@ -76,11 +76,13 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
       warm    – organic wood-block (otter, ocean, mermaid, sunset, forest)
       icy     – crystalline tinkle (ice, arctic, cyber_otter)
       sparkle – fast ascending twinkle (magic, rose, gold, pancake, noodle)
-      growl   – low rumbling growl (gore, zombie, dragon, blood moon)
+      growl   – low rumbling growl (gore, zombie, blood moon)
       bubble  – watery bubble pop (ocean, mermaid, deep ocean, coral reef)
       chirp   – bright bird/fairy chirp (fairy garden, spring bloom, sakura)
       crunch  – bone-dry crunch (skeleton, goth, abyssal void)
-      purr    – warm rhythmic purr (space cat, pancake, otter)
+      purr    – warm rhythmic purr (pancake, otter)
+      meow    – rising-then-falling pitch glide with vibrato (space cat)
+      roar    – low harmonic burst with slow attack (dragon fire)
     """
     samples: list = []
     if profile == "hard":
@@ -178,6 +180,41 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
             carrier = math.sin(2 * math.pi * 120 * t)
             carrier += 0.4 * math.sin(2 * math.pi * 240 * t)
             samples.append(int(20000 * carrier * mod * env))
+    elif profile == "meow":
+        # Cat meow — rising-then-falling pitch glide with vibrato and overtone.
+        # Approximates the classic "mee-oow" shape: 400 Hz → 900 Hz → 600 Hz
+        # over 150 ms with an 8 Hz vibrato for the natural cat-voice flutter.
+        n = int(sample_rate * 0.15)
+        dur = 0.15
+        phase = 0.0
+        for i in range(n):
+            t = i / sample_rate
+            # Pitch contour: rises in first 45 % then falls back
+            if t < dur * 0.45:
+                freq = 400.0 + 500.0 * (t / (dur * 0.45))      # 400 → 900 Hz
+            else:
+                freq = 900.0 - 300.0 * ((t - dur * 0.45) / (dur * 0.55))  # 900 → 600 Hz
+            freq += 20.0 * math.sin(2 * math.pi * 8 * t)  # 8 Hz vibrato ±20 Hz
+            env = math.exp(-t * 8.0) * (1.0 - math.exp(-t * 60.0))
+            phase += 2 * math.pi * freq / sample_rate
+            s = math.sin(phase) + 0.3 * math.sin(2 * phase)  # add 2nd harmonic
+            samples.append(int(18000 * s * env / 1.3))  # 1.3 = peak of 1+0.3
+    elif profile == "roar":
+        # Dragon/lion roar — rich harmonic burst with slow attack and rumble.
+        # Six partials (fundamental 80 Hz plus harmonics + slight detuning for
+        # beating) with an exponential onset create a dramatic roaring click.
+        n = int(sample_rate * 0.18)
+        for i in range(n):
+            t = i / sample_rate
+            env = (1.0 - math.exp(-t * 30.0)) * math.exp(-t * 8.0)
+            s = (math.sin(2 * math.pi * 80 * t)
+                 + 0.85 * math.sin(2 * math.pi * 160 * t)
+                 + 0.65 * math.sin(2 * math.pi * 240 * t)
+                 + 0.45 * math.sin(2 * math.pi * 320 * t)
+                 + 0.25 * math.sin(2 * math.pi * 400 * t)
+                 + 0.40 * math.sin(2 * math.pi * 85 * t))  # detuned for rumble
+            # 3.6 = 1 + 0.85 + 0.65 + 0.45 + 0.25 + 0.40 (sum of coefficients)
+            samples.append(int(22000 * s * env / 3.6))
     else:  # soft / default
         freq, dur, decay = 880, 0.06, 45
         n = int(sample_rate * dur)
@@ -202,8 +239,8 @@ _THEME_SOUND_PROFILES: dict[str, str] = {
     "Cyber Otter": "icy", "Toxic Neon": "bright", "Lava Cave": "hard",
     "Sunset Beach": "warm", "Midnight Forest": "warm",
     "Candy Land": "bright", "Zombie Apocalypse": "growl",
-    "Dragon Fire": "growl", "Bubblegum": "bubble", "Thunder Storm": "bright",
-    "Rose Gold": "chirp", "Space Cat": "purr", "Magic Mushroom": "sparkle",
+    "Dragon Fire": "roar", "Bubblegum": "bubble", "Thunder Storm": "bright",
+    "Rose Gold": "chirp", "Space Cat": "meow", "Magic Mushroom": "sparkle",
     "Abyssal Void": "dark", "Spring Bloom": "chirp",
     "Gold Rush": "sparkle", "Nebula": "dark",
     # New hidden themes (added below in theme_engine.py)
@@ -273,10 +310,79 @@ def _make_preview_wav(sample_rate: int = 22050) -> str:
     return _write_wav(samples, sample_rate)
 
 
+def _make_process_start_wav(sample_rate: int = 22050) -> str:
+    """Short ascending two-tone 'launch' cue played when a batch starts."""
+    # Two quick beeps going up: 440 Hz then 660 Hz, each 40 ms with a soft envelope
+    notes = [(440, 0.04), (660, 0.04)]
+    samples: list = []
+    pause = int(sample_rate * 0.015)  # 15 ms silence between notes
+    for freq, dur in notes:
+        n = int(sample_rate * dur)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.sin(math.pi * i / n)  # half-sine envelope
+            samples.append(int(20000 * math.sin(2 * math.pi * freq * t) * env))
+        samples.extend([0] * pause)
+    return _write_wav(samples, sample_rate)
 
-# ---------------------------------------------------------------------------
-# Click-filter that plays a sound on every QAbstractButton press
-# ---------------------------------------------------------------------------
+
+def _make_file_remove_wav(sample_rate: int = 22050) -> str:
+    """Short descending 'pop' played when files are removed from the queue."""
+    n = int(sample_rate * 0.05)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        # Slightly descending pitch: start at 500 Hz, end near 350 Hz
+        freq = 500 - 3000 * t
+        env = math.exp(-t * 50) * (1 - math.exp(-t * 300))
+        samples.append(int(16000 * math.sin(2 * math.pi * freq * t) * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_theme_change_wav(sample_rate: int = 22050) -> str:
+    """Soft upward whoosh played when the active theme changes.
+
+    Two overlapping sine glides sweep from low to high to convey a
+    smooth 'slide' feel (like a curtain being drawn back).
+    """
+    n = int(sample_rate * 0.14)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        env = math.sin(math.pi * t / 0.14) * 0.9  # half-sine — soft attack+release
+        # Two parallel rising tones create a richer whoosh texture
+        f1 = 300 + 1200 * (t / 0.14)   # 300 Hz → 1500 Hz
+        f2 = 200 + 800  * (t / 0.14)   # 200 Hz → 1000 Hz
+        s = 0.6 * math.sin(2 * math.pi * f1 * t)
+        s += 0.4 * math.sin(2 * math.pi * f2 * t)
+        samples.append(int(18000 * s * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_tab_switch_wav(sample_rate: int = 22050) -> str:
+    """Quick soft tick played when the user switches tabs."""
+    n = int(sample_rate * 0.04)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        env = math.exp(-t * 80)
+        samples.append(int(16000 * math.sin(2 * math.pi * 750 * t) * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_drag_enter_wav(sample_rate: int = 22050) -> str:
+    """Gentle rising two-note ping played when files are dragged over the drop zone."""
+    notes = [(660, 0.05), (880, 0.07)]
+    samples: list = []
+    for freq, dur in notes:
+        n = int(sample_rate * dur)
+        for i in range(n):
+            env = math.exp(-i / sample_rate * 28)
+            samples.append(int(16000 * math.sin(2 * math.pi * freq * i / sample_rate) * env))
+    return _write_wav(samples, sample_rate)
+
+
+
 
 class _ButtonClickFilter(QObject):
     def __init__(self, engine: "SoundEngine"):
@@ -324,6 +430,11 @@ class SoundEngine(QObject):
         self._unlock_wav: str = ""
         self._file_add_wav: str = ""
         self._preview_wav: str = ""
+        self._process_start_wav: str = ""
+        self._file_remove_wav: str = ""
+        self._theme_change_wav: str = ""
+        self._tab_switch_wav: str = ""
+        self._drag_enter_wav: str = ""
         # Per-profile click WAVs keyed by profile name
         self._theme_click_wavs: dict[str, str] = {}
         self._filter: _ButtonClickFilter | None = None
@@ -341,9 +452,14 @@ class SoundEngine(QObject):
             self._unlock_wav  = _make_unlock_wav()
             self._file_add_wav = _make_file_add_wav()
             self._preview_wav  = _make_preview_wav()
-            # Generate one WAV per sound profile (12 profiles)
+            self._process_start_wav = _make_process_start_wav()
+            self._file_remove_wav   = _make_file_remove_wav()
+            self._theme_change_wav  = _make_theme_change_wav()
+            self._tab_switch_wav    = _make_tab_switch_wav()
+            self._drag_enter_wav    = _make_drag_enter_wav()
+            # Generate one WAV per sound profile (14 profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
-                            "growl", "bubble", "chirp", "crunch", "purr"):
+                            "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar"):
                 self._theme_click_wavs[profile] = _make_theme_click_wav(profile)
         except Exception as exc:
             logger.warning("Could not generate sound WAVs: %s", exc)
@@ -364,6 +480,14 @@ class SoundEngine(QObject):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _volume(self) -> float:
+        """Return the current master volume as a 0.0–1.0 float."""
+        raw = self._settings.get("sound_volume", 50)
+        try:
+            return max(0.0, min(1.0, int(raw) / 100.0))
+        except (TypeError, ValueError):
+            return 0.45
 
     def install_on_app(self, app: QObject) -> None:
         """Install event filter so every button click triggers a sound."""
@@ -405,12 +529,16 @@ class SoundEngine(QObject):
         """Play the success chime after a batch completes cleanly."""
         if not self._settings.get("sound_enabled", False):
             return
+        if not self._settings.get("sound_success", True):
+            return
         if self._success_wav:
             self._play(self._success_wav)
 
     def play_error(self) -> None:
         """Play the error buzz when a batch finishes with failures."""
         if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_error", True):
             return
         if self._error_wav:
             self._play(self._error_wav)
@@ -419,12 +547,16 @@ class SoundEngine(QObject):
         """Play the unlock fanfare when a hidden theme is revealed."""
         if not self._settings.get("sound_enabled", False):
             return
+        if not self._settings.get("sound_unlock", True):
+            return
         if self._unlock_wav:
             self._play(self._unlock_wav)
 
     def play_file_add(self) -> None:
         """Play a soft 'thunk' when a file is added to the queue."""
         if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_file_add", True):
             return
         if self._file_add_wav:
             self._play(self._file_add_wav)
@@ -433,12 +565,57 @@ class SoundEngine(QObject):
         """Play a subtle ping when the live preview refreshes."""
         if not self._settings.get("sound_enabled", False):
             return
+        if not self._settings.get("sound_preview", False):
+            return
         if self._preview_wav:
             self._play(self._preview_wav)
 
-    # ------------------------------------------------------------------
-    # Internal playback
-    # ------------------------------------------------------------------
+    def play_process_start(self) -> None:
+        """Play a short ascending cue when a batch starts processing."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_process_start", False):
+            return
+        if self._process_start_wav:
+            self._play(self._process_start_wav)
+
+    def play_file_remove(self) -> None:
+        """Play a short descending pop when files are removed from the queue."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_file_remove", False):
+            return
+        if self._file_remove_wav:
+            self._play(self._file_remove_wav)
+
+    def play_theme_change(self) -> None:
+        """Play a soft upward whoosh when the active theme changes."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_theme_change", False):
+            return
+        if self._theme_change_wav:
+            self._play(self._theme_change_wav)
+
+    def play_tab_switch(self) -> None:
+        """Play a quick soft tick when the user switches tabs."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_tab_switch", False):
+            return
+        if self._tab_switch_wav:
+            self._play(self._tab_switch_wav)
+
+    def play_drag_enter(self) -> None:
+        """Play a gentle rising ping when files are dragged over the drop zone."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_drag_enter", False):
+            return
+        if self._drag_enter_wav:
+            self._play(self._drag_enter_wav)
+
+
 
     def _play(self, wav_path: str) -> None:
         if self._effect is not None:
@@ -447,6 +624,8 @@ class SoundEngine(QObject):
                 current_src = self._effect.source().toLocalFile()
                 if current_src != wav_path:
                     self._effect.setSource(QUrl.fromLocalFile(wav_path))
+                # Apply master volume (0.0–1.0) from settings
+                self._effect.setVolume(self._volume())
                 if not self._effect.isPlaying():
                     self._effect.play()
             except Exception as exc:
@@ -488,7 +667,10 @@ class SoundEngine(QObject):
         """Remove temp WAV files on application exit."""
         all_wavs = [self._click_wav, self._success_wav,
                     self._error_wav, self._unlock_wav,
-                    self._file_add_wav, self._preview_wav]
+                    self._file_add_wav, self._preview_wav,
+                    self._process_start_wav, self._file_remove_wav,
+                    self._theme_change_wav, self._tab_switch_wav,
+                    self._drag_enter_wav]
         all_wavs.extend(self._theme_click_wavs.values())
         for path in all_wavs:
             if path and os.path.isfile(path):

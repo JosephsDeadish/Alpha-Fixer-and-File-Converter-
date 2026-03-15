@@ -1,10 +1,11 @@
 """
 Main application window.
 """
+import math
 import sys
 import webbrowser
 
-from PyQt6.QtCore import Qt, QRect, QTimer
+from PyQt6.QtCore import Qt, QEvent, QRect, QTimer
 from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
@@ -71,66 +72,164 @@ _CURSOR_MAP = {
     "Blank":          Qt.CursorShape.BlankCursor,
 }
 
+# Cursor animation frame sequences keyed by the leading emoji character.
+# Each entry is the ordered list of emoji to cycle through at ~400 ms per
+# frame (≈ 2.5 fps — fast enough to be playful, slow enough to remain legible).
+# Themes that map to one of these emoji automatically get an animated cursor
+# when "Animate cursor" is enabled in settings.
+_CURSOR_ANIM_FRAMES: dict[str, list[str]] = {
+    "🦈": ["🦈", "🫦", "🦈"],           # shark jaw-snap
+    "🔥": ["🔥", "🕯️", "🔥"],           # fire flicker
+    "❄":  ["❄", "🌨️"],                  # snowflake / snowing
+    "✨": ["✨", "⭐", "🌟", "⭐"],       # sparkling
+    "⚡": ["⚡", "🌩️"],                  # lightning strike
+    "🌊": ["🌊", "💧", "🌊"],            # wave ripple
+    "🪄": ["🪄", "✨", "🪄"],            # magic wand sparkle
+    "🐉": ["🐉", "🔥", "🐉"],            # dragon fire
+    "🧙": ["🧙", "🔮", "🧙"],            # witch crystal ball
+    "🌸": ["🌸", "🌺", "🌸"],            # blossom / rose
+    "🫧": ["🫧", "💧", "🫧"],            # bubbles
+    "🧟": ["🧟", "💀", "🧟"],            # zombie skull
+    "🌌": ["🌌", "⭐", "🌟", "⭐"],      # nebula stars
+    "🐱": ["🐱", "😺", "🐱"],            # cat face smile
+    "🛸": ["🛸", "👽", "🛸"],            # UFO alien
+    "🧜": ["🧜", "🌊", "🧜"],            # mermaid wave
+    "🌹": ["🌹", "🥀", "🌹"],            # rose / wilted
+    "🍄": ["🍄", "✨", "🍄"],            # mushroom sparkle
+    "🔮": ["🔮", "✨", "🔮"],            # crystal ball
+    "🌈": ["🌈", "⛅", "🌈"],            # rainbow cloud
+    "💎": ["💎", "✨", "💎"],            # diamond sparkle
+    "🌟": ["🌟", "⭐", "✨", "⭐"],      # star shimmer
+    "🎃": ["🎃", "👻", "🎃"],            # pumpkin ghost
+    "🦇": ["🦇", "🌙", "🦇"],            # bat moon
+    "🌙": ["🌙", "⭐", "🌙"],            # moon star
+    "🐼": ["🐼", "🎋", "🐼"],            # panda bamboo
+    "🦦": ["🦦", "💦", "🦦"],            # otter splash
+    "🌋": ["🌋", "🔥", "🌋"],            # volcano fire
+    "🏴‍☠️": ["🏴‍☠️", "⚔️", "🏴‍☠️"],       # pirate sword
+    "💰": ["💰", "✨", "💰"],            # gold sparkle
+    "🪸": ["🪸", "🐠", "🪸"],            # coral fish
+}
 
-def _make_emoji_cursor(emoji: str, size: int = 40) -> QCursor:
+
+def _make_emoji_cursor(emoji: str, size: int = 48) -> QCursor:
     """Render *emoji* into a square pixmap and return a QCursor from it.
 
     The emoji is drawn centred in the pixmap and the hotspot is placed at
-    the centre so that interactions (clicks, hover) register at the visual
-    centre of the emoji character rather than at the invisible top-left
-    corner of the bounding box.
+    the logical centre so that interactions (clicks, hover) register at the
+    visual centre of the emoji character rather than at the invisible
+    top-left corner of the bounding box.
+
+    The font is rendered at 65 % of the logical pixmap size (pixel-size, not
+    point-size) so wide glyphs (e.g. 🦈 🌊) have adequate margin on every
+    side and are never clipped at the pixmap boundary.
+
+    On HiDPI / Retina displays the pixmap is created at the screen's physical
+    pixel density (devicePixelRatio) and the ratio is set on the pixmap so Qt
+    uses it at full physical resolution rather than scaling up a low-res bitmap.
 
     Falls back to the arrow cursor if pixmap painting is unavailable
     (e.g. running headless without a display).
     """
     try:
-        # Use a slightly larger pixmap than the rendered font size to ensure
-        # the full glyph is visible without clipping.
-        pix = QPixmap(size, size)
+        # Obtain the current screen DPR so the cursor is sharp on HiDPI
+        # displays.  Fall back to 1.0 if no screen is available (headless).
+        from PyQt6.QtWidgets import QApplication  # local import – avoids circular
+        screen = QApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen else 1.0
+
+        # Physical pixmap dimensions for crisp HiDPI rendering.
+        phys = max(1, int(size * dpr))
+        pix = QPixmap(phys, phys)
+        pix.setDevicePixelRatio(dpr)
         pix.fill(Qt.GlobalColor.transparent)
+
         painter = QPainter(pix)
-        # Use a font stack that covers Windows (Segoe UI Emoji), macOS (Apple Color Emoji),
-        # and Linux (Noto Color Emoji) so the emoji renders on every platform.
+        # Use a font stack that covers Windows (Segoe UI Emoji), macOS
+        # (Apple Color Emoji), and Linux (Noto Color Emoji).
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
-        font.setPointSize(max(6, size - 10))
+        # setPixelSize guarantees a fixed rendered glyph height in logical
+        # pixels regardless of screen DPI, unlike setPointSize which scales
+        # with DPI and produced a ~40 px glyph crammed into a 40 px pixmap
+        # (zero margin → wide emoji were clipped).  65 % of the logical size
+        # leaves ~17 % margin on each side — enough for any emoji glyph.
+        font.setPixelSize(max(8, int(size * 0.65)))
         painter.setFont(font)
+        # Draw in logical coordinates (0..size); the pixmap's DPR causes Qt
+        # to automatically scale the drawing to physical resolution.
         painter.drawText(
             QRect(0, 0, size, size),
             Qt.AlignmentFlag.AlignCenter,
             emoji,
         )
         painter.end()
-        # Hotspot at centre of the pixmap so the click-point matches the
-        # visual centre of the emoji (avoids the top-left offset problem).
+        # Hotspot at logical centre so the interaction point matches the
+        # visual centre of the emoji on all display densities.
         return QCursor(pix, size // 2, size // 2)
     except Exception:
         return QCursor(Qt.CursorShape.ArrowCursor)
 
 
 class _SpinningEmojiLabel(QWidget):
-    """Renders a single emoji character and rotates it continuously.
+    """Renders a single emoji with one of several animation modes.
 
-    This provides the per-theme "animated banner" effect: each theme's
-    representative emoji (🐼, 🩸, 🦇, etc.) appears to spin like a gear,
-    giving a genuine visual animation without cycling through different emojis.
+    Modes
+    -----
+    "spin"      Continuous 360° rotation (original behaviour).
+    "bounce"    Vertical bobbing using a sine wave.
+    "shake"     Rapid horizontal quiver.
+    "pendulum"  Oscillating swing (±30°) like a metronome.
+    "static"    No motion; used when an external flock effect is active.
+
+    The active mode is set via ``set_mode()``.  The animation is toggled
+    via ``set_animated()`` exactly as before so all callers stay compatible.
     """
 
-    _DEGREES_PER_FRAME = 2.0   # rotation speed per ~33 ms tick ≈ 1 full turn / ~6 s
-    _INTERVAL_MS = 33           # ~30 fps
+    _INTERVAL_MS = 33  # ~30 fps
+
+    # Per-mode speed constants
+    _SPIN_DEG_PER_FRAME = 2.0   # full rotation ≈ 6 s
+    _BOUNCE_STEP        = 0.12  # rad/tick ≈ full cycle / ~4 s
+    _SHAKE_STEP         = 0.40  # rad/tick ≈ full cycle / ~0.5 s
+    _PENDULUM_STEP      = 0.06  # rad/tick ≈ full cycle / ~10 s
+
+    _BOUNCE_AMPLITUDE   = 6     # pixels
+    _SHAKE_AMPLITUDE    = 5     # pixels
+    _PENDULUM_MAX_ANGLE = 30.0  # degrees
+
+    _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "static"})
 
     def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
         super().__init__(parent)
         self._emoji = emoji
         self._font_size = font_size
-        self._angle = 0.0
-        sz = font_size + 16
-        self.setFixedSize(sz, sz)
+        self._mode = "spin"
+        self._angle = 0.0     # degrees – used by spin / pendulum
+        self._phase = 0.0     # radians – used by bounce / shake / pendulum
+        self._offset_x = 0.0  # pixel offset for bounce / shake
+        self._offset_y = 0.0
+        self._update_size()
         self._timer = QTimer(self)
         self._timer.setInterval(self._INTERVAL_MS)
         self._timer.timeout.connect(self._tick)
         # Timer is NOT started by default; set_animated(True) starts it.
-        # This matches the animated_banner_enabled default of False.
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_mode(self, mode: str) -> None:
+        """Change the animation mode and reset all motion state."""
+        if mode not in self._VALID_MODES:
+            mode = "spin"
+        self._mode = mode
+        self._angle = 0.0
+        self._phase = 0.0
+        self._offset_x = 0.0
+        self._offset_y = 0.0
+        self._update_size()
+        self.update()
 
     def set_emoji(self, emoji: str) -> None:
         """Change the displayed emoji; takes effect on the next paint."""
@@ -138,29 +237,56 @@ class _SpinningEmojiLabel(QWidget):
         self.update()
 
     def set_animated(self, enabled: bool) -> None:
-        """Start or stop the rotation animation.
+        """Start or stop the animation timer.
 
-        When *enabled* is False the emoji is rendered at a fixed angle (0°)
-        without consuming CPU on the timer tick.  When re-enabled the rotation
-        resumes from angle zero.
+        In "static" mode the timer is never started even when *enabled* is
+        True — the emoji is always rendered without motion (the caller may
+        activate an external flock effect instead).
         """
-        if enabled:
+        if enabled and self._mode != "static":
             if not self._timer.isActive():
                 self._timer.start()
         else:
             if self._timer.isActive():
                 self._timer.stop()
             self._angle = 0.0
+            self._phase = 0.0
+            self._offset_x = 0.0
+            self._offset_y = 0.0
             self.update()
 
     def set_font_size(self, size: int) -> None:
         self._font_size = size
-        sz = size + 16
-        self.setFixedSize(sz, sz)
+        self._update_size()
         self.update()
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _update_size(self) -> None:
+        """Resize the widget to fit the emoji plus any animation headroom."""
+        base = self._font_size + 16
+        if self._mode == "bounce":
+            self.setFixedSize(base, base + self._BOUNCE_AMPLITUDE * 2)
+        elif self._mode == "shake":
+            self.setFixedSize(base + self._SHAKE_AMPLITUDE * 2, base)
+        else:
+            self.setFixedSize(base, base)
+
     def _tick(self) -> None:
-        self._angle = (self._angle + self._DEGREES_PER_FRAME) % 360.0
+        mode = self._mode
+        if mode == "spin":
+            self._angle = (self._angle + self._SPIN_DEG_PER_FRAME) % 360.0
+        elif mode == "bounce":
+            self._phase = (self._phase + self._BOUNCE_STEP) % (2 * math.pi)
+            self._offset_y = math.sin(self._phase) * self._BOUNCE_AMPLITUDE
+        elif mode == "shake":
+            self._phase = (self._phase + self._SHAKE_STEP) % (2 * math.pi)
+            self._offset_x = math.sin(self._phase) * self._SHAKE_AMPLITUDE
+        elif mode == "pendulum":
+            self._phase = (self._phase + self._PENDULUM_STEP) % (2 * math.pi)
+            self._angle = math.sin(self._phase) * self._PENDULUM_MAX_ANGLE
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
@@ -169,8 +295,11 @@ class _SpinningEmojiLabel(QWidget):
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         w, h = self.width(), self.height()
-        painter.translate(w / 2.0, h / 2.0)
-        painter.rotate(self._angle)
+        # Translate to widget centre plus any per-mode positional offset.
+        painter.translate(w / 2.0 + self._offset_x, h / 2.0 + self._offset_y)
+        # Apply rotation for spin / pendulum modes.
+        if self._angle != 0.0:
+            painter.rotate(self._angle)
 
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
@@ -221,12 +350,33 @@ class MainWindow(QMainWindow):
         (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
     ]
 
+    # Alternative unlock path: number of *alpha-fix files processed* required.
+    # Uses the same settings keys as _UNLOCK_TABLE so the first path to fire wins
+    # and no duplicate notification is shown.
+    _ALPHA_MILESTONES = [
+        (10,   "unlock_ice_cave",     "❄ 'Ice Cave' theme unlocked! (10 alpha fixes done)"),
+        (50,   "unlock_ocean",        "🌊 'Deep Ocean' theme unlocked! (50 alpha fixes done)"),
+        (250,  "unlock_midnight_forest", "🌲 'Midnight Forest' theme unlocked! (250 alpha fixes done)"),
+        (1000, "unlock_nebula",       "🌌 'Nebula' theme unlocked! (1 000 alpha fixes done)"),
+        (5000, "unlock_golden_hour",  "🌇 'Golden Hour' theme unlocked! (5 000 alpha fixes done)"),
+    ]
+
+    # Alternative unlock path: number of *converted files* required.
+    _CONV_MILESTONES = [
+        (10,   "unlock_blood_moon",   "🩸 'Blood Moon' theme unlocked! (10 conversions done)"),
+        (50,   "unlock_dragon_fire",  "🐉 'Dragon Fire' theme unlocked! (50 conversions done)"),
+        (250,  "unlock_spring_bloom", "🌷 'Spring Bloom' theme unlocked! (250 conversions done)"),
+        (1000, "unlock_crystal_cave", "💎 'Crystal Cave' theme unlocked! (1 000 conversions done)"),
+        (5000, "unlock_coral_reef",   "🪸 'Coral Reef' theme unlocked! (5 000 conversions done)"),
+    ]
+
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
         self._preset_mgr = PresetManager(settings)
         self._trail_overlay = None
         self._click_effects = None
+        self._button_anim = None
         self._tooltip_mgr = None
         self._sound = None
         self._svg_badge = None
@@ -237,6 +387,10 @@ class MainWindow(QMainWindow):
         self._status_bar = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
+        # Cursor animation state
+        self._cursor_anim_timer: "QTimer | None" = None
+        self._cursor_anim_frames: list[str] = []  # current animation sequence
+        self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
         self._tab_base_labels: tuple = ()   # set during first _apply_theme()
@@ -260,14 +414,42 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
         self._apply_theme()
         self._setup_effects()
+        # Connect to screen-topology and DPI-change signals so the window
+        # geometry stays valid when the user plugs in / removes a monitor or
+        # changes the system display-scale setting.
+        app = QApplication.instance()
+        if app is not None:
+            app.screenAdded.connect(self._on_screens_changed)
+            app.screenRemoved.connect(self._on_screens_changed)
+            app.primaryScreenChanged.connect(self._on_screens_changed)
 
     # ------------------------------------------------------------------
-    # Window setup
+    # Window setup / minimum-size helpers (screen-adaptive)
     # ------------------------------------------------------------------
+
+    def _update_minimum_size(self) -> None:
+        """Recompute and apply the window's minimum size based on the current
+        screen's available geometry.
+
+        The cap of 900×700 is the design-target minimum.  On displays where
+        the available area is smaller (e.g. 1280×720 laptops with a taskbar)
+        we shrink the minimum proportionally so the window can still be shown
+        without the OS forcing it to overflow the working area.
+        """
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            ag = screen.availableGeometry()
+            # Use at most 88 % of the available width/height, but never below
+            # a sensible floor that still allows the interface to be usable.
+            min_w = min(900, max(640, int(ag.width()  * 0.88)))
+            min_h = min(700, max(520, int(ag.height() * 0.88)))
+        else:
+            min_w, min_h = 900, 700
+        self.setMinimumSize(min_w, min_h)
 
     def _setup_window(self):
-        self.setWindowTitle(f"🐼 Alpha Fixer & File Converter  v{__version__}")
-        self.setMinimumSize(1000, 780)
+        self.setWindowTitle(f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}")
+        self._update_minimum_size()
         # Set the panda SVG as the window / taskbar icon (initial default).
         # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
         # which contains all shell sizes (16 → 256 px) for crisp display at
@@ -354,7 +536,7 @@ class MainWindow(QMainWindow):
         self._banner_emoji_left = _SpinningEmojiLabel("🐼", font_size=20)
         banner_layout.addWidget(self._banner_emoji_left)
 
-        banner_text = QLabel("Alpha Fixer  &  File Converter")
+        banner_text = QLabel("Alpha & RGBA Adjuster  |  File Converter")
         banner_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         banner_text.setObjectName("header")
         banner_text.setStyleSheet("padding: 0; font-size: 20px; background: transparent; border: none;")
@@ -371,8 +553,8 @@ class MainWindow(QMainWindow):
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
-        self._selective_alpha_tab = SelectiveAlphaTool()
-        self._tabs.addTab(self._alpha_tab, "🖼  Alpha Fixer")
+        self._selective_alpha_tab = SelectiveAlphaTool(self._settings)
+        self._tabs.addTab(self._alpha_tab, "🖼  Alpha & RGBA Adjuster")
         self._tabs.addTab(self._converter_tab, "🔄  Converter")
         self._tabs.addTab(self._history_tab, "📋  History")
         self._tabs.addTab(self._selective_alpha_tab, "🎨  Selective Alpha")
@@ -467,15 +649,37 @@ class MainWindow(QMainWindow):
         self._click_effects.click_registered.connect(self._check_unlocks)
         self._apply_theme_effect()
 
+        # Button press animator
+        from .click_effects import ButtonPressAnimator
+        self._button_anim = ButtonPressAnimator(self, self._click_effects)
+        self._apply_button_anim()
+
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
         self._converter_tab.processing_done.connect(self._on_processing_done)
+        # Additional connections for per-tool milestone unlocks
+        self._alpha_tab.processing_done.connect(self._on_alpha_processing_done)
+        self._converter_tab.processing_done.connect(self._on_conv_processing_done)
+        # Processing-error sounds
+        self._alpha_tab.processing_error.connect(self._on_processing_error)
+        self._converter_tab.processing_error.connect(self._on_processing_error)
+        # Processing-started sounds
+        self._alpha_tab.processing_started.connect(self._on_processing_started)
+        self._converter_tab.processing_started.connect(self._on_processing_started)
         # First-use unlock triggers
         self._alpha_tab.first_alpha_fix.connect(self._on_first_alpha_fix)
         self._converter_tab.first_conversion.connect(self._on_first_conversion)
         # File-add sounds
         self._alpha_tab.files_added.connect(self._on_files_added)
         self._converter_tab.files_added.connect(self._on_files_added)
+        # File-remove sounds
+        self._alpha_tab.files_removed.connect(self._on_files_removed)
+        self._converter_tab.files_removed.connect(self._on_files_removed)
+        # Drag-enter sounds
+        self._alpha_tab.drag_entered.connect(self._on_drag_entered)
+        self._converter_tab.drag_entered.connect(self._on_drag_entered)
+        # Preview-refresh sounds
+        self._alpha_tab.preview_refreshed.connect(self._on_preview_refreshed)
 
         # Cursor
         self._apply_cursor()
@@ -533,6 +737,21 @@ class MainWindow(QMainWindow):
         custom_raw = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
         custom_emoji = custom_raw.split() if custom_raw.strip() else DEFAULT_CUSTOM_EMOJI.split()
         self._click_effects.set_custom_emoji(custom_emoji)
+
+    def _apply_button_anim(self) -> None:
+        """Enable or disable button press animations to match the active settings."""
+        if self._button_anim is None:
+            return
+        enabled = self._settings.get("button_anim_enabled", False)
+        if not enabled:
+            self._button_anim.set_enabled(False)
+            return
+        theme = self._settings.get_theme()
+        if self._settings.get("use_theme_button_anim", True):
+            mode = theme.get("_button_anim", "press")
+        else:
+            mode = self._settings.get("button_anim_style", "press")
+        self._button_anim.set_enabled(True, mode)
 
     # ------------------------------------------------------------------
     # Unlock hidden themes based on click count
@@ -607,6 +826,48 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _on_files_removed(self) -> None:
+        """Play a short pop when files are removed from either tab's queue."""
+        try:
+            self._sound.play_file_remove()
+        except Exception:
+            pass
+
+    def _on_drag_entered(self) -> None:
+        """Play a gentle ping when files are dragged over either tab's drop zone."""
+        try:
+            self._sound.play_drag_enter()
+        except Exception:
+            pass
+
+    def _on_processing_started(self) -> None:
+        """Play an ascending two-tone cue when a batch starts processing."""
+        try:
+            self._sound.play_process_start()
+        except Exception:
+            pass
+
+    def _on_processing_error(self, error_count: int) -> None:
+        """Play an error buzz when a batch finishes with failures."""
+        try:
+            self._sound.play_error()
+        except Exception:
+            pass
+
+    def _on_preview_refreshed(self) -> None:
+        """Play a subtle ping when the live preview refreshes (opt-in, off by default)."""
+        try:
+            self._sound.play_preview()
+        except Exception:
+            pass
+
+    def _on_theme_changed_sound(self) -> None:
+        """Play a soft whoosh when the user switches to a different theme."""
+        try:
+            self._sound.play_theme_change()
+        except Exception:
+            pass
+
     def _schedule_unlock_clear(self) -> None:
         """Start (or restart) a one-shot timer that clears the unlock label."""
         from PyQt6.QtCore import QTimer
@@ -626,33 +887,92 @@ class MainWindow(QMainWindow):
 
     def _apply_cursor(self):
         use_theme = self._settings.get("use_theme_cursor", False)
+        anim_enabled = self._settings.get("cursor_anim_enabled", True)
         if use_theme:
             # Read the active theme's preferred cursor
             theme = self._settings.get_theme()
             cursor_spec = theme.get("_cursor", "Default")
             if cursor_spec.startswith("emoji:"):
                 emoji = cursor_spec[len("emoji:"):]
-                self.setCursor(_make_emoji_cursor(emoji))
+                self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
+                if not anim_enabled:
+                    self.setCursor(_make_emoji_cursor(emoji))
                 return
             # Otherwise treat it as a named cursor key
+            self._stop_cursor_anim()
             shape = _CURSOR_MAP.get(cursor_spec, Qt.CursorShape.ArrowCursor)
             self.setCursor(QCursor(shape))
         else:
             cursor_name = self._settings.get("cursor", "Default")
             # Check if it's a system cursor name
             if cursor_name in _CURSOR_MAP:
+                self._stop_cursor_anim()
                 self.setCursor(QCursor(_CURSOR_MAP[cursor_name]))
             elif cursor_name.startswith("emoji:"):
                 # Stored as "emoji:<char>" from theme profiles
-                self.setCursor(_make_emoji_cursor(cursor_name[len("emoji:"):]))
+                emoji = cursor_name[len("emoji:"):]
+                self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
+                if not anim_enabled:
+                    self.setCursor(_make_emoji_cursor(emoji))
             else:
                 # Combo items like "🐼 Panda" – extract the emoji (first char/cluster)
                 # by taking everything before the first space
                 parts = cursor_name.split(" ", 1)
                 if parts and parts[0].strip():
-                    self.setCursor(_make_emoji_cursor(parts[0]))
+                    emoji = parts[0]
+                    self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
+                    if not anim_enabled:
+                        self.setCursor(_make_emoji_cursor(emoji))
                 else:
+                    self._stop_cursor_anim()
                     self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def _start_cursor_anim(self, emoji: str) -> None:
+        """Start cursor animation for *emoji* if frames are defined.
+
+        If no animation frames exist for this emoji, stop any current
+        animation and render the emoji as a static cursor instead.
+        """
+        frames = _CURSOR_ANIM_FRAMES.get(emoji)
+        if not frames:
+            # No animation frames defined for this emoji – render it static.
+            self._stop_cursor_anim()
+            self.setCursor(_make_emoji_cursor(emoji))
+            return
+        # If the same sequence is already running, don't restart it
+        # (avoids the cursor jumping back to frame 0 on minor settings refreshes).
+        if self._cursor_anim_frames == frames and self._cursor_anim_timer is not None and self._cursor_anim_timer.isActive():
+            return
+        self._cursor_anim_frames = frames
+        self._cursor_anim_idx = 0
+        # Show the first frame immediately so there's no blank-cursor gap.
+        self.setCursor(_make_emoji_cursor(frames[0]))
+        if self._cursor_anim_timer is None:
+            self._cursor_anim_timer = QTimer(self)
+            self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
+        self._cursor_anim_timer.setInterval(400)  # 400 ms per frame ≈ 2.5 fps
+        self._cursor_anim_timer.start()
+
+    def _stop_cursor_anim(self) -> None:
+        """Stop the cursor animation timer and clear the frame buffer."""
+        if self._cursor_anim_timer is not None:
+            self._cursor_anim_timer.stop()
+        self._cursor_anim_frames = []
+        self._cursor_anim_idx = 0
+
+    def _tick_cursor_anim(self) -> None:
+        """Advance to the next cursor animation frame."""
+        if not self._cursor_anim_frames:
+            if self._cursor_anim_timer is not None:
+                self._cursor_anim_timer.stop()
+            return
+        self._cursor_anim_idx = (self._cursor_anim_idx + 1) % len(self._cursor_anim_frames)
+        try:
+            self.setCursor(_make_emoji_cursor(self._cursor_anim_frames[self._cursor_anim_idx]))
+        except RuntimeError:
+            # Widget destroyed during teardown – stop the timer gracefully.
+            if self._cursor_anim_timer is not None:
+                self._cursor_anim_timer.stop()
 
     def _apply_font_size(self):
         size = self._settings.get("font_size", 10)
@@ -674,6 +994,32 @@ class MainWindow(QMainWindow):
         y = self._settings.get("window_y")
         w = self._settings.get("window_w")
         h = self._settings.get("window_h")
+        # Guard against the window being positioned entirely off-screen
+        # (e.g. after a secondary monitor is disconnected).  We check that at
+        # least a strip of the title bar is visible on *some* available screen.
+        _MIN_VISIBLE_W = 100   # minimum logical pixels of title bar that must be visible
+        _MIN_VISIBLE_H = 50    # height of the title-bar strip we check
+        title_bar_strip = QRect(x, y, max(w, _MIN_VISIBLE_W), _MIN_VISIBLE_H)
+        screens = QApplication.screens()
+        on_screen = any(
+            scr.availableGeometry().intersects(title_bar_strip)
+            for scr in screens
+        )
+        primary = QApplication.primaryScreen()
+        if primary is None and screens:
+            primary = screens[0]
+        if not on_screen:
+            # Centre on the primary (or first available) screen instead.
+            if primary is not None:
+                ag = primary.availableGeometry()
+                x = ag.x() + max(0, (ag.width()  - w) // 2)
+                y = ag.y() + max(0, (ag.height() - h) // 2)
+        # Clamp saved size so it doesn't exceed the available area
+        # (e.g. the user previously ran on a larger monitor or higher resolution)
+        if primary is not None:
+            ag = primary.availableGeometry()
+            w = min(w, ag.width())
+            h = min(h, ag.height())
         self.setGeometry(x, y, w, h)
 
     def _save_geometry(self):
@@ -685,6 +1031,66 @@ class MainWindow(QMainWindow):
             self._settings.set("window_w", g.width())
             self._settings.set("window_h", g.height())
 
+    def _clamp_to_screen(self) -> None:
+        """Ensure the window is visible on *some* available screen.
+
+        Called after the user:
+        • Moves the window to a different monitor
+        • Changes the system DPI / display-scale setting
+        • Connects or disconnects a monitor
+
+        If the title bar is entirely off-screen the window is centred on the
+        primary (or first available) screen.  The window size is also clamped
+        so it never exceeds the available screen area.
+        """
+        if self.isMaximized() or self.isFullScreen():
+            return
+        g = self.geometry()
+        x, y, w, h = g.x(), g.y(), g.width(), g.height()
+        _MIN_VISIBLE_W = 100
+        _MIN_VISIBLE_H = 50
+        title_bar_strip = QRect(x, y, max(w, _MIN_VISIBLE_W), _MIN_VISIBLE_H)
+        screens = QApplication.screens()
+        on_screen = any(
+            scr.availableGeometry().intersects(title_bar_strip)
+            for scr in screens
+        )
+        primary = QApplication.primaryScreen()
+        if primary is None and screens:
+            primary = screens[0]
+        if primary is not None:
+            ag = primary.availableGeometry()
+            # Clamp size to available area
+            w = min(w, ag.width())
+            h = min(h, ag.height())
+            if not on_screen:
+                x = ag.x() + max(0, (ag.width()  - w) // 2)
+                y = ag.y() + max(0, (ag.height() - h) // 2)
+            self.setGeometry(x, y, w, h)
+        elif not on_screen and screens:
+            # No primary screen object – just re-centre on the first screen
+            ag = screens[0].availableGeometry()
+            w = min(w, ag.width())
+            h = min(h, ag.height())
+            self.setGeometry(
+                ag.x() + max(0, (ag.width()  - w) // 2),
+                ag.y() + max(0, (ag.height() - h) // 2),
+                w, h,
+            )
+
+    def _on_screens_changed(self, *_args) -> None:
+        """Handle monitor added/removed or primary-screen change.
+
+        Deferred 250 ms so the OS has time to finish updating screen geometry
+        before we query it.  Two timers coalesce into one callback even when
+        multiple signals fire in quick succession (e.g. a resolution change
+        can emit both ``screenRemoved`` and ``screenAdded`` for the same
+        physical monitor).
+        """
+        QTimer.singleShot(250, self._clamp_to_screen)
+        QTimer.singleShot(250, self._update_minimum_size)
+        QTimer.singleShot(250, self._apply_font_size)
+
     # ------------------------------------------------------------------
     # Theme
     # ------------------------------------------------------------------
@@ -695,19 +1101,44 @@ class MainWindow(QMainWindow):
         QApplication.instance().setStyleSheet(build_stylesheet(theme, tooltip_style))
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
-        # Update the spinning banner emoji to the theme's representative icon.
-        # The emoji rotates only when animated_banner_enabled is True.
+        # Update the banner emoji widget to the theme's representative icon.
         icon = get_theme_icon(theme_name)
         animated = self._settings.get("animated_banner_enabled", False)
-        if self._banner_emoji_left is not None:
-            self._banner_emoji_left.set_emoji(icon)
-            self._banner_emoji_left.set_animated(animated)
-        if self._banner_emoji_right is not None:
-            self._banner_emoji_right.set_emoji(icon)
-            self._banner_emoji_right.set_animated(animated)
+        # Determine the animation mode: use theme's _banner_anim if the
+        # "Use theme animation" setting is on, otherwise the manual setting.
+        if self._settings.get("banner_use_theme_anim", True):
+            anim_mode = theme.get("_banner_anim", "spin")
+        else:
+            anim_mode = self._settings.get("banner_anim_style", "spin")
+        # "flock" mode: keep emoji widgets static; activate a banner flock on
+        # the click-effects overlay so themed emoji fly across the top of the
+        # window periodically (independent of click-effect enable state).
+        if anim_mode == "flock":
+            if self._banner_emoji_left is not None:
+                self._banner_emoji_left.set_emoji(icon)
+                self._banner_emoji_left.set_mode("static")
+                self._banner_emoji_left.set_animated(False)
+            if self._banner_emoji_right is not None:
+                self._banner_emoji_right.set_emoji(icon)
+                self._banner_emoji_right.set_mode("static")
+                self._banner_emoji_right.set_animated(False)
+            if self._click_effects is not None:
+                trail_color = theme.get("_trail_color", "#e94560")
+                self._click_effects.set_banner_flock(animated, icon, trail_color)
+        else:
+            if self._banner_emoji_left is not None:
+                self._banner_emoji_left.set_emoji(icon)
+                self._banner_emoji_left.set_mode(anim_mode)
+                self._banner_emoji_left.set_animated(animated)
+            if self._banner_emoji_right is not None:
+                self._banner_emoji_right.set_emoji(icon)
+                self._banner_emoji_right.set_mode(anim_mode)
+                self._banner_emoji_right.set_animated(animated)
+            if self._click_effects is not None:
+                self._click_effects.set_banner_flock(False, icon, "#e94560")
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
-            self._banner_lbl.setText("Alpha Fixer  &  File Converter")
+            self._banner_lbl.setText("Alpha & RGBA Adjuster  |  File Converter")
         # Stop any legacy animation timer (banner no longer cycles emojis)
         if self._anim_timer is not None:
             self._anim_timer.stop()
@@ -736,6 +1167,8 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
+        if self._button_anim is not None:
+            self._apply_button_anim()
         # On Windows 11+, colour the native title bar to match the theme's
         # primary/surface colour so the window chrome integrates with the theme.
         try:
@@ -773,7 +1206,7 @@ class MainWindow(QMainWindow):
                     painter.end()
                     lbl = QLabel()
                     lbl.setPixmap(pix)
-                    lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+                    lbl.setToolTip("Alpha && RGBA Adjuster  |  File Converter 🐼")
                     lbl.setContentsMargins(4, 0, 4, 0)
                     return lbl
                 except Exception:
@@ -781,7 +1214,7 @@ class MainWindow(QMainWindow):
                 break
         # Fallback: plain text panda emoji
         lbl = QLabel("🐼")
-        lbl.setToolTip("Alpha Fixer && File Converter 🐼")
+        lbl.setToolTip("Alpha && RGBA Adjuster  |  File Converter 🐼")
         lbl.setContentsMargins(4, 0, 4, 0)
         return lbl
 
@@ -889,6 +1322,10 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, index: int):
         if self._tabs.widget(index) is self._history_tab:
             self._history_tab.refresh()
+        try:
+            self._sound.play_tab_switch()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Settings
@@ -897,9 +1334,12 @@ class MainWindow(QMainWindow):
     def _open_settings(self):
         dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         dlg.theme_changed.connect(lambda t: self._on_settings_changed())
+        dlg.theme_changed.connect(lambda t: self._on_theme_changed_sound())
         dlg.settings_changed.connect(self._on_settings_changed)
         # First tooltip mode change unlocks Secret Skeleton (independent of click count)
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
+        # First cursor animation enable unlocks Toxic Neon
+        dlg.first_cursor_anim_enabled.connect(self._on_first_cursor_anim_enabled)
 
         # Attach a click-effects overlay to the dialog so particle effects are
         # visible while the settings window is open (the main overlay is behind
@@ -941,6 +1381,7 @@ class MainWindow(QMainWindow):
         self._apply_font_size()
         self._apply_theme_effect()
         self._apply_trail()
+        self._apply_button_anim()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
                 self._settings.get("click_effects_enabled", False)
@@ -979,6 +1420,64 @@ class MainWindow(QMainWindow):
                 pass
             self._schedule_unlock_clear()
 
+    def _on_first_cursor_anim_enabled(self) -> None:
+        """Unlock Toxic Neon the first time the user enables cursor animation."""
+        if not self._settings.get("unlock_toxic_neon", False):
+            self._settings.set("unlock_toxic_neon", True)
+            self._unlock_lbl.setText("☢ 'Toxic Neon' theme unlocked! (cursor animation enabled!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _run_milestone_checks(self, total: int,
+                              table: list[tuple[int, str, str]]) -> None:
+        """Evaluate *table* against *total* and fire any newly reached milestones.
+
+        Re-uses the existing unlock-notification infrastructure so milestone
+        unlocks look identical to click-based ones.
+        """
+        newly_unlocked = False
+        for threshold, key, message in table:
+            if threshold > total:
+                break
+            if not self._settings.get(key, False):
+                self._settings.set(key, True)
+                self._unlock_lbl.setText(message)
+                try:
+                    self._sound.play_unlock()
+                except Exception:
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
+                newly_unlocked = True
+        if newly_unlocked:
+            self._schedule_unlock_clear()
+
+    def _on_alpha_processing_done(self, file_count: int) -> None:
+        """Track cumulative alpha fixes and check alpha-milestone unlocks."""
+        if file_count <= 0:
+            return
+        try:
+            total = self._settings.get("alpha_fixes_total", 0) + file_count
+            self._settings.set("alpha_fixes_total", total)
+            self._run_milestone_checks(total, self._ALPHA_MILESTONES)
+        except Exception:
+            pass
+
+    def _on_conv_processing_done(self, file_count: int) -> None:
+        """Track cumulative conversions and check conversion-milestone unlocks."""
+        if file_count <= 0:
+            return
+        try:
+            total = self._settings.get("conversions_total", 0) + file_count
+            self._settings.set("conversions_total", total)
+            self._run_milestone_checks(total, self._CONV_MILESTONES)
+        except Exception:
+            pass
+
     def _apply_trail(self):
         """Apply trail color, style, length, fade speed, intensity and enabled state."""
         if self._trail_overlay is None:
@@ -987,16 +1486,21 @@ class MainWindow(QMainWindow):
         if use_theme:
             theme = self._settings.get_theme()
             color = theme.get("_trail_color", "#e94560")
-            effect = theme.get("_effect", "default")
-            # Map effect → trail style
-            if effect == "fairy":
-                style = "fairy"
-            elif effect in ("ocean", "mermaid", "ripple"):
-                style = "wave"
-            elif effect in ("sparkle", "ice"):
-                style = "sparkle"
+            # Use the explicit _trail key added to every theme dict.
+            # Fall back to the legacy _effect → style mapping for any custom
+            # themes that were saved before the _trail key was introduced.
+            if "_trail" in theme:
+                style = theme["_trail"]
             else:
-                style = "dots"
+                effect = theme.get("_effect", "default")
+                if effect == "fairy":
+                    style = "fairy"
+                elif effect in ("ocean", "mermaid", "ripple"):
+                    style = "wave"
+                elif effect in ("sparkle", "ice"):
+                    style = "sparkle"
+                else:
+                    style = "dots"
         else:
             color = self._settings.get("trail_color", "#e94560")
             style = self._settings.get("trail_style", "dots")
@@ -1065,11 +1569,11 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         QMessageBox.about(
             self,
-            "About 🐼 Alpha Fixer & File Converter",
-            f"<h2>🐼 Alpha Fixer & File Converter  v{__version__}</h2>"
+            "About 🐼 Alpha & RGBA Adjuster  |  File Converter",
+            f"<h2>🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}</h2>"
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
-            "<li><b>Alpha Fixer:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
+            "<li><b>Alpha &amp; RGBA Adjuster:</b> PS2, N64, No Alpha, Max Alpha presets + custom</li>"
             "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI and more</li>"
             "<li>Drag-and-drop + batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"
@@ -1079,6 +1583,7 @@ class MainWindow(QMainWindow):
             " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
             "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"
             "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
+            "<li>Animated emoji cursors: 🦈 snaps, 🔥 flickers, ✨ sparkles, ⚡ crackles and more (Settings → General)</li>"
             "<li>Unique per-theme banner, shapes, and visual style — each theme has its own look</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · Ctrl+1/2/3 switch tabs · F1 help</li>"
@@ -1124,6 +1629,28 @@ class MainWindow(QMainWindow):
         # where the eventFilter is not installed (e.g., effects disabled).
         self._resize_timer.start()
 
+    def changeEvent(self, event: "QEvent") -> None:
+        """Handle runtime display/DPI changes.
+
+        Qt fires ``QEvent.Type.ScreenChangeInternal`` whenever:
+        • The window is dragged to a monitor with a different device-pixel ratio
+        • The user changes the system display-scale setting (e.g. 100 % → 150 %)
+        • Windows sends a WM_DPICHANGED message (per-monitor DPI awareness)
+
+        In response we:
+        1. Recalculate the adaptive minimum size for the new screen's geometry.
+        2. Clamp the window so it remains visible and fits within the new area.
+        3. Re-apply the saved font size so point-size metrics are correct on
+           the new display (the font family/size stays the same, but Qt must
+           recalculate layout metrics after a DPI change).
+        """
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ScreenChangeInternal:
+            # Defer slightly so Qt has updated screen/geometry data first.
+            QTimer.singleShot(150, self._update_minimum_size)
+            QTimer.singleShot(150, self._clamp_to_screen)
+            QTimer.singleShot(150, self._apply_font_size)
+
     def _reposition_overlays(self) -> None:
         """Reposition both overlays to fill the window after a resize burst."""
         if self._trail_overlay is not None:
@@ -1145,6 +1672,8 @@ class MainWindow(QMainWindow):
             self._click_effects.set_enabled(False)
         if self._trail_overlay is not None:
             self._trail_overlay.set_enabled(False)
+        if self._button_anim is not None:
+            self._button_anim.set_enabled(False)
         # Stop any running workers gracefully
         for tab in (self._alpha_tab, self._converter_tab):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
@@ -1164,6 +1693,7 @@ class MainWindow(QMainWindow):
             self._resize_timer,
             self._unlock_timer,
             self._anim_timer,
+            self._cursor_anim_timer,
         ):
             if timer is not None:
                 timer.stop()
@@ -1174,6 +1704,19 @@ class MainWindow(QMainWindow):
         # Flush any buffered QSettings writes to disk before closing.
         # This is the one place we explicitly sync since set() no longer
         # calls sync() after every write (which caused per-click disk I/O).
+        # Save Selective Alpha Tool state first so it is included in the sync.
+        try:
+            self._selective_alpha_tab._save_settings()
+        except Exception:
+            pass
+        # Release PIL images held by the Selective Alpha tab (source image,
+        # masks, result images).  closeEvent on embedded widgets is never
+        # triggered by Qt during application shutdown, so we invoke it
+        # explicitly here to ensure deterministic resource cleanup.
+        try:
+            self._selective_alpha_tab.closeEvent(event)
+        except Exception:
+            pass
         try:
             self._settings.sync()
         except Exception:
