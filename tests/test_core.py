@@ -6970,3 +6970,228 @@ class TestRound22SoundProfiles(unittest.TestCase):
                       "SoundEngine._setup() must include 'meow' in the profile loop")
         self.assertIn('"roar"', setup_body,
                       "SoundEngine._setup() must include 'roar' in the profile loop")
+
+
+# ===========================================================================
+# Round 23 – Animated cursor cycling
+# ===========================================================================
+
+class TestRound23AnimatedCursor(unittest.TestCase):
+    """Round-23: animated emoji cursors.
+
+    _CURSOR_ANIM_FRAMES in main_window.py maps emoji characters to ordered
+    frame lists.  _apply_cursor() starts/stops a QTimer-based animation when
+    the active cursor has defined frames and cursor_anim_enabled is True.
+    These tests inspect the source and settings to verify the contract without
+    requiring a live display.
+    """
+
+    _MAIN_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _DLG_SRC  = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "settings_dialog.py")
+    _SM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "core", "settings_manager.py")
+    _TM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _src(self, path) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # _CURSOR_ANIM_FRAMES presence and structure
+    # ------------------------------------------------------------------
+
+    def test_cursor_anim_frames_dict_exists(self):
+        """main_window.py must define a _CURSOR_ANIM_FRAMES dict."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("_CURSOR_ANIM_FRAMES", src,
+                      "_CURSOR_ANIM_FRAMES dict must exist in main_window.py")
+
+    def test_cursor_anim_frames_has_shark(self):
+        """Shark emoji must have an animation sequence defined."""
+        src = self._src(self._MAIN_SRC)
+        # The shark emoji u+1F988 should appear in _CURSOR_ANIM_FRAMES
+        self.assertIn("🦈", src,
+                      "🦈 (shark) must have an animation sequence in _CURSOR_ANIM_FRAMES")
+
+    def test_cursor_anim_frames_has_fire(self):
+        """Fire emoji must have an animation sequence defined."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("🔥", src,
+                      "🔥 (fire) must have an animation sequence in _CURSOR_ANIM_FRAMES")
+
+    def test_cursor_anim_frames_has_sparkle(self):
+        """Sparkle emoji must have an animation sequence defined."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("_CURSOR_ANIM_FRAMES", src)
+        # Find the dict body and check ✨ is a key
+        start = src.find("_CURSOR_ANIM_FRAMES")
+        block = src[start:start + 2000]
+        self.assertIn("✨", block,
+                      "✨ must have an animation sequence in _CURSOR_ANIM_FRAMES")
+
+    # ------------------------------------------------------------------
+    # Animation timer methods
+    # ------------------------------------------------------------------
+
+    def test_start_cursor_anim_method_exists(self):
+        """MainWindow must define a _start_cursor_anim method."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _start_cursor_anim(", src,
+                      "_start_cursor_anim method must exist in MainWindow")
+
+    def test_stop_cursor_anim_method_exists(self):
+        """MainWindow must define a _stop_cursor_anim method."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _stop_cursor_anim(", src,
+                      "_stop_cursor_anim method must exist in MainWindow")
+
+    def test_tick_cursor_anim_method_exists(self):
+        """MainWindow must define a _tick_cursor_anim method."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _tick_cursor_anim(", src,
+                      "_tick_cursor_anim method must exist in MainWindow")
+
+    def test_cursor_anim_timer_stopped_in_close_event(self):
+        """closeEvent must stop the cursor animation timer."""
+        src = self._src(self._MAIN_SRC)
+        # Find closeEvent body
+        start = src.find("def closeEvent(")
+        end_def = src.find("\n    def ", start + 1)
+        close_body = src[start:end_def]
+        self.assertIn("_cursor_anim_timer", close_body,
+                      "closeEvent must include _cursor_anim_timer in its stop list")
+
+    # ------------------------------------------------------------------
+    # apply_cursor respects cursor_anim_enabled flag
+    # ------------------------------------------------------------------
+
+    def test_apply_cursor_reads_cursor_anim_enabled(self):
+        """_apply_cursor must read the cursor_anim_enabled setting."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def _apply_cursor(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("cursor_anim_enabled", body,
+                      "_apply_cursor must read the cursor_anim_enabled setting")
+
+    def test_apply_cursor_calls_start_and_stop(self):
+        """_apply_cursor must call both _start_cursor_anim and _stop_cursor_anim."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def _apply_cursor(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("_start_cursor_anim", body,
+                      "_apply_cursor must call _start_cursor_anim for animated emoji cursors")
+        self.assertIn("_stop_cursor_anim", body,
+                      "_apply_cursor must call _stop_cursor_anim for non-animated cursors")
+
+    # ------------------------------------------------------------------
+    # Timer interval
+    # ------------------------------------------------------------------
+
+    def test_cursor_anim_interval_is_400ms(self):
+        """Cursor animation must run at 400 ms per frame (≈ 2.5 fps)."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def _start_cursor_anim(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("400", body,
+                      "_start_cursor_anim must set the timer interval to 400 ms")
+
+    # ------------------------------------------------------------------
+    # Settings defaults
+    # ------------------------------------------------------------------
+
+    def test_cursor_anim_enabled_default_true(self):
+        """cursor_anim_enabled must default to True in settings."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
+        from src.core.settings_manager import SettingsManager
+        sm = SettingsManager.__new__(SettingsManager)
+        sm._qs = type("_Q", (), {"value": lambda self, k, d=None: d, "setValue": lambda *a: None})()
+        val = sm.get("cursor_anim_enabled", True)
+        self.assertTrue(val, "cursor_anim_enabled must default to True")
+
+    def test_cursor_anim_used_once_default_false(self):
+        """cursor_anim_used_once must default to False (unfired unlock flag)."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"cursor_anim_used_once"', src,
+                      "cursor_anim_used_once must be in SettingsManager._DEFAULTS")
+        # Find the line and check it's False
+        import re
+        m = re.search(r'"cursor_anim_used_once"\s*:\s*(True|False)', src)
+        self.assertIsNotNone(m, "cursor_anim_used_once must have a default value")
+        self.assertEqual(m.group(1), "False",
+                         "cursor_anim_used_once must default to False")
+
+    # ------------------------------------------------------------------
+    # Settings dialog
+    # ------------------------------------------------------------------
+
+    def test_settings_dialog_has_cursor_anim_checkbox(self):
+        """SettingsDialog must create a _cursor_anim_check widget."""
+        src = self._src(self._DLG_SRC)
+        self.assertIn("_cursor_anim_check", src,
+                      "SettingsDialog must define _cursor_anim_check")
+        self.assertIn("QCheckBox", src,
+                      "SettingsDialog must use QCheckBox for cursor animation control")
+
+    def test_settings_dialog_has_first_cursor_anim_signal(self):
+        """SettingsDialog must declare the first_cursor_anim_enabled signal."""
+        src = self._src(self._DLG_SRC)
+        self.assertIn("first_cursor_anim_enabled", src,
+                      "SettingsDialog must declare first_cursor_anim_enabled pyqtSignal")
+
+    def test_settings_dialog_cursor_anim_in_block_signals(self):
+        """_cursor_anim_check must be in the signal-blocking list during _load_values."""
+        src = self._src(self._DLG_SRC)
+        # Find _load_values body
+        start = src.find("def _load_values(")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("_cursor_anim_check", body,
+                      "_cursor_anim_check must appear in _load_values (signal block + load)")
+
+    # ------------------------------------------------------------------
+    # Unlock connection
+    # ------------------------------------------------------------------
+
+    def test_main_window_connects_cursor_anim_signal(self):
+        """MainWindow._open_settings must connect first_cursor_anim_enabled."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("first_cursor_anim_enabled", src,
+                      "MainWindow must connect the first_cursor_anim_enabled signal")
+
+    def test_main_window_has_first_cursor_anim_handler(self):
+        """MainWindow must implement _on_first_cursor_anim_enabled."""
+        src = self._src(self._MAIN_SRC)
+        self.assertIn("def _on_first_cursor_anim_enabled(", src,
+                      "MainWindow must implement _on_first_cursor_anim_enabled")
+
+    # ------------------------------------------------------------------
+    # Tooltip registrations
+    # ------------------------------------------------------------------
+
+    def test_tooltip_manager_has_cursor_anim_entries(self):
+        """tooltip_manager.py must contain tooltip entries for the cursor_anim key."""
+        src = self._src(self._TM_SRC)
+        self.assertIn('"cursor_anim"', src,
+                      "tooltip_manager.py must have tooltip entries for 'cursor_anim'")
+
+    # ------------------------------------------------------------------
+    # Instance variables
+    # ------------------------------------------------------------------
+
+    def test_main_window_has_cursor_anim_instance_vars(self):
+        """MainWindow.__init__ must initialize _cursor_anim_timer, _frames, _idx."""
+        src = self._src(self._MAIN_SRC)
+        start = src.find("def __init__(self, settings: SettingsManager)")
+        end_def = src.find("\n    def ", start + 1)
+        body = src[start:end_def]
+        self.assertIn("_cursor_anim_timer", body,
+                      "MainWindow.__init__ must initialize _cursor_anim_timer")
+        self.assertIn("_cursor_anim_frames", body,
+                      "MainWindow.__init__ must initialize _cursor_anim_frames")
+        self.assertIn("_cursor_anim_idx", body,
+                      "MainWindow.__init__ must initialize _cursor_anim_idx")

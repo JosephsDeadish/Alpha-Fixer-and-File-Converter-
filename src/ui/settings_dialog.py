@@ -116,6 +116,9 @@ class SettingsDialog(QDialog):
     # Emitted the very first time the user changes the tooltip mode.
     # MainWindow connects this to trigger the Secret Skeleton unlock.
     first_tooltip_mode_change = pyqtSignal()
+    # Emitted the very first time the user enables cursor animation.
+    # MainWindow connects this to trigger the Toxic Neon unlock.
+    first_cursor_anim_enabled = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -576,6 +579,15 @@ class SettingsDialog(QDialog):
         self._use_theme_cursor_check.toggled.connect(
             lambda checked: self._cursor_combo.setEnabled(not checked)
         )
+        self._cursor_anim_check = QCheckBox(
+            "Animate cursor  (cycles through themed frames for emoji cursors)"
+        )
+        self._cursor_anim_check.setToolTip(
+            "When enabled, emoji cursors with defined animation sequences cycle\n"
+            "through frames at ~2.5 fps (e.g. 🦈 snapping, 🔥 flickering, ✨ sparkling).\n"
+            "Disable if you prefer a static cursor or need to reduce CPU usage."
+        )
+        cursor_gl.addWidget(self._cursor_anim_check, 2, 0, 1, 2)
         mouse_row.addWidget(grp_cursor, 1)
 
         tv.addLayout(mouse_row)
@@ -967,6 +979,7 @@ class SettingsDialog(QDialog):
         self._trail_style_combo.currentIndexChanged.connect(self._on_trail_style_changed)
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
+        self._cursor_anim_check.toggled.connect(self._on_cursor_anim_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
@@ -1056,7 +1069,7 @@ class SettingsDialog(QDialog):
             self._theme_preset_combo, self._effect_combo, self._sound_check,
             self._use_theme_sound_check, self._click_sound_edit, self._trail_check,
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
-            self._cursor_combo, self._use_theme_cursor_check, self._font_size_spin,
+            self._cursor_combo, self._use_theme_cursor_check, self._cursor_anim_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
             self._animated_banner_check, self._banner_anim_combo,
@@ -1136,6 +1149,7 @@ class SettingsDialog(QDialog):
         use_theme_cur = self._settings.get("use_theme_cursor", False)
         self._use_theme_cursor_check.setChecked(use_theme_cur)
         self._cursor_combo.setEnabled(not use_theme_cur)
+        self._cursor_anim_check.setChecked(bool(self._settings.get("cursor_anim_enabled", True)))
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         self._click_effects_theme_check.setChecked(
@@ -1223,6 +1237,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._trail_intensity_slider, "trail_intensity_slider")
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
+        mgr.register(self._cursor_anim_check, "cursor_anim")
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
@@ -1566,6 +1581,18 @@ class SettingsDialog(QDialog):
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
         self.settings_changed.emit()
+
+    def _on_cursor_anim_changed(self) -> None:
+        enabled = self._cursor_anim_check.isChecked()
+        # Emit first-enable signal before persisting so the unlock fires once.
+        if enabled and not self._settings.get("cursor_anim_used_once", False):
+            self._settings.set("cursor_anim_used_once", True)
+            self._settings.set("cursor_anim_enabled", enabled)
+            self.settings_changed.emit()
+            self.first_cursor_anim_enabled.emit()
+        else:
+            self._settings.set("cursor_anim_enabled", enabled)
+            self.settings_changed.emit()
 
     def _on_font_size_changed(self, value: int) -> None:
         self._settings.set("font_size", value)

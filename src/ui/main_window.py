@@ -72,6 +72,45 @@ _CURSOR_MAP = {
     "Blank":          Qt.CursorShape.BlankCursor,
 }
 
+# Cursor animation frame sequences keyed by the leading emoji character.
+# Each entry is the ordered list of emoji to cycle through at ~400 ms per
+# frame (≈ 2.5 fps — fast enough to be playful, slow enough to remain legible).
+# Themes that map to one of these emoji automatically get an animated cursor
+# when "Animate cursor" is enabled in settings.
+_CURSOR_ANIM_FRAMES: dict[str, list[str]] = {
+    "🦈": ["🦈", "🫦", "🦈"],           # shark jaw-snap
+    "🔥": ["🔥", "🕯️", "🔥"],           # fire flicker
+    "❄":  ["❄", "🌨️"],                  # snowflake / snowing
+    "✨": ["✨", "⭐", "🌟", "⭐"],       # sparkling
+    "⚡": ["⚡", "🌩️"],                  # lightning strike
+    "🌊": ["🌊", "💧", "🌊"],            # wave ripple
+    "🪄": ["🪄", "✨", "🪄"],            # magic wand sparkle
+    "🐉": ["🐉", "🔥", "🐉"],            # dragon fire
+    "🧙": ["🧙", "🔮", "🧙"],            # witch crystal ball
+    "🌸": ["🌸", "🌺", "🌸"],            # blossom / rose
+    "🫧": ["🫧", "💧", "🫧"],            # bubbles
+    "🧟": ["🧟", "💀", "🧟"],            # zombie skull
+    "🌌": ["🌌", "⭐", "🌟", "⭐"],      # nebula stars
+    "🐱": ["🐱", "😺", "🐱"],            # cat face smile
+    "🛸": ["🛸", "👽", "🛸"],            # UFO alien
+    "🧜": ["🧜", "🌊", "🧜"],            # mermaid wave
+    "🌹": ["🌹", "🥀", "🌹"],            # rose / wilted
+    "🍄": ["🍄", "✨", "🍄"],            # mushroom sparkle
+    "🔮": ["🔮", "✨", "🔮"],            # crystal ball
+    "🌈": ["🌈", "⛅", "🌈"],            # rainbow cloud
+    "💎": ["💎", "✨", "💎"],            # diamond sparkle
+    "🌟": ["🌟", "⭐", "✨", "⭐"],      # star shimmer
+    "🎃": ["🎃", "👻", "🎃"],            # pumpkin ghost
+    "🦇": ["🦇", "🌙", "🦇"],            # bat moon
+    "🌙": ["🌙", "⭐", "🌙"],            # moon star
+    "🐼": ["🐼", "🎋", "🐼"],            # panda bamboo
+    "🦦": ["🦦", "💦", "🦦"],            # otter splash
+    "🌋": ["🌋", "🔥", "🌋"],            # volcano fire
+    "🏴‍☠️": ["🏴‍☠️", "⚔️", "🏴‍☠️"],       # pirate sword
+    "💰": ["💰", "✨", "💰"],            # gold sparkle
+    "🪸": ["🪸", "🐠", "🪸"],            # coral fish
+}
+
 
 def _make_emoji_cursor(emoji: str, size: int = 48) -> QCursor:
     """Render *emoji* into a square pixmap and return a QCursor from it.
@@ -347,6 +386,10 @@ class MainWindow(QMainWindow):
         self._status_bar = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
+        # Cursor animation state
+        self._cursor_anim_timer: "QTimer | None" = None
+        self._cursor_anim_frames: list[str] = []  # current animation sequence
+        self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
         self._tab_base_labels: tuple = ()   # set during first _apply_theme()
@@ -843,33 +886,92 @@ class MainWindow(QMainWindow):
 
     def _apply_cursor(self):
         use_theme = self._settings.get("use_theme_cursor", False)
+        anim_enabled = self._settings.get("cursor_anim_enabled", True)
         if use_theme:
             # Read the active theme's preferred cursor
             theme = self._settings.get_theme()
             cursor_spec = theme.get("_cursor", "Default")
             if cursor_spec.startswith("emoji:"):
                 emoji = cursor_spec[len("emoji:"):]
-                self.setCursor(_make_emoji_cursor(emoji))
+                self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
+                if not anim_enabled:
+                    self.setCursor(_make_emoji_cursor(emoji))
                 return
             # Otherwise treat it as a named cursor key
+            self._stop_cursor_anim()
             shape = _CURSOR_MAP.get(cursor_spec, Qt.CursorShape.ArrowCursor)
             self.setCursor(QCursor(shape))
         else:
             cursor_name = self._settings.get("cursor", "Default")
             # Check if it's a system cursor name
             if cursor_name in _CURSOR_MAP:
+                self._stop_cursor_anim()
                 self.setCursor(QCursor(_CURSOR_MAP[cursor_name]))
             elif cursor_name.startswith("emoji:"):
                 # Stored as "emoji:<char>" from theme profiles
-                self.setCursor(_make_emoji_cursor(cursor_name[len("emoji:"):]))
+                emoji = cursor_name[len("emoji:"):]
+                self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
+                if not anim_enabled:
+                    self.setCursor(_make_emoji_cursor(emoji))
             else:
                 # Combo items like "🐼 Panda" – extract the emoji (first char/cluster)
                 # by taking everything before the first space
                 parts = cursor_name.split(" ", 1)
                 if parts and parts[0].strip():
-                    self.setCursor(_make_emoji_cursor(parts[0]))
+                    emoji = parts[0]
+                    self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
+                    if not anim_enabled:
+                        self.setCursor(_make_emoji_cursor(emoji))
                 else:
+                    self._stop_cursor_anim()
                     self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def _start_cursor_anim(self, emoji: str) -> None:
+        """Start cursor animation for *emoji* if frames are defined.
+
+        If no animation frames exist for this emoji, stop any current
+        animation and render the emoji as a static cursor instead.
+        """
+        frames = _CURSOR_ANIM_FRAMES.get(emoji)
+        if not frames:
+            # No animation frames defined for this emoji – render it static.
+            self._stop_cursor_anim()
+            self.setCursor(_make_emoji_cursor(emoji))
+            return
+        # If the same sequence is already running, don't restart it
+        # (avoids the cursor jumping back to frame 0 on minor settings refreshes).
+        if self._cursor_anim_frames == frames and self._cursor_anim_timer is not None and self._cursor_anim_timer.isActive():
+            return
+        self._cursor_anim_frames = frames
+        self._cursor_anim_idx = 0
+        # Show the first frame immediately so there's no blank-cursor gap.
+        self.setCursor(_make_emoji_cursor(frames[0]))
+        if self._cursor_anim_timer is None:
+            self._cursor_anim_timer = QTimer(self)
+            self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
+        self._cursor_anim_timer.setInterval(400)  # 400 ms per frame ≈ 2.5 fps
+        self._cursor_anim_timer.start()
+
+    def _stop_cursor_anim(self) -> None:
+        """Stop the cursor animation timer and clear the frame buffer."""
+        if self._cursor_anim_timer is not None:
+            self._cursor_anim_timer.stop()
+        self._cursor_anim_frames = []
+        self._cursor_anim_idx = 0
+
+    def _tick_cursor_anim(self) -> None:
+        """Advance to the next cursor animation frame."""
+        if not self._cursor_anim_frames:
+            if self._cursor_anim_timer is not None:
+                self._cursor_anim_timer.stop()
+            return
+        self._cursor_anim_idx = (self._cursor_anim_idx + 1) % len(self._cursor_anim_frames)
+        try:
+            self.setCursor(_make_emoji_cursor(self._cursor_anim_frames[self._cursor_anim_idx]))
+        except RuntimeError:
+            # Widget destroyed during teardown – stop the timer gracefully.
+            if self._cursor_anim_timer is not None:
+                self._cursor_anim_timer.stop()
 
     def _apply_font_size(self):
         size = self._settings.get("font_size", 10)
@@ -1235,6 +1337,8 @@ class MainWindow(QMainWindow):
         dlg.settings_changed.connect(self._on_settings_changed)
         # First tooltip mode change unlocks Secret Skeleton (independent of click count)
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
+        # First cursor animation enable unlocks Toxic Neon
+        dlg.first_cursor_anim_enabled.connect(self._on_first_cursor_anim_enabled)
 
         # Attach a click-effects overlay to the dialog so particle effects are
         # visible while the settings window is open (the main overlay is behind
@@ -1315,6 +1419,17 @@ class MainWindow(QMainWindow):
                 pass
             self._schedule_unlock_clear()
 
+    def _on_first_cursor_anim_enabled(self) -> None:
+        """Unlock Toxic Neon the first time the user enables cursor animation."""
+        if not self._settings.get("unlock_toxic_neon", False):
+            self._settings.set("unlock_toxic_neon", True)
+            self._unlock_lbl.setText("☢ 'Toxic Neon' theme unlocked! (cursor animation enabled!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
     def _run_milestone_checks(self, total: int,
                               table: list[tuple[int, str, str]]) -> None:
         """Evaluate *table* against *total* and fire any newly reached milestones.
@@ -1362,7 +1477,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-
+    def _apply_trail(self):
         """Apply trail color, style, length, fade speed, intensity and enabled state."""
         if self._trail_overlay is None:
             return
@@ -1467,6 +1582,7 @@ class MainWindow(QMainWindow):
             " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
             "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"
             "<li>Theme cursor: automatically applies a matching cursor per theme (Otter Cove → 🤘)</li>"
+            "<li>Animated emoji cursors: 🦈 snaps, 🔥 flickers, ✨ sparkles, ⚡ crackles and more (Settings → General)</li>"
             "<li>Unique per-theme banner, shapes, and visual style — each theme has its own look</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
             "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · Ctrl+1/2/3 switch tabs · F1 help</li>"
@@ -1576,6 +1692,7 @@ class MainWindow(QMainWindow):
             self._resize_timer,
             self._unlock_timer,
             self._anim_timer,
+            self._cursor_anim_timer,
         ):
             if timer is not None:
                 timer.stop()

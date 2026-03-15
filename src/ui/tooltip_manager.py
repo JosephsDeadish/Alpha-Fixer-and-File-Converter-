@@ -485,6 +485,14 @@ _NORMAL: dict[str, list[str]] = {
         "Panda themes and Rainbow Chaos use a pointing hand.",
         "Overrides the manual Cursor Style selector above.",
     ],
+    "cursor_anim": [
+        "When enabled, emoji cursors play a short looping animation (≈ 2.5 fps).",
+        "For example: 🦈 snaps its jaw, 🔥 flickers, ✨ sparkles, ⚡ crackles.",
+        "Animation only activates for cursors that have defined frame sequences.",
+        "Disable if you prefer a static emoji cursor or want to save CPU.",
+        "Animation cycles seamlessly — no jarring jumps or resets.",
+        "Works with both manual Cursor Style and Use Theme Cursor mode.",
+    ],
     "font_size": [
         "Adjust the global font size (in points) for all text in the app.",
         "Range is 8–24 pt. Default is 10 pt for a clean, compact look.",
@@ -1433,6 +1441,13 @@ _DUMBED: dict[str, list[str]] = {
         "Uncheck it if you want your boring arrow cursor back. Fair enough.",
         "Theme cursor = automatic. Manual cursor = your problem.",
     ],
+    "cursor_anim": [
+        "Makes your cursor wiggle/cycle between related emoji. It's fun.",
+        "🦈 snaps. 🔥 flickers. ✨ sparkles. Your cursor is now alive. Sort of.",
+        "Only works if your cursor has animation frames defined. Not all do.",
+        "Turn it off if you want your cursor to stop doing things. Valid choice.",
+        "It's 2.5 frames per second. Very cinematic.",
+    ],
     "font_size": [
         "Makes text bigger or smaller. Spinbox. Number. You know how this works.",
         "Higher number = bigger text. Lower number = smaller text. Math!",
@@ -2324,6 +2339,16 @@ _VULGAR: dict[str, list[str]] = {
         "Each theme has a custom cursor that fits its vibe. Enable this for the full experience.",
         "Mermaid theme + theme cursor = trident. Because of course it is. Enable this.",
         "Auto-cursor is the move. Match cursor to theme automatically. One less decision.",
+    ],
+    "cursor_anim": [
+        "Enable this and your cursor starts cycling through frames like a tiny animation. Yes, your cursor is animated now.",
+        "🦈 snaps its jaw at you. 🔥 flickers like it has feelings. ✨ sparkles constantly. Your cursor is now more alive than you are.",
+        "2.5 frames per second. Cinematic. Groundbreaking. Your cursor deserves this.",
+        "Turn it off if you find it distracting. But you won't. Because it's amazing.",
+        "Only cursors with defined animation frames animate. Not every emoji has a dramatic transformation sequence. Yet.",
+        "Your shark cursor opens its mouth every 400ms. Deal with it. You love it.",
+        "Animated cursor. On by default. You're welcome. If you don't like it, there's a checkbox right there. We're not stopping you.",
+        "The fire cursor actually flickers. The snow cursor snows. The star cursor sparkles. This is what technology is for.",
     ],
     "font_size": [
         "Crank the font size up if you're squinting at this screen like a damn mole.",

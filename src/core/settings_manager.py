@@ -87,6 +87,8 @@ class SettingsManager:
         # Cursor & trail
         "cursor": "Default",
         "use_theme_cursor": False,
+        "cursor_anim_enabled": True,   # animate emoji cursors that have frame sequences
+        "cursor_anim_used_once": False, # set True the first time cursor animation is enabled
         "trail_enabled": False,
         "trail_color": "#e94560",
         "trail_style": "dots",
@@ -425,7 +427,7 @@ class SettingsManager:
         "sound_success", "sound_error", "sound_unlock", "sound_file_add",
         "sound_preview", "sound_process_start", "sound_file_remove",
         "sound_theme_change", "sound_tab_switch", "sound_drag_enter",
-        "cursor", "use_theme_cursor", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
+        "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
