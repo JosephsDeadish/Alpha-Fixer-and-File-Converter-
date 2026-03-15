@@ -24,6 +24,12 @@ boundary automatically.
 import os
 from typing import Optional
 
+# File extensions that do not support a full per-pixel alpha channel.
+# Opening one of these shows a warning so the user can decide whether to
+# continue (the image is still loaded) or cancel; the result should be
+# saved as PNG to preserve the alpha channel.
+_NO_ALPHA_EXTS = frozenset({".jpg", ".jpeg", ".bmp", ".gif"})
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -1052,23 +1058,80 @@ class SelectiveAlphaTool(QWidget):
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
 
-        # Open / Save
-        io_box = QGroupBox("Image")
-        io_lay = QVBoxLayout(io_box)
+        # ── Workflow group: Open → Paint → Apply → Save ───────────────────
+        # All primary actions are grouped here at the top so the workflow
+        # is immediately obvious.
+        wf_box = QGroupBox("Workflow  ①Open  ②Paint  ③Apply  ④Save")
+        wf_lay = QVBoxLayout(wf_box)
+        wf_lay.setSpacing(4)
+
+        # Row 1: Open image
         self._btn_open = QPushButton("📂  Open Image…")
         self._btn_open.setMinimumHeight(30)
         self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
-        io_lay.addWidget(self._btn_open)
+        wf_lay.addWidget(self._btn_open)
+
+        # Row 2: Apply (primary action – most prominent)
+        self._btn_apply = QPushButton("✅  Apply Alpha Zones")
+        self._btn_apply.setEnabled(False)
+        self._btn_apply.setMinimumHeight(34)
+        self._btn_apply.setToolTip(
+            "Apply the painted zones to the image and make the result ready to save.  (Ctrl+Enter)"
+        )
+        self._btn_apply.clicked.connect(self._on_apply)
+        self._btn_apply.setStyleSheet(
+            "QPushButton:enabled { font-weight: bold; }"
+        )
+        wf_lay.addWidget(self._btn_apply)
+
+        # Row 3: Undo Process + Save side-by-side
+        row3 = QHBoxLayout()
+        row3.setSpacing(4)
+        self._btn_undo_process = QPushButton("↩  Undo Process")
+        self._btn_undo_process.setEnabled(False)
+        self._btn_undo_process.setMinimumHeight(28)
+        self._btn_undo_process.setToolTip(
+            "Undo the last Apply operation and restore the previous result."
+        )
+        self._btn_undo_process.clicked.connect(self._on_undo_process)
+        row3.addWidget(self._btn_undo_process)
+
         self._btn_save = QPushButton("💾  Save Result…")
-        self._btn_save.setMinimumHeight(30)
+        self._btn_save.setMinimumHeight(28)
         self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
-        io_lay.addWidget(self._btn_save)
-        lv.addWidget(io_box)
+        row3.addWidget(self._btn_save)
+        wf_lay.addLayout(row3)
 
-        # Drawing tools
+        # Row 4: Clear All Zones
+        self._btn_clear_all = QPushButton("🗑  Clear All Zones")
+        self._btn_clear_all.setMinimumHeight(28)
+        self._btn_clear_all.setToolTip("Erase all painted zone masks and start over.")
+        self._btn_clear_all.clicked.connect(self._on_clear_all)
+        wf_lay.addWidget(self._btn_clear_all)
+
+        lv.addWidget(wf_box)
+
+        # ── Drawing History: Undo / Redo (above Drawing Tool) ─────────────
+        hist_row = QHBoxLayout()
+        hist_row.setSpacing(4)
+        self._btn_undo = QPushButton("↩  Undo Drawing")
+        self._btn_undo.setEnabled(False)
+        self._btn_undo.setMinimumHeight(28)
+        self._btn_undo.setToolTip("Undo the last highlight / erase action.  (Ctrl+Z)")
+        self._btn_undo.clicked.connect(self._on_undo_mask)
+        hist_row.addWidget(self._btn_undo)
+        self._btn_redo = QPushButton("↪  Redo Drawing")
+        self._btn_redo.setEnabled(False)
+        self._btn_redo.setMinimumHeight(28)
+        self._btn_redo.setToolTip("Redo the last undone action.  (Ctrl+Y)")
+        self._btn_redo.clicked.connect(self._on_redo_mask)
+        hist_row.addWidget(self._btn_redo)
+        lv.addLayout(hist_row)
+
+        # ── Drawing tools ─────────────────────────────────────────────────
         tools_box = QGroupBox("Drawing Tool")
         tg = QGridLayout(tools_box)
         tg.setSpacing(4)
@@ -1131,7 +1194,9 @@ class SelectiveAlphaTool(QWidget):
             lambda v: self._canvas.set_eraser_size(v)
         )
         sg.addWidget(self._eraser_spin, 1, 1)
-        lv.addWidget(size_box)        # Auto-correct
+        lv.addWidget(size_box)
+
+        # Auto-correct
         self._autocorrect_chk = QCheckBox("Auto-correct (snap to edges)")
         self._autocorrect_chk.setToolTip(
             "When checked, freehand and line strokes are automatically snapped\n"
@@ -1180,49 +1245,6 @@ class SelectiveAlphaTool(QWidget):
                 zv.addWidget(sep)
         self._zone_rows[0].set_selected(True)
         lv.addWidget(zones_box)
-
-        # Drawing history (undo / redo)
-        hist_box = QGroupBox("Drawing History")
-        hh = QHBoxLayout(hist_box)
-        self._btn_undo = QPushButton("↩  Undo")
-        self._btn_undo.setEnabled(False)
-        self._btn_undo.setMinimumHeight(28)
-        self._btn_undo.setToolTip("Undo the last highlight / erase action.  (Ctrl+Z)")
-        self._btn_undo.clicked.connect(self._on_undo_mask)
-        hh.addWidget(self._btn_undo)
-        self._btn_redo = QPushButton("↪  Redo")
-        self._btn_redo.setEnabled(False)
-        self._btn_redo.setMinimumHeight(28)
-        self._btn_redo.setToolTip("Redo the last undone action.  (Ctrl+Y)")
-        self._btn_redo.clicked.connect(self._on_redo_mask)
-        hh.addWidget(self._btn_redo)
-        lv.addWidget(hist_box)
-
-        # Apply button
-        self._btn_apply = QPushButton("✅  Apply Alpha Zones")
-        self._btn_apply.setEnabled(False)
-        self._btn_apply.setMinimumHeight(32)
-        self._btn_apply.setToolTip(
-            "Apply the painted zones to the image and make the result ready to save.  (Ctrl+Enter)"
-        )
-        self._btn_apply.clicked.connect(self._on_apply)
-        lv.addWidget(self._btn_apply)
-
-        # Undo Process button
-        self._btn_undo_process = QPushButton("↩  Undo Process")
-        self._btn_undo_process.setEnabled(False)
-        self._btn_undo_process.setMinimumHeight(28)
-        self._btn_undo_process.setToolTip(
-            "Undo the last Apply operation and restore the previous result."
-        )
-        self._btn_undo_process.clicked.connect(self._on_undo_process)
-        lv.addWidget(self._btn_undo_process)
-
-        # Clear all
-        self._btn_clear_all = QPushButton("🗑  Clear All Zones")
-        self._btn_clear_all.setMinimumHeight(28)
-        self._btn_clear_all.clicked.connect(self._on_clear_all)
-        lv.addWidget(self._btn_clear_all)
 
         lv.addStretch()
 
@@ -1411,6 +1433,21 @@ class SelectiveAlphaTool(QWidget):
         )
         if not path:
             return
+        # Warn the user if the selected format does not support alpha channels.
+        _, ext = os.path.splitext(path)
+        if ext.lower() in _NO_ALPHA_EXTS:
+            ans = QMessageBox.warning(
+                self,
+                "Format Does Not Support Alpha",
+                f"The file you selected ({ext.upper() or 'unknown format'}) does not support a full "
+                f"per-pixel alpha (transparency) channel.\n\n"
+                f"The image will be loaded as-is for zone painting.\n"
+                f"To preserve the alpha output you must save the result as PNG.\n\n"
+                f"The Save dialog will suggest a PNG filename automatically.",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            )
+            if ans == QMessageBox.StandardButton.Cancel:
+                return
         try:
             loaded = self._canvas.load_image(path)
         except MemoryError:
@@ -1442,16 +1479,29 @@ class SelectiveAlphaTool(QWidget):
                 "Press 'Apply Alpha Zones' first to generate the result."
             )
             return
-        base, ext = os.path.splitext(self._src_path)
-        default_path = (base + "_selective_alpha" + (ext or ".png")) if self._src_path else ""
+        # Always default to a .png path – PNG is the only widely-supported
+        # format that preserves a full per-pixel alpha channel.
+        base = os.path.splitext(self._src_path)[0] if self._src_path else ""
+        default_path = (base + "_selective_alpha.png") if base else ""
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Result",
             default_path,
-            "PNG (*.png);;All Files (*)",
+            "PNG (*.png);;WebP (*.webp);;TIFF (*.tiff *.tif);;TGA (*.tga);;All Files (*)",
         )
         if not path:
             return
+        # Ensure the chosen path ends in a supported alpha-capable extension;
+        # if the user typed a non-alpha extension warn and append .png.
+        _, save_ext = os.path.splitext(path)
+        if save_ext.lower() in _NO_ALPHA_EXTS:
+            QMessageBox.warning(
+                self,
+                "Format Cannot Store Alpha",
+                f"The chosen format ({save_ext.upper()}) cannot store alpha channel data.\n"
+                f"The file will be saved as PNG instead.",
+            )
+            path = os.path.splitext(path)[0] + ".png"
         try:
             self._result_img.save(path)
         except MemoryError:
