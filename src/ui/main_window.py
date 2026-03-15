@@ -29,6 +29,14 @@ from ..version import __version__
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
+# QEvent.Type.ScreenChangeInternal is not exposed by name in all PyQt6 builds
+# (the underlying Qt integer value is 214).  Resolve it once at import time so
+# the comparison in changeEvent() never raises AttributeError at runtime.
+try:
+    _SCREEN_CHANGE_INTERNAL: QEvent.Type = QEvent.Type.ScreenChangeInternal
+except AttributeError:
+    _SCREEN_CHANGE_INTERNAL = QEvent.Type(214)  # type: ignore[assignment]
+
 
 def _apply_dwm_title_bar_color(hwnd: int, hex_color: str) -> bool:
     """Attempt to set the Windows 11+ title bar color via DWM.
@@ -1645,7 +1653,7 @@ class MainWindow(QMainWindow):
            recalculate layout metrics after a DPI change).
         """
         super().changeEvent(event)
-        if event.type() == QEvent.Type.ScreenChangeInternal:
+        if event.type() == _SCREEN_CHANGE_INTERNAL:
             # Defer slightly so Qt has updated screen/geometry data first.
             QTimer.singleShot(150, self._update_minimum_size)
             QTimer.singleShot(150, self._clamp_to_screen)

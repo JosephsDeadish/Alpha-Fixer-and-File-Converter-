@@ -13,7 +13,7 @@ from collections import OrderedDict
 from typing import Dict, Optional
 
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
+    Qt, QEvent, QThread, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont
@@ -29,6 +29,13 @@ _CACHE_MAX     = 600         # max thumbnails kept in memory
 _BATCH_PER_TICK = 15         # max thumbs to enqueue per timer tick
 _SCROLL_DEBOUNCE_MS = 220    # ms quiet time after scroll before loading thumbs
 _LOAD_DEBOUNCE_MS   = 60     # ms between consecutive load ticks
+
+# QEvent.Type.ScreenChangeInternal is not exposed by name in all PyQt6 builds.
+# Resolve it once at import time to avoid AttributeError in changeEvent().
+try:
+    _SCREEN_CHANGE_INTERNAL: QEvent.Type = QEvent.Type.ScreenChangeInternal
+except AttributeError:
+    _SCREEN_CHANGE_INTERNAL = QEvent.Type(214)  # type: ignore[assignment]
 
 # Thumbnail mode is disabled when the list has more items than this limit, to
 # avoid excessive memory use.  The user can still toggle it off manually.
@@ -206,8 +213,7 @@ class DropFileList(QListWidget):
         are sharp on the new display.
         """
         super().changeEvent(event)
-        from PyQt6.QtCore import QEvent
-        if event.type() == QEvent.Type.ScreenChangeInternal:
+        if event.type() == _SCREEN_CHANGE_INTERNAL:
             new_dpr = self._current_dpr()
             if new_dpr != self._dpr:
                 self._dpr = new_dpr
