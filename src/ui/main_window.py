@@ -1709,6 +1709,14 @@ class MainWindow(QMainWindow):
             self._selective_alpha_tab._save_settings()
         except Exception:
             pass
+        # Release PIL images held by the Selective Alpha tab (source image,
+        # masks, result images).  closeEvent on embedded widgets is never
+        # triggered by Qt during application shutdown, so we invoke it
+        # explicitly here to ensure deterministic resource cleanup.
+        try:
+            self._selective_alpha_tab.closeEvent(event)
+        except Exception:
+            pass
         try:
             self._settings.sync()
         except Exception:

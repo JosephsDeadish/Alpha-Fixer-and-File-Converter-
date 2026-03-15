@@ -7195,3 +7195,239 @@ class TestRound23AnimatedCursor(unittest.TestCase):
                       "MainWindow.__init__ must initialize _cursor_anim_frames")
         self.assertIn("_cursor_anim_idx", body,
                       "MainWindow.__init__ must initialize _cursor_anim_idx")
+
+
+# ---------------------------------------------------------------------------
+# Round-24: SelectiveAlphaCanvas.load_image() state-consistency fix
+# ---------------------------------------------------------------------------
+
+class TestRound24LoadImageStateConsistency(unittest.TestCase):
+    """Round-24 fixes:
+    Bug 1 (load_image, selective_alpha_tool.py):
+        When np.array(rgba) raises MemoryError, the old canvas state (src_img,
+        src_arr, masks) must remain unchanged – not partially overwritten.
+        Additionally rgba must be closed in the MemoryError/Exception handlers
+        since ownership was NOT yet transferred to self._src_img.
+
+    Bug 2 (SelectiveAlphaCanvas.unload_image):
+        A new public unload_image() method must close _src_img and all masks
+        so callers can release PIL resources deterministically.
+
+    Bug 3 (closeEvent / MainWindow cleanup):
+        SelectiveAlphaTool.closeEvent must call canvas.unload_image() (not
+        just clear_all_masks()).  MainWindow.closeEvent must trigger that
+        cleanup so embedded-widget PIL images are freed at shutdown.
+    """
+
+    _CANVAS_SRC = "src/ui/selective_alpha_tool.py"
+    _MAIN_SRC   = "src/ui/main_window.py"
+
+    @staticmethod
+    def _src(path: str) -> str:
+        return open(path, encoding="utf-8").read()
+
+    # ------------------------------------------------------------------
+    # Bug 1 – load_image defers state update until np.array() succeeds
+    # ------------------------------------------------------------------
+
+    def test_load_image_new_arr_before_src_img_assignment(self):
+        """load_image must compute np.array(rgba) into a local variable BEFORE
+        assigning self._src_img so a MemoryError leaves the canvas unchanged."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image not found")
+        body = match.group(0)
+        # new_arr (or equivalent) must be assigned before self._src_img =
+        new_arr_pos  = body.find("new_arr")
+        src_img_pos  = body.find("self._src_img  = rgba")
+        if src_img_pos == -1:
+            src_img_pos = body.find("self._src_img = rgba")
+        self.assertGreater(new_arr_pos, 0,
+                           "load_image must use a 'new_arr' local before updating _src_img")
+        self.assertGreater(src_img_pos, 0,
+                           "load_image must assign self._src_img = rgba")
+        self.assertLess(new_arr_pos, src_img_pos,
+                        "new_arr must be computed BEFORE self._src_img is assigned")
+
+    def test_load_image_rgba_none_after_ownership_transfer(self):
+        """After 'self._src_img = rgba', load_image must set 'rgba = None' so
+        the except handlers don't double-close an already-owned image."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image not found")
+        body = match.group(0)
+        self.assertIn("rgba = None",
+                      body,
+                      "load_image must set 'rgba = None' after ownership transfer to "
+                      "self._src_img so the except handlers don't close it again")
+
+    def test_load_image_except_closes_rgba_on_memoryerror(self):
+        """except MemoryError handler must close rgba if it is not None."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def load_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "load_image not found")
+        body = match.group(0)
+        # Find the MemoryError handler block
+        me_start = body.find("except MemoryError:")
+        self.assertGreater(me_start, 0, "load_image must have except MemoryError block")
+        # There should be at least one 'rgba' reference inside the handler
+        next_except = body.find("except ", me_start + 1)
+        me_block = body[me_start: next_except if next_except > 0 else me_start + 200]
+        self.assertIn("rgba", me_block,
+                      "except MemoryError handler must reference rgba to close it")
+
+    def test_load_image_state_unchanged_on_array_memoryerror(self):
+        """load_image must leave canvas state intact when np.array() raises MemoryError."""
+        import sys
+        import types
+        import tempfile
+        import os
+        try:
+            from PyQt6.QtWidgets import QApplication
+            self._qapp = QApplication.instance() or QApplication(sys.argv)
+            from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
+        except ImportError:
+            self.skipTest("PyQt6 not available")
+
+        canvas = SelectiveAlphaCanvas()
+        canvas.update = lambda: None
+        canvas.undo_available = types.SimpleNamespace(emit=lambda v: None)
+        canvas.redo_available = types.SimpleNamespace(emit=lambda v: None)
+
+        # Give the canvas a pre-existing valid state
+        old_img  = Image.new("RGBA", (4, 4), (10, 20, 30, 255))
+        old_arr  = np.array(old_img, dtype=np.uint8).copy()
+        canvas._src_img  = old_img
+        canvas._src_arr  = old_arr
+        canvas._masks    = [None] * 7
+
+        # Write a valid PNG so Image.open and .load succeed.
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "test.png")
+            Image.new("RGBA", (4, 4), (99, 99, 99, 128)).save(p)
+
+            rgba_closed = []
+
+            real_np_array = np.array
+
+            def fake_np_array(obj, *a, **kw):
+                # Fail on PIL images (the rgba conversion), pass for anything else
+                from PIL.Image import Image as PILImage
+                if isinstance(obj, PILImage):
+                    rgba_closed.append(False)   # mark the call; close check follows
+                    raise MemoryError("simulated OOM")
+                return real_np_array(obj, *a, **kw)
+
+            import numpy
+            original_array = numpy.array
+            numpy.array = fake_np_array
+            try:
+                with self.assertRaises(MemoryError):
+                    canvas.load_image(p)
+            finally:
+                numpy.array = original_array
+
+        # State must be UNCHANGED – old image and array should still be there
+        self.assertIs(canvas._src_img, old_img,
+                      "_src_img must not be replaced when np.array() raises MemoryError")
+        self.assertIs(canvas._src_arr, old_arr,
+                      "_src_arr must not be replaced when np.array() raises MemoryError")
+        # The old image must NOT have been closed by the error path
+        self.assertIsNotNone(canvas._src_img,
+                             "old _src_img must still be accessible after failed load")
+
+    # ------------------------------------------------------------------
+    # Bug 2 – unload_image() method
+    # ------------------------------------------------------------------
+
+    def test_canvas_has_unload_image_method(self):
+        """SelectiveAlphaCanvas must expose an unload_image() method."""
+        src = self._src(self._CANVAS_SRC)
+        self.assertIn("def unload_image(self)",
+                      src,
+                      "SelectiveAlphaCanvas must define unload_image()")
+
+    def test_unload_image_closes_src_img(self):
+        """unload_image() must close and null _src_img."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def unload_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "unload_image not found")
+        body = match.group(0)
+        self.assertIn("self._src_img.close()",
+                      body,
+                      "unload_image must call self._src_img.close()")
+        self.assertIn("self._src_img = None",
+                      body,
+                      "unload_image must set self._src_img = None")
+
+    def test_unload_image_clears_src_arr(self):
+        """unload_image() must clear _src_arr."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def unload_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "unload_image not found")
+        body = match.group(0)
+        self.assertIn("self._src_arr = None",
+                      body,
+                      "unload_image must set self._src_arr = None")
+
+    def test_unload_image_closes_masks(self):
+        """unload_image() must iterate and close non-None masks."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def unload_image\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "unload_image not found")
+        body = match.group(0)
+        self.assertIn("_masks", body,
+                      "unload_image must close mask images from self._masks")
+        self.assertIn(".close()", body,
+                      "unload_image must call .close() on mask images")
+
+    def test_unload_image_functional(self):
+        """unload_image() actually closes _src_img and zeroes _src_arr."""
+        import sys
+        try:
+            from PyQt6.QtWidgets import QApplication
+            self._qapp = QApplication.instance() or QApplication(sys.argv)
+            from src.ui.selective_alpha_tool import SelectiveAlphaCanvas
+        except ImportError:
+            self.skipTest("PyQt6 not available")
+
+        canvas = SelectiveAlphaCanvas()
+        canvas._src_img  = Image.new("RGBA", (4, 4), (1, 2, 3, 4))
+        canvas._src_arr  = np.zeros((4, 4, 4), dtype=np.uint8)
+        canvas._masks[0] = Image.new("L", (4, 4), 255)
+
+        canvas.unload_image()
+
+        self.assertIsNone(canvas._src_img, "_src_img must be None after unload_image")
+        self.assertIsNone(canvas._src_arr, "_src_arr must be None after unload_image")
+        self.assertIsNone(canvas._masks[0], "mask[0] must be None after unload_image")
+
+    # ------------------------------------------------------------------
+    # Bug 3 – closeEvent / MainWindow cleanup
+    # ------------------------------------------------------------------
+
+    def test_close_event_calls_unload_image(self):
+        """SelectiveAlphaTool.closeEvent must call self._canvas.unload_image()
+        rather than only clear_all_masks() so _src_img is released too."""
+        src = self._src(self._CANVAS_SRC)
+        match = re.search(r"def closeEvent\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "closeEvent not found in selective_alpha_tool.py")
+        body = match.group(0)
+        self.assertIn("unload_image",
+                      body,
+                      "closeEvent must call canvas.unload_image() for full cleanup")
+
+    def test_main_window_close_event_calls_selective_alpha_close(self):
+        """MainWindow.closeEvent must invoke the Selective Alpha tab's closeEvent
+        so that PIL images are released at application shutdown."""
+        src = self._src(self._MAIN_SRC)
+        close_start = src.find("def closeEvent(self")
+        self.assertGreater(close_start, 0, "closeEvent not found in main_window.py")
+        end_def = src.find("\n    def ", close_start + 1)
+        body = src[close_start: end_def]
+        self.assertIn("_selective_alpha_tab",
+                      body,
+                      "MainWindow.closeEvent must reference _selective_alpha_tab")
+        self.assertIn("closeEvent",
+                      body,
+                      "MainWindow.closeEvent must call the Selective Alpha tab's closeEvent")

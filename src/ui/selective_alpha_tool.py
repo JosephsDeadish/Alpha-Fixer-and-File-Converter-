@@ -181,6 +181,7 @@ class SelectiveAlphaCanvas(QWidget):
             out-of-memory condition from other load failures.
         """
         img = None
+        rgba = None
         try:
             img = Image.open(path)
             img.load()
@@ -188,10 +189,17 @@ class SelectiveAlphaCanvas(QWidget):
             if rgba is not img:
                 img.close()
                 img = None
+            # Build the numpy array BEFORE modifying any instance state so
+            # that a MemoryError here leaves the canvas fully unchanged.
+            # rgba is tracked separately so the except handlers can close it
+            # when the array allocation fails (ownership not yet transferred).
+            new_arr = np.array(rgba, dtype=np.uint8)
+            # Both operations succeeded: atomically replace the stored image.
             if self._src_img is not None:
                 self._src_img.close()
             self._src_img  = rgba
-            self._src_arr  = np.array(rgba, dtype=np.uint8)
+            rgba = None   # ownership transferred to self._src_img
+            self._src_arr  = new_arr
             self._edge_map = None   # recomputed lazily
             # Close any existing mask images before discarding them.
             for m in self._masks:
@@ -212,11 +220,32 @@ class SelectiveAlphaCanvas(QWidget):
         except MemoryError:
             if img is not None:
                 img.close()
+            if rgba is not None:
+                rgba.close()
             raise
         except Exception:
             if img is not None:
                 img.close()
+            if rgba is not None:
+                rgba.close()
             return False
+
+    def unload_image(self) -> None:
+        """Release all PIL images held by the canvas (source image and masks).
+
+        Called by :meth:`SelectiveAlphaTool.closeEvent` so that file handles
+        and pixel buffers are freed deterministically rather than waiting for
+        the garbage collector.
+        """
+        if self._src_img is not None:
+            self._src_img.close()
+            self._src_img = None
+        self._src_arr = None
+        self._edge_map = None
+        for i, m in enumerate(self._masks):
+            if m is not None:
+                m.close()
+                self._masks[i] = None
 
     def clear_mask(self, zone_idx: int) -> None:
         """Erase the mask for zone *zone_idx*."""
@@ -1290,7 +1319,7 @@ class SelectiveAlphaTool(QWidget):
     def closeEvent(self, event) -> None:  # noqa: N802
         """Save settings and release canvas PIL images on widget close."""
         self._save_settings()
-        self._canvas.clear_all_masks()
+        self._canvas.unload_image()
         if self._result_img is not None:
             self._result_img.close()
             self._result_img = None
