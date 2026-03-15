@@ -703,8 +703,7 @@ class SettingsDialog(QDialog):
             events_row2.addWidget(chk)
         events_row2.addStretch()
         sound_gl.addLayout(events_row2, 5, 1)
-
-
+        tv.addWidget(grp_sound)
 
         # ---- Button Press Animation GroupBox ----
         grp_btn_anim = QGroupBox("Button Press Animation")
