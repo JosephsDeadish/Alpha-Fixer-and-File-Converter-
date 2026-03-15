@@ -98,15 +98,17 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
         ),
     ),
     AlphaPreset(
-        name="PS2 Additive Blend  (128 → 255)",
+        name="Raise Floor / PS2 Additive  (128 → 255)",
         clamp_min=128,
         clamp_max=255,
         description=(
             "Remaps alpha to the 128–255 range. "
-            "On PS2 GS, values above 128 trigger additive/subtractive blending modes "
-            "instead of standard alpha blending. "
             "Source minimum → 128, source maximum → 255. "
-            "Use for lens flares, explosions, and bright glow effects on PS2."
+            "PC / DirectX / OpenGL: all output pixels are at least 50% opaque — "
+            "removes near-transparent fringe pixels and guarantees minimum visibility. "
+            "PS2 GS: values above 128 trigger additive/subtractive blending modes "
+            "instead of standard alpha blending — use for lens flares, explosions, "
+            "and bright glow effects on real PS2 hardware."
         ),
     ),
     # -----------------------------------------------------------------------
@@ -136,17 +138,6 @@ BUILTIN_PRESETS: list[AlphaPreset] = [
             "Also converts PS2 native alpha (0–128) back to standard PC range: "
             "PS2 128 (fully opaque) → 255, PS2 64 (half) → 128. "
             "Use when importing PS2 textures into a PC pipeline or emulator replacement pack."
-        ),
-    ),
-    AlphaPreset(
-        name="PC Raise Floor  (128 → 255)",
-        clamp_min=128,
-        clamp_max=255,
-        description=(
-            "Remaps alpha to the upper half (128–255). "
-            "Source minimum → 128, source maximum → 255. "
-            "All output pixels are at least 50% opaque. "
-            "Use to remove near-transparent fringe pixels or guarantee minimum visibility."
         ),
     ),
     # -----------------------------------------------------------------------

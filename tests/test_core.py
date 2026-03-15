@@ -287,8 +287,8 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(np.all(arr[:, :, 3] == 128))
 
     def test_builtin_clamp_128_255_preset(self):
-        """The built-in 'Clamp 128-255' preset clamps uniform alpha below the floor to 128.
-        alpha=50 with target=[128, 255] → clamp(50, 128, 255) = 128."""
+        """The built-in 'Raise Floor / PS2 Additive (128→255)' preset clamps uniform alpha
+        below the floor to 128.  alpha=50 with target=[128, 255] → clamp(50, 128, 255) = 128."""
         from unittest.mock import MagicMock
         from src.core.presets import PresetManager
         mock_settings = MagicMock()
