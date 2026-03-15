@@ -76,11 +76,13 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
       warm    – organic wood-block (otter, ocean, mermaid, sunset, forest)
       icy     – crystalline tinkle (ice, arctic, cyber_otter)
       sparkle – fast ascending twinkle (magic, rose, gold, pancake, noodle)
-      growl   – low rumbling growl (gore, zombie, dragon, blood moon)
+      growl   – low rumbling growl (gore, zombie, blood moon)
       bubble  – watery bubble pop (ocean, mermaid, deep ocean, coral reef)
       chirp   – bright bird/fairy chirp (fairy garden, spring bloom, sakura)
       crunch  – bone-dry crunch (skeleton, goth, abyssal void)
-      purr    – warm rhythmic purr (space cat, pancake, otter)
+      purr    – warm rhythmic purr (pancake, otter)
+      meow    – rising-then-falling pitch glide with vibrato (space cat)
+      roar    – low harmonic burst with slow attack (dragon fire)
     """
     samples: list = []
     if profile == "hard":
@@ -178,6 +180,41 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
             carrier = math.sin(2 * math.pi * 120 * t)
             carrier += 0.4 * math.sin(2 * math.pi * 240 * t)
             samples.append(int(20000 * carrier * mod * env))
+    elif profile == "meow":
+        # Cat meow — rising-then-falling pitch glide with vibrato and overtone.
+        # Approximates the classic "mee-oow" shape: 400 Hz → 900 Hz → 600 Hz
+        # over 150 ms with an 8 Hz vibrato for the natural cat-voice flutter.
+        n = int(sample_rate * 0.15)
+        dur = 0.15
+        phase = 0.0
+        for i in range(n):
+            t = i / sample_rate
+            # Pitch contour: rises in first 45 % then falls back
+            if t < dur * 0.45:
+                freq = 400.0 + 500.0 * (t / (dur * 0.45))      # 400 → 900 Hz
+            else:
+                freq = 900.0 - 300.0 * ((t - dur * 0.45) / (dur * 0.55))  # 900 → 600 Hz
+            freq += 20.0 * math.sin(2 * math.pi * 8 * t)  # 8 Hz vibrato ±20 Hz
+            env = math.exp(-t * 8.0) * (1.0 - math.exp(-t * 60.0))
+            phase += 2 * math.pi * freq / sample_rate
+            s = math.sin(phase) + 0.3 * math.sin(2 * phase)  # add 2nd harmonic
+            samples.append(int(18000 * s * env / 1.3))  # 1.3 = peak of 1+0.3
+    elif profile == "roar":
+        # Dragon/lion roar — rich harmonic burst with slow attack and rumble.
+        # Six partials (fundamental 80 Hz plus harmonics + slight detuning for
+        # beating) with an exponential onset create a dramatic roaring click.
+        n = int(sample_rate * 0.18)
+        for i in range(n):
+            t = i / sample_rate
+            env = (1.0 - math.exp(-t * 30.0)) * math.exp(-t * 8.0)
+            s = (math.sin(2 * math.pi * 80 * t)
+                 + 0.85 * math.sin(2 * math.pi * 160 * t)
+                 + 0.65 * math.sin(2 * math.pi * 240 * t)
+                 + 0.45 * math.sin(2 * math.pi * 320 * t)
+                 + 0.25 * math.sin(2 * math.pi * 400 * t)
+                 + 0.40 * math.sin(2 * math.pi * 85 * t))  # detuned for rumble
+            # 3.6 = 1 + 0.85 + 0.65 + 0.45 + 0.25 + 0.40 (sum of coefficients)
+            samples.append(int(22000 * s * env / 3.6))
     else:  # soft / default
         freq, dur, decay = 880, 0.06, 45
         n = int(sample_rate * dur)
@@ -202,8 +239,8 @@ _THEME_SOUND_PROFILES: dict[str, str] = {
     "Cyber Otter": "icy", "Toxic Neon": "bright", "Lava Cave": "hard",
     "Sunset Beach": "warm", "Midnight Forest": "warm",
     "Candy Land": "bright", "Zombie Apocalypse": "growl",
-    "Dragon Fire": "growl", "Bubblegum": "bubble", "Thunder Storm": "bright",
-    "Rose Gold": "chirp", "Space Cat": "purr", "Magic Mushroom": "sparkle",
+    "Dragon Fire": "roar", "Bubblegum": "bubble", "Thunder Storm": "bright",
+    "Rose Gold": "chirp", "Space Cat": "meow", "Magic Mushroom": "sparkle",
     "Abyssal Void": "dark", "Spring Bloom": "chirp",
     "Gold Rush": "sparkle", "Nebula": "dark",
     # New hidden themes (added below in theme_engine.py)
@@ -420,9 +457,9 @@ class SoundEngine(QObject):
             self._theme_change_wav  = _make_theme_change_wav()
             self._tab_switch_wav    = _make_tab_switch_wav()
             self._drag_enter_wav    = _make_drag_enter_wav()
-            # Generate one WAV per sound profile (12 profiles)
+            # Generate one WAV per sound profile (14 profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
-                            "growl", "bubble", "chirp", "crunch", "purr"):
+                            "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar"):
                 self._theme_click_wavs[profile] = _make_theme_click_wav(profile)
         except Exception as exc:
             logger.warning("Could not generate sound WAVs: %s", exc)

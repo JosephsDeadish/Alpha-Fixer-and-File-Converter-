@@ -2116,6 +2116,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_converter_history_null_returns_empty_list(self):
         """get_converter_history() must return [] when JSON is 'null', not None."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2129,6 +2133,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_alpha_history_null_returns_empty_list(self):
         """get_alpha_history() must return [] when JSON is 'null'."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2141,6 +2149,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_custom_presets_null_returns_empty_list(self):
         """get_custom_presets() must return [] when JSON is 'null'."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2153,6 +2165,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_saved_themes_null_returns_empty_dict(self):
         """get_saved_themes() must return {} when JSON is 'null', not None."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2167,6 +2183,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
     def test_get_theme_returns_complete_dict(self):
         """get_theme() must always return a dict with all required keys,
         merging missing keys from _DEFAULT_THEME for forward-compatibility."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         import json
         from unittest.mock import MagicMock
@@ -2188,6 +2208,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_get_theme_non_dict_returns_default(self):
         """get_theme() must return _DEFAULT_THEME when the stored JSON is not a dict."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
         mgr = SettingsManager.__new__(SettingsManager)
@@ -2209,6 +2233,10 @@ class TestRound2CrashHangLag(unittest.TestCase):
 
     def test_import_settings_validates_json_is_dict(self):
         """import_settings() must raise ValueError when the JSON root is not a dict."""
+        try:
+            import PyQt6  # noqa: F401
+        except ImportError:
+            self.skipTest("PyQt6 not available in this environment")
         import json, tempfile
         from src.core.settings_manager import SettingsManager
         from unittest.mock import MagicMock
@@ -6661,3 +6689,284 @@ class TestRound21RomDetectorAndPresetBugFixes(unittest.TestCase):
         p = AlphaPreset.from_dict(d)
         self.assertEqual(p.clamp_min, 0)
         self.assertEqual(p.clamp_max, 255)
+
+
+# ===========================================================================
+# Round 22 – Emoji cursor quality + sound profile expansion
+# ===========================================================================
+
+class TestRound22EmojiCursorQuality(unittest.TestCase):
+    """Round-22: _make_emoji_cursor renders glyphs at 65 % of the pixmap
+    logical size (via setPixelSize) to prevent clipping of wide emoji, and
+    creates a HiDPI-ready physical pixmap.
+
+    These tests inspect the source of main_window.py so they run without
+    a live display and without importing PyQt6.
+    """
+
+    _SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+
+    def _source(self) -> str:
+        with open(self._SRC, encoding="utf-8") as fh:
+            return fh.read()
+
+    def _func_body(self, src: str) -> str:
+        """Extract the body of _make_emoji_cursor up to the next module-level
+        class or def, whichever comes first."""
+        start = src.find("def _make_emoji_cursor(")
+        self.assertGreater(start, 0, "_make_emoji_cursor not found in main_window.py")
+        # Find the next top-level definition (class or def at column 0).
+        end_cls = src.find("\nclass ", start + 1)
+        end_def = src.find("\ndef ",   start + 1)
+        candidates = [c for c in (end_cls, end_def) if c > 0]
+        end = min(candidates) if candidates else len(src)
+        return src[start:end]
+
+    # ------------------------------------------------------------------
+    # Default size
+    # ------------------------------------------------------------------
+
+    def test_default_size_is_at_least_48(self):
+        """The default size parameter must be ≥ 48 px so emoji have margin."""
+        src = self._source()
+        import re
+        # Match the function definition with its default parameter value.
+        m = re.search(r"def _make_emoji_cursor\s*\(\s*emoji\s*:\s*str\s*,\s*size\s*:\s*int\s*=\s*(\d+)", src)
+        self.assertIsNotNone(m, "_make_emoji_cursor must have a default 'size' parameter")
+        default_size = int(m.group(1))
+        self.assertGreaterEqual(
+            default_size, 48,
+            f"Default cursor size {default_size} is too small; must be ≥ 48 px "
+            "to prevent wide-glyph clipping."
+        )
+
+    # ------------------------------------------------------------------
+    # Font sizing method
+    # ------------------------------------------------------------------
+
+    def test_uses_set_pixel_size_not_set_point_size(self):
+        """_make_emoji_cursor must use setPixelSize (not call setPointSize) so
+        the font height is DPI-independent and predictable relative to the pixmap."""
+        src = self._source()
+        func_body = self._func_body(src)
+        self.assertIn("setPixelSize", func_body,
+                      "_make_emoji_cursor must call font.setPixelSize()")
+        # Check that there is no actual *call* to setPointSize in the function
+        # (comments mentioning the old API are acceptable, calls are not).
+        self.assertNotIn("font.setPointSize(", func_body,
+                         "_make_emoji_cursor must NOT call font.setPointSize() — "
+                         "point sizes scale with screen DPI and overflow small pixmaps")
+
+    def test_pixel_size_is_at_most_80_percent_of_logical_size(self):
+        """The pixel size expression must be ≤ 80 % of the logical pixmap size
+        (i.e. leave at least 20 % margin on each side) to avoid clipping.
+
+        The implementation must use a factor strictly less than 1.0 when
+        computing the font pixel size relative to the logical pixmap size.
+        """
+        src = self._source()
+        import re
+        func_body = self._func_body(src)
+        # Ensure setPixelSize is called and contains a relative factor:
+        # e.g. font.setPixelSize(max(8, int(size * 0.65)))
+        self.assertIn("setPixelSize", func_body,
+                      "setPixelSize must be called in _make_emoji_cursor")
+        # Find the multiplication factor: "size * <float>" anywhere in the body.
+        m = re.search(r"size\s*\*\s*([\d.]+)", func_body)
+        self.assertIsNotNone(
+            m,
+            "_make_emoji_cursor must compute font size as a fraction of 'size' "
+            "(e.g. int(size * 0.65)) to guarantee margin around the emoji glyph"
+        )
+        factor = float(m.group(1))
+        self.assertLessEqual(
+            factor, 0.80,
+            f"Font pixel-size factor {factor} is too large (≤ 0.80 required) — "
+            "wide emoji will be clipped at the pixmap boundary."
+        )
+
+    # ------------------------------------------------------------------
+    # HiDPI support
+    # ------------------------------------------------------------------
+
+    def test_sets_device_pixel_ratio(self):
+        """_make_emoji_cursor must call setDevicePixelRatio on the pixmap so
+        the cursor is sharp on Retina / HiDPI displays."""
+        src = self._source()
+        func_body = self._func_body(src)
+        self.assertIn(
+            "setDevicePixelRatio",
+            func_body,
+            "_make_emoji_cursor must call pix.setDevicePixelRatio(dpr) to "
+            "produce a sharp HiDPI cursor."
+        )
+
+    def test_reads_screen_device_pixel_ratio(self):
+        """_make_emoji_cursor must query devicePixelRatio from the primary
+        screen so the cursor pixmap is created at the correct physical size."""
+        src = self._source()
+        func_body = self._func_body(src)
+        self.assertIn(
+            "devicePixelRatio",
+            func_body,
+            "_make_emoji_cursor must read the screen devicePixelRatio."
+        )
+
+    # ------------------------------------------------------------------
+    # Hotspot
+    # ------------------------------------------------------------------
+
+    def test_hotspot_at_logical_centre(self):
+        """The QCursor hotspot must be at the logical centre (size // 2)."""
+        src = self._source()
+        import re
+        func_body = self._func_body(src)
+        # The hotspot args must reference size // 2 twice (x and y).
+        matches = re.findall(r"size\s*//\s*2", func_body)
+        self.assertGreaterEqual(
+            len(matches), 2,
+            "QCursor must be constructed with hotspot at (size // 2, size // 2)"
+        )
+
+
+class TestRound22SoundProfiles(unittest.TestCase):
+    """Round-22: _make_theme_click_wav generates valid WAV data for the
+    two new profiles 'meow' and 'roar', and the theme→profile mapping
+    assigns them to the correct themes."""
+
+    _SRC_SE = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "sound_engine.py")
+
+    def _source(self) -> str:
+        with open(self._SRC_SE, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Profile generation
+    # ------------------------------------------------------------------
+
+    def test_meow_profile_generates_non_empty_wav(self):
+        """_make_theme_click_wav('meow') must produce a non-empty WAV path."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        path = _make_theme_click_wav("meow")
+        self.assertTrue(path, "meow profile must return a non-empty file path")
+        self.assertTrue(os.path.isfile(path), f"WAV file must exist at {path}")
+        self.assertGreater(os.path.getsize(path), 44,
+                           "WAV file must contain audio data beyond the header")
+
+    def test_roar_profile_generates_non_empty_wav(self):
+        """_make_theme_click_wav('roar') must produce a non-empty WAV path."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        path = _make_theme_click_wav("roar")
+        self.assertTrue(path, "roar profile must return a non-empty file path")
+        self.assertTrue(os.path.isfile(path), f"WAV file must exist at {path}")
+        self.assertGreater(os.path.getsize(path), 44,
+                           "WAV file must contain audio data beyond the header")
+
+    def test_meow_profile_distinct_from_purr(self):
+        """The 'meow' profile must produce a different WAV than 'purr'."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        meow_path = _make_theme_click_wav("meow")
+        purr_path  = _make_theme_click_wav("purr")
+        with open(meow_path, "rb") as fh:
+            meow_data = fh.read()
+        with open(purr_path, "rb") as fh:
+            purr_data = fh.read()
+        self.assertNotEqual(
+            meow_data, purr_data,
+            "meow and purr profiles must produce different audio data"
+        )
+
+    def test_roar_profile_distinct_from_growl(self):
+        """The 'roar' profile must produce a different WAV than 'growl'."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _make_theme_click_wav
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        roar_path  = _make_theme_click_wav("roar")
+        growl_path = _make_theme_click_wav("growl")
+        with open(roar_path, "rb") as fh:
+            roar_data = fh.read()
+        with open(growl_path, "rb") as fh:
+            growl_data = fh.read()
+        self.assertNotEqual(
+            roar_data, growl_data,
+            "roar and growl profiles must produce different audio data"
+        )
+
+    # ------------------------------------------------------------------
+    # Theme → profile mapping
+    # ------------------------------------------------------------------
+
+    def test_space_cat_uses_meow_profile(self):
+        """The 'Space Cat' theme must map to the 'meow' sound profile."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _THEME_SOUND_PROFILES
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        profile = _THEME_SOUND_PROFILES.get("Space Cat", "NOT_SET")
+        self.assertEqual(
+            profile, "meow",
+            f"Space Cat should use 'meow' profile, got '{profile}'"
+        )
+
+    def test_dragon_fire_uses_roar_profile(self):
+        """The 'Dragon Fire' theme must map to the 'roar' sound profile."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        try:
+            from src.ui.sound_engine import _THEME_SOUND_PROFILES
+        except ImportError:
+            self.skipTest("sound_engine not importable (PyQt6 missing)")
+        profile = _THEME_SOUND_PROFILES.get("Dragon Fire", "NOT_SET")
+        self.assertEqual(
+            profile, "roar",
+            f"Dragon Fire should use 'roar' profile, got '{profile}'"
+        )
+
+    def test_meow_and_roar_in_docstring(self):
+        """The _make_theme_click_wav docstring must document the meow and roar
+        profiles so maintainers know they exist."""
+        src = self._source()
+        start = src.find("def _make_theme_click_wav(")
+        docstring_end = src.find('"""', src.find('"""', start) + 1)
+        docstring = src[start:docstring_end]
+        self.assertIn("meow", docstring,
+                      "'meow' must be documented in _make_theme_click_wav docstring")
+        self.assertIn("roar", docstring,
+                      "'roar' must be documented in _make_theme_click_wav docstring")
+
+    # ------------------------------------------------------------------
+    # Setup loop includes new profiles
+    # ------------------------------------------------------------------
+
+    def test_setup_loop_includes_meow_and_roar(self):
+        """SoundEngine._setup() must generate WAVs for 'meow' and 'roar' so
+        they are available at play time."""
+        src = self._source()
+        # Find the for-loop that iterates over profile names in _setup
+        start = src.find("def _setup(")
+        end = src.find("\n    def ", start + 1)
+        setup_body = src[start:end]
+        self.assertIn('"meow"', setup_body,
+                      "SoundEngine._setup() must include 'meow' in the profile loop")
+        self.assertIn('"roar"', setup_body,
+                      "SoundEngine._setup() must include 'roar' in the profile loop")

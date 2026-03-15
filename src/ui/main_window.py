@@ -73,37 +73,60 @@ _CURSOR_MAP = {
 }
 
 
-def _make_emoji_cursor(emoji: str, size: int = 40) -> QCursor:
+def _make_emoji_cursor(emoji: str, size: int = 48) -> QCursor:
     """Render *emoji* into a square pixmap and return a QCursor from it.
 
     The emoji is drawn centred in the pixmap and the hotspot is placed at
-    the centre so that interactions (clicks, hover) register at the visual
-    centre of the emoji character rather than at the invisible top-left
-    corner of the bounding box.
+    the logical centre so that interactions (clicks, hover) register at the
+    visual centre of the emoji character rather than at the invisible
+    top-left corner of the bounding box.
+
+    The font is rendered at 65 % of the logical pixmap size (pixel-size, not
+    point-size) so wide glyphs (e.g. 🦈 🌊) have adequate margin on every
+    side and are never clipped at the pixmap boundary.
+
+    On HiDPI / Retina displays the pixmap is created at the screen's physical
+    pixel density (devicePixelRatio) and the ratio is set on the pixmap so Qt
+    uses it at full physical resolution rather than scaling up a low-res bitmap.
 
     Falls back to the arrow cursor if pixmap painting is unavailable
     (e.g. running headless without a display).
     """
     try:
-        # Use a slightly larger pixmap than the rendered font size to ensure
-        # the full glyph is visible without clipping.
-        pix = QPixmap(size, size)
+        # Obtain the current screen DPR so the cursor is sharp on HiDPI
+        # displays.  Fall back to 1.0 if no screen is available (headless).
+        from PyQt6.QtWidgets import QApplication  # local import – avoids circular
+        screen = QApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen else 1.0
+
+        # Physical pixmap dimensions for crisp HiDPI rendering.
+        phys = max(1, int(size * dpr))
+        pix = QPixmap(phys, phys)
+        pix.setDevicePixelRatio(dpr)
         pix.fill(Qt.GlobalColor.transparent)
+
         painter = QPainter(pix)
-        # Use a font stack that covers Windows (Segoe UI Emoji), macOS (Apple Color Emoji),
-        # and Linux (Noto Color Emoji) so the emoji renders on every platform.
+        # Use a font stack that covers Windows (Segoe UI Emoji), macOS
+        # (Apple Color Emoji), and Linux (Noto Color Emoji).
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
-        font.setPointSize(max(6, size - 10))
+        # setPixelSize guarantees a fixed rendered glyph height in logical
+        # pixels regardless of screen DPI, unlike setPointSize which scales
+        # with DPI and produced a ~40 px glyph crammed into a 40 px pixmap
+        # (zero margin → wide emoji were clipped).  65 % of the logical size
+        # leaves ~17 % margin on each side — enough for any emoji glyph.
+        font.setPixelSize(max(8, int(size * 0.65)))
         painter.setFont(font)
+        # Draw in logical coordinates (0..size); the pixmap's DPR causes Qt
+        # to automatically scale the drawing to physical resolution.
         painter.drawText(
             QRect(0, 0, size, size),
             Qt.AlignmentFlag.AlignCenter,
             emoji,
         )
         painter.end()
-        # Hotspot at centre of the pixmap so the click-point matches the
-        # visual centre of the emoji (avoids the top-left offset problem).
+        # Hotspot at logical centre so the interaction point matches the
+        # visual centre of the emoji on all display densities.
         return QCursor(pix, size // 2, size // 2)
     except Exception:
         return QCursor(Qt.CursorShape.ArrowCursor)
