@@ -43,6 +43,7 @@ class ConverterTab(QWidget):
     drag_entered = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None):
+        super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
         # ETA tracking for large batch runs
