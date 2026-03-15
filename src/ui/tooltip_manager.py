@@ -104,19 +104,19 @@ _NORMAL: dict[str, list[str]] = {
         "Combine with Binary Cut to create a hard-edge transparency mask at the threshold value.",
     ],
     "clamp_min_spin": [
-        "Minimum alpha output: all pixels are remapped so the lowest alpha becomes this value.",
+        "Minimum alpha output: for images with varied alpha, the lowest value maps to Min; all others stretch up.",
+        "For uniform-alpha images (all pixels the same): the single value is clamped to [Min, Max] instead.",
         "0 = fully transparent minimum (default for most game textures).",
         "Example: set to 128 to ensure the minimum alpha output is 128.",
         "Works independently from Max — set any value without affecting Max.",
-        "PS2 textures: typically leave at 0 to preserve the full transparency range.",
         "Note: when Min equals Max, every pixel gets the same alpha value.",
     ],
     "clamp_max_spin": [
-        "Maximum alpha output: all pixels are remapped so the highest alpha becomes this value.",
+        "Maximum alpha output: for images with varied alpha, the highest value maps to Max; all others stretch down.",
+        "For uniform-alpha images (all pixels the same): the single value is clamped to [Min, Max] instead.",
         "255 = fully opaque maximum (default). Lower to cap the maximum opacity.",
         "Example: set to 128 to remap all alpha so maximum becomes 128 (PS2 native full opacity).",
         "Works independently from Min — set any value without affecting Min.",
-        "PS2 Normalize: set Max to 128 to produce PS2-accurate alpha values.",
         "128 is the PS2 hardware maximum — the GPU interprets 128 as fully opaque.",
     ],
     "invert_check": [
@@ -1052,14 +1052,16 @@ _DUMBED: dict[str, list[str]] = {
         "Yes, you can type a number in there. No, it won't break anything.",
     ],
     "clamp_min_spin": [
-        "Minimum alpha: all pixels are remapped so the darkest alpha becomes this value.",
+        "Minimum alpha: for normal images, the darkest alpha becomes this value and everything else maps up.",
+        "If every pixel already has the same alpha, that value is clamped to fit within [Min, Max] instead.",
         "0 = fully transparent minimum (default). Easy.",
         "Works independently from Max. Change Min without touching Max.",
-        "128 = the lowest alpha in the output will be 128. Everything maps up from there.",
+        "128 = the lowest alpha in the output will be at least 128. Everything maps up from there.",
         "Leave at 0 for the most common case. Raise it if you need a floor.",
     ],
     "clamp_max_spin": [
-        "Maximum alpha: all pixels are remapped so the brightest alpha becomes this value.",
+        "Maximum alpha: for normal images, the brightest alpha becomes this value and everything else maps down.",
+        "If every pixel already has the same alpha, that value is clamped to fit within [Min, Max] instead.",
         "255 = fully opaque maximum (default). Lower it to cap how opaque pixels get.",
         "128 = replicate PS2's native 0–128 alpha scale. Very useful.",
         "Works independently from Min. Change Max without touching Min.",
@@ -2040,9 +2042,9 @@ _VULGAR: dict[str, list[str]] = {
         "Useful when you need surgical precision — fix only the semi-transparent parts and leave the fully opaque pixels the hell alone.",
     ],
     "clamp_min_spin": [
-        "Min: all pixels get remapped so the darkest alpha becomes this value. 0 = transparent minimum.",
+        "Min: for normal images the darkest alpha maps here; for uniform images the single value is clamped to [Min, Max]. 0 = transparent minimum.",
         "Works completely independently from Max. Change Min without Max giving a shit.",
-        "128 = the lowest alpha output will be 128. Nothing more transparent than that.",
+        "128 = the lowest alpha output will be at least 128. Nothing more transparent than that.",
         "Leave at 0 for the full 0–255 output range.",
         "Minimum of your target alpha range. The remapping maps the image's darkest pixels here.",
         "Setting this tells the app: 'the least transparent pixel should be at least this opaque'.",
@@ -2050,7 +2052,7 @@ _VULGAR: dict[str, list[str]] = {
         "Min and Max define your target range. All alpha values in the image are mapped into it.",
     ],
     "clamp_max_spin": [
-        "Max: all pixels get remapped so the brightest alpha becomes this value. 255 = full opacity.",
+        "Max: for normal images the brightest alpha maps here; for uniform images the single value is clamped to [Min, Max]. 255 = full opacity.",
         "128 = mimics PS2 GS alpha ceiling. The most opaque pixel will be 128.",
         "Works completely independently from Min. Change Max without dragging Min along.",
         "255 = no cap. Pixels can go fully opaque. Lower for platform limits.",
@@ -3316,7 +3318,7 @@ class TooltipManager(QObject):
         # we accept it with a leading dummy parameter so it does not accidentally
         # override the `bid` default and call cleanup with the wrong value.
         try:
-            tab_bar.destroyed.connect(lambda _dead=None, bid=bar_id: self._cleanup_tab_bar(bid))
+            tab_bar.destroyed.connect(lambda _destroyed_obj=None, bid=bar_id: self._cleanup_tab_bar(bid))
         except Exception:
             pass
         # Also clear per-tab native tooltips

@@ -437,8 +437,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Minimum alpha in the output.\n"
-            "The darkest pixel in the source will become this value.\n"
-            "All other pixels are stretched proportionally above it.\n"
+            "For images with a range of alpha values: the darkest pixel maps to this\n"
+            "value and all others are stretched proportionally above it.\n"
+            "For uniform-alpha images (every pixel already the same value): the single\n"
+            "value is clamped — below-Min → Min, above-Max → Max, in-range → unchanged.\n"
             "0 = fully transparent minimum (most common).\n"
             "Set Min = Max to force every pixel to the same alpha value."
         )
@@ -453,8 +455,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_max_spin.setMinimumHeight(26)
         self._clamp_max_spin.setToolTip(
             "Maximum alpha in the output.\n"
-            "The brightest pixel in the source will become this value.\n"
-            "All other pixels are stretched proportionally below it.\n"
+            "For images with a range of alpha values: the brightest pixel maps to this\n"
+            "value and all others are stretched proportionally below it.\n"
+            "For uniform-alpha images (every pixel already the same value): the single\n"
+            "value is clamped — below-Min → Min, above-Max → Max, in-range → unchanged.\n"
             "Example: set Max to 128 to cap maximum alpha at 128 (PS2 native full opacity).\n"
             "Set Min = Max to force every pixel to the same alpha value."
         )
