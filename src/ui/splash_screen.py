@@ -65,7 +65,7 @@ class ThemeSplashScreen(QSplashScreen):
         self._theme_name = theme.get("name", "Panda Dark") if theme else "Panda Dark"
 
         # Banner text for the theme — use animated frames if available
-        from .theme_engine import get_theme_banner, get_theme_banner_frames
+        from .theme_engine import get_theme_banner_frames
         self._banner_frames = get_theme_banner_frames(self._theme_name)
         self._banner_frame_idx = 0
         self._banner = self._banner_frames[0]

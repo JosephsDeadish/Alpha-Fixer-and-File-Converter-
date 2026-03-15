@@ -28,17 +28,17 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from PyQt6.QtCore import (
-    Qt, QEvent, QPoint, QPointF, QRect, QRectF, QTimer, pyqtSignal,
+    Qt, QEvent, QPointF, QRectF, pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QColor, QCursor, QFont, QImage, QPainter, QPen, QPixmap,
+    QColor, QFont, QImage, QPainter, QPen,
     QBrush, QKeySequence, QShortcut,
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
-    QButtonGroup, QAbstractButton, QSplitter, QFrame,
+    QButtonGroup, QFrame,
 )
 
 from ..core.selective_alpha_processor import (

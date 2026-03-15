@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.alpha_processor import collect_files
-from ..core.file_converter import SUPPORTED_OUTPUT_FORMATS, OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
+from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
 from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader

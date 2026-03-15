@@ -736,7 +736,7 @@ class AlphaFixerTab(QWidget):
         if not paths:
             return
         try:
-            from ..core.rom_detector import detect_from_paths
+            from ..core.rom_detector import detect_from_paths  # noqa: F401 – probe
         except ImportError:
             return
 

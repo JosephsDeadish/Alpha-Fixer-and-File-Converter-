@@ -314,7 +314,7 @@ def main():
     # Must come *after* QApplication is created so that QLockFile and the
     # fallback QMessageBox both have a running Qt event loop to work with.
     # The returned lock object MUST stay alive until the process exits.
-    _instance_lock = _acquire_single_instance_lock()
+    _instance_lock = _acquire_single_instance_lock()  # noqa: F841 – must stay alive
 
     logger.info("Starting Alpha Fixer & File Converter")
 
