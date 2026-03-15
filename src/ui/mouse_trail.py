@@ -17,8 +17,8 @@ The overlay supports seven trail styles:
 from collections import deque
 import random
 
-from PyQt6.QtCore import Qt, QTimer, QEvent, QObject, QPoint
-from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen, QPainterPath
+from PyQt6.QtCore import Qt, QTimer, QEvent, QObject
+from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen
 from PyQt6.QtWidgets import QWidget, QApplication
 
 

@@ -3344,7 +3344,7 @@ class TooltipManager(QObject):
         # we accept it with a leading dummy parameter so it does not accidentally
         # override the `bid` default and call cleanup with the wrong value.
         try:
-            tab_bar.destroyed.connect(lambda _destroyed_obj=None, bid=bar_id: self._cleanup_tab_bar(bid))
+            tab_bar.destroyed.connect(lambda *_args, bid=bar_id: self._cleanup_tab_bar(bid))
         except Exception:
             pass
         # Also clear per-tab native tooltips

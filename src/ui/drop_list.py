@@ -10,10 +10,9 @@ DropFileList – a QListWidget subclass that:
 import os
 import threading
 from collections import OrderedDict
-from typing import Dict, Optional
 
 from PyQt6.QtCore import (
-    Qt, QEvent, QThread, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
+    Qt, QEvent, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont

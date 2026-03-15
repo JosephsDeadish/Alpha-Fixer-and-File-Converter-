@@ -12,7 +12,7 @@ import time
 import traceback
 import logging
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -28,8 +28,6 @@ from .alpha_processor import (
     apply_alpha_preset,
     apply_manual_alpha,
     apply_rgba_adjust,
-    collect_files,
-    SUPPORTED_READ,
 )
 from .file_converter import convert_file, build_output_path
 from .presets import AlphaPreset

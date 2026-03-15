@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.presets import PresetManager
-from ..core.alpha_processor import collect_files, SUPPORTED_READ
+from ..core.alpha_processor import collect_files
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
 from .preview_pane import BeforeAfterWidget
@@ -128,7 +128,7 @@ class _AlphaPreviewLoader(QThread):
                 orig.close()
                 if processed is not None and processed is not orig:
                     processed.close()
-        except Exception as exc:
+        except Exception:
             import traceback
             self.failed.emit(traceback.format_exc())
 

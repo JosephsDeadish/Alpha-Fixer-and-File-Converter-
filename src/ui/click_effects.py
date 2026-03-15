@@ -17,7 +17,6 @@ Public API
 
 import math
 import random
-from collections import deque
 
 from PyQt6.QtCore import QEvent, QObject, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap

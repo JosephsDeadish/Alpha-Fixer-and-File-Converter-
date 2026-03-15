@@ -10,11 +10,10 @@ import math
 import webbrowser
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty
-from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QFontMetrics, QRadialGradient, QLinearGradient, QPen
+from PyQt6.QtCore import Qt, QTimer, QRect
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QRadialGradient, QLinearGradient, QPen
 from PyQt6.QtWidgets import QSplashScreen, QApplication
 from PyQt6.QtSvgWidgets import QSvgWidget
-from PyQt6.QtCore import QByteArray
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 

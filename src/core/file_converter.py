@@ -11,7 +11,7 @@ from typing import Optional
 
 from PIL import Image
 
-from .alpha_processor import _save_dds, _load_dds, SUPPORTED_READ
+from .alpha_processor import _save_dds, _load_dds
 
 logger = logging.getLogger(__name__)
 

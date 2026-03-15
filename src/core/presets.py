@@ -4,8 +4,7 @@ Preset definitions and manager for the Alpha & RGBA Adjuster tool.
 Built-in presets cover common game-console alpha conventions.
 Users can create, save, and delete their own presets.
 """
-import json
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from typing import Optional
 
 

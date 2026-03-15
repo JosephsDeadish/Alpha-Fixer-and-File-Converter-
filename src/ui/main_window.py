@@ -6,7 +6,7 @@ import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt, QEvent, QRect, QTimer
-from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter, QShortcut
+from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
@@ -21,9 +21,9 @@ from .history_tab import HistoryTab
 from .selective_alpha_tool import SelectiveAlphaTool
 from .settings_dialog import SettingsDialog
 from .theme_engine import (
-    build_stylesheet, PRESET_THEMES, HIDDEN_THEMES, THEME_EFFECTS,
-    get_theme_svg_path, get_theme_banner, get_theme_status,
-    get_theme_banner_frames, get_theme_tab_labels, get_theme_icon,
+    build_stylesheet, THEME_EFFECTS,
+    get_theme_svg_path, get_theme_status,
+    get_theme_tab_labels, get_theme_icon,
 )
 from ..version import __version__
 
@@ -1253,10 +1253,6 @@ class MainWindow(QMainWindow):
         # Hide badge entirely when animations are disabled
         if not self._settings.get("animated_banner_enabled", False):
             self._svg_badge.hide()
-            return
-        try:
-            from PyQt6.QtSvgWidgets import QSvgWidget
-        except ImportError:
             return
         theme = self._settings.get_theme()
         svg_path = get_theme_svg_path(theme.get("name", ""))

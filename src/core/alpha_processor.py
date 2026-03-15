@@ -8,7 +8,7 @@ import os
 import io
 import logging
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional
 
 import numpy as np
 from PIL import Image
@@ -73,8 +73,21 @@ def _load_dds_raw(path: str) -> Image.Image:
         raise ValueError("Not a valid DDS file")
     height = int.from_bytes(data[12:16], "little")
     width = int.from_bytes(data[16:20], "little")
-    flags = int.from_bytes(data[80:84], "little")  # pixel format flags
-    bits = int.from_bytes(data[88:92], "little")
+    # Pixel format structure at offset 76:
+    #   dwSize(76-80), dwFlags(80-84), dwFourCC(84-88), dwRGBBitCount(88-92)
+    pf_flags = int.from_bytes(data[80:84], "little")  # pixel format flags
+    pf_fourcc = data[84:88]                            # FourCC compression tag
+    bits = int.from_bytes(data[88:92], "little")       # bits per pixel
+    # DDPF_FOURCC (0x4): dwFourCC contains a valid compression code (DXT1 etc.)
+    # A non-zero FourCC also signals a compressed format.  Either way the raw
+    # pixel data is NOT a simple BGRA raster and must not be read as such.
+    _DDPF_FOURCC = 0x4
+    if pf_flags & _DDPF_FOURCC or pf_fourcc != b"\x00\x00\x00\x00":
+        raise ValueError(
+            f"Unsupported DDS pixel format: compressed format "
+            f"(FourCC={pf_fourcc!r}). "
+            "Install ImageMagick/wand to read compressed DDS files."
+        )
     pixel_data = data[128:]
     expected = width * height * (bits // 8)
     if len(pixel_data) < expected or bits not in (32, 24):
