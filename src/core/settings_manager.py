@@ -182,6 +182,9 @@ class SettingsManager:
         "unlock_golden_hour": False,
         "unlock_cat": False,
         "unlock_dog": False,
+        "unlock_snake": False,
+        "unlock_ghost": False,
+        "unlock_slime": False,
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------

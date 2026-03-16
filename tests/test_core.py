@@ -954,13 +954,13 @@ class TestThemeEngineBannerFrames(unittest.TestCase):
 
     def test_preset_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.PRESET_THEMES), 18,
-                         f"Expected 18 preset themes, got {len(te.PRESET_THEMES)}")
+        self.assertEqual(len(te.PRESET_THEMES), 20,
+                         f"Expected 20 preset themes, got {len(te.PRESET_THEMES)}")
 
     def test_hidden_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.HIDDEN_THEMES), 32,
-                         f"Expected 32 hidden themes, got {len(te.HIDDEN_THEMES)}")
+        self.assertEqual(len(te.HIDDEN_THEMES), 37,
+                         f"Expected 37 hidden themes, got {len(te.HIDDEN_THEMES)}")
 
     def test_new_preset_svgs_exist(self):
         """Mermaid, Shark Bait, and Alien should have dedicated SVG files."""

@@ -1937,6 +1937,12 @@ THEME_SVG = {
     "Golden Hour":       "sunset_beach.svg",
     "Purrfect Cats":     "otter_cove.svg",
     "Good Dog":          "otter_cove.svg",
+    # Newest themes (share visually similar existing SVGs)
+    "Anime":             "fairy_garden.svg",
+    "Waifu":             "secret_sakura.svg",
+    "Snake Pit":         "midnight_forest.svg",
+    "Ghost":             "abyssal_void.svg",
+    "Slime":             "toxic_neon.svg",
 }
 
 
@@ -1999,6 +2005,9 @@ THEME_BANNER = {
     # Animal themes
     "Purrfect Cats":     "🐱🧶  Alpha & RGBA Adjuster  |  File Converter  🧶🐱",
     "Good Dog":          "🐶🦴  Alpha & RGBA Adjuster  |  File Converter  🦴🐶",
+    # Newest preset themes
+    "Anime":             "🌸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌸",
+    "Waifu":             "💖🌸  Alpha & RGBA Adjuster  |  File Converter  🌸💖",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -2047,6 +2056,9 @@ THEME_STATUS_MESSAGES = {
     # Animal themes
     "Purrfect Cats":     "🐱  Purrfect Cats — Meow, your pixels look great.",
     "Good Dog":          "🐶  Good Dog — Such image. Very convert. Wow.",
+    # Newest preset themes
+    "Anime":             "🌸  Anime — Kawaii conversions unlocked!",
+    "Waifu":             "💖  Waifu — Your perfect pixel companion.",
 }
 
 
@@ -2099,6 +2111,12 @@ THEME_ICON: dict[str, str] = {
     "Nebula":            "🌌",
     "Purrfect Cats":     "🐱",
     "Good Dog":          "🐶",
+    # Newest themes
+    "Anime":             "🌸",
+    "Waifu":             "💖",
+    "Snake Pit":         "🐍",
+    "Ghost":             "👻",
+    "Slime":             "🟢",
 }
 
 
@@ -2158,6 +2176,12 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
     "Nebula":           ("🌌🖼", "🌌🔄", "🌌📋"),
     "Purrfect Cats":    ("🐱🖼", "🐱🔄", "🐱📋"),
     "Good Dog":         ("🐶🖼", "🐶🔄", "🐶📋"),
+    # Newest themes
+    "Anime":            ("🌸🖼", "🌸🔄", "🌸📋"),
+    "Waifu":            ("💖🖼", "💖🔄", "💖📋"),
+    "Snake Pit":        ("🐍🖼", "🐍🔄", "🐍📋"),
+    "Ghost":            ("👻🖼", "👻🔄", "👻📋"),
+    "Slime":            ("🟢🖼", "🟢🔄", "🟢📋"),
 }
 
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
