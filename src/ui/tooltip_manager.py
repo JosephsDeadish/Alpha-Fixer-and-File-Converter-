@@ -217,6 +217,8 @@ _NORMAL: dict[str, list[str]] = {
         "Locked hidden themes show 🔓 when unlocked — earn them by clicking and processing files.",
         "You can create custom color themes using the color pickers in the Theme tab.",
         "First time changing the theme unlocks the Candy Land 🍭 theme — just switch once!",
+        "Hidden themes: Snake Pit 🐍 at 11 500 clicks, Ghost 👻 at 12 000, Slime 🟢 at 12 500. Keep clicking!",
+        "Ghost 👻 also unlocks after 2 500 alpha fixes. Slime 🟢 also unlocks after 2 500 conversions.",
     ],
     "theme_color_btn": [
         "Click this color swatch to change that part of the theme's color palette.",
@@ -1204,6 +1206,7 @@ _DUMBED: dict[str, list[str]] = {
         "Gore theme has blood splatter. It's... tasteful. Mostly.",
         "Rainbow Chaos will do things to your eyes. You've been warned.",
         "First time you switch theme = free Candy Land 🍭 unlock. That's a reward for clicking a dropdown.",
+        "More secret themes: Snake Pit 🐍 at 11 500 clicks, Ghost 👻 at 12 000, Slime 🟢 at 12 500.",
     ],
     "theme_color_btn": [
         "Color swatch. Click it. Color picker opens. Pick a color. App changes. Wow.",
@@ -2286,6 +2289,7 @@ _VULGAR: dict[str, list[str]] = {
         "First time changing theme unlocks Candy Land 🍭. FREE THEME. Right now. This second. Change it.",
         "There are over 50 themes. You will spend at least 20 minutes in this dropdown. We accept this.",
         "Some themes have matching cursors, sounds, click effects, and trail styles. It's a whole vibe.",
+        "Snake Pit 🐍 at 11 500 clicks. Ghost 👻 at 12 000. Slime 🟢 at 12 500. Or 2 500 alpha fixes / conversions respectively. Now you fucking know.",
     ],
     "theme_color_btn": [
         "Color swatch button. You click it, a color picker opens, you pick a color, the app changes. Simple fucking concept.",

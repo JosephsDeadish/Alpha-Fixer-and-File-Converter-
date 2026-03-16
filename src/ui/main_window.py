@@ -358,6 +358,9 @@ class MainWindow(QMainWindow):
         (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
         (10500, "unlock_cat",             "🐱 'Purrfect Cats' theme unlocked! (Settings → Theme)"),
         (11000, "unlock_dog",             "🐶 'Good Dog' theme unlocked! (Settings → Theme)"),
+        (11500, "unlock_snake",           "🐍 'Snake Pit' theme unlocked! (Settings → Theme)"),
+        (12000, "unlock_ghost",           "👻 'Ghost' theme unlocked! (Settings → Theme)"),
+        (12500, "unlock_slime",           "🟢 'Slime' theme unlocked! (Settings → Theme)"),
     ]
 
     # Alternative unlock path: number of *alpha-fix files processed* required.
@@ -368,6 +371,7 @@ class MainWindow(QMainWindow):
         (50,   "unlock_ocean",        "🌊 'Deep Ocean' theme unlocked! (50 alpha fixes done)"),
         (250,  "unlock_midnight_forest", "🌲 'Midnight Forest' theme unlocked! (250 alpha fixes done)"),
         (1000, "unlock_nebula",       "🌌 'Nebula' theme unlocked! (1 000 alpha fixes done)"),
+        (2500, "unlock_ghost",        "👻 'Ghost' theme unlocked! (2 500 alpha fixes done)"),
         (5000, "unlock_golden_hour",  "🌇 'Golden Hour' theme unlocked! (5 000 alpha fixes done)"),
     ]
 
@@ -377,6 +381,7 @@ class MainWindow(QMainWindow):
         (50,   "unlock_dragon_fire",  "🐉 'Dragon Fire' theme unlocked! (50 conversions done)"),
         (250,  "unlock_spring_bloom", "🌷 'Spring Bloom' theme unlocked! (250 conversions done)"),
         (1000, "unlock_crystal_cave", "💎 'Crystal Cave' theme unlocked! (1 000 conversions done)"),
+        (2500, "unlock_slime",        "🟢 'Slime' theme unlocked! (2 500 conversions done)"),
         (5000, "unlock_coral_reef",   "🪸 'Coral Reef' theme unlocked! (5 000 conversions done)"),
     ]
 

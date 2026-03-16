@@ -7431,3 +7431,182 @@ class TestRound24LoadImageStateConsistency(unittest.TestCase):
         self.assertIn("closeEvent",
                       body,
                       "MainWindow.closeEvent must call the Selective Alpha tab's closeEvent")
+
+
+# ---------------------------------------------------------------------------
+# Round-25: Orphaned unlock keys — Snake Pit / Ghost / Slime milestones
+# ---------------------------------------------------------------------------
+
+class TestRound25SnakeGhostSlimeMilestones(unittest.TestCase):
+    """Verify that the unlock_snake, unlock_ghost, unlock_slime settings keys
+    introduced alongside their secret themes are backed by actual milestone
+    entries in main_window.py's _UNLOCK_TABLE (or _ALPHA_MILESTONES /
+    _CONV_MILESTONES), so that they can actually be earned.
+    """
+
+    _MAIN_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _SM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "core", "settings_manager.py")
+    _TE_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "theme_engine.py")
+    _TM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _src(self, path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # settings_manager.py — keys must exist
+    # ------------------------------------------------------------------
+
+    def test_unlock_snake_in_defaults(self):
+        """unlock_snake must be present in settings_manager._DEFAULTS."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"unlock_snake"', src,
+                      "unlock_snake missing from settings_manager._DEFAULTS")
+
+    def test_unlock_ghost_in_defaults(self):
+        """unlock_ghost must be present in settings_manager._DEFAULTS."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"unlock_ghost"', src,
+                      "unlock_ghost missing from settings_manager._DEFAULTS")
+
+    def test_unlock_slime_in_defaults(self):
+        """unlock_slime must be present in settings_manager._DEFAULTS."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"unlock_slime"', src,
+                      "unlock_slime missing from settings_manager._DEFAULTS")
+
+    # ------------------------------------------------------------------
+    # theme_engine.py — hidden themes use the right _unlock keys
+    # ------------------------------------------------------------------
+
+    def test_snake_pit_theme_has_unlock_key(self):
+        """SECRET_SNAKE_THEME must declare _unlock == 'snake'."""
+        src = self._src(self._TE_SRC)
+        # Find the SECRET_SNAKE_THEME block and confirm '_unlock': 'snake' inside it
+        idx = src.find("SECRET_SNAKE_THEME")
+        self.assertGreater(idx, 0, "SECRET_SNAKE_THEME not found in theme_engine.py")
+        block = src[idx: idx + 900]
+        self.assertIn('"_unlock": "snake"', block,
+                      "SECRET_SNAKE_THEME must have _unlock: snake")
+
+    def test_ghost_theme_has_unlock_key(self):
+        """SECRET_GHOST_THEME must declare _unlock == 'ghost'."""
+        src = self._src(self._TE_SRC)
+        idx = src.find("SECRET_GHOST_THEME")
+        self.assertGreater(idx, 0, "SECRET_GHOST_THEME not found in theme_engine.py")
+        block = src[idx: idx + 900]
+        self.assertIn('"_unlock": "ghost"', block,
+                      "SECRET_GHOST_THEME must have _unlock: ghost")
+
+    def test_slime_theme_has_unlock_key(self):
+        """SECRET_SLIME_THEME must declare _unlock == 'slime'."""
+        src = self._src(self._TE_SRC)
+        idx = src.find("SECRET_SLIME_THEME")
+        self.assertGreater(idx, 0, "SECRET_SLIME_THEME not found in theme_engine.py")
+        block = src[idx: idx + 900]
+        self.assertIn('"_unlock": "slime"', block,
+                      "SECRET_SLIME_THEME must have _unlock: slime")
+
+    # ------------------------------------------------------------------
+    # main_window.py — milestone entries must exist for all three keys
+    # ------------------------------------------------------------------
+
+    def test_unlock_snake_in_unlock_table(self):
+        """_UNLOCK_TABLE must contain an entry for unlock_snake so it can
+        be earned by accumulating clicks."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_UNLOCK_TABLE")
+        self.assertGreater(table_start, 0, "_UNLOCK_TABLE not found in main_window.py")
+        # Find the closing bracket of the list
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        self.assertIn('"unlock_snake"', table_body,
+                      "unlock_snake missing from _UNLOCK_TABLE in main_window.py")
+
+    def test_unlock_ghost_in_alpha_milestones(self):
+        """_ALPHA_MILESTONES must contain an entry for unlock_ghost so it can
+        be earned through processing alpha files."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_ALPHA_MILESTONES")
+        self.assertGreater(table_start, 0, "_ALPHA_MILESTONES not found in main_window.py")
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        self.assertIn('"unlock_ghost"', table_body,
+                      "unlock_ghost missing from _ALPHA_MILESTONES in main_window.py")
+
+    def test_unlock_slime_in_conv_milestones(self):
+        """_CONV_MILESTONES must contain an entry for unlock_slime so it can
+        be earned by converting files."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_CONV_MILESTONES")
+        self.assertGreater(table_start, 0, "_CONV_MILESTONES not found in main_window.py")
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        self.assertIn('"unlock_slime"', table_body,
+                      "unlock_slime missing from _CONV_MILESTONES in main_window.py")
+
+    def test_unlock_table_is_sorted_ascending(self):
+        """_UNLOCK_TABLE entries must be sorted in ascending threshold order
+        so the early-break optimisation in _run_unlock_checks() is correct."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_UNLOCK_TABLE")
+        self.assertGreater(table_start, 0)
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        thresholds = [int(m.group(1))
+                      for m in re.finditer(r"\((\d+),\s*\"unlock_", table_body)]
+        self.assertGreater(len(thresholds), 0, "No unlock entries found in _UNLOCK_TABLE")
+        self.assertEqual(thresholds, sorted(thresholds),
+                         "_UNLOCK_TABLE thresholds must be in ascending order")
+
+    def test_alpha_milestones_sorted_ascending(self):
+        """_ALPHA_MILESTONES must be sorted in ascending threshold order."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_ALPHA_MILESTONES")
+        self.assertGreater(table_start, 0)
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        thresholds = [int(m.group(1))
+                      for m in re.finditer(r"\((\d+),\s*\"unlock_", table_body)]
+        self.assertGreater(len(thresholds), 0)
+        self.assertEqual(thresholds, sorted(thresholds),
+                         "_ALPHA_MILESTONES thresholds must be in ascending order")
+
+    def test_conv_milestones_sorted_ascending(self):
+        """_CONV_MILESTONES must be sorted in ascending threshold order."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_CONV_MILESTONES")
+        self.assertGreater(table_start, 0)
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        thresholds = [int(m.group(1))
+                      for m in re.finditer(r"\((\d+),\s*\"unlock_", table_body)]
+        self.assertGreater(len(thresholds), 0)
+        self.assertEqual(thresholds, sorted(thresholds),
+                         "_CONV_MILESTONES thresholds must be in ascending order")
+
+    # ------------------------------------------------------------------
+    # tooltip_manager.py — tooltip hints mention the new themes
+    # ------------------------------------------------------------------
+
+    def test_tooltip_theme_combo_mentions_snake_pit(self):
+        """At least one tooltip mode for theme_combo must hint at Snake Pit 🐍."""
+        src = self._src(self._TM_SRC)
+        # Find all theme_combo sections and check that the snake hint appears
+        self.assertIn("Snake Pit", src,
+                      "tooltip_manager.py must mention 'Snake Pit' somewhere in theme_combo tips")
+
+    def test_tooltip_theme_combo_mentions_ghost(self):
+        """At least one tooltip mode for theme_combo must mention the Ghost theme."""
+        src = self._src(self._TM_SRC)
+        # 'Ghost' appears in several unrelated trail tips; confirm it appears
+        # in context of 'unlock' (milestone hint) rather than just trail tips.
+        # The new tips mention 'Ghost 👻 at 12 000' / 'unlock_ghost'.
+        self.assertIn("Ghost 👻 at 12", src,
+                      "tooltip_manager.py must mention 'Ghost 👻 at 12 000' in theme_combo tips")
+
+    def test_tooltip_theme_combo_mentions_slime(self):
+        """At least one tooltip mode for theme_combo must mention the Slime theme."""
+        src = self._src(self._TM_SRC)
+        self.assertIn("Slime 🟢 at 12", src,
+                      "tooltip_manager.py must mention 'Slime 🟢 at 12 500' in theme_combo tips")
