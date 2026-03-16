@@ -228,6 +228,103 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
                  + 0.3 * math.sin(2 * math.pi * 500 * t))
             # 2.0 = 1 + 0.7 + 0.3 (sum of coefficients)
             samples.append(int(22000 * s * env / 2.0))
+    elif profile == "howl":
+        # Dog howl — long ascending then sustained pitch glide, wolf-like
+        n = int(sample_rate * 0.22)
+        phase = 0.0
+        for i in range(n):
+            t = i / sample_rate
+            # rise 200→500 Hz over first 60%, then sustain with slight vibrato
+            if t < 0.13:
+                freq = 200.0 + 2307.7 * t   # 200→500 Hz
+            else:
+                freq = 500.0 + 15.0 * math.sin(2 * math.pi * 5 * t)
+            env = (1.0 - math.exp(-t * 20.0)) * math.exp(-t * 4.5)
+            phase += 2 * math.pi * freq / sample_rate
+            s = math.sin(phase) + 0.3 * math.sin(2 * phase)
+            samples.append(int(20000 * s * env / 1.3))
+    elif profile == "hiss":
+        # Cat hiss — breathy noise burst with a sharp sibilant character
+        rng = _random.Random(7)
+        n = int(sample_rate * 0.12)
+        for i in range(n):
+            t = i / sample_rate
+            env = (1.0 - math.exp(-t * 80.0)) * math.exp(-t * 22.0)
+            noise = rng.uniform(-1, 1)
+            carrier = math.sin(2 * math.pi * 2200 * t) * 0.3
+            samples.append(int(20000 * (0.7 * noise + 0.3 * carrier) * env))
+    elif profile == "rock1":
+        # Goth/rock electric guitar power-chord stab — low distorted thud
+        n = int(sample_rate * 0.14)
+        rng = _random.Random(11)
+        for i in range(n):
+            t = i / sample_rate
+            env = (1.0 - math.exp(-t * 40.0)) * math.exp(-t * 12.0)
+            # E2 power chord (82 Hz root + 123 Hz fifth)
+            s = math.sin(2 * math.pi * 82 * t)
+            s += 0.8 * math.sin(2 * math.pi * 123 * t)
+            s += 0.5 * math.sin(2 * math.pi * 164 * t)
+            # Add slight distortion via soft-clip
+            s = max(-1.2, min(1.2, s * 1.4))
+            s += 0.15 * rng.uniform(-1, 1)  # amp grit
+            samples.append(int(22000 * s * env / 2.0))
+    elif profile == "rock2":
+        # Goth/rock snare hit — tight percussive crack with noise transient
+        n = int(sample_rate * 0.10)
+        rng = _random.Random(13)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 35.0)
+            tone = math.sin(2 * math.pi * 200 * t) + 0.5 * math.sin(2 * math.pi * 280 * t)
+            noise = rng.uniform(-1, 1)
+            s = 0.45 * tone + 0.55 * noise
+            samples.append(int(24000 * s * env))
+    elif profile == "rock3":
+        # Goth/rock bass string pluck — rich low thump with harmonic decay
+        n = int(sample_rate * 0.16)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 14.0) * (1.0 - math.exp(-t * 60.0))
+            # A1 bass note (55 Hz) with harmonics
+            s = (math.sin(2 * math.pi * 55 * t)
+                 + 0.7 * math.sin(2 * math.pi * 110 * t)
+                 + 0.4 * math.sin(2 * math.pi * 165 * t)
+                 + 0.2 * math.sin(2 * math.pi * 220 * t))
+            samples.append(int(22000 * s * env / 2.3))
+    elif profile == "splash":
+        # Water splash — noise burst with descending frequency sweep
+        rng = _random.Random(17)
+        n = int(sample_rate * 0.11)
+        for i in range(n):
+            t = i / sample_rate
+            env = math.exp(-t * 28.0) * (1.0 - math.exp(-t * 120.0))
+            freq = 1200.0 - 800.0 * (t / 0.11)
+            tone = math.sin(2 * math.pi * freq * t)
+            noise = rng.uniform(-1, 1) * 0.4
+            samples.append(int(20000 * (0.6 * tone + noise) * env))
+    elif profile == "moo":
+        # Cow moo — low sustained tone with amplitude modulation
+        n = int(sample_rate * 0.20)
+        phase = 0.0
+        for i in range(n):
+            t = i / sample_rate
+            freq = 120.0 + 10.0 * math.sin(2 * math.pi * 3 * t)
+            env = (1.0 - math.exp(-t * 15.0)) * math.exp(-t * 5.0)
+            phase += 2 * math.pi * freq / sample_rate
+            s = math.sin(phase) + 0.5 * math.sin(2 * phase) + 0.25 * math.sin(3 * phase)
+            samples.append(int(18000 * s * env / 1.75))
+    elif profile == "tweet":
+        # Bird tweet — two quick ascending chirps
+        for chirp_base in (1000, 1300):
+            n = int(sample_rate * 0.05)
+            for i in range(n):
+                t = i / sample_rate
+                freq = chirp_base + 600 * (t / 0.05)
+                env = math.exp(-t * 30.0) * (1.0 - math.exp(-t * 150.0))
+                samples.append(int(18000 * math.sin(2 * math.pi * freq * t) * env))
+            # tiny gap
+            for _ in range(int(sample_rate * 0.02)):
+                samples.append(0)
     else:  # soft / default
         freq, dur, decay = 880, 0.06, 45
         n = int(sample_rate * dur)
@@ -243,28 +340,39 @@ _THEME_SOUND_PROFILES: dict[str, str] = {
     "Panda Dark": "soft", "Panda Light": "soft", "Neon Panda": "bright",
     "Gore": "growl", "Bat Cave": "dark", "Rainbow Chaos": "bright",
     "Otter Cove": "purr", "Galaxy": "dark", "Galaxy Otter": "dark",
-    "Goth": "crunch", "Volcano": "hard", "Arctic": "icy",
-    "Fairy Garden": "chirp", "Mermaid": "bubble", "Shark Bait": "bubble",
+    "Goth": "rock",  # cycles rock1/rock2/rock3
+    "Volcano": "hard", "Arctic": "icy",
+    "Fairy Garden": "chirp", "Mermaid": "splash", "Shark Bait": "bubble",
     "Alien": "bright", "Noodle": "sparkle", "Pancake": "sparkle",
     # Hidden themes
     "Secret Skeleton": "crunch", "Secret Sakura": "chirp",
-    "Deep Ocean": "bubble", "Blood Moon": "growl", "Ice Cave": "icy",
+    "Deep Ocean": "splash", "Blood Moon": "growl", "Ice Cave": "icy",
     "Cyber Otter": "icy", "Toxic Neon": "bright", "Lava Cave": "hard",
-    "Sunset Beach": "warm", "Midnight Forest": "warm",
+    "Sunset Beach": "warm", "Midnight Forest": "tweet",
     "Candy Land": "bright", "Zombie Apocalypse": "growl",
-    "Dragon Fire": "roar", "Bubblegum": "bubble", "Thunder Storm": "bright",
+    "Dragon Fire": "roar", "Bubblegum": "bubble", "Thunder Storm": "hard",
     "Rose Gold": "chirp", "Space Cat": "meow", "Magic Mushroom": "sparkle",
-    "Abyssal Void": "dark", "Spring Bloom": "chirp",
+    "Abyssal Void": "dark", "Spring Bloom": "tweet",
     "Gold Rush": "sparkle", "Nebula": "dark",
-    # New hidden themes (added below in theme_engine.py)
+    # New hidden themes
     "Crystal Cave": "icy", "Glitch": "bright", "Wild West": "warm",
     "Pirate": "dark", "Deep Space": "dark", "Witch's Brew": "crunch",
-    "Lava Lamp": "warm", "Coral Reef": "bubble", "Storm Cloud": "hard",
+    "Lava Lamp": "warm", "Coral Reef": "splash", "Storm Cloud": "hard",
     "Golden Hour": "sparkle",
-    # Animal themes
-    "Purrfect Cats": "purr",
-    "Good Dog": "bark",
+    # Animal themes — sounds match the animal
+    "Purrfect Cats": "purr",      # purring cat
+    "Good Dog": "bark",           # friendly bark
+    "Space Cat": "meow",          # meow in space
+    "Otter Cove": "purr",         # otter chitter mapped to purr
+    "Galaxy Otter": "purr",
 }
+
+# Goth/rock themes that cycle through rock sub-profiles on each click
+_GOTH_ROCK_THEMES: frozenset[str] = frozenset({
+    "Goth", "Secret Skeleton", "Abyssal Void", "Witch's Brew",
+    "Blood Moon", "Zombie Apocalypse",
+})
+_ROCK_CYCLE: tuple[str, ...] = ("rock1", "rock2", "rock3")
 
 
 def _make_success_wav(sample_rate: int = 22050) -> str:
@@ -454,6 +562,7 @@ class SoundEngine(QObject):
         # Per-profile click WAVs keyed by profile name
         self._theme_click_wavs: dict[str, str] = {}
         self._filter: _ButtonClickFilter | None = None
+        self._goth_rock_idx: int = 0   # cycles 0→1→2→0 for rock themes
         self._setup()
 
     # ------------------------------------------------------------------
@@ -473,10 +582,11 @@ class SoundEngine(QObject):
             self._theme_change_wav  = _make_theme_change_wav()
             self._tab_switch_wav    = _make_tab_switch_wav()
             self._drag_enter_wav    = _make_drag_enter_wav()
-            # Generate one WAV per sound profile (14 profiles)
+            # Generate one WAV per sound profile (all profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
                             "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar",
-                            "bark"):
+                            "bark", "howl", "hiss", "rock1", "rock2", "rock3",
+                            "splash", "moo", "tweet"):
                 self._theme_click_wavs[profile] = _make_theme_click_wav(profile)
         except Exception as exc:
             logger.warning("Could not generate sound WAVs: %s", exc)
@@ -519,7 +629,7 @@ class SoundEngine(QObject):
         """Play the click sound (respects the sound_enabled setting).
 
         If 'use_theme_sound' is enabled the click uses the per-theme profile;
-        otherwise a custom WAV path or the generic default is used.
+        goth/rock themes cycle through rock1/rock2/rock3 on each press.
         """
         if not self._settings.get("sound_enabled", False):
             return
@@ -529,7 +639,12 @@ class SoundEngine(QObject):
             try:
                 theme = self._settings.get_theme()
                 theme_name = theme.get("name", "")
-                profile = _THEME_SOUND_PROFILES.get(theme_name, "soft")
+                # Goth/rock themes cycle between three rock sub-profiles
+                if theme_name in _GOTH_ROCK_THEMES:
+                    profile = _ROCK_CYCLE[self._goth_rock_idx % len(_ROCK_CYCLE)]
+                    self._goth_rock_idx += 1
+                else:
+                    profile = _THEME_SOUND_PROFILES.get(theme_name, "soft")
                 wav_path = self._theme_click_wavs.get(profile, self._click_wav)
             except Exception:
                 wav_path = self._click_wav

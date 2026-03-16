@@ -409,8 +409,10 @@ class MainWindow(QMainWindow):
         # trigger dozens of expensive setStyleSheet() calls per second.
         self._settings_apply_timer = QTimer(self)
         self._settings_apply_timer.setSingleShot(True)
-        self._settings_apply_timer.setInterval(350)
+        self._settings_apply_timer.setInterval(250)
         self._settings_apply_timer.timeout.connect(self._apply_settings_now)
+        # Cache last applied stylesheet to avoid redundant setStyleSheet calls
+        self._last_stylesheet: str = ""
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
         # is wasteful; coalesce them into a single update 50ms after the last
@@ -1112,7 +1114,14 @@ class MainWindow(QMainWindow):
         tooltip_style = self._settings.get("tooltip_style", "Auto (follow theme)")
         app = QApplication.instance()
         if app is not None:
-            app.setStyleSheet(build_stylesheet(theme, tooltip_style))
+            new_ss = build_stylesheet(theme, tooltip_style)
+            if new_ss != self._last_stylesheet:
+                app.setUpdatesEnabled(False)
+                try:
+                    app.setStyleSheet(new_ss)
+                    self._last_stylesheet = new_ss
+                finally:
+                    app.setUpdatesEnabled(True)
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
         # Update the banner emoji widget to the theme's representative icon.

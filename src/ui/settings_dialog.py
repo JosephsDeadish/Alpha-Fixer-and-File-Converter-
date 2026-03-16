@@ -768,7 +768,7 @@ class SettingsDialog(QDialog):
             "Choose the press-animation style applied to every button.\n"
             "Greyed out while 'Use theme animation' is checked."
         )
-        self._button_anim_style_combo.setMaximumWidth(280)
+        self._button_anim_style_combo.setMinimumWidth(220)
         btn_anim_gl.addWidget(self._button_anim_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
 
         tv.addWidget(grp_btn_anim)
@@ -817,7 +817,7 @@ class SettingsDialog(QDialog):
             "Choose the animation style for the banner emoji when animation is enabled.\n"
             "Greyed out while 'Use theme animation' is checked."
         )
-        self._banner_anim_combo.setMaximumWidth(280)
+        self._banner_anim_combo.setMinimumWidth(220)
         banner_gl.addWidget(self._banner_anim_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
 
         self._banner_use_theme_anim_check = QCheckBox(
