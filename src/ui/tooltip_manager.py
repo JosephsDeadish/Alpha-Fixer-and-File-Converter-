@@ -33,11 +33,12 @@ from ..core.settings_manager import SettingsManager as _SettingsManager
 _NORMAL: dict[str, list[str]] = {
     "add_files": [
         "Click to add image files to the processing queue.",
-        "Supports PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, and GIF.",
+        "Supports PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI, and SVG.",
         "You can also drag and drop files directly into the list below.",
         "Hold Ctrl in the file dialog to select multiple files at once.",
         "Shortcut: Ctrl+O opens the Add Files dialog.",
         "Tip: you can add the same file multiple times for batch preset testing.",
+        "SVG files are now supported — they are rendered to raster on import.",
     ],
     "add_folder": [
         "Click to add an entire folder of images at once.",
@@ -159,6 +160,14 @@ _NORMAL: dict[str, list[str]] = {
         "Works for any image format supported by the app.",
         "Double-click the compare widget to zoom to fit the current preview.",
     ],
+    "alpha_vis_check": [
+        "Toggle a false-colour heat-map over the alpha channel in both preview images.",
+        "Red = fully transparent (α 0), Yellow = semi-transparent (α 128), Green = fully opaque (α 255).",
+        "This is a visual aid only — it has no effect on the files that get processed.",
+        "Useful for spotting small patches of nearly-transparent pixels that are easy to miss.",
+        "Turn this on to see exactly which areas will be affected by your alpha settings.",
+        "The heat-map blends with the original colours so detail remains visible.",
+    ],
     "file_list": [
         "Files queued for processing. Drag & drop files or folders here.",
         "Right-click any item to remove it from the queue.",
@@ -182,6 +191,8 @@ _NORMAL: dict[str, list[str]] = {
         "DDS: DirectX GPU textures.  TGA: classic game/3D format with alpha.",
         "AVIF: cutting-edge, excellent compression.  QOI: fast lossless with alpha.",
         "GIF: animated support (palette-only, 256 colours max).  BMP: uncompressed, always compatible.",
+        "SVG input: renders vector art to a raster image (requires cairosvg or svglib).",
+        "SVG output: embeds your image inside an SVG wrapper — no extra libraries needed.",
     ],
     "quality_spin": [
         "Quality percentage for lossy formats (JPEG, WEBP).",
@@ -1111,6 +1122,13 @@ _DUMBED: dict[str, list[str]] = {
         "Before on the left. After on the right. Like a before/after photo. Wild.",
         "Pick a file from the list first! Nothing to compare if nothing's loaded.",
     ],
+    "alpha_vis_check": [
+        "Makes your alpha channel look like a traffic light. Red = transparent, green = solid.",
+        "Tick this to see a pretty colour map showing which pixels are see-through.",
+        "It's just a preview helper. Your actual files are not changed. Promise.",
+        "Red bits = transparent. Yellow bits = kind of transparent. Green bits = solid.",
+        "Useful when your alpha values look the same but are actually different. Science.",
+    ],
     "file_list": [
         "This is where your files live. Drag some in. Or use the buttons above.",
         "The list shows your files. Click one to preview it. Revolutionary.",
@@ -1974,6 +1992,9 @@ _VULGAR: dict[str, list[str]] = {
         "Supports PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF — basically every format you've ever heard of and several you've definitely never seen in the wild.",
         "Holy shit you found the Add Files button! First try! Give yourself a medal, champ.",
         "It's literally just a file picker. Click. Select. Done. Why are you hovering here for so long?",
+        "SVGs are now supported! Throw those vector art bastards right in here along with all your PNGs.",
+        "Ctrl+O still works. The world has enough mouse-clickers. Be a keyboard person occasionally.",
+        "You can add the same file twice if you're determined to be inefficient. The app'll deduplicate. You're fine.",
     ],
     "add_folder": [
         "Add a whole fucking folder at once. Because clicking one file at a time is for suckers.",
@@ -2127,6 +2148,15 @@ _VULGAR: dict[str, list[str]] = {
         "If the right side looks like garbage, your settings are garbage. Adjust them.",
         "Live preview updates as you change settings. Watch the alpha change in real time like a god.",
     ],
+    "alpha_vis_check": [
+        "Smash this checkbox and watch your alpha channel explode into a beautiful red/yellow/green heat-map.",
+        "Red = your pixel is invisible. Green = solid as a rock. Yellow = somewhere in between, you wishy-washy bastard.",
+        "It's a visualization only. NOT changing your files. The files are safe. Calm the fuck down.",
+        "Turn this on to find those sneaky near-zero alpha pixels hiding in plain sight like little transparent cowards.",
+        "The heat-map blends at 70% so you can still see the actual image underneath. Best of both worlds, you demanding genius.",
+        "See exactly which parts of your image are transparent before you obliterate them with the alpha settings. Smart fucking move.",
+        "Alpha heat-map: because sometimes you need to see what you're actually doing instead of guessing like an idiot.",
+    ],
     "file_list": [
         "Drop your damn files here or use the buttons. Either way, fill this list up.",
         "Click a file to see the before/after comparison below. That's why we made it.",
@@ -2156,6 +2186,8 @@ _VULGAR: dict[str, list[str]] = {
         "AVIF is the new hotness. Smaller than WEBP, better quality than JPEG.",
         "QOI is a meme format that's actually decent. Fast as hell. Few people use it.",
         "DDS, TGA, BMP = retro game modding formats. For literally anything else — web, photos, modern games — use PNG or WEBP and stop asking.",
+        "SVG is now in the list. Input = vector art rendered to pixels. Output = your raster lovingly wrapped in an SVG hug. Beautiful.",
+        "Needs cairosvg for SVG input. pip install cairosvg. One command, zero excuses.",
     ],
     "quality_spin": [
         "Higher quality = better image, bigger file. Lower = potato, but tiny.",

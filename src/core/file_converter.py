@@ -2,8 +2,20 @@
 File converter – converts between image formats.
 
 Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PPM, PCX, AVIF, QOI.
+                   PPM, PCX, AVIF, QOI, SVG.
+
+SVG input (raster rendering) requires one of:
+  - cairosvg  (pip install cairosvg)   – needs libcairo system library
+  - svglib    (pip install svglib)      – pure Python, may need reportlab
+If neither is installed the app will raise an ImportError with install
+instructions when an SVG file is opened.
+
+SVG output embeds the raster image as base64-encoded PNG inside an <svg>
+element, producing a valid scalable vector document that all modern viewers
+can display.  No additional libraries are required for SVG output.
 """
+import base64
+import io
 import os
 import logging
 from pathlib import Path
@@ -26,6 +38,7 @@ SUPPORTED_OUTPUT_FORMATS = {
     "PNG": ".png",
     "PPM": ".ppm",
     "QOI": ".qoi",
+    "SVG": ".svg",
     "TGA": ".tga",
     "TIFF": ".tiff",
     "WEBP": ".webp",
@@ -91,6 +104,14 @@ FORMAT_DESCRIPTIONS = {
         "Widely used in 3D modelling and older game engines (Source, Quake, etc.).\n"
         "Supports 32-bit RGBA. Simple format with broad tool support."
     ),
+    "SVG": (
+        "Scalable Vector Graphics — XML-based vector/lossless format.\n"
+        "SVG input: renders the vector art to a full-colour RGBA raster.\n"
+        "  Requires cairosvg (pip install cairosvg) or svglib.\n"
+        "SVG output: embeds the raster image inside an <svg> element as\n"
+        "  base64 PNG — no extra libraries needed for output.\n"
+        "Useful for icons, logos, UI assets, and scalable game graphics."
+    ),
     "TIFF": (
         "Tagged Image File Format — flexible lossless/compressed format.\n"
         "Used in professional print, photography, and scientific imaging.\n"
@@ -107,11 +128,110 @@ FORMAT_DESCRIPTIONS = {
 _QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif"}
 
 
+def _has_cairosvg() -> bool:
+    """Return True when cairosvg is importable."""
+    try:
+        import cairosvg  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _has_svglib() -> bool:
+    """Return True when svglib + reportlab are importable."""
+    try:
+        from svglib.svglib import svg2rlg  # noqa: F401
+        from reportlab.graphics import renderPM  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _load_svg(path: str) -> Image.Image:
+    """
+    Render an SVG file to an RGBA PIL Image.
+
+    Tries (in order):
+    1. cairosvg       — pip install cairosvg
+    2. svglib         — pip install svglib
+    3. Raises ImportError with installation instructions.
+    """
+    if _has_cairosvg():
+        import cairosvg
+        png_bytes = cairosvg.svg2png(url=path)
+        img = Image.open(io.BytesIO(png_bytes))
+        try:
+            img.load()
+        except Exception:
+            img.close()
+            raise
+        return img.convert("RGBA")
+
+    if _has_svglib():
+        from svglib.svglib import svg2rlg
+        from reportlab.graphics import renderPM
+        drawing = svg2rlg(path)
+        if drawing is None:
+            raise ValueError(f"svglib could not parse SVG file: {path}")
+        png_bytes = renderPM.drawToString(drawing, fmt="PNG")
+        img = Image.open(io.BytesIO(png_bytes))
+        try:
+            img.load()
+        except Exception:
+            img.close()
+            raise
+        return img.convert("RGBA")
+
+    raise ImportError(
+        "SVG input requires cairosvg or svglib.\n"
+        "Install one of them:\n"
+        "    pip install cairosvg\n"
+        "    pip install svglib\n"
+        "(cairosvg also needs libcairo on your system — see https://cairosvg.org/)"
+    )
+
+
+def _save_svg(img: Image.Image, path: str) -> None:
+    """
+    Save *img* as an SVG file by embedding the raster as a base64-encoded PNG.
+
+    The resulting SVG is a valid, viewable scalable document that renders
+    identically to the original raster at any zoom level.  No extra libraries
+    are needed — only Pillow (for PNG encoding) and Python's standard library.
+    """
+    buf = io.BytesIO()
+    save_img = img
+    need_close = False
+    if img.mode not in ("RGB", "RGBA"):
+        save_img = img.convert("RGBA")
+        need_close = True
+    try:
+        save_img.save(buf, format="PNG", optimize=False)
+    finally:
+        if need_close:
+            save_img.close()
+    w, h = img.size
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    svg_text = (
+        f'<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="{w}" height="{h}" viewBox="0 0 {w} {h}">\n'
+        f'  <image width="{w}" height="{h}" '
+        f'xlink:href="data:image/png;base64,{b64}"/>\n'
+        f'</svg>\n'
+    )
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(svg_text)
+
+
 def _open_image(path: str) -> Image.Image:
-    """Open an image preserving its native mode (DDS handled specially)."""
+    """Open an image preserving its native mode (DDS/SVG handled specially)."""
     ext = Path(path).suffix.lower()
     if ext == ".dds":
         return _load_dds(path)
+    if ext == ".svg":
+        return _load_svg(path)
     img = Image.open(path)
     try:
         img.load()  # force decode so the file handle can be closed
@@ -279,6 +399,11 @@ def convert_file(
                 finally:
                     if rgba is not img:
                         rgba.close()
+                return output_path
+
+            # --- SVG (raster embedded in SVG wrapper) ---
+            if ext == ".svg":
+                _save_svg(img, output_path)
                 return output_path
 
             # --- JPEG (no alpha, RGB or L only) ---

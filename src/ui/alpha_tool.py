@@ -331,6 +331,17 @@ class AlphaFixerTab(QWidget):
         self._compare_lbl = compare_lbl
         ca_layout.addWidget(compare_lbl)
 
+        # Alpha visualization toggle – off by default, does not affect processing
+        self._alpha_vis_check = QCheckBox("🎨  Highlight Alpha Values")
+        self._alpha_vis_check.setChecked(False)
+        self._alpha_vis_check.setToolTip(
+            "Overlay a false-colour heat-map on the alpha channel in both preview images.\n"
+            "Red = fully transparent (α 0), Yellow = semi-transparent (α 128),\n"
+            "Green = fully opaque (α 255).\n"
+            "This is purely a visual aid — it does NOT change how files are processed."
+        )
+        ca_layout.addWidget(self._alpha_vis_check)
+
         # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
         compare_row = QHBoxLayout()
         compare_row.setContentsMargins(0, 0, 0, 0)
@@ -608,6 +619,8 @@ class AlphaFixerTab(QWidget):
         self._blue_spin.valueChanged.connect(self._on_finetune_changed)
         self._alpha_delta_spin.valueChanged.connect(self._on_finetune_changed)
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
+        # Alpha visualization toggle → re-apply overlay without re-processing
+        self._alpha_vis_check.toggled.connect(self._on_alpha_vis_toggled)
         # Persist batch options so they survive app restarts
         self._recursive_check.toggled.connect(
             lambda v: self._settings.set("batch_recursive", v)
@@ -659,6 +672,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._log, "processing_log")
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "alpha_status_lbl")
+        mgr.register(self._alpha_vis_check, "alpha_vis_check")
 
     def update_theme(self, theme_name: str) -> None:
         """Update inner header, section labels and group-box titles to match the active theme."""
@@ -681,7 +695,7 @@ class AlphaFixerTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -846,10 +860,94 @@ class AlphaFixerTab(QWidget):
         self._preview_loader.failed.connect(self._on_compare_failed)
         self._preview_loader.start()
 
+    # ------------------------------------------------------------------
+    # Alpha visualization helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _alpha_vis_overlay(qi: QImage) -> QImage:
+        """
+        Return a copy of *qi* (Format_ARGB32) with a false-colour heat-map
+        blended over the alpha channel.
+
+        Colour key:
+          α = 0   → vivid red    (fully transparent)
+          α = 128 → yellow       (semi-transparent)
+          α = 255 → vivid green  (fully opaque)
+
+        The heat-map is drawn at 70 % opacity so the underlying colours remain
+        visible while the alpha structure is clearly legible.
+        """
+        import numpy as np
+        from PyQt6.QtGui import QImage as _QI
+
+        # Work in Format_ARGB32 so we have direct byte access
+        src = qi.convertToFormat(_QI.Format.Format_ARGB32)
+        w, h = src.width(), src.height()
+        if w == 0 or h == 0:
+            return qi
+
+        # Extract raw bytes → ARGB array (Qt stores BGRA in little-endian)
+        ptr = src.bits()
+        ptr.setsize(h * w * 4)
+        arr = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4)).copy()
+
+        # Qt ARGB32: channels are [B, G, R, A] per pixel
+        alpha = arr[:, :, 3].astype(np.float32) / 255.0  # 0.0 … 1.0
+
+        # Heat-map colours (R, G, B):
+        #   0.0 → red   (255, 0, 0)
+        #   0.5 → yellow (255, 255, 0)
+        #   1.0 → green  (0, 255, 0)
+        heat_r = np.where(alpha < 0.5,
+                          255,
+                          np.clip((1.0 - alpha) * 2 * 255, 0, 255)).astype(np.uint8)
+        heat_g = np.where(alpha < 0.5,
+                          np.clip(alpha * 2 * 255, 0, 255),
+                          255).astype(np.uint8)
+        heat_b = np.zeros((h, w), dtype=np.uint8)
+
+        # Blend: out = heat * 0.70 + original * 0.30
+        blend = 0.70
+        arr[:, :, 2] = np.clip(heat_r * blend + arr[:, :, 2] * (1 - blend), 0, 255).astype(np.uint8)
+        arr[:, :, 1] = np.clip(heat_g * blend + arr[:, :, 1] * (1 - blend), 0, 255).astype(np.uint8)
+        arr[:, :, 0] = np.clip(heat_b * blend + arr[:, :, 0] * (1 - blend), 0, 255).astype(np.uint8)
+        # Keep alpha channel unchanged so transparency is still rendered
+        # (the overlay colour already encodes the alpha information visually)
+
+        out = _QI(arr.tobytes(), w, h, w * 4, _QI.Format.Format_ARGB32)
+        return out.copy()  # detach from numpy buffer
+
+    @pyqtSlot(bool)
+    def _on_alpha_vis_toggled(self, _checked: bool) -> None:
+        """Re-apply (or remove) the alpha visualization when the toggle changes."""
+        if self._compare.has_images():
+            self._apply_alpha_vis_to_compare()
+
+    def _apply_alpha_vis_to_compare(self) -> None:
+        """Apply the alpha heat-map overlay to the current compare images if enabled."""
+        before_raw = self._compare.before_image()
+        after_raw = self._compare.after_image()
+        if before_raw is None or after_raw is None:
+            return
+        if self._alpha_vis_check.isChecked():
+            self._compare.set_before(self._alpha_vis_overlay(before_raw))
+            self._compare.set_after(self._alpha_vis_overlay(after_raw))
+        else:
+            self._compare.set_before(before_raw)
+            self._compare.set_after(after_raw)
+
     @pyqtSlot(QImage, QImage)
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
-        self._compare.set_before(before_qi)
-        self._compare.set_after(after_qi)
+        # Store the raw (unmodified) images so the vis toggle can toggle on/off
+        # without needing to re-run the background worker.
+        self._compare.store_raw_images(before_qi, after_qi)
+        if self._alpha_vis_check.isChecked():
+            self._compare.set_before(self._alpha_vis_overlay(before_qi))
+            self._compare.set_after(self._alpha_vis_overlay(after_qi))
+        else:
+            self._compare.set_before(before_qi)
+            self._compare.set_after(after_qi)
         # Notify main window so it can play the preview sound (opt-in, off by default)
         self.preview_refreshed.emit()
 

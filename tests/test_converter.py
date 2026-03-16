@@ -213,6 +213,53 @@ class TestConvertFile(unittest.TestCase):
             with self.subTest(fmt=fmt):
                 self.assertIn(fmt, SUPPORTED_OUTPUT_FORMATS)
 
+    def test_supported_output_formats_includes_svg(self):
+        self.assertIn("SVG", SUPPORTED_OUTPUT_FORMATS)
+
+    def test_png_to_svg_creates_valid_svg(self):
+        """PNG → SVG should produce a file containing an <svg> element with embedded base64 image."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.svg")
+            _make_png(src)
+            convert_file(src, dst, "SVG")
+            self.assertTrue(os.path.isfile(dst))
+            with open(dst, encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("<svg", content)
+            self.assertIn("data:image/png;base64,", content)
+            self.assertIn("</svg>", content)
+
+    def test_rgba_png_to_svg_preserves_size(self):
+        """SVG output should embed an image with the correct width/height attributes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.svg")
+            _make_png(src, w=16, h=8)
+            convert_file(src, dst, "SVG")
+            with open(dst, encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn('width="16"', content)
+            self.assertIn('height="8"', content)
+
+    def test_svg_output_roundtrip(self):
+        """The base64 PNG embedded in the SVG should decode to a valid image of the right size."""
+        import base64
+        import re
+        from io import BytesIO
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.svg")
+            _make_png(src, w=8, h=8)
+            convert_file(src, dst, "SVG")
+            with open(dst, encoding="utf-8") as f:
+                content = f.read()
+            match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', content)
+            self.assertIsNotNone(match)
+            png_data = base64.b64decode(match.group(1))
+            rt_img = Image.open(BytesIO(png_data))
+            self.assertEqual(rt_img.size, (8, 8))
+
 
 class TestFlattenAlpha(unittest.TestCase):
 

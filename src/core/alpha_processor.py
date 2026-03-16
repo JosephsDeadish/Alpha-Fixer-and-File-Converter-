@@ -26,7 +26,7 @@ CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp"}
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
     ".gif", ".webp", ".tga", ".ico", ".dds",
-    ".ppm", ".pcx", ".avif", ".qoi",
+    ".ppm", ".pcx", ".avif", ".qoi", ".svg",
 }
 
 SUPPORTED_WRITE = SUPPORTED_READ
@@ -176,6 +176,12 @@ def load_image(path: str) -> Image.Image:
     ext = Path(path).suffix.lower()
     if ext == ".dds":
         return _load_dds(path)
+    if ext == ".svg":
+        # _load_svg is defined in file_converter and renders vector art to RGBA.
+        # Import lazily to avoid a circular import (file_converter imports from
+        # alpha_processor for _save_dds / _load_dds).
+        from .file_converter import _load_svg  # noqa: PLC0415
+        return _load_svg(path)
     img = Image.open(path)
     if img.mode != "RGBA":
         w, h = img.size
