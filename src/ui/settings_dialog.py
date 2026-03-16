@@ -773,6 +773,74 @@ class SettingsDialog(QDialog):
 
         tv.addWidget(grp_btn_anim)
 
+        # ---- Banner & SVG Animation GroupBox (moved here from General tab) ----
+        grp_banner = QGroupBox("Banner && SVG Badge Animation")
+        banner_gl = QGridLayout(grp_banner)
+        banner_gl.setColumnStretch(1, 1)
+        banner_gl.setHorizontalSpacing(10)
+        banner_gl.setVerticalSpacing(6)
+
+        self._animated_banner_check = QCheckBox(
+            "Enable animated banner emojis && SVG badge (off by default)"
+        )
+        self._animated_banner_check.setToolTip(
+            "When enabled: the banner emoji in the header animates continuously\n"
+            "and the theme SVG badge in the tab bar plays its built-in animation.\n"
+            "When disabled: both are rendered statically, saving CPU/GPU resources."
+        )
+        banner_gl.addWidget(self._animated_banner_check, 0, 0, 1, 2)
+
+        banner_gl.addWidget(QLabel("Banner animation:"), 1, 0)
+        self._banner_anim_combo = QComboBox()
+        _BANNER_ANIM_OPTIONS = [
+            ("spin",     "Spin – continuous 360° rotation"),
+            ("bounce",   "Bounce – gentle vertical bobbing"),
+            ("shake",    "Shake – rapid horizontal quiver"),
+            ("pendulum", "Pendulum – swinging back and forth"),
+            ("flock",    "Flock – emoji fly across the top of the window"),
+        ]
+        _BANNER_ANIM_TIPS = {
+            "spin":     "The emoji rotates continuously like a gear (~6 s per full turn).",
+            "bounce":   "The emoji bobs up and down with a smooth sine-wave motion.",
+            "shake":    "The emoji vibrates rapidly side to side — great for aggressive themes.",
+            "pendulum": "The emoji swings back and forth like a pendulum clock.",
+            "flock":    "A small group of themed emoji periodically flies across the top of\n"
+                        "the window (similar to the bat flock in Bat Cave theme).",
+        }
+        for key, label in _BANNER_ANIM_OPTIONS:
+            self._banner_anim_combo.addItem(label, userData=key)
+            idx = self._banner_anim_combo.count() - 1
+            tip = _BANNER_ANIM_TIPS.get(key, "")
+            if tip:
+                self._banner_anim_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._banner_anim_combo.setToolTip(
+            "Choose the animation style for the banner emoji when animation is enabled.\n"
+            "Greyed out while 'Use theme animation' is checked."
+        )
+        self._banner_anim_combo.setMaximumWidth(280)
+        banner_gl.addWidget(self._banner_anim_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
+
+        self._banner_use_theme_anim_check = QCheckBox(
+            "Use theme animation (each theme has its own style)"
+        )
+        self._banner_use_theme_anim_check.setToolTip(
+            "When checked the animation style is chosen automatically by the active\n"
+            "theme (e.g. Bat Cave uses flock, Alien uses bounce, Goth uses pendulum).\n"
+            "Uncheck to override with your own style from the dropdown above."
+        )
+        banner_gl.addWidget(self._banner_use_theme_anim_check, 2, 0, 1, 2)
+
+        self._show_splash_check = QCheckBox(
+            "Show themed splash screen on startup (off by default)"
+        )
+        self._show_splash_check.setToolTip(
+            "When enabled: an animated themed splash screen is shown while the\n"
+            "app loads on startup.  Disable to skip straight to the main window."
+        )
+        banner_gl.addWidget(self._show_splash_check, 3, 0, 1, 2)
+
+        tv.addWidget(grp_banner)
+
         # Wrap the theme tab contents in a scroll area so all controls are always
         # reachable regardless of screen/window size.
         theme_scroll = QScrollArea()
@@ -843,70 +911,6 @@ class SettingsDialog(QDialog):
         )
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Animated banner emojis and SVG badge (off by default – saves CPU/GPU)
-        self._animated_banner_check = QCheckBox(
-            "Enable animated banner emojis && SVG badge (off by default)"
-        )
-        self._animated_banner_check.setToolTip(
-            "When enabled: the banner emoji in the header animates continuously\n"
-            "and the theme SVG badge in the tab bar plays its built-in animation.\n"
-            "When disabled: both are rendered statically, saving CPU/GPU resources."
-        )
-        misc_gl.addWidget(self._animated_banner_check, 3, 0, 1, 2)
-
-        # Banner animation style (spin / bounce / shake / pendulum / flock)
-        misc_gl.addWidget(QLabel("Banner animation:"), 4, 0)
-        self._banner_anim_combo = QComboBox()
-        _BANNER_ANIM_OPTIONS = [
-            ("spin",     "Spin – continuous 360° rotation"),
-            ("bounce",   "Bounce – gentle vertical bobbing"),
-            ("shake",    "Shake – rapid horizontal quiver"),
-            ("pendulum", "Pendulum – swinging back and forth"),
-            ("flock",    "Flock – emoji fly across the top of the window"),
-        ]
-        _BANNER_ANIM_TIPS = {
-            "spin":     "The emoji rotates continuously like a gear (~6 s per full turn).",
-            "bounce":   "The emoji bobs up and down with a smooth sine-wave motion.",
-            "shake":    "The emoji vibrates rapidly side to side — great for aggressive themes.",
-            "pendulum": "The emoji swings back and forth like a pendulum clock.",
-            "flock":    "A small group of themed emoji periodically flies across the top of\n"
-                        "the window (similar to the bat flock in Bat Cave theme).",
-        }
-        for key, label in _BANNER_ANIM_OPTIONS:
-            self._banner_anim_combo.addItem(label, userData=key)
-            idx = self._banner_anim_combo.count() - 1
-            tip = _BANNER_ANIM_TIPS.get(key, "")
-            if tip:
-                self._banner_anim_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
-        self._banner_anim_combo.setToolTip(
-            "Choose the animation style for the banner emoji when animation is enabled.\n"
-            "Greyed out (non-interactive) while 'Use theme animation' is checked —\n"
-            "uncheck that box to override with your own style."
-        )
-        self._banner_anim_combo.setMaximumWidth(280)
-        misc_gl.addWidget(self._banner_anim_combo, 4, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Use-theme animation checkbox
-        self._banner_use_theme_anim_check = QCheckBox(
-            "Use theme animation (each theme has its own style)"
-        )
-        self._banner_use_theme_anim_check.setToolTip(
-            "When checked the animation style is chosen automatically by the active\n"
-            "theme (e.g. Bat Cave uses flock, Alien uses bounce, Goth uses pendulum).\n"
-            "Uncheck to override with your own style from the dropdown above."
-        )
-        misc_gl.addWidget(self._banner_use_theme_anim_check, 5, 0, 1, 2)
-
-        # Splash screen on startup (off by default)
-        self._show_splash_check = QCheckBox(
-            "Show themed splash screen on startup (off by default)"
-        )
-        self._show_splash_check.setToolTip(
-            "When enabled: an animated themed splash screen is shown while the\n"
-            "app loads on startup.  Disable to skip straight to the main window."
-        )
-        misc_gl.addWidget(self._show_splash_check, 6, 0, 1, 2)
 
         gv.addWidget(grp_misc)
 

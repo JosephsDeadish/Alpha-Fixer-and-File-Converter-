@@ -409,7 +409,7 @@ class MainWindow(QMainWindow):
         # trigger dozens of expensive setStyleSheet() calls per second.
         self._settings_apply_timer = QTimer(self)
         self._settings_apply_timer.setSingleShot(True)
-        self._settings_apply_timer.setInterval(200)
+        self._settings_apply_timer.setInterval(350)
         self._settings_apply_timer.timeout.connect(self._apply_settings_now)
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
