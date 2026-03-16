@@ -334,6 +334,13 @@ _NORMAL: dict[str, list[str]] = {
         "The first 10 file names are shown for quick reference.",
         "History is saved automatically at the end of every batch run.",
     ],
+    "history_sel_sub": [
+        "The Selective Alpha sub-tab lists every selective alpha batch session you have run.",
+        "Each row shows the timestamp, zone/mode used, file count, successes, and errors.",
+        "Rows with errors are highlighted in yellow for quick identification.",
+        "The first 10 file names processed are shown in the last column.",
+        "History entries are saved automatically and capped at 50 sessions.",
+    ],
     "history_conv_tree": [
         "Each row is one converter batch run. Columns: time, format, files, successes, errors.",
         "Hover the column headers for details on what each column means.",
@@ -348,6 +355,13 @@ _NORMAL: dict[str, list[str]] = {
         "The 'Preset / Mode' column shows 'manual' when fine-tune was used without a preset.",
         "History is capped at 50 entries. Older runs are removed as new ones are added.",
     ],
+    "history_sel_tree": [
+        "Each row is one selective alpha batch run. Columns: time, mode, files, successes, errors.",
+        "Hover column headers for descriptions of what each column tracks.",
+        "Yellow rows had errors — check the zone mode or file format if errors are appearing.",
+        "History is capped at 50 entries. Older runs are removed as new ones are added.",
+        "The last column shows the first 10 input file names in that batch.",
+    ],
     "history_conv_summary": [
         "Summary of your converter history — total sessions and files converted.",
         "Shows aggregate counts across all logged conversion batches.",
@@ -360,6 +374,13 @@ _NORMAL: dict[str, list[str]] = {
         "Shows aggregate counts across all logged alpha-fix batches.",
         "Total files = all files submitted. ✔ OK = processed cleanly. ✘ Err = failures.",
         "Errors can mean the file couldn't be opened or saved — check paths and formats.",
+        "Counts reset when you clear history using the 'Clear All History' button.",
+    ],
+    "history_sel_summary": [
+        "Summary of your selective alpha history — total sessions and files processed.",
+        "Shows aggregate counts across all logged selective alpha batches.",
+        "Total files = all files submitted. ✔ OK = processed cleanly. ✘ Err = failures.",
+        "Errors may mean unsupported formats or zone configuration issues.",
         "Counts reset when you clear history using the 'Clear All History' button.",
     ],
     "history_search": [
@@ -1305,6 +1326,13 @@ _DUMBED: dict[str, list[str]] = {
         "Up to 50 sessions are logged. After 50, the oldest ones are removed.",
         "Alpha fix logs. For checking what you broke and when.",
     ],
+    "history_sel_sub": [
+        "Selective Alpha history sub-tab. Shows each time you ran the selective alpha tool.",
+        "Each row shows when you ran it, what mode/zone, file count, and error count.",
+        "Yellow rows had errors. Something didn't go perfectly. Probably fine.",
+        "Up to 50 sessions are logged here. After 50 the oldest ones fall off.",
+        "Selective alpha logs. For the times you went in with a scalpel instead of a sledgehammer.",
+    ],
     "history_conv_tree": [
         "This table shows your conversion sessions. Each row = one batch. Very simple concept.",
         "Yellow rows had errors. Something didn't convert. Usually the format's fault.",
@@ -1319,6 +1347,13 @@ _DUMBED: dict[str, list[str]] = {
         "50 rows max. Older ones disappear. Like memories. Fleeting.",
         "Use this to figure out when you accidentally fixed the wrong files.",
     ],
+    "history_sel_tree": [
+        "Selective alpha session log. Each row = one time you ran selective alpha. Simple.",
+        "Yellow rows = errors. Something went wrong. Zone config or file format probably.",
+        "Columns: time, mode/zone, total files, successes, failures, file names.",
+        "50 rows max. After that the oldest ones fall off the list.",
+        "Good for tracking which zone modes you've been using and whether they worked.",
+    ],
     "history_conv_summary": [
         "Summary line below the converter tree. Totals for all logged sessions.",
         "Shows: total sessions + total files converted. Quick overview.",
@@ -1332,6 +1367,13 @@ _DUMBED: dict[str, list[str]] = {
         "High error count = something is wrong. Low error count = well done you.",
         "Resets when you clear history. Very logical.",
         "Shows aggregate data, not per-run data. That's what the table above is for.",
+    ],
+    "history_sel_summary": [
+        "Summary line below the selective alpha tree. Totals for all logged selective sessions.",
+        "Total sessions, total files, successes, errors. The overview for the scalpel work.",
+        "High error count = zone mode config probably needs adjusting.",
+        "Resets when you clear history.",
+        "Aggregate view. Big picture. For the selective alpha completionists.",
     ],
     "history_search": [
         "Type something here to filter the history list. It searches all columns.",
@@ -2894,6 +2936,16 @@ _VULGAR: dict[str, list[str]] = {
         "Great for debugging which preset kept causing failures. Spoiler alert: it's almost always the manual preset you configured yourself. Own your crimes.",
         "Your alpha-processing receipts. Organized. Merciless. Completely honest.",
     ],
+    "history_sel_sub": [
+        "Selective Alpha history. Every time you went in with a scalpel and fucked around with specific zones. Logged.",
+        "Yellow rows = errors. Even your precision work can blow up spectacularly. Very human.",
+        "Mode, file count, errors — all timestamped. The receipts of your surgical alpha crimes.",
+        "Up to 50 sessions. After that the oldest entries get unceremoniously deleted. Survival of the most recent.",
+        "You used selective alpha on something. It worked or it didn't. This table tells you which.",
+        "Every selective alpha session you've ever run is in this table. Every single one. That's a lot of zones.",
+        "The evidence. Right here. Zone mode, file count, error count. You did this. We just wrote it down.",
+        "Your selective alpha legacy. Preserved in this table. Judged by no one. Logged by everyone.",
+    ],
     "history_conv_tree": [
         "Conversion history table. Every batch you've ever run. All of them. Your entire legacy.",
         "Yellow rows = errors. Something failed. Could be the file, could be you. Statistically, both.",
@@ -2916,6 +2968,17 @@ _VULGAR: dict[str, list[str]] = {
         "Sort by any column. Click a header. Satisfy your need for order in a chaotic world.",
         "That one yellow row is haunting you. Find it. Read the error count. Investigate. Heal.",
     ],
+    "history_sel_tree": [
+        "Selective alpha history table. Zone by zone. Session by session. All of your precision fuckery documented.",
+        "Yellow = errors. Your scalpel slipped. It happens. The logs don't forgive though.",
+        "Columns: timestamp, mode/zone, total files, successes, failures, first 10 file names.",
+        "Hover the column headers. There are tooltips there. Tooltips within the tooltips. Inception bullshit.",
+        "50 row cap. After that old entries die and are replaced. The circle of log life.",
+        "Click a row. Select it. Feel the power. Do absolutely nothing useful with it.",
+        "The mode column shows what zone or configuration you used. 'manual' means you were improvising.",
+        "Your selective alpha crime scene. Documented, timestamped, and here for your reflection.",
+        "That yellow row with 4 errors is staring at you. It knows what you did. You know what you did.",
+    ],
     "history_conv_summary": [
         "Aggregate converter stats. Total sessions + total files converted + failures. The big picture.",
         "If your error count is growing session after session, something is consistently wrong. Fix it.",
@@ -2937,6 +3000,17 @@ _VULGAR: dict[str, list[str]] = {
         "Zero errors in the summary? You're either brilliant or haven't processed much. Both are fine honestly.",
         "These totals represent actual work done. Look at them. Feel accomplished. You earned it.",
         "The summary doesn't judge you. It just counts. Silently. Without mercy. Like taxes.",
+    ],
+    "history_sel_summary": [
+        "Selective alpha totals. All your precision zone-editing work smashed into a single summary line.",
+        "High error count means your zone setup is consistently broken. Fix the fucking zone, not just re-run it.",
+        "Total sessions × files = how deep you've gone into selective alpha territory. Respect or concern.",
+        "Resets on 'Clear All History'. Poof. Gone. Fresh start for your selective alpha legacy.",
+        "Cold hard aggregate numbers. Zero emotion. Just totals. Like your heart after years of debugging alpha channels.",
+        "Zero errors across all selective sessions? You're a goddamn surgical artist. Take a bow.",
+        "These numbers represent real precision work. You didn't just blast the whole image — you targeted specific zones. That's effort.",
+        "High session count, low error count? That's mastery. High session count, high error count? That's stubbornness.",
+        "Summary for the obsessive. You know who you are. You're reading the summary tooltip. That's evidence.",
     ],
     "history_search": [
         "Oh look, a search box! Type in it to filter history. I know, revolutionary fucking concept.",

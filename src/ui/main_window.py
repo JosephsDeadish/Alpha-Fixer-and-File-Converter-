@@ -1116,12 +1116,8 @@ class MainWindow(QMainWindow):
         if app is not None:
             new_ss = build_stylesheet(theme, tooltip_style)
             if new_ss != self._last_stylesheet:
-                app.setUpdatesEnabled(False)
-                try:
-                    app.setStyleSheet(new_ss)
-                    self._last_stylesheet = new_ss
-                finally:
-                    app.setUpdatesEnabled(True)
+                app.setStyleSheet(new_ss)
+                self._last_stylesheet = new_ss
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
         # Update the banner emoji widget to the theme's representative icon.
