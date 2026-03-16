@@ -180,6 +180,8 @@ class SettingsManager:
         "unlock_coral_reef": False,
         "unlock_storm_cloud": False,
         "unlock_golden_hour": False,
+        "unlock_cat": False,
+        "unlock_dog": False,
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------
@@ -365,6 +367,30 @@ class SettingsManager:
     def clear_alpha_history(self) -> None:
         """Erase all alpha-fixer history entries."""
         self._qs.setValue("alpha_history", "[]")
+        self._qs.sync()
+
+    # ------------------------------------------------------------------
+    # Selective Alpha Tool processing history
+    # ------------------------------------------------------------------
+
+    def get_selective_alpha_history(self) -> list:
+        raw = self._qs.value("selective_alpha_history", "[]")
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def add_selective_alpha_history(self, entry: dict, max_entries: int = 50):
+        history = self.get_selective_alpha_history()
+        history.insert(0, entry)
+        history = history[:max_entries]
+        self._qs.setValue("selective_alpha_history", json.dumps(history))
+        self._qs.sync()
+
+    def clear_selective_alpha_history(self) -> None:
+        """Erase all selective-alpha history entries."""
+        self._qs.setValue("selective_alpha_history", "[]")
         self._qs.sync()
 
     # ------------------------------------------------------------------

@@ -215,6 +215,19 @@ def _make_theme_click_wav(profile: str, sample_rate: int = 22050) -> str:
                  + 0.40 * math.sin(2 * math.pi * 85 * t))  # detuned for rumble
             # 3.6 = 1 + 0.85 + 0.65 + 0.45 + 0.25 + 0.40 (sum of coefficients)
             samples.append(int(22000 * s * env / 3.6))
+    elif profile == "bark":
+        # Dog bark — sharp attack with mid-frequency burst, fast decay.
+        # Two overlapping partials (200 Hz + 350 Hz) with a rapid percussive
+        # onset simulate a short friendly bark.
+        n = int(sample_rate * 0.10)
+        for i in range(n):
+            t = i / sample_rate
+            env = (1.0 - math.exp(-t * 80.0)) * math.exp(-t * 18.0)
+            s = (math.sin(2 * math.pi * 200 * t)
+                 + 0.7 * math.sin(2 * math.pi * 350 * t)
+                 + 0.3 * math.sin(2 * math.pi * 500 * t))
+            # 2.0 = 1 + 0.7 + 0.3 (sum of coefficients)
+            samples.append(int(22000 * s * env / 2.0))
     else:  # soft / default
         freq, dur, decay = 880, 0.06, 45
         n = int(sample_rate * dur)
@@ -248,6 +261,9 @@ _THEME_SOUND_PROFILES: dict[str, str] = {
     "Pirate": "dark", "Deep Space": "dark", "Witch's Brew": "crunch",
     "Lava Lamp": "warm", "Coral Reef": "bubble", "Storm Cloud": "hard",
     "Golden Hour": "sparkle",
+    # Animal themes
+    "Purrfect Cats": "purr",
+    "Good Dog": "bark",
 }
 
 
@@ -459,7 +475,8 @@ class SoundEngine(QObject):
             self._drag_enter_wav    = _make_drag_enter_wav()
             # Generate one WAV per sound profile (14 profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
-                            "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar"):
+                            "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar",
+                            "bark"):
                 self._theme_click_wavs[profile] = _make_theme_click_wav(profile)
         except Exception as exc:
             logger.warning("Could not generate sound WAVs: %s", exc)

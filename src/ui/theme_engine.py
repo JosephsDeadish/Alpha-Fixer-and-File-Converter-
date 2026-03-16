@@ -1577,6 +1577,77 @@ HIDDEN_THEMES.update({
     "Golden Hour":   SECRET_GOLDEN_HOUR_THEME,
 })
 
+# ---------------------------------------------------------------------------
+# Cat theme — warm orange & cream, soft rounded, purring cats
+# ---------------------------------------------------------------------------
+SECRET_CAT_THEME = {
+    "name": "Purrfect Cats",
+    "background": "#1a0e08",
+    "surface": "#2e1a0e",
+    "primary": "#3d2410",
+    "accent": "#e87a2a",
+    "text": "#fff0cc",
+    "text_secondary": "#cc9966",
+    "border": "#7a3c14",
+    "success": "#88cc44",
+    "warning": "#ffcc22",
+    "error": "#ff4422",
+    "tab_selected": "#e87a2a",
+    "button_bg": "#3d2410",
+    "button_hover": "#e87a2a",
+    "panda_white": "#fff0cc",
+    "panda_black": "#1a0e08",
+    "progress_bar": "#e87a2a",
+    "input_bg": "#110900",
+    "scrollbar": "#2e1a0e",
+    "scrollbar_handle": "#e87a2a",
+    "_effect": "default",
+    "_cursor": "emoji:🐱",
+    "_trail_color": "#e87a2a",
+    "_unlock": "cat",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "dots",
+}
+
+# ---------------------------------------------------------------------------
+# Dog theme — warm golden & brown, rounded playful, happy dogs
+# ---------------------------------------------------------------------------
+SECRET_DOG_THEME = {
+    "name": "Good Dog",
+    "background": "#100c04",
+    "surface": "#221a08",
+    "primary": "#332510",
+    "accent": "#cc9933",
+    "text": "#fff4cc",
+    "text_secondary": "#bbaa55",
+    "border": "#664d18",
+    "success": "#88bb33",
+    "warning": "#ffaa22",
+    "error": "#cc3300",
+    "tab_selected": "#cc9933",
+    "button_bg": "#332510",
+    "button_hover": "#cc9933",
+    "panda_white": "#fff4cc",
+    "panda_black": "#100c04",
+    "progress_bar": "#cc9933",
+    "input_bg": "#0c0a04",
+    "scrollbar": "#221a08",
+    "scrollbar_handle": "#cc9933",
+    "_effect": "default",
+    "_cursor": "emoji:🐶",
+    "_trail_color": "#cc9933",
+    "_unlock": "dog",
+    "_banner_anim": "shake",
+    "_button_anim": "bounce",
+    "_trail": "dots",
+}
+
+HIDDEN_THEMES.update({
+    "Purrfect Cats": SECRET_CAT_THEME,
+    "Good Dog":      SECRET_DOG_THEME,
+})
+
 # Which effects each theme uses (name → effect key)
 THEME_EFFECTS = {t["name"]: t.get("_effect", "default") for t in {
     **PRESET_THEMES, **HIDDEN_THEMES,
@@ -1638,6 +1709,9 @@ THEME_DESCRIPTIONS: dict[str, str] = {
     "Golden Hour":      "Deep amber-black with warm golden-orange sundown glow. 🌇",
     # ─── Pancake (preset, easy to miss) ───────────────────────────────
     "Pancake":          "Syrupy brown stacked pancake shapes. Thick rounded borders.",
+    # ─── Animal themes ────────────────────────────────────────────────
+    "Purrfect Cats":    "Warm orange & cream. Soft rounded shapes. Cats everywhere. 🐱",
+    "Good Dog":         "Golden warm brown. Playful rounded shapes. Very good dog. 🐶",
 }
 
 import os as _os
@@ -1698,6 +1772,8 @@ THEME_SVG = {
     "Coral Reef":        "deep_ocean.svg",
     "Storm Cloud":       "thunder_storm.svg",
     "Golden Hour":       "sunset_beach.svg",
+    "Purrfect Cats":     "otter_cove.svg",
+    "Good Dog":          "otter_cove.svg",
 }
 
 
@@ -1757,6 +1833,9 @@ THEME_BANNER = {
     "Spring Bloom":      "🌷🌿  Alpha & RGBA Adjuster  |  File Converter  🌿🌷",
     "Gold Rush":         "💰✦  Alpha & RGBA Adjuster  |  File Converter  ✦💰",
     "Nebula":            "🌌💫  Alpha & RGBA Adjuster  |  File Converter  💫🌌",
+    # Animal themes
+    "Purrfect Cats":     "🐱🧶  Alpha & RGBA Adjuster  |  File Converter  🧶🐱",
+    "Good Dog":          "🐶🦴  Alpha & RGBA Adjuster  |  File Converter  🦴🐶",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -1802,6 +1881,9 @@ THEME_STATUS_MESSAGES = {
     "Spring Bloom":      "🌷  Spring Bloom — Fresh pixels, fresh start.",
     "Gold Rush":         "💰  Gold Rush — Pixel gold guaranteed.",
     "Nebula":            "🌌  Nebula — Stardust and secrets.",
+    # Animal themes
+    "Purrfect Cats":     "🐱  Purrfect Cats — Meow, your pixels look great.",
+    "Good Dog":          "🐶  Good Dog — Such image. Very convert. Wow.",
 }
 
 
@@ -1852,6 +1934,8 @@ THEME_ICON: dict[str, str] = {
     "Spring Bloom":      "🌷",
     "Gold Rush":         "💰",
     "Nebula":            "🌌",
+    "Purrfect Cats":     "🐱",
+    "Good Dog":          "🐶",
 }
 
 
@@ -1909,6 +1993,8 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
     "Spring Bloom":     ("🌷🖼", "🌷🔄", "🌷📋"),
     "Gold Rush":        ("💰🖼", "💰🔄", "💰📋"),
     "Nebula":           ("🌌🖼", "🌌🔄", "🌌📋"),
+    "Purrfect Cats":    ("🐱🖼", "🐱🔄", "🐱📋"),
+    "Good Dog":         ("🐶🖼", "🐶🔄", "🐶📋"),
 }
 
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
@@ -3081,6 +3167,34 @@ QGroupBox {
 }
 QTabBar::tab { border-radius: 18px 18px 0px 0px; min-height: 32px; }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
+"""
+
+    # ----------------------------------------------------------------- Purrfect Cats
+    if name == "Purrfect Cats":
+        return """
+/* Purrfect Cats: warm rounded shapes, cosy cat vibes */
+QPushButton {
+    border-radius: 12px;
+    border-bottom: 3px solid #b05a1a;
+}
+QPushButton:hover { border-bottom-color: #e87a2a; }
+QGroupBox { border-radius: 10px; }
+QTabBar::tab { border-radius: 12px 12px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
+"""
+
+    # ----------------------------------------------------------------- Good Dog
+    if name == "Good Dog":
+        return """
+/* Good Dog: friendly rounded, warm golden */
+QPushButton {
+    border-radius: 10px;
+    border-bottom: 3px solid #996620;
+}
+QPushButton:hover { border-bottom-color: #cc9933; }
+QGroupBox { border-radius: 10px; }
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
 """
 
     return ""

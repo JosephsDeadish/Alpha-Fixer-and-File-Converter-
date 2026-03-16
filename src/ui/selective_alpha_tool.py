@@ -1504,6 +1504,16 @@ class SelectiveAlphaTool(QWidget):
             path = os.path.splitext(path)[0] + ".png"
         try:
             self._result_img.save(path)
+            # Record in history
+            if self._settings is not None:
+                from datetime import datetime as _dt
+                entry = {
+                    "timestamp": _dt.now().isoformat(timespec="seconds"),
+                    "source": self._src_path,
+                    "output": path,
+                    "zone_alphas": [row.alpha_value() for row in self._zone_rows],
+                }
+                self._settings.add_selective_alpha_history(entry)
         except MemoryError:
             QMessageBox.critical(
                 self, "Save Error",

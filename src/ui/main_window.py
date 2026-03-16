@@ -356,6 +356,8 @@ class MainWindow(QMainWindow):
         (9000, "unlock_coral_reef",       "🪸 'Coral Reef' theme unlocked! (Settings → Theme)"),
         (9500, "unlock_storm_cloud",      "⛈ 'Storm Cloud' theme unlocked! (Settings → Theme)"),
         (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
+        (10500, "unlock_cat",             "🐱 'Purrfect Cats' theme unlocked! (Settings → Theme)"),
+        (11000, "unlock_dog",             "🐶 'Good Dog' theme unlocked! (Settings → Theme)"),
     ]
 
     # Alternative unlock path: number of *alpha-fix files processed* required.
