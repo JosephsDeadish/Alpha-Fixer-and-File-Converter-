@@ -3418,6 +3418,13 @@ class TooltipManager(QObject):
     Intercepts QEvent.Type.ToolTip events and shows mode-appropriate cycling tips.
     """
 
+    # Keys whose tips should receive a "Currently using: <theme>" suffix when
+    # the active theme name is known.
+    _THEME_AWARE_KEYS = frozenset({
+        "settings_theme_tab", "theme_combo", "patreon_btn",
+        "tooltip_mode_combo", "tooltip_style_combo",
+    })
+
     def __init__(self, settings, parent: QObject = None):
         super().__init__(parent)
         self._settings = settings
@@ -3439,6 +3446,8 @@ class TooltipManager(QObject):
         # Map QTabWidget id → QTabBar so we can handle tooltip events that
         # Qt dispatches to the container rather than the bar child.
         self._tab_widget_to_bar: dict[int, object] = {}
+        # Active theme name injected by MainWindow on every theme change.
+        self._active_theme_name: str = ""
 
     # ------------------------------------------------------------------
     # Public API
@@ -3446,6 +3455,14 @@ class TooltipManager(QObject):
 
     def install_on_app(self, app) -> None:
         app.installEventFilter(self)
+
+    def set_active_theme(self, theme_name: str) -> None:
+        """Notify the manager of the currently active theme name.
+
+        Called by MainWindow whenever the theme changes so theme-aware tooltips
+        can reference the active theme by name.
+        """
+        self._active_theme_name = theme_name or ""
 
     def register(self, widget, tip_key: str) -> None:
         """Map widget → tip_key so tooltips cycle through variants."""
@@ -3614,6 +3631,10 @@ class TooltipManager(QObject):
             idx = self._shown_idx.get(key, 0)
 
         tip_text = variants[idx]
+        # For theme-aware keys, append a line with the current theme name so
+        # tooltips reflect what the user is actually running.
+        if key in self._THEME_AWARE_KEYS and self._active_theme_name:
+            tip_text = f"{tip_text}\n\n🎨 Active theme: {self._active_theme_name}"
         try:
             from PyQt6.QtWidgets import QToolTip
             QToolTip.showText(event.globalPos(), tip_text, obj)

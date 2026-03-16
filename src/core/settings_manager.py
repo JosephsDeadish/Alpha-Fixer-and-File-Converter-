@@ -93,6 +93,7 @@ class SettingsManager:
         "trail_color": "#e94560",
         "trail_style": "dots",
         "use_theme_trail": False,
+        "trail_enabled_once": False,  # set True the first time the trail is enabled
         "trail_length": 50,       # number of trail points kept (deque maxlen)
         "trail_fade_speed": 5,    # 1=slowest fade … 10=fastest fade
         "trail_intensity": 100,   # 10–100 % max trail opacity
@@ -124,6 +125,7 @@ class SettingsManager:
         "tooltip_mode_changed_once": False,
         "alpha_fix_done_once": False,
         "conversion_done_once": False,
+        "theme_changed_once": False,   # set True the first time the user picks a different theme
         # Click effects
         "click_effects_enabled": False,
         "use_theme_effect": False,

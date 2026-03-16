@@ -1120,6 +1120,10 @@ class MainWindow(QMainWindow):
                 self._last_stylesheet = new_ss
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
+        # Keep the tooltip manager in sync so theme-aware tooltips display
+        # the correct theme name.
+        if self._tooltip_mgr is not None:
+            self._tooltip_mgr.set_active_theme(theme_name)
         # Update the banner emoji widget to the theme's representative icon.
         icon = get_theme_icon(theme_name)
         animated = self._settings.get("animated_banner_enabled", False)
@@ -1355,6 +1359,10 @@ class MainWindow(QMainWindow):
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
         # First cursor animation enable unlocks Toxic Neon
         dlg.first_cursor_anim_enabled.connect(self._on_first_cursor_anim_enabled)
+        # First theme preset change unlocks Candy Land
+        dlg.first_theme_changed.connect(self._on_first_theme_changed)
+        # First trail enable unlocks Midnight Forest
+        dlg.first_trail_enabled.connect(self._on_first_trail_enabled)
 
         # Attach a click-effects overlay to the dialog so particle effects are
         # visible while the settings window is open (the main overlay is behind
@@ -1440,6 +1448,28 @@ class MainWindow(QMainWindow):
         if not self._settings.get("unlock_toxic_neon", False):
             self._settings.set("unlock_toxic_neon", True)
             self._unlock_lbl.setText("☢ 'Toxic Neon' theme unlocked! (cursor animation enabled!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_theme_changed(self) -> None:
+        """Unlock Candy Land the very first time the user selects a different theme."""
+        if not self._settings.get("unlock_candy_land", False):
+            self._settings.set("unlock_candy_land", True)
+            self._unlock_lbl.setText("🍭 'Candy Land' theme unlocked! (first theme change!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_trail_enabled(self) -> None:
+        """Unlock Midnight Forest the very first time the user enables the mouse trail."""
+        if not self._settings.get("unlock_midnight_forest", False):
+            self._settings.set("unlock_midnight_forest", True)
+            self._unlock_lbl.setText("🌲 'Midnight Forest' theme unlocked! (mouse trail enabled!)")
             try:
                 self._sound.play_unlock()
             except Exception:
@@ -1609,6 +1639,15 @@ class MainWindow(QMainWindow):
 
     def _open_patreon(self):
         webbrowser.open(PATREON_URL)
+        # First Patreon visit unlocks Rose Gold as a thank-you.
+        if not self._settings.get("unlock_rose_gold", False):
+            self._settings.set("unlock_rose_gold", True)
+            self._unlock_lbl.setText("🌹 'Rose Gold' theme unlocked! (thanks for supporting!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
 
     def _show_help_menu(self):
         """Show a popup menu from the Help button with shortcuts, about, and I/O options."""

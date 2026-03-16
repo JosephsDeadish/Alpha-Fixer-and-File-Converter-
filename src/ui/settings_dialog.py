@@ -119,6 +119,12 @@ class SettingsDialog(QDialog):
     # Emitted the very first time the user enables cursor animation.
     # MainWindow connects this to trigger the Toxic Neon unlock.
     first_cursor_anim_enabled = pyqtSignal()
+    # Emitted the very first time the user selects a different theme preset.
+    # MainWindow connects this to trigger the Candy Land unlock.
+    first_theme_changed = pyqtSignal()
+    # Emitted the very first time the user enables the mouse trail.
+    # MainWindow connects this to trigger the Midnight Forest unlock.
+    first_trail_enabled = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -1302,7 +1308,13 @@ class SettingsDialog(QDialog):
         self._set_effect_combo(self._theme.get("_effect", "default"))
         # Persist and broadcast immediately
         self._settings.set_theme(self._theme)
-        self.theme_changed.emit(self._theme)
+        # Emit first-change signal before theme_changed so unlock fires once.
+        if not self._settings.get("theme_changed_once", False):
+            self._settings.set("theme_changed_once", True)
+            self.theme_changed.emit(self._theme)
+            self.first_theme_changed.emit()
+        else:
+            self.theme_changed.emit(self._theme)
         self._update_delete_btn()
 
     def _save_custom_theme(self):
@@ -1553,9 +1565,15 @@ class SettingsDialog(QDialog):
         self._settings.set("sound_drag_enter", self._sound_drag_enter_check.isChecked())
 
     def _on_trail_changed(self) -> None:
-        self._settings.set("trail_enabled", self._trail_check.isChecked())
+        enabled = self._trail_check.isChecked()
+        self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
-        self.settings_changed.emit()
+        if enabled and not self._settings.get("trail_enabled_once", False):
+            self._settings.set("trail_enabled_once", True)
+            self.settings_changed.emit()
+            self.first_trail_enabled.emit()
+        else:
+            self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
         _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow"]
