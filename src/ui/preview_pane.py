@@ -3,7 +3,7 @@ preview_pane.py – image preview components.
 
 • ImagePreviewPane   – compact thumbnail + metadata panel (used by Converter tab).
 • BeforeAfterWidget  – side-by-side comparison with a draggable divider
-                       (used by Alpha Fixer tab).
+                       (used by Alpha & RGBA Adjuster tab).
 
 All image loading is done in background QThreads so the UI is never blocked.
 """
@@ -287,6 +287,10 @@ class BeforeAfterWidget(QWidget):
         # so they don't need external QLabel widgets (which have opaque backgrounds).
         self._stats_before: str = ""
         self._stats_after: str = ""
+        # Raw (unmodified) images stored so callers can toggle overlays without
+        # re-running the background worker.
+        self._raw_before: QImage | None = None
+        self._raw_after: QImage | None = None
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -342,7 +346,27 @@ class BeforeAfterWidget(QWidget):
         self._loading = False
         self._stats_before = ""
         self._stats_after = ""
+        self._raw_before = None
+        self._raw_after = None
         self.update()
+
+    def store_raw_images(self, before: QImage, after: QImage) -> None:
+        """Store the unmodified before/after images so overlay toggles can
+        re-apply or remove visualisation without re-running the worker."""
+        self._raw_before = before
+        self._raw_after = after
+
+    def before_image(self) -> QImage | None:
+        """Return the stored raw 'before' image, or None if not set."""
+        return self._raw_before
+
+    def after_image(self) -> QImage | None:
+        """Return the stored raw 'after' image, or None if not set."""
+        return self._raw_after
+
+    def has_images(self) -> bool:
+        """Return True when raw images have been stored (i.e. a preview was loaded)."""
+        return self._raw_before is not None and self._raw_after is not None
 
     # ------------------------------------------------------------------
     # Qt events
@@ -531,7 +555,7 @@ class _ConverterPreviewLoader(QThread):
 
     Emits both images as QImages together with compact metadata strings
     so the Converter tab can display a side-by-side before/after view
-    matching the Alpha Fixer tab's preview style.
+    matching the Alpha & RGBA Adjuster tab's preview style.
     """
     ready = pyqtSignal(QImage, QImage, str, str)   # (src_qi, out_qi, src_meta, out_meta)
     failed = pyqtSignal(str)

@@ -44,7 +44,7 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
 
 
 class HistoryTab(QWidget):
-    """View of the last 50 sessions for both the Converter and the Alpha Fixer."""
+    """View of the last 50 sessions for the Converter, Alpha & RGBA Adjuster, and Selective Alpha."""
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -72,7 +72,7 @@ class HistoryTab(QWidget):
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
 
-        # Sub-tabs: Converter | Alpha Fixer
+        # Sub-tabs: Converter | Alpha & RGBA Adjuster
         self._sub_tabs = QTabWidget()
 
         # --- Converter sub-tab ---
@@ -96,7 +96,7 @@ class HistoryTab(QWidget):
         conv_layout.addWidget(self._conv_summary)
         self._sub_tabs.addTab(conv_widget, "🔄  Converter")
 
-        # --- Alpha Fixer sub-tab ---
+        # --- Alpha & RGBA Adjuster sub-tab ---
         alpha_widget = QWidget()
         alpha_layout = QVBoxLayout(alpha_widget)
         alpha_layout.setContentsMargins(0, 6, 0, 0)
@@ -115,7 +115,28 @@ class HistoryTab(QWidget):
         self._alpha_summary = QLabel("")
         self._alpha_summary.setObjectName("subheader")
         alpha_layout.addWidget(self._alpha_summary)
-        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha Fixer")
+        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha & RGBA Adjuster")
+
+        # --- Selective Alpha sub-tab ---
+        sel_widget = QWidget()
+        sel_layout = QVBoxLayout(sel_widget)
+        sel_layout.setContentsMargins(0, 6, 0, 0)
+        self._sel_tree = _make_tree(
+            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            col_tips=[
+                "When the selective-alpha batch was started.",
+                "Zone / mode used for this batch.",
+                "Total number of files processed.",
+                "Files processed successfully.",
+                "Files that encountered errors.",
+                "First 10 input filenames in this batch.",
+            ],
+        )
+        sel_layout.addWidget(self._sel_tree)
+        self._sel_summary = QLabel("")
+        self._sel_summary.setObjectName("subheader")
+        sel_layout.addWidget(self._sel_summary)
+        self._sub_tabs.addTab(sel_widget, "🎭  Selective Alpha")
 
         layout.addWidget(self._sub_tabs, 1)
 
@@ -135,10 +156,13 @@ class HistoryTab(QWidget):
         mgr.register(self._btn_export, "history_export_btn")
         mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
         mgr.register(self._sub_tabs.widget(1), "history_alpha_sub")
+        mgr.register(self._sub_tabs.widget(2), "history_sel_sub")
         mgr.register(self._conv_tree, "history_conv_tree")
         mgr.register(self._alpha_tree, "history_alpha_tree")
+        mgr.register(self._sel_tree, "history_sel_tree")
         mgr.register(self._conv_summary, "history_conv_summary")
         mgr.register(self._alpha_summary, "history_alpha_summary")
+        mgr.register(self._sel_summary, "history_sel_summary")
 
     # ------------------------------------------------------------------
     # Theme
@@ -156,7 +180,8 @@ class HistoryTab(QWidget):
         # Decorate the converter/alpha-fixer sub-tab labels with the theme icon.
         icon = get_theme_icon(theme_name)
         self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
-        self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha Fixer")
+        self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha & RGBA Adjuster")
+        self._sub_tabs.setTabText(2, f"{icon}🎭  Selective Alpha")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -164,9 +189,10 @@ class HistoryTab(QWidget):
 
     @pyqtSlot()
     def refresh(self):
-        """Reload both history lists from settings."""
+        """Reload all three history lists from settings."""
         self._refresh_converter()
         self._refresh_alpha()
+        self._refresh_selective_alpha()
 
     def _refresh_converter(self):
         history = self._settings.get_converter_history()
@@ -209,7 +235,29 @@ class HistoryTab(QWidget):
         self._alpha_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
             + ("  (most recent first)" if total > 0 else
-               " — run the Alpha Fixer to see history here.")
+               " — run the Alpha & RGBA Adjuster to see history here.")
+        )
+
+    def _refresh_selective_alpha(self):
+        history = self._settings.get_selective_alpha_history()
+        self._sel_tree.clear()
+        for entry in history:
+            ts = _fmt_ts(entry.get("timestamp", ""))
+            mode = entry.get("mode", entry.get("preset", "?"))
+            n_files = str(entry.get("file_count", "?"))
+            n_ok = str(entry.get("success", "?"))
+            n_err = str(entry.get("errors", "?"))
+            files = ", ".join(entry.get("files", []))
+            item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
+            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
+                for col in range(6):
+                    item.setForeground(col, Qt.GlobalColor.yellow)
+            self._sel_tree.addTopLevelItem(item)
+        total = len(history)
+        self._sel_summary.setText(
+            f"{total} session{'s' if total != 1 else ''} recorded"
+            + ("  (most recent first)" if total > 0 else
+               " — run the Selective Alpha tool to see history here.")
         )
 
     # ------------------------------------------------------------------
@@ -225,6 +273,7 @@ class HistoryTab(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.clear_converter_history()
             self._settings.clear_alpha_history()
+            self._settings.clear_selective_alpha_history()
             self.refresh()
 
     # ------------------------------------------------------------------
@@ -239,10 +288,14 @@ class HistoryTab(QWidget):
             tree = self._conv_tree
             default_name = "converter_history.csv"
             headers = ["Time", "Format", "Files", "OK", "Errors", "File names (first 10)"]
-        else:
+        elif idx == 1:
             tree = self._alpha_tree
             default_name = "alpha_fixer_history.csv"
             headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names (first 10)"]
+        else:
+            tree = self._sel_tree
+            default_name = "selective_alpha_history.csv"
+            headers = ["Time", "Mode", "Files", "OK", "Errors", "File names (first 10)"]
 
         path, _ = QFileDialog.getSaveFileName(
             self, "Export History as CSV", default_name,

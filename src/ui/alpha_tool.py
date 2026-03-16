@@ -1,5 +1,5 @@
 """
-Alpha Fixer tab widget.
+Alpha & RGBA Adjuster tab widget.
 """
 import datetime
 import logging
@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.presets import PresetManager
-from ..core.alpha_processor import collect_files, SUPPORTED_READ
+from ..core.alpha_processor import collect_files
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
 from .preview_pane import BeforeAfterWidget
@@ -128,7 +128,7 @@ class _AlphaPreviewLoader(QThread):
                 orig.close()
                 if processed is not None and processed is not orig:
                     processed.close()
-        except Exception as exc:
+        except Exception:
             import traceback
             self.failed.emit(traceback.format_exc())
 
@@ -148,11 +148,20 @@ class AlphaFixerTab(QWidget):
     # Emitted after every successful batch: carries the count of files processed.
     # MainWindow connects this to check for processing-based theme unlocks.
     processing_done = pyqtSignal(int)
+    # Emitted when a batch finishes with at least one error (carries error count).
+    processing_error = pyqtSignal(int)
+    # Emitted when a batch starts (before the worker thread is launched).
+    processing_started = pyqtSignal()
     # Emitted the very first time a batch completes successfully.
     # MainWindow uses this to trigger the 'first alpha fix' theme unlock.
     first_alpha_fix = pyqtSignal()
     # Emitted whenever at least one file is added to the queue.
     files_added = pyqtSignal()
+    # Emitted whenever files are removed from the queue.
+    files_removed = pyqtSignal()
+    # Emitted when files are first dragged over the drop zone.
+    drag_entered = pyqtSignal()
+    preview_refreshed = pyqtSignal()
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -322,16 +331,32 @@ class AlphaFixerTab(QWidget):
         self._compare_lbl = compare_lbl
         ca_layout.addWidget(compare_lbl)
 
+        # Alpha visualization toggle – off by default, does not affect processing
+        self._alpha_vis_check = QCheckBox("🎨  Highlight Alpha Values")
+        self._alpha_vis_check.setChecked(False)
+        self._alpha_vis_check.setToolTip(
+            "Overlay a false-colour heat-map on the alpha channel in both preview images.\n"
+            "Red = fully transparent (α 0), Yellow = semi-transparent (α 128),\n"
+            "Green = fully opaque (α 255).\n"
+            "This is purely a visual aid — it does NOT change how files are processed."
+        )
+        ca_layout.addWidget(self._alpha_vis_check)
+
         # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
         compare_row = QHBoxLayout()
         compare_row.setContentsMargins(0, 0, 0, 0)
         compare_row.setSpacing(4)
 
         def _make_stats_panel() -> QLabel:
-            """Return a small fixed-width label used for alpha statistics."""
+            """Return a small label used for alpha statistics."""
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-            lbl.setFixedWidth(84)
+            # Use font metrics so the panel stays wide enough regardless of
+            # system font size or DPI.  "Min: 255" is the widest typical text.
+            from PyQt6.QtGui import QFontMetrics
+            from PyQt6.QtWidgets import QApplication
+            fm = QFontMetrics(QApplication.font())
+            lbl.setMinimumWidth(fm.horizontalAdvance("Min: 255") + 8)
             lbl.setWordWrap(True)
             lbl.setObjectName("stats_panel")
             lbl.setContentsMargins(2, 4, 2, 4)
@@ -401,10 +426,12 @@ class AlphaFixerTab(QWidget):
 
         # Brief hint so users immediately understand the workflow.
         hint_lbl = QLabel(
-            "ℹ  Set Min and Max alpha values.  Pixels are scaled from the full 0–255 range: "
-            "fully opaque (255) → Max, fully transparent (0) → Min, "
-            "values in between scale proportionally.  "
-            "To make every pixel the same value, set Min = Max."
+            "ℹ  Normalize the alpha channel to a new range.  "
+            "The image's darkest pixel maps to Min, the brightest maps to Max — "
+            "all others scale proportionally in between.  "
+            "For images where every pixel shares the same alpha value, the value is "
+            "clamped: below Min → Min, above Max → Max, within [Min, Max] → unchanged.  "
+            "Set Min = Max to force every pixel to exactly that value."
         )
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)
@@ -421,8 +448,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
             "Minimum alpha in the output.\n"
-            "The darkest pixel in the source will become this value.\n"
-            "All other pixels are stretched proportionally above it.\n"
+            "For images with a range of alpha values: the darkest pixel maps to this\n"
+            "value and all others are stretched proportionally above it.\n"
+            "For uniform-alpha images (every pixel already the same value): the single\n"
+            "value is clamped — below-Min → Min, above-Max → Max, in-range → unchanged.\n"
             "0 = fully transparent minimum (most common).\n"
             "Set Min = Max to force every pixel to the same alpha value."
         )
@@ -437,8 +466,10 @@ class AlphaFixerTab(QWidget):
         self._clamp_max_spin.setMinimumHeight(26)
         self._clamp_max_spin.setToolTip(
             "Maximum alpha in the output.\n"
-            "The brightest pixel in the source will become this value.\n"
-            "All other pixels are stretched proportionally below it.\n"
+            "For images with a range of alpha values: the brightest pixel maps to this\n"
+            "value and all others are stretched proportionally below it.\n"
+            "For uniform-alpha images (every pixel already the same value): the single\n"
+            "value is clamped — below-Min → Min, above-Max → Max, in-range → unchanged.\n"
             "Example: set Max to 128 to cap maximum alpha at 128 (PS2 native full opacity).\n"
             "Set Min = Max to force every pixel to the same alpha value."
         )
@@ -573,6 +604,8 @@ class AlphaFixerTab(QWidget):
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
+        self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.drag_entered.connect(self.drag_entered)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label
@@ -586,6 +619,8 @@ class AlphaFixerTab(QWidget):
         self._blue_spin.valueChanged.connect(self._on_finetune_changed)
         self._alpha_delta_spin.valueChanged.connect(self._on_finetune_changed)
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
+        # Alpha visualization toggle → re-apply overlay without re-processing
+        self._alpha_vis_check.toggled.connect(self._on_alpha_vis_toggled)
         # Persist batch options so they survive app restarts
         self._recursive_check.toggled.connect(
             lambda v: self._settings.set("batch_recursive", v)
@@ -637,12 +672,13 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._log, "processing_log")
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "alpha_status_lbl")
+        mgr.register(self._alpha_vis_check, "alpha_vis_check")
 
     def update_theme(self, theme_name: str) -> None:
         """Update inner header, section labels and group-box titles to match the active theme."""
         from .theme_engine import get_theme_tab_labels, get_theme_icon
         labels = get_theme_tab_labels(theme_name)
-        # labels[0] is e.g. "🩸🖼  Alpha Fixer" – use it directly as the header
+        # labels[0] is e.g. "🩸🖼  Alpha & RGBA Adjuster" – use it directly as the header
         self._hdr.setText(labels[0])
         # Decorate section labels and group-box titles with the theme's representative icon.
         icon = get_theme_icon(theme_name)
@@ -659,7 +695,7 @@ class AlphaFixerTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -714,7 +750,7 @@ class AlphaFixerTab(QWidget):
         if not paths:
             return
         try:
-            from ..core.rom_detector import detect_from_paths
+            from ..core.rom_detector import detect_from_paths  # noqa: F401 – probe
         except ImportError:
             return
 
@@ -824,10 +860,96 @@ class AlphaFixerTab(QWidget):
         self._preview_loader.failed.connect(self._on_compare_failed)
         self._preview_loader.start()
 
+    # ------------------------------------------------------------------
+    # Alpha visualization helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _alpha_vis_overlay(qi: QImage) -> QImage:
+        """
+        Return a copy of *qi* (Format_ARGB32) with a false-colour heat-map
+        blended over the alpha channel.
+
+        Colour key:
+          α = 0   → vivid red    (fully transparent)
+          α = 128 → yellow       (semi-transparent)
+          α = 255 → vivid green  (fully opaque)
+
+        The heat-map is drawn at 70 % opacity so the underlying colours remain
+        visible while the alpha structure is clearly legible.
+        """
+        import numpy as np
+        from PyQt6.QtGui import QImage as _QI
+
+        # Work in Format_ARGB32 so we have direct byte access
+        src = qi.convertToFormat(_QI.Format.Format_ARGB32)
+        w, h = src.width(), src.height()
+        if w == 0 or h == 0:
+            return qi
+
+        # Extract raw bytes → ARGB array (Qt stores BGRA in little-endian)
+        ptr = src.bits()
+        ptr.setsize(h * w * 4)
+        arr = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4)).copy()
+
+        # Qt ARGB32: channels are [B, G, R, A] per pixel
+        alpha = arr[:, :, 3].astype(np.float32) / 255.0  # 0.0 … 1.0
+
+        # Heat-map colours (R, G, B):
+        #   0.0 → red   (255, 0, 0)
+        #   0.5 → yellow (255, 255, 0)
+        #   1.0 → green  (0, 255, 0)
+        heat_r = np.where(alpha < 0.5,
+                          255,
+                          np.clip((1.0 - alpha) * 2 * 255, 0, 255)).astype(np.uint8)
+        heat_g = np.where(alpha < 0.5,
+                          np.clip(alpha * 2 * 255, 0, 255),
+                          255).astype(np.uint8)
+        heat_b = np.zeros((h, w), dtype=np.uint8)
+
+        # Blend: out = heat * 0.70 + original * 0.30
+        blend = 0.70
+        arr[:, :, 2] = np.clip(heat_r * blend + arr[:, :, 2] * (1 - blend), 0, 255).astype(np.uint8)
+        arr[:, :, 1] = np.clip(heat_g * blend + arr[:, :, 1] * (1 - blend), 0, 255).astype(np.uint8)
+        arr[:, :, 0] = np.clip(heat_b * blend + arr[:, :, 0] * (1 - blend), 0, 255).astype(np.uint8)
+        # Keep alpha channel unchanged so transparency is still rendered
+        # (the overlay colour already encodes the alpha information visually)
+
+        out = _QI(arr.tobytes(), w, h, w * 4, _QI.Format.Format_ARGB32)
+        return out.copy()  # detach from numpy buffer
+
+    @pyqtSlot(bool)
+    def _on_alpha_vis_toggled(self, _checked: bool) -> None:
+        """Re-apply (or remove) the alpha visualization when the toggle changes."""
+        if self._compare.has_images():
+            self._apply_alpha_vis_to_compare()
+
+    def _apply_alpha_vis_to_compare(self) -> None:
+        """Apply the alpha heat-map overlay to the current compare images if enabled."""
+        before_raw = self._compare.before_image()
+        after_raw = self._compare.after_image()
+        if before_raw is None or after_raw is None:
+            return
+        if self._alpha_vis_check.isChecked():
+            self._compare.set_before(self._alpha_vis_overlay(before_raw))
+            self._compare.set_after(self._alpha_vis_overlay(after_raw))
+        else:
+            self._compare.set_before(before_raw)
+            self._compare.set_after(after_raw)
+
     @pyqtSlot(QImage, QImage)
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
-        self._compare.set_before(before_qi)
-        self._compare.set_after(after_qi)
+        # Store the raw (unmodified) images so the vis toggle can toggle on/off
+        # without needing to re-run the background worker.
+        self._compare.store_raw_images(before_qi, after_qi)
+        if self._alpha_vis_check.isChecked():
+            self._compare.set_before(self._alpha_vis_overlay(before_qi))
+            self._compare.set_after(self._alpha_vis_overlay(after_qi))
+        else:
+            self._compare.set_before(before_qi)
+            self._compare.set_after(after_qi)
+        # Notify main window so it can play the preview sound (opt-in, off by default)
+        self.preview_refreshed.emit()
 
     @pyqtSlot(dict, dict)
     def _on_stats_ready(self, before: dict, after: dict):
@@ -917,6 +1039,8 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setText("Processing…")
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
+        # Notify main window so it can play the process-start sound
+        self.processing_started.emit()
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -1002,6 +1126,8 @@ class AlphaFixerTab(QWidget):
             if not self._settings.get("alpha_fix_done_once", False):
                 self._settings.set("alpha_fix_done_once", True)
                 self.first_alpha_fix.emit()
+        if errors > 0:
+            self.processing_error.emit(errors)
 
     def _log_msg(self, msg: str):
         self._log.append(msg)

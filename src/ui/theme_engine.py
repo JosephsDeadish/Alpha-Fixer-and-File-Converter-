@@ -30,6 +30,9 @@ DEFAULT_THEME = {
     "_effect": "panda",
     "_cursor": "Pointing Hand",
     "_trail_color": "#e94560",
+    "_banner_anim": "spin",
+    "_button_anim": "press",
+    "_trail": "dots",
 }
 
 LIGHT_THEME = {
@@ -56,6 +59,9 @@ LIGHT_THEME = {
     "_effect": "panda",
     "_cursor": "Pointing Hand",
     "_trail_color": "#e94560",
+    "_banner_anim": "spin",
+    "_button_anim": "press",
+    "_trail": "dots",
 }
 
 NEON_THEME = {
@@ -82,6 +88,9 @@ NEON_THEME = {
     "_effect": "neon",
     "_cursor": "emoji:⚡",
     "_trail_color": "#00ff88",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 GORE_THEME = {
@@ -108,6 +117,9 @@ GORE_THEME = {
     "_effect": "gore",
     "_cursor": "emoji:💀",
     "_trail_color": "#cc0000",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
+    "_trail": "dots",
 }
 
 BAT_THEME = {
@@ -134,6 +146,9 @@ BAT_THEME = {
     "_effect": "bat",
     "_cursor": "emoji:🦇",
     "_trail_color": "#7b2dff",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 RAINBOW_THEME = {
@@ -160,6 +175,9 @@ RAINBOW_THEME = {
     "_effect": "rainbow",
     "_cursor": "emoji:🌈",
     "_trail_color": "#ffff00",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "rainbow",
 }
 
 OTTER_THEME = {
@@ -186,6 +204,9 @@ OTTER_THEME = {
     "_effect": "otter",
     "_cursor": "emoji:🤘",
     "_trail_color": "#e8a040",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "ribbon",
 }
 
 GALAXY_THEME = {
@@ -212,6 +233,9 @@ GALAXY_THEME = {
     "_effect": "galaxy",
     "_cursor": "emoji:🌟",
     "_trail_color": "#4477ff",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 GALAXY_OTTER_THEME = {
@@ -238,6 +262,9 @@ GALAXY_OTTER_THEME = {
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🤘",
     "_trail_color": "#a06aff",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 GOTH_THEME = {
@@ -264,6 +291,9 @@ GOTH_THEME = {
     "_effect": "goth",
     "_cursor": "emoji:💀",
     "_trail_color": "#8800aa",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 VOLCANO_THEME = {
@@ -290,6 +320,9 @@ VOLCANO_THEME = {
     "_effect": "fire",
     "_cursor": "emoji:🌋",
     "_trail_color": "#ff4400",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
+    "_trail": "comet",
 }
 
 ARCTIC_THEME = {
@@ -316,6 +349,9 @@ ARCTIC_THEME = {
     "_effect": "ice",
     "_cursor": "emoji:❄",
     "_trail_color": "#44aaff",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 # Hidden / unlockable themes  (not shown in normal selector until unlocked)
@@ -344,6 +380,9 @@ SECRET_SKELETON_THEME = {
     "_cursor": "emoji:💀",
     "_trail_color": "#1a1a1a",
     "_unlock": "skeleton",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "dots",
 }
 
 SECRET_SAKURA_THEME = {
@@ -371,6 +410,9 @@ SECRET_SAKURA_THEME = {
     "_cursor": "emoji:🌸",
     "_trail_color": "#ff6699",
     "_unlock": "sakura",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 FAIRY_THEME = {
@@ -397,6 +439,9 @@ FAIRY_THEME = {
     "_effect": "fairy",
     "_cursor": "emoji:🪄",
     "_trail_color": "#ffccee",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_DEEP_OCEAN_THEME = {
@@ -424,6 +469,9 @@ SECRET_DEEP_OCEAN_THEME = {
     "_cursor": "emoji:🦑",
     "_trail_color": "#00d4ff",
     "_unlock": "ocean",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 PRESET_THEMES = {
@@ -470,6 +518,9 @@ MERMAID_THEME = {
     "_effect": "mermaid",
     "_cursor": "emoji:🧜",
     "_trail_color": "#00ccaa",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 SHARK_BAIT_THEME = {
@@ -496,6 +547,9 @@ SHARK_BAIT_THEME = {
     "_effect": "shark",
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
+    "_banner_anim": "shake",
+    "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 ALIEN_THEME = {
@@ -522,6 +576,9 @@ ALIEN_THEME = {
     "_effect": "alien",
     "_cursor": "emoji:🛸",
     "_trail_color": "#00ff88",
+    "_banner_anim": "bounce",
+    "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 PRESET_THEMES.update({
@@ -558,6 +615,9 @@ NOODLE_THEME = {
     "_effect": "default",
     "_cursor": "emoji:🍜",
     "_trail_color": "#ffdd44",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "ribbon",
 }
 
 # ---------------------------------------------------------------------------
@@ -588,6 +648,9 @@ PANCAKE_THEME = {
     "_effect": "default",
     "_cursor": "emoji:🥞",
     "_trail_color": "#d4860a",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "ribbon",
 }
 
 PRESET_THEMES.update({
@@ -620,6 +683,9 @@ SECRET_BLOOD_MOON_THEME = {
     "_cursor": "emoji:🩸",
     "_trail_color": "#cc1133",
     "_unlock": "blood_moon",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
+    "_trail": "dots",
 }
 
 SECRET_ICE_CAVE_THEME = {
@@ -647,6 +713,9 @@ SECRET_ICE_CAVE_THEME = {
     "_cursor": "emoji:❄",
     "_trail_color": "#88ddff",
     "_unlock": "ice_cave",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_CYBER_OTTER_THEME = {
@@ -674,6 +743,9 @@ SECRET_CYBER_OTTER_THEME = {
     "_cursor": "emoji:🦦",
     "_trail_color": "#00ffcc",
     "_unlock": "cyber_otter",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_TOXIC_NEON_THEME = {
@@ -701,6 +773,9 @@ SECRET_TOXIC_NEON_THEME = {
     "_cursor": "emoji:☢",
     "_trail_color": "#aaff00",
     "_unlock": "toxic_neon",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 SECRET_LAVA_CAVE_THEME = {
@@ -728,6 +803,9 @@ SECRET_LAVA_CAVE_THEME = {
     "_cursor": "emoji:🌋",
     "_trail_color": "#ff6600",
     "_unlock": "lava_cave",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
+    "_trail": "comet",
 }
 
 SECRET_SUNSET_BEACH_THEME = {
@@ -755,6 +833,9 @@ SECRET_SUNSET_BEACH_THEME = {
     "_cursor": "emoji:🌅",
     "_trail_color": "#ff9944",
     "_unlock": "sunset_beach",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "wave",
 }
 
 SECRET_MIDNIGHT_FOREST_THEME = {
@@ -782,6 +863,9 @@ SECRET_MIDNIGHT_FOREST_THEME = {
     "_cursor": "emoji:🌲",
     "_trail_color": "#44cc66",
     "_unlock": "midnight_forest",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 HIDDEN_THEMES = {
@@ -826,6 +910,9 @@ SECRET_CANDY_LAND_THEME = {
     "_cursor": "emoji:🍭",
     "_trail_color": "#ff55bb",
     "_unlock": "candy_land",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_ZOMBIE_THEME = {
@@ -853,6 +940,9 @@ SECRET_ZOMBIE_THEME = {
     "_cursor": "emoji:🧟",
     "_trail_color": "#55cc00",
     "_unlock": "zombie",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
+    "_trail": "dots",
 }
 
 SECRET_DRAGON_THEME = {
@@ -880,6 +970,9 @@ SECRET_DRAGON_THEME = {
     "_cursor": "emoji:🐉",
     "_trail_color": "#ff6600",
     "_unlock": "dragon_fire",
+    "_banner_anim": "shake",
+    "_button_anim": "shatter",
+    "_trail": "comet",
 }
 
 SECRET_BUBBLEGUM_THEME = {
@@ -907,6 +1000,9 @@ SECRET_BUBBLEGUM_THEME = {
     "_cursor": "emoji:🫧",
     "_trail_color": "#ff77ff",
     "_unlock": "bubblegum",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "wave",
 }
 
 SECRET_THUNDER_THEME = {
@@ -934,6 +1030,9 @@ SECRET_THUNDER_THEME = {
     "_cursor": "emoji:⚡",
     "_trail_color": "#aaaaff",
     "_unlock": "thunder_storm",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
+    "_trail": "comet",
 }
 
 SECRET_ROSE_GOLD_THEME = {
@@ -961,6 +1060,9 @@ SECRET_ROSE_GOLD_THEME = {
     "_cursor": "emoji:🌹",
     "_trail_color": "#cc7766",
     "_unlock": "rose_gold",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_SPACE_CAT_THEME = {
@@ -988,6 +1090,9 @@ SECRET_SPACE_CAT_THEME = {
     "_cursor": "emoji:🐱",
     "_trail_color": "#ff99ff",
     "_unlock": "space_cat",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_MUSHROOM_THEME = {
@@ -1015,6 +1120,9 @@ SECRET_MUSHROOM_THEME = {
     "_cursor": "emoji:🍄",
     "_trail_color": "#ff5599",
     "_unlock": "magic_mushroom",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_ABYSSAL_THEME = {
@@ -1042,6 +1150,9 @@ SECRET_ABYSSAL_THEME = {
     "_cursor": "emoji:🕳",
     "_trail_color": "#5500aa",
     "_unlock": "abyssal_void",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 SECRET_SPRING_THEME = {
@@ -1069,6 +1180,9 @@ SECRET_SPRING_THEME = {
     "_cursor": "emoji:🌷",
     "_trail_color": "#88dd44",
     "_unlock": "spring_bloom",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 SECRET_GOLD_RUSH_THEME = {
@@ -1096,6 +1210,9 @@ SECRET_GOLD_RUSH_THEME = {
     "_cursor": "emoji:💰",
     "_trail_color": "#ffcc00",
     "_unlock": "gold_rush",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "sparkle",
 }
 
 SECRET_NEBULA_THEME = {
@@ -1123,6 +1240,9 @@ SECRET_NEBULA_THEME = {
     "_cursor": "emoji:🌌",
     "_trail_color": "#cc44ff",
     "_unlock": "nebula",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 HIDDEN_THEMES.update({
@@ -1169,6 +1289,9 @@ SECRET_CRYSTAL_CAVE_THEME = {
     "_cursor": "emoji:💎",
     "_trail_color": "#99aaff",
     "_unlock": "crystal_cave",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "sparkle",
 }
 
 SECRET_GLITCH_THEME = {
@@ -1196,6 +1319,9 @@ SECRET_GLITCH_THEME = {
     "_cursor": "emoji:📡",
     "_trail_color": "#ff00ff",
     "_unlock": "glitch",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
+    "_trail": "sparkle",
 }
 
 SECRET_WILD_WEST_THEME = {
@@ -1223,6 +1349,9 @@ SECRET_WILD_WEST_THEME = {
     "_cursor": "emoji:🤠",
     "_trail_color": "#cc8833",
     "_unlock": "wild_west",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "dots",
 }
 
 SECRET_PIRATE_THEME = {
@@ -1250,6 +1379,9 @@ SECRET_PIRATE_THEME = {
     "_cursor": "emoji:🏴‍☠️",
     "_trail_color": "#ddaa22",
     "_unlock": "pirate",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 SECRET_DEEP_SPACE_THEME = {
@@ -1277,6 +1409,9 @@ SECRET_DEEP_SPACE_THEME = {
     "_cursor": "emoji:🛸",
     "_trail_color": "#4466ff",
     "_unlock": "deep_space",
+    "_banner_anim": "flock",
+    "_button_anim": "fall",
+    "_trail": "comet",
 }
 
 SECRET_WITCHS_BREW_THEME = {
@@ -1304,6 +1439,9 @@ SECRET_WITCHS_BREW_THEME = {
     "_cursor": "emoji:🧙",
     "_trail_color": "#44ff88",
     "_unlock": "witchs_brew",
+    "_banner_anim": "pendulum",
+    "_button_anim": "bounce",
+    "_trail": "sparkle",
 }
 
 SECRET_LAVA_LAMP_THEME = {
@@ -1331,6 +1469,9 @@ SECRET_LAVA_LAMP_THEME = {
     "_cursor": "emoji:🪔",
     "_trail_color": "#ff7700",
     "_unlock": "lava_lamp",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "ribbon",
 }
 
 SECRET_CORAL_REEF_THEME = {
@@ -1358,6 +1499,9 @@ SECRET_CORAL_REEF_THEME = {
     "_cursor": "emoji:🪸",
     "_trail_color": "#ff6655",
     "_unlock": "coral_reef",
+    "_banner_anim": "bounce",
+    "_button_anim": "fall",
+    "_trail": "wave",
 }
 
 SECRET_STORM_CLOUD_THEME = {
@@ -1385,6 +1529,9 @@ SECRET_STORM_CLOUD_THEME = {
     "_cursor": "emoji:⛈",
     "_trail_color": "#8899cc",
     "_unlock": "storm_cloud",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
+    "_trail": "comet",
 }
 
 SECRET_GOLDEN_HOUR_THEME = {
@@ -1412,6 +1559,9 @@ SECRET_GOLDEN_HOUR_THEME = {
     "_cursor": "emoji:🌇",
     "_trail_color": "#ffaa00",
     "_unlock": "golden_hour",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
 }
 
 HIDDEN_THEMES.update({
@@ -1425,6 +1575,240 @@ HIDDEN_THEMES.update({
     "Coral Reef":    SECRET_CORAL_REEF_THEME,
     "Storm Cloud":   SECRET_STORM_CLOUD_THEME,
     "Golden Hour":   SECRET_GOLDEN_HOUR_THEME,
+})
+
+# ---------------------------------------------------------------------------
+# Cat theme — warm orange & cream, soft rounded, purring cats
+# ---------------------------------------------------------------------------
+SECRET_CAT_THEME = {
+    "name": "Purrfect Cats",
+    "background": "#1a0e08",
+    "surface": "#2e1a0e",
+    "primary": "#3d2410",
+    "accent": "#e87a2a",
+    "text": "#fff0cc",
+    "text_secondary": "#cc9966",
+    "border": "#7a3c14",
+    "success": "#88cc44",
+    "warning": "#ffcc22",
+    "error": "#ff4422",
+    "tab_selected": "#e87a2a",
+    "button_bg": "#3d2410",
+    "button_hover": "#e87a2a",
+    "panda_white": "#fff0cc",
+    "panda_black": "#1a0e08",
+    "progress_bar": "#e87a2a",
+    "input_bg": "#110900",
+    "scrollbar": "#2e1a0e",
+    "scrollbar_handle": "#e87a2a",
+    "_effect": "default",
+    "_cursor": "emoji:🐱",
+    "_trail_color": "#e87a2a",
+    "_unlock": "cat",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "dots",
+}
+
+# ---------------------------------------------------------------------------
+# Dog theme — warm golden & brown, rounded playful, happy dogs
+# ---------------------------------------------------------------------------
+SECRET_DOG_THEME = {
+    "name": "Good Dog",
+    "background": "#100c04",
+    "surface": "#221a08",
+    "primary": "#332510",
+    "accent": "#cc9933",
+    "text": "#fff4cc",
+    "text_secondary": "#bbaa55",
+    "border": "#664d18",
+    "success": "#88bb33",
+    "warning": "#ffaa22",
+    "error": "#cc3300",
+    "tab_selected": "#cc9933",
+    "button_bg": "#332510",
+    "button_hover": "#cc9933",
+    "panda_white": "#fff4cc",
+    "panda_black": "#100c04",
+    "progress_bar": "#cc9933",
+    "input_bg": "#0c0a04",
+    "scrollbar": "#221a08",
+    "scrollbar_handle": "#cc9933",
+    "_effect": "default",
+    "_cursor": "emoji:🐶",
+    "_trail_color": "#cc9933",
+    "_unlock": "dog",
+    "_banner_anim": "shake",
+    "_button_anim": "bounce",
+    "_trail": "dots",
+}
+
+HIDDEN_THEMES.update({
+    "Purrfect Cats": SECRET_CAT_THEME,
+    "Good Dog":      SECRET_DOG_THEME,
+})
+
+# ── New unlockable themes: Snake, Ghost, Anime, Waifu, Slime ───────────────
+SECRET_SNAKE_THEME = {
+    "name": "Snake Pit",
+    "background": "#0a1a0a",
+    "surface": "#112211",
+    "primary": "#1a3a1a",
+    "accent": "#44dd44",
+    "text": "#ccffcc",
+    "text_secondary": "#88bb88",
+    "border": "#226622",
+    "success": "#00ff44",
+    "warning": "#ddff00",
+    "error": "#ff4400",
+    "tab_selected": "#44dd44",
+    "button_bg": "#1a3a1a",
+    "button_hover": "#44dd44",
+    "panda_white": "#ccffcc",
+    "panda_black": "#0a1a0a",
+    "progress_bar": "#44dd44",
+    "input_bg": "#060e06",
+    "scrollbar": "#112211",
+    "scrollbar_handle": "#44dd44",
+    "_effect": "slither",
+    "_cursor": "emoji:🐍",
+    "_trail_color": "#44dd44",
+    "_banner_anim": "shake",
+    "_button_anim": "shake",
+    "_trail": "sparkle",
+    "_unlock": "snake",
+}
+
+SECRET_GHOST_THEME = {
+    "name": "Ghost",
+    "background": "#0e0e12",
+    "surface": "#18181f",
+    "primary": "#26263a",
+    "accent": "#aaaaff",
+    "text": "#eeeeff",
+    "text_secondary": "#9999bb",
+    "border": "#44445a",
+    "success": "#88ffaa",
+    "warning": "#ffffaa",
+    "error": "#ff88aa",
+    "tab_selected": "#aaaaff",
+    "button_bg": "#26263a",
+    "button_hover": "#aaaaff",
+    "panda_white": "#eeeeff",
+    "panda_black": "#0e0e12",
+    "progress_bar": "#aaaaff",
+    "input_bg": "#090910",
+    "scrollbar": "#18181f",
+    "scrollbar_handle": "#aaaaff",
+    "_effect": "ghost",
+    "_cursor": "emoji:👻",
+    "_trail_color": "#ccccff",
+    "_banner_anim": "pendulum",
+    "_button_anim": "bounce",
+    "_trail": "comet",
+    "_unlock": "ghost",
+}
+
+ANIME_THEME = {
+    "name": "Anime",
+    "background": "#0d0020",
+    "surface": "#1a0030",
+    "primary": "#2e005a",
+    "accent": "#ff55cc",
+    "text": "#ffe6ff",
+    "text_secondary": "#cc88cc",
+    "border": "#660099",
+    "success": "#88ffcc",
+    "warning": "#ffee88",
+    "error": "#ff3388",
+    "tab_selected": "#ff55cc",
+    "button_bg": "#2e005a",
+    "button_hover": "#ff55cc",
+    "panda_white": "#ffe6ff",
+    "panda_black": "#0d0020",
+    "progress_bar": "#ff55cc",
+    "input_bg": "#07000f",
+    "scrollbar": "#1a0030",
+    "scrollbar_handle": "#ff55cc",
+    "_effect": "sparkle",
+    "_cursor": "emoji:✨",
+    "_trail_color": "#ff88ee",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "sparkle",
+    "_unlock": "anime",
+}
+
+WAIFU_THEME = {
+    "name": "Waifu",
+    "background": "#1a0010",
+    "surface": "#2a0020",
+    "primary": "#440030",
+    "accent": "#ff77bb",
+    "text": "#ffe0f0",
+    "text_secondary": "#cc88aa",
+    "border": "#880044",
+    "success": "#aaffdd",
+    "warning": "#ffeeaa",
+    "error": "#ff2266",
+    "tab_selected": "#ff77bb",
+    "button_bg": "#440030",
+    "button_hover": "#ff77bb",
+    "panda_white": "#ffe0f0",
+    "panda_black": "#1a0010",
+    "progress_bar": "#ff77bb",
+    "input_bg": "#0d0008",
+    "scrollbar": "#2a0020",
+    "scrollbar_handle": "#ff77bb",
+    "_effect": "sparkle",
+    "_cursor": "emoji:🌸",
+    "_trail_color": "#ffaacc",
+    "_banner_anim": "bounce",
+    "_button_anim": "bounce",
+    "_trail": "fairy",
+    "_unlock": "waifu",
+}
+
+SECRET_SLIME_THEME = {
+    "name": "Slime",
+    "background": "#061208",
+    "surface": "#0d2010",
+    "primary": "#153020",
+    "accent": "#55ee44",
+    "text": "#ccffcc",
+    "text_secondary": "#88cc88",
+    "border": "#2a6630",
+    "success": "#00ffaa",
+    "warning": "#eeff44",
+    "error": "#ff4422",
+    "tab_selected": "#55ee44",
+    "button_bg": "#153020",
+    "button_hover": "#55ee44",
+    "panda_white": "#ccffcc",
+    "panda_black": "#061208",
+    "progress_bar": "#55ee44",
+    "input_bg": "#03080a",
+    "scrollbar": "#0d2010",
+    "scrollbar_handle": "#55ee44",
+    "_effect": "slime",
+    "_cursor": "emoji:🟢",
+    "_trail_color": "#55ee44",
+    "_banner_anim": "pendulum",
+    "_button_anim": "fall",
+    "_trail": "sparkle",
+    "_unlock": "slime",
+}
+
+# Anime/Waifu go in PRESET_THEMES (unlocked by default); Snake/Ghost/Slime in HIDDEN_THEMES
+PRESET_THEMES.update({
+    "Anime": ANIME_THEME,
+    "Waifu": WAIFU_THEME,
+})
+
+HIDDEN_THEMES.update({
+    "Snake Pit":  SECRET_SNAKE_THEME,
+    "Ghost":      SECRET_GHOST_THEME,
+    "Slime":      SECRET_SLIME_THEME,
 })
 
 # Which effects each theme uses (name → effect key)
@@ -1488,6 +1872,9 @@ THEME_DESCRIPTIONS: dict[str, str] = {
     "Golden Hour":      "Deep amber-black with warm golden-orange sundown glow. 🌇",
     # ─── Pancake (preset, easy to miss) ───────────────────────────────
     "Pancake":          "Syrupy brown stacked pancake shapes. Thick rounded borders.",
+    # ─── Animal themes ────────────────────────────────────────────────
+    "Purrfect Cats":    "Warm orange & cream. Soft rounded shapes. Cats everywhere. 🐱",
+    "Good Dog":         "Golden warm brown. Playful rounded shapes. Very good dog. 🐶",
 }
 
 import os as _os
@@ -1548,6 +1935,14 @@ THEME_SVG = {
     "Coral Reef":        "deep_ocean.svg",
     "Storm Cloud":       "thunder_storm.svg",
     "Golden Hour":       "sunset_beach.svg",
+    "Purrfect Cats":     "otter_cove.svg",
+    "Good Dog":          "otter_cove.svg",
+    # Newest themes (share visually similar existing SVGs)
+    "Anime":             "fairy_garden.svg",
+    "Waifu":             "secret_sakura.svg",
+    "Snake Pit":         "midnight_forest.svg",
+    "Ghost":             "abyssal_void.svg",
+    "Slime":             "toxic_neon.svg",
 }
 
 
@@ -1565,48 +1960,54 @@ def get_theme_svg_path(theme_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 THEME_BANNER = {
-    "Panda Dark":      "🐼  Alpha Fixer  &  File Converter",
-    "Panda Light":     "🐼  Alpha Fixer  &  File Converter  🤍",
-    "Neon Panda":      "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
-    "Gore":            "🩸  Alpha Fixer  &  File Converter  🩸",
-    "Bat Cave":        "🦇  Alpha Fixer  &  File Converter  🦇",
-    "Rainbow Chaos":   "🌈  Alpha Fixer  &  File Converter  🌈",
-    "Otter Cove":      "🦦🤘  Alpha Fixer  &  File Converter  🤘🦦",
-    "Galaxy":          "✦  Alpha Fixer  &  File Converter  ✦",
-    "Galaxy Otter":    "🦦✦  Alpha Fixer  &  File Converter  ✦🦦",
-    "Goth":            "💀  Alpha Fixer  &  File Converter  💀",
-    "Volcano":         "🌋  Alpha Fixer  &  File Converter  🔥",
-    "Arctic":          "❄  Alpha Fixer  &  File Converter  ❄",
-    "Fairy Garden":    "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
-    "Secret Skeleton": "☠  Alpha Fixer  &  File Converter  ☠",
-    "Secret Sakura":   "🌸  Alpha Fixer  &  File Converter  🌸",
-    "Deep Ocean":      "🌊🦑  Alpha Fixer  &  File Converter  🦑🌊",
-    "Blood Moon":      "🩸🌕  Alpha Fixer  &  File Converter  🌕🩸",
-    "Ice Cave":        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
-    "Cyber Otter":     "🦦💻  Alpha Fixer  &  File Converter  💻🦦",
-    "Toxic Neon":      "☢⚡  Alpha Fixer  &  File Converter  ⚡☢",
-    "Lava Cave":       "🌋🔥  Alpha Fixer  &  File Converter  🔥🌋",
-    "Sunset Beach":    "🌅🏖  Alpha Fixer  &  File Converter  🏖🌅",
-    "Midnight Forest": "🌲🌙  Alpha Fixer  &  File Converter  🌙🌲",
+    "Panda Dark":      "🐼  Alpha & RGBA Adjuster  |  File Converter",
+    "Panda Light":     "🐼  Alpha & RGBA Adjuster  |  File Converter  🤍",
+    "Neon Panda":      "⚡🐼  Alpha & RGBA Adjuster  |  File Converter  🐼⚡",
+    "Gore":            "🩸  Alpha & RGBA Adjuster  |  File Converter  🩸",
+    "Bat Cave":        "🦇  Alpha & RGBA Adjuster  |  File Converter  🦇",
+    "Rainbow Chaos":   "🌈  Alpha & RGBA Adjuster  |  File Converter  🌈",
+    "Otter Cove":      "🦦🤘  Alpha & RGBA Adjuster  |  File Converter  🤘🦦",
+    "Galaxy":          "✦  Alpha & RGBA Adjuster  |  File Converter  ✦",
+    "Galaxy Otter":    "🦦✦  Alpha & RGBA Adjuster  |  File Converter  ✦🦦",
+    "Goth":            "💀  Alpha & RGBA Adjuster  |  File Converter  💀",
+    "Volcano":         "🌋  Alpha & RGBA Adjuster  |  File Converter  🔥",
+    "Arctic":          "❄  Alpha & RGBA Adjuster  |  File Converter  ❄",
+    "Fairy Garden":    "🧚✨🪄  Alpha & RGBA Adjuster  |  File Converter  🪄✨🧚",
+    "Secret Skeleton": "☠  Alpha & RGBA Adjuster  |  File Converter  ☠",
+    "Secret Sakura":   "🌸  Alpha & RGBA Adjuster  |  File Converter  🌸",
+    "Deep Ocean":      "🌊🦑  Alpha & RGBA Adjuster  |  File Converter  🦑🌊",
+    "Blood Moon":      "🩸🌕  Alpha & RGBA Adjuster  |  File Converter  🌕🩸",
+    "Ice Cave":        "❄🧊  Alpha & RGBA Adjuster  |  File Converter  🧊❄",
+    "Cyber Otter":     "🦦💻  Alpha & RGBA Adjuster  |  File Converter  💻🦦",
+    "Toxic Neon":      "☢⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡☢",
+    "Lava Cave":       "🌋🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🌋",
+    "Sunset Beach":    "🌅🏖  Alpha & RGBA Adjuster  |  File Converter  🏖🌅",
+    "Midnight Forest": "🌲🌙  Alpha & RGBA Adjuster  |  File Converter  🌙🌲",
     # New preset themes
-    "Mermaid":         "🧜🐚  Alpha Fixer  &  File Converter  🐚🧜",
-    "Shark Bait":      "🦈🩸  Alpha Fixer  &  File Converter  🩸🦈",
-    "Alien":           "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
-    "Noodle":          "🍜🥢  Alpha Fixer  &  File Converter  🥢🍜",
-    "Pancake":         "🥞🍯  Alpha Fixer  &  File Converter  🍯🥞",
+    "Mermaid":         "🧜🐚  Alpha & RGBA Adjuster  |  File Converter  🐚🧜",
+    "Shark Bait":      "🦈🩸  Alpha & RGBA Adjuster  |  File Converter  🩸🦈",
+    "Alien":           "🛸👽  Alpha & RGBA Adjuster  |  File Converter  👽🛸",
+    "Noodle":          "🍜🥢  Alpha & RGBA Adjuster  |  File Converter  🥢🍜",
+    "Pancake":         "🥞🍯  Alpha & RGBA Adjuster  |  File Converter  🍯🥞",
     # New hidden themes
-    "Candy Land":        "🍭🌈  Alpha Fixer  &  File Converter  🌈🍭",
-    "Zombie Apocalypse": "🧟💀  Alpha Fixer  &  File Converter  💀🧟",
-    "Dragon Fire":       "🐉🔥  Alpha Fixer  &  File Converter  🔥🐉",
-    "Bubblegum":         "🫧🍬  Alpha Fixer  &  File Converter  🍬🫧",
-    "Thunder Storm":     "⚡🌩  Alpha Fixer  &  File Converter  🌩⚡",
-    "Rose Gold":         "🌹✨  Alpha Fixer  &  File Converter  ✨🌹",
-    "Space Cat":         "🐱🚀  Alpha Fixer  &  File Converter  🚀🐱",
-    "Magic Mushroom":    "🍄✨  Alpha Fixer  &  File Converter  ✨🍄",
-    "Abyssal Void":      "🕳🌑  Alpha Fixer  &  File Converter  🌑🕳",
-    "Spring Bloom":      "🌷🌿  Alpha Fixer  &  File Converter  🌿🌷",
-    "Gold Rush":         "💰✦  Alpha Fixer  &  File Converter  ✦💰",
-    "Nebula":            "🌌💫  Alpha Fixer  &  File Converter  💫🌌",
+    "Candy Land":        "🍭🌈  Alpha & RGBA Adjuster  |  File Converter  🌈🍭",
+    "Zombie Apocalypse": "🧟💀  Alpha & RGBA Adjuster  |  File Converter  💀🧟",
+    "Dragon Fire":       "🐉🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🐉",
+    "Bubblegum":         "🫧🍬  Alpha & RGBA Adjuster  |  File Converter  🍬🫧",
+    "Thunder Storm":     "⚡🌩  Alpha & RGBA Adjuster  |  File Converter  🌩⚡",
+    "Rose Gold":         "🌹✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌹",
+    "Space Cat":         "🐱🚀  Alpha & RGBA Adjuster  |  File Converter  🚀🐱",
+    "Magic Mushroom":    "🍄✨  Alpha & RGBA Adjuster  |  File Converter  ✨🍄",
+    "Abyssal Void":      "🕳🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🕳",
+    "Spring Bloom":      "🌷🌿  Alpha & RGBA Adjuster  |  File Converter  🌿🌷",
+    "Gold Rush":         "💰✦  Alpha & RGBA Adjuster  |  File Converter  ✦💰",
+    "Nebula":            "🌌💫  Alpha & RGBA Adjuster  |  File Converter  💫🌌",
+    # Animal themes
+    "Purrfect Cats":     "🐱🧶  Alpha & RGBA Adjuster  |  File Converter  🧶🐱",
+    "Good Dog":          "🐶🦴  Alpha & RGBA Adjuster  |  File Converter  🦴🐶",
+    # Newest preset themes
+    "Anime":             "🌸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌸",
+    "Waifu":             "💖🌸  Alpha & RGBA Adjuster  |  File Converter  🌸💖",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -1652,12 +2053,18 @@ THEME_STATUS_MESSAGES = {
     "Spring Bloom":      "🌷  Spring Bloom — Fresh pixels, fresh start.",
     "Gold Rush":         "💰  Gold Rush — Pixel gold guaranteed.",
     "Nebula":            "🌌  Nebula — Stardust and secrets.",
+    # Animal themes
+    "Purrfect Cats":     "🐱  Purrfect Cats — Meow, your pixels look great.",
+    "Good Dog":          "🐶  Good Dog — Such image. Very convert. Wow.",
+    # Newest preset themes
+    "Anime":             "🌸  Anime — Kawaii conversions unlocked!",
+    "Waifu":             "💖  Waifu — Your perfect pixel companion.",
 }
 
 
 def get_theme_banner(theme_name: str) -> str:
     """Return the header banner text for *theme_name*, falling back to default."""
-    return THEME_BANNER.get(theme_name, "🐼  Alpha Fixer  &  File Converter")
+    return THEME_BANNER.get(theme_name, "🐼  Alpha & RGBA Adjuster  |  File Converter")
 
 
 # Single representative emoji for each theme — used for the animated banner icon.
@@ -1702,6 +2109,14 @@ THEME_ICON: dict[str, str] = {
     "Spring Bloom":      "🌷",
     "Gold Rush":         "💰",
     "Nebula":            "🌌",
+    "Purrfect Cats":     "🐱",
+    "Good Dog":          "🐶",
+    # Newest themes
+    "Anime":             "🌸",
+    "Waifu":             "💖",
+    "Snake Pit":         "🐍",
+    "Ghost":             "👻",
+    "Slime":             "🟢",
 }
 
 
@@ -1759,6 +2174,14 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
     "Spring Bloom":     ("🌷🖼", "🌷🔄", "🌷📋"),
     "Gold Rush":        ("💰🖼", "💰🔄", "💰📋"),
     "Nebula":           ("🌌🖼", "🌌🔄", "🌌📋"),
+    "Purrfect Cats":    ("🐱🖼", "🐱🔄", "🐱📋"),
+    "Good Dog":         ("🐶🖼", "🐶🔄", "🐶📋"),
+    # Newest themes
+    "Anime":            ("🌸🖼", "🌸🔄", "🌸📋"),
+    "Waifu":            ("💖🖼", "💖🔄", "💖📋"),
+    "Snake Pit":        ("🐍🖼", "🐍🔄", "🐍📋"),
+    "Ghost":            ("👻🖼", "👻🔄", "👻📋"),
+    "Slime":            ("🟢🖼", "🟢🔄", "🟢📋"),
 }
 
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
@@ -1774,7 +2197,7 @@ def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
     """
     e = _THEME_TAB_EMOJIS.get(theme_name, _DEFAULT_TAB_EMOJIS)
     return (
-        f"{e[0]}  Alpha Fixer",
+        f"{e[0]}  Alpha & RGBA Adjuster",
         f"{e[1]}  Converter",
         f"{e[2]}  History",
     )
@@ -1788,274 +2211,274 @@ THEME_BANNER_FRAMES: dict[str, list[str]] = {
     # Original preset themes
     # ---------------------------------------------------------------------------
     "Panda Dark": [
-        "🐼  Alpha Fixer  &  File Converter",
-        "🐼🎋  Alpha Fixer  &  File Converter  🎋🐼",
-        "🐼✨  Alpha Fixer  &  File Converter  ✨🐼",
+        "🐼  Alpha & RGBA Adjuster  |  File Converter",
+        "🐼🎋  Alpha & RGBA Adjuster  |  File Converter  🎋🐼",
+        "🐼✨  Alpha & RGBA Adjuster  |  File Converter  ✨🐼",
     ],
     "Panda Light": [
-        "🐼  Alpha Fixer  &  File Converter  🤍",
-        "🤍🐼  Alpha Fixer  &  File Converter  🐼🤍",
-        "🐼🌸🤍  Alpha Fixer  &  File Converter  🤍🌸🐼",
+        "🐼  Alpha & RGBA Adjuster  |  File Converter  🤍",
+        "🤍🐼  Alpha & RGBA Adjuster  |  File Converter  🐼🤍",
+        "🐼🌸🤍  Alpha & RGBA Adjuster  |  File Converter  🤍🌸🐼",
     ],
     "Neon Panda": [
-        "⚡🐼  Alpha Fixer  &  File Converter  🐼⚡",
-        "🐼⚡🌟  Alpha Fixer  &  File Converter  🌟⚡🐼",
-        "⚡✦🐼  Alpha Fixer  &  File Converter  🐼✦⚡",
+        "⚡🐼  Alpha & RGBA Adjuster  |  File Converter  🐼⚡",
+        "🐼⚡🌟  Alpha & RGBA Adjuster  |  File Converter  🌟⚡🐼",
+        "⚡✦🐼  Alpha & RGBA Adjuster  |  File Converter  🐼✦⚡",
     ],
     "Gore": [
-        "🩸  Alpha Fixer  &  File Converter  🩸",
-        "💀🩸  Alpha Fixer  &  File Converter  🩸💀",
-        "🩸☠💀  Alpha Fixer  &  File Converter  💀☠🩸",
+        "🩸  Alpha & RGBA Adjuster  |  File Converter  🩸",
+        "💀🩸  Alpha & RGBA Adjuster  |  File Converter  🩸💀",
+        "🩸☠💀  Alpha & RGBA Adjuster  |  File Converter  💀☠🩸",
     ],
     "Bat Cave": [
-        "🦇🌙💜  Alpha Fixer  &  File Converter  💜🌙🦇",
-        "🌙🦇  Alpha Fixer  &  File Converter  🦇🌙",
-        "💜🦇🌙  Alpha Fixer  &  File Converter  🌙🦇💜",
+        "🦇🌙💜  Alpha & RGBA Adjuster  |  File Converter  💜🌙🦇",
+        "🌙🦇  Alpha & RGBA Adjuster  |  File Converter  🦇🌙",
+        "💜🦇🌙  Alpha & RGBA Adjuster  |  File Converter  🌙🦇💜",
     ],
     "Rainbow Chaos": [
-        "🌈  Alpha Fixer  &  File Converter  🌈",
-        "🌈🦄  Alpha Fixer  &  File Converter  🦄🌈",
-        "🌈✨🦄  Alpha Fixer  &  File Converter  🦄✨🌈",
+        "🌈  Alpha & RGBA Adjuster  |  File Converter  🌈",
+        "🌈🦄  Alpha & RGBA Adjuster  |  File Converter  🦄🌈",
+        "🌈✨🦄  Alpha & RGBA Adjuster  |  File Converter  🦄✨🌈",
     ],
     "Otter Cove": [
-        "🦦🤘  Alpha Fixer  &  File Converter  🤘🦦",
-        "🤘🦦🐟  Alpha Fixer  &  File Converter  🐟🦦🤘",
-        "🦦💧🤘  Alpha Fixer  &  File Converter  🤘💧🦦",
+        "🦦🤘  Alpha & RGBA Adjuster  |  File Converter  🤘🦦",
+        "🤘🦦🐟  Alpha & RGBA Adjuster  |  File Converter  🐟🦦🤘",
+        "🦦💧🤘  Alpha & RGBA Adjuster  |  File Converter  🤘💧🦦",
     ],
     "Galaxy": [
-        "✦  Alpha Fixer  &  File Converter  ✦",
-        "⭐✦  Alpha Fixer  &  File Converter  ✦⭐",
-        "✦🌌⭐  Alpha Fixer  &  File Converter  ⭐🌌✦",
+        "✦  Alpha & RGBA Adjuster  |  File Converter  ✦",
+        "⭐✦  Alpha & RGBA Adjuster  |  File Converter  ✦⭐",
+        "✦🌌⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌌✦",
     ],
     "Galaxy Otter": [
-        "🦦✦  Alpha Fixer  &  File Converter  ✦🦦",
-        "✦🦦⭐  Alpha Fixer  &  File Converter  ⭐🦦✦",
-        "🦦🌌✦  Alpha Fixer  &  File Converter  ✦🌌🦦",
+        "🦦✦  Alpha & RGBA Adjuster  |  File Converter  ✦🦦",
+        "✦🦦⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🦦✦",
+        "🦦🌌✦  Alpha & RGBA Adjuster  |  File Converter  ✦🌌🦦",
     ],
     "Goth": [
-        "💀  Alpha Fixer  &  File Converter  💀",
-        "💀🕷  Alpha Fixer  &  File Converter  🕷💀",
-        "💀🖤🕷  Alpha Fixer  &  File Converter  🕷🖤💀",
+        "💀  Alpha & RGBA Adjuster  |  File Converter  💀",
+        "💀🕷  Alpha & RGBA Adjuster  |  File Converter  🕷💀",
+        "💀🖤🕷  Alpha & RGBA Adjuster  |  File Converter  🕷🖤💀",
     ],
     "Volcano": [
-        "🌋  Alpha Fixer  &  File Converter  🔥",
-        "🔥🌋  Alpha Fixer  &  File Converter  🌋🔥",
-        "🌋💥🔥  Alpha Fixer  &  File Converter  🔥💥🌋",
+        "🌋  Alpha & RGBA Adjuster  |  File Converter  🔥",
+        "🔥🌋  Alpha & RGBA Adjuster  |  File Converter  🌋🔥",
+        "🌋💥🔥  Alpha & RGBA Adjuster  |  File Converter  🔥💥🌋",
     ],
     "Arctic": [
-        "❄  Alpha Fixer  &  File Converter  ❄",
-        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
-        "❄✦🧊  Alpha Fixer  &  File Converter  🧊✦❄",
+        "❄  Alpha & RGBA Adjuster  |  File Converter  ❄",
+        "❄🧊  Alpha & RGBA Adjuster  |  File Converter  🧊❄",
+        "❄✦🧊  Alpha & RGBA Adjuster  |  File Converter  🧊✦❄",
     ],
     "Fairy Garden": [
-        "🧚✨🪄  Alpha Fixer  &  File Converter  🪄✨🧚",
-        "✨🌟🧚  Alpha Fixer  &  File Converter  🧚🌟✨",
-        "🪄💜✨  Alpha Fixer  &  File Converter  ✨💜🪄",
-        "🌸🧚🌟  Alpha Fixer  &  File Converter  🌟🧚🌸",
+        "🧚✨🪄  Alpha & RGBA Adjuster  |  File Converter  🪄✨🧚",
+        "✨🌟🧚  Alpha & RGBA Adjuster  |  File Converter  🧚🌟✨",
+        "🪄💜✨  Alpha & RGBA Adjuster  |  File Converter  ✨💜🪄",
+        "🌸🧚🌟  Alpha & RGBA Adjuster  |  File Converter  🌟🧚🌸",
     ],
     # ---------------------------------------------------------------------------
     # New preset themes
     # ---------------------------------------------------------------------------
     "Mermaid": [
-        "🧜🐚  Alpha Fixer  &  File Converter  🐚🧜",
-        "🐚🌊🧜  Alpha Fixer  &  File Converter  🧜🌊🐚",
-        "🧜🐠🐚  Alpha Fixer  &  File Converter  🐚🐠🧜",
-        "🌊🧜✨  Alpha Fixer  &  File Converter  ✨🧜🌊",
+        "🧜🐚  Alpha & RGBA Adjuster  |  File Converter  🐚🧜",
+        "🐚🌊🧜  Alpha & RGBA Adjuster  |  File Converter  🧜🌊🐚",
+        "🧜🐠🐚  Alpha & RGBA Adjuster  |  File Converter  🐚🐠🧜",
+        "🌊🧜✨  Alpha & RGBA Adjuster  |  File Converter  ✨🧜🌊",
     ],
     "Shark Bait": [
-        "🦈🩸  Alpha Fixer  &  File Converter  🩸🦈",
-        "🩸🦈💦  Alpha Fixer  &  File Converter  💦🦈🩸",
-        "🦈💥🩸  Alpha Fixer  &  File Converter  🩸💥🦈",
+        "🦈🩸  Alpha & RGBA Adjuster  |  File Converter  🩸🦈",
+        "🩸🦈💦  Alpha & RGBA Adjuster  |  File Converter  💦🦈🩸",
+        "🦈💥🩸  Alpha & RGBA Adjuster  |  File Converter  🩸💥🦈",
     ],
     "Alien": [
-        "🛸👽  Alpha Fixer  &  File Converter  👽🛸",
-        "👽🌌🛸  Alpha Fixer  &  File Converter  🛸🌌👽",
-        "🛸⭐👽  Alpha Fixer  &  File Converter  👽⭐🛸",
+        "🛸👽  Alpha & RGBA Adjuster  |  File Converter  👽🛸",
+        "👽🌌🛸  Alpha & RGBA Adjuster  |  File Converter  🛸🌌👽",
+        "🛸⭐👽  Alpha & RGBA Adjuster  |  File Converter  👽⭐🛸",
     ],
     "Noodle": [
-        "🍜🥢  Alpha Fixer  &  File Converter  🥢🍜",
-        "🥢🍜♨  Alpha Fixer  &  File Converter  ♨🍜🥢",
-        "🍜🫕🥢  Alpha Fixer  &  File Converter  🥢🫕🍜",
+        "🍜🥢  Alpha & RGBA Adjuster  |  File Converter  🥢🍜",
+        "🥢🍜♨  Alpha & RGBA Adjuster  |  File Converter  ♨🍜🥢",
+        "🍜🫕🥢  Alpha & RGBA Adjuster  |  File Converter  🥢🫕🍜",
     ],
     "Pancake": [
-        "🥞🍯  Alpha Fixer  &  File Converter  🍯🥞",
-        "🥞🧈🍯  Alpha Fixer  &  File Converter  🍯🧈🥞",
-        "🥞💛🍯  Alpha Fixer  &  File Converter  🍯💛🥞",
+        "🥞🍯  Alpha & RGBA Adjuster  |  File Converter  🍯🥞",
+        "🥞🧈🍯  Alpha & RGBA Adjuster  |  File Converter  🍯🧈🥞",
+        "🥞💛🍯  Alpha & RGBA Adjuster  |  File Converter  🍯💛🥞",
     ],
     # ---------------------------------------------------------------------------
     # Hidden / unlockable themes
     # ---------------------------------------------------------------------------
     "Secret Skeleton": [
-        "☠  Alpha Fixer  &  File Converter  ☠",
-        "☠💀  Alpha Fixer  &  File Converter  💀☠",
-        "💀☠🦴  Alpha Fixer  &  File Converter  🦴☠💀",
+        "☠  Alpha & RGBA Adjuster  |  File Converter  ☠",
+        "☠💀  Alpha & RGBA Adjuster  |  File Converter  💀☠",
+        "💀☠🦴  Alpha & RGBA Adjuster  |  File Converter  🦴☠💀",
     ],
     "Secret Sakura": [
-        "🌸  Alpha Fixer  &  File Converter  🌸",
-        "🌸🌺  Alpha Fixer  &  File Converter  🌺🌸",
-        "🌺🌸🌷  Alpha Fixer  &  File Converter  🌷🌸🌺",
+        "🌸  Alpha & RGBA Adjuster  |  File Converter  🌸",
+        "🌸🌺  Alpha & RGBA Adjuster  |  File Converter  🌺🌸",
+        "🌺🌸🌷  Alpha & RGBA Adjuster  |  File Converter  🌷🌸🌺",
     ],
     "Deep Ocean": [
-        "🌊🦑  Alpha Fixer  &  File Converter  🦑🌊",
-        "🦑🐙🌊  Alpha Fixer  &  File Converter  🌊🐙🦑",
-        "🌊🐠🦑  Alpha Fixer  &  File Converter  🦑🐠🌊",
-        "🐙🌊🐟  Alpha Fixer  &  File Converter  🐟🌊🐙",
+        "🌊🦑  Alpha & RGBA Adjuster  |  File Converter  🦑🌊",
+        "🦑🐙🌊  Alpha & RGBA Adjuster  |  File Converter  🌊🐙🦑",
+        "🌊🐠🦑  Alpha & RGBA Adjuster  |  File Converter  🦑🐠🌊",
+        "🐙🌊🐟  Alpha & RGBA Adjuster  |  File Converter  🐟🌊🐙",
     ],
     "Blood Moon": [
-        "🩸🌕  Alpha Fixer  &  File Converter  🌕🩸",
-        "🌕🩸🌑  Alpha Fixer  &  File Converter  🌑🩸🌕",
-        "🩸🌑💀  Alpha Fixer  &  File Converter  💀🌑🩸",
+        "🩸🌕  Alpha & RGBA Adjuster  |  File Converter  🌕🩸",
+        "🌕🩸🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🩸🌕",
+        "🩸🌑💀  Alpha & RGBA Adjuster  |  File Converter  💀🌑🩸",
     ],
     "Ice Cave": [
-        "❄🧊  Alpha Fixer  &  File Converter  🧊❄",
-        "🧊❄💎  Alpha Fixer  &  File Converter  💎❄🧊",
-        "❄✦🧊  Alpha Fixer  &  File Converter  🧊✦❄",
+        "❄🧊  Alpha & RGBA Adjuster  |  File Converter  🧊❄",
+        "🧊❄💎  Alpha & RGBA Adjuster  |  File Converter  💎❄🧊",
+        "❄✦🧊  Alpha & RGBA Adjuster  |  File Converter  🧊✦❄",
     ],
     "Cyber Otter": [
-        "🦦💻  Alpha Fixer  &  File Converter  💻🦦",
-        "💻🦦⚡  Alpha Fixer  &  File Converter  ⚡🦦💻",
-        "🦦✦💻  Alpha Fixer  &  File Converter  💻✦🦦",
+        "🦦💻  Alpha & RGBA Adjuster  |  File Converter  💻🦦",
+        "💻🦦⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡🦦💻",
+        "🦦✦💻  Alpha & RGBA Adjuster  |  File Converter  💻✦🦦",
     ],
     "Toxic Neon": [
-        "☢⚡  Alpha Fixer  &  File Converter  ⚡☢",
-        "⚡☢💚  Alpha Fixer  &  File Converter  💚☢⚡",
-        "☢✦⚡  Alpha Fixer  &  File Converter  ⚡✦☢",
+        "☢⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡☢",
+        "⚡☢💚  Alpha & RGBA Adjuster  |  File Converter  💚☢⚡",
+        "☢✦⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡✦☢",
     ],
     "Lava Cave": [
-        "🌋🔥  Alpha Fixer  &  File Converter  🔥🌋",
-        "🔥🌋💥  Alpha Fixer  &  File Converter  💥🌋🔥",
-        "🌋🔴🔥  Alpha Fixer  &  File Converter  🔥🔴🌋",
+        "🌋🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🌋",
+        "🔥🌋💥  Alpha & RGBA Adjuster  |  File Converter  💥🌋🔥",
+        "🌋🔴🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🔴🌋",
     ],
     "Sunset Beach": [
-        "🌅🏖  Alpha Fixer  &  File Converter  🏖🌅",
-        "🏖🌅🌊  Alpha Fixer  &  File Converter  🌊🌅🏖",
-        "🌅🌴🏖  Alpha Fixer  &  File Converter  🏖🌴🌅",
+        "🌅🏖  Alpha & RGBA Adjuster  |  File Converter  🏖🌅",
+        "🏖🌅🌊  Alpha & RGBA Adjuster  |  File Converter  🌊🌅🏖",
+        "🌅🌴🏖  Alpha & RGBA Adjuster  |  File Converter  🏖🌴🌅",
     ],
     "Midnight Forest": [
-        "🌲🌙  Alpha Fixer  &  File Converter  🌙🌲",
-        "🌙🌲🦉  Alpha Fixer  &  File Converter  🦉🌲🌙",
-        "🌲✨🌙  Alpha Fixer  &  File Converter  🌙✨🌲",
+        "🌲🌙  Alpha & RGBA Adjuster  |  File Converter  🌙🌲",
+        "🌙🌲🦉  Alpha & RGBA Adjuster  |  File Converter  🦉🌲🌙",
+        "🌲✨🌙  Alpha & RGBA Adjuster  |  File Converter  🌙✨🌲",
     ],
     "Candy Land": [
-        "🍭🌈  Alpha Fixer  &  File Converter  🌈🍭",
-        "🌈🍭🍬  Alpha Fixer  &  File Converter  🍬🍭🌈",
-        "🍭✨🌈  Alpha Fixer  &  File Converter  🌈✨🍭",
+        "🍭🌈  Alpha & RGBA Adjuster  |  File Converter  🌈🍭",
+        "🌈🍭🍬  Alpha & RGBA Adjuster  |  File Converter  🍬🍭🌈",
+        "🍭✨🌈  Alpha & RGBA Adjuster  |  File Converter  🌈✨🍭",
     ],
     "Zombie Apocalypse": [
-        "🧟💀  Alpha Fixer  &  File Converter  💀🧟",
-        "💀🧟🦠  Alpha Fixer  &  File Converter  🦠🧟💀",
-        "🧟☣💀  Alpha Fixer  &  File Converter  💀☣🧟",
+        "🧟💀  Alpha & RGBA Adjuster  |  File Converter  💀🧟",
+        "💀🧟🦠  Alpha & RGBA Adjuster  |  File Converter  🦠🧟💀",
+        "🧟☣💀  Alpha & RGBA Adjuster  |  File Converter  💀☣🧟",
     ],
     "Dragon Fire": [
-        "🐉🔥  Alpha Fixer  &  File Converter  🔥🐉",
-        "🔥🐉💥  Alpha Fixer  &  File Converter  💥🐉🔥",
-        "🐉🔥🌋  Alpha Fixer  &  File Converter  🌋🔥🐉",
+        "🐉🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🐉",
+        "🔥🐉💥  Alpha & RGBA Adjuster  |  File Converter  💥🐉🔥",
+        "🐉🔥🌋  Alpha & RGBA Adjuster  |  File Converter  🌋🔥🐉",
     ],
     "Bubblegum": [
-        "🫧🍬  Alpha Fixer  &  File Converter  🍬🫧",
-        "🍬🫧💜  Alpha Fixer  &  File Converter  💜🫧🍬",
-        "🫧✨🍬  Alpha Fixer  &  File Converter  🍬✨🫧",
+        "🫧🍬  Alpha & RGBA Adjuster  |  File Converter  🍬🫧",
+        "🍬🫧💜  Alpha & RGBA Adjuster  |  File Converter  💜🫧🍬",
+        "🫧✨🍬  Alpha & RGBA Adjuster  |  File Converter  🍬✨🫧",
     ],
     "Thunder Storm": [
-        "⚡🌩  Alpha Fixer  &  File Converter  🌩⚡",
-        "🌩⚡🌪  Alpha Fixer  &  File Converter  🌪⚡🌩",
-        "⚡🌑🌩  Alpha Fixer  &  File Converter  🌩🌑⚡",
+        "⚡🌩  Alpha & RGBA Adjuster  |  File Converter  🌩⚡",
+        "🌩⚡🌪  Alpha & RGBA Adjuster  |  File Converter  🌪⚡🌩",
+        "⚡🌑🌩  Alpha & RGBA Adjuster  |  File Converter  🌩🌑⚡",
     ],
     "Rose Gold": [
-        "🌹✨  Alpha Fixer  &  File Converter  ✨🌹",
-        "✨🌹💫  Alpha Fixer  &  File Converter  💫🌹✨",
-        "🌹🌸✨  Alpha Fixer  &  File Converter  ✨🌸🌹",
+        "🌹✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌹",
+        "✨🌹💫  Alpha & RGBA Adjuster  |  File Converter  💫🌹✨",
+        "🌹🌸✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌸🌹",
     ],
     "Space Cat": [
-        "🐱🚀  Alpha Fixer  &  File Converter  🚀🐱",
-        "🚀🐱⭐  Alpha Fixer  &  File Converter  ⭐🐱🚀",
-        "🐱🌌🚀  Alpha Fixer  &  File Converter  🚀🌌🐱",
+        "🐱🚀  Alpha & RGBA Adjuster  |  File Converter  🚀🐱",
+        "🚀🐱⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🐱🚀",
+        "🐱🌌🚀  Alpha & RGBA Adjuster  |  File Converter  🚀🌌🐱",
     ],
     "Magic Mushroom": [
-        "🍄✨  Alpha Fixer  &  File Converter  ✨🍄",
-        "✨🍄🌟  Alpha Fixer  &  File Converter  🌟🍄✨",
-        "🍄🌈✨  Alpha Fixer  &  File Converter  ✨🌈🍄",
+        "🍄✨  Alpha & RGBA Adjuster  |  File Converter  ✨🍄",
+        "✨🍄🌟  Alpha & RGBA Adjuster  |  File Converter  🌟🍄✨",
+        "🍄🌈✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌈🍄",
     ],
     "Abyssal Void": [
-        "🕳🌑  Alpha Fixer  &  File Converter  🌑🕳",
-        "🌑🕳💜  Alpha Fixer  &  File Converter  💜🕳🌑",
-        "🕳✦🌑  Alpha Fixer  &  File Converter  🌑✦🕳",
+        "🕳🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🕳",
+        "🌑🕳💜  Alpha & RGBA Adjuster  |  File Converter  💜🕳🌑",
+        "🕳✦🌑  Alpha & RGBA Adjuster  |  File Converter  🌑✦🕳",
     ],
     "Spring Bloom": [
-        "🌷🌿  Alpha Fixer  &  File Converter  🌿🌷",
-        "🌿🌷🌸  Alpha Fixer  &  File Converter  🌸🌷🌿",
-        "🌷✨🌿  Alpha Fixer  &  File Converter  🌿✨🌷",
+        "🌷🌿  Alpha & RGBA Adjuster  |  File Converter  🌿🌷",
+        "🌿🌷🌸  Alpha & RGBA Adjuster  |  File Converter  🌸🌷🌿",
+        "🌷✨🌿  Alpha & RGBA Adjuster  |  File Converter  🌿✨🌷",
     ],
     "Gold Rush": [
-        "💰✦  Alpha Fixer  &  File Converter  ✦💰",
-        "✦💰⭐  Alpha Fixer  &  File Converter  ⭐💰✦",
-        "💰🌟✦  Alpha Fixer  &  File Converter  ✦🌟💰",
+        "💰✦  Alpha & RGBA Adjuster  |  File Converter  ✦💰",
+        "✦💰⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐💰✦",
+        "💰🌟✦  Alpha & RGBA Adjuster  |  File Converter  ✦🌟💰",
     ],
     "Nebula": [
-        "🌌💫  Alpha Fixer  &  File Converter  💫🌌",
-        "💫🌌✦  Alpha Fixer  &  File Converter  ✦🌌💫",
-        "🌌⭐💫  Alpha Fixer  &  File Converter  💫⭐🌌",
-        "💫🔮🌌  Alpha Fixer  &  File Converter  🌌🔮💫",
+        "🌌💫  Alpha & RGBA Adjuster  |  File Converter  💫🌌",
+        "💫🌌✦  Alpha & RGBA Adjuster  |  File Converter  ✦🌌💫",
+        "🌌⭐💫  Alpha & RGBA Adjuster  |  File Converter  💫⭐🌌",
+        "💫🔮🌌  Alpha & RGBA Adjuster  |  File Converter  🌌🔮💫",
     ],
     "Crystal Cave": [
-        "💎❄  Alpha Fixer  &  File Converter  ❄💎",
-        "✦💎🔷  Alpha Fixer  &  File Converter  🔷💎✦",
-        "❄💎✨  Alpha Fixer  &  File Converter  ✨💎❄",
-        "🔷✦💎  Alpha Fixer  &  File Converter  💎✦🔷",
+        "💎❄  Alpha & RGBA Adjuster  |  File Converter  ❄💎",
+        "✦💎🔷  Alpha & RGBA Adjuster  |  File Converter  🔷💎✦",
+        "❄💎✨  Alpha & RGBA Adjuster  |  File Converter  ✨💎❄",
+        "🔷✦💎  Alpha & RGBA Adjuster  |  File Converter  💎✦🔷",
     ],
     "Glitch": [
-        "📡⚡  Alpha Fixer  &  File Converter  ⚡📡",
-        "⚡📡💀  Alpha Fixer  &  File Converter  💀📡⚡",
-        "📡🔴⚡  Alpha Fixer  &  File Converter  ⚡🔴📡",
-        "⚡💜📡  Alpha Fixer  &  File Converter  📡💜⚡",
+        "📡⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡📡",
+        "⚡📡💀  Alpha & RGBA Adjuster  |  File Converter  💀📡⚡",
+        "📡🔴⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡🔴📡",
+        "⚡💜📡  Alpha & RGBA Adjuster  |  File Converter  📡💜⚡",
     ],
     "Wild West": [
-        "🤠⭐  Alpha Fixer  &  File Converter  ⭐🤠",
-        "⭐🤠🌵  Alpha Fixer  &  File Converter  🌵🤠⭐",
-        "🤠🌟⭐  Alpha Fixer  &  File Converter  ⭐🌟🤠",
-        "🌵⭐🤠  Alpha Fixer  &  File Converter  🤠⭐🌵",
+        "🤠⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🤠",
+        "⭐🤠🌵  Alpha & RGBA Adjuster  |  File Converter  🌵🤠⭐",
+        "🤠🌟⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌟🤠",
+        "🌵⭐🤠  Alpha & RGBA Adjuster  |  File Converter  🤠⭐🌵",
     ],
     "Pirate": [
-        "🏴‍☠️⚓  Alpha Fixer  &  File Converter  ⚓🏴‍☠️",
-        "⚓🏴‍☠️💀  Alpha Fixer  &  File Converter  💀🏴‍☠️⚓",
-        "🏴‍☠️⚔️⚓  Alpha Fixer  &  File Converter  ⚓⚔️🏴‍☠️",
-        "💀⚓🏴‍☠️  Alpha Fixer  &  File Converter  🏴‍☠️⚓💀",
+        "🏴‍☠️⚓  Alpha & RGBA Adjuster  |  File Converter  ⚓🏴‍☠️",
+        "⚓🏴‍☠️💀  Alpha & RGBA Adjuster  |  File Converter  💀🏴‍☠️⚓",
+        "🏴‍☠️⚔️⚓  Alpha & RGBA Adjuster  |  File Converter  ⚓⚔️🏴‍☠️",
+        "💀⚓🏴‍☠️  Alpha & RGBA Adjuster  |  File Converter  🏴‍☠️⚓💀",
     ],
     "Deep Space": [
-        "🛸🌑  Alpha Fixer  &  File Converter  🌑🛸",
-        "🌑🛸⭐  Alpha Fixer  &  File Converter  ⭐🛸🌑",
-        "🛸🪐🌑  Alpha Fixer  &  File Converter  🌑🪐🛸",
-        "⭐🌑🛸  Alpha Fixer  &  File Converter  🛸🌑⭐",
+        "🛸🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🛸",
+        "🌑🛸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🛸🌑",
+        "🛸🪐🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🪐🛸",
+        "⭐🌑🛸  Alpha & RGBA Adjuster  |  File Converter  🛸🌑⭐",
     ],
     "Witch's Brew": [
-        "🧙🫧  Alpha Fixer  &  File Converter  🫧🧙",
-        "🫧🧙🍄  Alpha Fixer  &  File Converter  🍄🧙🫧",
-        "🧙🌿🫧  Alpha Fixer  &  File Converter  🫧🌿🧙",
-        "🍄🫧🧙  Alpha Fixer  &  File Converter  🧙🫧🍄",
+        "🧙🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🧙",
+        "🫧🧙🍄  Alpha & RGBA Adjuster  |  File Converter  🍄🧙🫧",
+        "🧙🌿🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🌿🧙",
+        "🍄🫧🧙  Alpha & RGBA Adjuster  |  File Converter  🧙🫧🍄",
     ],
     "Lava Lamp": [
-        "🪔🔥  Alpha Fixer  &  File Converter  🔥🪔",
-        "🔥🪔🫧  Alpha Fixer  &  File Converter  🫧🪔🔥",
-        "🪔✨🔥  Alpha Fixer  &  File Converter  🔥✨🪔",
-        "🫧🔥🪔  Alpha Fixer  &  File Converter  🪔🔥🫧",
+        "🪔🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🪔",
+        "🔥🪔🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🪔🔥",
+        "🪔✨🔥  Alpha & RGBA Adjuster  |  File Converter  🔥✨🪔",
+        "🫧🔥🪔  Alpha & RGBA Adjuster  |  File Converter  🪔🔥🫧",
     ],
     "Coral Reef": [
-        "🪸🐠  Alpha Fixer  &  File Converter  🐠🪸",
-        "🐠🪸🌊  Alpha Fixer  &  File Converter  🌊🪸🐠",
-        "🪸🫧🐠  Alpha Fixer  &  File Converter  🐠🫧🪸",
-        "🌊🐠🪸  Alpha Fixer  &  File Converter  🪸🐠🌊",
+        "🪸🐠  Alpha & RGBA Adjuster  |  File Converter  🐠🪸",
+        "🐠🪸🌊  Alpha & RGBA Adjuster  |  File Converter  🌊🪸🐠",
+        "🪸🫧🐠  Alpha & RGBA Adjuster  |  File Converter  🐠🫧🪸",
+        "🌊🐠🪸  Alpha & RGBA Adjuster  |  File Converter  🪸🐠🌊",
     ],
     "Storm Cloud": [
-        "⛈⚡  Alpha Fixer  &  File Converter  ⚡⛈",
-        "⚡⛈🌧  Alpha Fixer  &  File Converter  🌧⛈⚡",
-        "⛈💨⚡  Alpha Fixer  &  File Converter  ⚡💨⛈",
-        "🌧⚡⛈  Alpha Fixer  &  File Converter  ⛈⚡🌧",
+        "⛈⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡⛈",
+        "⚡⛈🌧  Alpha & RGBA Adjuster  |  File Converter  🌧⛈⚡",
+        "⛈💨⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡💨⛈",
+        "🌧⚡⛈  Alpha & RGBA Adjuster  |  File Converter  ⛈⚡🌧",
     ],
     "Golden Hour": [
-        "🌇✨  Alpha Fixer  &  File Converter  ✨🌇",
-        "✨🌇🌅  Alpha Fixer  &  File Converter  🌅🌇✨",
-        "🌇🌟✨  Alpha Fixer  &  File Converter  ✨🌟🌇",
-        "🌅✨🌇  Alpha Fixer  &  File Converter  🌇✨🌅",
+        "🌇✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌇",
+        "✨🌇🌅  Alpha & RGBA Adjuster  |  File Converter  🌅🌇✨",
+        "🌇🌟✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌟🌇",
+        "🌅✨🌇  Alpha & RGBA Adjuster  |  File Converter  🌇✨🌅",
     ],
 }
 
@@ -2311,7 +2734,7 @@ QPushButton {
 QPushButton:hover { border-color: #00ffff; }
 QTabBar::tab {
     border-radius: 16px 16px 0px 0px;
-    min-width: 110px;
+    min-width: 80px;
 }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
 QGroupBox { border-radius: 14px; }
@@ -2737,7 +3160,7 @@ QPushButton {
 QPushButton:hover { border-color: #ff88cc; }
 QLineEdit, QComboBox, QSpinBox { border-radius: 16px; }
 QGroupBox { border-radius: 16px; border: 2px solid #ff44aa; }
-QTabBar::tab { border-radius: 16px 16px 0px 0px; min-width: 110px; }
+QTabBar::tab { border-radius: 16px 16px 0px 0px; min-width: 80px; }
 """
 
     # --------------------------------------------------------------- Zombie Apocalypse
@@ -2933,6 +3356,34 @@ QTabBar::tab { border-radius: 18px 18px 0px 0px; min-height: 32px; }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 14px; }
 """
 
+    # ----------------------------------------------------------------- Purrfect Cats
+    if name == "Purrfect Cats":
+        return """
+/* Purrfect Cats: warm rounded shapes, cosy cat vibes */
+QPushButton {
+    border-radius: 12px;
+    border-bottom: 3px solid #b05a1a;
+}
+QPushButton:hover { border-bottom-color: #e87a2a; }
+QGroupBox { border-radius: 10px; }
+QTabBar::tab { border-radius: 12px 12px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
+"""
+
+    # ----------------------------------------------------------------- Good Dog
+    if name == "Good Dog":
+        return """
+/* Good Dog: friendly rounded, warm golden */
+QPushButton {
+    border-radius: 10px;
+    border-bottom: 3px solid #996620;
+}
+QPushButton:hover { border-bottom-color: #cc9933; }
+QGroupBox { border-radius: 10px; }
+QTabBar::tab { border-radius: 10px 10px 0px 0px; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { border-radius: 10px; }
+"""
+
     return ""
 
 
@@ -3046,16 +3497,16 @@ QTabBar[objectName="qt_tabwidget_tabbar"] {{
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
-    padding: 8px 20px;
-    min-width: 90px;
-    min-height: 28px;
+    padding: 5px 14px;
+    min-width: 80px;
+    min-height: 22px;
     margin-right: 3px;
     border: 2px solid {t['border']};
     border-bottom: none;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 11px;
 }}
 QTabBar::tab:selected {{
     background: {t['tab_selected']};

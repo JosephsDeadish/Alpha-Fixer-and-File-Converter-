@@ -108,7 +108,7 @@ def edge_flood_fill(
 ) -> np.ndarray:
     """Return a boolean mask from *seed* that stops at strong edges.
 
-    Uses an iterative BFS (depth-first stack) so it never hits Python
+    Uses an iterative DFS (depth-first stack) so it never hits Python
     recursion limits on large images.
 
     Parameters
@@ -116,11 +116,22 @@ def edge_flood_fill(
     seed      : ``(x, y)`` pixel coordinate in image space (col, row).
     edge_map  : float32 (h, w) array from :func:`detect_edges`.
     threshold : pixels with edge strength >= threshold block expansion.
+                Must be in [0.0, 1.0].
 
     Returns
     -------
     bool ndarray, shape (h, w)
     """
+    if not (0.0 <= threshold <= 1.0):
+        import warnings
+        warnings.warn(
+            f"edge_flood_fill: threshold={threshold!r} is outside [0.0, 1.0]; "
+            "clamping to valid range.",
+            UserWarning,
+            stacklevel=2,
+        )
+        threshold = max(0.0, min(1.0, threshold))
+
     h, w = edge_map.shape
     x0, y0 = int(seed[0]), int(seed[1])
     result = np.zeros((h, w), dtype=bool)
@@ -165,7 +176,8 @@ def _dilate_mask(mask: np.ndarray, radius: int) -> np.ndarray:
     for _ in range(radius):
         padded = np.pad(result, 1, constant_values=False)
         result = (
-            padded[:-2, 1:-1] | padded[2:, 1:-1]
+            padded[1:-1, 1:-1]              # original pixels (keep existing set)
+            | padded[:-2, 1:-1] | padded[2:, 1:-1]
             | padded[1:-1, :-2] | padded[1:-1, 2:]
         )
     return result
@@ -250,18 +262,35 @@ def apply_selective_alpha(
     Returns
     -------
     A new RGBA PIL Image.
+
+    Raises
+    ------
+    ValueError
+        If ``zone_masks`` or ``zone_alphas`` do not each have exactly
+        :data:`NUM_ZONES` elements.
     """
-    out = img.convert("RGBA")
+    if len(zone_masks) != NUM_ZONES:
+        raise ValueError(
+            f"zone_masks must have exactly {NUM_ZONES} elements, "
+            f"got {len(zone_masks)}"
+        )
+    if len(zone_alphas) != NUM_ZONES:
+        raise ValueError(
+            f"zone_alphas must have exactly {NUM_ZONES} elements, "
+            f"got {len(zone_alphas)}"
+        )
+    out = img.convert("RGBA") if img.mode != "RGBA" else img
     try:
         arr = np.array(out, dtype=np.uint8)
-        # Apply from lowest priority to highest so zone 0 is written last
-        # and therefore wins on overlap.
+        # Apply from the highest zone index down to zone 0 so that zone 0 is
+        # written last and therefore wins on overlap (zone 0 has highest priority).
         for mask, alpha_val in zip(reversed(zone_masks), reversed(zone_alphas)):
             if mask is not None and mask.any():
                 arr[mask, 3] = np.uint8(np.clip(alpha_val, 0, 255))
         return Image.fromarray(arr, "RGBA")
     finally:
-        out.close()
+        if out is not img:
+            out.close()
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +312,17 @@ def composite_zones(
     Returns
     -------
     uint8 ndarray (h, w, 4) – blended composite.
+
+    Raises
+    ------
+    ValueError
+        If ``zone_masks`` does not have exactly :data:`NUM_ZONES` elements.
     """
+    if len(zone_masks) != NUM_ZONES:
+        raise ValueError(
+            f"zone_masks must have exactly {NUM_ZONES} elements, "
+            f"got {len(zone_masks)}"
+        )
     out = src_rgba.astype(np.float32, copy=True)
     for mask, (r, g, b, oa) in zip(zone_masks, ZONE_COLORS):
         if mask is None or not mask.any():

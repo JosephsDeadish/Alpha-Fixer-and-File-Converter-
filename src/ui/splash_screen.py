@@ -10,11 +10,10 @@ import math
 import webbrowser
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty
-from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QFontMetrics, QRadialGradient, QLinearGradient, QPen
+from PyQt6.QtCore import Qt, QTimer, QRect
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QRadialGradient, QLinearGradient, QPen
 from PyQt6.QtWidgets import QSplashScreen, QApplication
 from PyQt6.QtSvgWidgets import QSvgWidget
-from PyQt6.QtCore import QByteArray
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
@@ -33,9 +32,17 @@ class ThemeSplashScreen(QSplashScreen):
     HEIGHT = 300
 
     def __init__(self, settings) -> None:
-        # Build a blank pixmap – we paint everything ourselves
+        # Determine the device-pixel ratio of the primary screen so we can
+        # create a high-resolution pixmap for crisp HiDPI rendering.
+        screen = QApplication.primaryScreen()
+        self._dpr: float = screen.devicePixelRatio() if screen else 1.0
+
+        # Build a blank pixmap – we paint everything ourselves.
+        # Physical size = logical size × device-pixel ratio so the splash
+        # renders at full resolution on HiDPI / Retina displays.
         from PyQt6.QtGui import QPixmap
-        pix = QPixmap(self.WIDTH, self.HEIGHT)
+        pix = QPixmap(int(self.WIDTH * self._dpr), int(self.HEIGHT * self._dpr))
+        pix.setDevicePixelRatio(self._dpr)
         pix.fill(Qt.GlobalColor.transparent)
         super().__init__(pix)
 
@@ -58,7 +65,7 @@ class ThemeSplashScreen(QSplashScreen):
         self._theme_name = theme.get("name", "Panda Dark") if theme else "Panda Dark"
 
         # Banner text for the theme — use animated frames if available
-        from .theme_engine import get_theme_banner, get_theme_banner_frames
+        from .theme_engine import get_theme_banner_frames
         self._banner_frames = get_theme_banner_frames(self._theme_name)
         self._banner_frame_idx = 0
         self._banner = self._banner_frames[0]
@@ -111,7 +118,8 @@ class ThemeSplashScreen(QSplashScreen):
 
     def _repaint_pixmap(self) -> None:
         from PyQt6.QtGui import QPixmap
-        pix = QPixmap(self.WIDTH, self.HEIGHT)
+        pix = QPixmap(int(self.WIDTH * self._dpr), int(self.HEIGHT * self._dpr))
+        pix.setDevicePixelRatio(self._dpr)
         pix.fill(Qt.GlobalColor.transparent)
         self._paint_background(pix)
         self.setPixmap(pix)
@@ -160,7 +168,7 @@ class ThemeSplashScreen(QSplashScreen):
         title_font = QFont("Segoe UI", 22, QFont.Weight.Bold)
         p.setFont(title_font)
         p.setPen(self._text)
-        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Alpha Fixer & File Converter")
+        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Alpha & RGBA Adjuster  |  File Converter")
 
         # Theme banner / subtitle
         sub_font = QFont("Segoe UI", 11)
