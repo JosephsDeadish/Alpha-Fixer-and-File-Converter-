@@ -216,6 +216,7 @@ _NORMAL: dict[str, list[str]] = {
         "Themes change colors, button shapes, and enable unique click particle effects.",
         "Locked hidden themes show 🔓 when unlocked — earn them by clicking and processing files.",
         "You can create custom color themes using the color pickers in the Theme tab.",
+        "First time changing the theme unlocks the Candy Land 🍭 theme — just switch once!",
     ],
     "theme_color_btn": [
         "Click this color swatch to change that part of the theme's color palette.",
@@ -263,6 +264,8 @@ _NORMAL: dict[str, list[str]] = {
         "Patrons get early access to new hidden themes.",
         "Even $1/month helps keep the panda well-fed 🐼",
         "Visit patreon.com/c/DeadOnTheInside",
+        "First click unlocks the Rose Gold 🌹 theme — it's completely free!",
+        "One click = a free Rose Gold theme + a happy developer. Both great outcomes.",
     ],
     "help_btn": [
         "Open the Help menu: keyboard shortcuts, About, and settings export/import.",
@@ -466,6 +469,8 @@ _NORMAL: dict[str, list[str]] = {
         "Use the Trail Color button below to change the trail color.",
         "Trail is rendered on a transparent overlay that ignores clicks.",
         "Turn it on for extra visual flair — it's surprisingly satisfying.",
+        "First time enabling the trail unlocks Midnight Forest 🌲 — a free hidden theme!",
+        "Enable the trail once to get the Midnight Forest theme as a reward.",
     ],
     "trail_color": [
         "Click to pick the color for the mouse trail effect.",
@@ -1198,6 +1203,7 @@ _DUMBED: dict[str, list[str]] = {
         "Bat Cave makes bats fly across the screen. Because why not.",
         "Gore theme has blood splatter. It's... tasteful. Mostly.",
         "Rainbow Chaos will do things to your eyes. You've been warned.",
+        "First time you switch theme = free Candy Land 🍭 unlock. That's a reward for clicking a dropdown.",
     ],
     "theme_color_btn": [
         "Color swatch. Click it. Color picker opens. Pick a color. App changes. Wow.",
@@ -1255,6 +1261,7 @@ _DUMBED: dict[str, list[str]] = {
         "Think of it as a tip jar. For software. For a panda.",
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
+        "First click unlocks a secret Rose Gold 🌹 theme. It's free! Just click it!",
     ],
     "help_btn": [
         "Click here to open the Help menu. Shocking, I know.",
@@ -1458,6 +1465,7 @@ _DUMBED: dict[str, list[str]] = {
         "It follows your mouse and looks cool. That's the whole point.",
         "The color is set in the Trail Color picker below. Very logical.",
         "Turn it on. Wiggle your mouse. It's honestly quite pleasing.",
+        "First time enabling it unlocks a Midnight Forest 🌲 theme. Free! Check and uncheck it right now!",
     ],
     "trail_color": [
         "Click this to pick a pretty color for the trail. Color picker appears. Amazing.",
@@ -2274,6 +2282,10 @@ _VULGAR: dict[str, list[str]] = {
         "Mermaid theme: teal and more teal. Trident cursor. Ripple clicks. Underwater vibes.",
         "Alien theme: grey-green and eerie. UFO cursor. Tractor beam effects.",
         "Some themes are hidden until you unlock them. Keep clicking and converting. Secrets await.",
+        "Hidden themes unlock via milestones — total clicks, alpha fixes, conversions. Yes, really.",
+        "First time changing theme unlocks Candy Land 🍭. FREE THEME. Right now. This second. Change it.",
+        "There are over 50 themes. You will spend at least 20 minutes in this dropdown. We accept this.",
+        "Some themes have matching cursors, sounds, click effects, and trail styles. It's a whole vibe.",
     ],
     "theme_color_btn": [
         "Color swatch button. You click it, a color picker opens, you pick a color, the app changes. Simple fucking concept.",
@@ -2346,6 +2358,9 @@ _VULGAR: dict[str, list[str]] = {
         "Mouse trail: the feature that makes everyone who walks by ask 'wait, what is that?'",
         "Enable the trail, set a neon color, match it to your theme. Then be unproductive for 10 minutes.",
         "Trail enabled = every mouse movement is art. Trail disabled = boring cursor doing boring things.",
+        "FIRST ENABLE UNLOCKS MIDNIGHT FOREST 🌲. Turn the trail on ONCE and you get a free theme. Do it.",
+        "Checking this box once — just once! — gives you Midnight Forest for free. It's not a scam. It's a gift.",
+        "One checkbox. One free theme. The math is not complicated.",
     ],
     "trail_color": [
         "Pick the damn color for your trail. Click the button. Color picker appears. Simple.",
@@ -3130,6 +3145,10 @@ _VULGAR: dict[str, list[str]] = {
         "The developer spent actual months of their actual life building this ridiculous beautiful app. patreon.com/c/DeadOnTheInside — throw them a few bucks, you absolute cheapskate.",
         "Patreon support = more features, more themes, more everything. Good karma too.",
         "Link opens to DeadOnTheInside on Patreon. No payment required to follow. Just click.",
+        "FIRST CLICK UNLOCKS ROSE GOLD 🌹. Did you miss that? Clicking this button = a free theme. Do it RIGHT NOW.",
+        "Clicking this button once gives you the Rose Gold theme for free. That's a better deal than your streaming subscription.",
+        "The dev is a human person who built this for you. Click. Once. Free theme. No excuses.",
+        "One click, free theme, happy developer. That's a three-for-one deal. What are you waiting for.",
     ],
     "help_btn": [
         "Opens the Help menu. Shortcuts, About, Export/Import settings are all in there.",
@@ -3392,13 +3411,28 @@ _FALLBACK_NORMAL = ["Hover for more info.", "Check the docs for details.",
 _FALLBACK_DUMBED = ["It does a thing. Click it.", "Hover longer next time.",
                     "Looks important. Probably is.", "Just try clicking it.",
                     "Instructions unclear. Try again."]
-_FALLBACK_VULGAR = ["It's a button. Click the damn thing and find out what happens.",
-                    "No specific tip exists for this. Just click it. Stop overthinking.",
-                    "Figure it out yourself, genius. You've been doing great so far.",
-                    "This widget exists and it does something. Click it and join the rest of us.",
-                    "No tip written yet. The dev was probably tired. Click it anyway.",
-                    "Unknown widget. Unknown function. Known result: clicking it. Do it.",
-                    "Tip not found. Like your missing sock. Still functional. Still worth using.",]
+_FALLBACK_VULGAR = [
+    "It's a button. Click the damn thing and find out what happens.",
+    "No specific tip exists for this. Just click it. Stop overthinking.",
+    "Figure it out yourself, genius. You've been doing great so far.",
+    "This widget exists and it does something. Click it and join the rest of us.",
+    "No tip written yet. The dev was probably tired. Click it anyway.",
+    "Unknown widget. Unknown function. Known result: clicking it. Do it.",
+    "Tip not found. Like your missing sock. Still functional. Still worth using.",
+    "Why the fuck are you hovering here? Just click it and see what it does.",
+    "No tooltip for this one. We ran out of words. Shocking, we know.",
+    "Tip: this thing does stuff. Click it. Find out. It won't bite. Probably.",
+    "Holy shit, you found an untipped widget. Congratulations on your thorough investigation.",
+    "This button has been patiently waiting for someone to click it. That someone is you. Do it.",
+    "We were going to write a proper tip but then we said fuck it and left it blank. Here you are.",
+    "Look, if we documented EVERY widget the file would be 10 MB. Use your brain. Click it.",
+    "Undocumented. Like a government secret, except way less interesting and way more clickable.",
+    "At some point you just have to click and find out. Today is that point.",
+    "The dev forgot to write a tip here. They feel terrible about it. Or they don't. Hard to say.",
+    "This tooltip is a mystery wrapped in an enigma wrapped in a UI element. CLICK IT.",
+    "You've hovered here for like 3 full seconds. That's 3 seconds you could have spent clicking.",
+    "Genuinely have no idea how you found this one. Impressive. Still need you to click it.",
+]
 
 _MODE_TIPS = {
     "Normal":           (_NORMAL, _FALLBACK_NORMAL),
