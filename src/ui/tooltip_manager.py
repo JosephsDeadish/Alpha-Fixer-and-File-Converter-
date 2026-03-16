@@ -362,6 +362,13 @@ _NORMAL: dict[str, list[str]] = {
         "Errors can mean the file couldn't be opened or saved — check paths and formats.",
         "Counts reset when you clear history using the 'Clear All History' button.",
     ],
+    "history_search": [
+        "Type to filter history rows in real time — searches across all columns.",
+        "Enter a date, format name, or file name fragment to narrow the list.",
+        "The filter is case-insensitive. Type 'png' to see only PNG conversion sessions.",
+        "Clear the field to show all history entries again.",
+        "Click the × button on the right to clear the search quickly.",
+    ],
     "settings_theme_tab": [
         "The Theme tab: choose a preset theme or build your own custom color scheme.",
         "Click any color swatch to change that part of the app's palette — changes apply live.",
@@ -1325,6 +1332,13 @@ _DUMBED: dict[str, list[str]] = {
         "High error count = something is wrong. Low error count = well done you.",
         "Resets when you clear history. Very logical.",
         "Shows aggregate data, not per-run data. That's what the table above is for.",
+    ],
+    "history_search": [
+        "Type something here to filter the history list. It searches all columns.",
+        "Works in real time. As you type, rows that don't match disappear.",
+        "Clear the box to get all entries back.",
+        "Try typing a format like 'webp' or a date like '2026' to narrow it down.",
+        "The little × button clears the filter so everything shows again.",
     ],
     "settings_theme_tab": [
         "Theme tab. Pick colors. Make the app look like you want. Very self-explanatory.",
@@ -2923,6 +2937,17 @@ _VULGAR: dict[str, list[str]] = {
         "Zero errors in the summary? You're either brilliant or haven't processed much. Both are fine honestly.",
         "These totals represent actual work done. Look at them. Feel accomplished. You earned it.",
         "The summary doesn't judge you. It just counts. Silently. Without mercy. Like taxes.",
+    ],
+    "history_search": [
+        "Oh look, a search box! Type in it to filter history. I know, revolutionary fucking concept.",
+        "It searches ALL the columns. Time, format, file names — the whole fucking row. Just type.",
+        "Real-time filtering. Every character you type nukes the rows that don't match. Immediate feedback.",
+        "Type 'error' to see every session that fucked up. Useful if you enjoy suffering.",
+        "Clear this box and ALL your history comes shambling back from the shadow realm. Everything returns.",
+        "Type a date like '2026' or a format like 'PNG' and watch the irrelevant bullshit vanish.",
+        "This exists because scrolling through 50 history entries looking for one specific run is a special kind of hell.",
+        "The × button clears it. One click. It's fine. Your history is still there, just un-filtered.",
+        "Partial matches work. 'we' finds 'webp'. 'ps2' finds anything with PS2 in the preset name.",
     ],
     "settings_theme_tab": [
         "Theme tab. Colors. Presets. Custom schemes. Where the aesthetic decisions get made.",
