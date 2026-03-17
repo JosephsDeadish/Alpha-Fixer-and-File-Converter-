@@ -8026,3 +8026,251 @@ class TestRound35ThemeFlavorTooltips(unittest.TestCase):
         # The primary branch should set tip_text to the flavor value
         self.assertIn("flavor", surrounding,
                       "get_tip primary branch must use the 'flavor' variable")
+
+
+class TestRound36VulgarSAExpansion(unittest.TestCase):
+    """Round 36: all selective-alpha _VULGAR entries expanded to ≥8 variants."""
+
+    _TM_PATH = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py"
+    )
+
+    def _src(self) -> str:
+        with open(self._TM_PATH, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Helper: count entries for a key inside the _VULGAR block
+    # ------------------------------------------------------------------
+
+    def _vulgar_entry_count(self, key: str) -> int:
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        self.assertGreater(start_v, 0, "_VULGAR dict not found in tooltip_manager.py")
+        vulgar_chunk = src[start_v:]
+        k_start = vulgar_chunk.find(f'    "{key}": [')
+        if k_start < 0:
+            return 0
+        k_end = vulgar_chunk.find("    ],", k_start)
+        if k_end < 0:
+            return 0
+        block = vulgar_chunk[k_start : k_end + 6]
+        return block.count('        "')
+
+    # ------------------------------------------------------------------
+    # Individual key tests
+    # ------------------------------------------------------------------
+
+    def test_selective_alpha_tab_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("selective_alpha_tab")
+        self.assertGreaterEqual(count, 8,
+                                "selective_alpha_tab needs ≥8 _VULGAR entries")
+
+    def test_sa_open_btn_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_open_btn")
+        self.assertGreaterEqual(count, 8, "sa_open_btn needs ≥8 _VULGAR entries")
+
+    def test_sa_save_btn_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_save_btn")
+        self.assertGreaterEqual(count, 8, "sa_save_btn needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_freehand_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_freehand")
+        self.assertGreaterEqual(count, 8, "sa_tool_freehand needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_line_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_line")
+        self.assertGreaterEqual(count, 8, "sa_tool_line needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_rect_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_rect")
+        self.assertGreaterEqual(count, 8, "sa_tool_rect needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_ellipse_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_ellipse")
+        self.assertGreaterEqual(count, 8, "sa_tool_ellipse needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_fill_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_fill")
+        self.assertGreaterEqual(count, 8, "sa_tool_fill needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_polygon_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_polygon")
+        self.assertGreaterEqual(count, 8, "sa_tool_polygon needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_eraser_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_eraser")
+        self.assertGreaterEqual(count, 8, "sa_tool_eraser needs ≥8 _VULGAR entries")
+
+    def test_sa_close_poly_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_close_poly")
+        self.assertGreaterEqual(count, 8, "sa_close_poly needs ≥8 _VULGAR entries")
+
+    def test_sa_brush_spin_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_brush_spin")
+        self.assertGreaterEqual(count, 8, "sa_brush_spin needs ≥8 _VULGAR entries")
+
+    def test_sa_eraser_spin_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_eraser_spin")
+        self.assertGreaterEqual(count, 8, "sa_eraser_spin needs ≥8 _VULGAR entries")
+
+    def test_sa_autocorrect_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_autocorrect")
+        self.assertGreaterEqual(count, 8, "sa_autocorrect needs ≥8 _VULGAR entries")
+
+    def test_sa_zoom_in_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zoom_in")
+        self.assertGreaterEqual(count, 8, "sa_zoom_in needs ≥8 _VULGAR entries")
+
+    def test_sa_zoom_out_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zoom_out")
+        self.assertGreaterEqual(count, 8, "sa_zoom_out needs ≥8 _VULGAR entries")
+
+    def test_sa_zoom_fit_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zoom_fit")
+        self.assertGreaterEqual(count, 8, "sa_zoom_fit needs ≥8 _VULGAR entries")
+
+    def test_sa_show_all_zones_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_show_all_zones")
+        self.assertGreaterEqual(count, 8,
+                                "sa_show_all_zones needs ≥8 _VULGAR entries")
+
+    def test_sa_hide_all_zones_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_hide_all_zones")
+        self.assertGreaterEqual(count, 8,
+                                "sa_hide_all_zones needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_alpha_spin_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_alpha_spin")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_alpha_spin needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_select_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_select")
+        self.assertGreaterEqual(count, 8, "sa_zone_select needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_clear_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_clear")
+        self.assertGreaterEqual(count, 8, "sa_zone_clear needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_visibility_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_visibility")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_visibility needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_copy_mask_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_copy_mask")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_copy_mask needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_paste_mask_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_paste_mask")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_paste_mask needs ≥8 _VULGAR entries")
+
+    def test_sa_undo_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_undo")
+        self.assertGreaterEqual(count, 8, "sa_undo needs ≥8 _VULGAR entries")
+
+    def test_sa_redo_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_redo")
+        self.assertGreaterEqual(count, 8, "sa_redo needs ≥8 _VULGAR entries")
+
+    def test_sa_apply_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_apply")
+        self.assertGreaterEqual(count, 8, "sa_apply needs ≥8 _VULGAR entries")
+
+    def test_sa_undo_process_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_undo_process")
+        self.assertGreaterEqual(count, 8,
+                                "sa_undo_process needs ≥8 _VULGAR entries")
+
+    def test_sa_clear_all_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_clear_all")
+        self.assertGreaterEqual(count, 8, "sa_clear_all needs ≥8 _VULGAR entries")
+
+    def test_sa_canvas_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_canvas")
+        self.assertGreaterEqual(count, 8, "sa_canvas needs ≥8 _VULGAR entries")
+
+    def test_sa_status_lbl_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_status_lbl")
+        self.assertGreaterEqual(count, 8, "sa_status_lbl needs ≥8 _VULGAR entries")
+
+    # ------------------------------------------------------------------
+    # Spot-check content quality: new entries must have actual profanity
+    # ------------------------------------------------------------------
+
+    def test_sa_tool_freehand_new_entries_have_profanity(self):
+        """The expanded sa_tool_freehand block must reference Auto-Correct or chaos."""
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        chunk = src[start_v:]
+        k_start = chunk.find('    "sa_tool_freehand": [')
+        k_end = chunk.find("    ],", k_start)
+        block = chunk[k_start : k_end + 6].lower()
+        self.assertTrue(
+            "auto-correct" in block or "autocorrect" in block or "chaos" in block,
+            "sa_tool_freehand _VULGAR block must reference auto-correct or chaos",
+        )
+
+    def test_sa_apply_new_entries_emphasise_painting_alone_does_nothing(self):
+        """The expanded sa_apply block must stress that painting alone does nothing."""
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        chunk = src[start_v:]
+        k_start = chunk.find('    "sa_apply": [')
+        k_end = chunk.find("    ],", k_start)
+        block = chunk[k_start : k_end + 6].lower()
+        self.assertTrue(
+            "nothing" in block or "does nothing" in block or "alone" in block,
+            "sa_apply _VULGAR block must warn that painting without Apply does nothing",
+        )
+
+    def test_sa_undo_new_entries_mention_ctrl_z(self):
+        """The expanded sa_undo block must mention Ctrl+Z."""
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        chunk = src[start_v:]
+        k_start = chunk.find('    "sa_undo": [')
+        k_end = chunk.find("    ],", k_start)
+        block = chunk[k_start : k_end + 6]
+        self.assertIn("Ctrl+Z", block,
+                      "sa_undo _VULGAR block must contain Ctrl+Z shortcut hint")
+
+    def test_vulgar_sa_keys_total_count_is_32(self):
+        """Exactly 32 selective-alpha keys must exist in _VULGAR."""
+        import re
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        vulgar_chunk = src[start_v:]
+        sa_keys = re.findall(
+            r'^\s{4}\"(sa_[a-z_]+|selective_alpha_tab)\":\s*\[',
+            vulgar_chunk, re.MULTILINE
+        )
+        self.assertEqual(len(sa_keys), 32,
+                         f"Expected 32 sa_* keys in _VULGAR, found {len(sa_keys)}")
+
+    def test_vulgar_minimum_entry_count_is_at_least_6_for_all_keys(self):
+        """Every key in _VULGAR must have ≥6 entries after Round 36."""
+        import re, statistics
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        vulgar_chunk = src[start_v:]
+        keys = re.findall(r'^\s{4}\"([a-z_]+)\":\s*\[', vulgar_chunk, re.MULTILINE)
+        low_keys = []
+        for key in keys:
+            k_start = vulgar_chunk.find(f'    "{key}": [')
+            if k_start < 0:
+                continue
+            k_end = vulgar_chunk.find("    ],", k_start)
+            if k_end < 0:
+                continue
+            block = vulgar_chunk[k_start : k_end + 6]
+            count = block.count('        "')
+            if count < 6:
+                low_keys.append((key, count))
+        self.assertEqual(
+            low_keys, [],
+            f"Keys with <6 _VULGAR entries after Round 36: {low_keys}",
+        )

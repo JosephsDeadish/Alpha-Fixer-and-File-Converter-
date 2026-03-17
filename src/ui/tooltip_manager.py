@@ -3477,6 +3477,9 @@ _VULGAR: dict[str, list[str]] = {
         "This tab lets you assign different alpha values to different parts of your image. Pretty advanced stuff.",
         "Seven zones, each with its own colour and opacity level. More flexibility than you'll ever actually need.",
         "Draw regions, assign see-through levels, click Apply. Undo exists if you screw it up. Use it.",
+        "Holy shit, you can make DIFFERENT parts of your image have DIFFERENT transparency levels. Mind-blowing. I know.",
+        "This is the advanced tab. If you're scared, go back to the baby tools. No judgment. Okay, a little judgment.",
+        "Zone 1 for the background, Zone 2 for the foreground, Zones 3-7 for whatever unholy mess you're making.",
     ],
     "sa_open_btn": [
         "Open an image. Load the damn thing onto the canvas so you can start painting zones.",
@@ -3484,6 +3487,9 @@ _VULGAR: dict[str, list[str]] = {
         "Opening a new image nukes all your existing zones. Just so you know before you click.",
         "RGBA internal treatment. Alpha channel handled whether or not the source image had one.",
         "This is step one. You cannot do a single useful thing without clicking this first.",
+        "Click the fucking Open button. Load your image. That's literally step 1 of 3. You can do this.",
+        "No image loaded? The entire canvas tab is useless. Open something. Anything. Let's go.",
+        "It opens a file. Into the canvas. For painting zones onto. This shouldn't need explaining.",
     ],
     "sa_save_btn": [
         "Save the processed image. Grey until you actually click Apply, you impatient person.",
@@ -3491,6 +3497,9 @@ _VULGAR: dict[str, list[str]] = {
         "PNG output. Because PNG keeps alpha. We respect alpha here.",
         "Default name has '_selective_alpha' appended. Rename it if you hate it.",
         "Grey = you haven't Applied yet. Click Apply. Then this. In that order.",
+        "Still grey? You skipped Apply, didn't you? Classic. Go click Apply and come back.",
+        "It saves your shit to disk. Which is where shit needs to be to be useful. Two steps: Apply, Save.",
+        "Congratulations on making it to Save. Most people give up at Apply. You're doing great.",
     ],
     "sa_tool_freehand": [
         "Hold mouse, drag, paint zone colour wherever the hell you drag. Freehand. Classic chaos.",
@@ -3498,6 +3507,9 @@ _VULGAR: dict[str, list[str]] = {
         "Brush size controls stroke width. Big brush = fast coverage. Small = detail work.",
         "Auto-correct will clean up your wobbly-ass strokes if you enable the checkbox.",
         "A brush. You drag it. Zone gets painted. Not complicated. Do not overthink.",
+        "Your freehand looks like a seismic reading? Turn on Auto-Correct and it'll snap to edges like magic.",
+        "Hold, drag, release. That's it. You've been using brushes your whole life. This one paints transparency.",
+        "Messiest tool, most fun tool. Scribble first, regret never. Undo exists for a reason.",
     ],
     "sa_tool_line": [
         "Click, drag, release. Straight line. Geometry for people who can't draw straight.",
@@ -3505,6 +3517,9 @@ _VULGAR: dict[str, list[str]] = {
         "Rubber-band preview shows where the line lands before you commit. Nice touch.",
         "Auto-correct snaps line endpoints to nearby edges. Useful when precision matters.",
         "Straight line tool. For when freehand looks like your hand was shaking. Which it was.",
+        "A to B. Start to end. One clean line. Your wobbly freehand wrist was not made for this work.",
+        "Click and drag a straight-ass line across your image. The preview shows exactly where it'll land.",
+        "For slicing across a region in one stroke. Clean, efficient, no trembling. Unlike your freehand.",
     ],
     "sa_tool_rect": [
         "Drag corner-to-corner to fill a rectangle. A box. You know what a fucking box is.",
@@ -3512,6 +3527,9 @@ _VULGAR: dict[str, list[str]] = {
         "Preview dashed box shows before you release. Like a window selection. Familiar.",
         "Great for flat rectangular zones. Terrible for round things. Use Ellipse for those.",
         "Rectangle: efficient, reliable, the workhorse of zone selection. No shame using it.",
+        "Two corners, one drag, entire rectangle filled. This is not rocket science. It's a fucking box.",
+        "If your image region is roughly rectangular, this is the fastest tool in the shed. Use it. God.",
+        "Drag one corner to the opposite. The entire box fills. Dashed preview shows you exactly what's happening.",
     ],
     "sa_tool_ellipse": [
         "Drag the bounding box and watch an oval fill inside it. Ellipse = oval. That's it.",
@@ -3519,6 +3537,9 @@ _VULGAR: dict[str, list[str]] = {
         "Preview ellipse shows as a dashed shape while dragging. You see what you're getting.",
         "Round objects, coins, wheels, eyes, circular blobs — the ellipse tool is your friend.",
         "Ellipse: for when rectangles are too angular for your sophisticated artistic vision.",
+        "It's an oval. You drag a box, the oval fits inside. This is how ellipses work and always have.",
+        "Round things deserve round zones. Stop trying to fit circles into your rectangle zone, you animal.",
+        "Drag bounding box, oval appears, release to commit. The preview is a live dashed ellipse. Elegant.",
     ],
     "sa_tool_fill": [
         "Click anywhere and watch it flood-fill to the nearest strong edge. Glorious efficiency.",
@@ -3526,6 +3547,9 @@ _VULGAR: dict[str, list[str]] = {
         "Works best on high-contrast images with clear region boundaries. Low contrast = chaos.",
         "One click, entire region painted. Lazy? Yes. Efficient? Absolutely. Use it.",
         "If the fill leaks everywhere, your image doesn't have strong edges there. Not the tool's fault.",
+        "CLICK AND THE ENTIRE REGION FILLS. One. Single. Click. The laziest possible way to paint a zone.",
+        "The fill leaked into the next zone? Your image has weak edges there. That's on your image, not the tool.",
+        "High contrast images make this tool absurdly fast. Low contrast makes it leak like a broken pipe. Plan accordingly.",
     ],
     "sa_tool_polygon": [
         "Click for each vertex. Double-click the last one to close and fill. Polygon power.",
@@ -3533,6 +3557,9 @@ _VULGAR: dict[str, list[str]] = {
         "Press Esc to abort at any time. No shame. Happens to everyone.",
         "Close Polygon button works too if double-clicking feels too committal.",
         "For complex irregular shapes. When rectangles and ovals just won't cut it.",
+        "Click. Click. Click. Double-click. Done. A polygon appears. You're basically a goddamn vector artist.",
+        "The most powerful zone tool. Also the most demanding. Minimum 3 points or it won't close. Don't embarrass yourself.",
+        "Esc to bail at any time. No commitment until you double-click. Unlike your other life choices.",
     ],
     "sa_tool_eraser": [
         "Drag to erase zone paint. Removes from ALL zones simultaneously. No discrimination.",
@@ -3540,6 +3567,9 @@ _VULGAR: dict[str, list[str]] = {
         "Eraser size below controls the affected radius. Big = fast wipe. Small = precise removal.",
         "Use it to fix overlaps, clean up sloppy boundaries, or just nuke an entire region.",
         "After erasing, those pixels fall back to original alpha when you click Apply. Confirmed safe.",
+        "Cleans up your garbage painting. No zone preference — it erases all of them under the cursor. A true equal-opportunity destroyer.",
+        "Made a mistake? Drag the eraser over it. All zones under the cursor get wiped. Instantly. Beautifully.",
+        "The eraser is the great equaliser. Doesn't care which zone you painted it in. It just erases. Like consequences.",
     ],
     "sa_close_poly": [
         "Close the polygon you're halfway through drawing. Commits and fills the shape.",
@@ -3547,6 +3577,9 @@ _VULGAR: dict[str, list[str]] = {
         "Same as double-clicking the last point. Button version for the less confident.",
         "Auto-correct runs on the boundary if enabled. Snaps to nearby edges.",
         "Only visible when Polygon tool is active. Gone when you switch tools. It knows.",
+        "If double-clicking feels too stressful, press this instead. Same result. No judgment.",
+        "Three points minimum. Two-point 'polygon' isn't a polygon, it's a line, and it refuses to close.",
+        "Commits and fills in one click. This is the 'I'm done placing points now' button. Click wisely.",
     ],
     "sa_brush_spin": [
         "Brush radius in image pixels. Bigger = fatter stroke. Smaller = precision line work.",
@@ -3554,6 +3587,9 @@ _VULGAR: dict[str, list[str]] = {
         "1 = hair-thin. 200 = paint roller. Most people want somewhere sensibly in between.",
         "Does NOT affect the eraser. Eraser has its own goddamn size spinbox right below.",
         "The preview circle updates live on the canvas as you change the value. No surprises.",
+        "Crank it up for large regions, dial it down for edges. It's called brush SIZE for a reason.",
+        "The little circle on the canvas shows exactly how big your brush is before you paint. Use that information.",
+        "Radius 1 for surgical precision. Radius 100 for 'I'll just roughly cover this whole area'. Pick appropriately.",
     ],
     "sa_eraser_spin": [
         "Eraser radius. Bigger = erase more area at once. Smaller = surgical precision.",
@@ -3561,6 +3597,9 @@ _VULGAR: dict[str, list[str]] = {
         "A dashed white circle on the canvas shows the eraser radius when Eraser is active.",
         "1 = tiny correction eraser. 200 = scorched-earth zone wipe. Both valid.",
         "Eraser size spinbox. It controls the eraser. The eraser erases. The size controls how much.",
+        "Big eraser for big mistakes. Small eraser for small mistakes. Some of us need the big one.",
+        "Separate from the brush size because erasing and painting are not the same fucking operation.",
+        "Crank this to 200 and you can wipe an entire zone's worth of paint in three angry drag strokes.",
     ],
     "sa_autocorrect": [
         "Check this to have the app automatically fix your terrible freehand strokes. You're welcome.",
@@ -3568,6 +3607,9 @@ _VULGAR: dict[str, list[str]] = {
         "No nearby edges? Nothing changes. The algorithm isn't psychic, just helpful.",
         "Edge map is precomputed when the image loads. Fast snapping, no waiting.",
         "Try it. Draw a rough stroke near an edge and watch it snap into shape. Pretty satisfying.",
+        "Can't draw straight? Can't stay inside the lines? Auto-correct judges you silently but fixes it anyway.",
+        "Strokes snap to image edges after you release. The edge map was built when you loaded the image. It's instant.",
+        "The cheat code for people whose hands shake. No shame. All benefit. Turn it on.",
     ],
     "sa_zoom_in": [
         "Zoom in. Get uncomfortably close to your image pixels. Detail mode activated.",
@@ -3575,6 +3617,9 @@ _VULGAR: dict[str, list[str]] = {
         "Max 20× zoom. Beyond that the app politely declines your request.",
         "Pan while zoomed using middle-mouse drag or Alt+left-drag. Navigate freely.",
         "Zoom in + tiny brush = precision zone painting. The pro workflow. Use it.",
+        "Get in there. See the individual pixels. Make choices at the microscopic level. Be the detail artist.",
+        "Max 20× because beyond that you're not painting zones, you're having an existential crisis.",
+        "Scroll wheel zooms too, in case this button is inconveniently located. Both methods, one result.",
     ],
     "sa_zoom_out": [
         "Zoom out. Regain perspective. See the full picture. Philosophical and practical.",
@@ -3582,6 +3627,9 @@ _VULGAR: dict[str, list[str]] = {
         "Minimum 10% zoom. Below that the app just says no and you accept it.",
         "Can't find your image? You zoomed too far. This button un-zooms you.",
         "Fit button is faster if you want to jump all the way back to normal. One click.",
+        "Zoomed in too deep and now everything is a giant blur of pixels? This button saves you.",
+        "Zoom out until you can see the whole image. Then make some goddamn decisions about your zones.",
+        "10% minimum zoom. Because below that you'd just see a blurry nothing and accomplish absolutely shit.",
     ],
     "sa_zoom_fit": [
         "Reset zoom and pan. See the whole damn image. Back to sanity.",
@@ -3589,6 +3637,9 @@ _VULGAR: dict[str, list[str]] = {
         "Resets both zoom level and pan offset simultaneously. Full reset. One click.",
         "Can't see the whole image? Can't find it off-screen? Click this. Done.",
         "1× zoom, centred, everything visible. The 'I give up navigating' button. No shame.",
+        "The nuclear reset for your viewport. Zoom gone, pan gone, back to the full image like it never happened.",
+        "Lost your image somewhere off-screen while panning? Press this. Crisis averted. You're welcome.",
+        "One click and everything is centred and fitted again. The digital equivalent of taking a deep breath.",
     ],
     "sa_show_all_zones": [
         "Shows all zone overlays at once. Every single coloured blob.",
@@ -3596,6 +3647,9 @@ _VULGAR: dict[str, list[str]] = {
         "All eye toggles flip to visible. Synchronised. Because why do them one at a time.",
         "Masks are completely unaffected. Just the visibility state changes.",
         "Press this when you want to see your work. Which, presumably, is often.",
+        "Every zone you hid comes back at once. Show All: the 'okay I was wrong to hide them' button.",
+        "Flips every single zone eye toggle to visible in one goddamn click. Efficiency. Look it up.",
+        "All zones, fully visible, instantly. No clicking through each one individually like an animal.",
     ],
     "sa_hide_all_zones": [
         "Hides every zone overlay simultaneously. All of them. Gone.",
@@ -3603,6 +3657,9 @@ _VULGAR: dict[str, list[str]] = {
         "Useful for looking at the actual source image without paint blobs obstructing it.",
         "All eye toggles flip to off automatically. Consistent behaviour. Nice.",
         "Click Show All Zones when you're done peeking at the raw image.",
+        "One click, every coloured blob disappears. The image is clean. The zones are just… hiding. Like cowards.",
+        "Hides the visual overlays. Every single painted zone is invisible. The masks are still there. Still real.",
+        "Use this to check the source image without your zone blobs blocking the view. Then Show All to bring them back.",
     ],
     "sa_zone_alpha_spin": [
         "Alpha value for this zone. 0=fully transparent, 128=half-transparent, 255=solid.",
@@ -3610,6 +3667,9 @@ _VULGAR: dict[str, list[str]] = {
         "Each zone has its own alpha. That's the whole fucking point of this tool.",
         "Change it any time before Apply. Painting and alpha value are completely decoupled.",
         "PS2 sweet spot is 128. Full opacity is 255. 0 makes pixels invisible. Choose wisely.",
+        "The whole reason you're even on this tab. Different zones, different alpha values. That's the entire deal.",
+        "0 = invisible, 128 = ghost, 255 = solid. Where the magic number lands is your artistic decision.",
+        "You can change this AFTER painting. The alpha value isn't burned in until you hit Apply. Total flexibility.",
     ],
     "sa_zone_select": [
         "Select this zone to start painting into it. Activates the zone for all drawing tools.",
@@ -3617,6 +3677,9 @@ _VULGAR: dict[str, list[str]] = {
         "Switch zones any time without losing paint in the other zones.",
         "Button presses in when selected. Visual confirmation that you're in the right zone.",
         "Pick zone, paint zone, pick another zone, paint that. The whole workflow in a nutshell.",
+        "SELECT the zone. Then PAINT. If you paint without selecting, you're painting in the wrong zone. Classic mistake.",
+        "Zones 1 through 7 each have their own select button. Pick one. Only one is active at a time.",
+        "The active zone's select button stays pressed in. Visual indicator. Check it before every brushstroke.",
     ],
     "sa_zone_clear": [
         "Wipes this zone's mask entirely. Just this one. Scorched earth for one zone.",
@@ -3624,6 +3687,9 @@ _VULGAR: dict[str, list[str]] = {
         "Undoable. The main Undo button handles it. No reason to panic.",
         "Alpha value setting stays set after clearing. Only the mask gets nuked.",
         "Use this when a zone is a disaster and needs a complete repaint from scratch.",
+        "Completely wipes one zone's painting. Just this zone. The others keep their shit intact.",
+        "It's like a zone-specific 'undo everything' button. Your alpha value stays, your painting does not.",
+        "Don't be scared. It's undoable. Press Undo if you clear a zone and immediately regret it.",
     ],
     "sa_zone_visibility": [
         "The eye button. Hides or shows this zone's overlay. Simple.",
@@ -3631,6 +3697,9 @@ _VULGAR: dict[str, list[str]] = {
         "Hiding a zone overlay doesn't delete shit. The mask is preserved.",
         "Toggle off to see what's under the blob. Toggle on to see the blob again.",
         "If you want to check the source image under a painted zone, this is what you use.",
+        "The eye icon. Click it to make one zone's overlay invisible. The mask still exists. It's just shy.",
+        "Hiding a zone visually doesn't remove the paint. The mask is still there, it's just invisible. Ghost zone.",
+        "Toggle visibility per-zone. See exactly how each zone sits against the source image without the blob in the way.",
     ],
     "sa_zone_copy_mask": [
         "Copies this zone's mask to the clipboard. One zone's painted area, now duplicatable.",
@@ -3638,6 +3707,9 @@ _VULGAR: dict[str, list[str]] = {
         "One clipboard slot. Copy again and you lose the previous copy. Pay attention.",
         "Use this to apply the same painted pattern to multiple zones without repainting.",
         "Source zone is unchanged. Copying doesn't destroy the original.",
+        "Copies the zone's entire mask to clipboard. One copy slot. If you copy again, the old one's gone forever.",
+        "After copying, Paste Mask lights up on every other zone. Replicate your painting pattern without repainting it.",
+        "Same painted area, different zone, different alpha value. That's the killer use case for Copy/Paste Mask.",
     ],
     "sa_zone_paste_mask": [
         "Pastes the clipboard mask into this zone. Replaces everything here.",
@@ -3645,6 +3717,9 @@ _VULGAR: dict[str, list[str]] = {
         "Paste is undoable with the Undo drawing button.",
         "Full replacement. Not a merge. Everything in this zone gets replaced.",
         "Pasting into a zone doesn't affect any other zone. Targeted operation.",
+        "Grey? You haven't copied anything yet. Go copy a zone mask first. Then come back to this button.",
+        "Replaces this zone's entire mask with the clipboard contents. Not a merge. A full replacement.",
+        "One zone's pattern, infinite zones worth of application potential. Copy once, paste everywhere.",
     ],
     "sa_undo": [
         "Undo the last drawing action. Ctrl+Z also works, you Ctrl+Z addict.",
@@ -3652,6 +3727,9 @@ _VULGAR: dict[str, list[str]] = {
         "Up to 50 steps stored. If 50 undos isn't enough, maybe commit more often.",
         "Does NOT undo Apply operations. That's the other undo button. Different things.",
         "Grey = nothing to undo. You've either done nothing or undone literally everything.",
+        "Ctrl+Z, you absolute conditioned reflex. Or just click this. Same result. No judgment.",
+        "50 undo steps. If you need more than 50 undos on a single canvas session, seek help.",
+        "Drawing undo only. Apply operations have their own separate undo stack. Different button, different system.",
     ],
     "sa_redo": [
         "Redo what you just undid. Ctrl+Y or Ctrl+Shift+Z because why have just one shortcut.",
@@ -3659,6 +3737,9 @@ _VULGAR: dict[str, list[str]] = {
         "Changed your mind about undoing? This button un-undoes it. Language is wild.",
         "Only covers drawing actions. Not Apply. Two completely separate undo systems.",
         "Grey = nothing to redo. Draw something new. Or just undo and redo forever. Your call.",
+        "Redo stack evaporates the moment you paint anything new. Make your redo decisions before your brush decisions.",
+        "Un-undo. Re-undo. The action that undoes the undo. The English language was not ready for digital art.",
+        "Ctrl+Y or Ctrl+Shift+Z. Two shortcuts for the same thing. Because the redo key is a goddamn war crime of standards.",
     ],
     "sa_apply": [
         "THE button. Actually does the thing. Applies zone alpha values to the image. Finally.",
@@ -3666,6 +3747,9 @@ _VULGAR: dict[str, list[str]] = {
         "Nothing actually happens to the image until you click this. Painting does nothing alone.",
         "Multiple Applies tracked. Undo Process handles reverting. Stack of results.",
         "After Apply, Save button wakes up. One step closer to being done with this. Click it.",
+        "This is when the magic happens. All your painting, all your alpha values — committed to the image. Click it.",
+        "Painting without clicking Apply is like writing without saving. All that work means nothing until you hit this.",
+        "Multiple Applies are tracked. Undo Process can step back through them. You're not trapped. But do press Apply.",
     ],
     "sa_undo_process": [
         "Undoes the last Apply operation. Different from drawing Undo. Different system.",
@@ -3673,6 +3757,9 @@ _VULGAR: dict[str, list[str]] = {
         "Grey = only one Apply done so far or none at all. Need 2+ to undo.",
         "Up to 50 Apply results tracked. For the extremely, almost pathologically indecisive.",
         "Revert Apply while keeping all your zone painting intact. Best of both worlds.",
+        "Reverts the image to before your last Apply. Your zone masks are untouched. Best of both worlds.",
+        "Applied the wrong alpha? Click this. Image reverts. Painting stays. Adjust values. Apply again. Easy.",
+        "Not the same as drawing Undo. Those are two separate systems and they don't talk to each other. At all.",
     ],
     "sa_clear_all": [
         "NUKES all zone masks simultaneously. Every zone. All of it. Gone.",
@@ -3680,6 +3767,9 @@ _VULGAR: dict[str, list[str]] = {
         "UNDOABLE. Before you panic: undoable. Main Undo button saves you here.",
         "Use this when the zone situation is beyond saving and you need a fresh start.",
         "All 7 zones cleared in one goddamn click. The nuclear option for zone masks.",
+        "Every zone. Every mask. Gone in one click. The alpha values stay. The painting does not. Scorched earth.",
+        "The 'I've made a terrible mess and I accept that and I'm starting over' button. Completely valid choice.",
+        "Clears ALL zones simultaneously. Not recoverable by zone-level undo. Use the main Undo button immediately if you panic.",
     ],
     "sa_canvas": [
         "This is where you paint. The whole point of this tab. Paint on this.",
@@ -3687,6 +3777,9 @@ _VULGAR: dict[str, list[str]] = {
         "Coloured blobs = zone masks you've painted. Grey checkers = transparent background.",
         "Pick a tool, pick a zone, drag across the canvas. That is the entire workflow.",
         "The canvas. Sacred. Awaiting your perfectly placed zone masks. Don't disappoint it.",
+        "YOU PAINT HERE. The tools paint here. The zones live here. This is the whole show.",
+        "Grey checkerboard = transparency. Coloured blobs = zones. You're basically an alpha painter now. Congrats.",
+        "Zoom in with scroll wheel. Pan with middle-drag. Paint with left-drag. Undo with Ctrl+Z. That's it.",
     ],
     "sa_status_lbl": [
         "Status bar. Tells you what the hell is currently happening at all times.",
@@ -3694,6 +3787,9 @@ _VULGAR: dict[str, list[str]] = {
         "Zoom % tells you exactly how magnified the view is. 100% = normal scale.",
         "Updates every time you change tool, zone, or brush size. Real-time info.",
         "Informational only. Nothing to click. Just read it occasionally like an adult.",
+        "It's watching everything you do and reporting it. Not in a creepy way. In a helpful way. Mostly.",
+        "Active tool: right there. Zone name: right there. Brush size: right there. Zoom: right there. Read it.",
+        "The only status bar that never judges you. Even when you've painted 7 zones over the same region twice.",
     ],
 }
 
