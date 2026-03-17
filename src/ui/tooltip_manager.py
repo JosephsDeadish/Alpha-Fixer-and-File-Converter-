@@ -3745,12 +3745,76 @@ class TooltipManager(QObject):
     Intercepts QEvent.Type.ToolTip events and shows mode-appropriate cycling tips.
     """
 
-    # Keys whose tips should receive a "Currently using: <theme>" suffix when
-    # the active theme name is known.
+    # Keys whose tips should receive per-theme flavor text when the active
+    # theme name is known.  Replaces the old generic "Active theme: X" append.
     _THEME_AWARE_KEYS = frozenset({
         "settings_theme_tab", "theme_combo", "patreon_btn",
         "tooltip_mode_combo", "tooltip_style_combo",
     })
+
+    # Per-theme short flavor text shown as a suffix on theme-aware tooltips.
+    # Each entry matches the theme's personality so the hint feels authentic
+    # rather than just repeating the name.  Fallback for unknown themes is a
+    # generic "🎨 Active theme: <name>" line.
+    _THEME_FLAVORS: dict[str, str] = {
+        "Panda Dark":          "🐼 Panda Dark is active — midnight bamboo vibes, dark and cozy.",
+        "Panda Light":         "🐼 Panda Light is active — soft daylight bamboo energy, bright and clean.",
+        "Neon Panda":          "🐼 Neon Panda is active — when pandas discovered glowsticks.",
+        "Gore":                "🩸 Gore is active — not for the faint of heart. Eyes open.",
+        "Bat Cave":            "🦇 Bat Cave is active — dark, echo-y, and full of winged critters.",
+        "Rainbow Chaos":       "🌈 Rainbow Chaos is active — all the colors, none of the rules.",
+        "Otter Cove":          "🦦 Otter Cove is active — cozy riverside; otters are judging your output.",
+        "Galaxy":              "✦ Galaxy is active — deep space drifting; stars included, gravity optional.",
+        "Galaxy Otter":        "🦦✨ Galaxy Otter is active — an otter in space. Peak design.",
+        "Goth":                "🖤 Goth is active — black lipstick, existential dread, perfect output.",
+        "Volcano":             "🌋 Volcano is active — hot stuff; lava-powered image processing.",
+        "Arctic":              "❄️ Arctic is active — crisp, clean, and cold as your render times.",
+        "Secret Skeleton":     "💀 Secret Skeleton is active — rattling bones and creepy-good vibes.",
+        "Secret Sakura":       "🌸 Secret Sakura is active — cherry-blossom serenity; spring forever.",
+        "Fairy Garden":        "🧚 Fairy Garden is active — sparkles, mushrooms, and pure magic.",
+        "Deep Ocean":          "🌊 Deep Ocean is active — 20,000 pixels under the sea.",
+        "Mermaid":             "🧜 Mermaid is active — half fish, totally fabulous, undersea chic.",
+        "Shark Bait":          "🦈 Shark Bait is active — hoo hah hah; everything is bait.",
+        "Alien":               "👽 Alien is active — we came in peace; we leave in PNG.",
+        "Noodle":              "🍜 Noodle is active — dangling, wobbly, delicious chaos.",
+        "Pancake":             "🥞 Pancake is active — fluffy stacks and maple-syrup gradients.",
+        "Blood Moon":          "🌕 Blood Moon is active — the sky is red; your alpha is fixed.",
+        "Ice Cave":            "🧊 Ice Cave is active — frosty depths, crystalline precision.",
+        "Cyber Otter":         "🦦💻 Cyber Otter is active — soldering circuits in the digital dark.",
+        "Toxic Neon":          "☢️ Toxic Neon is active — radioactive green and absolutely thriving.",
+        "Lava Cave":           "🔥 Lava Cave is active — molten rock, volcanic palette.",
+        "Sunset Beach":        "🌅 Sunset Beach is active — warm and golden like a perfect render.",
+        "Midnight Forest":     "🌲 Midnight Forest is active — trees, darkness, and absolute focus.",
+        "Candy Land":          "🍭 Candy Land is active — pastel everything; pure sugar-rush aesthetic.",
+        "Zombie Apocalypse":   "🧟 Zombie Apocalypse is active — braaaains… and alpha channels.",
+        "Dragon Fire":         "🐉 Dragon Fire is active — fire-breathing image processing.",
+        "Bubblegum":           "🫧 Bubblegum is active — pink, chewy, and surprisingly powerful.",
+        "Thunder Storm":       "⛈️ Thunder Storm is active — crackling energy, static electricity.",
+        "Rose Gold":           "🌹 Rose Gold is active — warm pink metal; thanks for the support.",
+        "Space Cat":           "🐱🚀 Space Cat is active — meowing through the cosmos at warp speed.",
+        "Magic Mushroom":      "🍄 Magic Mushroom is active — colors that defy rational explanation.",
+        "Abyssal Void":        "🕳️ Abyssal Void is active — staring into the dark; it processes back.",
+        "Spring Bloom":        "🌸 Spring Bloom is active — fresh, bright, and full of possibility.",
+        "Gold Rush":           "🥇 Gold Rush is active — everything is golden; mine that output.",
+        "Nebula":              "🌌 Nebula is active — cosmic dust and ionized gas; beautiful chaos.",
+        "Crystal Cave":        "💎 Crystal Cave is active — crystalline precision in every pixel.",
+        "Glitch":              "📡 Glitch is active — Error 404: normalcy not found. Feature, not bug.",
+        "Wild West":           "🤠 Wild West is active — howdy, partner; alphas are getting rounded up.",
+        "Pirate":              "🏴‍☠️ Pirate is active — arrr, ye file shall be converted, matey.",
+        "Deep Space":          "🚀 Deep Space is active — boldly processing where none have processed before.",
+        "Witch's Brew":        "🧙 Witch's Brew is active — bubbling cauldron of image magic.",
+        "Lava Lamp":           "🫧 Lava Lamp is active — slow, hypnotic, and surprisingly functional.",
+        "Coral Reef":          "🐠 Coral Reef is active — underwater color explosion; reef-markable.",
+        "Storm Cloud":         "⛅ Storm Cloud is active — brooding sky energy; outputs strike like lightning.",
+        "Golden Hour":         "🌇 Golden Hour is active — that perfect warm glow; magic time.",
+        "Purrfect Cats":       "🐱 Purrfect Cats is active — meow; your files are purring with approval.",
+        "Good Dog":            "🐶 Good Dog is active — such convert, very alpha, wow.",
+        "Snake Pit":           "🐍 Snake Pit is active — ssslithering through your image queue.",
+        "Ghost":               "👻 Ghost is active — boo! Your files are hauntingly well-processed.",
+        "Anime":               "✨ Anime is active — big eyes, perfect alphas, dramatic wind.",
+        "Waifu":               "💕 Waifu is active — kawaii processing at maximum capacity.",
+        "Slime":               "🟢 Slime is active — oozing through your files with slimy efficiency.",
+    }
 
     def __init__(self, settings, parent: QObject = None):
         super().__init__(parent)
@@ -3958,10 +4022,15 @@ class TooltipManager(QObject):
             idx = self._shown_idx.get(key, 0)
 
         tip_text = variants[idx]
-        # For theme-aware keys, append a line with the current theme name so
-        # tooltips reflect what the user is actually running.
+        # For theme-aware keys, append a per-theme personality line so the
+        # tooltip reflects the current theme in a meaningful, flavourful way
+        # rather than just echoing the theme name verbatim.
         if key in self._THEME_AWARE_KEYS and self._active_theme_name:
-            tip_text = f"{tip_text}\n\n🎨 Active theme: {self._active_theme_name}"
+            flavor = self._THEME_FLAVORS.get(self._active_theme_name)
+            if flavor:
+                tip_text = f"{tip_text}\n\n{flavor}"
+            else:
+                tip_text = f"{tip_text}\n\n🎨 Active theme: {self._active_theme_name}"
         try:
             from PyQt6.QtWidgets import QToolTip
             QToolTip.showText(event.globalPos(), tip_text, obj)

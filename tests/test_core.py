@@ -7861,3 +7861,168 @@ class TestRound34ThemeSoundMapping(unittest.TestCase):
         snippet = src[idx: idx + 400]
         self.assertIn("Space Cat", snippet,
                       "sound_cat_meow_check tooltip must mention 'Space Cat' theme")
+
+
+class TestRound35ThemeFlavorTooltips(unittest.TestCase):
+    """Verify Round-35: TooltipManager._THEME_FLAVORS replaces the old generic
+    'Active theme: <name>' append with per-theme personality flavor text.
+
+    Checks:
+    - _THEME_FLAVORS dict exists as a class-level attribute on TooltipManager.
+    - Every built-in preset and hidden theme name has an entry.
+    - The old generic "Active theme: " pattern is no longer used in get_tip
+      as the primary path (it is kept only as a fallback for unknown themes).
+    - Each flavor string is non-empty and mentions the theme name or a
+      clearly-themed emoji/keyword (sanity check).
+    - The fallback path for an unknown theme still produces "🎨 Active theme:".
+    """
+
+    _TM_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _src(self) -> str:
+        with open(self._TM_SRC, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Structure: _THEME_FLAVORS must exist
+    # ------------------------------------------------------------------
+
+    def test_theme_flavors_dict_defined(self):
+        """TooltipManager must define a _THEME_FLAVORS class-level dict."""
+        src = self._src()
+        self.assertIn("_THEME_FLAVORS", src,
+                      "tooltip_manager.py must define _THEME_FLAVORS")
+
+    def test_theme_flavors_is_dict_literal(self):
+        """_THEME_FLAVORS must be a non-empty dict literal."""
+        src = self._src()
+        idx = src.find("_THEME_FLAVORS")
+        self.assertGreater(idx, 0)
+        # Some entries should be present shortly after the dict start
+        snippet = src[idx: idx + 500]
+        self.assertIn("Panda Dark", snippet,
+                      "_THEME_FLAVORS must contain an entry for 'Panda Dark'")
+
+    # ------------------------------------------------------------------
+    # Coverage: each shipped theme must have an entry
+    # ------------------------------------------------------------------
+
+    _REQUIRED_THEMES = [
+        "Panda Dark", "Panda Light", "Neon Panda",
+        "Gore", "Bat Cave", "Rainbow Chaos", "Otter Cove", "Galaxy",
+        "Galaxy Otter", "Goth", "Volcano", "Arctic",
+        "Secret Skeleton", "Secret Sakura", "Fairy Garden", "Deep Ocean",
+        "Mermaid", "Shark Bait", "Alien", "Noodle", "Pancake",
+        "Blood Moon", "Ice Cave", "Cyber Otter", "Toxic Neon", "Lava Cave",
+        "Sunset Beach", "Midnight Forest", "Candy Land", "Zombie Apocalypse",
+        "Dragon Fire", "Bubblegum", "Thunder Storm", "Rose Gold",
+        "Space Cat", "Magic Mushroom", "Abyssal Void", "Spring Bloom",
+        "Gold Rush", "Nebula", "Crystal Cave", "Glitch", "Wild West",
+        "Pirate", "Deep Space", "Witch's Brew", "Lava Lamp", "Coral Reef",
+        "Storm Cloud", "Golden Hour",
+        "Purrfect Cats", "Good Dog", "Snake Pit", "Ghost",
+        "Anime", "Waifu", "Slime",
+    ]
+
+    def test_all_preset_and_hidden_themes_have_flavor(self):
+        """Every shipped theme must have an entry in _THEME_FLAVORS."""
+        src = self._src()
+        # Extract the _THEME_FLAVORS block
+        start = src.find("_THEME_FLAVORS")
+        self.assertGreater(start, 0)
+        # Grab a generous window that covers the whole dict
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        for theme in self._REQUIRED_THEMES:
+            self.assertIn(theme, block,
+                          f"_THEME_FLAVORS is missing an entry for theme '{theme}'")
+
+    # ------------------------------------------------------------------
+    # Content: each entry should be a meaningful string, not just the name
+    # ------------------------------------------------------------------
+
+    def test_bat_cave_flavor_has_bat_emoji_or_keyword(self):
+        """Bat Cave flavor text must reference a bat or cave."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        bat_idx = block.find('"Bat Cave"')
+        self.assertGreater(bat_idx, 0)
+        snippet = block[bat_idx: bat_idx + 200]
+        self.assertTrue(
+            "🦇" in snippet or "bat" in snippet.lower() or "cave" in snippet.lower(),
+            "Bat Cave flavor text must reference bats or a cave",
+        )
+
+    def test_good_dog_flavor_has_dog_keyword(self):
+        """Good Dog flavor text must contain dog-related content."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        idx = block.find('"Good Dog"')
+        self.assertGreater(idx, 0)
+        snippet = block[idx: idx + 200]
+        self.assertTrue(
+            "🐶" in snippet or "dog" in snippet.lower(),
+            "Good Dog flavor text must contain dog-related content",
+        )
+
+    def test_purrfect_cats_flavor_has_cat_keyword(self):
+        """Purrfect Cats flavor text must contain cat-related content."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        idx = block.find('"Purrfect Cats"')
+        self.assertGreater(idx, 0)
+        snippet = block[idx: idx + 200]
+        self.assertTrue(
+            "🐱" in snippet or "cat" in snippet.lower() or "meow" in snippet.lower(),
+            "Purrfect Cats flavor text must contain cat-related content",
+        )
+
+    def test_ghost_flavor_has_ghost_keyword(self):
+        """Ghost flavor text must contain ghost-related content."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        idx = block.find('"Ghost"')
+        self.assertGreater(idx, 0)
+        snippet = block[idx: idx + 200]
+        self.assertTrue(
+            "👻" in snippet or "ghost" in snippet.lower() or "boo" in snippet.lower(),
+            "Ghost flavor text must contain ghost-related content",
+        )
+
+    # ------------------------------------------------------------------
+    # Logic: get_tip must use _THEME_FLAVORS instead of generic append
+    # ------------------------------------------------------------------
+
+    def test_get_tip_uses_theme_flavors_lookup(self):
+        """get_tip must reference _THEME_FLAVORS for the theme-aware suffix."""
+        src = self._src()
+        # The method body should reference _THEME_FLAVORS.get(
+        idx = src.find("_THEME_FLAVORS.get(")
+        self.assertGreater(idx, 0,
+                           "get_tip must look up the theme in _THEME_FLAVORS")
+
+    def test_get_tip_has_fallback_for_unknown_themes(self):
+        """get_tip must still produce '🎨 Active theme:' for unknown themes."""
+        src = self._src()
+        # The fallback branch should be present
+        self.assertIn("🎨 Active theme:", src,
+                      "get_tip must keep the generic fallback for unknown themes")
+
+    def test_primary_path_uses_flavor_not_raw_name(self):
+        """The primary theme-aware suffix path must use flavor, not raw name string."""
+        src = self._src()
+        # Find the get_tip block
+        idx = src.find("_THEME_FLAVORS.get(")
+        self.assertGreater(idx, 0)
+        surrounding = src[idx: idx + 300]
+        # The primary branch should set tip_text to the flavor value
+        self.assertIn("flavor", surrounding,
+                      "get_tip primary branch must use the 'flavor' variable")
