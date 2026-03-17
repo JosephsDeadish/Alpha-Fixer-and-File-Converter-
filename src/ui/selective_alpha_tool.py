@@ -44,7 +44,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
-    QButtonGroup, QFrame,
+    QButtonGroup, QFrame, QColorDialog,
 )
 
 from ..core.selective_alpha_processor import (
@@ -81,8 +81,20 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
     return qi.copy()
 
 
-def _zone_qcolor(zone_idx: int, alpha: int = 200) -> QColor:
-    r, g, b, _ = ZONE_COLORS[zone_idx]
+def _zone_qcolor(
+    zone_idx: int,
+    alpha: int = 200,
+    color_override: Optional[tuple[int, int, int, int]] = None,
+) -> QColor:
+    """Return a QColor for *zone_idx* with the given *alpha*.
+
+    If *color_override* is provided it is used in place of the default
+    ``ZONE_COLORS`` palette entry for that zone.
+    """
+    if color_override is not None:
+        r, g, b = color_override[0], color_override[1], color_override[2]
+    else:
+        r, g, b, _ = ZONE_COLORS[zone_idx]
     return QColor(r, g, b, alpha)
 
 
@@ -171,6 +183,14 @@ class SelectiveAlphaCanvas(QWidget):
         # ---- Composite cache (invalidated when a mask changes) -----------
         self._composite_dirty: bool             = True
         self._composite_qimg:  QImage | None    = None
+
+        # ---- Zone-level visibility flags (True = overlay shown in canvas) -----
+        self._zone_visible: list[bool] = [True] * NUM_ZONES
+
+        # ---- Per-zone overlay colors (R,G,B,overlay_alpha) ------------------
+        # Starts as a mutable copy of the module-level palette so individual
+        # zones can be recoloured without touching the shared constant.
+        self._zone_colors: list[tuple[int, int, int, int]] = list(ZONE_COLORS)
 
         # ---- Cursor position for brush-size preview circle ---------------
         self._cursor_pos: QPointF | None = None
@@ -276,6 +296,74 @@ class SelectiveAlphaCanvas(QWidget):
         self.update()
         for i in range(NUM_ZONES):
             self.mask_changed.emit(i)
+
+    def set_zone_visible(self, idx: int, visible: bool) -> None:
+        """Show or hide the overlay for zone *idx* in the canvas.
+
+        Hidden zones still accumulate paint strokes; they are just not blended
+        into the on-screen composite.  This lets the user focus on one region
+        at a time without losing painted work.
+        """
+        if 0 <= idx < NUM_ZONES and self._zone_visible[idx] != visible:
+            self._zone_visible[idx] = visible
+            self._composite_dirty = True
+            self.update()
+
+    def set_zone_color(self, idx: int, r: int, g: int, b: int) -> None:
+        """Replace the overlay colour for zone *idx* with (r, g, b).
+
+        The overlay opacity (alpha) is preserved from the current entry.
+        """
+        if 0 <= idx < NUM_ZONES:
+            _, _, _, oa = self._zone_colors[idx]
+            self._zone_colors[idx] = (
+                max(0, min(255, r)),
+                max(0, min(255, g)),
+                max(0, min(255, b)),
+                oa,
+            )
+            self._composite_dirty = True
+            self.update()
+
+    def get_zone_color(self, idx: int) -> tuple[int, int, int, int]:
+        """Return the (R, G, B, overlay_alpha) tuple for zone *idx*."""
+        return self._zone_colors[idx]
+
+    def get_mask_as_array(self, idx: int) -> Optional[np.ndarray]:
+        """Return the painted mask for zone *idx* as a uint8 (h, w) numpy array.
+
+        Returns *None* if the zone has not been painted yet.  The array is a
+        fresh copy so the caller may modify it freely.
+        """
+        if not (0 <= idx < NUM_ZONES):
+            return None
+        m = self._masks[idx]
+        if m is None:
+            return None
+        return np.array(m, dtype=np.uint8)
+
+    def set_mask_from_array(self, idx: int, arr: np.ndarray) -> None:
+        """Replace the mask for zone *idx* with the uint8 array *arr*.
+
+        A snapshot is pushed onto the undo stack before the replacement so the
+        operation can be undone.  *arr* must have the same (h, w) shape as the
+        source image; if no image is loaded the call is silently ignored.
+        """
+        if self._src_img is None or not (0 <= idx < NUM_ZONES):
+            return
+        iw, ih = self._src_img.size
+        if arr.shape[:2] != (ih, iw):
+            return
+        self._push_history()
+        new_mask = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="L")
+        if self._masks[idx] is not None:
+            self._masks[idx].close()
+        self._masks[idx] = new_mask
+        self._composite_dirty = True
+        self.update()
+        self.mask_changed.emit(idx)
+        self.undo_available.emit(bool(self._history))
+        self.redo_available.emit(False)
 
     def set_active_zone(self, idx: int) -> None:
         self._active_zone = max(0, min(NUM_ZONES - 1, idx))
@@ -560,12 +648,24 @@ class SelectiveAlphaCanvas(QWidget):
     # --------------------------------------------------- rendering
 
     def _rebuild_composite(self) -> None:
-        """Recompute the cached composite QImage."""
+        """Recompute the cached composite QImage.
+
+        Zones whose visibility flag is False are rendered as if their mask is
+        empty (the overlay is hidden) without discarding any painted data.
+        Custom per-zone colours stored in *_zone_colors* are forwarded to
+        :func:`composite_zones` so user colour choices are reflected live.
+        """
         if self._src_arr is None:
             self._composite_qimg = None
             return
-        bool_masks = self.get_masks_as_bool()
-        comp = composite_zones(self._src_arr, bool_masks)
+        raw_masks = self.get_masks_as_bool()
+        # Apply visibility: hide zones that have been toggled off.
+        visible_masks = [
+            m if vis else None
+            for m, vis in zip(raw_masks, self._zone_visible)
+        ]
+        comp = composite_zones(self._src_arr, visible_masks,
+                               zone_colors=self._zone_colors)
         self._composite_qimg = _np_to_qimage(comp)
         self._composite_dirty = False
 
@@ -622,7 +722,8 @@ class SelectiveAlphaCanvas(QWidget):
         if self._tool not in ("line", "rect", "ellipse"):
             return
 
-        zc = _zone_qcolor(self._active_zone, 200)
+        zc = _zone_qcolor(self._active_zone, 200,
+                          color_override=self._zone_colors[self._active_zone])
         pen = QPen(zc, 2, Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.setBrush(QBrush(QColor(zc.red(), zc.green(), zc.blue(), 60)))
@@ -643,7 +744,8 @@ class SelectiveAlphaCanvas(QWidget):
 
     def _draw_polygon_preview(self, painter: QPainter) -> None:
         """Draw in-progress polygon vertices and connecting lines."""
-        zc = _zone_qcolor(self._active_zone, 220)
+        zc = _zone_qcolor(self._active_zone, 220,
+                          color_override=self._zone_colors[self._active_zone])
         pen = QPen(zc, 2)
         painter.setPen(pen)
 
@@ -673,7 +775,8 @@ class SelectiveAlphaCanvas(QWidget):
             pen = QPen(QColor(255, 255, 255, 200), 1.5, Qt.PenStyle.DashLine)
         else:
             r = self._brush_size * s
-            zc = _zone_qcolor(self._active_zone, 220)
+            zc = _zone_qcolor(self._active_zone, 220,
+                              color_override=self._zone_colors[self._active_zone])
             pen = QPen(zc, 1.5)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -926,37 +1029,55 @@ def _draw_checker(painter: QPainter, w: int, h: int, sq: int = 10) -> None:
 
 
 class _ZoneRow(QWidget):
-    """A two-row widget showing zone colour swatch, name, alpha spinbox and
-    Paint/Clear buttons for one zone."""
+    """A three-row widget showing zone colour swatch, name, alpha spinbox,
+    visibility toggle, Paint/Clear buttons, and Copy/Paste mask buttons."""
 
-    selected = pyqtSignal(int)   # zone_idx
+    selected          = pyqtSignal(int)        # zone_idx  (or -(idx+1) for clear)
+    color_changed     = pyqtSignal(int, object) # zone_idx, (r,g,b) tuple
+    visibility_changed = pyqtSignal(int, bool) # zone_idx, visible
+    copy_requested    = pyqtSignal(int)        # zone_idx
+    paste_requested   = pyqtSignal(int)        # zone_idx
 
     def __init__(self, zone_idx: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._idx = zone_idx
+        r0, g0, b0, _ = ZONE_COLORS[zone_idx]
+        self._cur_rgb: tuple[int, int, int] = (r0, g0, b0)
+        color_name = ZONE_NAMES[zone_idx]
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(2, 3, 2, 3)
         outer.setSpacing(3)
 
-        # ── Row 1: swatch + name + alpha spinbox ─────────────────────────
+        # ── Row 1: visibility toggle + swatch + name + alpha spinbox ────
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(6)
+        top.setSpacing(4)
 
-        # Colour swatch
-        r, g, b, _ = ZONE_COLORS[zone_idx]
-        swatch = QLabel()
-        swatch.setFixedSize(18, 18)
-        color_name = ZONE_NAMES[zone_idx]
-        swatch.setStyleSheet(
-            f"background:{QColor(r,g,b).name()};"
-            "border:1px solid #666; border-radius:3px;"
+        # Visibility toggle (eye icon)
+        self._vis_btn = QPushButton("👁")
+        self._vis_btn.setCheckable(True)
+        self._vis_btn.setChecked(True)
+        self._vis_btn.setFixedSize(24, 24)
+        self._vis_btn.setToolTip(
+            f"Toggle visibility of the {color_name} overlay in the canvas.\n"
+            "Hidden zones keep their painted masks — they are just not shown."
         )
-        swatch.setToolTip(color_name)
-        top.addWidget(swatch)
+        self._vis_btn.clicked.connect(self._on_vis_toggled)
+        top.addWidget(self._vis_btn)
 
-        # Name — use the full "Zone N – Colour" label from ZONE_NAMES
+        # Colour swatch — clickable to open colour picker
+        self._swatch = QPushButton()
+        self._swatch.setFixedSize(18, 18)
+        self._swatch.setToolTip(
+            f"Click to choose a custom overlay colour for {color_name}."
+        )
+        self._swatch.setFlat(True)
+        self._update_swatch_style()
+        self._swatch.clicked.connect(self._on_pick_color)
+        top.addWidget(self._swatch)
+
+        # Name label
         name_lbl = QLabel(color_name)
         name_lbl.setMinimumWidth(52)
         top.addWidget(name_lbl)
@@ -970,7 +1091,8 @@ class _ZoneRow(QWidget):
         self._alpha_spin.setValue(128)
         self._alpha_spin.setMinimumWidth(62)
         self._alpha_spin.setToolTip(
-            "Alpha value applied to all pixels painted in this zone (0=transparent, 255=opaque)."
+            "Alpha value applied to all pixels painted in this zone "
+            "(0=transparent, 255=opaque)."
         )
         top.addWidget(self._alpha_spin)
         outer.addLayout(top)
@@ -978,7 +1100,7 @@ class _ZoneRow(QWidget):
         # ── Row 2: Paint + Clear buttons ─────────────────────────────────
         bot = QHBoxLayout()
         bot.setContentsMargins(0, 0, 0, 0)
-        bot.setSpacing(6)
+        bot.setSpacing(4)
 
         self._sel_btn = QPushButton("🖌  Paint")
         self._sel_btn.setCheckable(True)
@@ -995,9 +1117,61 @@ class _ZoneRow(QWidget):
 
         outer.addLayout(bot)
 
+        # ── Row 3: Copy + Paste mask buttons ─────────────────────────────
+        cp_row = QHBoxLayout()
+        cp_row.setContentsMargins(0, 0, 0, 0)
+        cp_row.setSpacing(4)
+
+        self._copy_btn = QPushButton("📋  Copy Mask")
+        self._copy_btn.setMinimumHeight(24)
+        self._copy_btn.setToolTip(
+            f"Copy the painted mask for {color_name} to the zone clipboard.\n"
+            "Use 'Paste Mask' on any zone to apply this copy."
+        )
+        self._copy_btn.clicked.connect(lambda: self.copy_requested.emit(self._idx))
+        cp_row.addWidget(self._copy_btn)
+
+        self._paste_btn = QPushButton("📌  Paste Mask")
+        self._paste_btn.setMinimumHeight(24)
+        self._paste_btn.setEnabled(False)
+        self._paste_btn.setToolTip(
+            f"Paste the copied mask onto {color_name}, replacing its current paint."
+        )
+        self._paste_btn.clicked.connect(lambda: self.paste_requested.emit(self._idx))
+        cp_row.addWidget(self._paste_btn)
+
+        outer.addLayout(cp_row)
+
+    # ---------------------------------------------------------------- helpers
+
+    def _update_swatch_style(self) -> None:
+        r, g, b = self._cur_rgb
+        self._swatch.setStyleSheet(
+            f"background:{QColor(r, g, b).name()};"
+            "border:1px solid #666; border-radius:3px;"
+            "padding:0;"
+        )
+
+    def _on_vis_toggled(self, checked: bool) -> None:
+        self.visibility_changed.emit(self._idx, checked)
+
+    def _on_pick_color(self) -> None:
+        """Open a colour-picker dialog and emit color_changed if the user confirms."""
+        r, g, b = self._cur_rgb
+        initial = QColor(r, g, b)
+        chosen = QColorDialog.getColor(
+            initial, self, f"Choose colour for {ZONE_NAMES[self._idx]}"
+        )
+        if chosen.isValid():
+            self._cur_rgb = (chosen.red(), chosen.green(), chosen.blue())
+            self._update_swatch_style()
+            self.color_changed.emit(self._idx, self._cur_rgb)
+
     def _on_clear(self) -> None:
         # Bubbles up to SelectiveAlphaTool via canvas
         self.selected.emit(-(self._idx + 1))  # negative = clear signal
+
+    # ---------------------------------------------------------------- public
 
     def alpha_value(self) -> int:
         return self._alpha_spin.value()
@@ -1014,11 +1188,23 @@ class _ZoneRow(QWidget):
         self.style().unpolish(self)
         self.style().polish(self)
 
+    def set_zone_color(self, rgb: tuple[int, int, int]) -> None:
+        """Update the swatch colour without opening a dialog."""
+        self._cur_rgb = (rgb[0], rgb[1], rgb[2])
+        self._update_swatch_style()
+
+    def set_paste_enabled(self, enabled: bool) -> None:
+        """Enable or disable the Paste Mask button."""
+        self._paste_btn.setEnabled(enabled)
+
     def register_tooltips(self, mgr) -> None:
         """Register zone-row widgets with the TooltipManager for cycling tips."""
-        mgr.register(self._alpha_spin, "sa_zone_alpha_spin")
-        mgr.register(self._sel_btn,   "sa_zone_select")
-        mgr.register(self._clear_btn, "sa_zone_clear")
+        mgr.register(self._alpha_spin,  "sa_zone_alpha_spin")
+        mgr.register(self._sel_btn,     "sa_zone_select")
+        mgr.register(self._clear_btn,   "sa_zone_clear")
+        mgr.register(self._vis_btn,     "sa_zone_visibility")
+        mgr.register(self._copy_btn,    "sa_zone_copy_mask")
+        mgr.register(self._paste_btn,   "sa_zone_paste_mask")
 
 
 # ---------------------------------------------------------------------------
@@ -1041,6 +1227,9 @@ class SelectiveAlphaTool(QWidget):
         self._result_history: list[Image.Image] = []
         # Flag set during settings restoration to suppress spurious auto-saves.
         self._restoring: bool = False
+        # Zone-mask clipboard: keyed by zone index, stores raw uint8 ndarray.
+        # Only one entry is kept at a time (the most recent Copy Mask action).
+        self._mask_clipboard: Optional[np.ndarray] = None
         self._setup_ui()
         self._restore_settings()
 
@@ -1229,10 +1418,43 @@ class SelectiveAlphaTool(QWidget):
         zones_box = QGroupBox("Alpha Zones  (🖌 Paint to assign alpha per zone)")
         zv = QVBoxLayout(zones_box)
         zv.setSpacing(2)
+
+        # Master visibility toggle row
+        vis_all_row = QHBoxLayout()
+        vis_all_row.setContentsMargins(0, 0, 0, 2)
+        self._btn_show_all = QPushButton("👁  Show All")
+        self._btn_show_all.setMinimumHeight(24)
+        self._btn_show_all.setToolTip(
+            "Make all zone overlays visible in the canvas at once."
+        )
+        self._btn_show_all.clicked.connect(self._on_show_all_zones)
+        self._btn_hide_all = QPushButton("🙈  Hide All")
+        self._btn_hide_all.setMinimumHeight(24)
+        self._btn_hide_all.setToolTip(
+            "Hide all zone overlays in the canvas so the source image is shown clean.\n"
+            "Painted masks are preserved — click Show All to reveal them again."
+        )
+        self._btn_hide_all.clicked.connect(self._on_hide_all_zones)
+        vis_all_row.addWidget(self._btn_show_all)
+        vis_all_row.addWidget(self._btn_hide_all)
+        zv.addLayout(vis_all_row)
+
+        # Thin separator
+        sep0 = QFrame()
+        sep0.setFrameShape(QFrame.Shape.HLine)
+        sep0.setFrameShadow(QFrame.Shadow.Sunken)
+        sep0.setFixedHeight(1)
+        zv.addWidget(sep0)
+
         self._zone_rows: list[_ZoneRow] = []
         for i in range(NUM_ZONES):
             row = _ZoneRow(i)
             row.selected.connect(self._on_zone_action)
+            row.color_changed.connect(self._on_zone_color_changed)
+            row.copy_requested.connect(self._on_copy_mask)
+            row.paste_requested.connect(self._on_paste_mask)
+            # visibility_changed and canvas connections wired after canvas is
+            # created (further below in _setup_ui).
             zv.addWidget(row)
             self._zone_rows.append(row)
             # Thin separator between rows (not after the last one)
@@ -1262,6 +1484,10 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.mask_changed.connect(self._on_mask_changed)
         self._canvas.undo_available.connect(self._btn_undo.setEnabled)
         self._canvas.redo_available.connect(self._btn_redo.setEnabled)
+
+        # Wire zone visibility signals now that _canvas exists.
+        for row in self._zone_rows:
+            row.visibility_changed.connect(self._canvas.set_zone_visible)
 
         # Wrap canvas + status label in a vertical layout.
         right_widget = QWidget()
@@ -1313,6 +1539,13 @@ class SelectiveAlphaTool(QWidget):
             alphas = self._settings.get_sa_zone_alphas()
             for row, alpha in zip(self._zone_rows, alphas):
                 row.set_alpha(alpha)
+            # Restore custom zone colours
+            saved_colors = self._settings.get_sa_zone_colors()
+            if saved_colors is not None:
+                for idx, (row, c) in enumerate(zip(self._zone_rows, saved_colors)):
+                    rgb = (c[0], c[1], c[2])
+                    row.set_zone_color(rgb)
+                    self._canvas.set_zone_color(idx, rgb[0], rgb[1], rgb[2])
             # Restore brush / eraser sizes
             self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
             self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
@@ -1332,6 +1565,10 @@ class SelectiveAlphaTool(QWidget):
             return
         self._settings.set_sa_zone_alphas(
             [row.alpha_value() for row in self._zone_rows]
+        )
+        # Persist custom zone colours: read from canvas which is the source of truth.
+        self._settings.set_sa_zone_colors(
+            [list(self._canvas.get_zone_color(i)) for i in range(NUM_ZONES)]
         )
         self._settings.set("sa_brush_size",  self._brush_spin.value())
         self._settings.set("sa_eraser_size", self._eraser_spin.value())
@@ -1370,6 +1607,8 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_zoom_in,      "sa_zoom_in")
         mgr.register(self._btn_zoom_out,     "sa_zoom_out")
         mgr.register(self._btn_zoom_fit,     "sa_zoom_fit")
+        mgr.register(self._btn_show_all,     "sa_show_all_zones")
+        mgr.register(self._btn_hide_all,     "sa_hide_all_zones")
         for row in self._zone_rows:
             row.register_tooltips(mgr)
         mgr.register(self._btn_undo,         "sa_undo")
@@ -1423,6 +1662,51 @@ class SelectiveAlphaTool(QWidget):
         self._btn_save.setEnabled(v)
 
     # ---------------------------------------------------------------- slots
+
+    def _on_show_all_zones(self) -> None:
+        """Make all zone overlays visible and sync the eye-icon toggles."""
+        for idx, row in enumerate(self._zone_rows):
+            row._vis_btn.setChecked(True)
+            self._canvas.set_zone_visible(idx, True)
+
+    def _on_hide_all_zones(self) -> None:
+        """Hide all zone overlays and sync the eye-icon toggles."""
+        for idx, row in enumerate(self._zone_rows):
+            row._vis_btn.setChecked(False)
+            self._canvas.set_zone_visible(idx, False)
+
+    def _on_zone_color_changed(self, zone_idx: int, rgb: tuple) -> None:
+        """Propagate a user-chosen zone colour to the canvas and save settings."""
+        r, g, b = rgb
+        self._canvas.set_zone_color(zone_idx, r, g, b)
+        self._save_settings()
+
+    def _on_copy_mask(self, zone_idx: int) -> None:
+        """Copy the painted mask of *zone_idx* into the single-slot clipboard."""
+        arr = self._canvas.get_mask_as_array(zone_idx)
+        if arr is None:
+            QMessageBox.information(
+                self, "Nothing to copy",
+                f"Zone {zone_idx + 1} has no painted mask to copy."
+            )
+            return
+        self._mask_clipboard = arr
+        # Enable Paste button on all zones.
+        for row in self._zone_rows:
+            row.set_paste_enabled(True)
+
+    def _on_paste_mask(self, zone_idx: int) -> None:
+        """Paste the clipboard mask into *zone_idx*, replacing its current mask."""
+        if self._mask_clipboard is None:
+            QMessageBox.information(
+                self, "Nothing to paste",
+                "Copy a zone mask first using the 📋 Copy Mask button."
+            )
+            return
+        if not self._canvas.has_image():
+            return
+        # Attempt to paste; set_mask_from_array validates dimensions.
+        self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard.copy())
 
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

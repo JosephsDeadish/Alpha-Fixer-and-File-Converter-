@@ -301,13 +301,18 @@ def apply_selective_alpha(
 def composite_zones(
     src_rgba: np.ndarray,
     zone_masks: list[Optional[np.ndarray]],
+    zone_colors: Optional[list[tuple[int, int, int, int]]] = None,
 ) -> np.ndarray:
     """Blend zone-colour overlays onto *src_rgba* and return uint8 RGBA.
 
     Parameters
     ----------
-    src_rgba   : uint8 (h, w, 4) ndarray – source RGBA image.
-    zone_masks : list of :data:`NUM_ZONES` bool (h, w) ndarray or ``None``.
+    src_rgba    : uint8 (h, w, 4) ndarray – source RGBA image.
+    zone_masks  : list of :data:`NUM_ZONES` bool (h, w) ndarray or ``None``.
+    zone_colors : optional list of ``(R, G, B, overlay_alpha)`` tuples, one
+                  per zone.  When *None* (default) the module-level
+                  :data:`ZONE_COLORS` palette is used.  Pass a custom list to
+                  support user-chosen zone colours.
 
     Returns
     -------
@@ -323,8 +328,9 @@ def composite_zones(
             f"zone_masks must have exactly {NUM_ZONES} elements, "
             f"got {len(zone_masks)}"
         )
+    colors = zone_colors if zone_colors is not None else ZONE_COLORS
     out = src_rgba.astype(np.float32, copy=True)
-    for mask, (r, g, b, oa) in zip(zone_masks, ZONE_COLORS):
+    for mask, (r, g, b, oa) in zip(zone_masks, colors):
         if mask is None or not mask.any():
             continue
         a = oa / 255.0

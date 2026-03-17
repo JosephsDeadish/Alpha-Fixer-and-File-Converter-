@@ -201,6 +201,9 @@ class SettingsManager:
         # ------------------------------------------------------------------
         # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)
         "sa_zone_alphas": "[128,128,128,128,128,128,128]",
+        # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
+        # Empty string = use built-in ZONE_COLORS palette.
+        "sa_zone_colors": "",
         # Brush and eraser sizes in pixels
         "sa_brush_size": 10,
         "sa_eraser_size": 10,
@@ -420,6 +423,34 @@ class SettingsManager:
         """Persist the 7 zone alpha values."""
         self._qs.setValue("sa_zone_alphas", json.dumps(
             [max(0, min(255, int(v))) for v in alphas]
+        ))
+
+    # ------------------------------------------------------------------
+    # Custom zone colors  (R, G, B, overlay_alpha) per zone
+    # ------------------------------------------------------------------
+
+    def get_sa_zone_colors(self) -> list[list[int]] | None:
+        """Return persisted zone overlay colors as list of [R,G,B,A] lists.
+
+        Returns *None* when no custom colors have been saved, signalling the
+        caller to fall back to the built-in ZONE_COLORS palette.
+        """
+        raw = self._qs.value("sa_zone_colors", "")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if (isinstance(data, list) and len(data) == 7
+                    and all(isinstance(c, list) and len(c) == 4 for c in data)):
+                return [[max(0, min(255, int(v))) for v in c] for c in data]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        return None
+
+    def set_sa_zone_colors(self, colors: list[list[int]]) -> None:
+        """Persist 7 zone overlay colors as [[R,G,B,A], …]."""
+        self._qs.setValue("sa_zone_colors", json.dumps(
+            [[max(0, min(255, int(v))) for v in c] for c in colors]
         ))
 
     def reset_all(self) -> None:
