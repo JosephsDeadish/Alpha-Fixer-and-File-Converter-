@@ -40,6 +40,9 @@ _NORMAL: dict[str, list[str]] = {
         "Tip: you can add the same file multiple times for batch preset testing.",
         "SVG files are now supported — they are rendered to raster on import.",
         "Files already in the list are automatically deduplicated — adding the same file twice is safe.",
+        "Add. Files. That's the button's name. That's its function. Revolutionary overlap.",
+        "You found it! Now click it. Files are waiting to be added. Don't keep them waiting.",
+        "Yes, it really is that simple. Click. Files. List. Process. You've got this.",
     ],
     "add_folder": [
         "Click to add an entire folder of images at once.",
@@ -50,6 +53,9 @@ _NORMAL: dict[str, list[str]] = {
         "Files added from a folder follow your 'Include subfolders' setting.",
         "The file counter updates live as the folder is scanned — large directories may take a moment.",
         "All 13 supported formats are recognized when scanning: PNG, JPG, WEBP, DDS, TGA, BMP, TIFF, GIF, ICO, AVIF, QOI, PCX, SVG.",
+        "One folder, all the images inside. You don't have to add them one by one. You're welcome.",
+        "Congratulations, you discovered folder importing. The entire concept took two seconds to explain.",
+        "If you can't find the Add Folder button, it's the one that says Add Folder. Just checking.",
     ],
     "clear_list": [
         "Removes all files from the queue. Does not delete files on disk.",
@@ -60,6 +66,9 @@ _NORMAL: dict[str, list[str]] = {
         "Tip: add files again straight after clearing to rebuild the queue.",
         "Keyboard shortcut: Ctrl+Del clears the list without touching any files on disk.",
         "After clearing you can immediately drag new files in or use Ctrl+O — no need to restart.",
+        "It empties the queue. Not your hard drive. Deep breath.",
+        "Clearing the list is reversible. Just add files again. Easy fix.",
+        "Yes, you can add files after clearing. That's how lists work. Mind = blown.",
     ],
     "process_btn": [
         "Start processing all queued files with the current settings.",
@@ -70,6 +79,9 @@ _NORMAL: dict[str, list[str]] = {
         "Processing each file also counts toward unlocking hidden themes!",
         "Output filenames with a suffix (e.g. '_fixed') prevent overwriting the originals.",
         "If overwrite mode is on (no suffix, same output dir), originals are replaced — double-check settings first.",
+        "Everything is ready. You just need to press this one button. One. Button.",
+        "Congratulations on locating the Process button. Now press it.",
+        "All that setup was for this moment. Click it. Watch things happen.",
     ],
     "stop_btn": [
         "Stop processing after the current file completes.",
@@ -80,6 +92,9 @@ _NORMAL: dict[str, list[str]] = {
         "The stop is graceful — the current file finishes before halting.",
         "Already-processed files in the batch keep their output — stopping is non-destructive.",
         "After stopping you can add more files or change settings, then start a new batch run.",
+        "Processing can be stopped mid-batch. Wild concept, right?",
+        "Nothing is permanent until the files are written. This cancels before that.",
+        "Congratulations on your change of heart. This button respects your decision.",
     ],
     "preset_combo": [
         "Choose a preset alpha profile for common platforms.",
@@ -90,6 +105,8 @@ _NORMAL: dict[str, list[str]] = {
         "Select 'Manual' to bypass presets and set alpha values directly.",
         "Selecting any preset auto-fills all controls; uncheck 'Use preset' to switch back to manual mode.",
         "Manual mode lets you set every parameter (Min, Max, Threshold, Invert, Binary Cut) independently.",
+        "Your custom presets appear here too. Right alongside the built-ins. Equal treatment.",
+        "Congratulations on finding the preset dropdown. Pick one and let it do the thinking.",
     ],
     "save_preset": [
         "Save all current Alpha Channel Settings (alpha value, mode, threshold, clamp min/max, invert, binary cut) as a named preset.",
@@ -100,6 +117,8 @@ _NORMAL: dict[str, list[str]] = {
         "Custom presets appear in the preset dropdown above.",
         "Presets store: alpha value, remap mode, threshold, clamp min/max, invert flag, and binary-cut flag.",
         "Use short memorable names — 'PS2 Lens Flare' beats 'preset_1_v2_final_FINAL'.",
+        "Type a name that means something. You'll search for it later. Future-you will appreciate it.",
+        "Congratulations on saving a preset. It's in the dropdown forever. Or until you delete it.",
     ],
     "delete_preset": [
         "Delete the currently selected custom preset.",
@@ -110,6 +129,9 @@ _NORMAL: dict[str, list[str]] = {
         "Only custom (user-created) presets are deletable — built-ins are permanent.",
         "Built-in platform presets (PS2, N64, GameCube, PSP, Wii…) are permanently protected and cannot be deleted.",
         "After deletion the dropdown auto-selects the first available preset so the app stays in a valid state.",
+        "Delete removes it from your preset list. The actual image files are fine.",
+        "Confirm the dialog. Yes, you're sure. That's how confirming works.",
+        "Gone is gone. Make a new one if you need it back.",
     ],
     "threshold_spin": [
         "Advanced: only process pixels with alpha strictly below this value (0 = process all pixels).",
@@ -120,6 +142,9 @@ _NORMAL: dict[str, list[str]] = {
         "Combine with Binary Cut to create a hard-edge transparency mask at the threshold value.",
         "Threshold is checked BEFORE invert; if invert is on the skipped pixels are still the original high-alpha ones.",
         "Combine Threshold=128 with Binary Cut for a clean 50% opacity cutoff — every pixel ends up 0 or 255.",
+        "Think of it as a cutoff. Below = process. At or above = skip. That's how thresholds work.",
+        "If unsure, 0 processes everything. Starting point for the confused.",
+        "Adjust. See the preview change. That's the whole workflow. You've got this.",
     ],
     "clamp_min_spin": [
         "Minimum alpha output: for images with varied alpha, the lowest value maps to Min; all others stretch up.",
@@ -130,6 +155,8 @@ _NORMAL: dict[str, list[str]] = {
         "Note: when Min equals Max, every pixel gets the same alpha value.",
         "PS2 semi-transparent effects often need Min=64 to keep ghost and glass shaders above the invisible floor.",
         "N64 fog layers sometimes need Min=16 so they don't disappear entirely in high-threshold mode.",
+        "Congratulations on finding Min clamp. Leave it at 0 unless you specifically need a floor.",
+        "Think of it as the minimum opacity floor your output pixels can reach.",
     ],
     "clamp_max_spin": [
         "Maximum alpha output: for images with varied alpha, the highest value maps to Max; all others stretch down.",
@@ -140,6 +167,8 @@ _NORMAL: dict[str, list[str]] = {
         "128 is the PS2 hardware maximum — the GPU interprets 128 as fully opaque.",
         "Setting Max<255 preserves semi-transparency in scenes where full opacity would look wrong, e.g. water.",
         "PS2 hardware treats alpha 128 as fully opaque — set Max=128 to ensure textures render at max PS2 opacity.",
+        "Congratulations on finding Max clamp. 255 is the default. Lower for platform-specific needs.",
+        "Think of it as the maximum opacity ceiling your output pixels can reach.",
     ],
     "invert_check": [
         "Invert the alpha channel before the min/max remapping is applied.",
@@ -150,6 +179,9 @@ _NORMAL: dict[str, list[str]] = {
         "Applied before clamp: invert first, then remap to [Min, Max].",
         "Useful when source art uses white=transparent / black=opaque convention instead of the standard reverse.",
         "Invert + Binary Cut creates a negative-space cutout — opaque becomes transparent and vice versa.",
+        "It flips the alpha interpretation. Transparent to opaque and back. Yes, that's really what invert means.",
+        "Congratulations on discovering the Invert checkbox. Try it. See what happens.",
+        "Works best with threshold set. Just leave it unchecked if you don't know why you'd need this.",
     ],
     "binary_cut_check": [
         "Binary cut: pixels at or above the threshold become 255 (fully opaque); below become 0 (fully transparent).",
@@ -160,6 +192,9 @@ _NORMAL: dict[str, list[str]] = {
         "Binary cut ignores Min/Max remapping — alpha is simply 0 or 255.",
         "Ideal for UI sprites, HUD icons, and stylised pixel art where soft alpha edges look wrong.",
         "Combine with Threshold spinbox: set Threshold=128 for a mid-tone cut, or any value you need.",
+        "On = hard edges. Off = gradients. That's literally the entire feature.",
+        "Great for sprite sheets where you want clean, pixel-perfect transparency. Try it.",
+        "Congratulations, you found Binary Cut. It cuts alpha into binary. You get it.",
     ],
     "out_dir": [
         "Specify a custom output folder for processed files.",
@@ -170,6 +205,9 @@ _NORMAL: dict[str, list[str]] = {
         "Relative paths are resolved relative to each source file's directory.",
         "Leave blank + add a suffix to safely write '_fixed' copies next to each source file.",
         "The folder is created automatically at run time if it does not already exist.",
+        "Leave it blank and files stay next to the originals. Very convenient, actually.",
+        "Output directory. Where things go after processing. Basic folder concept.",
+        "Congratulations on locating the Output Directory field. Now fill it in.",
     ],
     "recursive_check": [
         "When enabled, subfolders inside the selected folder are also scanned.",
@@ -180,6 +218,9 @@ _NORMAL: dict[str, list[str]] = {
         "The file counter updates to reflect all images found recursively.",
         "When unchecked, only images in the top-level folder are included — subfolders are ignored.",
         "Recursive mode is remembered per session; toggle it before adding folders to control the scope.",
+        "Checked = digs into ALL subfolders. Unchecked = only the folder you added. Your choice.",
+        "Deep folder structures are fine. Recursive handles them. That's what it's for.",
+        "Wild concept: one checkbox lets you process an entire folder tree. Riveting.",
     ],
     "compare_widget": [
         "Drag the red ◀▶ handle left or right to compare before and after.",
@@ -190,6 +231,9 @@ _NORMAL: dict[str, list[str]] = {
         "Double-click the compare widget to zoom to fit the current preview.",
         "Press Left/Right arrow keys to nudge the divider one pixel at a time for precise comparison.",
         "The heat-map checkbox above overlays alpha values on both sides for a deeper analysis.",
+        "Drag it left, drag it right, compare old and new alpha. That's the handle's whole personality.",
+        "Before is always on the left. After is always on the right. That's how time works.",
+        "Congratulations, you found the comparison slider. Drag it around. It's genuinely useful.",
     ],
     "alpha_vis_check": [
         "Toggle a false-colour heat-map over the alpha channel in both preview images.",
@@ -200,6 +244,9 @@ _NORMAL: dict[str, list[str]] = {
         "The heat-map blends with the original colours so detail remains visible.",
         "Alpha visualisation is per-preview only — it is never written to the output file.",
         "Green regions confirm your settings are working; red regions show pixels that will be fully transparent.",
+        "Colour-coded = easier to see. Red = invisible, green = solid. Simple visualization.",
+        "Toggle it. See the colour map. Toggle off. Normal again. That's how checkboxes work.",
+        "Congratulations, you discovered the alpha visualizer. It does not change your files.",
     ],
     "file_list": [
         "Files queued for processing. Drag & drop files or folders here.",
@@ -210,6 +257,9 @@ _NORMAL: dict[str, list[str]] = {
         "Sort order: files are processed in the order they appear in this list.",
         "Drag items up or down in the list to reorder the processing sequence.",
         "Multiple files can be selected with Ctrl+click or Shift+click for bulk removal.",
+        "Drop files directly here too. Drag and drop works. Yes, really.",
+        "Select a file in the list to preview it. One click. Revolutionary.",
+        "Congratulations on populating your file list. Now hit Process.",
     ],
     "convert_btn": [
         "Convert all queued files to the selected output format.",
@@ -220,6 +270,9 @@ _NORMAL: dict[str, list[str]] = {
         "Each converted file also counts toward hidden theme unlocks!",
         "DDS output targets BC3/DXT5 by default, which preserves the alpha channel for game engines.",
         "GIF output uses palette quantisation — up to 256 colours are retained; transparent frames supported.",
+        "Input format. Output format. Click Convert. Files change. Wild, right?",
+        "Congratulations, you found the Convert button. It converts. Click it.",
+        "Make sure you've picked an output format first. Then this button does its job.",
     ],
     "format_combo": [
         "Choose the target image format for conversion.",
@@ -230,6 +283,9 @@ _NORMAL: dict[str, list[str]] = {
         "GIF: animated support (palette-only, 256 colours max).  BMP: uncompressed, always compatible.",
         "SVG input: renders vector art to a raster image (requires cairosvg or svglib).",
         "SVG output: embeds your image inside an SVG wrapper — no extra libraries needed.",
+        "DDS needs DirectX libraries installed. If it fails, that's probably why.",
+        "BMP = huge uncompressed file. Please think twice before picking BMP.",
+        "Congratulations on picking a format. Now click Convert. You're almost there.",
     ],
     "quality_spin": [
         "Quality percentage for lossy formats (JPEG, WEBP).",
@@ -240,6 +296,9 @@ _NORMAL: dict[str, list[str]] = {
         "For DDS, quality affects the level of compression detail retained.",
         "WEBP at quality 100 is near-lossless (visually identical to PNG but smaller).",
         "AVIF benefits the most from quality tuning — values around 80–90 give excellent compression ratios.",
+        "PNG ignores this. JPEG and WEBP use it. 90 is honestly fine for most people.",
+        "Wild, right? A single number controls the quality vs. file size tradeoff.",
+        "Congratulations on finding quality settings. 85 is what the internet runs on.",
     ],
     "settings_btn": [
         "Open the Settings dialog to customize themes, effects, and behavior.",
@@ -250,6 +309,9 @@ _NORMAL: dict[str, list[str]] = {
         "Tip: hover over settings controls to get detailed tooltips explaining each option.",
         "Settings are written to an INI file next to the app — safe to back up or copy to another machine.",
         "Export/Import Settings (under Help menu) backs up or restores the full settings file.",
+        "Settings. It has settings in it. The name checks out.",
+        "Congratulations on finding Settings. A whole world of options awaits you in there.",
+        "Everything you can change is in here. Except file settings. Those are in the main tabs.",
     ],
     "theme_combo": [
         "Choose a visual theme for the application.",
@@ -260,6 +322,7 @@ _NORMAL: dict[str, list[str]] = {
         "First time changing the theme unlocks the Candy Land 🍭 theme — just switch once!",
         "Hidden themes: Snake Pit 🐍 at 11 500 clicks, Ghost 👻 at 12 000, Slime 🟢 at 12 500. Keep clicking!",
         "Ghost 👻 also unlocks after 2 500 alpha fixes. Slime 🟢 also unlocks after 2 500 conversions.",
+        "Switching themes is undoable in the sense that you can just switch back. Very forgiving.",
     ],
     "theme_color_btn": [
         "Click this color swatch to change that part of the theme's color palette.",
@@ -270,6 +333,9 @@ _NORMAL: dict[str, list[str]] = {
         "Reset to the theme default by switching themes and back — custom swatches revert on theme switch.",
         "Save your custom color scheme with the Save Custom Theme button before switching themes.",
         "Up to 15 palette roles can be independently customized: bg, surface, primary, accent, text and more.",
+        "Each theme has 15 colors you can customize. This is one of them.",
+        "You can reset to defaults if your color choices turn out to be catastrophic.",
+        "Congratulations on picking a custom color. The theme is now slightly yours.",
     ],
     "effect_combo": [
         "Choose the click particle effect style for this theme.",
@@ -280,6 +346,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fire 🔥 spawns rising flame particles from the cursor on every click.",
         "Ice ❄ showers the cursor with drifting snowflake particles on click.",
         "Galaxy produces star/sparkle particles for a space-themed experience; pairs with the Galaxy theme.",
+        "Your click explosions. You earned the fancy ones by clicking things enough.",
+        "Congratulations, you get to pick your own click effects. That's new technology.",
+        "Each option does something slightly different. Hover each to see a description.",
     ],
     "custom_emoji": [
         "Select an emoji from the dropdown and click Add to build your custom click-particle set.",
@@ -290,6 +359,9 @@ _NORMAL: dict[str, list[str]] = {
         "Up to 10 emoji can be in the custom list — they fire randomly on each click for variety.",
         "Only the 'Custom' effect style in the Effect dropdown actually uses this emoji list.",
         "Removed emoji can be re-added at any time; the list persists between sessions.",
+        "You're customizing click particles with individual emoji. That's genuinely advanced stuff.",
+        "Clear All removes every emoji you added. Re-add from the dropdown. Simple.",
+        "Yes, up to about 70 choices exist in the dropdown. Someone had a lot of time.",
     ],
     "tooltip_mode_combo": [
         "Controls how tooltips appear throughout the application.",
@@ -300,6 +372,9 @@ _NORMAL: dict[str, list[str]] = {
         "Tip: changing this mode for the first time can unlock a hidden theme!",
         "Tooltip content updates live — switch mode and immediately hover any widget to see the change.",
         "Switching mode for the first time may unlock a secret hidden theme — try all four modes!",
+        "Changing this affects all tooltips immediately. Like this one. Meta as ever.",
+        "Quiet mode shows only one tip. No cycling. One and done.",
+        "Congratulations on finding the Tooltip Mode setting. Very recursive.",
     ],
     "tooltip_style_combo": [
         "Controls the visual shape of tooltip boxes — separate from their text content.",
@@ -311,6 +386,9 @@ _NORMAL: dict[str, list[str]] = {
         "Wavy: wide/narrow alternating corners — organic and flowing.",
         "Neon: monospace text, glowing accent border — cyberpunk terminal vibes.",
         "Classic: plain dark box, grey border — classic tooltip look.",
+        "The shape of the box that tells you things. Very important decision, truly.",
+        "Congratulations, you found the style settings for the boxes that explain things.",
+        "Change it. Look at tooltips around the app. See if you like it. Very experimental.",
     ],
     "patreon_btn": [
         "Support development on Patreon!",
@@ -321,6 +399,8 @@ _NORMAL: dict[str, list[str]] = {
         "First click unlocks the Rose Gold 🌹 theme — it's completely free!",
         "One click = a free Rose Gold theme + a happy developer. Both great outcomes.",
         "No account needed to view the page — but supporters get early theme access and devlog updates.",
+        "Yes, clicking it opens Patreon in your browser. That's how links work.",
+        "Congratulations on considering supporting the developer. The panda appreciates it.",
     ],
     "help_btn": [
         "Open the Help menu: keyboard shortcuts, About, and settings export/import.",
@@ -331,6 +411,9 @@ _NORMAL: dict[str, list[str]] = {
         "Export Settings saves a full INI backup so you can restore if something goes wrong.",
         "Import Settings restores from a previously exported INI — useful when moving to a new machine.",
         "The About dialog shows app version, build date, and a link to the project repository.",
+        "The Help menu. Wild concept: press F1 instead and skip this button entirely.",
+        "Keyboard shortcuts are listed in here. You'll use them eventually.",
+        "Congratulations on finding the Help menu. The irony of getting a tooltip for Help is not lost.",
     ],
     "use_theme_sound": [
         "Play a click sound that matches the active theme.",
@@ -341,6 +424,9 @@ _NORMAL: dict[str, list[str]] = {
         "The Bat Cave theme plays a deep thump; Panda themes get a gentle chime; Neon gets a crisp click.",
         "Disable to use your own .wav file or the built-in default click sound for all themes.",
         "Theme sound profiles are bundled into the app and require no external files.",
+        "Each theme has its own vibe and matching sounds. This enables that pairing.",
+        "Congratulations, you found the theme sound toggle. Very thematic decision.",
+        "Bat Cave: thud. Fairy Garden: tinkle. Gore: crunch. All automatic. Wild.",
     ],
     "alpha_fixer_tab": [
         "The Alpha & RGBA Adjuster tab — fix and adjust transparency in image files.",
@@ -351,6 +437,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut Ctrl+1 jumps directly to this tab from anywhere in the app.",
         "Fine-tune controls (R/G/B/A deltas, suffix, output dir) are hidden until you expand the panel.",
         "The compare widget and alpha visualisation are exclusive to this tab for precision work.",
+        "Alpha. Fixer. Tab. You're on it. Press Ctrl+1 if you ever end up somewhere else.",
+        "Congratulations, you found the main tab. This is where most of the action happens.",
+        "Batch fix transparency on entire folders. That's this tab's superpower.",
     ],
     "converter_tab": [
         "The Converter tab — convert images between different file formats.",
@@ -361,6 +450,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut Ctrl+2 jumps directly to the Converter tab.",
         "Resize and metadata options appear when you expand the fine-tune section at the bottom.",
         "The quality spinner only activates for lossy formats — it is greyed out for PNG, BMP, TGA, etc.",
+        "Ctrl+2 to jump here. If clicking is still somehow too hard.",
+        "Congratulations on switching to the Converter tab. Many supported formats await.",
+        "Convert between PNG, JPEG, WEBP, DDS, BMP, TIFF, and more. That's the gist.",
     ],
     "history_tab": [
         "The History tab — browse your recently processed files. Ctrl+3 to jump here.",
@@ -371,6 +463,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut Ctrl+3 jumps directly to the History tab.",
         "Use the Search box to filter entries by date, format, file name, or preset name.",
         "Export any sub-tab to CSV for auditing, spreadsheet analysis, or external record-keeping.",
+        "Ctrl+3 gets you here. In case clicking is still a challenge.",
+        "Congratulations on finding History. Your past batches are all recorded here.",
+        "Three sub-tabs: Converter, Alpha, and Selective Alpha. Very organized.",
     ],
     "history_refresh_btn": [
         "Refresh the history list to show the latest processing sessions.",
@@ -381,6 +476,9 @@ _NORMAL: dict[str, list[str]] = {
         "History is also refreshed automatically each time you switch to the History tab.",
         "Useful when another process adds entries outside of this session.",
         "The refresh is near-instant — there is no loading delay even for 50-entry histories.",
+        "Click it and the list updates. Very standard button behavior.",
+        "Congratulations, you found Refresh. New sessions appear after clicking it.",
+        "It reloads from the log file. If new entries are missing, this fixes it.",
     ],
     "history_export_btn": [
         "Export the currently visible history sub-tab to a CSV file.",
@@ -391,6 +489,9 @@ _NORMAL: dict[str, list[str]] = {
         "The exported CSV includes session timestamp, preset/format, file count, and error count.",
         "Open the file in Excel or Google Sheets for sorting, filtering, and pivot analysis.",
         "Switching to a different sub-tab before exporting changes which history is exported.",
+        "Congratulations, you can now export your processing history. Spreadsheet awaits.",
+        "The resulting CSV can go into Excel, Google Sheets, or literally any text editor.",
+        "Switch between sub-tabs first if you want to export a different type of history.",
     ],
     "history_clear_btn": [
         "Clear all history entries for both the Converter and Alpha & RGBA Adjuster tabs.",
@@ -401,6 +502,9 @@ _NORMAL: dict[str, list[str]] = {
         "Clears all three sub-tab histories simultaneously — Converter, Alpha Fixer, and Selective Alpha.",
         "History clear cannot be undone; export to CSV first if you need an archive.",
         "Settings, presets, custom themes, and processed files are completely unaffected.",
+        "Confirms before deleting. So it takes two clicks to accidentally nuke everything.",
+        "Congratulations on finding the delete-all-history button. Proceed with care.",
+        "Only deletes the history records. Your actual processed files are fine. Breathe.",
     ],
     "history_conv_sub": [
         "The Converter sub-tab lists every batch conversion session you have run.",
@@ -411,6 +515,9 @@ _NORMAL: dict[str, list[str]] = {
         "Click a column header to sort the list — useful for finding the longest or most error-prone sessions.",
         "History is capped at 50 sessions; the oldest entry is removed when a new one is added.",
         "Click Export to save this tab's history as a CSV file for external review.",
+        "Converter conversion history. Each row = one session. That's the whole thing.",
+        "Congratulations, you clicked the Converter sub-tab. Your conversion logs are here.",
+        "Click a row to expand it and see the individual file names. Hidden details!",
     ],
     "history_alpha_sub": [
         "The Alpha & RGBA Adjuster sub-tab lists every alpha-fixing batch session you have run.",
@@ -421,6 +528,9 @@ _NORMAL: dict[str, list[str]] = {
         "The 'Preset / Mode' column shows 'manual' when fine-tune was used without a named preset.",
         "Click a column header to sort — find the preset with the most errors quickly.",
         "Export to CSV for record-keeping or to compare settings across multiple batches.",
+        "Alpha fix history. Each row = one batch. Very logical organization.",
+        "Congratulations on discovering the Alpha sub-tab. All your fix sessions are here.",
+        "Click a row to expand it and see per-file results. The details are there if you want them.",
     ],
     "history_sel_sub": [
         "The Selective Alpha sub-tab lists every selective alpha batch session you have run.",
@@ -431,6 +541,9 @@ _NORMAL: dict[str, list[str]] = {
         "Each entry records the zone configuration mode used at the time of the batch run.",
         "Click a column header to sort — useful for finding large-batch selective alpha sessions.",
         "Export to CSV to keep a log of all selective alpha operations performed.",
+        "Selective Alpha history. Each row = one selective alpha session you ran.",
+        "Congratulations, you found the Selective Alpha history. Very specific records await.",
+        "Click a row to see the file names. The table is expandable. Fancy.",
     ],
     "history_conv_tree": [
         "Each row is one converter batch run. Columns: time, format, files, successes, errors.",
@@ -441,6 +554,9 @@ _NORMAL: dict[str, list[str]] = {
         "Rows are sorted newest-first by default — click the Time column header to reverse.",
         "The File Names column truncates at 10 entries; export to CSV for the full list.",
         "Search box above filters all columns — type a format name to filter by format.",
+        "Click a row to expand it and see each individual file that was converted.",
+        "Congratulations on finding the conversion history table. Now look at what you've done.",
+        "The table keeps up to 50 sessions. After that, old ones fall off. Natural selection.",
     ],
     "history_alpha_tree": [
         "Each row is one alpha-fix batch run. Columns: time, preset/mode, files, successes, errors.",
@@ -451,6 +567,9 @@ _NORMAL: dict[str, list[str]] = {
         "Rows are sorted newest-first by default — click any column header to re-sort.",
         "The File Names column truncates at 10 entries; export to CSV for the full list.",
         "Search box above filters all columns — type a preset name to find all runs using it.",
+        "Click a row to expand it and see per-file results from that alpha fix session.",
+        "Congratulations, you're reading an alpha fix history log. Niche but useful.",
+        "50 rows max. After that, ancient history disappears. Sad but necessary.",
     ],
     "history_sel_tree": [
         "Each row is one selective alpha batch run. Columns: time, mode, files, successes, errors.",
@@ -461,6 +580,9 @@ _NORMAL: dict[str, list[str]] = {
         "Rows are sorted newest-first by default — click any column header to re-sort.",
         "The File Names column truncates at 10 entries; export to CSV for the full list.",
         "Search box filters all columns in real-time — type a zone name or file fragment.",
+        "Click a row to expand it and see per-file details from that selective alpha run.",
+        "Congratulations, you found the selective alpha log. Very specific records in here.",
+        "50 sessions max. After that, the oldest ones quietly vanish.",
     ],
     "history_conv_summary": [
         "Summary of your converter history — total sessions and files converted.",
@@ -471,6 +593,9 @@ _NORMAL: dict[str, list[str]] = {
         "Summary stats are computed across all visible (filtered) rows, not just the full history.",
         "If the error count is >0, filter by format to see which format is failing most often.",
         "Summary resets to zero when history is cleared — use CSV export for long-term tracking.",
+        "All your conversion sessions summarized in one line. Total view.",
+        "Congratulations on finding the summary row. Very efficient data consumption.",
+        "Updates every time you refresh. The numbers reflect your actual processing history.",
     ],
     "history_alpha_summary": [
         "Summary of your alpha-fix history — total sessions and files processed.",
@@ -481,6 +606,9 @@ _NORMAL: dict[str, list[str]] = {
         "Summary stats are computed across all visible (filtered) rows, not just the full history.",
         "If errors are high, filter by preset to isolate which alpha preset is causing problems.",
         "Summary resets to zero when history is cleared — export to CSV before clearing.",
+        "All your alpha fix sessions summarized in one handy line. Efficiency.",
+        "Congratulations on reaching the summary. Here's the grand total of your alpha fixes.",
+        "Refreshes when you hit Refresh. Same as everything else in this tab.",
     ],
     "history_sel_summary": [
         "Summary of your selective alpha history — total sessions and files processed.",
@@ -491,6 +619,9 @@ _NORMAL: dict[str, list[str]] = {
         "Summary stats are computed across all visible (filtered) rows, not just the full history.",
         "Filter by zone or mode to narrow down which configuration produces the most errors.",
         "Summary resets to zero when history is cleared — use CSV export for long-term tracking.",
+        "Summary of all selective alpha sessions. Aggregate view.",
+        "Congratulations on finding the summary at the bottom. Very thorough of you.",
+        "Grand total of all the selective alpha work you've done. Impressive or alarming.",
     ],
     "history_search": [
         "Type to filter history rows in real time — searches across all columns.",
@@ -501,6 +632,9 @@ _NORMAL: dict[str, list[str]] = {
         "Searches across Time, Format/Preset, and File Name columns simultaneously.",
         "Press Escape to clear the search field and restore the full history list.",
         "The × button on the right clears the filter without needing to select the text first.",
+        "Type here to find specific sessions. Format, date, file name — it searches all of it.",
+        "Works in real time. The list shrinks as you type. Very satisfying.",
+        "Congratulations, you found the search box. It works exactly like you'd expect.",
     ],
     "settings_theme_tab": [
         "The Theme tab: choose a preset theme or build your own custom color scheme.",
@@ -511,6 +645,9 @@ _NORMAL: dict[str, list[str]] = {
         "Custom color themes are saved in the INI settings file and persist across sessions.",
         "Import themes created by the community using the Import button — JSON format.",
         "Locked hidden themes are greyed out until unlocked — earn them through usage milestones.",
+        "15 customizable color slots. Click any swatch to change it. Instant preview.",
+        "Congratulations on arriving at the Theme tab. Make it look exactly how you want.",
+        "Locked themes show a lock icon. Keep using the app and they unlock. Patience rewarded.",
     ],
     "settings_general_tab": [
         "The General tab: configure click effects, trails, cursor, sounds, font, and tooltip style.",
@@ -521,6 +658,9 @@ _NORMAL: dict[str, list[str]] = {
         "All changes are previewed live — no need to restart or click Save for most settings.",
         "Apply & Close commits all changes; Close without Apply discards unsaved changes.",
         "The Reset All Settings button here returns everything to factory defaults — use with caution.",
+        "Sounds, effects, trails, fonts, resets — it's all here in one glorious tab.",
+        "Congratulations on finding General Settings. You'll probably spend a while in here.",
+        "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
     ],
     "alpha_file_count_lbl": [
         "Shows how many files are in the list and the keyboard shortcuts to run or stop.",
@@ -531,6 +671,9 @@ _NORMAL: dict[str, list[str]] = {
         "F5 starts processing; Escape stops a running batch; Ctrl+O opens the Add Files dialog.",
         "During a batch run the label shows per-file progress and an ETA for large queues.",
         "The counter resets each time you clear the list — drag new files in right away.",
+        "How many files are queued. Counting is useful. This does it for you.",
+        "Congratulations on reading the file count. Now add some files if it says zero.",
+        "Updates when you add or remove files. That's how counts work.",
     ],
     "conv_file_count_lbl": [
         "Shows how many files are queued for conversion and the keyboard shortcuts.",
@@ -541,6 +684,9 @@ _NORMAL: dict[str, list[str]] = {
         "F5 starts conversion; Escape stops a running batch; Ctrl+Shift+O adds a whole folder.",
         "During conversion the label shows per-file progress and an ETA for large queues.",
         "The counter updates immediately when files are added or removed from the queue.",
+        "Converter queue count. How many files want to be converted. Very descriptive.",
+        "Congratulations on reading the converter file count. Add files if zero.",
+        "Goes up with adds, down with removes, resets on Clear. Math.",
     ],
     "processing_log": [
         "The log panel shows real-time messages from the processing worker.",
@@ -551,6 +697,9 @@ _NORMAL: dict[str, list[str]] = {
         "✔ lines mean success; ✘ lines mean failure — each failure includes a brief error reason.",
         "The log is cleared at the start of each new batch run — previous entries are not saved.",
         "Right-click the log to select-all and copy the text for pasting into a bug report.",
+        "Congratulations on discovering the log. All the per-file results are in here.",
+        "Tick = worked. Cross = didn't. Red text = error details. Very clear.",
+        "Scroll up to see older log entries. The log doesn't disappear mid-process.",
     ],
     "processing_progress": [
         "The progress bar fills as each file in the batch is processed.",
@@ -561,6 +710,9 @@ _NORMAL: dict[str, list[str]] = {
         "The progress bar is reset to 0 % at the start of each new batch run automatically.",
         "Hovering the bar shows the exact file count processed / total queued.",
         "For single-file batches the bar jumps straight from 0 % to 100 % instantly.",
+        "Fills from left to right. Reaches 100% when done. Wild, right?",
+        "Congratulations on locating the progress bar. Now watch it fill up.",
+        "Each file processed moves it a little. Many files, many little moves.",
     ],
     "alpha_status_lbl": [
         "Shows the current status of the Alpha & RGBA Adjuster — Ready, processing, or a done summary.",
@@ -571,6 +723,9 @@ _NORMAL: dict[str, list[str]] = {
         "Status updates from 'Processing…' to a success/failure summary as soon as the batch ends.",
         "A yellow status indicates warnings — check the log panel for per-file details.",
         "The label returns to 'Ready.' as soon as you modify any setting or add new files.",
+        "Wild concept: a label that tells you what's happening. Read it.",
+        "Congratulations, you found the status label. It has useful information in it.",
+        "Idle = nothing happening. Anything else = something is happening. Simple.",
     ],
     "conv_status_lbl": [
         "Shows the current status of the Converter — Ready, converting, or a done summary.",
@@ -581,6 +736,9 @@ _NORMAL: dict[str, list[str]] = {
         "Status updates from 'Converting…' to a success/failure summary as soon as the batch ends.",
         "A yellow status indicates warnings — check the log panel for per-file details.",
         "The label returns to 'Ready.' as soon as you modify any setting or add new files.",
+        "Converter status. Same idea as the alpha one but for converting.",
+        "Congratulations on reading the converter status. Very informative decision.",
+        "'Ready.' = nothing happening. Numbers = something happened. Interpret accordingly.",
     ],
     "theme_search": [
         "Type part of a theme name here to instantly filter the theme dropdown.",
@@ -591,6 +749,9 @@ _NORMAL: dict[str, list[str]] = {
         "The search filters the theme dropdown list in real time — no need to press Enter.",
         "Type a partial name to narrow a long list; press × or delete the text to show all themes.",
         "Search is case-insensitive and matches anywhere in the theme name.",
+        "Type here and the theme dropdown filters down. Instantly. Like magic.",
+        "Congratulations on finding the theme search. 40 themes is a lot to scroll through.",
+        "Delete your text to bring all themes back. Very standard search behavior.",
     ],
     "sound_check": [
         "Enable or disable click sound effects throughout the app.",
@@ -601,6 +762,9 @@ _NORMAL: dict[str, list[str]] = {
         "Sounds are played via Qt Multimedia — volume is controlled by the slider below.",
         "Custom .wav files in the sound path field are used when 'Use theme sound' is off.",
         "Each event type (success, error, unlock, click) can be toggled individually in the section below.",
+        "Checked = app makes sounds. Unchecked = silence. Revolutionary toggle.",
+        "Congratulations on finding the global sound toggle. It controls everything below.",
+        "If you untick this, all the other sound checkboxes below do nothing. FYI.",
     ],
     "trail_check": [
         "Toggle the mouse trail overlay on or off.",
@@ -611,6 +775,8 @@ _NORMAL: dict[str, list[str]] = {
         "First time enabling the trail unlocks Midnight Forest 🌲 — a free hidden theme!",
         "Enable the trail once to get the Midnight Forest theme as a reward.",
         "Trail and click effects stack — enable both for a full particle-and-streak combo.",
+        "Check it. Move your mouse. Watch the trail appear. Very satisfying discovery.",
+        "Congratulations on finding the trail toggle. Enable it at least once to see what it does.",
     ],
     "trail_color": [
         "Click to pick the color for the mouse trail effect.",
@@ -621,6 +787,9 @@ _NORMAL: dict[str, list[str]] = {
         "The color picker shows your last used color first — quick to re-select.",
         "Bright saturated colors stand out most on dark backgrounds; light colors suit bright themes.",
         "Color changes take effect immediately without needing to click Apply & Close.",
+        "One click picks a color for your cursor trail. The color picker is very user-friendly.",
+        "Congratulations on customizing your trail color. It looks great. Probably.",
+        "Remember: trail needs to be enabled for this color to show up. Check that box first.",
     ],
     "trail_style": [
         "Choose the visual style of the mouse trail.",
@@ -631,6 +800,9 @@ _NORMAL: dict[str, list[str]] = {
         "Rainbow cycles through the full colour spectrum — tail to head sweeps the whole hue wheel.",
         "Fairy, Wave, and Sparkle styles use Unicode emoji — scale with font size on high-DPI displays.",
         "Comet style tapers toward the tail; pair with a vivid theme color for maximum impact.",
+        "Some styles look better at faster speeds. Experiment until one looks right.",
+        "Congratulations on finding the Trail Style dropdown. There are a surprising number of options.",
+        "You can override this with Use Theme Trail if you want fully automatic styling.",
     ],
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
@@ -641,6 +813,9 @@ _NORMAL: dict[str, list[str]] = {
         "Check this for a fully auto-themed experience: trail color and style both follow the active theme.",
         "Galaxy theme activates a sparkling star-dust emoji trail automatically.",
         "Uncheck to lock in a specific trail color regardless of which theme is active.",
+        "Checked = theme decides trail style. Unchecked = you're in charge. Your call.",
+        "Congratulations on discovering Use Theme Trail. Very convenient if you like themes matching.",
+        "Each theme has its own trail vibe. Bat Cave gets bats. Rainbow gets rainbow. Predictably.",
     ],
     "trail_length_slider": [
         "Controls how many trail points are kept — longer trail or shorter trail.",
@@ -651,6 +826,9 @@ _NORMAL: dict[str, list[str]] = {
         "Longer trails look best with Ribbon or Comet style; shorter trails suit Dots or Sparkle.",
         "Very long trails (150+) can impact performance on low-spec machines — tune accordingly.",
         "Trail length is saved between sessions and restores to your last used value on startup.",
+        "Drag it and watch the trail change in real time. That's how sliders work.",
+        "Congratulations on adjusting trail length. Your cursor has a longer tail now.",
+        "Short trail = subtle. Long trail = maximum dramatic effect. Pick your vibe.",
     ],
     "trail_fade_slider": [
         "Controls how fast the trail fades from full opacity to invisible.",
@@ -661,6 +839,9 @@ _NORMAL: dict[str, list[str]] = {
         "Slower fade (lower value) pairs well with longer trail length for a ghost-tail effect.",
         "Fast fade (value 8–10) gives a crisp, snappy trail that vanishes almost instantly.",
         "Fade speed is independent from trail length — experiment with combinations.",
+        "Drag it and watch how quickly the trail vanishes. Left = slow. Right = fast.",
+        "Congratulations on finding the fade control. Low = ghost mode. High = instant.",
+        "Works best when combined with the length slider. Tune them together.",
     ],
     "trail_intensity_slider": [
         "Controls the maximum brightness/opacity of the trail (10–100%).",
@@ -671,6 +852,9 @@ _NORMAL: dict[str, list[str]] = {
         "Lower intensity lets the trail complement the UI without overwhelming it.",
         "Full intensity (100%) is best with vivid neon or dark themes for maximum contrast.",
         "Intensity changes apply live — move the slider and see the trail update immediately.",
+        "Intensity = how much it stands out. Low = ghost. High = vivid. Dial it in.",
+        "Congratulations on discovering trail intensity. It changes how visible the trail is.",
+        "Combine with a bright color for maximum pop. Or dim it for subtlety. Your choice.",
     ],
     "cursor_combo": [
         "Change the mouse cursor shape used throughout the application.",
@@ -681,6 +865,9 @@ _NORMAL: dict[str, list[str]] = {
         "Emoji cursors (🐼, 🦈, 🔥, etc.) are available when specific themes are active or unlocked.",
         "Precision crosshair is useful for pixel-perfect work in the Selective Alpha canvas.",
         "Custom cursor setting is remembered across sessions — no need to set it each time.",
+        "Wild concept: you can change your cursor shape. From a dropdown. Right here.",
+        "Congratulations on exploring cursor options. Many pointy arrow choices await.",
+        "Click Apply after choosing. Or just pick Use Theme Cursor and let the theme decide.",
     ],
     "use_theme_cursor": [
         "When enabled, the cursor automatically matches the active theme.",
@@ -691,6 +878,9 @@ _NORMAL: dict[str, list[str]] = {
         "Enable this for a zero-configuration cursor: just switch themes and the cursor follows.",
         "Fairy Garden and Rainbow Chaos themes get whimsical cursors; Gore and Neon get crosshairs.",
         "Uncheck to keep a specific cursor regardless of which theme is currently active.",
+        "Checked = theme picks cursor. Easy mode cursor management.",
+        "Congratulations on finding the theme cursor option. Very hands-off decision.",
+        "Different themes get different cursors. Otter Cove gets a special one, others get sensible ones.",
     ],
     "cursor_anim": [
         "When enabled, emoji cursors play a short looping animation (≈ 2.5 fps).",
@@ -702,6 +892,9 @@ _NORMAL: dict[str, list[str]] = {
         "Static cursors are slightly more accurate for click targeting — animation adds a 1 px offset effect.",
         "Cursor animation restarts its cycle each time the cursor stops and starts moving.",
         "Works with both 'Use Theme Cursor' and manual cursor selection from the combo box.",
+        "It cycles between a few related emoji every few frames. Novelty factor: high.",
+        "Congratulations on enabling cursor animation. Your cursor now has opinions.",
+        "Turn it off if the wiggling is distracting. Not every cursor needs to be alive.",
     ],
     "font_size": [
         "Adjust the global font size (in points) for all text in the app.",
@@ -712,6 +905,9 @@ _NORMAL: dict[str, list[str]] = {
         "All text elements scale proportionally — labels, buttons, tabs, tooltips all update together.",
         "Sizes below 9 pt may make some labels clip; sizes above 16 pt may cause layout overflow.",
         "Changes apply immediately in the preview but take full effect after Apply & Close.",
+        "Smaller number = harder to read. Bigger number = easier but chunkier layout.",
+        "Congratulations on finding the font size control. 10-12 is the sweet spot for most.",
+        "Changes apply across the whole app. Immediately. Wild, right?",
     ],
     "click_effects_check": [
         "Enable or disable the per-theme click particle effects.",
@@ -722,6 +918,9 @@ _NORMAL: dict[str, list[str]] = {
         "Particles are spawned on the overlay layer above all widgets — they never block UI interaction.",
         "Effect style and emoji list (for Custom mode) are configured in the Theme tab.",
         "Disable temporarily during heavy batch work to keep the screen clean and distraction-free.",
+        "Check it and watch things explode when you click. Uncheck it and they stop.",
+        "Congratulations on finding the Click Effects toggle. Particles await your decision.",
+        "Use Theme Effect auto-picks the right particles. This just turns them on or off.",
     ],
     "use_theme_effect": [
         "When enabled, the click effect automatically matches the active theme.",
@@ -732,6 +931,9 @@ _NORMAL: dict[str, list[str]] = {
         "Check this for the full immersive experience — every theme has a handpicked particle effect.",
         "Uncheck to use a fixed effect style that doesn't change when you switch themes.",
         "Theme effect assignment is hard-coded — e.g. Fairy Garden always gets sparkles, Bat Cave gets bats.",
+        "Wild concept: the particles match the theme automatically. Check and see.",
+        "Congratulations on finding Use Theme Effect. Very convenient automation.",
+        "Bat Cave gets bats. Fairy gets stars. Gore gets what you'd expect. Very thematic.",
     ],
     "animated_banner_check": [
         "Toggle the spinning emoji banner and animated SVG badge on or off.",
@@ -742,6 +944,9 @@ _NORMAL: dict[str, list[str]] = {
         "The banner animation is rendered at low frame rate to minimize CPU/GPU impact.",
         "Animation style (Bounce, Shake, etc.) is set in the combo box below this checkbox.",
         "The SVG badge in the header also starts animating when this is enabled.",
+        "The spinning mascot emoji is controlled by this checkbox. Enable for fun.",
+        "Congratulations on finding the banner animation toggle. Very important control.",
+        "Turn it on for the full animated experience. Turn it off for clean minimalism.",
     ],
     "banner_anim_combo": [
         "Choose the animation style for the header banner when the banner is enabled.",
@@ -752,6 +957,9 @@ _NORMAL: dict[str, list[str]] = {
         "Flock style sends small themed particles drifting across the header bar continuously.",
         "Pendulum swings the emoji in a wide arc — great for playful themes like Panda or Fairy.",
         "The combo box is disabled when 'Use theme animation' is checked — the theme picks the style.",
+        "Try each option. The banner updates live. Very easy to experiment.",
+        "Congratulations on finding the banner animation style dropdown. Many options exist.",
+        "Flock is the fancy one with floating particles around the header. Very extra.",
     ],
     "banner_use_theme_anim_check": [
         "When enabled, the banner animation style is chosen automatically by the active theme.",
@@ -762,6 +970,9 @@ _NORMAL: dict[str, list[str]] = {
         "Each of the 40 themes has a default animation style that best fits its aesthetic.",
         "Check this alongside 'Use theme effect' and 'Use theme cursor' for a fully auto-themed experience.",
         "Uncheck only when you want to override the theme's default banner animation style manually.",
+        "Lets the theme decide the animation style. Same idea as theme cursor and trail.",
+        "Congratulations on finding this setting. Your banner will now match your theme.",
+        "Uncheck to override with the dropdown above. Full manual control if needed.",
     ],
     "show_splash_check": [
         "Show or hide the animated splash screen when the app starts.",
@@ -772,6 +983,9 @@ _NORMAL: dict[str, list[str]] = {
         "The splash screen duration is ~3 seconds and cannot be clicked away — it auto-dismisses.",
         "Splash artwork adapts to the active theme: each theme has its own SVG splash design.",
         "Disable for faster startup on slow machines or when you just want to get to work quickly.",
+        "Splash screen lasts about 3 seconds on startup. Very dramatic. Very optional.",
+        "Congratulations on finding the splash screen toggle. Enable for theatrical launches.",
+        "Turn it off if you want the app to open fast. Turn it on for the full entrance.",
     ],
     "button_anim_check": [
         "Enable short animations when any button in the app is pressed.",
@@ -782,6 +996,9 @@ _NORMAL: dict[str, list[str]] = {
         "Button animations are purely cosmetic — they add no delay to the actual button action.",
         "Works on all QPushButton widgets in the app, including tab buttons and small icon buttons.",
         "Disable if you find the animations distracting during rapid workflow use.",
+        "Checked = buttons do little animations. Unchecked = buttons are boring but fast.",
+        "Congratulations on finding the button animation toggle. Vibes decision ahead.",
+        "Each animation style does something different. See the style dropdown below.",
     ],
     "button_anim_style_combo": [
         "Choose the style of animation to apply when a button is pressed.",
@@ -793,6 +1010,8 @@ _NORMAL: dict[str, list[str]] = {
         "Press and Fall feel the most physical; Bounce and Shake are more expressive and playful.",
         "Shatter is the most visually dramatic — it combines the animation with click-effect particles.",
         "The combo is disabled when 'Use theme button animation' is checked — the theme picks the style.",
+        "Congratulations on finding this dropdown. Your buttons are about to have a personality.",
+        "Try each one. Apply. Click a button. See if you like it. Very experimental process.",
     ],
     "use_theme_button_anim_check": [
         "When enabled the animation style is chosen automatically by the active theme.",
@@ -803,6 +1022,9 @@ _NORMAL: dict[str, list[str]] = {
         "Each of the 40 built-in themes has a pre-assigned button animation style to match its personality.",
         "Overrides the manual combo box selection — the combo box re-enables when you uncheck this.",
         "Check alongside 'Use theme effect' and 'Use theme cursor' for a fully auto-themed experience.",
+        "Let the theme pick the button animation. Consistent theming. Very elegant.",
+        "Congratulations on finding the auto-animation toggle. Easy mode for button vibes.",
+        "Uncheck to choose the style yourself. The dropdown below becomes your domain.",
     ],
     "save_custom_theme": [
         "Save the current colour values as a new custom theme.",
@@ -813,6 +1035,9 @@ _NORMAL: dict[str, list[str]] = {
         "Custom themes are stored as named sections in the INI settings file — portable and editable.",
         "You can save as many custom themes as you like; there is no cap on the number.",
         "After saving, the new theme immediately appears in the theme dropdown for selection.",
+        "Type a name. Press Save. Done. Your theme is immortalized.",
+        "Congratulations on saving your first custom theme. It's in the dropdown now.",
+        "You can overwrite it later by saving with the exact same name. Very convenient.",
     ],
     "delete_custom_theme": [
         "Delete the currently selected custom theme.",
@@ -823,6 +1048,9 @@ _NORMAL: dict[str, list[str]] = {
         "You cannot delete the currently active theme — switch to another first, then delete.",
         "Built-in preset themes (all 40 default ones) are protected and can never be deleted.",
         "Export the theme to JSON before deleting if you want to be able to restore it later.",
+        "Only deletes the selected one. Other themes are completely safe. Breathe.",
+        "Congratulations on finding the delete button for themes. It works. Be careful.",
+        "Can't delete built-in themes. They're protected. Only your custom ones are at risk.",
     ],
     "export_custom_theme": [
         "Export the currently selected theme as a JSON file for sharing or backup.",
@@ -833,6 +1061,9 @@ _NORMAL: dict[str, list[str]] = {
         "Exported JSON files can be shared with other users who can import them on their install.",
         "The file is plain text — open it in any editor to manually tweak colour hex values.",
         "Export works for both built-in and custom themes — a great way to document your palette.",
+        "Exports to JSON so you can share it, back it up, or move it to another install.",
+        "Congratulations on finding theme export. Your color work is now portable.",
+        "The JSON file can be imported on any machine running this app. Cross-device theming.",
     ],
     "import_custom_theme": [
         "Import a theme from a JSON file exported by this app.",
@@ -843,6 +1074,9 @@ _NORMAL: dict[str, list[str]] = {
         "The JSON must contain at minimum: background, surface, primary, accent, and text keys.",
         "After import the theme is selected and applied immediately — you can tweak it further.",
         "Community-made themes can be downloaded and imported this way to extend your collection.",
+        "Pick a JSON file and the theme loads into your list. Instant custom theme.",
+        "Congratulations on finding theme import. Someone else's work is now yours.",
+        "The JSON just needs the right color keys. Wrong format = politely rejected.",
     ],
     "sound_path": [
         "Path to a custom .wav file to use as the click sound.",
@@ -853,6 +1087,9 @@ _NORMAL: dict[str, list[str]] = {
         "The path is resolved relative to the application directory if a relative path is entered.",
         "WAV format is most reliably supported; MP3 and OGG may work but depend on system codecs.",
         "Leave this blank to always use the built-in default click sound bundled with the app.",
+        "WAV files only. Not MP3, not OGG. WAV. Very specific requirement.",
+        "Congratulations on finding the custom sound path field. Browse or type. Either works.",
+        "Leave it blank for the built-in default blip. It's honestly quite pleasant.",
     ],
     "sound_browse": [
         "Open a file browser to choose a custom .wav sound file.",
@@ -863,6 +1100,9 @@ _NORMAL: dict[str, list[str]] = {
         "The file browser filters to .wav files by default — other formats shown if you change the filter.",
         "After selecting a file, the sound plays immediately on the next click so you can audition it.",
         "Clear the path field manually or leave it blank to revert to the built-in default sound.",
+        "Congratulations on finding Browse. Now click it and find your WAV file.",
+        "It opens a file picker. You pick a WAV. Very advanced two-step process.",
+        "The path fills in automatically after you pick a file. That's what Browse does.",
     ],
     "sound_volume_slider": [
         "Master volume for all application sounds (0 = silent, 100 = full volume).",
@@ -873,6 +1113,9 @@ _NORMAL: dict[str, list[str]] = {
         "Volume 0 mutes all sounds instantly without disabling the sound toggle.",
         "Changing volume takes effect immediately — no need to click Apply & Close.",
         "Each sound event (click, success, error) uses this master volume as a scale factor.",
+        "Wild concept: you control how loud the app sounds are. Right here.",
+        "Congratulations on finding volume control. Now make the noises the right volume.",
+        "Drag it left to get quieter. Drag it right to get louder. That's how volume works.",
     ],
     "sound_success_check": [
         "Play a cheerful two-note chime when a batch completes with no errors.",
@@ -883,6 +1126,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires at the end of a batch run only when zero file errors occurred.",
         "Tone is two ascending notes (C5 → E5) — pleasant and recognisable as a 'win' sound.",
         "Disable to keep a silent workflow while still getting the visual status update.",
+        "Check this and hear a pleasant sound when everything works. It's satisfying.",
+        "Congratulations on finding the success sound option. Enable it. You earned that chime.",
+        "Fires when ALL files in a batch complete without errors. The good outcome.",
     ],
     "sound_error_check": [
         "Play a descending buzz when a batch finishes with one or more file errors.",
@@ -893,6 +1139,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires at the end of a batch run when one or more files failed to process.",
         "The descending E3→C3 tone is distinct from the success chime so you can tell them apart.",
         "Even with sound off, error counts are shown in the status label and log panel.",
+        "Check this and hear a distinct sound when something fails. Audio debugging.",
+        "Congratulations on finding the error sound setting. It's a sad little buzzer.",
+        "Pairs well with the success sound so you can tell outcomes without looking.",
     ],
     "sound_unlock_check": [
         "Play an ascending arpeggio fanfare when a secret theme is unlocked.",
@@ -903,6 +1152,9 @@ _NORMAL: dict[str, list[str]] = {
         "The fanfare is a rising 4-note arpeggio — unmistakably celebratory.",
         "Fires the first time a new theme is unlocked; does not repeat for already-unlocked themes.",
         "Visual unlock banner appears regardless — the sound is purely an additional celebration.",
+        "Check this for an ascending fanfare every time you unlock a secret theme.",
+        "Congratulations on finding the unlock sound toggle. Enable it. You want this.",
+        "Fires once per unlock. That's it. You don't have to earn it twice.",
     ],
     "sound_file_add_check": [
         "Play a soft thunk when files are dropped or added to the processing queue.",
@@ -913,6 +1165,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires once per add-event, not once per file — adding 200 files at once plays the sound once.",
         "The sound is a soft thunk, quiet enough to not be annoying during rapid file-adding.",
         "Disable if you prefer silent drag-and-drop workflows.",
+        "Check for a thump when files enter the queue. Nice tactile audio feedback.",
+        "Congratulations on finding the file-add sound option. Enable for satisfying thumps.",
+        "Soft landing sound when files enter the list. Reassuring click-confirmation.",
     ],
     "sound_preview_check": [
         "Play a subtle ping each time the live preview image refreshes.",
@@ -923,6 +1178,9 @@ _NORMAL: dict[str, list[str]] = {
         "The preview ping is deliberately low volume — it won't compete with your music or other sounds.",
         "Fires only when the preview actually refreshes, not on every mouse move over the widget.",
         "Useful for confirming the preview updated when you have the window partially obscured.",
+        "It pings on every preview refresh. Off by default to avoid constant pinging.",
+        "Congratulations on finding the preview sound. Enable if you enjoy constant soft pings.",
+        "Useful as an audio confirmation that the preview updated. Very niche.",
     ],
     "sound_process_start_check": [
         "Play a short ascending two-tone cue when a batch starts processing.",
@@ -933,6 +1191,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires as soon as the processing worker thread starts — before any file is actually read.",
         "Two quick ascending beeps (440 Hz then 660 Hz) give an unambiguous 'work started' cue.",
         "Pair with the success/error sounds for full audio feedback from start to finish.",
+        "Two quick ascending beeps when a batch begins. Good audio GO signal.",
+        "Congratulations on finding the start-of-batch sound. Enable for audio confirmation.",
+        "Fires once when batch begins. Pairs with the success sound for start-to-end audio.",
     ],
     "sound_file_remove_check": [
         "Play a short descending pop when files are removed from the processing queue.",
@@ -943,6 +1204,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires when items are removed via Delete key, right-click Remove, or the Clear List button.",
         "The downward pitch sweep is distinct from the file-add sound so you can tell them apart.",
         "Useful in hands-free workflows where you delete files while looking at something else.",
+        "Check this for a soft swoosh when files are removed from the queue. Satisfying.",
+        "Congratulations on finding the file-remove sound. It confirms deletion audibly.",
+        "Short descending tone when files leave. Distinct from the add sound.",
     ],
     "sound_theme_change_check": [
         "Play a soft upward whoosh sound whenever the active theme is changed.",
@@ -953,6 +1217,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires every time you select a different theme — including when switching back to a previous one.",
         "The rising whoosh is smooth and brief — won't annoy during rapid theme browsing.",
         "Disable if you browse themes frequently and find the repeated whoosh distracting.",
+        "Check for a whoosh every time you switch themes. Very satisfying transition noise.",
+        "Congratulations on finding the theme change sound. Enable for theme-switching audio.",
+        "Fires every time the theme dropdown changes. Very feedback-friendly.",
     ],
     "sound_tab_switch_check": [
         "Play a quick soft tick sound whenever you switch between the main tabs.",
@@ -963,6 +1230,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires on every main-tab switch: Alpha Fixer, Converter, History, and Settings tabs.",
         "The tick is very brief (~50 ms) and quiet — barely noticeable but confirms tab change.",
         "Disable during heavy batch work when tab-switching sounds might break your focus.",
+        "Check for a click sound when hopping between the main tabs. Navigation audio.",
+        "Congratulations on finding the tab-switch sound option. Enable for clicky tabs.",
+        "Very quiet. Won't startle you. Just a small confirmation sound.",
     ],
     "sound_drag_enter_check": [
         "Play a gentle rising ping when files are dragged over the drop zone.",
@@ -973,6 +1243,9 @@ _NORMAL: dict[str, list[str]] = {
         "The rising ping fires as soon as dragged files cross into the drop zone boundary.",
         "Helps confirm you're over the right drop zone without looking away from what you're dragging.",
         "Disable if drag-and-drop sounds feel redundant alongside the visual drop highlight.",
+        "Check for a rising tone when you drag files over the drop zone. Good feedback.",
+        "Congratulations on finding the drag-enter sound. It fires when drag enters the zone.",
+        "Very subtle. Just a soft tone to confirm you're in the right place.",
     ],
     "sound_zone_paint_check": [
         "Play a soft brush-stroke sound each time you paint a new zone pixel.",
@@ -983,6 +1256,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires when new zone pixels are detected — throttled to one sound per ~100 ms to avoid rapid-fire.",
         "The brush-stroke sound is soft and brief — won't interrupt focus during long painting sessions.",
         "Pairs well with sa_mask_copy and sa_mask_paste sounds for complete SA audio feedback.",
+        "Check for brush sounds while painting on the selective alpha canvas. Art noises.",
+        "Congratulations on finding the zone paint sound. Enable for satisfying canvas audio.",
+        "Throttled so it doesn't rapid-fire. Just occasional confirmation clicks.",
     ],
     "sound_mask_copy_check": [
         "Play a clipboard click when you copy a zone mask to the clipboard.",
@@ -993,6 +1269,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires when the Copy Mask button is pressed on any zone row in the Selective Alpha panel.",
         "The clipboard click is short and crisp — clearly different from the mask-paste sound.",
         "Only one mask can be in the clipboard at a time; copying again replaces the previous.",
+        "Check for a click when you copy a zone mask. Audio confirmation it worked.",
+        "Congratulations on finding the mask-copy sound toggle. Very specific, very useful.",
+        "Short distinct click. Different from Paste sound so you know which happened.",
     ],
     "sound_mask_paste_check": [
         "Play a pop sound when you paste a copied mask onto a zone.",
@@ -1003,6 +1282,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires only when a valid mask is in the clipboard — no sound if the clipboard is empty.",
         "The pop sound is distinct from the copy sound so you can distinguish the two actions.",
         "Paste replaces the entire zone mask — the sound confirms the operation completed.",
+        "Check for a pop when you paste a mask. Confirmation the paste actually worked.",
+        "Congratulations on finding the mask-paste sound option. Enable for paste confirmation.",
+        "Only plays if there's a mask to paste. Silent if clipboard is empty.",
     ],
     "sound_bat_screech_check": [
         "Play a bat screech when the Bat Cave theme is selected.",
@@ -1013,6 +1295,9 @@ _NORMAL: dict[str, list[str]] = {
         "The screech fires only on the first switch to Bat Cave per session — not on repeat visits.",
         "The screech is brief (~0.5 s) and lower volume than the click sound for subtlety.",
         "Uncheck if you work in Bat Cave theme all the time and find the screech repetitive.",
+        "Enable and get a bat screech on Bat Cave theme switch. Atmospheric choice.",
+        "Congratulations on finding the bat screech toggle. Your theme switching is now spooky.",
+        "Falls back to normal whoosh if unchecked. Bat Cave still works, just less dramatically.",
     ],
     "sound_cat_meow_check": [
         "Play a cat meow when a Panda or cat-themed theme is selected.",
@@ -1023,6 +1308,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires when switching to Panda Dark, Panda Light, Space Cat, or Purrfect Cats themes.",
         "The meow is soft and quick — a short 'mew' rather than a full yowl.",
         "Uncheck if you live in Panda theme permanently and prefer silence on theme changes.",
+        "Enable for a meow whenever you switch to cat-adjacent themes. Very cute.",
+        "Congratulations on finding the meow toggle. Enable it. You know you want to.",
+        "Applies to: Panda Dark, Panda Light, Space Cat, Purrfect Cats. All the soft themes.",
     ],
     "sound_dog_bark_check": [
         "Play a dog bark when the file list is cleared all at once.",
@@ -1033,6 +1321,9 @@ _NORMAL: dict[str, list[str]] = {
         "The bark fires on the Clear All Files action in either the Alpha or Converter queue.",
         "Short, single woof — not a full dog soundboard, just a fun confirmation.",
         "Also plays when switching to the Good Dog �� theme if that theme is installed.",
+        "Enable and a dog bark plays when clearing all files. Very enthusiastic confirmation.",
+        "Congratulations on finding the dog bark toggle. WOOF is your clear-all alert.",
+        "Also fires on Good Dog theme switch. Double bark value for one checkbox.",
     ],
     "sound_frog_croak_check": [
         "Play a frog croak for Slime or swamp-themed events.",
@@ -1043,6 +1334,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fires when switching to the Slime 🟢 or Snake Pit 🐍 themes.",
         "The croak is two-pulse (ribbit-ribbit) — unmistakably amphibian and brief.",
         "Uncheck if you switch between swamp themes often and find the repeated croak annoying.",
+        "Enable for a frog croak on swampy theme switches. Slime and Snake Pit eligible.",
+        "Congratulations on finding the frog sound toggle. The swamp is now fully interactive.",
+        "Two low raspy pulses. Very dignified croaking. Very atmospheric.",
     ],
     "sound_batch_done_check": [
         "Play an ascending fanfare when a batch of 100 or more files finishes.",
@@ -1053,6 +1347,9 @@ _NORMAL: dict[str, list[str]] = {
         "Only fires for batches of 100+ files — smaller batches use the standard success chime.",
         "The fanfare is louder and longer than the success chime — hard to miss from another room.",
         "Great for unattended overnight batch runs where you want a clear 'all done' signal.",
+        "Check for a fanfare when 100+ files finish processing. Big batch celebration.",
+        "Congratulations on finding the batch done sound. Enable for large-batch audio.",
+        "Only fires on large batches. For 99 files or fewer, you get the regular success ping.",
     ],
     "reset_all_settings": [
         "Reset ALL application settings to their factory defaults.",
@@ -1063,6 +1360,9 @@ _NORMAL: dict[str, list[str]] = {
         "Resets theme, cursor, trail, sound volume, click effects, tooltip mode, and font size.",
         "Custom themes and saved presets are also cleared — export them first if you want to keep them.",
         "A confirmation dialog appears before any change is made — you can cancel safely.",
+        "Congratulations on finding the nuclear reset button. Maybe don't use it casually.",
+        "Confirmation dialog asks first. So you need to really commit to this decision.",
+        "Everything goes back to factory defaults. Clean slate. Except your files. Those stay.",
     ],
     "reset_unlocks_btn": [
         "Reset ONLY the hidden-theme unlock flags and click counter to zero.",
@@ -1073,6 +1373,9 @@ _NORMAL: dict[str, list[str]] = {
         "Resets click counter, file-processed counters, and all hidden-theme unlock flags to zero.",
         "All other settings (theme, sound, trail, presets) are completely preserved.",
         "After reset, work toward milestones again: process files, click buttons, and explore features.",
+        "Only touches unlock flags. Your theme, sounds, presets, and colors are untouched.",
+        "Congratulations on finding the unlock reset. Great for redoing the easter egg hunt.",
+        "All secret themes go back to locked. Start earning them again. You've got this.",
     ],
     "finetune_params_lbl": [
         "Live summary of the exact settings that will be applied when you click ▶ Process.",
@@ -1083,6 +1386,9 @@ _NORMAL: dict[str, list[str]] = {
         "The label turns orange/yellow when non-default settings are active — a quick visual warning.",
         "Presets override this display with their own label when 'Use preset' is checked.",
         "This summary is the source of truth — what you see here is exactly what gets applied.",
+        "It updates live. Change a setting, this label reflects it immediately.",
+        "Congratulations on reading the params summary. It tells you exactly what will happen.",
+        "Check this before processing. If it doesn't look right, adjust your settings.",
     ],
     "use_preset_check": [
         "When checked, the selected preset auto-fills all the controls and its settings are used when processing.",
@@ -1093,6 +1399,9 @@ _NORMAL: dict[str, list[str]] = {
         "Unchecking locks in whatever values are currently shown in the controls for manual processing.",
         "Re-checking loads fresh values from the selected preset, discarding any manual edits.",
         "Custom presets saved via the Save button also appear in the preset dropdown for later use.",
+        "Checked = preset drives the settings. Unchecked = you're manually in control.",
+        "Congratulations on understanding the Use Preset toggle. Very smart control.",
+        "The preset fills in Min/Max/threshold/invert/binary-cut all at once. Efficient.",
     ],
     "red_spin": [
         "Adjust the Red channel of every pixel by this delta (\u2013255 to +255).",
@@ -1103,6 +1412,9 @@ _NORMAL: dict[str, list[str]] = {
         "Values outside the 0–255 range are clamped automatically after adding the delta.",
         "The R channel adjustment is applied after the alpha processing step in the same pass.",
         "Combine all four RGBA deltas with presets for complete texture colour correction in one run.",
+        "Nothing changes unless Apply RGBA is checked. Just a reminder.",
+        "Congratulations on adjusting the red channel. Your texture is slightly more crimson now.",
+        "Positive adds red. Negative removes red. That's the whole R in RGBA right there.",
     ],
     "green_spin": [
         "Adjust the Green channel of every pixel by this delta (\u2013255 to +255).",
@@ -1113,6 +1425,9 @@ _NORMAL: dict[str, list[str]] = {
         "Values outside the 0–255 range are clamped automatically after adding the delta.",
         "The G channel adjustment is applied after the alpha processing step in the same pass.",
         "Useful for shifting textures between warm (low G) and cool (high G) tones.",
+        "Nothing changes unless Apply RGBA is checked. Check it if nothing's happening.",
+        "Congratulations on tweaking the green channel. Very precise color correction.",
+        "Positive = more green. Negative = less green. The G in RGBA, fully explained.",
     ],
     "blue_spin": [
         "Adjust the Blue channel of every pixel by this delta (\u2013255 to +255).",
@@ -1123,6 +1438,9 @@ _NORMAL: dict[str, list[str]] = {
         "Values outside the 0–255 range are clamped automatically after adding the delta.",
         "The B channel adjustment is applied after the alpha processing step in the same pass.",
         "Common use: +30 Blue to shift warm PS2 textures toward the correct cooler output tone.",
+        "Nothing changes unless Apply RGBA is checked. You've been warned.",
+        "Congratulations on adjusting the blue channel. Your texture is now subtly cooler.",
+        "Positive = more blue. Negative = less blue. The B in RGBA. Very intuitive.",
     ],
     "alpha_delta_spin": [
         "Shift the Alpha channel of every pixel by this delta (\u2013255 to +255).",
@@ -1133,6 +1451,9 @@ _NORMAL: dict[str, list[str]] = {
         "Values outside the 0–255 range are clamped automatically after applying the delta.",
         "The alpha delta is applied after the main alpha remap (Min/Max/Threshold) in the pipeline.",
         "Use a negative delta to darken semi-transparent areas without affecting fully opaque pixels.",
+        "Nothing changes unless Apply RGBA is checked. Check it. Really.",
+        "Congratulations on adjusting the alpha delta. Everything gets slightly more or less transparent.",
+        "Positive = more solid. Negative = more transparent. The A in RGBA. Complete set.",
     ],
     "apply_rgb_check": [
         "Enable RGBA channel adjustments in addition to the alpha processing.",
@@ -1143,6 +1464,9 @@ _NORMAL: dict[str, list[str]] = {
         "Tick this only when you need colour correction — it adds a small per-pixel processing cost.",
         "RGBA deltas are applied after alpha remapping in the same single-pass pipeline.",
         "Uncheck to skip colour correction entirely and process only the alpha channel.",
+        "Check this and the R/G/B/A spinboxes above all actually do something.",
+        "Congratulations on finding the Apply RGBA toggle. The spinboxes were waiting for this.",
+        "Without this checked, the color adjustments are decorative. Enable for substance.",
     ],
     "suffix_edit": [
         "Append a suffix to output filenames to avoid overwriting originals.",
@@ -1153,6 +1477,9 @@ _NORMAL: dict[str, list[str]] = {
         "Leave blank and set a separate output folder to avoid overwriting while keeping tidy names.",
         "Suffix is appended before the extension — 'image.png' + '_v2' becomes 'image_v2.png'.",
         "Use versioned suffixes like '_v1', '_v2' to track iterations of the same texture.",
+        "Blank suffix = files overwrite originals. Fill it in if that terrifies you.",
+        "Congratulations on finding the suffix field. '_fixed' is a classic choice.",
+        "The suffix goes between the name and the extension. 'file' becomes 'file_fixed'. Simple.",
     ],
     "resize_check": [
         "Enable image resizing during conversion.",
@@ -1163,6 +1490,9 @@ _NORMAL: dict[str, list[str]] = {
         "Resize is applied before format conversion — the output file is the resized version.",
         "Aspect ratio lock (checkbox below) prevents squishing when only one dimension is changed.",
         "Leave Width or Height at 0 to scale only one axis while preserving the other dimension.",
+        "Check this to enable the width and height boxes below. Two for one.",
+        "Congratulations on enabling resize mode. The dimension boxes are now usable.",
+        "Unchecked = original size preserved. Checked = you control the dimensions.",
     ],
     "lock_aspect_check": [
         "Lock the aspect ratio when resizing — change width and height auto-adjusts.",
@@ -1173,6 +1503,9 @@ _NORMAL: dict[str, list[str]] = {
         "Computed from the first selected file's dimensions — different files in the queue may distort.",
         "Uncheck to set width and height independently for explicit dimension control.",
         "Lock is on by default; most textures and sprites look wrong if aspect ratio is changed.",
+        "Keeps proportions intact while resizing. Checked = no accidental stretching.",
+        "Congratulations on finding the aspect ratio lock. Very sensible default.",
+        "Change width and height auto-adjusts. Or uncheck for manual both-axis control.",
     ],
     "width_spin": [
         "Target output width in pixels when resize is enabled.",
@@ -1183,6 +1516,9 @@ _NORMAL: dict[str, list[str]] = {
         "Set both Width and Height to 0 to skip resizing and keep original dimensions.",
         "When aspect lock is on, changing Width auto-recalculates Height proportionally.",
         "Upscaling (width > original) uses bilinear interpolation for smooth results.",
+        "Pixels. Horizontal. Left to right. Width. That's what this number is.",
+        "Congratulations on entering a width value. The image will be that many pixels wide.",
+        "0 = use original width. Any other number = that specific width in pixels.",
     ],
     "height_spin": [
         "Target output height in pixels when resize is enabled.",
@@ -1193,6 +1529,9 @@ _NORMAL: dict[str, list[str]] = {
         "Set both Width and Height to 0 to skip resizing and keep original dimensions.",
         "When aspect lock is on, changing Height auto-recalculates Width proportionally.",
         "Downscaling (height < original) uses area averaging for sharp downsampled textures.",
+        "Pixels. Vertical. Top to bottom. Height. That's what this number is.",
+        "Congratulations on entering a height value. The image will be that many pixels tall.",
+        "0 = use original height. Any other number = that specific height in pixels.",
     ],
     "out_dir_browse": [
         "Click to choose the output directory using a folder browser.",
@@ -1203,6 +1542,9 @@ _NORMAL: dict[str, list[str]] = {
         "The folder dialog opens at the last used output directory for quick navigation.",
         "Network paths and mapped drive letters are supported on Windows.",
         "Leave blank in the text field to write output alongside each source file.",
+        "Opens a folder picker. You pick a folder. Files go there. Complete explanation.",
+        "Congratulations on finding the Browse button for output directory. Click it.",
+        "Typing the path directly in the box above also works, if you're that kind of person.",
     ],
     "keep_metadata_check": [
         "Preserve metadata (EXIF/ICC profiles) in the converted output file.",
@@ -1213,6 +1555,9 @@ _NORMAL: dict[str, list[str]] = {
         "EXIF GPS tags are included — be aware of privacy implications when sharing output files.",
         "ICC profiles help color-managed workflows maintain accurate hues across devices.",
         "Keep unchecked for game textures: metadata adds file size with no rendering benefit.",
+        "Check to preserve EXIF data. Uncheck to strip it for cleaner files.",
+        "Congratulations on finding the metadata toggle. Important for photo workflows.",
+        "EXIF = camera model, date, GPS. ICC = color profile. Both controlled by this.",
     ],
     "before_stats_panel": [
         "Alpha channel statistics for the BEFORE (original) image.",
@@ -1223,6 +1568,9 @@ _NORMAL: dict[str, list[str]] = {
         "Uniform = all pixels share the same alpha value (common for fully-opaque game textures).",
         "If min=0 and max=0 the image is fully transparent — check your source file.",
         "The stats refresh each time you select a new file from the queue.",
+        "Congratulations on reading the BEFORE stats. Original image alpha info right there.",
+        "Min/Max/Mean/Std of your original alpha channel. Before you touched anything.",
+        "Compare these numbers to the AFTER panel. That shows if your settings did anything.",
     ],
     "after_stats_panel": [
         "Alpha channel statistics for the AFTER (processed) image.",
@@ -1233,6 +1581,9 @@ _NORMAL: dict[str, list[str]] = {
         "min=0 and max=255 indicates a mix of fully transparent and fully opaque pixels (hard-edge).",
         "mean close to 128 means the image is roughly half-transparent on average after processing.",
         "If before and after stats are identical, your current settings have no effect on this file.",
+        "Congratulations on reading the AFTER stats. Post-processing alpha info right there.",
+        "Min/Max/Mean/Std after your settings were applied. Compare to BEFORE on the left.",
+        "If these match BEFORE exactly, either nothing changed or something is wrong.",
     ],
     "rom_banner": [
         "Game/ROM folder detected! The app identified the console based on folder structure.",
@@ -1243,6 +1594,9 @@ _NORMAL: dict[str, list[str]] = {
         "The detected disc ID can be searched on PCSX2 compatibility lists to check game status.",
         "If the banner shows the wrong console, rename the folder without the recognised fingerprint files.",
         "Cover art is loaded from the emulator covers directory — the path is shown in the banner.",
+        "Congratulations, the app recognized your game folder. Very smart of both of you.",
+        "The console icon and disc ID appear automatically. No manual input needed.",
+        "If the detection is wrong, ignore the banner. It's just a suggestion, not a verdict.",
     ],
     # ---------------------------------------------------------------- Selective Alpha tab
     "selective_alpha_tab": [
@@ -1254,6 +1608,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut Ctrl+4 jumps directly to the Selective Alpha tab.",
         "All zone masks are preserved if you switch tabs and return — nothing is lost.",
         "Apply can be run multiple times; each result is tracked separately and undoable.",
+        "Ctrl+4 to jump here. If clicking the tab seems like too much effort.",
+        "Congratulations on finding the Selective Alpha tab. Zone painting awaits.",
+        "Each zone gets its own alpha level. More control than the main fixer tab.",
     ],
     "sa_open_btn": [
         "Open an image file to load it onto the canvas for zone painting.",
@@ -1264,6 +1621,9 @@ _NORMAL: dict[str, list[str]] = {
         "File browser opens at the last used directory for quick access to recent images.",
         "Large images (>4 K) are loaded at full resolution — painting remains responsive.",
         "SVG files are rasterised at load time — the resulting PNG is then editable on the canvas.",
+        "Click, find your image, open it. That's the three-step process explained in full.",
+        "Congratulations on finding Open. Now click it and choose an image to work on.",
+        "The image loads to the canvas. Zone painting can then begin. One step at a time.",
     ],
     "sa_save_btn": [
         "Save the processed result image after clicking Apply Alpha Zones.",
@@ -1274,6 +1634,9 @@ _NORMAL: dict[str, list[str]] = {
         "The Save dialog pre-fills the suggested filename with the '_selective_alpha' suffix.",
         "Output is always PNG — the alpha channel is preserved at full 8-bit depth.",
         "Save is only active after at least one Apply Alpha Zones operation has been performed.",
+        "Grey until you Apply. Then it turns active and you can save your result.",
+        "Congratulations on being ready to save. That means you clicked Apply. Well done.",
+        "Saves as PNG with '_selective_alpha' appended. Good naming convention built right in.",
     ],
     "sa_tool_freehand": [
         "Freehand: hold and drag to paint zone colour freely over the image.",
@@ -1284,6 +1647,9 @@ _NORMAL: dict[str, list[str]] = {
         "Freehand strokes are added to the undo stack as a single step when the mouse button is released.",
         "Autocorrect snaps the stroke to nearby image edges after you release — great for jagged boundaries.",
         "Hold Shift while dragging to constrain the stroke to horizontal or vertical directions.",
+        "Hold mouse, drag, zone appears. Classic freehand approach. Very artsy.",
+        "Congratulations on choosing Freehand. The most intuitive tool in the box.",
+        "Great for irregular shapes. Terrible for precise rectangles. Use the shape tools for those.",
     ],
     "sa_tool_line": [
         "Line: click and drag to draw a straight filled stroke from start to end.",
@@ -1294,6 +1660,9 @@ _NORMAL: dict[str, list[str]] = {
         "Line strokes are committed as a single undo step when the mouse button is released.",
         "Hold Shift while dragging to snap the line to 0°, 45°, or 90° angles.",
         "Useful for marking geometric boundaries along straight edges of objects or panels.",
+        "Drag from point A to point B. Straight line painted. Very efficient.",
+        "Congratulations on finding the Line tool. Straight lines are now your power.",
+        "Great for painting along edges. Much cleaner than trying to freehand a straight line.",
     ],
     "sa_tool_rect": [
         "Rectangle: drag corner-to-corner to fill a solid rectangular region.",
@@ -1304,6 +1673,9 @@ _NORMAL: dict[str, list[str]] = {
         "Rectangles are committed as a single undo step on mouse release.",
         "Hold Shift while dragging to constrain the rectangle to a perfect square.",
         "Great for quickly blocking out rectangular UI elements, health bars, or panel backgrounds.",
+        "Drag diagonally to fill a rectangle. Four corners. Done. Very tidy.",
+        "Congratulations on finding the Rectangle tool. Boxes are your zone now.",
+        "Fast for boxy regions. Beats painting the same square four times freehand.",
     ],
     "sa_tool_ellipse": [
         "Ellipse: drag the bounding box corner-to-corner to fill an elliptical region.",
@@ -1314,6 +1686,9 @@ _NORMAL: dict[str, list[str]] = {
         "Ellipses are committed as a single undo step on mouse release.",
         "Hold Shift while dragging to constrain the ellipse to a perfect circle.",
         "Use with the Eraser tool to clean up the edges after placing a rough ellipse.",
+        "Drag to define the bounding box. Oval fills inside. Curves handled.",
+        "Congratulations on choosing Ellipse. Round regions are now within your skill set.",
+        "Great for eyes, halos, round objects. Saves you from drawing ovals freehand.",
     ],
     "sa_tool_fill": [
         "Fill: click to flood-fill a region from the clicked point outward.",
@@ -1324,6 +1699,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fill snaps to image edges using a Canny-based edge map precomputed at load time.",
         "If the fill bleeds past an intended boundary, try painting a thin freehand line to block it.",
         "Each fill operation is recorded as a single undo step.",
+        "One click fills the region from that point. Like a paint bucket. Exactly like a paint bucket.",
+        "Congratulations on finding Fill. One-click zone painting for distinct image regions.",
+        "Best on images with clear edges. Blurry edges lead to fill spills.",
     ],
     "sa_tool_polygon": [
         "Polygon: click to place vertices one by one; double-click the last point to close and fill.",
@@ -1334,6 +1712,9 @@ _NORMAL: dict[str, list[str]] = {
         "Each vertex click is recorded; the polygon is committed as one undo step on close.",
         "You can place dozens of vertices for highly detailed shapes — no polygon vertex limit.",
         "Hold Shift while clicking to snap new vertices to 45° angles from the previous one.",
+        "Click to place corners. Double-click to close and fill. Polygon complete.",
+        "Congratulations on choosing Polygon. Complex shapes are now achievable.",
+        "Esc cancels. Close Polygon button also works. Multiple ways out if it goes wrong.",
     ],
     "sa_tool_eraser": [
         "Eraser: hold and drag to remove painted zone colour from ALL zones simultaneously.",
@@ -1344,6 +1725,9 @@ _NORMAL: dict[str, list[str]] = {
         "Eraser strokes are recorded as a single undo step when the mouse button is released.",
         "The dashed circle on the canvas shows the exact eraser radius as you drag.",
         "Erasing all zones simultaneously means you don't need to switch zones to clean up overlaps.",
+        "Drag to erase paint from the canvas. Works on ALL zones. All of them.",
+        "Congratulations on finding the Eraser. Zone corrections are now possible.",
+        "Erased areas return to original alpha after Apply. Clean slate pixels.",
     ],
     "sa_close_poly": [
         "Close and fill the current in-progress polygon.",
@@ -1354,6 +1738,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut: press Enter while the polygon tool is active to close and fill.",
         "If fewer than 3 vertices are placed, closing is blocked and the button is greyed out.",
         "After closing, the polygon is committed to the undo stack as a single step.",
+        "Closes and fills the polygon you're currently placing points on.",
+        "Congratulations on finding Close Polygon. It closes polygons. Very accurate name.",
+        "Only active while Polygon tool is running. Disappears otherwise.",
     ],
     "sa_brush_spin": [
         "Set the brush radius in image pixels for freehand, line, and shape tools.",
@@ -1364,6 +1751,9 @@ _NORMAL: dict[str, list[str]] = {
         "The cursor circle on the canvas reflects brush size in real time as you drag the spinbox.",
         "Larger brush sizes are faster for rough coverage; smaller sizes give precise edge control.",
         "Brush size is saved per session — it restores to your last used value on next launch.",
+        "Adjust brush radius. Watch the cursor circle on canvas change size in real time.",
+        "Congratulations on adjusting brush size. Your painting stroke is now wider or narrower.",
+        "Big brush covers more area quickly. Small brush gives precision. Balance accordingly.",
     ],
     "sa_eraser_spin": [
         "Set the eraser radius in image pixels.",
@@ -1374,6 +1764,9 @@ _NORMAL: dict[str, list[str]] = {
         "The eraser cursor circle on the canvas shows the radius in real time when the Eraser tool is active.",
         "Larger eraser sizes can quickly clear a whole zone in a few strokes.",
         "Eraser size is independent from brush size — set both to different values for efficient workflows.",
+        "Adjust eraser radius. Same idea as brush size but for erasing. Independent.",
+        "Congratulations on finding the eraser size control. Now erase things at the right scale.",
+        "Big eraser = erase large areas fast. Small eraser = surgical precision removal.",
     ],
     "sa_autocorrect": [
         "Auto-correct: after releasing the mouse, strokes snap toward nearby strong image edges.",
@@ -1384,6 +1777,9 @@ _NORMAL: dict[str, list[str]] = {
         "Autocorrect is most effective on high-contrast images with clear object boundaries.",
         "Low-contrast images may not snap well — turn off autocorrect and paint manually instead.",
         "The edge map is computed using a Canny detector preloaded when the image is opened.",
+        "Snaps strokes to nearby image edges automatically. On = tidier. Off = what you drew.",
+        "Congratulations on finding Auto-correct. Enable for self-cleaning freehand strokes.",
+        "Doesn't change anything while painting. Kicks in after you release the mouse.",
     ],
     "sa_zoom_in": [
         "Zoom in to see the image in greater detail for precise painting.",
@@ -1394,6 +1790,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut: Ctrl+= (plus) zooms in while the canvas has keyboard focus.",
         "Zoom centres on the cursor position, not the canvas centre — point at what you want to enlarge.",
         "Maximum zoom is 20× — at that level individual image pixels are clearly visible for precise work.",
+        "More zoom. For seeing tiny details you need to paint on. Very useful.",
+        "Congratulations on zooming in. Precision zone painting is now achievable.",
+        "Scroll wheel up also zooms. The button and the wheel do the same thing.",
     ],
     "sa_zoom_out": [
         "Zoom out to see more of the image at once.",
@@ -1404,6 +1803,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut: Ctrl+- (minus) zooms out while the canvas has keyboard focus.",
         "Zoom out to check zone coverage across the whole image before applying.",
         "Minimum zoom is 10% of the fit scale — the image never shrinks below a usable size.",
+        "Less zoom. For when you've zoomed in too far and lost your bearings.",
+        "Congratulations on zooming out. You can see the whole image again. Good.",
+        "Scroll wheel down also zooms out. Two-way zoom control, very flexible.",
     ],
     "sa_zoom_fit": [
         "Reset zoom and pan to fit the entire image in the canvas.",
@@ -1414,6 +1816,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut: Ctrl+0 resets zoom to fit while the canvas has keyboard focus.",
         "Fit also resets the pan offset so the image is perfectly centred on the canvas.",
         "Use Fit before applying to get a final overview of all painted zones.",
+        "Fits the image to the canvas window. One click back to full view. Very convenient.",
+        "Congratulations on finding Fit. Lost in zoom? This button finds you.",
+        "Resets zoom AND pan position. Everything back to centred and comfortable.",
     ],
     "sa_show_all_zones": [
         "Make all zone overlays visible on the canvas at once.",
@@ -1424,6 +1829,9 @@ _NORMAL: dict[str, list[str]] = {
         "Zone data is never lost when hidden — only the display overlay is toggled.",
         "Show All restores the eye toggle state for all 7 zone rows simultaneously.",
         "Use Show All before applying to confirm all zones are positioned correctly.",
+        "Reveals all zone overlays at once. All the coloured blobs come back.",
+        "Congratulations on showing all zones. Your painting work is now fully visible.",
+        "Wild, right? One button and all seven zones become visible simultaneously.",
     ],
     "sa_hide_all_zones": [
         "Hide all zone overlays from the canvas at once.",
@@ -1434,6 +1842,9 @@ _NORMAL: dict[str, list[str]] = {
         "Hide All lets you inspect the original source image without any colour overlay.",
         "Zone masks are fully preserved when hidden — nothing is erased by toggling visibility.",
         "Use Hide All to compare the painted zone positions against the original image content.",
+        "Hides all zone overlays. The masks still exist. You're just not looking at them.",
+        "Congratulations on hiding all zones. You can now see the actual image clearly.",
+        "Click Show All to bring them back. They didn't go anywhere, just invisible.",
     ],
     "sa_zone_alpha_spin": [
         "Alpha value (0–255) applied to all pixels painted in this zone when you Apply.",
@@ -1444,6 +1855,9 @@ _NORMAL: dict[str, list[str]] = {
         "Common game values: 0 = invisible, 64 = ghost/glass, 128 = PS2 full opaque, 255 = PC full opaque.",
         "The spinner only affects the Apply output — change it freely between Apply runs.",
         "Each zone can have a different alpha; you can create multi-layer transparency effects in one Apply.",
+        "This sets the alpha level for this zone's pixels when Apply is clicked.",
+        "Congratulations on finding the zone alpha value. This is the core of the tool.",
+        "Change it any time before Apply. No need to repaint anything.",
     ],
     "sa_zone_select": [
         "Select this zone as the active painting target.",
@@ -1454,6 +1868,9 @@ _NORMAL: dict[str, list[str]] = {
         "Keyboard shortcut: press 1–7 while the canvas has focus to quickly switch between zones.",
         "The active zone row is highlighted — confirm you're on the right zone before painting.",
         "Switching zones mid-stroke mid-stroke starts a new undo step on the newly selected zone.",
+        "Makes this zone the active drawing target. All your tools paint into it.",
+        "Congratulations on selecting a zone. Now pick a tool and start painting.",
+        "Active zone has a pressed-in button appearance. Confirmation you're in the right one.",
     ],
     "sa_zone_clear": [
         "Erase all paint from this zone's mask only.",
@@ -1464,6 +1881,9 @@ _NORMAL: dict[str, list[str]] = {
         "Clear Zone is undoable — press Undo drawing immediately after to restore the mask.",
         "Clearing the mask does not reset the zone's alpha value — it remains for the next paint.",
         "Use Clear Zone to repaint a zone from scratch when autocorrect didn't snap correctly.",
+        "Erases all paint from this zone only. Other zones are completely unaffected.",
+        "Congratulations on clearing a zone. Fresh canvas for this zone. Repaint away.",
+        "Undoable! The Undo drawing button covers zone clear actions too.",
     ],
     "sa_zone_visibility": [
         "Toggle this zone's colour overlay on or off.",
@@ -1474,6 +1894,9 @@ _NORMAL: dict[str, list[str]] = {
         "Hide a zone to see neighbouring zones more clearly without deleting any painted data.",
         "The eye icon turns hollow when the zone is hidden and filled when visible.",
         "Visibility state does not affect Apply output — hidden zones still contribute their alpha.",
+        "Eye icon: on = zone colour shown. Off = zone colour invisible. Classic eye toggle.",
+        "Congratulations on toggling zone visibility. The mask is still there either way.",
+        "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
         "Copy this zone's painted mask to the internal clipboard.",
@@ -1484,6 +1907,9 @@ _NORMAL: dict[str, list[str]] = {
         "Use Copy + Paste to duplicate the exact painted area from one zone into another zone.",
         "Clipboard holds one mask image at a time; the next Copy replaces it.",
         "Paste Mask becomes enabled on all other zone rows as soon as you copy.",
+        "Copies this zone's painted shape for pasting into any other zone.",
+        "Congratulations on copying a zone mask. Paste it into any zone with the Paste button.",
+        "One clipboard. One copied mask. Use it wisely.",
     ],
     "sa_zone_paste_mask": [
         "Paste the clipboard mask into this zone, replacing its current mask.",
@@ -1494,6 +1920,9 @@ _NORMAL: dict[str, list[str]] = {
         "Paste is undoable — press Undo drawing immediately to restore the previous zone mask.",
         "The pasted mask is a copy; modifying it after paste does not affect the source zone.",
         "Paste only becomes active after at least one Copy Mask operation has been performed.",
+        "Pastes the copied mask into this zone, replacing whatever was painted here.",
+        "Congratulations on finding Paste Mask. Zone-to-zone shape transfer, complete.",
+        "Original zone is unchanged. You're copying, not moving. The source stays intact.",
     ],
     "sa_undo": [
         "Undo the last drawing or erase action on the canvas.",
@@ -1504,6 +1933,9 @@ _NORMAL: dict[str, list[str]] = {
         "Undo steps cover: freehand strokes, shape draws, fills, eraser strokes, clears, and pastes.",
         "The undo stack is per-session — it does not persist between app launches.",
         "Ctrl+Z is the fastest way to undo; keep pressing to step back through multiple strokes.",
+        "Takes back the last brush stroke. Or the last zone clear. Very forgiving.",
+        "Congratulations on finding Undo. 50 drawing steps available for undoing.",
+        "Ctrl+Z works too. Because one undo path wasn't enough.",
     ],
     "sa_redo": [
         "Redo a previously undone drawing action.",
@@ -1514,6 +1946,9 @@ _NORMAL: dict[str, list[str]] = {
         "Redo steps are cleared as soon as any new drawing stroke is made.",
         "Use Ctrl+Y (or Ctrl+Shift+Z) for faster redo without reaching for the button.",
         "Redo allows you to compare before/after a stroke by alternating Undo and Redo.",
+        "Puts back what you just undid. Changed your mind back. Valid.",
+        "Congratulations on finding Redo. Ctrl+Y or Ctrl+Shift+Z — both work.",
+        "Redo stack clears if you draw something new. Act fast.",
     ],
     "sa_apply": [
         "Apply the painted zone masks to the image and produce the result.",
@@ -1524,6 +1959,9 @@ _NORMAL: dict[str, list[str]] = {
         "Each Apply creates a new result entry in the process undo stack — previous results are preserved.",
         "After Apply the result is shown in the canvas alongside the zone overlays.",
         "Unpainted pixels keep their original alpha; only pixels inside painted zones are modified.",
+        "Click this after painting zones to actually apply the alpha values.",
+        "Congratulations on clicking Apply. The zone alpha values are now written to the image.",
+        "Nothing is permanent until Save. You can Apply again with different settings.",
     ],
     "sa_undo_process": [
         "Undo the last Apply operation and restore the previous result.",
@@ -1534,6 +1972,9 @@ _NORMAL: dict[str, list[str]] = {
         "Process undo is separate from drawing undo — Ctrl+Z undoes strokes; this undoes Apply results.",
         "Up to 50 Apply results are stored; the oldest is dropped when the limit is reached.",
         "Undo Process makes the previous result available for Save — useful for iterating apply settings.",
+        "Reverts the last Apply action. Previous Apply result comes back.",
+        "Congratulations on finding Undo Process. Apply history is trackable.",
+        "Separate from drawing undo. Two undo systems. Both useful.",
     ],
     "sa_clear_all": [
         "Erase all paint from every zone's mask simultaneously.",
@@ -1544,6 +1985,9 @@ _NORMAL: dict[str, list[str]] = {
         "Clear All is undoable with the Undo drawing button — press immediately to restore all masks.",
         "Useful when you want to repaint from scratch without reloading the image.",
         "All 7 zone alpha values and zone names are preserved after a Clear All.",
+        "Clears paint from every single zone simultaneously. Clean canvas.",
+        "Congratulations on clearing all zones. Blank canvas achieved.",
+        "All seven zones reset. Image is untouched. Only the painted zones are cleared.",
     ],
     "sa_canvas": [
         "Paint zone masks directly on the image using the selected drawing tool.",
@@ -1554,6 +1998,9 @@ _NORMAL: dict[str, list[str]] = {
         "Press Ctrl+Z / Ctrl+Y to undo/redo strokes; press Enter to close a polygon while painting.",
         "Hold Alt + left-drag to pan the canvas without switching away from the active tool.",
         "The grey checkerboard pattern indicates transparent areas in the source image.",
+        "The painting surface. Drag tools here to paint zones. Very intuitive.",
+        "Congratulations on looking at the canvas. Now paint something on it.",
+        "Ctrl+Z to undo, Ctrl+Y to redo, scroll to zoom. Standard canvas controls.",
     ],
     "sa_status_lbl": [
         "Shows the active tool, current zone, brush or eraser size, and zoom level.",
@@ -1564,6 +2011,9 @@ _NORMAL: dict[str, list[str]] = {
         "Tool name, active zone, brush/eraser size in px, and canvas zoom % are all shown here.",
         "Zone colour swatch in the status bar matches the painted overlay colour for confirmation.",
         "Zoom % updates in real time as you scroll the mouse wheel over the canvas.",
+        "This label tells you what the tool thinks is happening right now.",
+        "Congratulations on reading the status bar. It has genuinely useful information.",
+        "Tool, zone, brush size, zoom level. Four pieces of info in one small line.",
     ],
 }
 
@@ -1575,6 +2025,9 @@ _DUMBED: dict[str, list[str]] = {
         "Wow, you're hovering over Add Files. Incredible deductive reasoning.",
         "Congratulations! This button does exactly what it says. Wild, right?",
         "If you can't figure this out you should maybe try MS Paint first.",
+        "Add. Files. That's the button's name. That's its function. Revolutionary overlap.",
+        "You found it! Now click it. Files are waiting to be added. Don't keep them waiting.",
+        "Yes, it really is that simple. Click. Files. List. Process. You've got this.",
     ],
     "add_folder": [
         "It's like Add Files but for a WHOLE FOLDER. Mind = blown.",
@@ -1582,6 +2035,9 @@ _DUMBED: dict[str, list[str]] = {
         "Add Folder: for when you have so many images you need a whole folder.",
         "Yes, you can put multiple files in a folder. Yes, this adds them all.",
         "Subfolders too! It goes all the way down. Like a turtle tower.",
+        "One folder, all the images inside. You don't have to add them one by one. You're welcome.",
+        "Congratulations, you discovered folder importing. The entire concept took two seconds to explain.",
+        "If you can't find the Add Folder button, it's the one that says Add Folder. Just checking.",
     ],
     "clear_list": [
         "Click to make the list empty. Files on disk are fine, don't panic.",
@@ -1589,6 +2045,9 @@ _DUMBED: dict[str, list[str]] = {
         "Clear = gone from the list. Still on disk. You're okay.",
         "It's like closing a tab. The website still exists. You're welcome.",
         "Congratulations on finding the Clear button. We're so proud of you.",
+        "It empties the queue. Not your hard drive. Deep breath.",
+        "Clearing the list is reversible. Just add files again. Easy fix.",
+        "Yes, you can add files after clearing. That's how lists work. Mind = blown.",
     ],
     "process_btn": [
         "Green means go! Click it and things will HAPPEN.",
@@ -1596,6 +2055,9 @@ _DUMBED: dict[str, list[str]] = {
         "Pressing this button starts processing. Shocking, I know.",
         "F5 also works. You know, if clicking is too much effort.",
         "The progress bar will fill up. Exciting. Wait for it. Waaait.",
+        "Everything is ready. You just need to press this one button. One. Button.",
+        "Congratulations on locating the Process button. Now press it.",
+        "All that setup was for this moment. Click it. Watch things happen.",
     ],
     "stop_btn": [
         "Having second thoughts? This button stops things. Use it wisely.",
@@ -1603,6 +2065,9 @@ _DUMBED: dict[str, list[str]] = {
         "Like a pause button but it actually stops. Details matter.",
         "Changed your mind? No judgment. Just click this.",
         "Esc also works if the button is too far away for your little hands.",
+        "Processing can be stopped mid-batch. Wild concept, right?",
+        "Nothing is permanent until the files are written. This cancels before that.",
+        "Congratulations on your change of heart. This button respects your decision.",
     ],
     "preset_combo": [
         "A preset is a saved recipe. You pick one. It applies. Simple.",
@@ -1611,6 +2076,8 @@ _DUMBED: dict[str, list[str]] = {
         "If you don't know which to pick, PS2 Force Opaque is usually a safe bet for PS2 textures.",
         "You can also make your own. Click 'Save'. Mind blown, I know.",
         "The Raise Floor / PS2 Additive preset covers two jobs at once. It's a two-for-one deal, buddy.",
+        "Your custom presets appear here too. Right alongside the built-ins. Equal treatment.",
+        "Congratulations on finding the preset dropdown. Pick one and let it do the thinking.",
     ],
     "threshold_spin": [
         "Higher number = more pixels get processed. Lower = fewer. Simple math.",
@@ -1618,6 +2085,9 @@ _DUMBED: dict[str, list[str]] = {
         "Threshold means 'the line you draw'. Pixels at or above it are left alone.",
         "If you're confused, just leave it at 0. It works fine.",
         "Yes, you can type a number in there. No, it won't break anything.",
+        "Think of it as a cutoff. Below = process. At or above = skip. That's how thresholds work.",
+        "If unsure, 0 processes everything. Starting point for the confused.",
+        "Adjust. See the preview change. That's the whole workflow. You've got this.",
     ],
     "clamp_min_spin": [
         "Minimum alpha: for normal images, the darkest alpha becomes this value and everything else maps up.",
@@ -1626,6 +2096,8 @@ _DUMBED: dict[str, list[str]] = {
         "Works independently from Max. Change Min without touching Max.",
         "128 = the lowest alpha in the output will be at least 128. Everything maps up from there.",
         "Leave at 0 for the most common case. Raise it if you need a floor.",
+        "Congratulations on finding Min clamp. Leave it at 0 unless you specifically need a floor.",
+        "Think of it as the minimum opacity floor your output pixels can reach.",
     ],
     "clamp_max_spin": [
         "Maximum alpha: for normal images, the brightest alpha becomes this value and everything else maps down.",
@@ -1634,6 +2106,8 @@ _DUMBED: dict[str, list[str]] = {
         "128 = replicate PS2's native 0–128 alpha scale. Very useful.",
         "Works independently from Min. Change Max without touching Min.",
         "Leave at 255 for normal use. Lower it for platform-specific limits.",
+        "Congratulations on finding Max clamp. 255 is the default. Lower for platform-specific needs.",
+        "Think of it as the maximum opacity ceiling your output pixels can reach.",
     ],
     "invert_check": [
         "Check this to flip transparent ↔ opaque. It's like turning inside out.",
@@ -1641,6 +2115,9 @@ _DUMBED: dict[str, list[str]] = {
         "This one's a bit advanced. You sure you need it? No pressure.",
         "Unchecked = normal. Checked = opposite. There you go.",
         "Use with threshold for fancy effects you can pretend you intended.",
+        "It flips the alpha interpretation. Transparent to opaque and back. Yes, that's really what invert means.",
+        "Congratulations on discovering the Invert checkbox. Try it. See what happens.",
+        "Works best with threshold set. Just leave it unchecked if you don't know why you'd need this.",
     ],
     "binary_cut_check": [
         "Binary cut: pixels above the threshold get set to 255 (solid). Below get set to 0 (invisible).",
@@ -1648,6 +2125,9 @@ _DUMBED: dict[str, list[str]] = {
         "The Threshold value (under Advanced Options below) determines who lives (255) and who dies (0).",
         "Great for retro sprites and game textures that need clean crisp edges.",
         "On = binary mode. Off = soft gradients allowed. Pick based on your texture needs.",
+        "On = hard edges. Off = gradients. That's literally the entire feature.",
+        "Great for sprite sheets where you want clean, pixel-perfect transparency. Try it.",
+        "Congratulations, you found Binary Cut. It cuts alpha into binary. You get it.",
     ],
     "out_dir": [
         "Where do you want the fixed files to go? Type or browse. Simple.",
@@ -1655,6 +2135,9 @@ _DUMBED: dict[str, list[str]] = {
         "Browse = open a folder picker. Typing also works if you remember paths.",
         "Output folder is just where the results end up. You got this.",
         "Pro tip: create a folder called 'FIXED' first. Very professional.",
+        "Leave it blank and files stay next to the originals. Very convenient, actually.",
+        "Output directory. Where things go after processing. Basic folder concept.",
+        "Congratulations on locating the Output Directory field. Now fill it in.",
     ],
     "recursive_check": [
         "Check this to include ALL subfolders. Uncheck to stay shallow.",
@@ -1662,6 +2145,9 @@ _DUMBED: dict[str, list[str]] = {
         "Recursive means it digs through ALL your nested folders. Very thorough.",
         "Leave it checked unless you specifically want only the top folder. Simple.",
         "Subfolders go in. All of them. If that's what you want, check it.",
+        "Checked = digs into ALL subfolders. Unchecked = only the folder you added. Your choice.",
+        "Deep folder structures are fine. Recursive handles them. That's what it's for.",
+        "Wild concept: one checkbox lets you process an entire folder tree. Riveting.",
     ],
     "compare_widget": [
         "See that red handle? Drag it. Look at the pretty before/after.",
@@ -1669,6 +2155,9 @@ _DUMBED: dict[str, list[str]] = {
         "The handle is that red vertical line. Drag it. We believe in you.",
         "Before on the left. After on the right. Like a before/after photo. Wild.",
         "Pick a file from the list first! Nothing to compare if nothing's loaded.",
+        "Drag it left, drag it right, compare old and new alpha. That's the handle's whole personality.",
+        "Before is always on the left. After is always on the right. That's how time works.",
+        "Congratulations, you found the comparison slider. Drag it around. It's genuinely useful.",
     ],
     "alpha_vis_check": [
         "Makes your alpha channel look like a traffic light. Red = transparent, green = solid.",
@@ -1676,6 +2165,9 @@ _DUMBED: dict[str, list[str]] = {
         "It's just a preview helper. Your actual files are not changed. Promise.",
         "Red bits = transparent. Yellow bits = kind of transparent. Green bits = solid.",
         "Useful when your alpha values look the same but are actually different. Science.",
+        "Colour-coded = easier to see. Red = invisible, green = solid. Simple visualization.",
+        "Toggle it. See the colour map. Toggle off. Normal again. That's how checkboxes work.",
+        "Congratulations, you discovered the alpha visualizer. It does not change your files.",
     ],
     "file_list": [
         "This is where your files live. Drag some in. Or use the buttons above.",
@@ -1683,6 +2175,9 @@ _DUMBED: dict[str, list[str]] = {
         "Right-click to remove a file. Or press Delete. You have options.",
         "If the list is empty, you should probably add some files first.",
         "Files go IN here, then you click Process. That's the whole thing.",
+        "Drop files directly here too. Drag and drop works. Yes, really.",
+        "Select a file in the list to preview it. One click. Revolutionary.",
+        "Congratulations on populating your file list. Now hit Process.",
     ],
     "convert_btn": [
         "Convert = change format. Click it. Watch the magic.",
@@ -1690,6 +2185,9 @@ _DUMBED: dict[str, list[str]] = {
         "Formats change here. PNG, JPEG, DDS – they're just file types. Easy.",
         "F5 also works. Just in case clicking is still too hard.",
         "Progress bar goes up. Files come out as the new format. Wow.",
+        "Input format. Output format. Click Convert. Files change. Wild, right?",
+        "Congratulations, you found the Convert button. It converts. Click it.",
+        "Make sure you've picked an output format first. Then this button does its job.",
     ],
     "format_combo": [
         "PNG is usually the right answer. Just pick PNG.",
@@ -1697,6 +2195,9 @@ _DUMBED: dict[str, list[str]] = {
         "Hover over each format in the list to see what it actually does. Helpful!",
         "They're just containers. Like choosing between a bag and a box.",
         "WEBP is like PNG but smaller. Try it. Live on the edge.",
+        "DDS needs DirectX libraries installed. If it fails, that's probably why.",
+        "BMP = huge uncompressed file. Please think twice before picking BMP.",
+        "Congratulations on picking a format. Now click Convert. You're almost there.",
     ],
     "quality_spin": [
         "Higher = prettier but bigger file. Lower = uglier but smaller. Tradeoffs.",
@@ -1704,6 +2205,9 @@ _DUMBED: dict[str, list[str]] = {
         "Quality only matters for JPEG and WEBP. For PNG it does nothing.",
         "If you're unsure, leave it at 90. It's fine. It's always fine.",
         "Move the number up or down. The changes are minor, don't overthink it.",
+        "PNG ignores this. JPEG and WEBP use it. 90 is honestly fine for most people.",
+        "Wild, right? A single number controls the quality vs. file size tradeoff.",
+        "Congratulations on finding quality settings. 85 is what the internet runs on.",
     ],
     "settings_btn": [
         "This opens Settings. Where you make the app look different.",
@@ -1711,6 +2215,9 @@ _DUMBED: dict[str, list[str]] = {
         "Ctrl+, also works. There are two ways to do everything.",
         "You can break nothing in settings. Well, almost nothing.",
         "Settings: where you can make it look extra fancy for no reason.",
+        "Settings. It has settings in it. The name checks out.",
+        "Congratulations on finding Settings. A whole world of options awaits you in there.",
+        "Everything you can change is in here. Except file settings. Those are in the main tabs.",
     ],
     "theme_combo": [
         "Choose pretty colors. There's blood and bats and rainbows. You're welcome.",
@@ -1720,6 +2227,7 @@ _DUMBED: dict[str, list[str]] = {
         "Rainbow Chaos will do things to your eyes. You've been warned.",
         "First time you switch theme = free Candy Land 🍭 unlock. That's a reward for clicking a dropdown.",
         "More secret themes: Snake Pit 🐍 at 11 500 clicks, Ghost 👻 at 12 000, Slime 🟢 at 12 500.",
+        "Switching themes is undoable in the sense that you can just switch back. Very forgiving.",
     ],
     "theme_color_btn": [
         "Color swatch. Click it. Color picker opens. Pick a color. App changes. Wow.",
@@ -1727,6 +2235,9 @@ _DUMBED: dict[str, list[str]] = {
         "Changes apply instantly. If it looks bad, click again and pick a better color.",
         "Save your changes with the Save Theme button. Or don't. Live dangerously.",
         "15 different colors you can customize. Yes, all of them. One at a time.",
+        "Each theme has 15 colors you can customize. This is one of them.",
+        "You can reset to defaults if your color choices turn out to be catastrophic.",
+        "Congratulations on picking a custom color. The theme is now slightly yours.",
     ],
     "effect_combo": [
         "It's the sparkle chooser. Pick how things explode when you click.",
@@ -1734,6 +2245,9 @@ _DUMBED: dict[str, list[str]] = {
         "Select 'Custom' and then add your own emoji in the section below.",
         "New ones: Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸. Each one does a different thing. Apparently this needs explaining.",
         "Press Apply and Close. The sparkles change. That's it. You did it.",
+        "Your click explosions. You earned the fancy ones by clicking things enough.",
+        "Congratulations, you get to pick your own click effects. That's new technology.",
+        "Each option does something slightly different. Hover each to see a description.",
     ],
     "custom_emoji": [
         "Pick an emoji from the dropdown and smash Add. Watch them fly when you click stuff.",
@@ -1741,6 +2255,9 @@ _DUMBED: dict[str, list[str]] = {
         "Select something like 🐼 and click Add. It's a dropdown. You got this.",
         "Clear All removes them all. Add adds new ones. The dropdown has like 70 choices.",
         "The emoji you add will shoot out when you click things. Congrats.",
+        "You're customizing click particles with individual emoji. That's genuinely advanced stuff.",
+        "Clear All removes every emoji you added. Re-add from the dropdown. Simple.",
+        "Yes, up to about 70 choices exist in the dropdown. Someone had a lot of time.",
     ],
     "tooltip_mode_combo": [
         "This changes how tooltips work. You're reading one right now. Meta.",
@@ -1748,6 +2265,9 @@ _DUMBED: dict[str, list[str]] = {
         "Dumbed Down mode is this mode. How's it going? Feeling talked down to?",
         "No Filter 🤬 mode is the BEST mode. Trust us on this one.",
         "Normal mode has 5 helpful tips per widget. Very sensible. Boring.",
+        "Changing this affects all tooltips immediately. Like this one. Meta as ever.",
+        "Quiet mode shows only one tip. No cycling. One and done.",
+        "Congratulations on finding the Tooltip Mode setting. Very recursive.",
     ],
     "tooltip_style_combo": [
         "Tooltip Style. Separate from the mode — this one changes how the box looks.",
@@ -1755,6 +2275,9 @@ _DUMBED: dict[str, list[str]] = {
         "Pick Angular if you like sharp things. Bubbly if you like round things.",
         "Neon makes tooltips look like hacker terminal output. Very cool.",
         "Classic is the boring normal box. You probably already know what it looks like.",
+        "The shape of the box that tells you things. Very important decision, truly.",
+        "Congratulations, you found the style settings for the boxes that explain things.",
+        "Change it. Look at tooltips around the app. See if you like it. Very experimental.",
     ],
     "save_preset": [
         "Click Save, type a name. Wow, technology.",
@@ -1763,6 +2286,8 @@ _DUMBED: dict[str, list[str]] = {
         "Name it something memorable. 'aaa' works but you'll regret it.",
         "Saved presets show in the dropdown. Very useful. Very exciting.",
         "You can have as many presets as you want. Go nuts.",
+        "Type a name that means something. You'll search for it later. Future-you will appreciate it.",
+        "Congratulations on saving a preset. It's in the dropdown forever. Or until you delete it.",
     ],
     "delete_preset": [
         "This deletes the preset. Gone. The built-in ones are safe though.",
@@ -1770,6 +2295,9 @@ _DUMBED: dict[str, list[str]] = {
         "You can recreate it. It's a few clicks. Breathe.",
         "Confirm the dialog. It's deleted. The end.",
         "Only your custom presets can be deleted. The built-ins survive everything.",
+        "Delete removes it from your preset list. The actual image files are fine.",
+        "Confirm the dialog. Yes, you're sure. That's how confirming works.",
+        "Gone is gone. Make a new one if you need it back.",
     ],
     "patreon_btn": [
         "Click this to give the dev money. Very simple concept.",
@@ -1778,6 +2306,8 @@ _DUMBED: dict[str, list[str]] = {
         "Your dollar could fund the next hidden theme. Worth it.",
         "Even $1 helps! That's like… one coffee. You can do that.",
         "First click unlocks a secret Rose Gold 🌹 theme. It's free! Just click it!",
+        "Yes, clicking it opens Patreon in your browser. That's how links work.",
+        "Congratulations on considering supporting the developer. The panda appreciates it.",
     ],
     "help_btn": [
         "Click here to open the Help menu. Shocking, I know.",
@@ -1785,6 +2315,9 @@ _DUMBED: dict[str, list[str]] = {
         "Press F1 and skip this button entirely for keyboard shortcuts. You're welcome.",
         "Export and Import settings are in here too, buried under Help like nature intended.",
         "It's a dropdown menu. Click it. Read the options. Pick one. Complicated stuff.",
+        "The Help menu. Wild concept: press F1 instead and skip this button entirely.",
+        "Keyboard shortcuts are listed in here. You'll use them eventually.",
+        "Congratulations on finding the Help menu. The irony of getting a tooltip for Help is not lost.",
     ],
     "use_theme_sound": [
         "Tick this. Theme plays its own sound. Untick. Normal sound. That's it.",
@@ -1792,6 +2325,9 @@ _DUMBED: dict[str, list[str]] = {
         "Think of it as sound effects that match what you're looking at. Toggle. Done.",
         "Gore theme goes THUD. Fairy garden goes tinkle. Ice cave goes crystalline ding. Enable it.",
         "It's just sounds. The button says 'theme sound'. It plays theme sounds. You're overthinking.",
+        "Each theme has its own vibe and matching sounds. This enables that pairing.",
+        "Congratulations, you found the theme sound toggle. Very thematic decision.",
+        "Bat Cave: thud. Fairy Garden: tinkle. Gore: crunch. All automatic. Wild.",
     ],
     "alpha_fixer_tab": [
         "This is the Alpha & RGBA Adjuster tab. You click on it. You were already on it. Ctrl+1 also works.",
@@ -1799,6 +2335,9 @@ _DUMBED: dict[str, list[str]] = {
         "The tab with the picture frame icon. Pretty self-explanatory, no?",
         "Presets, sliders, batch processing — all the exciting alpha-fixing action lives here.",
         "If you needed a tooltip to find the Alpha & RGBA Adjuster tab you might be in trouble.",
+        "Alpha. Fixer. Tab. You're on it. Press Ctrl+1 if you ever end up somewhere else.",
+        "Congratulations, you found the main tab. This is where most of the action happens.",
+        "Batch fix transparency on entire folders. That's this tab's superpower.",
     ],
     "converter_tab": [
         "The Converter tab converts files. Mind-blowing, I know. Press Ctrl+2 to jump here.",
@@ -1806,6 +2345,9 @@ _DUMBED: dict[str, list[str]] = {
         "For when Alpha & RGBA Adjuster is too exciting and you just want boring format changes.",
         "Supports like a dozen formats. PNG, JPEG, WEBP, etc. Click it already.",
         "Converter. Con-vert-er. Files go in one format, come out another. There you go.",
+        "Ctrl+2 to jump here. If clicking is still somehow too hard.",
+        "Congratulations on switching to the Converter tab. Many supported formats await.",
+        "Convert between PNG, JPEG, WEBP, DDS, BMP, TIFF, and more. That's the gist.",
     ],
     "history_tab": [
         "History. Like browser history but for files. And we judge you less. Ctrl+3 to jump here.",
@@ -1813,6 +2355,9 @@ _DUMBED: dict[str, list[str]] = {
         "Click it to see recent processing logs. Exciting stuff.",
         "If something went wrong this tab might tell you what. Might.",
         "History tab: for when you can't remember what you broke.",
+        "Ctrl+3 gets you here. In case clicking is still a challenge.",
+        "Congratulations on finding History. Your past batches are all recorded here.",
+        "Three sub-tabs: Converter, Alpha, and Selective Alpha. Very organized.",
     ],
     "history_refresh_btn": [
         "Refresh. Click it. History updates. Not hard.",
@@ -1820,6 +2365,9 @@ _DUMBED: dict[str, list[str]] = {
         "Click to reload recent sessions. It's a refresh button. Very standard.",
         "If your new entries aren't showing, click this. Problem solved.",
         "Refresh button. Does refreshing. You got this.",
+        "Click it and the list updates. Very standard button behavior.",
+        "Congratulations, you found Refresh. New sessions appear after clicking it.",
+        "It reloads from the log file. If new entries are missing, this fixes it.",
     ],
     "history_export_btn": [
         "Export the current history to a CSV file. Opens a save dialog. Very intuitive.",
@@ -1827,6 +2375,9 @@ _DUMBED: dict[str, list[str]] = {
         "Open in Excel. Google Sheets. Notepad. Whatever. It's just a CSV.",
         "Exports only the currently active sub-tab. Switch tabs to export the other one.",
         "Good for auditing big batches or sending logs to someone who doesn't have this app.",
+        "Congratulations, you can now export your processing history. Spreadsheet awaits.",
+        "The resulting CSV can go into Excel, Google Sheets, or literally any text editor.",
+        "Switch between sub-tabs first if you want to export a different type of history.",
     ],
     "history_clear_btn": [
         "This erases all history. Gone. Forever. No takebacks.",
@@ -1834,6 +2385,9 @@ _DUMBED: dict[str, list[str]] = {
         "Clears your processing history. Doesn't delete actual files, just the records.",
         "Warning: this permanently wipes the log. Or don't, up to you.",
         "The nuclear option for your history tab. Use carefully.",
+        "Confirms before deleting. So it takes two clicks to accidentally nuke everything.",
+        "Congratulations on finding the delete-all-history button. Proceed with care.",
+        "Only deletes the history records. Your actual processed files are fine. Breathe.",
     ],
     "history_conv_sub": [
         "Converter history sub-tab. Lists your file conversion sessions. You convert files, it logs it.",
@@ -1841,6 +2395,9 @@ _DUMBED: dict[str, list[str]] = {
         "Yellow rows have errors in them. That's your hint something didn't go perfectly.",
         "You can see up to 50 sessions here. After that, old ones fall off the list.",
         "Converter sub-tab. Conversion logs. That's it.",
+        "Converter conversion history. Each row = one session. That's the whole thing.",
+        "Congratulations, you clicked the Converter sub-tab. Your conversion logs are here.",
+        "Click a row to expand it and see the individual file names. Hidden details!",
     ],
     "history_alpha_sub": [
         "Alpha & RGBA Adjuster history sub-tab. Lists your alpha-fixing sessions. Very niche, very useful.",
@@ -1848,6 +2405,9 @@ _DUMBED: dict[str, list[str]] = {
         "If it's yellow, there were errors. Click Refresh to make sure it's up to date.",
         "Up to 50 sessions are logged. After 50, the oldest ones are removed.",
         "Alpha fix logs. For checking what you broke and when.",
+        "Alpha fix history. Each row = one batch. Very logical organization.",
+        "Congratulations on discovering the Alpha sub-tab. All your fix sessions are here.",
+        "Click a row to expand it and see per-file results. The details are there if you want them.",
     ],
     "history_sel_sub": [
         "Selective Alpha history sub-tab. Shows each time you ran the selective alpha tool.",
@@ -1855,6 +2415,9 @@ _DUMBED: dict[str, list[str]] = {
         "Yellow rows had errors. Something didn't go perfectly. Probably fine.",
         "Up to 50 sessions are logged here. After 50 the oldest ones fall off.",
         "Selective alpha logs. For the times you went in with a scalpel instead of a sledgehammer.",
+        "Selective Alpha history. Each row = one selective alpha session you ran.",
+        "Congratulations, you found the Selective Alpha history. Very specific records await.",
+        "Click a row to see the file names. The table is expandable. Fancy.",
     ],
     "history_conv_tree": [
         "This table shows your conversion sessions. Each row = one batch. Very simple concept.",
@@ -1862,6 +2425,9 @@ _DUMBED: dict[str, list[str]] = {
         "Columns: time, format, total files, how many worked, how many didn't, file names.",
         "Hover the column headers if you're confused about what they mean.",
         "Sorted by time. Most recent batch is at the top. Probably.",
+        "Click a row to expand it and see each individual file that was converted.",
+        "Congratulations on finding the conversion history table. Now look at what you've done.",
+        "The table keeps up to 50 sessions. After that, old ones fall off. Natural selection.",
     ],
     "history_alpha_tree": [
         "Alpha fix session log. Each row = one time you ran a batch fix. There it is.",
@@ -1869,6 +2435,9 @@ _DUMBED: dict[str, list[str]] = {
         "Columns: time, which preset/mode, total files, successes, errors, file names.",
         "50 rows max. Older ones disappear. Like memories. Fleeting.",
         "Use this to figure out when you accidentally fixed the wrong files.",
+        "Click a row to expand it and see per-file results from that alpha fix session.",
+        "Congratulations, you're reading an alpha fix history log. Niche but useful.",
+        "50 rows max. After that, ancient history disappears. Sad but necessary.",
     ],
     "history_sel_tree": [
         "Selective alpha session log. Each row = one time you ran selective alpha. Simple.",
@@ -1876,6 +2445,9 @@ _DUMBED: dict[str, list[str]] = {
         "Columns: time, mode/zone, total files, successes, failures, file names.",
         "50 rows max. After that the oldest ones fall off the list.",
         "Good for tracking which zone modes you've been using and whether they worked.",
+        "Click a row to expand it and see per-file details from that selective alpha run.",
+        "Congratulations, you found the selective alpha log. Very specific records in here.",
+        "50 sessions max. After that, the oldest ones quietly vanish.",
     ],
     "history_conv_summary": [
         "Summary line below the converter tree. Totals for all logged sessions.",
@@ -1883,6 +2455,9 @@ _DUMBED: dict[str, list[str]] = {
         "If the error count is high, you should probably look into that.",
         "Resets to zero when you clear history. That's how resetting works.",
         "Aggregate stats. For the big picture. The forest, not the trees.",
+        "All your conversion sessions summarized in one line. Total view.",
+        "Congratulations on finding the summary row. Very efficient data consumption.",
+        "Updates every time you refresh. The numbers reflect your actual processing history.",
     ],
     "history_alpha_summary": [
         "Summary line below the alpha tree. Totals for all logged alpha-fix sessions.",
@@ -1890,6 +2465,9 @@ _DUMBED: dict[str, list[str]] = {
         "High error count = something is wrong. Low error count = well done you.",
         "Resets when you clear history. Very logical.",
         "Shows aggregate data, not per-run data. That's what the table above is for.",
+        "All your alpha fix sessions summarized in one handy line. Efficiency.",
+        "Congratulations on reaching the summary. Here's the grand total of your alpha fixes.",
+        "Refreshes when you hit Refresh. Same as everything else in this tab.",
     ],
     "history_sel_summary": [
         "Summary line below the selective alpha tree. Totals for all logged selective sessions.",
@@ -1897,6 +2475,9 @@ _DUMBED: dict[str, list[str]] = {
         "High error count = zone mode config probably needs adjusting.",
         "Resets when you clear history.",
         "Aggregate view. Big picture. For the selective alpha completionists.",
+        "Summary of all selective alpha sessions. Aggregate view.",
+        "Congratulations on finding the summary at the bottom. Very thorough of you.",
+        "Grand total of all the selective alpha work you've done. Impressive or alarming.",
     ],
     "history_search": [
         "Type something here to filter the history list. It searches all columns.",
@@ -1904,6 +2485,9 @@ _DUMBED: dict[str, list[str]] = {
         "Clear the box to get all entries back.",
         "Try typing a format like 'webp' or a date like '2026' to narrow it down.",
         "The little × button clears the filter so everything shows again.",
+        "Type here to find specific sessions. Format, date, file name - it searches all of it.",
+        "Works in real time. The list shrinks as you type. Very satisfying.",
+        "Congratulations, you found the search box. It works exactly like you'd expect.",
     ],
     "settings_theme_tab": [
         "Theme tab. Pick colors. Make the app look like you want. Very self-explanatory.",
@@ -1911,6 +2495,9 @@ _DUMBED: dict[str, list[str]] = {
         "Unlocked themes show up here. Keep clicking stuff and they'll appear.",
         "Export = save your theme to a file. Import = steal someone else's. Fair game.",
         "Search box filters the theme list. Very useful when you've made 40 custom themes.",
+        "15 customizable color slots. Click any swatch to change it. Instant preview.",
+        "Congratulations on arriving at the Theme tab. Make it look exactly how you want.",
+        "Locked themes show a lock icon. Keep using the app and they unlock. Patience rewarded.",
     ],
     "settings_general_tab": [
         "General tab. Effects, sounds, trails, cursor, fonts. All the fun stuff.",
@@ -1918,6 +2505,9 @@ _DUMBED: dict[str, list[str]] = {
         "Trail, effect, and cursor combos have theme-matched options that auto-update.",
         "Tooltip Mode is here. Dumbed Down is honestly the funniest one.",
         "Font size, reset button, sound file — all buried in here. Explore.",
+        "Sounds, effects, trails, fonts, resets - it's all here in one glorious tab.",
+        "Congratulations on finding General Settings. You'll probably spend a while in here.",
+        "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
     ],
     "alpha_file_count_lbl": [
         "File count. How many files are in the list. Not rocket science.",
@@ -1925,6 +2515,9 @@ _DUMBED: dict[str, list[str]] = {
         "Add more files and the number goes up. Remove them and it goes down. Basic math.",
         "During processing this updates with progress + ETA for big batches.",
         "If it says 0 files, maybe add some files first. Just a suggestion.",
+        "How many files are queued. Counting is useful. This does it for you.",
+        "Congratulations on reading the file count. Now add some files if it says zero.",
+        "Updates when you add or remove files. That's how counts work.",
     ],
     "conv_file_count_lbl": [
         "Converter file count. How many things are waiting to be converted.",
@@ -1932,6 +2525,9 @@ _DUMBED: dict[str, list[str]] = {
         "Watch the number go up as you add files. Very satisfying.",
         "Shows progress during conversion. ETA shows up for big batches (500+ files).",
         "If it says 0 files, add some. They won't add themselves.",
+        "Converter queue count. How many files want to be converted. Very descriptive.",
+        "Congratulations on reading the converter file count. Add files if zero.",
+        "Goes up with adds, down with removes, resets on Clear. Math.",
     ],
     "processing_log": [
         "The log. Where all the ✔ and ✘ messages live. Each line = one file.",
@@ -1939,6 +2535,9 @@ _DUMBED: dict[str, list[str]] = {
         "Auto-scrolls to the latest message. You can scroll up to see the older ones.",
         "Clears at the start of every new batch. Fresh log, fresh start.",
         "If everything is ✔, you're golden. If it's all ✘, something is very wrong.",
+        "Congratulations on discovering the log. All the per-file results are in here.",
+        "Tick = worked. Cross = didn't. Red text = error details. Very clear.",
+        "Scroll up to see older log entries. The log doesn't disappear mid-process.",
     ],
     "processing_progress": [
         "Progress bar. Goes from empty to full. That's how progress bars work.",
@@ -1946,6 +2545,9 @@ _DUMBED: dict[str, list[str]] = {
         "Stays at 100% when done because done is done and it's not going backwards.",
         "Fast for small files, slower for big ones. This is expected.",
         "ETA appears in the file count label above this. For the truly impatient.",
+        "Fills from left to right. Reaches 100% when done. Wild, right?",
+        "Congratulations on locating the progress bar. Now watch it fill up.",
+        "Each file processed moves it a little. Many files, many little moves.",
     ],
     "alpha_status_lbl": [
         "Status label. Tells you what the Alpha & RGBA Adjuster is currently doing.",
@@ -1953,6 +2555,9 @@ _DUMBED: dict[str, list[str]] = {
         "Shows ✔ and ✘ counts after each batch. Green numbers are good. Red are bad.",
         "Check the log below if errors appear here. The log has the details.",
         "It changes during processing too. Watch it update in real time. Exciting.",
+        "Wild concept: a label that tells you what's happening. Read it.",
+        "Congratulations, you found the status label. It has useful information in it.",
+        "Idle = nothing happening. Anything else = something is happening. Simple.",
     ],
     "conv_status_lbl": [
         "Status label for the Converter. Like the one in Alpha & RGBA Adjuster but for converting.",
@@ -1960,6 +2565,9 @@ _DUMBED: dict[str, list[str]] = {
         "Shows how many converted successfully vs how many exploded.",
         "Log panel below has the per-file breakdown if anything went wrong.",
         "Green-ish = fine. Red-ish = not fine. You can figure it out.",
+        "Converter status. Same idea as the alpha one but for converting.",
+        "Congratulations on reading the converter status. Very informative decision.",
+        "'Ready.' = nothing happening. Numbers = something happened. Interpret accordingly.",
     ],
     "theme_search": [
         "Type a theme name here to filter the dropdown. Like searching but for themes.",
@@ -1967,6 +2575,9 @@ _DUMBED: dict[str, list[str]] = {
         "It's a search box. For themes. Not complicated.",
         "Can't find your custom theme? Type its name here. There it is.",
         "Filter themes. Type. Done. Very high-tech.",
+        "Type here and the theme dropdown filters down. Instantly. Like magic.",
+        "Congratulations on finding the theme search. 40 themes is a lot to scroll through.",
+        "Delete your text to bring all themes back. Very standard search behavior.",
     ],
     "sound_check": [
         "Check = sounds on. Uncheck = silence. Riveting decision.",
@@ -1974,6 +2585,9 @@ _DUMBED: dict[str, list[str]] = {
         "Sounds. Noises. Enabled or disabled. This checkbox handles it.",
         "Custom sound goes in the box below. Or leave it blank for the default blip.",
         "If you uncheck it, the app goes quiet. Like a mime. A software mime.",
+        "Checked = app makes sounds. Unchecked = silence. Revolutionary toggle.",
+        "Congratulations on finding the global sound toggle. It controls everything below.",
+        "If you untick this, all the other sound checkboxes below do nothing. FYI.",
     ],
     "trail_check": [
         "Mouse trail means a colorful line follows your cursor. Decorative. Fancy.",
@@ -1982,6 +2596,8 @@ _DUMBED: dict[str, list[str]] = {
         "The color is set in the Trail Color picker below. Very logical.",
         "Turn it on. Wiggle your mouse. It's honestly quite pleasing.",
         "First time enabling it unlocks a Midnight Forest 🌲 theme. Free! Check and uncheck it right now!",
+        "Check it. Move your mouse. Watch the trail appear. Very satisfying discovery.",
+        "Congratulations on finding the trail toggle. Enable it at least once to see what it does.",
     ],
     "trail_color": [
         "Click this to pick a pretty color for the trail. Color picker appears. Amazing.",
@@ -1989,6 +2605,9 @@ _DUMBED: dict[str, list[str]] = {
         "Click. Pick color. Done. This is genuinely that simple.",
         "Go wild. Neon pink. Boring gray. Radioactive green. Sky's the limit.",
         "The color only shows if Trail is enabled. You did check that, right?",
+        "One click picks a color for your cursor trail. The color picker is very user-friendly.",
+        "Congratulations on customizing your trail color. It looks great. Probably.",
+        "Remember: trail needs to be enabled for this color to show up. Check that box first.",
     ],
     "trail_style": [
         "This lets you change what the trail looks like. Dots, ribbon, comet, emoji, rainbow.",
@@ -1996,6 +2615,9 @@ _DUMBED: dict[str, list[str]] = {
         "Fairy/Wave/Sparkle use emoji that float around. They're cute. You're welcome.",
         "Rainbow cycles through every colour in the spectrum as you move. Very flashy.",
         "Use theme trail (below) to skip this and auto-pick the right style for your theme.",
+        "Some styles look better at faster speeds. Experiment until one looks right.",
+        "Congratulations on finding the Trail Style dropdown. There are a surprising number of options.",
+        "You can override this with Use Theme Trail if you want fully automatic styling.",
     ],
     "use_theme_trail": [
         "Check this and the trail changes color automatically for each theme. Smart.",
@@ -2003,6 +2625,9 @@ _DUMBED: dict[str, list[str]] = {
         "Themes with ocean/mermaid effects get bubble trail (🫧💧🌊). Ice effects get crystals (✦❄✧).",
         "Uncheck to go back to manually picking a color. Boring but valid.",
         "Theme trail = automatic colors AND styles. Manual trail = DIY. Your call.",
+        "Checked = theme decides trail style. Unchecked = you're in charge. Your call.",
+        "Congratulations on discovering Use Theme Trail. Very convenient if you like themes matching.",
+        "Each theme has its own trail vibe. Bat Cave gets bats. Rainbow gets rainbow. Predictably.",
     ],
     "trail_length_slider": [
         "Slide right = more trail points = longer trail. Slide left = shorter snappy trail.",
@@ -2010,6 +2635,9 @@ _DUMBED: dict[str, list[str]] = {
         "200 points = long ghost trail. 10 points = tiny little blip behind your cursor.",
         "The slider controls length. The fade speed controls how fast it disappears.",
         "Long trail + slow fade = maximum ghosting effect.",
+        "Drag it and watch the trail change in real time. That's how sliders work.",
+        "Congratulations on adjusting trail length. Your cursor has a longer tail now.",
+        "Short trail = subtle. Long trail = maximum dramatic effect. Pick your vibe.",
     ],
     "trail_fade_slider": [
         "How fast the trail fades: 1 = super slow, 10 = super fast.",
@@ -2017,6 +2645,9 @@ _DUMBED: dict[str, list[str]] = {
         "Think of it as 'persistence'. High = persistent. Low = fast.",
         "Combo with the length slider to tune the exact feel you want.",
         "1 is basically a ghost trail. 10 is basically no trail.",
+        "Drag it and watch how quickly the trail vanishes. Left = slow. Right = fast.",
+        "Congratulations on finding the fade control. Low = ghost mode. High = instant.",
+        "Works best when combined with the length slider. Tune them together.",
     ],
     "trail_intensity_slider": [
         "How bright/visible the trail is. 100% = full color. 10% = barely there.",
@@ -2024,6 +2655,9 @@ _DUMBED: dict[str, list[str]] = {
         "High intensity = bright vivid trail that stands out.",
         "Combine with a bold theme color for maximum pop.",
         "Turn it all the way down if you want the trail but don't want to notice it much.",
+        "Intensity = how much it stands out. Low = ghost. High = vivid. Dial it in.",
+        "Congratulations on discovering trail intensity. It changes how visible the trail is.",
+        "Combine with a bright color for maximum pop. Or dim it for subtlety. Your choice.",
     ],
     "cursor_combo": [
         "Your cursor shape. You can change it. Here. With this dropdown.",
@@ -2031,6 +2665,9 @@ _DUMBED: dict[str, list[str]] = {
         "Pointing Hand feels very 'I'm a web developer circa 2002'.",
         "Cross cursor is great for feeling like a precise, serious person.",
         "Pick one. Click Apply. Your cursor changes. Life continues.",
+        "Wild concept: you can change your cursor shape. From a dropdown. Right here.",
+        "Congratulations on exploring cursor options. Many pointy arrow choices await.",
+        "Click Apply after choosing. Or just pick Use Theme Cursor and let the theme decide.",
     ],
     "use_theme_cursor": [
         "Check this to let the theme decide your cursor. Hands off the wheel.",
@@ -2038,6 +2675,9 @@ _DUMBED: dict[str, list[str]] = {
         "When checked, the manual cursor dropdown above does literally nothing.",
         "Uncheck it if you want your boring arrow cursor back. Fair enough.",
         "Theme cursor = automatic. Manual cursor = your problem.",
+        "Checked = theme picks cursor. Easy mode cursor management.",
+        "Congratulations on finding the theme cursor option. Very hands-off decision.",
+        "Different themes get different cursors. Otter Cove gets a special one, others get sensible ones.",
     ],
     "cursor_anim": [
         "Makes your cursor wiggle/cycle between related emoji. It's fun.",
@@ -2045,6 +2685,9 @@ _DUMBED: dict[str, list[str]] = {
         "Only works if your cursor has animation frames defined. Not all do.",
         "Turn it off if you want your cursor to stop doing things. Valid choice.",
         "It's 2.5 frames per second. Very cinematic.",
+        "It cycles between a few related emoji every few frames. Novelty factor: high.",
+        "Congratulations on enabling cursor animation. Your cursor now has opinions.",
+        "Turn it off if the wiggling is distracting. Not every cursor needs to be alive.",
     ],
     "font_size": [
         "Makes text bigger or smaller. Spinbox. Number. You know how this works.",
@@ -2052,6 +2695,9 @@ _DUMBED: dict[str, list[str]] = {
         "8pt is tiny. 24pt is huge. 10pt is normal. Pick one.",
         "Squinting? Go bigger. Too big? Go smaller. The controls are right there.",
         "This changes fonts everywhere. In the app. Not on your computer.",
+        "Smaller number = harder to read. Bigger number = easier but chunkier layout.",
+        "Congratulations on finding the font size control. 10-12 is the sweet spot for most.",
+        "Changes apply across the whole app. Immediately. Wild, right?",
     ],
     "click_effects_check": [
         "This enables the fancy particles that explode when you click stuff.",
@@ -2059,6 +2705,9 @@ _DUMBED: dict[str, list[str]] = {
         "The particles match the theme. Bats, blood, stars… all configurable.",
         "Turn it off if the constant explosions are too distracting. Fair.",
         "Each theme has different particles. See Theme tab to change which ones.",
+        "Check it and watch things explode when you click. Uncheck it and they stop.",
+        "Congratulations on finding the Click Effects toggle. Particles await your decision.",
+        "Use Theme Effect auto-picks the right particles. This just turns them on or off.",
     ],
     "use_theme_effect": [
         "This makes the particles automatically match your theme. Pretty cool right?",
@@ -2066,6 +2715,9 @@ _DUMBED: dict[str, list[str]] = {
         "Checked = app picks the right particles for you. Unchecked = your problem now.",
         "Gore theme? Blood. Bat Cave? Bats. You get it. This just does it automatically.",
         "Turn it off if you want to mix themes up. A panda theme with bat effects? Sure.",
+        "Wild concept: the particles match the theme automatically. Check and see.",
+        "Congratulations on finding Use Theme Effect. Very convenient automation.",
+        "Bat Cave gets bats. Fairy gets stars. Gore gets what you'd expect. Very thematic.",
     ],
     "animated_banner_check": [
         "This controls whether the little emoji in the header spins and the badge animates.",
@@ -2073,6 +2725,9 @@ _DUMBED: dict[str, list[str]] = {
         "Turn it off if your computer is struggling. Animation uses some CPU/GPU.",
         "It is off by default because not everyone wants things spinning all the time.",
         "Turn it back on to enjoy the theme mascot spinning like it's having a great time.",
+        "The spinning mascot emoji is controlled by this checkbox. Enable for fun.",
+        "Congratulations on finding the banner animation toggle. Very important control.",
+        "Turn it on for the full animated experience. Turn it off for clean minimalism.",
     ],
     "banner_anim_combo": [
         "Pick how the banner header does its little animated thing when it's enabled.",
@@ -2080,6 +2735,9 @@ _DUMBED: dict[str, list[str]] = {
         "Disabled when 'Use theme animation' is on — the theme is currently in charge.",
         "Change it live. The banner updates immediately. Very satisfying.",
         "Each theme has a default that matches its vibe. This lets you override that.",
+        "Try each option. The banner updates live. Very easy to experiment.",
+        "Congratulations on finding the banner animation style dropdown. Many options exist.",
+        "Flock is the fancy one with floating particles around the header. Very extra.",
     ],
     "banner_use_theme_anim_check": [
         "Tick this and the banner animation style is picked automatically by the active theme.",
@@ -2087,6 +2745,9 @@ _DUMBED: dict[str, list[str]] = {
         "Untick to choose the banner style yourself from the dropdown. Full control.",
         "Automatically updates when you switch themes. Zero effort required.",
         "Works with 'Use theme cursor' and 'Use theme trail' for a fully matched themed setup.",
+        "Lets the theme decide the animation style. Same idea as theme cursor and trail.",
+        "Congratulations on finding this setting. Your banner will now match your theme.",
+        "Uncheck to override with the dropdown above. Full manual control if needed.",
     ],
     "show_splash_check": [
         "Controls whether a fancy splash screen shows up when you open the app.",
@@ -2094,6 +2755,9 @@ _DUMBED: dict[str, list[str]] = {
         "Unticked = app just opens directly, no waiting, no fanfare, straight to business.",
         "Off by default so the app feels snappy and instant.",
         "Enable it if you want the theatrical intro experience every time you launch.",
+        "Splash screen lasts about 3 seconds on startup. Very dramatic. Very optional.",
+        "Congratulations on finding the splash screen toggle. Enable for theatrical launches.",
+        "Turn it off if you want the app to open fast. Turn it on for the full entrance.",
     ],
     "button_anim_check": [
         "Turns on little button press animations. Every button does a little move when clicked.",
@@ -2101,6 +2765,9 @@ _DUMBED: dict[str, list[str]] = {
         "Turn it on and every button in the app will wiggle, bounce, shake, or explode.",
         "It's subtle enough to be satisfying without being distracting. Most of the time.",
         "Enable it. Disable it. It doesn't affect how the app works. Just vibes.",
+        "Checked = buttons do little animations. Unchecked = buttons are boring but fast.",
+        "Congratulations on finding the button animation toggle. Vibes decision ahead.",
+        "Each animation style does something different. See the style dropdown below.",
     ],
     "button_anim_style_combo": [
         "Choose what animation plays when you press a button.",
@@ -2109,6 +2776,8 @@ _DUMBED: dict[str, list[str]] = {
         "'Bounce' = button leaps upward then bounces back. Very excitable energy.",
         "'Shake' = button vibrates left/right rapidly. Good for when you're clicking angrily.",
         "'Shatter' = particles explode from the button. Requires click effects for best results.",
+        "Congratulations on finding this dropdown. Your buttons are about to have a personality.",
+        "Try each one. Apply. Click a button. See if you like it. Very experimental process.",
     ],
     "use_theme_button_anim_check": [
         "Lets the theme decide what animation style to use. Smart delegation.",
@@ -2116,6 +2785,9 @@ _DUMBED: dict[str, list[str]] = {
         "Uncheck it to pick your own animation style that ignores the theme's suggestion.",
         "Automatically updates when you switch themes. Very convenient.",
         "Works with 'Use theme effect' and 'Use theme animation' for total theme coherence.",
+        "Let the theme pick the button animation. Consistent theming. Very elegant.",
+        "Congratulations on finding the auto-animation toggle. Easy mode for button vibes.",
+        "Uncheck to choose the style yourself. The dropdown below becomes your domain.",
     ],
     "save_custom_theme": [
         "Saves the current colors as a custom theme. Name it something clever.",
@@ -2123,6 +2795,9 @@ _DUMBED: dict[str, list[str]] = {
         "Custom themes persist. They're yours. They live in the INI file. They're real.",
         "Give it a name. Saves it. That's how saving works. You knew that.",
         "You can save as many themes as you want. Go nuts. Go absolutely nuts.",
+        "Type a name. Press Save. Done. Your theme is immortalized.",
+        "Congratulations on saving your first custom theme. It's in the dropdown now.",
+        "You can overwrite it later by saving with the exact same name. Very convenient.",
     ],
     "delete_custom_theme": [
         "Deletes the selected custom theme. Gone. Poof. No undo.",
@@ -2130,6 +2805,9 @@ _DUMBED: dict[str, list[str]] = {
         "Click this, confirm the dialog, theme dies. Simple operation.",
         "Export first if you want a backup. Don't come crying later.",
         "Works on your user-created themes only. Leave the presets alone.",
+        "Only deletes the selected one. Other themes are completely safe. Breathe.",
+        "Congratulations on finding the delete button for themes. It works. Be careful.",
+        "Can't delete built-in themes. They're protected. Only your custom ones are at risk.",
     ],
     "export_custom_theme": [
         "Exports the selected theme to a JSON file. For sharing, or just hoarding.",
@@ -2137,6 +2815,9 @@ _DUMBED: dict[str, list[str]] = {
         "Share your masterpiece of a theme with others. Or keep it private. Whatever.",
         "JSON files can be imported on any machine with this app.",
         "Even imports back into this app. Very circular.",
+        "Exports to JSON so you can share it, back it up, or move it to another install.",
+        "Congratulations on finding theme export. Your color work is now portable.",
+        "The JSON file can be imported on any machine running this app. Cross-device theming.",
     ],
     "import_custom_theme": [
         "Imports a theme from a JSON file. Someone made it, you imported it, welcome home.",
@@ -2144,6 +2825,9 @@ _DUMBED: dict[str, list[str]] = {
         "JSON must have the right color keys. Invalid file = rejected. Rules exist.",
         "Imported themes become your custom themes. You own them now.",
         "Community themes go in here. If the community makes themes. Which they might.",
+        "Pick a JSON file and the theme loads into your list. Instant custom theme.",
+        "Congratulations on finding theme import. Someone else's work is now yours.",
+        "The JSON just needs the right color keys. Wrong format = politely rejected.",
     ],
     "sound_path": [
         "Path to your custom click sound. WAV file. Put the path here or browse.",
@@ -2151,6 +2835,9 @@ _DUMBED: dict[str, list[str]] = {
         "Custom WAV path. For when the default sound isn't aggressive enough.",
         "Type the path or use Browse. Both work. Pick your adventure.",
         "If the path is wrong, the sound won't play. It'll just be silent. Sad.",
+        "WAV files only. Not MP3, not OGG. WAV. Very specific requirement.",
+        "Congratulations on finding the custom sound path field. Browse or type. Either works.",
+        "Leave it blank for the built-in default blip. It's honestly quite pleasant.",
     ],
     "sound_browse": [
         "Opens a file browser. For finding WAV files. You know what a file browser is.",
@@ -2158,6 +2845,9 @@ _DUMBED: dict[str, list[str]] = {
         "Navigate. Find WAV. Click Open. Done. Very advanced stuff.",
         "Find your custom click sound file here. WAV format.",
         "Browse = look through folders for a file. That's literally what it means.",
+        "Congratulations on finding Browse. Now click it and find your WAV file.",
+        "It opens a file picker. You pick a WAV. Very advanced two-step process.",
+        "The path fills in automatically after you pick a file. That's what Browse does.",
     ],
     "sound_volume_slider": [
         "How loud the sounds are. Left = quiet. Right = loud. Slider. You understand sliders.",
@@ -2165,6 +2855,9 @@ _DUMBED: dict[str, list[str]] = {
         "Master volume for all the sounds in the app. Drag it. See what happens.",
         "Quieter = less annoying. Louder = more satisfying. It's a volume slider. Classic.",
         "Set to 0 as a quick mute. Works with sounds still enabled. Sneaky.",
+        "Wild concept: you control how loud the app sounds are. Right here.",
+        "Congratulations on finding volume control. Now make the noises the right volume.",
+        "Drag it left to get quieter. Drag it right to get louder. That's how volume works.",
     ],
     "sound_success_check": [
         "Make a happy sound when a batch finishes successfully. Check this box.",
@@ -2172,6 +2865,9 @@ _DUMBED: dict[str, list[str]] = {
         "Uncheck if you don't want to hear it every time. That's allowed.",
         "Plays after a batch completes with no errors. The good outcome sound.",
         "Nice chime. Very cheerful. Like the app saying 'good job' to you.",
+        "Check this and hear a pleasant sound when everything works. It's satisfying.",
+        "Congratulations on finding the success sound option. Enable it. You earned that chime.",
+        "Fires when ALL files in a batch complete without errors. The good outcome.",
     ],
     "sound_error_check": [
         "Makes a sad sound when something goes wrong. Buzzer noise.",
@@ -2179,6 +2875,9 @@ _DUMBED: dict[str, list[str]] = {
         "Uncheck if errors happen a lot and the noise is driving you mad.",
         "Low buzzy sound = something broke. Good audio warning.",
         "Pairs with the success chime. Error = bad sound. Success = good sound. Simple system.",
+        "Check this and hear a distinct sound when something fails. Audio debugging.",
+        "Congratulations on finding the error sound setting. It's a sad little buzzer.",
+        "Pairs well with the success sound so you can tell outcomes without looking.",
     ],
     "sound_unlock_check": [
         "Plays a fanfare when you unlock a secret theme. Congratulations noise.",
@@ -2186,6 +2885,9 @@ _DUMBED: dict[str, list[str]] = {
         "Uncheck if you don't want the excitement. Less fun but ok.",
         "Secret theme unlocked = fanfare sound. Achievement unlocked sound. That vibe.",
         "The sound fires once per unlock. It's a reward. Accept the reward.",
+        "Check this for an ascending fanfare every time you unlock a secret theme.",
+        "Congratulations on finding the unlock sound toggle. Enable it. You want this.",
+        "Fires once per unlock. That's it. You don't have to earn it twice.",
     ],
     "sound_file_add_check": [
         "Makes a thump sound when you add files. Confirmation that it worked.",
@@ -2193,6 +2895,9 @@ _DUMBED: dict[str, list[str]] = {
         "Uncheck if you add tons of files at once and the thumping is too much.",
         "File added = thunk. Simple. Intuitive. Correct.",
         "Audio confirmation your files are in the queue. Good feedback.",
+        "Check for a thump when files enter the queue. Nice tactile audio feedback.",
+        "Congratulations on finding the file-add sound option. Enable for satisfying thumps.",
+        "Soft landing sound when files enter the list. Reassuring click-confirmation.",
     ],
     "sound_preview_check": [
         "Plays a tiny ping every time the preview updates. Off by default.",
@@ -2200,6 +2905,9 @@ _DUMBED: dict[str, list[str]] = {
         "Turn on if you want to hear the preview update. Niche but useful.",
         "Soft ping = preview refreshed. Very quiet. Barely noticeable.",
         "Useful with headphones. Not useful with loud speakers unless you enjoy chaos.",
+        "It pings on every preview refresh. Off by default to avoid constant pinging.",
+        "Congratulations on finding the preview sound. Enable if you enjoy constant soft pings.",
+        "Useful as an audio confirmation that the preview updated. Very niche.",
     ],
     "sound_process_start_check": [
         "Two quick beeps upward when a batch kicks off. Off by default.",
@@ -2207,6 +2915,9 @@ _DUMBED: dict[str, list[str]] = {
         "Useful if you tab away and want to know the job has begun.",
         "Short two-note ascending sequence. Tasteful. Informative.",
         "Pairs with the success sound so you get start AND end audio feedback.",
+        "Two quick ascending beeps when a batch begins. Good audio GO signal.",
+        "Congratulations on finding the start-of-batch sound. Enable for audio confirmation.",
+        "Fires once when batch begins. Pairs with the success sound for start-to-end audio.",
     ],
     "sound_file_remove_check": [
         "Pop sound when you remove files from the queue. Off by default.",
@@ -2214,6 +2925,9 @@ _DUMBED: dict[str, list[str]] = {
         "Fires on Delete key or right-click Remove. Confirms the file is gone.",
         "Short pitch-down sweep. Clean. Distinct from the add sound.",
         "Good for confirming you deleted the right file without having to stare at the list.",
+        "Check this for a soft swoosh when files are removed from the queue. Satisfying.",
+        "Congratulations on finding the file-remove sound. It confirms deletion audibly.",
+        "Short descending tone when files leave. Distinct from the add sound.",
     ],
     "sound_theme_change_check": [
         "Plays a little whoosh when you switch themes. Off by default.",
@@ -2221,6 +2935,9 @@ _DUMBED: dict[str, list[str]] = {
         "Fires every time you pick a different theme from the dropdown.",
         "Very subtle. Won't annoy you. Just a tiny audio nod that things changed.",
         "Turn it on. Turn it off. The themes keep switching either way.",
+        "Check for a whoosh every time you switch themes. Very satisfying transition noise.",
+        "Congratulations on finding the theme change sound. Enable for theme-switching audio.",
+        "Fires every time the theme dropdown changes. Very feedback-friendly.",
     ],
     "sound_tab_switch_check": [
         "Quick tick sound when you switch tabs. Off by default.",
@@ -2228,6 +2945,9 @@ _DUMBED: dict[str, list[str]] = {
         "Fires when you hop between Alpha Fixer, Converter, and the other tabs.",
         "Very quiet and brief. Won't distract you from whatever you're doing.",
         "Useful if you're tabbing around quickly and want audio confirmation you landed right.",
+        "Check for a click sound when hopping between the main tabs. Navigation audio.",
+        "Congratulations on finding the tab-switch sound option. Enable for clicky tabs.",
+        "Very quiet. Won't startle you. Just a small confirmation sound.",
     ],
     "sound_drag_enter_check": [
         "Gentle rising ping when files are dragged over the drop zone. Off by default.",
@@ -2235,6 +2955,9 @@ _DUMBED: dict[str, list[str]] = {
         "Fires the moment your drag enters the drop area, before you let go.",
         "Very subtle. Won't scare you. Just a little 'yes, you're in the right place' tone.",
         "Pairs with the file-add sound for a full drag-and-drop audio experience.",
+        "Check for a rising tone when you drag files over the drop zone. Good feedback.",
+        "Congratulations on finding the drag-enter sound. It fires when drag enters the zone.",
+        "Very subtle. Just a soft tone to confirm you're in the right place.",
     ],
     "sound_zone_paint_check": [
         "Little brush sound when you paint a zone. Off by default.",
@@ -2242,6 +2965,9 @@ _DUMBED: dict[str, list[str]] = {
         "Throttled so it doesn't rapid-fire like a machine gun while brushing.",
         "Tells you the canvas is actually responding. Reassuring.",
         "Turn it on. Turn it off. Totally optional. But kind of fun.",
+        "Check for brush sounds while painting on the selective alpha canvas. Art noises.",
+        "Congratulations on finding the zone paint sound. Enable for satisfying canvas audio.",
+        "Throttled so it doesn't rapid-fire. Just occasional confirmation clicks.",
     ],
     "sound_mask_copy_check": [
         "Click sound when you copy a zone mask. Off by default.",
@@ -2249,6 +2975,9 @@ _DUMBED: dict[str, list[str]] = {
         "Different sound from Paste so you know which one happened.",
         "Fires when you press the Copy Mask button on a zone row.",
         "Useful if you copy and paste a lot of masks across zones.",
+        "Check for a click when you copy a zone mask. Audio confirmation it worked.",
+        "Congratulations on finding the mask-copy sound toggle. Very specific, very useful.",
+        "Short distinct click. Different from Paste sound so you know which happened.",
     ],
     "sound_mask_paste_check": [
         "Pop sound when you paste a mask onto a zone. Off by default.",
@@ -2256,6 +2985,9 @@ _DUMBED: dict[str, list[str]] = {
         "Different from Copy so you know the paste actually went through.",
         "Only fires when there is a copied mask to paste. Obviously.",
         "Good for confirming zone-to-zone mask transfers worked.",
+        "Check for a pop when you paste a mask. Confirmation the paste actually worked.",
+        "Congratulations on finding the mask-paste sound option. Enable for paste confirmation.",
+        "Only plays if there's a mask to paste. Silent if clipboard is empty.",
     ],
     "sound_bat_screech_check": [
         "Bat screech plays when you switch to Bat Cave theme. Off by default.",
@@ -2263,6 +2995,9 @@ _DUMBED: dict[str, list[str]] = {
         "Falls back to the normal whoosh if you turn this off.",
         "Turn this on if you want a screech every time you go dark mode.",
         "Does exactly what it says. Bat. Screech. On theme change.",
+        "Enable and get a bat screech on Bat Cave theme switch. Atmospheric choice.",
+        "Congratulations on finding the bat screech toggle. Your theme switching is now spooky.",
+        "Falls back to normal whoosh if unchecked. Bat Cave still works, just less dramatically.",
     ],
     "sound_cat_meow_check": [
         "Cat meow plays when you switch to a cat or panda theme. Off by default.",
@@ -2270,6 +3005,9 @@ _DUMBED: dict[str, list[str]] = {
         "Falls back to the normal whoosh if this is turned off.",
         "Yes it's a cat meow on a panda theme. Pandas like cats. Probably.",
         "Turn on for maximum cuteness. Turn off for professionalism.",
+        "Enable for a meow whenever you switch to cat-adjacent themes. Very cute.",
+        "Congratulations on finding the meow toggle. Enable it. You know you want to.",
+        "Applies to: Panda Dark, Panda Light, Space Cat, Purrfect Cats. All the soft themes.",
     ],
     "sound_dog_bark_check": [
         "Dog bark plays when you clear all files at once. Off by default.",
@@ -2277,6 +3015,9 @@ _DUMBED: dict[str, list[str]] = {
         "WOOF. All files cleared. Clean slate. The dog approves.",
         "Short bark. Not scary. More like a golden retriever than a doberman.",
         "If you hear the bark, all your files are gone from the queue.",
+        "Enable and a dog bark plays when clearing all files. Very enthusiastic confirmation.",
+        "Congratulations on finding the dog bark toggle. WOOF is your clear-all alert.",
+        "Also fires on Good Dog theme switch. Double bark value for one checkbox.",
     ],
     "sound_frog_croak_check": [
         "Frog croak plays when you switch to a slimy or swampy theme. Off by default.",
@@ -2284,6 +3025,9 @@ _DUMBED: dict[str, list[str]] = {
         "Two low raspy pulses. Classic frog. Very distinguished.",
         "Falls back to the whoosh if this is off.",
         "Turn on if you want the full swamp audio experience.",
+        "Enable for a frog croak on swampy theme switches. Slime and Snake Pit eligible.",
+        "Congratulations on finding the frog sound toggle. The swamp is now fully interactive.",
+        "Two low raspy pulses. Very dignified croaking. Very atmospheric.",
     ],
     "sound_batch_done_check": [
         "Fanfare plays when a batch of 100+ files finishes. Off by default.",
@@ -2291,6 +3035,9 @@ _DUMBED: dict[str, list[str]] = {
         "Rising multi-note sound. Unmistakably different from the regular ping.",
         "Only fires for 100+ files. Step away, come back, hear the fanfare.",
         "You processed 100 files. You earned this fanfare. It's yours.",
+        "Check for a fanfare when 100+ files finish processing. Big batch celebration.",
+        "Congratulations on finding the batch done sound. Enable for large-batch audio.",
+        "Only fires on large batches. For 99 files or fewer, you get the regular success ping.",
     ],
     "reset_all_settings": [
         "This resets EVERYTHING. Theme, sound, cursors, presets, all of it. Nuclear option.",
@@ -2298,6 +3045,9 @@ _DUMBED: dict[str, list[str]] = {
         "Reset. All. Settings. To. Default. It's in the button name. Very descriptive.",
         "Useful for when you break everything and just want to start over.",
         "Doesn't delete files on disk. Just resets the app config. Not THAT destructive.",
+        "Congratulations on finding the nuclear reset button. Maybe don't use it casually.",
+        "Confirmation dialog asks first. So you need to really commit to this decision.",
+        "Everything goes back to factory defaults. Clean slate. Except your files. Those stay.",
     ],
     "reset_unlocks_btn": [
         "Resets just the unlock flags. Won't nuke your theme or sound or anything fun. Calm down.",
@@ -2305,6 +3055,9 @@ _DUMBED: dict[str, list[str]] = {
         "Unlock counter goes to zero. Click stuff again. Discover stuff again. Groundhog Day.",
         "Keeps your colours, sounds, and presets. Just forgets which themes you already unlocked.",
         "Useful for re-testing hidden theme unlocks without torching everything else.",
+        "Only touches unlock flags. Your theme, sounds, presets, and colors are untouched.",
+        "Congratulations on finding the unlock reset. Great for redoing the easter egg hunt.",
+        "All secret themes go back to locked. Start earning them again. You've got this.",
     ],
     "finetune_params_lbl": [
         "Live summary of what's active. Tells you exactly what will happen when you hit Process.",
@@ -2312,6 +3065,9 @@ _DUMBED: dict[str, list[str]] = {
         "'remap → [0–128]' = remapping alpha range to 0–128. The brackets are your output range.",
         "Check this label before clicking Process. It's the whole settings summary in one line.",
         "Shows Min–Max range, threshold, invert, and binary-cut status. All at once.",
+        "It updates live. Change a setting, this label reflects it immediately.",
+        "Congratulations on reading the params summary. It tells you exactly what will happen.",
+        "Check this before processing. If it doesn't look right, adjust your settings.",
     ],
     "use_preset_check": [
         "Check this and the preset auto-fills all the controls. Easy mode.",
@@ -2319,6 +3075,9 @@ _DUMBED: dict[str, list[str]] = {
         "Unchecked = you're in charge of the alpha. No pressure. The controls stay unlocked.",
         "Edit any control and this unchecks itself automatically. The app does the thinking.",
         "This decides which settings win: the preset up top or whatever you typed.",
+        "Checked = preset drives the settings. Unchecked = you're manually in control.",
+        "Congratulations on understanding the Use Preset toggle. Very smart control.",
+        "The preset fills in Min/Max/threshold/invert/binary-cut all at once. Efficient.",
     ],
     "red_spin": [
         "This makes the image more red (positive) or less red (negative). Colors!",
@@ -2326,6 +3085,9 @@ _DUMBED: dict[str, list[str]] = {
         "Nothing happens unless you also check 'Apply RGBA adjustments'. Gotcha.",
         "Works together with green, blue, and alpha sliders for full RGBA control.",
         "Use it to fix weirdly-tinted game textures. Or make everything red. You do you.",
+        "Nothing changes unless Apply RGBA is checked. Just a reminder.",
+        "Congratulations on adjusting the red channel. Your texture is slightly more crimson now.",
+        "Positive adds red. Negative removes red. That's the whole R in RGBA right there.",
     ],
     "green_spin": [
         "This makes the image more green (positive) or less green (negative). Yep.",
@@ -2333,6 +3095,9 @@ _DUMBED: dict[str, list[str]] = {
         "Nothing happens unless you also check 'Apply RGBA adjustments'.",
         "Works with red, blue, and alpha for complete color correction.",
         "Great for making everything look like it's in a forest. Or not.",
+        "Nothing changes unless Apply RGBA is checked. Check it if nothing's happening.",
+        "Congratulations on tweaking the green channel. Very precise color correction.",
+        "Positive = more green. Negative = less green. The G in RGBA, fully explained.",
     ],
     "blue_spin": [
         "This makes the image more blue (positive) or less blue (negative). Cool.",
@@ -2340,6 +3105,9 @@ _DUMBED: dict[str, list[str]] = {
         "Nothing happens unless you also check 'Apply RGBA adjustments'.",
         "Works with red and green for full color adjustment.",
         "Add blue to make things look colder. Remove blue for warm tones.",
+        "Nothing changes unless Apply RGBA is checked. You've been warned.",
+        "Congratulations on adjusting the blue channel. Your texture is now subtly cooler.",
+        "Positive = more blue. Negative = less blue. The B in RGBA. Very intuitive.",
     ],
     "alpha_delta_spin": [
         "Shift the alpha (transparency) of every pixel up or down. Simple!",
@@ -2347,6 +3115,9 @@ _DUMBED: dict[str, list[str]] = {
         "Nothing happens unless you also check 'Apply RGBA adjustments'.",
         "Works alongside R/G/B so you can fix color AND transparency in one go.",
         "Use this when every pixel needs a little more or less see-through-ness.",
+        "Nothing changes unless Apply RGBA is checked. Check it. Really.",
+        "Congratulations on adjusting the alpha delta. Everything gets slightly more or less transparent.",
+        "Positive = more solid. Negative = more transparent. The A in RGBA. Complete set.",
     ],
     "apply_rgb_check": [
         "Check this to make the Red/Green/Blue/Alpha adjustments actually do something.",
@@ -2354,6 +3125,9 @@ _DUMBED: dict[str, list[str]] = {
         "Enables color AND alpha correction on top of the alpha fix. Double the fun.",
         "Alpha processing runs first, then the RGBA deltas kick in. Order matters.",
         "If nothing looks different, check this box first. Yeah, that's why.",
+        "Check this and the R/G/B/A spinboxes above all actually do something.",
+        "Congratulations on finding the Apply RGBA toggle. The spinboxes were waiting for this.",
+        "Without this checked, the color adjustments are decorative. Enable for substance.",
     ],
     "suffix_edit": [
         "Type a word here to add it to the output filename. Or don't. Up to you.",
@@ -2361,6 +3135,9 @@ _DUMBED: dict[str, list[str]] = {
         "Leave it blank and it'll overwrite your original. Hope you have backups.",
         "You probably want something here. '_fixed' or '_out' works great.",
         "It goes before the file extension. Like a name tag for your file.",
+        "Blank suffix = files overwrite originals. Fill it in if that terrifies you.",
+        "Congratulations on finding the suffix field. '_fixed' is a classic choice.",
+        "The suffix goes between the name and the extension. 'file' becomes 'file_fixed'. Simple.",
     ],
     "resize_check": [
         "Check this if you want the images to come out a different size.",
@@ -2368,6 +3145,9 @@ _DUMBED: dict[str, list[str]] = {
         "Unchecked = same size as the original. Checked = you're in control. Maybe.",
         "Resizing changes the dimensions. You probably knew that.",
         "This does not resize your brain. Just the images.",
+        "Check this to enable the width and height boxes below. Two for one.",
+        "Congratulations on enabling resize mode. The dimension boxes are now usable.",
+        "Unchecked = original size preserved. Checked = you control the dimensions.",
     ],
     "lock_aspect_check": [
         "Lock aspect ratio. So when you change width, height updates automatically.",
@@ -2375,6 +3155,9 @@ _DUMBED: dict[str, list[str]] = {
         "This reads the selected file's dimensions to compute the correct height.",
         "Checked by default because squishing images is usually bad.",
         "Lock = smart resize. Unlock = manual resize. Both are valid options.",
+        "Keeps proportions intact while resizing. Checked = no accidental stretching.",
+        "Congratulations on finding the aspect ratio lock. Very sensible default.",
+        "Change width and height auto-adjusts. Or uncheck for manual both-axis control.",
     ],
     "width_spin": [
         "Type the width you want. In pixels. Not centimetres. Pixels.",
@@ -2382,6 +3165,9 @@ _DUMBED: dict[str, list[str]] = {
         "Width in pixels. Goes sideways. You know this.",
         "Put a number here if you want the image to be that many pixels wide.",
         "Big number = wide image. Small number = narrow image. Physics!",
+        "Pixels. Horizontal. Left to right. Width. That's what this number is.",
+        "Congratulations on entering a width value. The image will be that many pixels wide.",
+        "0 = use original width. Any other number = that specific width in pixels.",
     ],
     "height_spin": [
         "Type the height you want. In pixels. Up and down. You know how height works.",
@@ -2389,6 +3175,9 @@ _DUMBED: dict[str, list[str]] = {
         "Height in pixels. Goes up-down. The other direction from width.",
         "Put a number here for how tall you want the output image to be.",
         "Big number = tall image. Small number = short image. You've got this.",
+        "Pixels. Vertical. Top to bottom. Height. That's what this number is.",
+        "Congratulations on entering a height value. The image will be that many pixels tall.",
+        "0 = use original height. Any other number = that specific height in pixels.",
     ],
     "out_dir_browse": [
         "Click this to find a folder. You know how to use a folder browser, right?",
@@ -2396,6 +3185,9 @@ _DUMBED: dict[str, list[str]] = {
         "You can type the path too. But clicking is more fun apparently.",
         "Pick a folder. Files go there. Revolutionary concept.",
         "This stores where your output files end up. Important button, honestly.",
+        "Opens a folder picker. You pick a folder. Files go there. Complete explanation.",
+        "Congratulations on finding the Browse button for output directory. Click it.",
+        "Typing the path directly in the box above also works, if you're that kind of person.",
     ],
     "keep_metadata_check": [
         "Check this to keep EXIF and ICC stuff in your converted files. Important for photo people.",
@@ -2403,6 +3195,9 @@ _DUMBED: dict[str, list[str]] = {
         "Game textures? Don't care about EXIF. Photos? Probably check this.",
         "ICC profiles are what keep colors looking correct. Leave checked if you care about accuracy.",
         "Unchecked = smaller files, no extra info. Checked = full metadata intact. Simple.",
+        "Check to preserve EXIF data. Uncheck to strip it for cleaner files.",
+        "Congratulations on finding the metadata toggle. Important for photo workflows.",
+        "EXIF = camera model, date, GPS. ICC = color profile. Both controlled by this.",
     ],
     "before_stats_panel": [
         "This shows the alpha stats BEFORE you did anything. Original image. Untouched.",
@@ -2410,6 +3205,9 @@ _DUMBED: dict[str, list[str]] = {
         "These numbers tell you how transparent your original image is. Lower mean = more transparent.",
         "Compare this to the AFTER panel on the right to see if your settings are doing anything.",
         "If min and max are both 255, your image had zero transparency to begin with. Congrats?",
+        "Congratulations on reading the BEFORE stats. Original image alpha info right there.",
+        "Min/Max/Mean/Std of your original alpha channel. Before you touched anything.",
+        "Compare these numbers to the AFTER panel. That shows if your settings did anything.",
     ],
     "after_stats_panel": [
         "These are the alpha stats AFTER your fix ran. Right side. After. You get it.",
@@ -2417,6 +3215,9 @@ _DUMBED: dict[str, list[str]] = {
         "If min/max/mean look the same as before, you might not have changed anything useful.",
         "Mean going up = more opaque. Mean going down = more transparent. Simple concept.",
         "If after stats show all zeros, you set everything to transparent. Check your settings.",
+        "Congratulations on reading the AFTER stats. Post-processing alpha info right there.",
+        "Min/Max/Mean/Std after your settings were applied. Compare to BEFORE on the left.",
+        "If these match BEFORE exactly, either nothing changed or something is wrong.",
     ],
     "rom_banner": [
         "The app spotted a game folder! It recognized the console from file/folder names.",
@@ -2424,6 +3225,9 @@ _DUMBED: dict[str, list[str]] = {
         "The disc ID shown here can help you look up the game online or find cover art.",
         "This banner appears automatically when the tool detects a known game format.",
         "If it detected the wrong console, the folder structure might use common names.",
+        "Congratulations, the app recognized your game folder. Very smart of both of you.",
+        "The console icon and disc ID appear automatically. No manual input needed.",
+        "If the detection is wrong, ignore the banner. It's just a suggestion, not a verdict.",
     ],
     # ---------------------------------------------------------------- Selective Alpha tab
     "selective_alpha_tab": [
@@ -2432,6 +3236,9 @@ _DUMBED: dict[str, list[str]] = {
         "Draw, set numbers, click Apply. That's the whole workflow. You've totally got this.",
         "The coloured blobs are just previews. Don't panic. They show up as transparency after Apply.",
         "Paint by numbers but for transparency. More artistic than it sounds.",
+        "Ctrl+4 to jump here. If clicking the tab seems like too much effort.",
+        "Congratulations on finding the Selective Alpha tab. Zone painting awaits.",
+        "Each zone gets its own alpha level. More control than the main fixer tab.",
     ],
     "sa_open_btn": [
         "Click to open an image. You know what Open means, right?",
@@ -2439,6 +3246,9 @@ _DUMBED: dict[str, list[str]] = {
         "Supported: PNG, JPG, BMP, TIFF, WEBP, TGA, GIF, ICO. Basically everything.",
         "Opening a new image clears all your zones. Just a heads-up before you click.",
         "You probably want to click this first. Start here. Good luck.",
+        "Click, find your image, open it. That's the three-step process explained in full.",
+        "Congratulations on finding Open. Now click it and choose an image to work on.",
+        "The image loads to the canvas. Zone painting can then begin. One step at a time.",
     ],
     "sa_save_btn": [
         "Saves the result. Grey until you click Apply. Then it wakes up.",
@@ -2446,6 +3256,9 @@ _DUMBED: dict[str, list[str]] = {
         "Output is PNG because PNG keeps alpha. We're not amateurs.",
         "File gets '_selective_alpha' added to the name. Very descriptive.",
         "Grey = nothing to save yet. Click Apply first, then this button.",
+        "Grey until you Apply. Then it turns active and you can save your result.",
+        "Congratulations on being ready to save. That means you clicked Apply. Well done.",
+        "Saves as PNG with '_selective_alpha' appended. Good naming convention built right in.",
     ],
     "sa_tool_freehand": [
         "Hold mouse, drag, paint zone colour everywhere you drag. Like MS Paint but for alpha.",
@@ -2453,6 +3266,9 @@ _DUMBED: dict[str, list[str]] = {
         "Bigger brush = wider stroke. Use the brush size spinbox below.",
         "Auto-correct will tidy up wobbly strokes if you check the checkbox.",
         "The classic 'just drag it' tool. Perfect for when you have no idea what else to try.",
+        "Hold mouse, drag, zone appears. Classic freehand approach. Very artsy.",
+        "Congratulations on choosing Freehand. The most intuitive tool in the box.",
+        "Great for irregular shapes. Terrible for precise rectangles. Use the shape tools for those.",
     ],
     "sa_tool_line": [
         "Click, drag, release. Straight line appears. Very impressive.",
@@ -2460,6 +3276,9 @@ _DUMBED: dict[str, list[str]] = {
         "A dashed preview shows where the line will go before you release.",
         "Brush size controls how wide the line is.",
         "For when your freehand looks like a toddler drew it. Straight line to the rescue.",
+        "Drag from point A to point B. Straight line painted. Very efficient.",
+        "Congratulations on finding the Line tool. Straight lines are now your power.",
+        "Great for painting along edges. Much cleaner than trying to freehand a straight line.",
     ],
     "sa_tool_rect": [
         "Drag to fill a rectangle. A box. Four corners. You know what a box is.",
@@ -2467,6 +3286,9 @@ _DUMBED: dict[str, list[str]] = {
         "Preview shows a dashed rectangle as you drag. Like a window select.",
         "Great for boxy regions. Not great for round things. Use Ellipse for those.",
         "Rectangle: the lazy person's polygon. Respectable efficiency.",
+        "Drag diagonally to fill a rectangle. Four corners. Done. Very tidy.",
+        "Congratulations on finding the Rectangle tool. Boxes are your zone now.",
+        "Fast for boxy regions. Beats painting the same square four times freehand.",
     ],
     "sa_tool_ellipse": [
         "Drag to fill an oval shape. Ellipse = fancy word for oval.",
@@ -2474,6 +3296,9 @@ _DUMBED: dict[str, list[str]] = {
         "Preview shows the dashed ellipse while dragging.",
         "Round things: use Ellipse. Square things: use Rectangle. Easy.",
         "Great for eyes, coins, wheels, or anything annoyingly circular.",
+        "Drag to define the bounding box. Oval fills inside. Curves handled.",
+        "Congratulations on choosing Ellipse. Round regions are now within your skill set.",
+        "Great for eyes, halos, round objects. Saves you from drawing ovals freehand.",
     ],
     "sa_tool_fill": [
         "Click to flood-fill a region from that point outward. Like a paint bucket.",
@@ -2481,6 +3306,9 @@ _DUMBED: dict[str, list[str]] = {
         "Works best where the image has clear edges. Blurry edges = unpredictable.",
         "One click, whole region painted. Very lazy. Very efficient.",
         "If the fill leaks everywhere, the image edges there are too soft.",
+        "One click fills the region from that point. Like a paint bucket. Exactly like a paint bucket.",
+        "Congratulations on finding Fill. One-click zone painting for distinct image regions.",
+        "Best on images with clear edges. Blurry edges lead to fill spills.",
     ],
     "sa_tool_polygon": [
         "Click to add corners. Double-click to close and fill. Fancy polygon tool.",
@@ -2488,6 +3316,9 @@ _DUMBED: dict[str, list[str]] = {
         "Press Esc to cancel if it all goes wrong. No judgment.",
         "Close Polygon button also works if double-clicking feels risky.",
         "For shapes that aren't rectangles or ovals. Maximum precision.",
+        "Click to place corners. Double-click to close and fill. Polygon complete.",
+        "Congratulations on choosing Polygon. Complex shapes are now achievable.",
+        "Esc cancels. Close Polygon button also works. Multiple ways out if it goes wrong.",
     ],
     "sa_tool_eraser": [
         "Drag to erase. Removes paint from ALL zones, not just the active one. All of them.",
@@ -2495,6 +3326,9 @@ _DUMBED: dict[str, list[str]] = {
         "Eraser size below controls how wide the erased area is.",
         "Great for fixing the overlaps you definitely didn't intend to make.",
         "After erasing, those pixels go back to original alpha when you click Apply.",
+        "Drag to erase paint from the canvas. Works on ALL zones. All of them.",
+        "Congratulations on finding the Eraser. Zone corrections are now possible.",
+        "Erased areas return to original alpha after Apply. Clean slate pixels.",
     ],
     "sa_close_poly": [
         "Closes the polygon you're drawing. Finishes and fills it.",
@@ -2502,6 +3336,9 @@ _DUMBED: dict[str, list[str]] = {
         "Same as double-clicking your last point. Button version for the cautious.",
         "Fills the polygon and adds it to the active zone mask.",
         "Only visible when Polygon tool is active. Then it vanishes like a ghost.",
+        "Closes and fills the polygon you're currently placing points on.",
+        "Congratulations on finding Close Polygon. It closes polygons. Very accurate name.",
+        "Only active while Polygon tool is running. Disappears otherwise.",
     ],
     "sa_brush_spin": [
         "Bigger number = fatter brush stroke. Smaller = thinner. Simple.",
@@ -2509,6 +3346,9 @@ _DUMBED: dict[str, list[str]] = {
         "The circle on the canvas shows exactly how big the brush is right now.",
         "1 = tiny. 200 = enormous. Somewhere in between is probably right.",
         "Eraser uses its own separate spinbox below. These are different sizes.",
+        "Adjust brush radius. Watch the cursor circle on canvas change size in real time.",
+        "Congratulations on adjusting brush size. Your painting stroke is now wider or narrower.",
+        "Big brush covers more area quickly. Small brush gives precision. Balance accordingly.",
     ],
     "sa_eraser_spin": [
         "Same idea as brush size, but for the eraser. Bigger = erases more.",
@@ -2516,6 +3356,9 @@ _DUMBED: dict[str, list[str]] = {
         "1 = tiny precise eraser. 200 = giant zone wipe.",
         "Different from the brush size. They're independent. I know.",
         "Big for speed, small for precision. Adjust as needed.",
+        "Adjust eraser radius. Same idea as brush size but for erasing. Independent.",
+        "Congratulations on finding the eraser size control. Now erase things at the right scale.",
+        "Big eraser = erase large areas fast. Small eraser = surgical precision removal.",
     ],
     "sa_autocorrect": [
         "Auto-correct fixes your wobbly strokes by snapping to nearby image edges.",
@@ -2523,6 +3366,9 @@ _DUMBED: dict[str, list[str]] = {
         "Happens after you release the mouse, not while drawing.",
         "No nearby edge? Stroke left alone. Fair.",
         "Not magic, just edge detection. It does its best.",
+        "Snaps strokes to nearby image edges automatically. On = tidier. Off = what you drew.",
+        "Congratulations on finding Auto-correct. Enable for self-cleaning freehand strokes.",
+        "Doesn't change anything while painting. Kicks in after you release the mouse.",
     ],
     "sa_zoom_in": [
         "Makes the image bigger for detail work. Very useful for precision painting.",
@@ -2530,6 +3376,9 @@ _DUMBED: dict[str, list[str]] = {
         "Max 20× zoom. Very zoomy. Very detailed.",
         "Use Fit to zoom back out to a sane view after you're done.",
         "Zoom in + small brush = precision zone painting.",
+        "More zoom. For seeing tiny details you need to paint on. Very useful.",
+        "Congratulations on zooming in. Precision zone painting is now achievable.",
+        "Scroll wheel up also zooms. The button and the wheel do the same thing.",
     ],
     "sa_zoom_out": [
         "Makes the image smaller. The opposite of zoom in. Opposite!",
@@ -2537,6 +3386,9 @@ _DUMBED: dict[str, list[str]] = {
         "Minimum 10% zoom. App says no if you go below that.",
         "Use when you've zoomed in too far and lost the image.",
         "Fit button is faster if you just want normal view back.",
+        "Less zoom. For when you've zoomed in too far and lost your bearings.",
+        "Congratulations on zooming out. You can see the whole image again. Good.",
+        "Scroll wheel down also zooms out. Two-way zoom control, very flexible.",
     ],
     "sa_zoom_fit": [
         "Shows the whole image at once. Back to normal. Very grounding.",
@@ -2544,6 +3396,9 @@ _DUMBED: dict[str, list[str]] = {
         "Click when you're lost in zoom land. It finds you.",
         "Can't see the whole image? This button fixes that in one click.",
         "1× zoom, centred. Simple and clean.",
+        "Fits the image to the canvas window. One click back to full view. Very convenient.",
+        "Congratulations on finding Fit. Lost in zoom? This button finds you.",
+        "Resets zoom AND pan position. Everything back to centred and comfortable.",
     ],
     "sa_show_all_zones": [
         "Makes all zone colours appear at once. All of them. Simultaneously.",
@@ -2551,6 +3406,9 @@ _DUMBED: dict[str, list[str]] = {
         "Doesn't change any masks. Just shows things you were hiding.",
         "Eye toggles on each zone also flip back to on.",
         "Use when you want to see all the zones and also remember they exist.",
+        "Reveals all zone overlays at once. All the coloured blobs come back.",
+        "Congratulations on showing all zones. Your painting work is now fully visible.",
+        "Wild, right? One button and all seven zones become visible simultaneously.",
     ],
     "sa_hide_all_zones": [
         "Makes all zone overlays disappear. Poof. Gone visually. Still there though.",
@@ -2558,6 +3416,9 @@ _DUMBED: dict[str, list[str]] = {
         "Useful for seeing the actual image without a bunch of coloured blobs on it.",
         "All eye toggles also flip to off. Consistent. Neat.",
         "Click Show All to bring them back. They don't go far.",
+        "Hides all zone overlays. The masks still exist. You're just not looking at them.",
+        "Congratulations on hiding all zones. You can now see the actual image clearly.",
+        "Click Show All to bring them back. They didn't go anywhere, just invisible.",
     ],
     "sa_zone_alpha_spin": [
         "How see-through this zone's pixels will be. 0=invisible, 255=solid.",
@@ -2565,6 +3426,9 @@ _DUMBED: dict[str, list[str]] = {
         "Can be changed any time before Apply. Painting and value are separate.",
         "0 = fully transparent. 128 = half. 255 = fully solid. You've got this.",
         "Each zone gets its own value. That's the point of having zones.",
+        "This sets the alpha level for this zone's pixels when Apply is clicked.",
+        "Congratulations on finding the zone alpha value. This is the core of the tool.",
+        "Change it any time before Apply. No need to repaint anything.",
     ],
     "sa_zone_select": [
         "Click Select to make this zone the active painting target.",
@@ -2572,6 +3436,9 @@ _DUMBED: dict[str, list[str]] = {
         "Only one active zone at a time. Switching is instant and harmless.",
         "Button presses in when selected. Visual confirmation.",
         "Pick zone, paint, pick next zone, paint that. Repeat.",
+        "Makes this zone the active drawing target. All your tools paint into it.",
+        "Congratulations on selecting a zone. Now pick a tool and start painting.",
+        "Active zone has a pressed-in button appearance. Confirmation you're in the right one.",
     ],
     "sa_zone_clear": [
         "Wipes out all paint in this zone. Just this one. Others are fine.",
@@ -2579,6 +3446,9 @@ _DUMBED: dict[str, list[str]] = {
         "Alpha value setting stays after clearing. Only the mask goes.",
         "Use this when a zone is a disaster and needs a fresh start.",
         "Targeted destruction. Other zones unaffected.",
+        "Erases all paint from this zone only. Other zones are completely unaffected.",
+        "Congratulations on clearing a zone. Fresh canvas for this zone. Repaint away.",
+        "Undoable! The Undo drawing button covers zone clear actions too.",
     ],
     "sa_zone_visibility": [
         "The eye button. It hides this zone's colour blob. The mask is still there.",
@@ -2586,6 +3456,9 @@ _DUMBED: dict[str, list[str]] = {
         "Turn it off to see the image under this zone. Turn it on to see the zone.",
         "It does not delete anything. Just hides it.",
         "Toggle it off, look at image, toggle it on. Very useful for checking your work.",
+        "Eye icon: on = zone colour shown. Off = zone colour invisible. Classic eye toggle.",
+        "Congratulations on toggling zone visibility. The mask is still there either way.",
+        "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
         "Copies this zone's painted shape into a clipboard. Like Ctrl+C but for paint zones.",
@@ -2593,6 +3466,9 @@ _DUMBED: dict[str, list[str]] = {
         "Copy once, paste anywhere. Efficient.",
         "One clipboard. If you copy again you lose the first copy.",
         "Use this to copy a zone mask and paste it into a different zone.",
+        "Copies this zone's painted shape for pasting into any other zone.",
+        "Congratulations on copying a zone mask. Paste it into any zone with the Paste button.",
+        "One clipboard. One copied mask. Use it wisely.",
     ],
     "sa_zone_paste_mask": [
         "Pastes the copied mask into this zone. Replaces whatever was here.",
@@ -2600,6 +3476,9 @@ _DUMBED: dict[str, list[str]] = {
         "It's undoable. Undo drawing button covers it.",
         "Replaces the whole mask. Doesn't merge. Replaces.",
         "Source zone is untouched. Pasting doesn't steal the original.",
+        "Pastes the copied mask into this zone, replacing whatever was painted here.",
+        "Congratulations on finding Paste Mask. Zone-to-zone shape transfer, complete.",
+        "Original zone is unchanged. You're copying, not moving. The source stays intact.",
     ],
     "sa_undo": [
         "Undo! Takes back the last drawing action.",
@@ -2607,6 +3486,9 @@ _DUMBED: dict[str, list[str]] = {
         "Up to 50 drawing history steps. That's a lot of oopsies covered.",
         "Grey = nothing to undo. Lit = something to undo.",
         "Covers drawing only. Apply has its own separate undo button.",
+        "Takes back the last brush stroke. Or the last zone clear. Very forgiving.",
+        "Congratulations on finding Undo. 50 drawing steps available for undoing.",
+        "Ctrl+Z works too. Because one undo path wasn't enough.",
     ],
     "sa_redo": [
         "Redo what you just undid. Changed your mind again. Completely valid.",
@@ -2614,6 +3496,9 @@ _DUMBED: dict[str, list[str]] = {
         "Redo stack clears when you draw something new. Use it fast.",
         "Grey = nothing to redo. Lit = undone step available.",
         "Undo → Redo → Undo → Redo. The infinite indecision loop.",
+        "Puts back what you just undid. Changed your mind back. Valid.",
+        "Congratulations on finding Redo. Ctrl+Y or Ctrl+Shift+Z - both work.",
+        "Redo stack clears if you draw something new. Act fast.",
     ],
     "sa_apply": [
         "THE button. Click after painting zones to actually do the thing.",
@@ -2621,6 +3506,9 @@ _DUMBED: dict[str, list[str]] = {
         "Nothing happens to the image until you click this. Painting alone doesn't do it.",
         "Can Apply multiple times. Each result is tracked by Undo Process.",
         "After Apply, Save button wakes up and lets you write the result to disk.",
+        "Click this after painting zones to actually apply the alpha values.",
+        "Congratulations on clicking Apply. The zone alpha values are now written to the image.",
+        "Nothing is permanent until Save. You can Apply again with different settings.",
     ],
     "sa_undo_process": [
         "Undoes the last Apply. Like Ctrl+Z but for the Apply button specifically.",
@@ -2628,6 +3516,9 @@ _DUMBED: dict[str, list[str]] = {
         "Grey = only one Apply done or none at all. Lit = previous result available.",
         "Drawing Undo and Apply Undo are totally separate things. Don't mix them up.",
         "Restores the previous Apply result without touching the zone painting.",
+        "Reverts the last Apply action. Previous Apply result comes back.",
+        "Congratulations on finding Undo Process. Apply history is trackable.",
+        "Separate from drawing undo. Two undo systems. Both useful.",
     ],
     "sa_clear_all": [
         "Clears every single zone mask at once. ALL of them. Simultaneously.",
@@ -2635,6 +3526,9 @@ _DUMBED: dict[str, list[str]] = {
         "Undoable. The Undo drawing button has your back if you regret it.",
         "Start fresh with zone painting without opening a new image.",
         "All 7 zones cleared in one click. Nuclear option for zone masks.",
+        "Clears paint from every single zone simultaneously. Clean canvas.",
+        "Congratulations on clearing all zones. Blank canvas achieved.",
+        "All seven zones reset. Image is untouched. Only the painted zones are cleared.",
     ],
     "sa_canvas": [
         "Here's where you paint. Drag mouse to mark zones.",
@@ -2642,6 +3536,9 @@ _DUMBED: dict[str, list[str]] = {
         "Ctrl+Z undoes. Ctrl+Y redoes. While the canvas has keyboard focus.",
         "Coloured blobs = painted zone areas. Grey checkers = transparent background.",
         "Paint zones here, set alpha values on the left, click Apply.",
+        "The painting surface. Drag tools here to paint zones. Very intuitive.",
+        "Congratulations on looking at the canvas. Now paint something on it.",
+        "Ctrl+Z to undo, Ctrl+Y to redo, scroll to zoom. Standard canvas controls.",
     ],
     "sa_status_lbl": [
         "Info bar. Shows tool, zone, brush size, and zoom. Very informative. Read it.",
@@ -2649,6 +3546,9 @@ _DUMBED: dict[str, list[str]] = {
         "Zoom % shows current magnification. 100% = normal size.",
         "Nothing to click. It's just text. Watches you work quietly.",
         "Updates when you switch tools, zones, or sizes. Real-time status.",
+        "This label tells you what the tool thinks is happening right now.",
+        "Congratulations on reading the status bar. It has genuinely useful information.",
+        "Tool, zone, brush size, zoom level. Four pieces of info in one small line.",
     ],
 }
 
