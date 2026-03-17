@@ -705,6 +705,8 @@ class MainWindow(QMainWindow):
         from .sound_engine import SoundEngine
         self._sound = SoundEngine(self._settings, parent=self)
         self._sound.install_on_app(QApplication.instance())
+        # Wire sound engine into tools that need it.
+        self._selective_alpha_tab._sound = self._sound
 
         # Font size
         self._apply_font_size()

@@ -1215,9 +1215,10 @@ class _ZoneRow(QWidget):
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
 
-    def __init__(self, settings_manager=None, parent: QWidget | None = None) -> None:
+    def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings_manager
+        self._sound = sound_engine
         self._src_path: str = ""
         # Current applied result and history stack for the Undo Process feature.
         # _result_img holds the most recently applied image; _result_history
@@ -1694,6 +1695,8 @@ class SelectiveAlphaTool(QWidget):
         # Enable Paste button on all zones.
         for row in self._zone_rows:
             row.set_paste_enabled(True)
+        if self._sound is not None:
+            self._sound.play_mask_copy()
 
     def _on_paste_mask(self, zone_idx: int) -> None:
         """Paste the clipboard mask into *zone_idx*, replacing its current mask."""
@@ -1707,6 +1710,8 @@ class SelectiveAlphaTool(QWidget):
             return
         # Attempt to paste; set_mask_from_array validates dimensions.
         self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard.copy())
+        if self._sound is not None:
+            self._sound.play_mask_paste()
 
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

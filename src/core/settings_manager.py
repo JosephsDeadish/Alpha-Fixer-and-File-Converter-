@@ -84,6 +84,9 @@ class SettingsManager:
         "sound_theme_change": False,
         "sound_tab_switch": False,
         "sound_drag_enter": False,
+        "sound_zone_paint": False,
+        "sound_mask_copy": False,
+        "sound_mask_paste": False,
         # Cursor & trail
         "cursor": "Default",
         "use_theme_cursor": False,
@@ -489,6 +492,7 @@ class SettingsManager:
         "sound_success", "sound_error", "sound_unlock", "sound_file_add",
         "sound_preview", "sound_process_start", "sound_file_remove",
         "sound_theme_change", "sound_tab_switch", "sound_drag_enter",
+        "sound_zone_paint", "sound_mask_copy", "sound_mask_paste",
         "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",

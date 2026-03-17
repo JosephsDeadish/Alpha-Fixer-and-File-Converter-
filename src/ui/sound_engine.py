@@ -506,6 +506,64 @@ def _make_drag_enter_wav(sample_rate: int = 22050) -> str:
     return _write_wav(samples, sample_rate)
 
 
+def _make_zone_paint_wav(sample_rate: int = 22050) -> str:
+    """Soft brush-swipe sound for zone painting.
+
+    A short band of filtered noise with a quick decay mimics the feel of a
+    soft-bristle brush dragging across canvas.
+    """
+    n = int(sample_rate * 0.06)
+    samples: list = []
+    import random as _rng
+    rng = _rng.Random(42)
+    for i in range(n):
+        t = i / sample_rate
+        env = math.exp(-t * 35) * 0.7
+        noise = rng.uniform(-1.0, 1.0)
+        # Band-pass effect: mix noise with a low sine to add warmth
+        warm = 0.3 * math.sin(2 * math.pi * 220 * t)
+        samples.append(int(12000 * (noise * 0.7 + warm) * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_mask_copy_wav(sample_rate: int = 22050) -> str:
+    """Crisp camera-shutter click for copying a zone mask.
+
+    Two very short transients — a mechanical click followed by a faint echo —
+    imitate the feel of pressing a physical copy button.
+    """
+    n = int(sample_rate * 0.07)
+    samples: list = []
+    click_at = [0, int(sample_rate * 0.025)]
+    for i in range(n):
+        t = i / sample_rate
+        s = 0.0
+        for onset in click_at:
+            dt = i - onset
+            if dt >= 0:
+                env = math.exp(-dt / sample_rate * 120)
+                s += math.sin(2 * math.pi * 1800 * dt / sample_rate) * env
+        samples.append(int(16000 * s * 0.5))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_mask_paste_wav(sample_rate: int = 22050) -> str:
+    """Soft 'splat/plop' for pasting a zone mask.
+
+    A low-frequency tone with a quick non-linear decay simulates a dab or
+    stamp landing on a surface.
+    """
+    n = int(sample_rate * 0.08)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        # Pitch drops rapidly (stamp landing + resonance)
+        freq = 320 - 180 * (t / 0.08)
+        env = math.exp(-t * 40) * (1.0 - math.exp(-t * 300))
+        samples.append(int(18000 * math.sin(2 * math.pi * freq * t) * env))
+    return _write_wav(samples, sample_rate)
+
+
 
 
 class _ButtonClickFilter(QObject):
@@ -559,6 +617,9 @@ class SoundEngine(QObject):
         self._theme_change_wav: str = ""
         self._tab_switch_wav: str = ""
         self._drag_enter_wav: str = ""
+        self._zone_paint_wav: str = ""
+        self._mask_copy_wav: str = ""
+        self._mask_paste_wav: str = ""
         # Per-profile click WAVs keyed by profile name
         self._theme_click_wavs: dict[str, str] = {}
         self._filter: _ButtonClickFilter | None = None
@@ -582,6 +643,9 @@ class SoundEngine(QObject):
             self._theme_change_wav  = _make_theme_change_wav()
             self._tab_switch_wav    = _make_tab_switch_wav()
             self._drag_enter_wav    = _make_drag_enter_wav()
+            self._zone_paint_wav    = _make_zone_paint_wav()
+            self._mask_copy_wav     = _make_mask_copy_wav()
+            self._mask_paste_wav    = _make_mask_paste_wav()
             # Generate one WAV per sound profile (all profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
                             "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar",
@@ -747,6 +811,33 @@ class SoundEngine(QObject):
         if self._drag_enter_wav:
             self._play(self._drag_enter_wav)
 
+    def play_zone_paint(self) -> None:
+        """Play a soft brush swipe when zone paint is applied to the canvas."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_zone_paint", False):
+            return
+        if self._zone_paint_wav:
+            self._play(self._zone_paint_wav)
+
+    def play_mask_copy(self) -> None:
+        """Play a crisp click when a zone mask is copied to the clipboard."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_mask_copy", False):
+            return
+        if self._mask_copy_wav:
+            self._play(self._mask_copy_wav)
+
+    def play_mask_paste(self) -> None:
+        """Play a soft splat/plop when a zone mask is pasted from the clipboard."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_mask_paste", False):
+            return
+        if self._mask_paste_wav:
+            self._play(self._mask_paste_wav)
+
 
 
     def _play(self, wav_path: str) -> None:
@@ -802,7 +893,8 @@ class SoundEngine(QObject):
                     self._file_add_wav, self._preview_wav,
                     self._process_start_wav, self._file_remove_wav,
                     self._theme_change_wav, self._tab_switch_wav,
-                    self._drag_enter_wav]
+                    self._drag_enter_wav,
+                    self._zone_paint_wav, self._mask_copy_wav, self._mask_paste_wav]
         all_wavs.extend(self._theme_click_wavs.values())
         for path in all_wavs:
             if path and os.path.isfile(path):
