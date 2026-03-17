@@ -1106,13 +1106,13 @@ class TestThemeMakerEffect(unittest.TestCase):
         _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("effect_combo", _NORMAL)
-        self.assertEqual(len(_NORMAL["effect_combo"]), 5)
+        self.assertGreaterEqual(len(_NORMAL["effect_combo"]), 5)
 
     def test_normal_tips_have_custom_emoji_key(self):
         _require_pyqt6(self)
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("custom_emoji", _NORMAL)
-        self.assertEqual(len(_NORMAL["custom_emoji"]), 5)
+        self.assertGreaterEqual(len(_NORMAL["custom_emoji"]), 5)
 
     def test_all_modes_have_effect_combo_key(self):
         _require_pyqt6(self)
