@@ -1866,6 +1866,8 @@ class SelectiveAlphaTool(QWidget):
 
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
+        if self._sound is not None:
+            self._sound.play_zone_paint()
         pass  # canvas handles dirty flag internally
 
     def _on_undo_mask(self) -> None:
