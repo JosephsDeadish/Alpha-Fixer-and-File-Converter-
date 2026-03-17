@@ -2405,6 +2405,7 @@ _VULGAR: dict[str, list[str]] = {
         "The heat-map blends at 70% so you can still see the actual image underneath. Best of both worlds, you demanding genius.",
         "See exactly which parts of your image are transparent before you obliterate them with the alpha settings. Smart fucking move.",
         "Alpha heat-map: because sometimes you need to see what you're actually doing instead of guessing like an idiot.",
+        "Your image has secret invisible pixels and this checkbox is the fucking flashlight. Turn it on and see what's been hiding from you this whole time.",
     ],
     "file_list": [
         "Drop your damn files here or use the buttons. Either way, fill this list up.",
@@ -2677,6 +2678,7 @@ _VULGAR: dict[str, list[str]] = {
         "If your computer sounds like a jet engine with it on, turn it off. It's just decoration.",
         "The SVG badge has theme-specific animations built in — Gore drips blood, Bats have flying bats, etc. Very extra.",
         "Honestly one of the cooler features. Just costs a few cycles. Worth it on most machines.",
+        "ON = your header looks alive and slightly unhinged. OFF = your header is a lifeless void of professionalism. You decide which is worse.",
     ],
     "banner_anim_combo": [
         "This picks how the header banner moves when you've got animation enabled. Your call.",
@@ -2686,6 +2688,7 @@ _VULGAR: dict[str, list[str]] = {
         "Change it live and watch the banner immediately start doing something different. Fun.",
         "Each theme has a default that suits its vibe. Override it here if you disagree with the theme's taste.",
         "None of these options are wrong. Some are more chaotic than others. Choose accordingly.",
+        "Pendulum is the most unhinged option. If you pick Pendulum you are a specific kind of person. Embrace it.",
     ],
     "banner_use_theme_anim_check": [
         "Lets the active theme pick the banner animation automatically. Delegation in action.",
@@ -2694,6 +2697,8 @@ _VULGAR: dict[str, list[str]] = {
         "Updates instantly when you switch themes. Zero effort from you. Maximum theming coherence.",
         "Pairs with 'Use theme cursor' and 'Use theme trail' for a fully automated themed aesthetic.",
         "Turn it on if you trust the themes. Turn it off if you have opinions. Both are valid.",
+        "Every single automation toggle enabled at once = the most hands-off themed experience possible. Pure luxury. Pure chaos. Highly recommended.",
+        "The theme has better taste in animations than you do. That's not an insult. It's just statistically true. Let it drive.",
     ],
     "show_splash_check": [
         "The splash screen is the fancy intro that shows when you open the app. This toggle controls it.",
@@ -2702,6 +2707,8 @@ _VULGAR: dict[str, list[str]] = {
         "It's off by default because nobody wants to stare at a loading screen they've already seen a thousand times.",
         "Enable it if you love the themed intro and want to see it every time. No judgment. It IS pretty.",
         "The splash uses the current theme's colors and SVG art. Changes if you switch themes. Nice touch.",
+        "You've seen it 500 times and it's still kind of cool. Or it's deeply annoying. Checkbox is right there either way.",
+        "Switch to a new theme, then enable splash, then reopen the app. The themed splash intro is genuinely impressive. Then turn splash off again. You're welcome.",
     ],
     "button_anim_check": [
         "Enables button press animations throughout the entire app. Every single button.",
@@ -2710,6 +2717,8 @@ _VULGAR: dict[str, list[str]] = {
         "Off by default. Has basically zero performance impact when off.",
         "Turn it on. It's delightful. Turn it off. Doesn't matter. The app works the same either way.",
         "Pairs with click effects for maximum visual chaos. Or keep effects off for subtle-only mode.",
+        "Every. Single. Button. Gets an animation. Every click becomes a tiny event. Your entire workflow turns into a tiny theatrical production. YES.",
+        "OFF = functional adult. ON = functional adult who gets a little dopamine hit every time they click Process. Which do YOU want to be?",
     ],
     "button_anim_style_combo": [
         "Picks the animation style for button presses. Six options from subtle to dramatic.",
@@ -2719,6 +2728,7 @@ _VULGAR: dict[str, list[str]] = {
         "Shake = rapid left-right vibration. Great for Neon/Alien/Thunder. Aggressive vibes.",
         "Shatter = particles burst from the button center. Works with click effects. Most dramatic option.",
         "None = no animation. Button presses are boring and functional. Not recommended but fine.",
+        "Shatter + click effects ON = literal explosions every time you click anything. This is not hyperbole. Please enable this. Please.",
     ],
     "use_theme_button_anim_check": [
         "Makes the theme decide the button animation style. Automated theming.",
@@ -2727,6 +2737,8 @@ _VULGAR: dict[str, list[str]] = {
         "Uncheck to override the theme's choice and use whatever style you want regardless.",
         "Updates instantly when you switch themes. Zero manual effort required.",
         "The theme knows what it wants. Let it pick. Or don't. That's what the checkbox is for.",
+        "Every theme has a hand-picked button style that fits its vibe perfectly. Bat Cave bounces like bats. Gore shatters like skulls. Let the theme be in charge.",
+        "Uncheck this, manually pick Shatter for the Fairy Garden theme, and report back on how unhinged it looks. We dare you. Actually we encourage it.",
     ],
     "save_custom_theme": [
         "Saves your fucking color choices as a named custom theme. Very important button.",
@@ -2868,6 +2880,7 @@ _VULGAR: dict[str, list[str]] = {
         "Useful for long batches where you want audio confirmation it actually started and didn't hang.",
         "Without this: silent start. Could have silently crashed. With this: confirmed audio launch.",
         "The sound fires the moment you hit Process. Immediate feedback. Batch is in motion.",
+        "Two ascending beeps = your batch gave you a little 'we're doing this' nod. Enable it. Feel the validation.",
     ],
     "sound_file_remove_check": [
         "Descending pop when files are removed from the queue. Off by default.",
@@ -2877,6 +2890,7 @@ _VULGAR: dict[str, list[str]] = {
         "Short sound. Not annoying. Just a little 'gone' noise to confirm the file left.",
         "Pairs with the file-add thunk for a complete queue-management sound system.",
         "Enable if you want to know a file was actually removed and not just visually hidden.",
+        "The pop-down sound is weirdly satisfying. Like a tiny audit trail that goes 'yep, deleted, confirmed, moving on'. Enable it.",
     ],
     "sound_theme_change_check": [
         "Plays a soft whoosh every time you switch themes. Off by default.",
@@ -2886,6 +2900,7 @@ _VULGAR: dict[str, list[str]] = {
         "Turn it on if you like audio feedback for everything. Turn it off if you prefer silence.",
         "The whoosh is short. Not annoying. Will not make you want to mute your computer.",
         "Pairs with tab switch and drag enter sounds for a fully sound-drenched UI experience.",
+        "You're about to spend 45 minutes switching themes. This whoosh will confirm every single switch. You absolutely want this on.",
     ],
     "sound_tab_switch_check": [
         "Quick soft tick every time you switch tabs. Off by default.",
@@ -2895,6 +2910,7 @@ _VULGAR: dict[str, list[str]] = {
         "Useful if you're tabbing fast and want confirmation you're on the right tab.",
         "It's a tick. A tiny tick. A tasteful tick. You'll barely notice it. That's the point.",
         "Disable it if silence is your thing. Enable it if you like hearing the UI respond to you.",
+        "Tab → tick. Tab → tick. Tab → tick. It's a tiny metronome of productivity and it's genuinely satisfying. Enable it.",
     ],
     "sound_drag_enter_check": [
         "Rising ping when you drag files over the drop zone. Off by default.",
@@ -2904,6 +2920,7 @@ _VULGAR: dict[str, list[str]] = {
         "Fires once per drag-enter event. Not once per file. Once per entry. Not a machine gun.",
         "Pairs with the file-add sound for a complete 'drag → drop → confirm' audio workflow.",
         "Turn it on if you do a lot of drag-and-drop. Turn it off if you do not. That's it.",
+        "The rising ping = 'yes, right here, drop them here, this is the zone'. Audio GPS for your file drags. Enable it.",
     ],
     "sound_zone_paint_check": [
         "Little brush click when you paint a zone. Off by default. Yes, every brush stroke.",
@@ -2913,6 +2930,7 @@ _VULGAR: dict[str, list[str]] = {
         "Turn on for the full 'I am a professional zone painter' experience.",
         "Turn off if silence is sacred to you. The zones still get painted either way.",
         "It's a small sound. A modest sound. A sound that respects your personal space.",
+        "Throttled brush sounds while painting = you become a paint-clicking rhythm machine. Weirdly meditative. Weird flex but the zones look great.",
     ],
     "sound_mask_copy_check": [
         "Click when you copy a zone mask. Off by default. The clipboard heard you.",
@@ -2922,6 +2940,7 @@ _VULGAR: dict[str, list[str]] = {
         "Useful when juggling multiple zones and you want audio confirmation of copies.",
         "Won't play if you haven't painted anything. The app is not deceptive.",
         "Combine with paste sound for the full copy-paste audio symphony.",
+        "The clipboard click is crisp and immediate. 'Got it. Copied. In memory. Ready for paste.' One little sound, zero ambiguity.",
     ],
     "sound_mask_paste_check": [
         "Pop sound when you paste a mask onto a zone. Off by default.",
@@ -2931,6 +2950,7 @@ _VULGAR: dict[str, list[str]] = {
         "Good for confirming zone transfers. Did it paste? You'll hear it.",
         "Combine with copy sound for maximum paste feedback satisfaction.",
         "Very short. Very pop. Very 'yes that worked' energy.",
+        "The pop means it worked. No pop means nothing was in the clipboard. Copy first. Then paste. Then pop. Life in three steps.",
     ],
     "sound_bat_screech_check": [
         "Bat screech when you switch to Bat Cave theme. Off by default. SCREECH.",
@@ -2940,6 +2960,7 @@ _VULGAR: dict[str, list[str]] = {
         "Enable this. You know you want to. Don't pretend you don't.",
         "Turn it off if you work in an open office. You're welcome.",
         "The screech is short. It ends. You're fine. It's just a bat.",
+        "Bat Cave theme + bat screech + bat click effects = fully committed batmancore experience. Enable all three. Live in the cave.",
     ],
     "sound_cat_meow_check": [
         "Cat meow when you switch to a cat or panda theme. Off by default. MEOW.",
@@ -2949,6 +2970,7 @@ _VULGAR: dict[str, list[str]] = {
         "Enable this. Pet the invisible cat. You deserve it.",
         "Works for multiple themes. One meow event to rule them all.",
         "Short meow. Professional meow. The kind a cat gives when mildly acknowledged.",
+        "Space Cat theme + meow sound + space particle effects = a space cat app that meows at you. Is that not exactly what you want from life? Enable it.",
     ],
     "sound_dog_bark_check": [
         "Dog bark when you clear all files at once. Off by default. WOOF.",
@@ -2958,6 +2980,7 @@ _VULGAR: dict[str, list[str]] = {
         "The bark = 'all your files are gone, start fresh, we're doing this'.",
         "Enable this if you want the app to feel like it's rooting for you.",
         "One bark. Short bark. Not a howl. Not a tirade. Just a woof.",
+        "Good Dog theme + bark sound = best app. Scientifically. A thesis was not written on this but one absolutely should be.",
     ],
     "sound_frog_croak_check": [
         "Frog croak when you switch to Slime or Snake Pit theme. Off by default. RIBBIT.",
@@ -2967,6 +2990,7 @@ _VULGAR: dict[str, list[str]] = {
         "Enable this for the complete swamp-themed audio experience. You earned it.",
         "Two croaks. Not three. Not one. Two. The frog has standards.",
         "Short, raspy, unmistakably frog. Pairs well with the Slime theme aesthetic.",
+        "Slime theme + frog croak + green slime effects = a fully realized swamp simulator masquerading as an image editor. Enable it.",
     ],
     "sound_batch_done_check": [
         "Fanfare when a batch of 100+ files finishes. Off by default. You did the thing.",
@@ -2976,6 +3000,7 @@ _VULGAR: dict[str, list[str]] = {
         "You processed 100 files. The app is proud of you. This is your reward.",
         "Short but triumphant. Not an orchestra. But not nothing either.",
         "Enable this for motivation. Disable it for mystery. Your call.",
+        "Queue up 200 files, hit Process, go make coffee, come back to a triumphant fanfare. You deserve that fanfare. Enable it.",
     ],
     "reset_all_settings": [
         "RESET EVERYTHING. Factory defaults. The nuclear option. You absolutely sure about this?",
@@ -3415,6 +3440,8 @@ _VULGAR: dict[str, list[str]] = {
         "Press F1 instead of hunting for this button like an animal. Just F1. It's one key.",
         "The Help menu. Because apparently things need to be explained. Everything is in here.",
         "Click → menu appears → read options → click one. Somehow we needed a tooltip for this.",
+        "Export/Import settings = backup and restore everything. Custom themes, presets, all of it. One JSON file. Do it before you nuke your settings.",
+        "About dialog tells you the app version, credits, and what this whole clusterfuck actually does. Worth reading once. Probably.",
     ],
     "use_theme_sound": [
         "Enable this and your click sounds will be as themed as the rest of this shit.",
