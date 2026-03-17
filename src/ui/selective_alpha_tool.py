@@ -1228,8 +1228,8 @@ class SelectiveAlphaTool(QWidget):
         self._result_history: list[Image.Image] = []
         # Flag set during settings restoration to suppress spurious auto-saves.
         self._restoring: bool = False
-        # Zone-mask clipboard: keyed by zone index, stores raw uint8 ndarray.
-        # Only one entry is kept at a time (the most recent Copy Mask action).
+        # Zone-mask clipboard: stores a single uint8 ndarray (the most recent
+        # Copy Mask action).  Copying again silently replaces the previous entry.
         self._mask_clipboard: Optional[np.ndarray] = None
         self._setup_ui()
         self._restore_settings()
