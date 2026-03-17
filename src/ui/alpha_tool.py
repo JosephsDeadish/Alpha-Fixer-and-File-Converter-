@@ -159,6 +159,8 @@ class AlphaFixerTab(QWidget):
     files_added = pyqtSignal()
     # Emitted whenever files are removed from the queue.
     files_removed = pyqtSignal()
+    # Emitted when the entire file queue is cleared at once.
+    list_cleared = pyqtSignal()
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
     preview_refreshed = pyqtSignal()
@@ -605,6 +607,7 @@ class AlphaFixerTab(QWidget):
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
         self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)

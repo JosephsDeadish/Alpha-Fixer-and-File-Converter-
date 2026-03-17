@@ -692,6 +692,9 @@ class MainWindow(QMainWindow):
         # File-remove sounds
         self._alpha_tab.files_removed.connect(self._on_files_removed)
         self._converter_tab.files_removed.connect(self._on_files_removed)
+        # List-cleared sound (dog bark)
+        self._alpha_tab.list_cleared.connect(self._on_list_cleared)
+        self._converter_tab.list_cleared.connect(self._on_list_cleared)
         # Drag-enter sounds
         self._alpha_tab.drag_entered.connect(self._on_drag_entered)
         self._converter_tab.drag_entered.connect(self._on_drag_entered)
@@ -854,6 +857,13 @@ class MainWindow(QMainWindow):
         """Play a short pop when files are removed from either tab's queue."""
         try:
             self._sound.play_file_remove()
+        except Exception:
+            pass
+
+    def _on_list_cleared(self) -> None:
+        """Play a dog bark when the entire file list is cleared at once."""
+        try:
+            self._sound.play_dog_bark()
         except Exception:
             pass
 
