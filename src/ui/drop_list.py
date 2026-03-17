@@ -142,6 +142,7 @@ class DropFileList(QListWidget):
     paths_dropped = pyqtSignal(list)   # list[str] – new paths dragged in
     count_changed = pyqtSignal(int)    # emitted after any add/remove
     file_removed  = pyqtSignal()       # emitted when items are explicitly removed by the user
+    list_cleared  = pyqtSignal()       # emitted when all items are cleared at once
     drag_entered  = pyqtSignal()       # emitted when files are first dragged over the list
 
     # Icon shown in the centre of the list when no files have been added yet
@@ -533,6 +534,7 @@ class DropFileList(QListWidget):
         self._cancel_event = threading.Event()
         super().clear()
         self.count_changed.emit(0)
+        self.list_cleared.emit()
 
     # Override clear() so external callers also get count_changed
     def clear(self):

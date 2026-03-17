@@ -821,12 +821,17 @@ class MainWindow(QMainWindow):
         Each file successfully processed is counted as a 'bonus click' so
         that heavy users who batch-process files naturally unlock themes
         without having to manually click thousands of times.  Also plays
-        the success chime if sound is enabled.
+        the success chime (or a special fanfare for large batches) if sound
+        is enabled.
         """
         if file_count <= 0:
             return
         try:
-            self._sound.play_success()
+            if file_count >= 100:
+                # Large batch — play the rising fanfare instead of the normal ping
+                self._sound.play_batch_done()
+            else:
+                self._sound.play_success()
         except Exception:
             pass
         try:
@@ -881,9 +886,23 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_theme_changed_sound(self) -> None:
-        """Play a soft whoosh when the user switches to a different theme."""
+        """Play a sound when the user switches to a different theme.
+
+        The default is a soft whoosh.  Certain themes play their own
+        characteristic animal sound instead (if the user has that toggle on).
+        """
         try:
-            self._sound.play_theme_change()
+            theme_name = self._settings.get_theme().get("name", "")
+            if theme_name == "Bat Cave":
+                # Try bat screech first; fall back to the generic whoosh if
+                # the per-event toggle is off.
+                self._sound.play_bat_screech()
+                self._sound.play_theme_change()
+            elif theme_name in ("Panda Dark", "Panda Light"):
+                self._sound.play_cat_meow()
+                self._sound.play_theme_change()
+            else:
+                self._sound.play_theme_change()
         except Exception:
             pass
 
