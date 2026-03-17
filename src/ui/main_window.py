@@ -911,6 +911,10 @@ class MainWindow(QMainWindow):
             elif theme_name in ("Panda Dark", "Panda Light"):
                 self._sound.play_cat_meow()
                 self._sound.play_theme_change()
+            elif theme_name in ("Slime", "Snake Pit"):
+                # Swamp / nature themes get a frog croak; fall back to whoosh.
+                self._sound.play_frog_croak()
+                self._sound.play_theme_change()
             else:
                 self._sound.play_theme_change()
         except Exception:

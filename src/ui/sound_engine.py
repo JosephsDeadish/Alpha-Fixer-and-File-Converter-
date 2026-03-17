@@ -1006,7 +1006,7 @@ class SoundEngine(QObject):
             self._play(self._dog_bark_wav)
 
     def play_frog_croak(self) -> None:
-        """Play a frog croak (e.g. when a new theme is unlocked via alpha milestones)."""
+        """Play a frog croak when switching to swamp/nature-themed themes (Slime, Snake Pit)."""
         if not self._settings.get("sound_enabled", False):
             return
         if not self._settings.get("sound_frog_croak", False):

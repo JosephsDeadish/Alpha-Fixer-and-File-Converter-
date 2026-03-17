@@ -7610,3 +7610,142 @@ class TestRound25SnakeGhostSlimeMilestones(unittest.TestCase):
         src = self._src(self._TM_SRC)
         self.assertIn("Slime 🟢 at 12", src,
                       "tooltip_manager.py must mention 'Slime 🟢 at 12 500' in theme_combo tips")
+
+
+class TestRound33NewSoundEventTooltipsAndFrogCroak(unittest.TestCase):
+    """Verify Round-33 additions:
+    1. All 8 new sound event checkbox keys appear in all 3 tooltip mode dicts.
+    2. play_frog_croak is wired to Slime and Snake Pit in _on_theme_changed_sound.
+    """
+
+    _TM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+    _MW_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _SE_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "sound_engine.py")
+
+    _NEW_SOUND_KEYS = [
+        "sound_zone_paint_check",
+        "sound_mask_copy_check",
+        "sound_mask_paste_check",
+        "sound_bat_screech_check",
+        "sound_cat_meow_check",
+        "sound_dog_bark_check",
+        "sound_frog_croak_check",
+        "sound_batch_done_check",
+    ]
+
+    def _src(self, path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # tooltip_manager.py — 8 new sound keys appear in all 3 mode dicts
+    # ------------------------------------------------------------------
+
+    def test_sound_zone_paint_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_zone_paint_check"')
+        self.assertEqual(count, 3,
+                         "sound_zone_paint_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_mask_copy_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_mask_copy_check"')
+        self.assertEqual(count, 3,
+                         "sound_mask_copy_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_mask_paste_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_mask_paste_check"')
+        self.assertEqual(count, 3,
+                         "sound_mask_paste_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_bat_screech_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_bat_screech_check"')
+        self.assertEqual(count, 3,
+                         "sound_bat_screech_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_cat_meow_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_cat_meow_check"')
+        self.assertEqual(count, 3,
+                         "sound_cat_meow_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_dog_bark_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_dog_bark_check"')
+        self.assertEqual(count, 3,
+                         "sound_dog_bark_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_frog_croak_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_frog_croak_check"')
+        self.assertEqual(count, 3,
+                         "sound_frog_croak_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_batch_done_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_batch_done_check"')
+        self.assertEqual(count, 3,
+                         "sound_batch_done_check must appear in all 3 tooltip mode dicts")
+
+    def test_all_new_keys_have_tips_in_tooltip_manager(self):
+        """Each new key must have at least one tip line (a non-empty list entry)."""
+        src = self._src(self._TM_SRC)
+        for key in self._NEW_SOUND_KEYS:
+            idx = src.find(f'"{key}"')
+            self.assertGreater(idx, -1,
+                               f"{key} not found in tooltip_manager.py")
+            # The list starts within 30 chars of the key name
+            snippet = src[idx: idx + 200]
+            self.assertIn('"', snippet[len(key) + 3:],
+                          f"{key} must have at least one tip string")
+
+    # ------------------------------------------------------------------
+    # main_window.py — play_frog_croak wired to Slime / Snake Pit themes
+    # ------------------------------------------------------------------
+
+    def test_frog_croak_wired_to_slime_theme(self):
+        """_on_theme_changed_sound must call play_frog_croak for the Slime theme."""
+        src = self._src(self._MW_SRC)
+        idx = src.find("_on_theme_changed_sound")
+        self.assertGreater(idx, 0, "_on_theme_changed_sound not found in main_window.py")
+        # Find the method body (up to next def at same indentation)
+        end = src.find("\n    def ", idx + 1)
+        method_src = src[idx:end] if end > 0 else src[idx:]
+        self.assertIn("Slime", method_src,
+                      "_on_theme_changed_sound must handle 'Slime' theme for frog croak")
+        self.assertIn("play_frog_croak", method_src,
+                      "_on_theme_changed_sound must call play_frog_croak")
+
+    def test_frog_croak_wired_to_snake_pit_theme(self):
+        """_on_theme_changed_sound must call play_frog_croak for Snake Pit theme."""
+        src = self._src(self._MW_SRC)
+        idx = src.find("_on_theme_changed_sound")
+        self.assertGreater(idx, 0)
+        end = src.find("\n    def ", idx + 1)
+        method_src = src[idx:end] if end > 0 else src[idx:]
+        self.assertIn("Snake Pit", method_src,
+                      "_on_theme_changed_sound must handle 'Snake Pit' theme for frog croak")
+
+    # ------------------------------------------------------------------
+    # sound_engine.py — play_frog_croak method exists with correct guard
+    # ------------------------------------------------------------------
+
+    def test_play_frog_croak_exists_in_sound_engine(self):
+        """SoundEngine must have a play_frog_croak method."""
+        src = self._src(self._SE_SRC)
+        self.assertIn("def play_frog_croak", src,
+                      "SoundEngine must define play_frog_croak()")
+
+    def test_play_frog_croak_checks_sound_enabled(self):
+        """play_frog_croak must guard on sound_enabled setting."""
+        src = self._src(self._SE_SRC)
+        idx = src.find("def play_frog_croak")
+        self.assertGreater(idx, 0)
+        end = src.find("\n    def ", idx + 1)
+        method_src = src[idx:end] if end > 0 else src[idx:]
+        self.assertIn("sound_enabled", method_src,
+                      "play_frog_croak must check sound_enabled setting")
+        self.assertIn("sound_frog_croak", method_src,
+                      "play_frog_croak must check sound_frog_croak per-event toggle")
