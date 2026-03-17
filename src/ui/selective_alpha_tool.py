@@ -22,6 +22,7 @@ boundary automatically.
 """
 
 import os
+import time
 from typing import Optional
 
 # File extensions that do not support a full per-pixel alpha channel.
@@ -1219,6 +1220,8 @@ class SelectiveAlphaTool(QWidget):
         super().__init__(parent)
         self._settings = settings_manager
         self._sound = sound_engine
+        # Throttle zone-paint sound: play at most once per 200 ms during strokes.
+        self._last_zone_paint_sound_t: float = 0.0
         self._src_path: str = ""
         # Current applied result and history stack for the Undo Process feature.
         # _result_img holds the most recently applied image; _result_history
@@ -1867,8 +1870,10 @@ class SelectiveAlphaTool(QWidget):
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
         if self._sound is not None:
-            self._sound.play_zone_paint()
-        pass  # canvas handles dirty flag internally
+            now = time.monotonic()
+            if now - self._last_zone_paint_sound_t >= 0.2:
+                self._last_zone_paint_sound_t = now
+                self._sound.play_zone_paint()
 
     def _on_undo_mask(self) -> None:
         """Undo the last drawing / erase action on the canvas."""

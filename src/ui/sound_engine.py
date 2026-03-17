@@ -1023,7 +1023,12 @@ class SoundEngine(QObject):
         if self._batch_done_wav:
             self._play(self._batch_done_wav)
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
+    def _play(self, wav_path: str) -> None:
+        """Route playback through QSoundEffect when available, else subprocess."""
         if self._effect is not None:
             try:
                 from PyQt6.QtCore import QUrl
