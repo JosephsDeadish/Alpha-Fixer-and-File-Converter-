@@ -82,7 +82,8 @@ class _ThumbRunnable(QRunnable):
         img = None
         try:
             from PIL import Image
-            img = Image.open(self._path)
+            from src.core.file_converter import _open_image
+            img = _open_image(self._path)
             img.thumbnail((self._thumb_px, self._thumb_px), Image.LANCZOS)
             if img.mode == "RGBA":
                 data = img.tobytes("raw", "RGBA")

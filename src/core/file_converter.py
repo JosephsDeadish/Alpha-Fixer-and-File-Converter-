@@ -2,7 +2,7 @@
 File converter – converts between image formats.
 
 Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PPM, PCX, AVIF, QOI, SVG.
+                   PPM, PCX, AVIF, QOI, SVG, JPEG2000.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
@@ -34,6 +34,7 @@ SUPPORTED_OUTPUT_FORMATS = {
     "GIF": ".gif",
     "ICO": ".ico",
     "JPEG": ".jpg",
+    "JPEG2000": ".jp2",
     "PCX": ".pcx",
     "PNG": ".png",
     "PPM": ".ppm",
@@ -78,6 +79,11 @@ FORMAT_DESCRIPTIONS = {
         "Joint Photographic Experts Group — lossy compression for photos.\n"
         "No alpha channel support; transparent pixels are composited onto white.\n"
         "Quality 85–95 gives a good size/quality balance for photos."
+    ),
+    "JPEG2000": (
+        "JPEG 2000 — advanced wavelet-based compression with alpha support.\n"
+        "Superior quality to standard JPEG at the same file size.\n"
+        "Supports full RGBA. Used in professional print, cinema (DCI), and medical imaging."
     ),
     "PCX": (
         "PC Paintbrush format — old lossless format from the DOS era.\n"
@@ -125,7 +131,7 @@ FORMAT_DESCRIPTIONS = {
 }
 
 # Formats whose save() accepts a quality parameter
-_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif"}
+_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif", ".jp2"}
 
 
 def _has_cairosvg() -> bool:

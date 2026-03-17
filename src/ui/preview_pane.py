@@ -95,7 +95,8 @@ class _ThumbLoader(QThread):
         img = None
         try:
             from PIL import Image
-            img = Image.open(self._path)
+            from src.core.file_converter import _open_image
+            img = _open_image(self._path)
             mode = img.mode
             width, height = img.size
             file_size = os.path.getsize(self._path)
@@ -165,8 +166,9 @@ class _ConvertedThumbLoader(QThread):
         try:
             import io
             from PIL import Image
+            from src.core.file_converter import _open_image
 
-            img = Image.open(self._path)
+            img = _open_image(self._path)
             orig_mode = img.mode
             orig_w, orig_h = img.size
 
@@ -577,8 +579,9 @@ class _ConverterPreviewLoader(QThread):
         try:
             import io
             from PIL import Image
+            from src.core.file_converter import _open_image
 
-            img = Image.open(self._path)
+            img = _open_image(self._path)
             orig_mode = img.mode
             orig_w, orig_h = img.size
             src_file_size = os.path.getsize(self._path)
