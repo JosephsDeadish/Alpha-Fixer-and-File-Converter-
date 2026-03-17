@@ -908,8 +908,14 @@ class MainWindow(QMainWindow):
                 # the per-event toggle is off.
                 self._sound.play_bat_screech()
                 self._sound.play_theme_change()
-            elif theme_name in ("Panda Dark", "Panda Light"):
+            elif theme_name in ("Panda Dark", "Panda Light",
+                                "Purrfect Cats", "Space Cat"):
+                # Cat / panda themes play a meow; fall back to whoosh.
                 self._sound.play_cat_meow()
+                self._sound.play_theme_change()
+            elif theme_name == "Good Dog":
+                # Dog theme plays a bark; fall back to whoosh.
+                self._sound.play_dog_bark()
                 self._sound.play_theme_change()
             elif theme_name in ("Slime", "Snake Pit"):
                 # Swamp / nature themes get a frog croak; fall back to whoosh.

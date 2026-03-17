@@ -7749,3 +7749,115 @@ class TestRound33NewSoundEventTooltipsAndFrogCroak(unittest.TestCase):
                       "play_frog_croak must check sound_enabled setting")
         self.assertIn("sound_frog_croak", method_src,
                       "play_frog_croak must check sound_frog_croak per-event toggle")
+
+
+class TestRound34ThemeSoundMapping(unittest.TestCase):
+    """Verify Round-34 fixes: _on_theme_changed_sound maps all animal-themed
+    themes to their matching sound events in main_window.py, consistent with
+    the tooltip descriptions in tooltip_manager.py.
+
+    New in this round:
+    - "Good Dog" → play_dog_bark()
+    - "Purrfect Cats" and "Space Cat" → play_cat_meow()
+    """
+
+    _MW_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _TM_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _method_src(self, path: str, method_name: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        idx = src.find(method_name)
+        if idx < 0:
+            return ""
+        end = src.find("\n    def ", idx + 1)
+        return src[idx:end] if end > 0 else src[idx:]
+
+    def _src(self, path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # main_window.py — Good Dog wired to play_dog_bark
+    # ------------------------------------------------------------------
+
+    def test_good_dog_theme_triggers_play_dog_bark(self):
+        """_on_theme_changed_sound must call play_dog_bark for the Good Dog theme."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertGreater(len(method), 0,
+                           "_on_theme_changed_sound not found in main_window.py")
+        self.assertIn("Good Dog", method,
+                      "_on_theme_changed_sound must handle 'Good Dog' theme")
+        self.assertIn("play_dog_bark", method,
+                      "_on_theme_changed_sound must call play_dog_bark for Good Dog theme")
+
+    # ------------------------------------------------------------------
+    # main_window.py — Purrfect Cats wired to play_cat_meow
+    # ------------------------------------------------------------------
+
+    def test_purrfect_cats_theme_triggers_play_cat_meow(self):
+        """_on_theme_changed_sound must call play_cat_meow for the Purrfect Cats theme."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertGreater(len(method), 0,
+                           "_on_theme_changed_sound not found in main_window.py")
+        self.assertIn("Purrfect Cats", method,
+                      "_on_theme_changed_sound must handle 'Purrfect Cats' theme")
+        self.assertIn("play_cat_meow", method,
+                      "_on_theme_changed_sound must call play_cat_meow for Purrfect Cats theme")
+
+    # ------------------------------------------------------------------
+    # main_window.py — Space Cat wired to play_cat_meow
+    # ------------------------------------------------------------------
+
+    def test_space_cat_theme_triggers_play_cat_meow(self):
+        """_on_theme_changed_sound must call play_cat_meow for the Space Cat theme."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertGreater(len(method), 0,
+                           "_on_theme_changed_sound not found in main_window.py")
+        self.assertIn("Space Cat", method,
+                      "_on_theme_changed_sound must handle 'Space Cat' theme")
+
+    # ------------------------------------------------------------------
+    # Consistency: Good Dog and Purrfect Cats are in different elif branches
+    # ------------------------------------------------------------------
+
+    def test_good_dog_and_purrfect_cats_in_separate_branches(self):
+        """Good Dog must be in its own elif branch separate from Purrfect Cats."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertIn("Good Dog", method)
+        self.assertIn("Purrfect Cats", method)
+        # Both must be present; ensure the method has play_dog_bark
+        self.assertIn("play_dog_bark", method,
+                      "Good Dog must use play_dog_bark, not play_cat_meow")
+
+    # ------------------------------------------------------------------
+    # tooltip_manager.py — descriptions match implementation
+    # ------------------------------------------------------------------
+
+    def test_tooltip_dog_bark_mentions_good_dog_theme(self):
+        """sound_dog_bark_check tooltips must mention switching to Good Dog theme."""
+        src = self._src(self._TM_SRC)
+        # Find the key and check the surrounding content
+        idx = src.find('"sound_dog_bark_check"')
+        self.assertGreater(idx, -1)
+        snippet = src[idx: idx + 400]
+        self.assertIn("Good Dog", snippet,
+                      "sound_dog_bark_check tooltip must mention 'Good Dog' theme")
+
+    def test_tooltip_cat_meow_mentions_purrfect_cats(self):
+        """sound_cat_meow_check tooltips must mention the Purrfect Cats theme."""
+        src = self._src(self._TM_SRC)
+        idx = src.find('"sound_cat_meow_check"')
+        self.assertGreater(idx, -1)
+        snippet = src[idx: idx + 400]
+        self.assertIn("Purrfect Cats", snippet,
+                      "sound_cat_meow_check tooltip must mention 'Purrfect Cats' theme")
+
+    def test_tooltip_cat_meow_mentions_space_cat(self):
+        """sound_cat_meow_check tooltips must mention the Space Cat theme."""
+        src = self._src(self._TM_SRC)
+        idx = src.find('"sound_cat_meow_check"')
+        self.assertGreater(idx, -1)
+        snippet = src[idx: idx + 400]
+        self.assertIn("Space Cat", snippet,
+                      "sound_cat_meow_check tooltip must mention 'Space Cat' theme")
