@@ -1778,15 +1778,38 @@ class MainWindow(QMainWindow):
         for tab in (self._alpha_tab, self._converter_tab):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
                 tab._worker.stop()
-                tab._worker.wait(3000)
+                # Allow up to 15 seconds for an in-flight batch to finish its
+                # current file so it can reach the abort check.  3 seconds was
+                # too short when processing large images or slow storage.
+                tab._worker.wait(15000)
             # Cancel any in-flight preview loaders so their threads don't
             # try to emit signals into already-destroyed Qt objects.
             if hasattr(tab, "_preview_loader") and tab._preview_loader is not None:
                 tab._preview_loader.stop()
+                # Wait for the preview thread to finish so it cannot emit into
+                # widgets that are being torn down below.
+                tab._preview_loader.wait(3000)
             # Stop preview debounce timers so pending timeouts don't fire
             # after the tab widgets have been torn down.
             if hasattr(tab, "_preview_debounce") and tab._preview_debounce is not None:
                 tab._preview_debounce.stop()
+        # Drain the global QThreadPool (used by thumbnail loaders in the drop
+        # lists).  Without this, runnables that are still running when Qt
+        # starts tearing down widgets may emit signals to deleted objects and
+        # crash.  We cancel all pending runnables first via the cancel events
+        # already held by each DropFileList, then give the pool 3 seconds to
+        # let any already-running runnable reach its own cancel check.
+        try:
+            from .drop_list import DropFileList
+            from PyQt6.QtCore import QThreadPool
+            for tab in (self._alpha_tab, self._converter_tab):
+                for attr in ("_file_list", "_drop_list"):
+                    widget = getattr(tab, attr, None)
+                    if isinstance(widget, DropFileList):
+                        widget._cancel_event.set()
+            QThreadPool.globalInstance().waitForDone(3000)
+        except Exception:
+            pass
         # Stop main-window timers before the window is destroyed
         for timer in (
             self._settings_apply_timer,

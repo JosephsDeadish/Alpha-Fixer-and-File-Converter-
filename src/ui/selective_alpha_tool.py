@@ -698,7 +698,7 @@ class SelectiveAlphaCanvas(QWidget):
         _draw_checker(p, cw, ch)
 
         # Draw the composite image scaled to the current view.
-        if self._composite_qimg is not None:
+        if self._composite_qimg is not None and self._src_img is not None:
             s, ox, oy = self._transform()
             iw, ih = self._src_img.size
             dst = QRectF(ox, oy, iw * s, ih * s)

@@ -46,7 +46,10 @@ _THUMB_AUTO_DISABLE = 3000
 # ---------------------------------------------------------------------------
 
 class _ThumbSignals(QObject):
-    loaded = pyqtSignal(str, QIcon)  # path, icon
+    # Emits QImage instead of QIcon so the heavy QPixmap/QIcon objects are
+    # always constructed on the main (GUI) thread.  QImage is safe to create
+    # and pass across threads; QPixmap and QPainter on a QPixmap are not.
+    loaded = pyqtSignal(str, QImage)  # path, composite QImage
 
 
 class _ThumbRunnable(QRunnable):
@@ -100,31 +103,37 @@ class _ThumbRunnable(QRunnable):
                               QImage.Format.Format_RGB888)
             # Scale the image to fit within the physical thumbnail cell while
             # preserving its aspect ratio, then letterbox it into an exact
-            # _thumb_px square transparent pixmap so Qt never stretches it.
+            # _thumb_px square transparent QImage.
+            #
+            # IMPORTANT: QPixmap and QPainter-on-QPixmap are NOT thread-safe —
+            # they must only be used on the main (GUI) thread.  QImage and
+            # QPainter-on-QImage are thread-safe for raster paint devices, so
+            # we build the composite QImage here and let _on_thumb_loaded
+            # (which runs on the main thread) convert it to a QIcon.
             phys = self._thumb_px
-            scaled = QPixmap.fromImage(qimg).scaled(
+            scaled = qimg.scaled(
                 phys, phys,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            out = QPixmap(phys, phys)
+            # Create a transparent ARGB32 QImage for the letterbox composite.
+            out = QImage(phys, phys, QImage.Format.Format_ARGB32_Premultiplied)
             out.fill(Qt.GlobalColor.transparent)
             painter = QPainter(out)
             if painter.isActive():
-                painter.drawPixmap(
+                painter.drawImage(
                     (phys - scaled.width()) // 2,
                     (phys - scaled.height()) // 2,
                     scaled,
                 )
                 painter.end()
-            # Tag the pixmap with the device-pixel ratio so Qt renders it at
+            # Tag the image with the device-pixel ratio so Qt renders it at
             # the correct logical size on HiDPI / Retina displays.
             out.setDevicePixelRatio(self._dpr)
-            icon = QIcon(out)
-            # Final cancel check before emitting so we don't deliver the icon
+            # Final cancel check before emitting so we don't deliver the image
             # to a list that was cleared while the thumbnail was being built.
             if not self._cancel.is_set():
-                self._signals.loaded.emit(self._path, icon)
+                self._signals.loaded.emit(self._path, out)
         except Exception:
             pass  # silently skip unreadable / non-image files
         finally:
@@ -315,10 +324,18 @@ class DropFileList(QListWidget):
         else:
             self._load_tick.stop()
 
-    @pyqtSlot(str, QIcon)
-    def _on_thumb_loaded(self, path: str, icon: QIcon) -> None:
-        """Called from _ThumbSignals (main thread) when a thumbnail is ready."""
+    @pyqtSlot(str, QImage)
+    def _on_thumb_loaded(self, path: str, qimg: QImage) -> None:
+        """Called from _ThumbSignals (main thread) when a thumbnail is ready.
+
+        The runnable emits a QImage (thread-safe); we convert it to QPixmap
+        and QIcon here on the main thread where QPixmap construction is safe.
+        """
         self._pending.discard(path)
+
+        # Convert QImage → QIcon on the main thread (QPixmap is GUI-thread only)
+        pixmap = QPixmap.fromImage(qimg)
+        icon = QIcon(pixmap)
 
         # Evict oldest entry if cache is full
         if len(self._thumb_cache) >= _CACHE_MAX:
