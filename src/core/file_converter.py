@@ -319,7 +319,7 @@ def convert_file(
     :param input_path:     Source file path.
     :param output_path:    Destination file path (with correct extension).
     :param target_format:  One of the keys in SUPPORTED_OUTPUT_FORMATS, e.g. "PNG".
-    :param quality:        JPEG/WEBP/AVIF quality (1-100).
+    :param quality:        JPEG/WEBP/AVIF/JPEG2000 quality (1-100). 100 = lossless for JPEG2000.
     :param resize:         Optional (width, height) tuple.
     :param keep_metadata:  When True, copy EXIF/ICC/DPI metadata to the output.
     :returns: output_path on success.
@@ -496,6 +496,20 @@ def convert_file(
             # --- AVIF (supports RGB and RGBA, quality applies) ---
             if ext == ".avif":
                 img.save(output_path, quality=quality, **_meta_kwargs(ext))
+                return output_path
+
+            # --- JPEG 2000 (supports RGB and RGBA; quality maps to compression rate) ---
+            if ext == ".jp2":
+                if quality >= 100:
+                    # Lossless (reversible wavelet transform)
+                    img.save(output_path, irreversible=False)
+                else:
+                    # Lossy: map quality 1-99 to a compression rate.
+                    # A rate of ~1.0 bpp is high quality; lower rates compress more.
+                    # quality=99→rate≈1.0 bpp (near-lossless), quality=1→rate≈0.02 bpp.
+                    rate = max(0.02, (quality / 100.0) ** 2 * 10)
+                    img.save(output_path, irreversible=True,
+                             quality_mode="rates", quality_layers=[rate])
                 return output_path
 
             # --- QOI (supports RGB and RGBA) ---

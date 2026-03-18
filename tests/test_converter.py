@@ -198,6 +198,26 @@ class TestConvertFile(unittest.TestCase):
             convert_file(src, dst, "QOI")
             self.assertTrue(os.path.isfile(dst))
 
+    def test_png_to_jpeg2000(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.jp2")
+            _make_png(src)
+            convert_file(src, dst, "JPEG2000")
+            self.assertTrue(os.path.isfile(dst))
+            self.assertGreater(os.path.getsize(dst), 0)
+
+    def test_png_to_jpeg2000_lossless(self):
+        """quality=100 should produce a lossless JPEG2000 file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.jp2")
+            _make_png(src)
+            convert_file(src, dst, "JPEG2000", quality=100)
+            self.assertTrue(os.path.isfile(dst))
+            result = Image.open(dst)
+            self.assertIn(result.mode, ("RGBA", "RGB"))
+
     def test_rgb_png_preserved_as_png(self):
         """RGB source → PNG should not be needlessly upcast to RGBA."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -209,7 +229,7 @@ class TestConvertFile(unittest.TestCase):
             self.assertEqual(img.mode, "RGB")
 
     def test_supported_output_formats_includes_new(self):
-        for fmt in ("PPM", "PCX", "AVIF", "QOI"):
+        for fmt in ("PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
             with self.subTest(fmt=fmt):
                 self.assertIn(fmt, SUPPORTED_OUTPUT_FORMATS)
 
