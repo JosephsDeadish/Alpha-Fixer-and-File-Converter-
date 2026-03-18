@@ -635,130 +635,6 @@ class SettingsDialog(QDialog):
         vol_row.addWidget(self._sound_volume_lbl)
         sound_gl.addLayout(vol_row, 2, 1)
 
-        sound_gl.addWidget(QLabel("Custom click .wav:"), 3, 0)
-        sound_row = QHBoxLayout()
-        self._click_sound_edit = QLineEdit()
-        self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
-        self._btn_sound_browse = QPushButton("Browse…")
-        sound_row.addWidget(self._click_sound_edit, 1)
-        sound_row.addWidget(self._btn_sound_browse)
-        sound_gl.addLayout(sound_row, 3, 1)
-
-        # Per-event sound toggles
-        sound_gl.addWidget(QLabel("Event sounds:"), 4, 0)
-        events_row = QHBoxLayout()
-        self._sound_success_check = QCheckBox("Completion")
-        self._sound_success_check.setToolTip(
-            "Play a cheerful chime when a batch finishes with no errors."
-        )
-        self._sound_error_check = QCheckBox("Error")
-        self._sound_error_check.setToolTip(
-            "Play a descending buzz when a batch finishes with file errors."
-        )
-        self._sound_unlock_check = QCheckBox("Unlock")
-        self._sound_unlock_check.setToolTip(
-            "Play an ascending fanfare when a secret theme is unlocked."
-        )
-        self._sound_file_add_check = QCheckBox("File added")
-        self._sound_file_add_check.setToolTip(
-            "Play a soft thunk when files are dropped into the queue."
-        )
-        self._sound_preview_check = QCheckBox("Preview")
-        self._sound_preview_check.setToolTip(
-            "Play a subtle ping every time the live preview image refreshes.\n"
-            "Off by default — can be distracting during rapid parameter changes."
-        )
-        self._sound_process_start_check = QCheckBox("Process start")
-        self._sound_process_start_check.setToolTip(
-            "Play a short ascending two-tone cue when a batch starts processing.\n"
-            "Off by default."
-        )
-        self._sound_file_remove_check = QCheckBox("File removed")
-        self._sound_file_remove_check.setToolTip(
-            "Play a short descending pop when files are removed from the queue.\n"
-            "Off by default."
-        )
-        for chk in (self._sound_success_check, self._sound_error_check,
-                    self._sound_unlock_check, self._sound_file_add_check,
-                    self._sound_preview_check, self._sound_process_start_check,
-                    self._sound_file_remove_check):
-            events_row.addWidget(chk)
-        sound_gl.addLayout(events_row, 4, 1)
-
-        # Additional event sounds (second row)
-        events_row2 = QHBoxLayout()
-        self._sound_theme_change_check = QCheckBox("Theme change")
-        self._sound_theme_change_check.setToolTip(
-            "Play a soft whoosh when switching to a different theme.\n"
-            "Off by default."
-        )
-        self._sound_tab_switch_check = QCheckBox("Tab switch")
-        self._sound_tab_switch_check.setToolTip(
-            "Play a quick soft tick when switching tabs.\n"
-            "Off by default."
-        )
-        self._sound_drag_enter_check = QCheckBox("Drag enter")
-        self._sound_drag_enter_check.setToolTip(
-            "Play a gentle rising ping when files are dragged over the drop zone.\n"
-            "Off by default."
-        )
-        for chk in (self._sound_theme_change_check,
-                    self._sound_tab_switch_check,
-                    self._sound_drag_enter_check):
-            events_row2.addWidget(chk)
-        events_row2.addStretch()
-        sound_gl.addLayout(events_row2, 5, 1)
-
-        # Selective-alpha / animal event sounds (third row)
-        events_row3 = QHBoxLayout()
-        self._sound_zone_paint_check = QCheckBox("Zone paint")
-        self._sound_zone_paint_check.setToolTip(
-            "Play a soft brush stroke sound while painting zones in the Selective Alpha tool.\n"
-            "Off by default."
-        )
-        self._sound_mask_copy_check = QCheckBox("Mask copy")
-        self._sound_mask_copy_check.setToolTip(
-            "Play a subtle copy blip when a zone mask is copied.\n"
-            "Off by default."
-        )
-        self._sound_mask_paste_check = QCheckBox("Mask paste")
-        self._sound_mask_paste_check.setToolTip(
-            "Play a subtle paste blip when a zone mask is pasted.\n"
-            "Off by default."
-        )
-        self._sound_bat_screech_check = QCheckBox("Bat screech")
-        self._sound_bat_screech_check.setToolTip(
-            "Play a bat screech on theme-specific events (e.g. Blood Moon theme).\n"
-            "Off by default."
-        )
-        self._sound_cat_meow_check = QCheckBox("Cat meow")
-        self._sound_cat_meow_check.setToolTip(
-            "Play a cat meow on theme-specific events.\n"
-            "Off by default."
-        )
-        self._sound_dog_bark_check = QCheckBox("Dog bark")
-        self._sound_dog_bark_check.setToolTip(
-            "Play a dog bark when the file list is cleared.\n"
-            "Off by default."
-        )
-        self._sound_frog_croak_check = QCheckBox("Frog croak")
-        self._sound_frog_croak_check.setToolTip(
-            "Play a frog croak on theme-specific events.\n"
-            "Off by default."
-        )
-        self._sound_batch_done_check = QCheckBox("Batch fanfare")
-        self._sound_batch_done_check.setToolTip(
-            "Play an animal fanfare at the end of a successful batch.\n"
-            "Off by default."
-        )
-        for chk in (self._sound_zone_paint_check, self._sound_mask_copy_check,
-                    self._sound_mask_paste_check, self._sound_bat_screech_check,
-                    self._sound_cat_meow_check, self._sound_dog_bark_check,
-                    self._sound_frog_croak_check, self._sound_batch_done_check):
-            events_row3.addWidget(chk)
-        events_row3.addStretch()
-        sound_gl.addLayout(events_row3, 6, 1)
-
         tv.addWidget(grp_sound)
 
         # ---- Button Press Animation GroupBox ----
@@ -1013,33 +889,13 @@ class SettingsDialog(QDialog):
         self._btn_close.clicked.connect(self.accept)
         self._btn_reset.clicked.connect(self._reset_all_settings)
         self._btn_reset_unlocks.clicked.connect(self._reset_unlocks_only)
-        self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
         self._btn_emoji_clear.clicked.connect(self._clear_emoji)
         # All controls save+emit live
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
-        self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
         self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
-        self._sound_success_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_error_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_unlock_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_file_add_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_preview_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_process_start_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_file_remove_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_theme_change_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_tab_switch_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_drag_enter_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_zone_paint_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_mask_copy_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_mask_paste_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_bat_screech_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_cat_meow_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_dog_bark_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_frog_croak_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_batch_done_check.toggled.connect(self._on_sound_event_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
@@ -1134,7 +990,7 @@ class SettingsDialog(QDialog):
         # trigger save-and-emit loops.
         controls = [
             self._theme_preset_combo, self._effect_combo, self._sound_check,
-            self._use_theme_sound_check, self._click_sound_edit, self._trail_check,
+            self._use_theme_sound_check, self._trail_check,
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
             self._cursor_combo, self._use_theme_cursor_check, self._cursor_anim_check, self._font_size_spin,
             self._click_effects_theme_check,
@@ -1147,15 +1003,6 @@ class SettingsDialog(QDialog):
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
             self._sound_volume_slider,
-            self._sound_success_check, self._sound_error_check, self._sound_unlock_check,
-            self._sound_file_add_check, self._sound_preview_check,
-            self._sound_process_start_check, self._sound_file_remove_check,
-            self._sound_theme_change_check, self._sound_tab_switch_check,
-            self._sound_drag_enter_check,
-            self._sound_zone_paint_check, self._sound_mask_copy_check,
-            self._sound_mask_paste_check, self._sound_bat_screech_check,
-            self._sound_cat_meow_check, self._sound_dog_bark_check,
-            self._sound_frog_croak_check, self._sound_batch_done_check,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -1178,28 +1025,9 @@ class SettingsDialog(QDialog):
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
         self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
-        self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
         vol = int(self._settings.get("sound_volume", 50))
         self._sound_volume_slider.setValue(max(0, min(100, vol)))
         self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
-        self._sound_success_check.setChecked(self._settings.get("sound_success", True))
-        self._sound_error_check.setChecked(self._settings.get("sound_error", True))
-        self._sound_unlock_check.setChecked(self._settings.get("sound_unlock", True))
-        self._sound_file_add_check.setChecked(self._settings.get("sound_file_add", True))
-        self._sound_preview_check.setChecked(self._settings.get("sound_preview", False))
-        self._sound_process_start_check.setChecked(self._settings.get("sound_process_start", False))
-        self._sound_file_remove_check.setChecked(self._settings.get("sound_file_remove", False))
-        self._sound_theme_change_check.setChecked(self._settings.get("sound_theme_change", False))
-        self._sound_tab_switch_check.setChecked(self._settings.get("sound_tab_switch", False))
-        self._sound_drag_enter_check.setChecked(self._settings.get("sound_drag_enter", False))
-        self._sound_zone_paint_check.setChecked(self._settings.get("sound_zone_paint", False))
-        self._sound_mask_copy_check.setChecked(self._settings.get("sound_mask_copy", False))
-        self._sound_mask_paste_check.setChecked(self._settings.get("sound_mask_paste", False))
-        self._sound_bat_screech_check.setChecked(self._settings.get("sound_bat_screech", False))
-        self._sound_cat_meow_check.setChecked(self._settings.get("sound_cat_meow", False))
-        self._sound_dog_bark_check.setChecked(self._settings.get("sound_dog_bark", False))
-        self._sound_frog_croak_check.setChecked(self._settings.get("sound_frog_croak", False))
-        self._sound_batch_done_check.setChecked(self._settings.get("sound_batch_done", False))
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1297,24 +1125,6 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
         mgr.register(self._sound_volume_slider, "sound_volume_slider")
-        mgr.register(self._sound_success_check, "sound_success_check")
-        mgr.register(self._sound_error_check, "sound_error_check")
-        mgr.register(self._sound_unlock_check, "sound_unlock_check")
-        mgr.register(self._sound_file_add_check, "sound_file_add_check")
-        mgr.register(self._sound_preview_check, "sound_preview_check")
-        mgr.register(self._sound_process_start_check, "sound_process_start_check")
-        mgr.register(self._sound_file_remove_check, "sound_file_remove_check")
-        mgr.register(self._sound_theme_change_check, "sound_theme_change_check")
-        mgr.register(self._sound_tab_switch_check, "sound_tab_switch_check")
-        mgr.register(self._sound_drag_enter_check, "sound_drag_enter_check")
-        mgr.register(self._sound_zone_paint_check, "sound_zone_paint_check")
-        mgr.register(self._sound_mask_copy_check, "sound_mask_copy_check")
-        mgr.register(self._sound_mask_paste_check, "sound_mask_paste_check")
-        mgr.register(self._sound_bat_screech_check, "sound_bat_screech_check")
-        mgr.register(self._sound_cat_meow_check, "sound_cat_meow_check")
-        mgr.register(self._sound_dog_bark_check, "sound_dog_bark_check")
-        mgr.register(self._sound_frog_croak_check, "sound_frog_croak_check")
-        mgr.register(self._sound_batch_done_check, "sound_batch_done_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -1340,8 +1150,6 @@ class SettingsDialog(QDialog):
         mgr.register(self._btn_delete_theme, "delete_custom_theme")
         mgr.register(self._btn_export_theme, "export_custom_theme")
         mgr.register(self._btn_import_theme, "import_custom_theme")
-        mgr.register(self._click_sound_edit, "sound_path")
-        mgr.register(self._btn_sound_browse, "sound_browse")
         mgr.register(self._btn_reset, "reset_all_settings")
         mgr.register(self._btn_reset_unlocks, "reset_unlocks_btn")
         # Settings dialog own tab bar (Theme / General tabs)
