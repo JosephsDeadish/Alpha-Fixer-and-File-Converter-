@@ -193,6 +193,11 @@ class SelectiveAlphaCanvas(QWidget):
         # zones can be recoloured without touching the shared constant.
         self._zone_colors: list[tuple[int, int, int, int]] = list(ZONE_COLORS)
 
+        # ---- Show-zero-alpha flag -----------------------------------------
+        # When True, fully-transparent source pixels inside a painted zone
+        # have their output alpha lifted so the overlay remains visible.
+        self._show_zero_alpha: bool = False
+
         # ---- Cursor position for brush-size preview circle ---------------
         self._cursor_pos: QPointF | None = None
 
@@ -323,6 +328,18 @@ class SelectiveAlphaCanvas(QWidget):
                 max(0, min(255, b)),
                 oa,
             )
+            self._composite_dirty = True
+            self.update()
+
+    def set_show_zero_alpha(self, enabled: bool) -> None:
+        """Control whether fully-transparent source pixels inside a zone are highlighted.
+
+        When *enabled* is ``True`` the overlay for painted zones is made
+        visible even over pixels whose source alpha is 0, so the user can see
+        and adjust zones on fully-transparent areas.
+        """
+        if self._show_zero_alpha != enabled:
+            self._show_zero_alpha = enabled
             self._composite_dirty = True
             self.update()
 
@@ -666,7 +683,8 @@ class SelectiveAlphaCanvas(QWidget):
             for m, vis in zip(raw_masks, self._zone_visible)
         ]
         comp = composite_zones(self._src_arr, visible_masks,
-                               zone_colors=self._zone_colors)
+                               zone_colors=self._zone_colors,
+                               show_zero_alpha=self._show_zero_alpha)
         self._composite_qimg = _np_to_qimage(comp)
         self._composite_dirty = False
 
@@ -1443,6 +1461,16 @@ class SelectiveAlphaTool(QWidget):
         vis_all_row.addWidget(self._btn_hide_all)
         zv.addLayout(vis_all_row)
 
+        # "Highlight transparent pixels" checkbox
+        self._show_zero_alpha_chk = QCheckBox("Highlight transparent pixels")
+        self._show_zero_alpha_chk.setChecked(False)
+        self._show_zero_alpha_chk.setToolTip(
+            "When checked, zone highlights are shown even over fully-transparent\n"
+            "(alpha = 0) pixels so you can paint and see selections on\n"
+            "transparent areas of the image."
+        )
+        zv.addWidget(self._show_zero_alpha_chk)
+
         # Thin separator
         sep0 = QFrame()
         sep0.setFrameShape(QFrame.Shape.HLine)
@@ -1493,6 +1521,9 @@ class SelectiveAlphaTool(QWidget):
         for row in self._zone_rows:
             row.visibility_changed.connect(self._canvas.set_zone_visible)
 
+        # Wire show-zero-alpha checkbox.
+        self._show_zero_alpha_chk.toggled.connect(self._canvas.set_show_zero_alpha)
+
         # Wrap canvas + status label in a vertical layout.
         right_widget = QWidget()
         rv = QVBoxLayout(right_widget)
@@ -1518,6 +1549,7 @@ class SelectiveAlphaTool(QWidget):
         self._brush_spin.valueChanged.connect(lambda _: self._save_settings())
         self._eraser_spin.valueChanged.connect(lambda _: self._save_settings())
         self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
+        self._show_zero_alpha_chk.toggled.connect(lambda _: self._save_settings())
         for row in self._zone_rows:
             row._alpha_spin.valueChanged.connect(lambda _: self._save_settings())
 
@@ -1555,6 +1587,10 @@ class SelectiveAlphaTool(QWidget):
             self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
             # Restore autocorrect toggle
             self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
+            # Restore show-zero-alpha toggle
+            self._show_zero_alpha_chk.setChecked(
+                bool(self._settings.get("sa_show_zero_alpha", False))
+            )
             # Restore last-used drawing tool
             last_tool = str(self._settings.get("sa_last_tool", "freehand"))
             if last_tool in self._tool_btns:
@@ -1577,6 +1613,7 @@ class SelectiveAlphaTool(QWidget):
         self._settings.set("sa_brush_size",  self._brush_spin.value())
         self._settings.set("sa_eraser_size", self._eraser_spin.value())
         self._settings.set("sa_autocorrect", self._autocorrect_chk.isChecked())
+        self._settings.set("sa_show_zero_alpha", self._show_zero_alpha_chk.isChecked())
         self._settings.set("sa_last_tool",   self._canvas._tool)
 
     def closeEvent(self, event) -> None:  # noqa: N802
