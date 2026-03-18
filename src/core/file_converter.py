@@ -10,9 +10,15 @@ SVG input (raster rendering) requires one of:
 If neither is installed the app will raise an ImportError with install
 instructions when an SVG file is opened.
 
-SVG output embeds the raster image as base64-encoded PNG inside an <svg>
-element, producing a valid scalable vector document that all modern viewers
-can display.  No additional libraries are required for SVG output.
+SVG output — two modes depending on installed libraries:
+  • vtracer available (pip install vtracer):
+      Traces the raster into true vector paths (colour polygons/beziers).
+      The result is a genuine scalable vector document suitable for logos,
+      icons, pixel art, and game sprites.  Large or photographic images
+      may produce complex SVGs.
+  • vtracer not installed (fallback):
+      Embeds the raster as a base64-encoded PNG inside an <svg> element.
+      Pixel-perfect at any zoom level but not a true vector document.
 """
 import base64
 import io
@@ -114,8 +120,11 @@ FORMAT_DESCRIPTIONS = {
         "Scalable Vector Graphics — XML-based vector/lossless format.\n"
         "SVG input: renders the vector art to a full-colour RGBA raster.\n"
         "  Requires cairosvg (pip install cairosvg) or svglib.\n"
-        "SVG output: embeds the raster image inside an <svg> element as\n"
-        "  base64 PNG — no extra libraries needed for output.\n"
+        "SVG output — two modes:\n"
+        "  • vtracer installed: traces raster into true vector paths\n"
+        "      (pip install vtracer). Best for logos, icons, pixel art.\n"
+        "  • fallback: embeds raster as base64 PNG — pixel-perfect but\n"
+        "      not true vector. No extra libraries required.\n"
         "Useful for icons, logos, UI assets, and scalable game graphics."
     ),
     "TIFF": (
@@ -148,6 +157,15 @@ def _has_svglib() -> bool:
     try:
         from svglib.svglib import svg2rlg  # noqa: F401
         from reportlab.graphics import renderPM  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _has_vtracer() -> bool:
+    """Return True when vtracer is importable (used for raster→SVG vectorization)."""
+    try:
+        import vtracer  # noqa: F401
         return True
     except ImportError:
         return False
