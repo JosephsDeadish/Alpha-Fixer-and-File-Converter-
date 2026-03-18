@@ -302,17 +302,22 @@ def composite_zones(
     src_rgba: np.ndarray,
     zone_masks: list[Optional[np.ndarray]],
     zone_colors: Optional[list[tuple[int, int, int, int]]] = None,
+    show_zero_alpha: bool = False,
 ) -> np.ndarray:
     """Blend zone-colour overlays onto *src_rgba* and return uint8 RGBA.
 
     Parameters
     ----------
-    src_rgba    : uint8 (h, w, 4) ndarray – source RGBA image.
-    zone_masks  : list of :data:`NUM_ZONES` bool (h, w) ndarray or ``None``.
-    zone_colors : optional list of ``(R, G, B, overlay_alpha)`` tuples, one
-                  per zone.  When *None* (default) the module-level
-                  :data:`ZONE_COLORS` palette is used.  Pass a custom list to
-                  support user-chosen zone colours.
+    src_rgba        : uint8 (h, w, 4) ndarray – source RGBA image.
+    zone_masks      : list of :data:`NUM_ZONES` bool (h, w) ndarray or ``None``.
+    zone_colors     : optional list of ``(R, G, B, overlay_alpha)`` tuples, one
+                      per zone.  When *None* (default) the module-level
+                      :data:`ZONE_COLORS` palette is used.  Pass a custom list to
+                      support user-chosen zone colours.
+    show_zero_alpha : when *True*, pixels whose source alpha is 0 but that fall
+                      inside a painted zone have their output alpha lifted to
+                      the zone's overlay-alpha so the highlight is visible even
+                      on fully-transparent source areas.  Defaults to *False*.
 
     Returns
     -------
@@ -337,4 +342,9 @@ def composite_zones(
         out[mask, 0] = out[mask, 0] * (1.0 - a) + r * a
         out[mask, 1] = out[mask, 1] * (1.0 - a) + g * a
         out[mask, 2] = out[mask, 2] * (1.0 - a) + b * a
+        if show_zero_alpha:
+            # Lift fully-transparent masked pixels so the overlay is visible.
+            zero_mask = mask & (src_rgba[:, :, 3] == 0)
+            if zero_mask.any():
+                out[zero_mask, 3] = float(oa)
     return np.clip(out, 0, 255).astype(np.uint8)
