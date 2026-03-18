@@ -24,6 +24,7 @@ import base64
 import io
 import os
 import logging
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -217,12 +218,44 @@ def _load_svg(path: str) -> Image.Image:
 
 def _save_svg(img: Image.Image, path: str) -> None:
     """
-    Save *img* as an SVG file by embedding the raster as a base64-encoded PNG.
+    Save *img* as an SVG file.
 
-    The resulting SVG is a valid, viewable scalable document that renders
-    identically to the original raster at any zoom level.  No extra libraries
-    are needed — only Pillow (for PNG encoding) and Python's standard library.
+    Strategy:
+    1. If vtracer is installed, write a temporary PNG, run vtracer to produce
+       genuine vector paths, and write the resulting SVG.  Best for logos,
+       icons, and pixel art.
+    2. Otherwise, embed the raster as a base64-encoded PNG inside an <svg>
+       wrapper.  Pixel-perfect but not a true vector document.
     """
+    if _has_vtracer():
+        import vtracer as _vtracer
+        # vtracer needs RGB or RGBA PNG input
+        save_img = img
+        need_close = False
+        if img.mode not in ("RGB", "RGBA"):
+            save_img = img.convert("RGBA")
+            need_close = True
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png:
+                tmp_png_path = tmp_png.name
+            try:
+                save_img.save(tmp_png_path, format="PNG")
+                _vtracer.convert_image_to_svg_py(
+                    tmp_png_path,
+                    path,
+                    colormode="color",
+                )
+            finally:
+                try:
+                    os.unlink(tmp_png_path)
+                except OSError:
+                    pass
+        finally:
+            if need_close:
+                save_img.close()
+        return
+
+    # Fallback: embed raster as base64 PNG inside an SVG wrapper
     buf = io.BytesIO()
     save_img = img
     need_close = False
