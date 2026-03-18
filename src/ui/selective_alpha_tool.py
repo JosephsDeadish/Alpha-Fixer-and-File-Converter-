@@ -1246,7 +1246,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Left panel (controls) ─────────────────────────────────────────
         left_panel = QWidget()
-        left_panel.setFixedWidth(290)
+        left_panel.setFixedWidth(330)
         lv = QVBoxLayout(left_panel)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
@@ -1419,7 +1419,7 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(zoom_box)
 
         # Zone rows
-        zones_box = QGroupBox("Alpha Zones  (🖌 Paint to assign alpha per zone)")
+        zones_box = QGroupBox("Alpha Zones")
         zv = QVBoxLayout(zones_box)
         zv.setSpacing(2)
 
@@ -1480,7 +1480,7 @@ class SelectiveAlphaTool(QWidget):
         left_scroll.setWidget(left_panel)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        left_scroll.setFixedWidth(310)  # panel 290 + scroll bar ~20
+        left_scroll.setFixedWidth(350)  # panel 330 + scroll bar ~20
         root.addWidget(left_scroll)
 
         # ── Canvas ───────────────────────────────────────────────────────

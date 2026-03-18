@@ -241,7 +241,6 @@ class SettingsDialog(QDialog):
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
         scroll.setMinimumHeight(220)
-        scroll.setMaximumHeight(320)
         tv.addWidget(scroll)
 
         # ---- Effect + Emoji in a single row of GroupBoxes ----
