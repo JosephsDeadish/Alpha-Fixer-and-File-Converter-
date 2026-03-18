@@ -133,7 +133,10 @@ class _ThumbRunnable(QRunnable):
             # Final cancel check before emitting so we don't deliver the image
             # to a list that was cleared while the thumbnail was being built.
             if not self._cancel.is_set():
-                self._signals.loaded.emit(self._path, out)
+                try:
+                    self._signals.loaded.emit(self._path, out)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         except Exception:
             pass  # silently skip unreadable / non-image files
         finally:

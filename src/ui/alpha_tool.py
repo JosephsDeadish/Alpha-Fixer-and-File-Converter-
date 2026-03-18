@@ -122,15 +122,21 @@ class _AlphaPreviewLoader(QThread):
 
                 after_qi = _pil_to_qimage(processed)
                 after_stats = self._alpha_stats(processed)
-                self.preview_ready.emit(before_qi, after_qi)
-                self.stats_ready.emit(before_stats, after_stats)
+                try:
+                    self.preview_ready.emit(before_qi, after_qi)
+                    self.stats_ready.emit(before_stats, after_stats)
+                except RuntimeError:
+                    return  # receiver destroyed; abort
             finally:
                 orig.close()
                 if processed is not None and processed is not orig:
                     processed.close()
         except Exception:
             import traceback
-            self.failed.emit(traceback.format_exc())
+            try:
+                self.failed.emit(traceback.format_exc())
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
 
 
 # ---------------------------------------------------------------------------

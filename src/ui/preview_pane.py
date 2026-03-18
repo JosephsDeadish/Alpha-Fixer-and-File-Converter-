@@ -130,9 +130,15 @@ class _ThumbLoader(QThread):
                 f"{width} × {height}  ·  {mode}{alpha_note}\n"
                 f"{_fmt_size(file_size)}{meta_note}"
             )
-            self.loaded.emit(qimg, meta_text)
+            try:
+                self.loaded.emit(qimg, meta_text)
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            self.failed.emit(str(exc))
+            try:
+                self.failed.emit(str(exc))
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
@@ -226,7 +232,10 @@ class _ConvertedThumbLoader(QThread):
                     f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                     f"Preview as {fmt}  (source shown)"
                 )
-                self.loaded.emit(qimg, meta)
+                try:
+                    self.loaded.emit(qimg, meta)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
                 return
 
             if save_img is not img:
@@ -243,9 +252,15 @@ class _ConvertedThumbLoader(QThread):
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                 f"Preview as {fmt}{quality_note}  ·  ~{_fmt_size(converted_size)}"
             )
-            self.loaded.emit(qimg, meta)
+            try:
+                self.loaded.emit(qimg, meta)
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            self.failed.emit(str(exc))
+            try:
+                self.failed.emit(str(exc))
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
@@ -661,7 +676,10 @@ class _ConverterPreviewLoader(QThread):
                 )
                 img.close()
                 img = None
-                self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+                try:
+                    self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
                 return
 
             if save_img is not img:
@@ -685,9 +703,15 @@ class _ConverterPreviewLoader(QThread):
                 f"Preview as {fmt}{quality_note}\n"
                 f"~{_fmt_size(converted_size)}"
             )
-            self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+            try:
+                self.ready.emit(src_qi, out_qi, src_meta, out_meta)
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            self.failed.emit(str(exc))
+            try:
+                self.failed.emit(str(exc))
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
