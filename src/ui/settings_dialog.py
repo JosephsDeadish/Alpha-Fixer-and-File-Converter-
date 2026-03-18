@@ -4,7 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QRect
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -1160,6 +1160,31 @@ class SettingsDialog(QDialog):
         # Register all color swatch buttons with the same generic key
         for btn in self._color_buttons.values():
             mgr.register(btn, "theme_color_btn")
+
+    # ------------------------------------------------------------------
+    # Window positioning
+    # ------------------------------------------------------------------
+
+    def showEvent(self, event):  # noqa: N802
+        """Center the dialog on the screen it will appear on and clamp its
+        size to the available geometry so no part is hidden off-screen."""
+        super().showEvent(event)
+        # Determine which screen we're on (use parent's screen, fall back to primary)
+        screen = (self.parent().screen() if self.parent() is not None else None)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        ag = screen.availableGeometry()
+        # Ensure the dialog is no larger than the available area
+        w = min(self.width(), ag.width())
+        h = min(self.height(), ag.height())
+        if w != self.width() or h != self.height():
+            self.resize(w, h)
+        # Center on the available geometry
+        x = ag.x() + max(0, (ag.width() - w) // 2)
+        y = ag.y() + max(0, (ag.height() - h) // 2)
+        self.move(x, y)
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply
