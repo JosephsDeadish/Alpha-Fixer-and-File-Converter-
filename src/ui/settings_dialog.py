@@ -144,6 +144,11 @@ class SettingsDialog(QDialog):
         else:
             min_w, min_h = 800, 600
         self.setMinimumSize(min_w, min_h)
+        # Set an initial size that fits the screen; the showEvent also clamps it
+        # but this avoids an initial oversized paint on some platforms.
+        init_w = min(950, max(min_w, ag.width() - 60)) if screen is not None else min_w
+        init_h = min(750, max(min_h, ag.height() - 80)) if screen is not None else min_h
+        self.resize(init_w, init_h)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:
@@ -612,12 +617,47 @@ class SettingsDialog(QDialog):
         self._use_theme_sound_check = QCheckBox("Use theme sound (click sound follows the active theme)")
         self._use_theme_sound_check.setToolTip(
             "When enabled the click sound changes to match the active theme.\n"
-            "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc."
+            "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc.\n"
+            "When disabled, the Sound profile dropdown below is used instead."
         )
         sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
 
+        # Sound profile dropdown (used when "Use theme sound" is OFF)
+        sound_gl.addWidget(QLabel("Sound profile:"), 2, 0)
+        self._sound_profile_combo = QComboBox()
+        _SOUND_PROFILE_OPTIONS = [
+            ("soft",    "Soft — gentle chime 🎵"),
+            ("bright",  "Bright — snappy ping ✨"),
+            ("dark",    "Dark — low thud 🌑"),
+            ("hard",    "Hard — punchy hit 💥"),
+            ("warm",    "Warm — mellow tone 🌅"),
+            ("icy",     "Icy — crystalline click ❄"),
+            ("sparkle", "Sparkle — shimmery tinkle 🌟"),
+            ("growl",   "Growl — gritty bass 🩸"),
+            ("bubble",  "Bubble — pop 🫧"),
+            ("chirp",   "Chirp — bird-like tweet 🐦"),
+            ("crunch",  "Crunch — bone snap 💀"),
+            ("purr",    "Purr — cat rumble 🐱"),
+            ("meow",    "Meow — cat cry 🐱"),
+            ("roar",    "Roar — fierce growl 🐉"),
+            ("bark",    "Bark — dog bark 🐶"),
+            ("howl",    "Howl — wolf howl 🐺"),
+            ("hiss",    "Hiss — serpent hiss 🐍"),
+            ("rock",    "Rock — cycling guitar riff 🎸"),
+            ("splash",  "Splash — water drop 💧"),
+            ("tweet",   "Tweet — forest bird 🌿"),
+        ]
+        for key, label in _SOUND_PROFILE_OPTIONS:
+            self._sound_profile_combo.addItem(label, userData=key)
+        self._sound_profile_combo.setToolTip(
+            "Click-sound profile used when 'Use theme sound' is disabled.\n"
+            "Each profile has a distinct tone that matches different moods.\n"
+            "Ignored when 'Use theme sound' is enabled."
+        )
+        sound_gl.addWidget(self._sound_profile_combo, 2, 1)
+
         # Volume slider
-        sound_gl.addWidget(QLabel("Volume:"), 2, 0)
+        sound_gl.addWidget(QLabel("Volume:"), 3, 0)
         vol_row = QHBoxLayout()
         self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._sound_volume_slider.setRange(0, 100)
@@ -633,7 +673,7 @@ class SettingsDialog(QDialog):
         )
         vol_row.addWidget(self._sound_volume_slider, 1)
         vol_row.addWidget(self._sound_volume_lbl)
-        sound_gl.addLayout(vol_row, 2, 1)
+        sound_gl.addLayout(vol_row, 3, 1)
 
         tv.addWidget(grp_sound)
 
@@ -895,6 +935,8 @@ class SettingsDialog(QDialog):
         # All controls save+emit live
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
+        self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_toggled)
+        self._sound_profile_combo.currentIndexChanged.connect(self._on_sound_profile_changed)
         self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
@@ -1028,6 +1070,15 @@ class SettingsDialog(QDialog):
         vol = int(self._settings.get("sound_volume", 50))
         self._sound_volume_slider.setValue(max(0, min(100, vol)))
         self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
+        # Load sound profile combo
+        saved_profile = str(self._settings.get("sound_manual_profile", "soft"))
+        _profile_idx = self._sound_profile_combo.findData(saved_profile)
+        if _profile_idx >= 0:
+            self._sound_profile_combo.setCurrentIndex(_profile_idx)
+        # Disable profile combo when "use theme sound" is ON
+        self._sound_profile_combo.setEnabled(
+            not self._settings.get("use_theme_sound", False)
+        )
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1124,6 +1175,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
+        mgr.register(self._sound_profile_combo, "sound_profile_combo")
         mgr.register(self._sound_volume_slider, "sound_volume_slider")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
@@ -1441,6 +1493,16 @@ class SettingsDialog(QDialog):
     def _on_use_theme_sound_changed(self) -> None:
         self._settings.set("use_theme_sound", self._use_theme_sound_check.isChecked())
         self.settings_changed.emit()
+
+    def _on_use_theme_sound_toggled(self, checked: bool) -> None:
+        """Enable/disable the manual sound profile combo based on theme-sound toggle."""
+        self._sound_profile_combo.setEnabled(not checked)
+
+    def _on_sound_profile_changed(self) -> None:
+        """Save the manually selected sound profile."""
+        profile = self._sound_profile_combo.currentData()
+        if profile:
+            self._settings.set("sound_manual_profile", profile)
 
     def _on_sound_volume_changed(self, value: int) -> None:
         self._settings.set("sound_volume", value)

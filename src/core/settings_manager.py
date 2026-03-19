@@ -73,6 +73,7 @@ class SettingsManager:
         "sound_volume": 50,           # 0–100 master volume
         "click_sound_path": "",
         "use_theme_sound": False,
+        "sound_manual_profile": "soft",   # click-sound profile used when use_theme_sound=False
         # Per-event sound toggles (all on by default when sound_enabled=True)
         "sound_success": True,
         "sound_error": True,

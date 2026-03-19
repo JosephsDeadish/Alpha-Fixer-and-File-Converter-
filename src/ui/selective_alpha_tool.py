@@ -1411,6 +1411,19 @@ class SelectiveAlphaTool(QWidget):
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
 
+        # Row 1b: Show Highlights toggle — prominent master visibility control
+        self._btn_show_highlights = QPushButton("👁  Show Highlights")
+        self._btn_show_highlights.setCheckable(True)
+        self._btn_show_highlights.setChecked(False)
+        self._btn_show_highlights.setMinimumHeight(28)
+        self._btn_show_highlights.setToolTip(
+            "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
+            "Off by default — turn on to see the coloured highlights and alpha labels.\n"
+            "Automatically turns on when multiple alpha zones are detected in an image."
+        )
+        self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
+        wf_lay.addWidget(self._btn_show_highlights)
+
         # Row 2: Apply (primary action – most prominent)
         self._btn_apply = QPushButton("✅  Apply Alpha Zones")
         self._btn_apply.setEnabled(False)
@@ -1785,8 +1798,9 @@ class SelectiveAlphaTool(QWidget):
 
     def register_tooltips(self, mgr) -> None:
         """Register all Selective Alpha tab widgets with the TooltipManager."""
-        mgr.register(self._btn_open,         "sa_open_btn")
-        mgr.register(self._btn_save,         "sa_save_btn")
+        mgr.register(self._btn_open,            "sa_open_btn")
+        mgr.register(self._btn_show_highlights, "sa_show_highlights")
+        mgr.register(self._btn_save,            "sa_save_btn")
         mgr.register(self._tool_btns["freehand"], "sa_tool_freehand")
         mgr.register(self._tool_btns["line"],     "sa_tool_line")
         mgr.register(self._tool_btns["rect"],     "sa_tool_rect")
@@ -1856,6 +1870,13 @@ class SelectiveAlphaTool(QWidget):
         self._btn_save.setEnabled(v)
 
     # ---------------------------------------------------------------- slots
+
+    def _on_show_highlights_toggled(self, checked: bool) -> None:
+        """Master toggle: show or hide all zone overlays from the top button."""
+        if checked:
+            self._on_show_all_zones()
+        else:
+            self._on_hide_all_zones()
 
     def _on_show_all_zones(self) -> None:
         """Make all zone overlays visible and sync the eye-icon toggles."""
@@ -1954,6 +1975,11 @@ class SelectiveAlphaTool(QWidget):
             img.close()
         self._result_history.clear()
         self._btn_undo_process.setEnabled(False)
+        # Reset the Show Highlights toggle so a freshly-loaded image starts
+        # with highlights hidden; _auto_populate_zones_from_image will turn it
+        # back on if multiple distinct alpha zones are detected.
+        self._btn_show_highlights.setChecked(False)
+        self._on_hide_all_zones()
         # Auto-populate zone masks if the image has multiple distinct alphas.
         self._auto_populate_zones_from_image()
 
@@ -2003,8 +2029,9 @@ class SelectiveAlphaTool(QWidget):
             row._vis_btn.setChecked(True)
             self._canvas.set_zone_visible(i, True)
 
-        # Reveal all populated zones.
+        # Reveal all populated zones and sync the master Show Highlights toggle.
         self._on_show_all_zones()
+        self._btn_show_highlights.setChecked(True)
 
     def _on_save(self) -> None:
         if self._result_img is None:

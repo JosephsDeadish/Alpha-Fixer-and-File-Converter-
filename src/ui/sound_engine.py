@@ -853,9 +853,19 @@ class SoundEngine(QObject):
             except Exception:
                 wav_path = self._click_wav
         else:
-            # Custom user-supplied WAV or generic default
+            # Custom user-supplied WAV overrides the manual profile choice.
             custom = self._settings.get("click_sound_path", "").strip()
-            wav_path = custom if (custom and os.path.isfile(custom)) else self._click_wav
+            if custom and os.path.isfile(custom):
+                wav_path = custom
+            else:
+                # Use the manually-selected sound profile (default: "soft")
+                manual_profile = str(self._settings.get("sound_manual_profile", "soft"))
+                if manual_profile not in self._theme_click_wavs:
+                    logger.warning(
+                        "Unknown sound profile %r — falling back to default click sound.",
+                        manual_profile,
+                    )
+                wav_path = self._theme_click_wavs.get(manual_profile, self._click_wav)
 
         if not wav_path:
             return
