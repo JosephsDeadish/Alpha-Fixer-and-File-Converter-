@@ -8274,3 +8274,203 @@ class TestRound36VulgarSAExpansion(unittest.TestCase):
             low_keys, [],
             f"Keys with <6 _VULGAR entries after Round 36: {low_keys}",
         )
+
+
+# ---------------------------------------------------------------------------
+# Round-46: zone name label fix, multi-slot mask collection, autocorrect
+#           placement, get_active_zone() API
+# ---------------------------------------------------------------------------
+
+
+class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
+    """Round-46: zone-name label no longer clips, mask slot collection works,
+    autocorrect checkbox is inside the Tool Size group, canvas exposes
+    get_active_zone()."""
+
+    _SA_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "selective_alpha_tool.py"
+    )
+
+    @staticmethod
+    def _src() -> str:
+        with open(
+            os.path.join(
+                os.path.dirname(__file__), "..", "src", "ui", "selective_alpha_tool.py"
+            ),
+            encoding="utf-8",
+        ) as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Zone-name label fix
+    # ------------------------------------------------------------------
+
+    def test_zone_name_label_no_addstretch_before_alpha_spin(self):
+        """The _ZoneRow top row must NOT use addStretch() between name and
+        alpha spinbox — the stretch was causing the name label to be squeezed
+        to its minimum width and clip on longer zone names."""
+        src = self._src()
+        zone_row_match = re.search(
+            r"class _ZoneRow.*?(?=\nclass |\Z)", src, re.S
+        )
+        self.assertIsNotNone(zone_row_match, "_ZoneRow class not found in source")
+        zone_row_body = zone_row_match.group(0)
+        # The addStretch call in the top HBoxLayout must be gone.
+        # Acceptable: there is NO addStretch between the name label and "α:"
+        # We check that addStretch does NOT appear BETWEEN name_lbl and α:
+        name_pos = zone_row_body.find("name_lbl")
+        alpha_lbl_pos = zone_row_body.find('"α:"')
+        if name_pos > 0 and alpha_lbl_pos > 0:
+            between = zone_row_body[name_pos:alpha_lbl_pos]
+            self.assertNotIn(
+                "addStretch",
+                between,
+                "addStretch must not appear between the zone name label and the α: "
+                "label — it was causing text clipping on long zone names.",
+            )
+
+    def test_zone_name_label_has_expanding_size_policy(self):
+        """_ZoneRow must set an Expanding horizontal size policy on name_lbl
+        so the label fills available space and long names render fully."""
+        src = self._src()
+        zone_row_match = re.search(
+            r"class _ZoneRow.*?(?=\nclass |\Z)", src, re.S
+        )
+        self.assertIsNotNone(zone_row_match, "_ZoneRow class not found")
+        body = zone_row_match.group(0)
+        self.assertIn(
+            "setSizePolicy",
+            body,
+            "_ZoneRow must call setSizePolicy on name_lbl to prevent clipping",
+        )
+        self.assertIn(
+            "Expanding",
+            body,
+            "_ZoneRow name_lbl must use an Expanding size policy",
+        )
+
+    # ------------------------------------------------------------------
+    # get_active_zone()
+    # ------------------------------------------------------------------
+
+    def test_canvas_has_get_active_zone_method(self):
+        """SelectiveAlphaCanvas must expose get_active_zone() → int."""
+        src = self._src()
+        self.assertIn(
+            "def get_active_zone(self)",
+            src,
+            "SelectiveAlphaCanvas must define get_active_zone()",
+        )
+
+    def test_get_active_zone_returns_active_zone_attribute(self):
+        """get_active_zone() must return self._active_zone."""
+        src = self._src()
+        match = re.search(r"def get_active_zone\(self\).*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "get_active_zone body not found")
+        body = match.group(0)
+        self.assertIn(
+            "self._active_zone",
+            body,
+            "get_active_zone() must return self._active_zone",
+        )
+
+    # ------------------------------------------------------------------
+    # Multi-slot mask collection
+    # ------------------------------------------------------------------
+
+    def test_tool_has_mask_slots_attribute_init(self):
+        """SelectiveAlphaTool._setup_ui must initialise _mask_slots as a list."""
+        src = self._src()
+        self.assertIn(
+            "_mask_slots",
+            src,
+            "SelectiveAlphaTool must define _mask_slots for multi-slot clipboard",
+        )
+
+    def test_tool_has_on_save_to_slot_method(self):
+        """SelectiveAlphaTool must define _on_save_to_slot()."""
+        src = self._src()
+        self.assertIn(
+            "def _on_save_to_slot(self",
+            src,
+            "SelectiveAlphaTool must define _on_save_to_slot()",
+        )
+
+    def test_tool_has_on_paste_from_slot_method(self):
+        """SelectiveAlphaTool must define _on_paste_from_slot()."""
+        src = self._src()
+        self.assertIn(
+            "def _on_paste_from_slot(self",
+            src,
+            "SelectiveAlphaTool must define _on_paste_from_slot()",
+        )
+
+    def test_save_to_slot_calls_get_active_zone(self):
+        """_on_save_to_slot must query the canvas for the active zone index."""
+        src = self._src()
+        match = re.search(r"def _on_save_to_slot\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "_on_save_to_slot body not found")
+        body = match.group(0)
+        self.assertIn(
+            "get_active_zone",
+            body,
+            "_on_save_to_slot must call canvas.get_active_zone() to find active zone",
+        )
+
+    def test_paste_from_slot_calls_set_mask_from_array(self):
+        """_on_paste_from_slot must call canvas.set_mask_from_array to apply
+        the saved mask onto the active zone."""
+        src = self._src()
+        match = re.search(
+            r"def _on_paste_from_slot\(self.*?\n(?=    def |\Z)", src, re.S
+        )
+        self.assertIsNotNone(match, "_on_paste_from_slot body not found")
+        body = match.group(0)
+        self.assertIn(
+            "set_mask_from_array",
+            body,
+            "_on_paste_from_slot must call canvas.set_mask_from_array()",
+        )
+
+    def test_saved_masks_group_present_in_setup_ui(self):
+        """_setup_ui must create a 'Saved Masks' QGroupBox."""
+        src = self._src()
+        self.assertIn(
+            '"Saved Masks"',
+            src,
+            "_setup_ui must create a 'Saved Masks' group for the slot collection",
+        )
+
+    def test_five_save_slots_created(self):
+        """The 'Saved Masks' panel must create exactly 5 save/paste slot pairs."""
+        src = self._src()
+        # Look for _MASK_SLOT_COUNT = 5 constant
+        self.assertIn(
+            "_MASK_SLOT_COUNT = 5",
+            src,
+            "must define _MASK_SLOT_COUNT = 5 for the collection size",
+        )
+
+    # ------------------------------------------------------------------
+    # Autocorrect checkbox placement
+    # ------------------------------------------------------------------
+
+    def test_autocorrect_checkbox_inside_tool_size_group(self):
+        """The autocorrect checkbox must be added to the Tool Size QGroupBox
+        (sg.addWidget) so it is not floating outside any group."""
+        src = self._src()
+        # Find the Tool Size group setup block
+        tool_size_match = re.search(
+            r'size_box\s*=\s*QGroupBox\("Tool Size"\).*?lv\.addWidget\(size_box\)',
+            src, re.S
+        )
+        self.assertIsNotNone(
+            tool_size_match,
+            "Could not find Tool Size group setup in _setup_ui",
+        )
+        block = tool_size_match.group(0)
+        self.assertIn(
+            "_autocorrect_chk",
+            block,
+            "autocorrect checkbox must be added inside the Tool Size group block",
+        )

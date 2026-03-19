@@ -455,6 +455,10 @@ class SelectiveAlphaCanvas(QWidget):
     def set_active_zone(self, idx: int) -> None:
         self._active_zone = max(0, min(NUM_ZONES - 1, idx))
 
+    def get_active_zone(self) -> int:
+        """Return the index of the currently active painting zone."""
+        return self._active_zone
+
     def set_tool(self, tool: str) -> None:
         """Set the active tool name."""
         self._tool   = tool
@@ -1224,12 +1228,13 @@ class _ZoneRow(QWidget):
         self._swatch.clicked.connect(self._on_pick_color)
         top.addWidget(self._swatch)
 
-        # Name label
+        # Name label — expanding so it fills available space and never clips
         name_lbl = QLabel(color_name)
-        name_lbl.setMinimumWidth(52)
+        name_lbl.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        name_lbl.setMinimumWidth(60)
         top.addWidget(name_lbl)
-
-        top.addStretch()
 
         # Alpha label + spinbox
         top.addWidget(QLabel("α:"))
@@ -1524,7 +1529,7 @@ class SelectiveAlphaTool(QWidget):
 
         lv.addWidget(tools_box)
 
-        # Tool sizes
+        # Tool sizes + Auto-correct grouped together
         size_box = QGroupBox("Tool Size")
         sg = QGridLayout(size_box)
         sg.setSpacing(4)
@@ -1546,9 +1551,10 @@ class SelectiveAlphaTool(QWidget):
             lambda v: self._canvas.set_eraser_size(v)
         )
         sg.addWidget(self._eraser_spin, 1, 1)
-        lv.addWidget(size_box)
 
-        # Auto-correct
+        # Auto-correct sits inside the Tool Size group so it is clearly
+        # associated with the drawing tools and is never hidden by the
+        # zone list scrolling out of view.
         self._autocorrect_chk = QCheckBox("Auto-correct (snap to edges)")
         self._autocorrect_chk.setToolTip(
             "When checked, freehand and line strokes are automatically snapped\n"
@@ -1558,7 +1564,8 @@ class SelectiveAlphaTool(QWidget):
         self._autocorrect_chk.toggled.connect(
             lambda v: self._canvas.set_autocorrect(v)
         )
-        lv.addWidget(self._autocorrect_chk)
+        sg.addWidget(self._autocorrect_chk, 2, 0, 1, 2)
+        lv.addWidget(size_box)
 
         # Zoom controls
         zoom_box = QGroupBox("Zoom")
@@ -1649,6 +1656,75 @@ class SelectiveAlphaTool(QWidget):
                 zv.addWidget(sep)
         self._zone_rows[0].set_selected(True)
         lv.addWidget(zones_box)
+
+        # ── Saved Masks Collection ─────────────────────────────────────────
+        # Up to _MASK_SLOT_COUNT named slots that survive image changes, so
+        # the user can copy zones from one image and paste onto another.
+        _MASK_SLOT_COUNT = 5
+        self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_COUNT
+        self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_COUNT
+        self._slot_status_labels: list[QLabel] = []
+        self._slot_paste_btns: list[QPushButton] = []
+
+        slots_box = QGroupBox("Saved Masks")
+        sv = QVBoxLayout(slots_box)
+        sv.setSpacing(2)
+        sv.setContentsMargins(4, 4, 4, 4)
+
+        slots_note = QLabel(
+            "Save a zone's mask to a slot and load it onto any zone later,\n"
+            "even after switching to a different image."
+        )
+        slots_note.setWordWrap(True)
+        slots_note.setStyleSheet("color: #999; font-size: 10px;")
+        sv.addWidget(slots_note)
+
+        for slot_idx in range(_MASK_SLOT_COUNT):
+            slot_row = QHBoxLayout()
+            slot_row.setSpacing(4)
+
+            slot_lbl = QLabel(f"Slot {slot_idx + 1}:")
+            slot_lbl.setFixedWidth(46)
+            slot_row.addWidget(slot_lbl)
+
+            status_lbl = QLabel("(empty)")
+            status_lbl.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            )
+            status_lbl.setStyleSheet("color: #888; font-size: 10px;")
+            status_lbl.setToolTip(f"Slot {slot_idx + 1}: currently empty.")
+            slot_row.addWidget(status_lbl)
+            self._slot_status_labels.append(status_lbl)
+
+            save_btn = QPushButton("Save")
+            save_btn.setFixedWidth(46)
+            save_btn.setMinimumHeight(22)
+            save_btn.setToolTip(
+                f"Save the active zone's mask into Slot {slot_idx + 1}.\n"
+                "Overwrites any previously saved mask in this slot."
+            )
+            save_btn.clicked.connect(
+                lambda _checked, idx=slot_idx: self._on_save_to_slot(idx)
+            )
+            slot_row.addWidget(save_btn)
+
+            paste_btn = QPushButton("Paste")
+            paste_btn.setFixedWidth(46)
+            paste_btn.setMinimumHeight(22)
+            paste_btn.setEnabled(False)
+            paste_btn.setToolTip(
+                f"Paste the mask stored in Slot {slot_idx + 1} into the\n"
+                "currently active zone, replacing its painted mask."
+            )
+            paste_btn.clicked.connect(
+                lambda _checked, idx=slot_idx: self._on_paste_from_slot(idx)
+            )
+            slot_row.addWidget(paste_btn)
+            self._slot_paste_btns.append(paste_btn)
+
+            sv.addLayout(slot_row)
+
+        lv.addWidget(slots_box)
 
         lv.addStretch()
 
@@ -1925,6 +2001,54 @@ class SelectiveAlphaTool(QWidget):
             return
         # Attempt to paste; set_mask_from_array validates dimensions.
         self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard.copy())
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
+    def _on_save_to_slot(self, slot_idx: int) -> None:
+        """Save the active zone's mask into the named collection slot *slot_idx*."""
+        active_zone = self._canvas.get_active_zone() if self._canvas.has_image() else -1
+        if not self._canvas.has_image() or active_zone < 0:
+            QMessageBox.information(
+                self, "No image loaded",
+                "Please open an image and paint a zone mask before saving to a slot."
+            )
+            return
+        arr = self._canvas.get_mask_as_array(active_zone)
+        if arr is None:
+            QMessageBox.information(
+                self, "Nothing to save",
+                f"Zone {active_zone + 1} has no painted mask to save."
+            )
+            return
+        self._mask_slots[slot_idx] = arr.copy()
+        zone_name = ZONE_NAMES[active_zone] if active_zone < len(ZONE_NAMES) else f"Zone {active_zone + 1}"
+        info = zone_name
+        self._mask_slot_info[slot_idx] = info
+        # Update UI
+        lbl = self._slot_status_labels[slot_idx]
+        lbl.setText(info)
+        lbl.setStyleSheet("color: #aef; font-size: 10px;")
+        lbl.setToolTip(f"Slot {slot_idx + 1}: saved from {info}.")
+        self._slot_paste_btns[slot_idx].setEnabled(True)
+        if self._sound is not None:
+            self._sound.play_mask_copy()
+
+    def _on_paste_from_slot(self, slot_idx: int) -> None:
+        """Paste the mask stored in *slot_idx* into the currently active zone."""
+        if self._mask_slots[slot_idx] is None:
+            QMessageBox.information(
+                self, "Slot empty",
+                f"Slot {slot_idx + 1} is empty. Save a mask there first."
+            )
+            return
+        if not self._canvas.has_image():
+            QMessageBox.information(
+                self, "No image loaded",
+                "Please open an image before pasting a saved mask."
+            )
+            return
+        active_zone = self._canvas.get_active_zone()
+        self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx].copy())
         if self._sound is not None:
             self._sound.play_mask_paste()
 
