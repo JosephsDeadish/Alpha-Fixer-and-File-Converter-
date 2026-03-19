@@ -6,6 +6,7 @@ Provides utilities for the Selective Alpha editor:
   - Edge-constrained flood fill (smart-fill tool)
   - Mask auto-correct (snap drawn mask boundary to nearby edges)
   - Applying per-zone alpha values to the final image
+  - Auto-detection of distinct alpha zones in a source image
 """
 
 from __future__ import annotations
@@ -348,3 +349,72 @@ def composite_zones(
             if zero_mask.any():
                 out[zero_mask, 3] = float(oa)
     return np.clip(out, 0, 255).astype(np.uint8)
+
+
+# ---------------------------------------------------------------------------
+# Auto-detection of distinct alpha zones
+# ---------------------------------------------------------------------------
+
+
+def detect_alpha_zones(
+    arr: np.ndarray,
+    min_pixel_fraction: float = 0.005,
+) -> list[tuple[int, np.ndarray]]:
+    """Detect distinct alpha-value zones in an RGBA uint8 array.
+
+    Looks at the alpha channel and identifies pixel groups that share the same
+    alpha value.  Only *significant* alpha values — those covering at least
+    *min_pixel_fraction* of all pixels — are returned.
+
+    The function returns an empty list when:
+      - The array is not RGBA (fewer than 4 channels).
+      - Fewer than 2 distinct significant alpha values exist (i.e. the image is
+        uniformly transparent or uniformly opaque).
+      - More than :data:`NUM_ZONES` distinct significant alpha values exist
+        (indicates a smooth gradient rather than discrete zones).
+
+    Parameters
+    ----------
+    arr               : uint8 ndarray (h, w, 4) – RGBA source array.
+    min_pixel_fraction: minimum fraction of total pixels a unique alpha value
+                        must occupy to be considered a zone.  Default 0.5%.
+
+    Returns
+    -------
+    list of ``(alpha_value, bool_mask)`` tuples, sorted by pixel count
+    (largest zone first), at most :data:`NUM_ZONES` entries.
+    """
+    if arr.ndim != 3 or arr.shape[2] < 4:
+        return []
+
+    alpha = arr[:, :, 3]
+    total = alpha.size
+    min_pixels = max(1, int(total * min_pixel_fraction))
+
+    unique_vals, counts = np.unique(alpha, return_counts=True)
+
+    # Keep only alpha values that represent at least min_pixel_fraction of pixels.
+    significant = [
+        (int(v), int(c))
+        for v, c in zip(unique_vals, counts)
+        if c >= min_pixels
+    ]
+
+    # Need at least 2 distinct values to auto-populate zones.
+    if len(significant) < 2:
+        return []
+
+    # More than NUM_ZONES distinct values → likely a gradient; skip auto-detect.
+    if len(significant) > NUM_ZONES:
+        return []
+
+    # Sort by descending pixel count (most common zone first).
+    significant.sort(key=lambda x: -x[1])
+
+    result: list[tuple[int, np.ndarray]] = []
+    for alpha_val, _ in significant:
+        bool_mask = alpha == alpha_val
+        result.append((alpha_val, bool_mask))
+
+    return result
+

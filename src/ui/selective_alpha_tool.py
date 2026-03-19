@@ -57,6 +57,7 @@ from ..core.selective_alpha_processor import (
     autocorrect_mask,
     apply_selective_alpha,
     composite_zones,
+    detect_alpha_zones,
 )
 
 # ---------------------------------------------------------------------------
@@ -380,6 +381,45 @@ class SelectiveAlphaCanvas(QWidget):
         self._composite_dirty = True
         self.update()
         self.mask_changed.emit(idx)
+        self.undo_available.emit(bool(self._history))
+        self.redo_available.emit(False)
+
+    def populate_zones_from_detection(
+        self, zones: list[tuple[int, np.ndarray]]
+    ) -> None:
+        """Bulk-load auto-detected alpha masks into the canvas.
+
+        All zone masks are set in a single undo step so the user can revert
+        the entire auto-population with one Ctrl+Z.  Only zones present in
+        *zones* are modified; any remaining zones keep their current (empty)
+        state.
+
+        Parameters
+        ----------
+        zones : list of ``(alpha_value, bool_mask)`` tuples as returned by
+                :func:`~selective_alpha_processor.detect_alpha_zones`.
+        """
+        if self._src_img is None or not zones:
+            return
+        iw, ih = self._src_img.size
+        self._push_history()
+        for i, (_, bool_mask) in enumerate(zones):
+            if i >= NUM_ZONES:
+                break
+            if bool_mask.shape != (ih, iw):
+                continue
+            mask_arr = (bool_mask.astype(np.uint8)) * 255
+            new_mask = Image.fromarray(mask_arr, mode="L")
+            if self._masks[i] is not None:
+                self._masks[i].close()
+            self._masks[i] = new_mask
+        self._composite_dirty = True
+        self.update()
+        for i in range(min(len(zones), NUM_ZONES)):
+            try:
+                self.mask_changed.emit(i)
+            except RuntimeError:
+                pass
         self.undo_available.emit(bool(self._history))
         self.redo_available.emit(False)
 
@@ -1800,6 +1840,57 @@ class SelectiveAlphaTool(QWidget):
             img.close()
         self._result_history.clear()
         self._btn_undo_process.setEnabled(False)
+        # Auto-populate zone masks if the image has multiple distinct alphas.
+        self._auto_populate_zones_from_image()
+
+    def _auto_populate_zones_from_image(self) -> None:
+        """Auto-detect distinct alpha zones in the loaded image and populate them.
+
+        When the source image contains 2–7 significant distinct alpha values
+        (each covering ≥ 0.5 % of pixels) the method automatically:
+          - Paints each zone mask to cover pixels sharing that alpha value.
+          - Sets the corresponding alpha spinbox to the detected value.
+          - Makes all populated zones visible.
+
+        The entire operation is a single undo step.  If the image has only one
+        alpha value, or more than NUM_ZONES distinct significant values (smooth
+        gradient), nothing happens.
+        """
+        src_img = self._canvas.get_source_image()
+        if src_img is None:
+            return
+
+        # Build RGBA array for analysis.
+        if src_img.mode == "RGBA":
+            arr = np.array(src_img, dtype=np.uint8)
+        else:
+            tmp = src_img.convert("RGBA")
+            try:
+                arr = np.array(tmp, dtype=np.uint8)
+            finally:
+                tmp.close()
+
+        zones = detect_alpha_zones(arr)
+        del arr  # free memory; masks will be stored inside the canvas
+
+        if not zones:
+            return
+
+        # Populate canvas masks in one undo step.
+        self._canvas.populate_zones_from_detection(zones)
+
+        # Sync alpha spinboxes and zone visibility.
+        for i, (alpha_val, _) in enumerate(zones):
+            if i >= len(self._zone_rows):
+                break
+            row = self._zone_rows[i]
+            row.set_alpha(alpha_val)
+            # Ensure the visibility toggle is on for this zone.
+            row._vis_btn.setChecked(True)
+            self._canvas.set_zone_visible(i, True)
+
+        # Reveal all populated zones.
+        self._on_show_all_zones()
 
     def _on_save(self) -> None:
         if self._result_img is None:
