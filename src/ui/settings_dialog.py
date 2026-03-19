@@ -1376,18 +1376,6 @@ class SettingsDialog(QDialog):
         self._update_emoji_display()
         self.settings_changed.emit()
 
-    # ------------------------------------------------------------------
-    # Sound file browser
-    # ------------------------------------------------------------------
-
-    def _browse_sound(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select Click Sound", "",
-            "WAV Files (*.wav);;All Files (*)",
-        )
-        if path:
-            self._click_sound_edit.setText(path)
-
     def _reset_all_settings(self) -> None:
         """Ask the user then wipe all settings back to factory defaults."""
         from PyQt6.QtWidgets import QMessageBox
@@ -1454,34 +1442,9 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_sound", self._use_theme_sound_check.isChecked())
         self.settings_changed.emit()
 
-    def _on_sound_path_changed(self) -> None:
-        self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
-        self.settings_changed.emit()
-
     def _on_sound_volume_changed(self, value: int) -> None:
         self._settings.set("sound_volume", value)
         # No settings_changed emit needed — volume is read at play time.
-
-    def _on_sound_event_changed(self) -> None:
-        """Save per-event sound toggle states."""
-        self._settings.set("sound_success", self._sound_success_check.isChecked())
-        self._settings.set("sound_error", self._sound_error_check.isChecked())
-        self._settings.set("sound_unlock", self._sound_unlock_check.isChecked())
-        self._settings.set("sound_file_add", self._sound_file_add_check.isChecked())
-        self._settings.set("sound_preview", self._sound_preview_check.isChecked())
-        self._settings.set("sound_process_start", self._sound_process_start_check.isChecked())
-        self._settings.set("sound_file_remove", self._sound_file_remove_check.isChecked())
-        self._settings.set("sound_theme_change", self._sound_theme_change_check.isChecked())
-        self._settings.set("sound_tab_switch", self._sound_tab_switch_check.isChecked())
-        self._settings.set("sound_drag_enter", self._sound_drag_enter_check.isChecked())
-        self._settings.set("sound_zone_paint", self._sound_zone_paint_check.isChecked())
-        self._settings.set("sound_mask_copy", self._sound_mask_copy_check.isChecked())
-        self._settings.set("sound_mask_paste", self._sound_mask_paste_check.isChecked())
-        self._settings.set("sound_bat_screech", self._sound_bat_screech_check.isChecked())
-        self._settings.set("sound_cat_meow", self._sound_cat_meow_check.isChecked())
-        self._settings.set("sound_dog_bark", self._sound_dog_bark_check.isChecked())
-        self._settings.set("sound_frog_croak", self._sound_frog_croak_check.isChecked())
-        self._settings.set("sound_batch_done", self._sound_batch_done_check.isChecked())
 
     def _on_trail_changed(self) -> None:
         enabled = self._trail_check.isChecked()

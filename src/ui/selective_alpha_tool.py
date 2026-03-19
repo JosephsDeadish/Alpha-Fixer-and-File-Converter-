@@ -45,7 +45,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
-    QButtonGroup, QFrame, QColorDialog,
+    QButtonGroup, QFrame, QColorDialog, QMenu,
 )
 
 from ..core.selective_alpha_processor import (
@@ -119,9 +119,11 @@ class SelectiveAlphaCanvas(QWidget):
     redo_available   : bool – True when there is at least one redo step available.
     """
 
-    mask_changed   = pyqtSignal(int)
-    undo_available = pyqtSignal(bool)
-    redo_available = pyqtSignal(bool)
+    mask_changed    = pyqtSignal(int)
+    undo_available  = pyqtSignal(bool)
+    redo_available  = pyqtSignal(bool)
+    copy_requested  = pyqtSignal(int)
+    paste_requested = pyqtSignal(int)
 
     # ------------------------------------------------------------------ init
 
@@ -198,6 +200,16 @@ class SelectiveAlphaCanvas(QWidget):
         # When True, fully-transparent source pixels inside a painted zone
         # have their output alpha lifted so the overlay remains visible.
         self._show_zero_alpha: bool = False
+
+        # ---- Show-alpha-labels flag (draw α value text at zone centroids) -
+        self._show_alpha_labels: bool = False
+        # Per-zone alpha values mirrored from the spinboxes for label drawing.
+        self._zone_alphas: list[int] = [255] * NUM_ZONES
+        # Cached image-pixel centroids per zone; recomputed in _rebuild_composite.
+        self._zone_centroids: list[tuple[float, float] | None] = [None] * NUM_ZONES
+
+        # ---- Paste-available flag (for context menu) ----------------------
+        self._paste_available: bool = False
 
         # ---- Cursor position for brush-size preview circle ---------------
         self._cursor_pos: QPointF | None = None
@@ -343,6 +355,23 @@ class SelectiveAlphaCanvas(QWidget):
             self._show_zero_alpha = enabled
             self._composite_dirty = True
             self.update()
+
+    def set_show_alpha_labels(self, enabled: bool) -> None:
+        """Toggle drawing of per-zone alpha-value text at zone centroids."""
+        if self._show_alpha_labels != enabled:
+            self._show_alpha_labels = enabled
+            self.update()
+
+    def set_zone_alpha_label(self, idx: int, value: int) -> None:
+        """Update the cached alpha value for zone *idx* (used by label overlay)."""
+        if 0 <= idx < NUM_ZONES:
+            self._zone_alphas[idx] = value
+            if self._show_alpha_labels:
+                self.update()
+
+    def set_paste_available(self, enabled: bool) -> None:
+        """Set whether a mask is available to paste (controls context-menu state)."""
+        self._paste_available = enabled
 
     def get_zone_color(self, idx: int) -> tuple[int, int, int, int]:
         """Return the (R, G, B, overlay_alpha) tuple for zone *idx*."""
@@ -727,6 +756,17 @@ class SelectiveAlphaCanvas(QWidget):
                                show_zero_alpha=self._show_zero_alpha)
         self._composite_qimg = _np_to_qimage(comp)
         self._composite_dirty = False
+        # Recompute per-zone centroids (image-pixel coords) for label overlay.
+        for i, mask in enumerate(self._masks):
+            if mask is None:
+                self._zone_centroids[i] = None
+            else:
+                arr = np.array(mask, dtype=np.uint8)
+                ys, xs = np.where(arr > 127)
+                if len(xs):
+                    self._zone_centroids[i] = (float(xs.mean()), float(ys.mean()))
+                else:
+                    self._zone_centroids[i] = None
 
     def paintEvent(self, event) -> None:   # noqa: N802
         if self._src_img is None:
@@ -772,7 +812,55 @@ class SelectiveAlphaCanvas(QWidget):
         # Draw brush / eraser size preview circle at the cursor position.
         self._draw_cursor_circle(p)
 
+        # Draw alpha-value labels at zone centroids when the toggle is on.
+        if self._show_alpha_labels and self._src_img is not None:
+            self._draw_alpha_labels(p)
+
         p.end()
+
+    def _draw_alpha_labels(self, painter: QPainter) -> None:
+        """Draw each visible zone's alpha value as text at its centroid."""
+        s, ox, oy = self._transform()
+        font = QFont("Arial", 10)
+        font.setBold(True)
+        painter.setFont(font)
+        for i in range(NUM_ZONES):
+            if not self._zone_visible[i]:
+                continue
+            centroid = self._zone_centroids[i]
+            if centroid is None:
+                continue
+            cx_img, cy_img = centroid
+            cx_w = cx_img * s + ox
+            cy_w = cy_img * s + oy
+            text = str(self._zone_alphas[i])
+            zc = _zone_qcolor(i, 255, color_override=self._zone_colors[i])
+            # Shadow for readability
+            painter.setPen(QColor(0, 0, 0, 200))
+            painter.drawText(QPointF(cx_w + 1.0, cy_w + 1.0), text)
+            # Foreground
+            painter.setPen(zc)
+            painter.drawText(QPointF(cx_w, cy_w), text)
+
+    def contextMenuEvent(self, event) -> None:   # noqa: N802
+        """Right-click context menu for copy/paste of the active zone mask."""
+        menu = QMenu(self)
+        copy_act  = menu.addAction("📋  Copy Mask (active zone)")
+        paste_act = menu.addAction("📌  Paste Mask (active zone)")
+        has_img = self._src_img is not None
+        copy_act.setEnabled(has_img)
+        paste_act.setEnabled(self._paste_available and has_img)
+        action = menu.exec(event.globalPos())
+        if action == copy_act:
+            try:
+                self.copy_requested.emit(self._active_zone)
+            except RuntimeError:
+                pass
+        elif action == paste_act:
+            try:
+                self.paste_requested.emit(self._active_zone)
+            except RuntimeError:
+                pass
 
     def _draw_preview(self, painter: QPainter) -> None:
         """Draw rubber-band shape preview during drag."""
@@ -1511,6 +1599,15 @@ class SelectiveAlphaTool(QWidget):
         )
         zv.addWidget(self._show_zero_alpha_chk)
 
+        # "Show α values" checkbox
+        self._show_alpha_labels_chk = QCheckBox("Show α values on canvas")
+        self._show_alpha_labels_chk.setChecked(False)
+        self._show_alpha_labels_chk.setToolTip(
+            "When checked, each zone's alpha value is drawn as text at the\n"
+            "centre of its painted area on the canvas.  Off by default."
+        )
+        zv.addWidget(self._show_alpha_labels_chk)
+
         # Thin separator
         sep0 = QFrame()
         sep0.setFrameShape(QFrame.Shape.HLine)
@@ -1556,6 +1653,9 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.mask_changed.connect(self._on_mask_changed)
         self._canvas.undo_available.connect(self._btn_undo.setEnabled)
         self._canvas.redo_available.connect(self._btn_redo.setEnabled)
+        # Wire canvas context-menu copy/paste signals.
+        self._canvas.copy_requested.connect(self._on_copy_mask)
+        self._canvas.paste_requested.connect(self._on_paste_mask)
 
         # Wire zone visibility signals now that _canvas exists.
         for row in self._zone_rows:
@@ -1563,6 +1663,13 @@ class SelectiveAlphaTool(QWidget):
 
         # Wire show-zero-alpha checkbox.
         self._show_zero_alpha_chk.toggled.connect(self._canvas.set_show_zero_alpha)
+        # Wire show-alpha-labels checkbox.
+        self._show_alpha_labels_chk.toggled.connect(self._canvas.set_show_alpha_labels)
+        # Keep canvas alpha-label values in sync with spinboxes.
+        for i, row in enumerate(self._zone_rows):
+            row._alpha_spin.valueChanged.connect(
+                lambda v, idx=i: self._canvas.set_zone_alpha_label(idx, v)
+            )
 
         # Wrap canvas + status label in a vertical layout.
         right_widget = QWidget()
@@ -1590,6 +1697,7 @@ class SelectiveAlphaTool(QWidget):
         self._eraser_spin.valueChanged.connect(lambda _: self._save_settings())
         self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
         self._show_zero_alpha_chk.toggled.connect(lambda _: self._save_settings())
+        self._show_alpha_labels_chk.toggled.connect(lambda _: self._save_settings())
         for row in self._zone_rows:
             row._alpha_spin.valueChanged.connect(lambda _: self._save_settings())
 
@@ -1631,6 +1739,10 @@ class SelectiveAlphaTool(QWidget):
             self._show_zero_alpha_chk.setChecked(
                 bool(self._settings.get("sa_show_zero_alpha", False))
             )
+            # Restore show-alpha-labels toggle
+            self._show_alpha_labels_chk.setChecked(
+                bool(self._settings.get("sa_show_alpha_labels", False))
+            )
             # Restore last-used drawing tool
             last_tool = str(self._settings.get("sa_last_tool", "freehand"))
             if last_tool in self._tool_btns:
@@ -1654,6 +1766,7 @@ class SelectiveAlphaTool(QWidget):
         self._settings.set("sa_eraser_size", self._eraser_spin.value())
         self._settings.set("sa_autocorrect", self._autocorrect_chk.isChecked())
         self._settings.set("sa_show_zero_alpha", self._show_zero_alpha_chk.isChecked())
+        self._settings.set("sa_show_alpha_labels", self._show_alpha_labels_chk.isChecked())
         self._settings.set("sa_last_tool",   self._canvas._tool)
 
     def closeEvent(self, event) -> None:  # noqa: N802
@@ -1772,9 +1885,10 @@ class SelectiveAlphaTool(QWidget):
             )
             return
         self._mask_clipboard = arr
-        # Enable Paste button on all zones.
+        # Enable Paste button on all zone rows and the canvas context menu.
         for row in self._zone_rows:
             row.set_paste_enabled(True)
+        self._canvas.set_paste_available(True)
         if self._sound is not None:
             self._sound.play_mask_copy()
 
