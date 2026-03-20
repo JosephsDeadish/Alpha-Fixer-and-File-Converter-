@@ -548,7 +548,7 @@ SHARK_BAIT_THEME = {
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
     "_banner_anim": "shake",
-    "_button_anim": "fall",
+    "_button_anim": "bite",
     "_trail": "wave",
 }
 

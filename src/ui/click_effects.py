@@ -459,6 +459,74 @@ _SPAWNERS = {
 
 
 # ---------------------------------------------------------------------------
+# Gore drip (periodic blood-drop particles for Gore / gore-effect themes)
+# ---------------------------------------------------------------------------
+
+class _GoreDrip(QObject):
+    """Spawns slow-falling blood-drop particles from button tops periodically.
+
+    Activated whenever the active click-effect key is ``"gore"``.  Drops fall
+    from random buttons in the main window, giving the UI the impression of
+    perpetually dripping blood.
+    """
+
+    _DRIP_INTERVAL_MS = 900  # spawn a new drip cluster roughly every 0.9 s
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._DRIP_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn_drip)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn_drip(self) -> None:
+        from PyQt6.QtWidgets import QPushButton
+        main_window = self._overlay._main_window
+        if main_window is None or not main_window.isVisible():
+            return
+        btns = [w for w in main_window.findChildren(QPushButton)
+                if w.isVisible() and w.width() > 20]
+        if not btns:
+            return
+        btn = random.choice(btns)
+        # Map top-center of button into main-window coordinates
+        top_local = btn.rect().topLeft() + btn.rect().topRight()
+        top_local_x = btn.rect().center().x()
+        top_local_y = 0
+        from PyQt6.QtCore import QPoint
+        global_pt = btn.mapToGlobal(QPoint(top_local_x, top_local_y))
+        mw_pt = main_window.mapFromGlobal(global_pt)
+        x, y = mw_pt.x(), mw_pt.y()
+
+        drip_colors = ["#880000", "#aa0000", "#cc1133", "#660000", "#990000", "#bb0022"]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            vx = random.uniform(-0.4, 0.4)
+            vy = random.uniform(1.5, 3.5)  # falling downward
+            color = QColor(random.choice(drip_colors))
+            size = random.uniform(4, 8)
+            life = random.uniform(1.0, 2.2)
+            p = _Particle(
+                x + random.uniform(-4, 4), y,
+                vx, vy, life,
+                "circle", size, color, "",
+            )
+            self._overlay._particles.append(p)
+
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
 # Bat flock (periodic background animation for Bat Cave theme)
 # ---------------------------------------------------------------------------
 
@@ -639,6 +707,7 @@ class ClickEffectsOverlay(QWidget):
         self._click_count = 0
         self._bat_flock: _BatFlock | None = None
         self._fairy_flock: _FairyFlock | None = None
+        self._gore_drip: _GoreDrip | None = None
         self._banner_flock: _BannerFlock | None = None
         self._banner_flock_active: bool = False
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
@@ -687,6 +756,8 @@ class ClickEffectsOverlay(QWidget):
                 self._bat_flock.stop()
             if self._fairy_flock:
                 self._fairy_flock.stop()
+            if self._gore_drip:
+                self._gore_drip.stop()
             # Only hide the overlay if the banner flock is also inactive.
             # When banner flock is running we still need the overlay visible
             # so flying particles can be rendered even without click effects.
@@ -743,6 +814,14 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._fairy_flock:
                 self._fairy_flock.stop()
+        # Manage gore drip timer
+        if effect_key == "gore" and self._enabled:
+            if self._gore_drip is None:
+                self._gore_drip = _GoreDrip(self)
+            self._gore_drip.start()
+        else:
+            if self._gore_drip:
+                self._gore_drip.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
@@ -1038,6 +1117,10 @@ class ButtonPressAnimator(QObject):
     # amount of memory; this just caps runaway accumulation during rapid
     # clicking.
     _MAX_ACTIVE = 20
+    # Maximum bite level (progressive damage stages)
+    _MAX_BITE = 6
+    # Milliseconds of inactivity before bite level decays one step
+    _BITE_DECAY_MS = 5000
 
     def __init__(self, main_window: QWidget,
                  click_effects: "ClickEffectsOverlay | None" = None):
@@ -1049,6 +1132,10 @@ class ButtonPressAnimator(QObject):
         # Keep references to running animation groups so they are not
         # garbage-collected before they finish.
         self._active: list = []
+        # Bite-mark tracking: maps button id() → (level, decay_timer)
+        self._bite_levels: dict[int, int] = {}
+        self._bite_timers: dict[int, QTimer] = {}
+        self._bite_widgets: dict[int, "QWidget | None"] = {}  # weak refs via id
 
     # ------------------------------------------------------------------
     # Public API
@@ -1107,6 +1194,8 @@ class ButtonPressAnimator(QObject):
             self._do_shatter(btn)
         elif mode == "abduct":
             self._do_abduct(btn)
+        elif mode == "bite":
+            self._do_bite(btn)
 
     # ------------------------------------------------------------------
     # Individual animation implementations
@@ -1265,6 +1354,97 @@ class ButtonPressAnimator(QObject):
         self._start(group)
         # Spawn click particles from the button centre
         self._do_shatter(btn)
+
+    # ------------------------------------------------------------------
+
+    def _do_bite(self, btn: QWidget) -> None:
+        """Progressive shark-bite animation.
+
+        Each click increments the button's ``bite level`` (capped at
+        ``_MAX_BITE``).  The level determines how many particles are spawned
+        and how intense they appear (more blood/sharks at higher levels).
+        A per-button decay timer resets the level step-by-step after
+        ``_BITE_DECAY_MS`` ms of inactivity so the button eventually
+        'heals' once the user stops clicking.
+        """
+        bid = id(btn)
+        # Register / increment bite level
+        level = min(self._bite_levels.get(bid, 0) + 1, self._MAX_BITE)
+        self._bite_levels[bid] = level
+        self._bite_widgets[bid] = btn
+
+        # Reset / start the decay timer for this button
+        if bid in self._bite_timers:
+            self._bite_timers[bid].stop()
+            self._bite_timers[bid].deleteLater()
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(self._BITE_DECAY_MS)
+        # Capture bid by value for the closure
+        timer.timeout.connect(lambda b=bid: self._decay_bite(b))
+        self._bite_timers[bid] = timer
+        timer.start()
+
+        # Spawn particles proportional to bite level
+        if self._click_effects is not None:
+            centre_local = btn.rect().center()
+            centre_global = btn.mapToGlobal(centre_local)
+            centre_mw = self._main_window.mapFromGlobal(centre_global)
+            x, y = centre_mw.x(), centre_mw.y()
+
+            # More particles and blood at higher levels
+            shark_emojis = ["🦈", "🩸", "💥", "🐟", "🐠"]
+            shark_colors = ["#1177aa", "#0055cc", "#cc1133", "#aa3355", "#ff4466"]
+            count = max(2, level + 1)
+            for _ in range(count):
+                angle = random.uniform(0, 2 * math.pi)
+                speed = random.uniform(2.0 + level * 0.5, 5.0 + level * 1.0)
+                vx = math.cos(angle) * speed
+                vy = math.sin(angle) * speed
+                # At higher levels, prefer blood/damage emojis
+                if level >= 4:
+                    emoji_pool = ["🩸", "💥", "🦈"]
+                elif level >= 2:
+                    emoji_pool = ["🦈", "🩸", "🐟"]
+                else:
+                    emoji_pool = shark_emojis
+                kind = "text" if random.random() < 0.65 else "circle"
+                color = QColor(random.choice(shark_colors))
+                text = random.choice(emoji_pool) if kind == "text" else ""
+                size = random.uniform(10 + level, 18 + level * 2) if kind == "text" \
+                    else random.uniform(3, 6 + level)
+                p = _Particle(x, y, vx, vy,
+                              random.uniform(0.5, 0.9 + level * 0.1),
+                              kind, size, color, text)
+                self._click_effects._particles.append(p)
+
+            if not self._click_effects._timer.isActive():
+                self._click_effects._timer.start()
+            if not self._click_effects.isVisible():
+                self._click_effects.show()
+
+        # Also do a small press animation so the button responds physically
+        self._do_slide(btn, dy=3, duration=120)
+
+    def _decay_bite(self, bid: int) -> None:
+        """Reduce the bite level for button *bid* by 1 (or remove if zero)."""
+        level = self._bite_levels.get(bid, 0)
+        if level <= 1:
+            self._bite_levels.pop(bid, None)
+            self._bite_timers.pop(bid, None)
+            self._bite_widgets.pop(bid, None)
+        else:
+            self._bite_levels[bid] = level - 1
+            # Schedule next decay step
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(self._BITE_DECAY_MS)
+            timer.timeout.connect(lambda b=bid: self._decay_bite(b))
+            old = self._bite_timers.pop(bid, None)
+            if old is not None:
+                old.deleteLater()
+            self._bite_timers[bid] = timer
+            timer.start()
 
     # ------------------------------------------------------------------
 
