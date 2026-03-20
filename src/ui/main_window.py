@@ -5,7 +5,7 @@ import math
 import sys
 import webbrowser
 
-from PyQt6.QtCore import Qt, QEvent, QRect, QTimer
+from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
@@ -320,6 +320,106 @@ class _SpinningEmojiLabel(QWidget):
         painter.end()
 
 
+# ---------------------------------------------------------------------------
+# Easter-egg helpers
+# ---------------------------------------------------------------------------
+
+class _EasterCollectible(QLabel):
+    """A floating emoji collectible that appears when a secret spot is triggered.
+
+    The label bobs gently while waiting.  Clicking it calls back into
+    MainWindow to perform the theme unlock, play the fanfare, and hide this
+    widget.
+    """
+
+    collected = pyqtSignal()
+
+    # vertical bobbing parameters
+    _BOB_STEP_RAD = 0.15
+    _BOB_AMP_PX   = 5
+    _INTERVAL_MS  = 40
+
+    def __init__(self, emoji: str, tip: str, parent: QWidget):
+        super().__init__(emoji, parent)
+        font = QFont()
+        font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+        font.setPointSize(26)
+        self.setFont(font)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedSize(52, 52)
+        self.setToolTip(tip)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            "background: rgba(0,0,0,120); border-radius: 8px; border: 2px solid #ffcc00;"
+        )
+        self._phase = 0.0
+        self._base_y = 0
+        self._bob_timer = QTimer(self)
+        self._bob_timer.setInterval(self._INTERVAL_MS)
+        self._bob_timer.timeout.connect(self._bob_tick)
+        self.hide()
+
+    def show_at(self, win_pos: QPoint) -> None:
+        """Show the collectible centred on *win_pos* in parent coordinates."""
+        x = win_pos.x() - self.width() // 2
+        y = win_pos.y() - self.height() // 2
+        self._base_y = y
+        self._phase = 0.0
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self._bob_timer.start()
+
+    def dismiss(self) -> None:
+        """Stop animation and hide without emitting *collected*."""
+        self._bob_timer.stop()
+        self.hide()
+
+    def _bob_tick(self) -> None:
+        self._phase = (self._phase + self._BOB_STEP_RAD) % (2 * math.pi)
+        dy = int(self._BOB_AMP_PX * math.sin(self._phase))
+        self.move(self.x(), self._base_y + dy)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._bob_timer.stop()
+            self.hide()
+            self.collected.emit()
+        super().mousePressEvent(event)
+
+
+class _EasterClickFilter(QObject):
+    """Event filter that counts left-clicks on a watched widget.
+
+    When the click count reaches *threshold*, ``triggered`` is emitted with
+    the global position of the click.
+    """
+
+    triggered = pyqtSignal(QPoint)
+
+    def __init__(self, threshold: int, parent: QObject = None):
+        super().__init__(parent)
+        self._threshold = threshold
+        self._count = 0
+
+    def reset(self) -> None:
+        self._count = 0
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._count += 1
+                if self._count >= self._threshold:
+                    self._count = 0
+                    # Map the local click to global coords
+                    try:
+                        gpos = obj.mapToGlobal(event.position().toPoint())
+                    except Exception:
+                        gpos = QPoint(0, 0)
+                    self.triggered.emit(gpos)
+        return False  # never consume the event
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -385,6 +485,50 @@ class MainWindow(QMainWindow):
         (5000, "unlock_coral_reef",   "🪸 'Coral Reef' theme unlocked! (5 000 conversions done)"),
     ]
 
+    # -----------------------------------------------------------------------
+    # Easter-egg spots: (spot_id, click_threshold, unlock_key, collectible_emoji,
+    #                    collectible_tip, unlock_banner_msg)
+    # spot_id is used as a key in _easter_filters and _easter_collectibles.
+    # -----------------------------------------------------------------------
+    _EASTER_SPOTS = [
+        # Left banner panda — click 7× to summon a shark 🦈 → unlocks Deep Ocean
+        ("egg_banner_left",  7,
+         "unlock_ocean",
+         "🦈",
+         "✨ Secret found!  Click the shark to unlock Deep Ocean theme!",
+         "🌊 'Deep Ocean' theme unlocked via secret easter egg!"),
+        # Right banner panda — click 7× to summon a mermaid 🧜 → unlocks Midnight Forest
+        ("egg_banner_right", 7,
+         "unlock_midnight_forest",
+         "🧜",
+         "✨ Secret found!  Click the mermaid to unlock Midnight Forest theme!",
+         "🌙 'Midnight Forest' theme unlocked via secret easter egg!"),
+        # Help button — click 5× to summon a mushroom 🍄 → unlocks Magic Mushroom
+        ("egg_help_btn",     5,
+         "unlock_magic_mushroom",
+         "🍄",
+         "✨ Secret found!  Click the mushroom to unlock Magic Mushroom theme!",
+         "🍄 'Magic Mushroom' theme unlocked via secret easter egg!"),
+        # History tab header — click 6× to summon an otter 🦦 → unlocks Cyber Otter
+        ("egg_history_tab",  6,
+         "unlock_cyber_otter",
+         "🦦",
+         "✨ Secret found!  Click the otter to unlock Cyber Otter theme!",
+         "🦦 'Cyber Otter' theme unlocked via secret easter egg!"),
+        # Status bar — click 5× to summon a ghost 👻 → unlocks Ghost
+        ("egg_status_bar",   5,
+         "unlock_ghost",
+         "👻",
+         "✨ Secret found!  Click the ghost to unlock Ghost theme!",
+         "👻 'Ghost' theme unlocked via secret easter egg!"),
+        # Patreon button — click 8× to summon a pirate ☠ → unlocks Pirate
+        ("egg_patreon_btn",  8,
+         "unlock_pirate",
+         "☠",
+         "✨ Secret found!  Click the skull to unlock Pirate theme!",
+         "🏴‍☠️ 'Pirate' theme unlocked via secret easter egg!"),
+    ]
+
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
@@ -418,6 +562,9 @@ class MainWindow(QMainWindow):
         self._settings_apply_timer.timeout.connect(self._apply_settings_now)
         # Cache last applied stylesheet to avoid redundant setStyleSheet calls
         self._last_stylesheet: str = ""
+        # Easter-egg state: per-spot event filters and collectible widgets
+        self._easter_filters: dict[str, _EasterClickFilter] = {}
+        self._easter_collectibles: dict[str, _EasterCollectible] = {}
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
         # is wasteful; coalesce them into a single update 50ms after the last
@@ -431,6 +578,7 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
         self._apply_theme()
         self._setup_effects()
+        self._setup_easter_eggs()
         # Connect to screen-topology and DPI-change signals so the window
         # geometry stays valid when the user plugs in / removes a monitor or
         # changes the system display-scale setting.
@@ -774,6 +922,98 @@ class MainWindow(QMainWindow):
         else:
             mode = self._settings.get("button_anim_style", "press")
         self._button_anim.set_enabled(True, mode)
+
+    # ------------------------------------------------------------------
+    # Easter-egg discovery system
+    # ------------------------------------------------------------------
+
+    def _setup_easter_eggs(self) -> None:
+        """Create collectible widgets and attach click filters to secret spots."""
+        # Map spot_id → the widget to watch
+        spot_widgets: dict[str, QWidget] = {
+            "egg_banner_left":  self._banner_emoji_left,
+            "egg_banner_right": self._banner_emoji_right,
+            "egg_help_btn":     self._btn_help,
+            "egg_history_tab":  self._history_tab,
+            "egg_status_bar":   self._status_bar,
+            "egg_patreon_btn":  self._btn_patreon,
+        }
+
+        for spot_id, threshold, unlock_key, emoji, tip, banner in self._EASTER_SPOTS:
+            widget = spot_widgets.get(spot_id)
+            if widget is None:
+                continue
+
+            # Create & store the collectible
+            collectible = _EasterCollectible(emoji, tip, self)
+            self._easter_collectibles[spot_id] = collectible
+
+            # Connect its "collected" signal (lambda captures spot_id & data)
+            def _make_collect_handler(sid, uk, bm, col):
+                def _on_collect():
+                    self._on_collectible_collected(sid, uk, bm, col)
+                return _on_collect
+
+            collectible.collected.connect(
+                _make_collect_handler(spot_id, unlock_key, banner, collectible)
+            )
+
+            # Create & attach the click filter
+            filt = _EasterClickFilter(threshold, self)
+            self._easter_filters[spot_id] = filt
+            widget.installEventFilter(filt)
+
+            # Connect the filter's "triggered" signal
+            def _make_trigger_handler(sid, col):
+                def _on_trigger(gpos: QPoint):
+                    self._on_easter_spot_triggered(sid, gpos, col)
+                return _on_trigger
+
+            filt.triggered.connect(_make_trigger_handler(spot_id, collectible))
+
+    def _on_easter_spot_triggered(
+        self, spot_id: str, gpos: QPoint, collectible: "_EasterCollectible"
+    ) -> None:
+        """A secret spot accumulated enough clicks — show the collectible."""
+        if collectible.isVisible():
+            return  # already showing
+        # Map global pos to main-window-local coords for positioning
+        local_pos = self.mapFromGlobal(gpos)
+        # Nudge upward a bit so the collectible appears above the click point
+        local_pos = QPoint(local_pos.x(), local_pos.y() - 30)
+        collectible.show_at(local_pos)
+        # Optionally play a discovery sound (soft chime)
+        try:
+            self._sound.play_file_add()
+        except Exception:
+            pass
+
+    def _on_collectible_collected(
+        self,
+        spot_id: str,
+        unlock_key: str,
+        banner_msg: str,
+        collectible: "_EasterCollectible",
+    ) -> None:
+        """The user clicked a collectible — unlock the theme and celebrate."""
+        try:
+            if not self._settings.get(unlock_key, False):
+                self._settings.set(unlock_key, True)
+                self._unlock_lbl.setText(banner_msg)
+                self._schedule_unlock_clear()
+                try:
+                    self._sound.play_unlock()
+                except Exception:
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
+            else:
+                # Theme was already unlocked — still celebrate with a message
+                self._unlock_lbl.setText(f"✅ Already unlocked!  {banner_msg}")
+                self._schedule_unlock_clear()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Unlock hidden themes based on click count
@@ -1759,6 +1999,13 @@ class MainWindow(QMainWindow):
         if self._click_effects is not None:
             self._click_effects.setGeometry(self.rect())
             self._click_effects.raise_()
+        # Keep any visible easter-egg collectibles on-screen
+        for collectible in self._easter_collectibles.values():
+            if collectible.isVisible():
+                x = max(0, min(self.width()  - collectible.width(),  collectible.x()))
+                y = max(0, min(self.height() - collectible.height(), collectible.y()))
+                collectible.move(x, y)
+                collectible.raise_()
 
     # ------------------------------------------------------------------
     # Lifecycle
