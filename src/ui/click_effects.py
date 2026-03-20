@@ -1105,6 +1105,8 @@ class ButtonPressAnimator(QObject):
             self._do_shake(btn)
         elif mode == "shatter":
             self._do_shatter(btn)
+        elif mode == "abduct":
+            self._do_abduct(btn)
 
     # ------------------------------------------------------------------
     # Individual animation implementations
@@ -1223,6 +1225,47 @@ class ButtonPressAnimator(QObject):
 
     # ------------------------------------------------------------------
     # Helpers
+    # ------------------------------------------------------------------
+
+    def _do_abduct(self, btn: QWidget) -> None:
+        """UFO tractor-beam abduction: button drifts upward as if lifted by a
+        beam, then snaps back down to its original position.
+
+        The animation has three phases:
+          1. Rise – button slides 22 px upward over 280 ms with OutQuad easing.
+          2. Hover – button holds the high position for 120 ms (zero-duration noop
+             simulated with a tiny pause anim).
+          3. Drop – button falls back with InBack easing (slight overshoot).
+        """
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect, QPauseAnimation,
+        )
+        orig = QRect(btn.geometry())
+        high = QRect(orig.translated(0, -22))
+
+        a_rise = QPropertyAnimation(btn, b"geometry", self)
+        a_rise.setDuration(280)
+        a_rise.setStartValue(orig)
+        a_rise.setEndValue(high)
+        a_rise.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        a_hover = QPauseAnimation(120, self)
+
+        a_drop = QPropertyAnimation(btn, b"geometry", self)
+        a_drop.setDuration(200)
+        a_drop.setStartValue(high)
+        a_drop.setEndValue(orig)
+        a_drop.setEasingCurve(QEasingCurve.Type.InBack)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(a_rise)
+        group.addAnimation(a_hover)
+        group.addAnimation(a_drop)
+        self._start(group)
+        # Spawn click particles from the button centre
+        self._do_shatter(btn)
+
     # ------------------------------------------------------------------
 
     def _start(self, group) -> None:

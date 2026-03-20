@@ -516,7 +516,7 @@ MERMAID_THEME = {
     "scrollbar": "#0a1e2e",
     "scrollbar_handle": "#00ccaa",
     "_effect": "mermaid",
-    "_cursor": "emoji:🧜",
+    "_cursor": "emoji:🔱",
     "_trail_color": "#00ccaa",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
@@ -577,7 +577,7 @@ ALIEN_THEME = {
     "_cursor": "emoji:🛸",
     "_trail_color": "#00ff88",
     "_banner_anim": "bounce",
-    "_button_anim": "shake",
+    "_button_anim": "abduct",
     "_trail": "sparkle",
 }
 
@@ -617,7 +617,7 @@ NOODLE_THEME = {
     "_trail_color": "#ffdd44",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "ribbon",
+    "_trail": "noodle",
 }
 
 # ---------------------------------------------------------------------------

@@ -527,6 +527,24 @@ class MainWindow(QMainWindow):
          "☠",
          "✨ Secret found!  Click the skull to unlock Pirate theme!",
          "🏴‍☠️ 'Pirate' theme unlocked via secret easter egg!"),
+        # Converter tab header — click 9× to summon a UFO 🛸 → unlocks Alien
+        ("egg_converter_tab", 9,
+         "unlock_alien",
+         "🛸",
+         "🛸 Secret found!  Click the UFO to unlock Alien theme!",
+         "👽 'Alien' theme unlocked via secret easter egg!"),
+        # Alpha tab header — click 10× to summon a shark 🦈 → unlocks Shark Bait
+        ("egg_alpha_tab",    10,
+         "unlock_shark_bait",
+         "🦈",
+         "🦈 Secret found!  Click the shark to unlock Shark Bait theme!",
+         "🦈 'Shark Bait' theme unlocked via secret easter egg!"),
+        # Selective Alpha tab — click 8× to summon a noodle 🍜 → unlocks Noodle
+        ("egg_selective_tab", 8,
+         "unlock_noodle",
+         "🍜",
+         "🍜 Secret found!  Click the noodle to unlock Noodle theme!",
+         "🍜 'Noodle' theme unlocked via secret easter egg!"),
     ]
 
     def __init__(self, settings: SettingsManager):
@@ -931,12 +949,15 @@ class MainWindow(QMainWindow):
         """Create collectible widgets and attach click filters to secret spots."""
         # Map spot_id → the widget to watch
         spot_widgets: dict[str, QWidget] = {
-            "egg_banner_left":  self._banner_emoji_left,
-            "egg_banner_right": self._banner_emoji_right,
-            "egg_help_btn":     self._btn_help,
-            "egg_history_tab":  self._history_tab,
-            "egg_status_bar":   self._status_bar,
-            "egg_patreon_btn":  self._btn_patreon,
+            "egg_banner_left":   self._banner_emoji_left,
+            "egg_banner_right":  self._banner_emoji_right,
+            "egg_help_btn":      self._btn_help,
+            "egg_history_tab":   self._history_tab,
+            "egg_status_bar":    self._status_bar,
+            "egg_patreon_btn":   self._btn_patreon,
+            "egg_converter_tab": self._converter_tab,
+            "egg_alpha_tab":     self._alpha_tab,
+            "egg_selective_tab": self._selective_alpha_tab,
         }
 
         for spot_id, threshold, unlock_key, emoji, tip, banner in self._EASTER_SPOTS:
