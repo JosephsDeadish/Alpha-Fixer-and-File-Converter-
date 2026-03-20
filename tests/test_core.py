@@ -8239,7 +8239,12 @@ class TestRound36VulgarSAExpansion(unittest.TestCase):
                       "sa_undo _VULGAR block must contain Ctrl+Z shortcut hint")
 
     def test_vulgar_sa_keys_total_count_is_32(self):
-        """Exactly 32 selective-alpha keys must exist in _VULGAR."""
+        """At least 32 selective-alpha keys must exist in _VULGAR.
+
+        New rounds keep adding sa_* tooltip keys, so we assert a lower-bound
+        (≥32) rather than an exact count to avoid updating the number after
+        every expansion.
+        """
         import re
         src = self._src()
         start_v = src.find("_VULGAR:")
@@ -8248,8 +8253,8 @@ class TestRound36VulgarSAExpansion(unittest.TestCase):
             r'^\s{4}\"(sa_[a-z_]+|selective_alpha_tab)\":\s*\[',
             vulgar_chunk, re.MULTILINE
         )
-        self.assertEqual(len(sa_keys), 32,
-                         f"Expected 32 sa_* keys in _VULGAR, found {len(sa_keys)}")
+        self.assertGreaterEqual(len(sa_keys), 32,
+                                f"Expected at least 32 sa_* keys in _VULGAR, found {len(sa_keys)}")
 
     def test_vulgar_minimum_entry_count_is_at_least_6_for_all_keys(self):
         """Every key in _VULGAR must have ≥6 entries after Round 36."""
