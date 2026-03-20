@@ -73,6 +73,7 @@ class SettingsManager:
         "sound_volume": 50,           # 0–100 master volume
         "click_sound_path": "",
         "use_theme_sound": False,
+        "sound_theme_preset": "",         # name of theme whose sounds to use (empty = follow active theme)
         "sound_manual_profile": "soft",   # click-sound profile used when use_theme_sound=False
         # Per-event sound toggles (all on by default when sound_enabled=True)
         "sound_success": True,
@@ -495,6 +496,7 @@ class SettingsManager:
         "theme", "theme_data", "saved_themes",
         # Sound settings
         "sound_enabled", "sound_volume", "click_sound_path", "use_theme_sound",
+        "sound_theme_preset", "sound_manual_profile",
         "sound_success", "sound_error", "sound_unlock", "sound_file_add",
         "sound_preview", "sound_process_start", "sound_file_remove",
         "sound_theme_change", "sound_tab_switch", "sound_drag_enter",

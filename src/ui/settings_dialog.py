@@ -614,16 +614,31 @@ class SettingsDialog(QDialog):
             "Off by default. Individual events can still be muted below."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
-        self._use_theme_sound_check = QCheckBox("Use theme sound (click sound follows the active theme)")
+        self._use_theme_sound_check = QCheckBox("Use theme sound")
         self._use_theme_sound_check.setToolTip(
-            "When enabled the click sound changes to match the active theme.\n"
-            "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc.\n"
+            "When enabled the click sound uses the selected Sound Theme below.\n"
+            "Each theme has a distinct sound profile (e.g. Gore = deep thud,\n"
+            "Panda = soft chime, Alien = bright ping).\n"
             "When disabled, the Sound profile dropdown below is used instead."
         )
         sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
 
+        # Sound theme dropdown (active when "Use theme sound" is ON)
+        sound_gl.addWidget(QLabel("Sound theme:"), 2, 0)
+        self._sound_theme_combo = QComboBox()
+        self._sound_theme_combo.addItem("Auto (follow active visual theme)", userData="")
+        _all_themes = sorted(PRESET_THEMES.keys()) + sorted(HIDDEN_THEMES.keys())
+        for _tname in _all_themes:
+            self._sound_theme_combo.addItem(_tname, userData=_tname)
+        self._sound_theme_combo.setToolTip(
+            "Select which theme's sound profile to use when 'Use theme sound' is enabled.\n"
+            "'Auto' means the click sound follows whichever visual theme is currently active.\n"
+            "Choosing a specific theme lets you use, say, Shark Bait sounds with any visual theme."
+        )
+        sound_gl.addWidget(self._sound_theme_combo, 2, 1)
+
         # Sound profile dropdown (used when "Use theme sound" is OFF)
-        sound_gl.addWidget(QLabel("Sound profile:"), 2, 0)
+        sound_gl.addWidget(QLabel("Sound profile:"), 3, 0)
         self._sound_profile_combo = QComboBox()
         _SOUND_PROFILE_OPTIONS = [
             ("soft",    "Soft — gentle chime 🎵"),
@@ -654,10 +669,10 @@ class SettingsDialog(QDialog):
             "Each profile has a distinct tone that matches different moods.\n"
             "Ignored when 'Use theme sound' is enabled."
         )
-        sound_gl.addWidget(self._sound_profile_combo, 2, 1)
+        sound_gl.addWidget(self._sound_profile_combo, 3, 1)
 
         # Volume slider
-        sound_gl.addWidget(QLabel("Volume:"), 3, 0)
+        sound_gl.addWidget(QLabel("Volume:"), 4, 0)
         vol_row = QHBoxLayout()
         self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._sound_volume_slider.setRange(0, 100)
@@ -673,7 +688,7 @@ class SettingsDialog(QDialog):
         )
         vol_row.addWidget(self._sound_volume_slider, 1)
         vol_row.addWidget(self._sound_volume_lbl)
-        sound_gl.addLayout(vol_row, 3, 1)
+        sound_gl.addLayout(vol_row, 4, 1)
 
         tv.addWidget(grp_sound)
 
@@ -936,6 +951,7 @@ class SettingsDialog(QDialog):
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_toggled)
+        self._sound_theme_combo.currentIndexChanged.connect(self._on_sound_theme_preset_changed)
         self._sound_profile_combo.currentIndexChanged.connect(self._on_sound_profile_changed)
         self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
@@ -1032,7 +1048,7 @@ class SettingsDialog(QDialog):
         # trigger save-and-emit loops.
         controls = [
             self._theme_preset_combo, self._effect_combo, self._sound_check,
-            self._use_theme_sound_check, self._trail_check,
+            self._use_theme_sound_check, self._sound_theme_combo, self._trail_check,
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
             self._cursor_combo, self._use_theme_cursor_check, self._cursor_anim_check, self._font_size_spin,
             self._click_effects_theme_check,
@@ -1066,19 +1082,26 @@ class SettingsDialog(QDialog):
         self._update_emoji_display()
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
-        self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
+        use_theme_sound = self._settings.get("use_theme_sound", False)
+        self._use_theme_sound_check.setChecked(use_theme_sound)
         vol = int(self._settings.get("sound_volume", 50))
         self._sound_volume_slider.setValue(max(0, min(100, vol)))
         self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
+        # Load sound theme preset combo
+        saved_sound_theme = str(self._settings.get("sound_theme_preset", ""))
+        _st_idx = self._sound_theme_combo.findData(saved_sound_theme)
+        if _st_idx >= 0:
+            self._sound_theme_combo.setCurrentIndex(_st_idx)
+        else:
+            self._sound_theme_combo.setCurrentIndex(0)  # "Auto"
+        self._sound_theme_combo.setEnabled(use_theme_sound)
         # Load sound profile combo
         saved_profile = str(self._settings.get("sound_manual_profile", "soft"))
         _profile_idx = self._sound_profile_combo.findData(saved_profile)
         if _profile_idx >= 0:
             self._sound_profile_combo.setCurrentIndex(_profile_idx)
         # Disable profile combo when "use theme sound" is ON
-        self._sound_profile_combo.setEnabled(
-            not self._settings.get("use_theme_sound", False)
-        )
+        self._sound_profile_combo.setEnabled(not use_theme_sound)
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1175,6 +1198,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
+        mgr.register(self._sound_theme_combo, "sound_theme_combo")
         mgr.register(self._sound_profile_combo, "sound_profile_combo")
         mgr.register(self._sound_volume_slider, "sound_volume_slider")
         mgr.register(self._trail_check, "trail_check")
@@ -1495,8 +1519,14 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_use_theme_sound_toggled(self, checked: bool) -> None:
-        """Enable/disable the manual sound profile combo based on theme-sound toggle."""
+        """Enable/disable the sound-theme combo and manual profile combo."""
+        self._sound_theme_combo.setEnabled(checked)
         self._sound_profile_combo.setEnabled(not checked)
+
+    def _on_sound_theme_preset_changed(self) -> None:
+        """Save the selected sound theme preset."""
+        preset = self._sound_theme_combo.currentData()
+        self._settings.set("sound_theme_preset", preset if preset is not None else "")
 
     def _on_sound_profile_changed(self) -> None:
         """Save the manually selected sound profile."""
