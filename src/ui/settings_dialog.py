@@ -132,22 +132,24 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        # Adaptive minimum size: cap at 800×600 but shrink proportionally on
-        # small or low-resolution screens so the dialog is never forced off the
-        # visible area (e.g. 1280×720 laptop with a large taskbar at 125% DPI).
+        # Adaptive minimum size: shrink proportionally on small or low-resolution
+        # screens so the dialog is never forced off the visible area.  We keep the
+        # floor generous enough that all content remains usable; the scroll areas
+        # inside each tab mean even a 400×320 window can reach every control.
         screen = (self.parent().screen() if self.parent() is not None
                   else None) or QApplication.primaryScreen()
         if screen is not None:
             ag = screen.availableGeometry()
-            min_w = min(800, max(560, int(ag.width()  * 0.85)))
-            min_h = min(600, max(420, int(ag.height() * 0.85)))
+            min_w = min(720, max(460, int(ag.width()  * 0.55)))
+            min_h = min(560, max(360, int(ag.height() * 0.55)))
         else:
-            min_w, min_h = 800, 600
+            min_w, min_h = 720, 560
+            ag = None
         self.setMinimumSize(min_w, min_h)
         # Set an initial size that fits the screen; the showEvent also clamps it
         # but this avoids an initial oversized paint on some platforms.
-        init_w = min(950, max(min_w, ag.width() - 60)) if screen is not None else min_w
-        init_h = min(750, max(min_h, ag.height() - 80)) if screen is not None else min_h
+        init_w = min(880, max(min_w, ag.width() - 60)) if ag is not None else min_w
+        init_h = min(700, max(min_h, ag.height() - 80)) if ag is not None else min_h
         self.resize(init_w, init_h)
         self._setup_ui()
         self._load_values()
@@ -690,6 +692,34 @@ class SettingsDialog(QDialog):
         vol_row.addWidget(self._sound_volume_lbl)
         sound_gl.addLayout(vol_row, 4, 1)
 
+        # Sound event toggles (off by default; each controls a specific app event)
+        events_lbl = QLabel("Event sounds:")
+        events_lbl.setToolTip(
+            "Enable or disable individual application sound events.\n"
+            "All are off by default to keep the app unobtrusive."
+        )
+        sound_gl.addWidget(events_lbl, 5, 0)
+        self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
+        self._sound_theme_change_chk.setToolTip(
+            "Play a short whoosh sound whenever the active theme is switched.\n"
+            "Off by default."
+        )
+        sound_gl.addWidget(self._sound_theme_change_chk, 5, 1)
+
+        self._sound_tab_switch_chk = QCheckBox("Play sound when switching tabs")
+        self._sound_tab_switch_chk.setToolTip(
+            "Play a soft tick when you click between the main tabs.\n"
+            "Off by default."
+        )
+        sound_gl.addWidget(self._sound_tab_switch_chk, 6, 1)
+
+        self._sound_drag_enter_chk = QCheckBox("Play sound when files are dragged in")
+        self._sound_drag_enter_chk.setToolTip(
+            "Play a ping when files are dragged into the file list.\n"
+            "Off by default."
+        )
+        sound_gl.addWidget(self._sound_drag_enter_chk, 7, 1)
+
         tv.addWidget(grp_sound)
 
         # ---- Button Press Animation GroupBox ----
@@ -951,6 +981,9 @@ class SettingsDialog(QDialog):
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_toggled)
+        self._sound_theme_change_chk.toggled.connect(self._on_sound_theme_change_changed)
+        self._sound_tab_switch_chk.toggled.connect(self._on_sound_tab_switch_changed)
+        self._sound_drag_enter_chk.toggled.connect(self._on_sound_drag_enter_changed)
         self._sound_theme_combo.currentIndexChanged.connect(self._on_sound_theme_preset_changed)
         self._sound_profile_combo.currentIndexChanged.connect(self._on_sound_profile_changed)
         self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
@@ -1057,6 +1090,8 @@ class SettingsDialog(QDialog):
             self._banner_use_theme_anim_check, self._show_splash_check,
             self._button_anim_check, self._button_anim_style_combo,
             self._use_theme_button_anim_check,
+            self._sound_theme_change_chk, self._sound_tab_switch_chk,
+            self._sound_drag_enter_chk,
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
@@ -1102,6 +1137,16 @@ class SettingsDialog(QDialog):
             self._sound_profile_combo.setCurrentIndex(_profile_idx)
         # Disable profile combo when "use theme sound" is ON
         self._sound_profile_combo.setEnabled(not use_theme_sound)
+        # Load sound event toggles
+        self._sound_theme_change_chk.setChecked(
+            bool(self._settings.get("sound_theme_change", False))
+        )
+        self._sound_tab_switch_chk.setChecked(
+            bool(self._settings.get("sound_tab_switch", False))
+        )
+        self._sound_drag_enter_chk.setChecked(
+            bool(self._settings.get("sound_drag_enter", False))
+        )
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1201,6 +1246,9 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_theme_combo, "sound_theme_combo")
         mgr.register(self._sound_profile_combo, "sound_profile_combo")
         mgr.register(self._sound_volume_slider, "sound_volume_slider")
+        mgr.register(self._sound_theme_change_chk, "sound_theme_change_check")
+        mgr.register(self._sound_tab_switch_chk, "sound_tab_switch_check")
+        mgr.register(self._sound_drag_enter_chk, "sound_drag_enter_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -1252,6 +1300,18 @@ class SettingsDialog(QDialog):
         if screen is None:
             return
         ag = screen.availableGeometry()
+        # Relax the minimum size so the dialog can shrink to fit the screen.
+        # Without this, resize() cannot reduce below setMinimumSize(), leaving
+        # the bottom/right edge of the dialog off-screen on small monitors.
+        # Subtract 4 px to leave room for window decorations/shadows so the
+        # resize lands cleanly within the available area.
+        safe_w = max(320, ag.width() - 4)
+        safe_h = max(240, ag.height() - 4)
+        if self.minimumWidth() >= safe_w or self.minimumHeight() >= safe_h:
+            self.setMinimumSize(
+                min(self.minimumWidth(), safe_w),
+                min(self.minimumHeight(), safe_h),
+            )
         # Ensure the dialog is no larger than the available area
         w = min(self.width(), ag.width())
         h = min(self.height(), ag.height())
@@ -1537,6 +1597,15 @@ class SettingsDialog(QDialog):
     def _on_sound_volume_changed(self, value: int) -> None:
         self._settings.set("sound_volume", value)
         # No settings_changed emit needed — volume is read at play time.
+
+    def _on_sound_theme_change_changed(self) -> None:
+        self._settings.set("sound_theme_change", self._sound_theme_change_chk.isChecked())
+
+    def _on_sound_tab_switch_changed(self) -> None:
+        self._settings.set("sound_tab_switch", self._sound_tab_switch_chk.isChecked())
+
+    def _on_sound_drag_enter_changed(self) -> None:
+        self._settings.set("sound_drag_enter", self._sound_drag_enter_chk.isChecked())
 
     def _on_trail_changed(self) -> None:
         enabled = self._trail_check.isChecked()
