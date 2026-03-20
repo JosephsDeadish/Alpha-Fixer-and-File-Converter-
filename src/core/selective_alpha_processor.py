@@ -418,3 +418,122 @@ def detect_alpha_zones(
 
     return result
 
+
+# ---------------------------------------------------------------------------
+# Mask geometric transforms (shift / rotate / scale)
+# ---------------------------------------------------------------------------
+
+
+def shift_mask(mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
+    """Translate a uint8 or bool mask by (dx, dy) pixels.
+
+    Pixels that shift outside the image boundary are discarded; the vacated
+    area is filled with zeros.  Positive *dx* shifts right, positive *dy*
+    shifts down.
+
+    Parameters
+    ----------
+    mask : uint8 or bool ndarray, shape (h, w)
+    dx   : horizontal shift in pixels (right-positive)
+    dy   : vertical shift in pixels (down-positive)
+
+    Returns
+    -------
+    Same dtype ndarray, shape (h, w)
+    """
+    h, w = mask.shape[:2]
+    result = np.zeros_like(mask)
+    src_x0 = max(0, -dx)
+    src_x1 = min(w, w - dx)
+    dst_x0 = max(0,  dx)
+    dst_x1 = min(w, w + dx)
+    src_y0 = max(0, -dy)
+    src_y1 = min(h, h - dy)
+    dst_y0 = max(0,  dy)
+    dst_y1 = min(h, h + dy)
+    if src_x0 < src_x1 and src_y0 < src_y1 and dst_x0 < dst_x1 and dst_y0 < dst_y1:
+        result[dst_y0:dst_y1, dst_x0:dst_x1] = mask[src_y0:src_y1, src_x0:src_x1]
+    return result
+
+
+def rotate_mask(mask: np.ndarray, angle_degrees: float) -> np.ndarray:
+    """Rotate a uint8 or bool mask around the image centre.
+
+    Uses PIL nearest-neighbour resampling so the mask stays binary.  Positive
+    *angle_degrees* rotates **counter-clockwise** (PIL convention).  The image
+    size is unchanged; pixels that rotate outside the bounds are discarded.
+
+    Parameters
+    ----------
+    mask           : uint8 or bool ndarray, shape (h, w)
+    angle_degrees  : rotation angle in degrees (positive = counter-clockwise)
+
+    Returns
+    -------
+    Same dtype ndarray, shape (h, w)
+    """
+    original_dtype = mask.dtype
+    pil_src = Image.fromarray(mask.astype(np.uint8), mode="L")
+    try:
+        rotated = pil_src.rotate(
+            angle_degrees,
+            resample=Image.Resampling.NEAREST,
+            expand=False,
+            fillcolor=0,
+        )
+        result = np.array(rotated, dtype=np.uint8)
+        rotated.close()
+    finally:
+        pil_src.close()
+    if original_dtype == bool:
+        return result > 0
+    return result
+
+
+def scale_mask(mask: np.ndarray, factor: float) -> np.ndarray:
+    """Scale a uint8 or bool mask about the image centre by *factor*.
+
+    Uses a PIL affine transform with nearest-neighbour resampling so the mask
+    stays binary.  *factor* > 1 enlarges the masked region; 0 < *factor* < 1
+    shrinks it.  The image size is unchanged.
+
+    Parameters
+    ----------
+    mask   : uint8 or bool ndarray, shape (h, w)
+    factor : scale factor (must be > 0)
+
+    Returns
+    -------
+    Same dtype ndarray, shape (h, w)
+
+    Raises
+    ------
+    ValueError
+        If *factor* is not positive.
+    """
+    if factor <= 0.0:
+        raise ValueError(f"scale_mask: factor must be positive, got {factor!r}")
+    original_dtype = mask.dtype
+    h, w = mask.shape[:2]
+    inv_f = 1.0 / factor
+    cx = (w - 1) / 2.0
+    cy = (h - 1) / 2.0
+    tx = cx * (1.0 - inv_f)
+    ty = cy * (1.0 - inv_f)
+    pil_src = Image.fromarray(mask.astype(np.uint8), mode="L")
+    try:
+        transformed = pil_src.transform(
+            (w, h),
+            Image.Transform.AFFINE,
+            (inv_f, 0.0, tx, 0.0, inv_f, ty),
+            resample=Image.Resampling.NEAREST,
+            fillcolor=0,
+        )
+        result = np.array(transformed, dtype=np.uint8)
+        transformed.close()
+    finally:
+        pil_src.close()
+    if original_dtype == bool:
+        return result > 0
+    return result
+
