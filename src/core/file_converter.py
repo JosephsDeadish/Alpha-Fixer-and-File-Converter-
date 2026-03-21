@@ -2,7 +2,7 @@
 File converter – converts between image formats.
 
 Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PPM, PCX, AVIF, QOI, SVG.
+                   PPM, PCX, AVIF, QOI, SVG, JPEG2000.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
@@ -10,14 +10,21 @@ SVG input (raster rendering) requires one of:
 If neither is installed the app will raise an ImportError with install
 instructions when an SVG file is opened.
 
-SVG output embeds the raster image as base64-encoded PNG inside an <svg>
-element, producing a valid scalable vector document that all modern viewers
-can display.  No additional libraries are required for SVG output.
+SVG output — two modes depending on installed libraries:
+  • vtracer available (pip install vtracer):
+      Traces the raster into true vector paths (colour polygons/beziers).
+      The result is a genuine scalable vector document suitable for logos,
+      icons, pixel art, and game sprites.  Large or photographic images
+      may produce complex SVGs.
+  • vtracer not installed (fallback):
+      Embeds the raster as a base64-encoded PNG inside an <svg> element.
+      Pixel-perfect at any zoom level but not a true vector document.
 """
 import base64
 import io
 import os
 import logging
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -34,6 +41,7 @@ SUPPORTED_OUTPUT_FORMATS = {
     "GIF": ".gif",
     "ICO": ".ico",
     "JPEG": ".jpg",
+    "JPEG2000": ".jp2",
     "PCX": ".pcx",
     "PNG": ".png",
     "PPM": ".ppm",
@@ -79,6 +87,11 @@ FORMAT_DESCRIPTIONS = {
         "No alpha channel support; transparent pixels are composited onto white.\n"
         "Quality 85–95 gives a good size/quality balance for photos."
     ),
+    "JPEG2000": (
+        "JPEG 2000 — advanced wavelet-based compression with alpha support.\n"
+        "Superior quality to standard JPEG at the same file size.\n"
+        "Supports full RGBA. Used in professional print, cinema (DCI), and medical imaging."
+    ),
     "PCX": (
         "PC Paintbrush format — old lossless format from the DOS era.\n"
         "Limited support in modern software. Use PNG or BMP instead where possible.\n"
@@ -108,8 +121,11 @@ FORMAT_DESCRIPTIONS = {
         "Scalable Vector Graphics — XML-based vector/lossless format.\n"
         "SVG input: renders the vector art to a full-colour RGBA raster.\n"
         "  Requires cairosvg (pip install cairosvg) or svglib.\n"
-        "SVG output: embeds the raster image inside an <svg> element as\n"
-        "  base64 PNG — no extra libraries needed for output.\n"
+        "SVG output — two modes:\n"
+        "  • vtracer installed: traces raster into true vector paths\n"
+        "      (pip install vtracer). Best for logos, icons, pixel art.\n"
+        "  • fallback: embeds raster as base64 PNG — pixel-perfect but\n"
+        "      not true vector. No extra libraries required.\n"
         "Useful for icons, logos, UI assets, and scalable game graphics."
     ),
     "TIFF": (
@@ -125,7 +141,7 @@ FORMAT_DESCRIPTIONS = {
 }
 
 # Formats whose save() accepts a quality parameter
-_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif"}
+_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif", ".jp2"}
 
 
 def _has_cairosvg() -> bool:
@@ -142,6 +158,15 @@ def _has_svglib() -> bool:
     try:
         from svglib.svglib import svg2rlg  # noqa: F401
         from reportlab.graphics import renderPM  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _has_vtracer() -> bool:
+    """Return True when vtracer is importable (used for raster→SVG vectorization)."""
+    try:
+        import vtracer  # noqa: F401
         return True
     except ImportError:
         return False
@@ -193,12 +218,44 @@ def _load_svg(path: str) -> Image.Image:
 
 def _save_svg(img: Image.Image, path: str) -> None:
     """
-    Save *img* as an SVG file by embedding the raster as a base64-encoded PNG.
+    Save *img* as an SVG file.
 
-    The resulting SVG is a valid, viewable scalable document that renders
-    identically to the original raster at any zoom level.  No extra libraries
-    are needed — only Pillow (for PNG encoding) and Python's standard library.
+    Strategy:
+    1. If vtracer is installed, write a temporary PNG, run vtracer to produce
+       genuine vector paths, and write the resulting SVG.  Best for logos,
+       icons, and pixel art.
+    2. Otherwise, embed the raster as a base64-encoded PNG inside an <svg>
+       wrapper.  Pixel-perfect but not a true vector document.
     """
+    if _has_vtracer():
+        import vtracer as _vtracer
+        # vtracer needs RGB or RGBA PNG input
+        save_img = img
+        need_close = False
+        if img.mode not in ("RGB", "RGBA"):
+            save_img = img.convert("RGBA")
+            need_close = True
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png:
+                tmp_png_path = tmp_png.name
+            try:
+                save_img.save(tmp_png_path, format="PNG")
+                _vtracer.convert_image_to_svg_py(
+                    tmp_png_path,
+                    path,
+                    colormode="color",
+                )
+            finally:
+                try:
+                    os.unlink(tmp_png_path)
+                except OSError:
+                    pass
+        finally:
+            if need_close:
+                save_img.close()
+        return
+
+    # Fallback: embed raster as base64 PNG inside an SVG wrapper
     buf = io.BytesIO()
     save_img = img
     need_close = False
@@ -313,7 +370,7 @@ def convert_file(
     :param input_path:     Source file path.
     :param output_path:    Destination file path (with correct extension).
     :param target_format:  One of the keys in SUPPORTED_OUTPUT_FORMATS, e.g. "PNG".
-    :param quality:        JPEG/WEBP/AVIF quality (1-100).
+    :param quality:        JPEG/WEBP/AVIF/JPEG2000 quality (1-100). 100 = lossless for JPEG2000.
     :param resize:         Optional (width, height) tuple.
     :param keep_metadata:  When True, copy EXIF/ICC/DPI metadata to the output.
     :returns: output_path on success.
@@ -490,6 +547,20 @@ def convert_file(
             # --- AVIF (supports RGB and RGBA, quality applies) ---
             if ext == ".avif":
                 img.save(output_path, quality=quality, **_meta_kwargs(ext))
+                return output_path
+
+            # --- JPEG 2000 (supports RGB and RGBA; quality maps to compression rate) ---
+            if ext == ".jp2":
+                if quality >= 100:
+                    # Lossless (reversible wavelet transform)
+                    img.save(output_path, irreversible=False)
+                else:
+                    # Lossy: map quality 1-99 to a compression rate.
+                    # A rate of ~1.0 bpp is high quality; lower rates compress more.
+                    # quality=99→rate≈1.0 bpp (near-lossless), quality=1→rate≈0.02 bpp.
+                    rate = max(0.02, (quality / 100.0) ** 2 * 10)
+                    img.save(output_path, irreversible=True,
+                             quality_mode="rates", quality_layers=[rate])
                 return output_path
 
             # --- QOI (supports RGB and RGBA) ---

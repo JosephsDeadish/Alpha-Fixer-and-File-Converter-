@@ -5,7 +5,7 @@ import math
 import sys
 import webbrowser
 
-from PyQt6.QtCore import Qt, QEvent, QRect, QTimer
+from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
@@ -320,6 +320,106 @@ class _SpinningEmojiLabel(QWidget):
         painter.end()
 
 
+# ---------------------------------------------------------------------------
+# Easter-egg helpers
+# ---------------------------------------------------------------------------
+
+class _EasterCollectible(QLabel):
+    """A floating emoji collectible that appears when a secret spot is triggered.
+
+    The label bobs gently while waiting.  Clicking it calls back into
+    MainWindow to perform the theme unlock, play the fanfare, and hide this
+    widget.
+    """
+
+    collected = pyqtSignal()
+
+    # vertical bobbing parameters
+    _BOB_STEP_RAD = 0.15
+    _BOB_AMP_PX   = 5
+    _INTERVAL_MS  = 40
+
+    def __init__(self, emoji: str, tip: str, parent: QWidget):
+        super().__init__(emoji, parent)
+        font = QFont()
+        font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+        font.setPointSize(26)
+        self.setFont(font)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedSize(52, 52)
+        self.setToolTip(tip)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            "background: rgba(0,0,0,120); border-radius: 8px; border: 2px solid #ffcc00;"
+        )
+        self._phase = 0.0
+        self._base_y = 0
+        self._bob_timer = QTimer(self)
+        self._bob_timer.setInterval(self._INTERVAL_MS)
+        self._bob_timer.timeout.connect(self._bob_tick)
+        self.hide()
+
+    def show_at(self, win_pos: QPoint) -> None:
+        """Show the collectible centred on *win_pos* in parent coordinates."""
+        x = win_pos.x() - self.width() // 2
+        y = win_pos.y() - self.height() // 2
+        self._base_y = y
+        self._phase = 0.0
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self._bob_timer.start()
+
+    def dismiss(self) -> None:
+        """Stop animation and hide without emitting *collected*."""
+        self._bob_timer.stop()
+        self.hide()
+
+    def _bob_tick(self) -> None:
+        self._phase = (self._phase + self._BOB_STEP_RAD) % (2 * math.pi)
+        dy = int(self._BOB_AMP_PX * math.sin(self._phase))
+        self.move(self.x(), self._base_y + dy)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._bob_timer.stop()
+            self.hide()
+            self.collected.emit()
+        super().mousePressEvent(event)
+
+
+class _EasterClickFilter(QObject):
+    """Event filter that counts left-clicks on a watched widget.
+
+    When the click count reaches *threshold*, ``triggered`` is emitted with
+    the global position of the click.
+    """
+
+    triggered = pyqtSignal(QPoint)
+
+    def __init__(self, threshold: int, parent: QObject = None):
+        super().__init__(parent)
+        self._threshold = threshold
+        self._count = 0
+
+    def reset(self) -> None:
+        self._count = 0
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._count += 1
+                if self._count >= self._threshold:
+                    self._count = 0
+                    # Map the local click to global coords
+                    try:
+                        gpos = obj.mapToGlobal(event.position().toPoint())
+                    except Exception:
+                        gpos = QPoint(0, 0)
+                    self.triggered.emit(gpos)
+        return False  # never consume the event
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -358,6 +458,9 @@ class MainWindow(QMainWindow):
         (10000, "unlock_golden_hour",     "🌇 'Golden Hour' theme unlocked! (Settings → Theme)"),
         (10500, "unlock_cat",             "🐱 'Purrfect Cats' theme unlocked! (Settings → Theme)"),
         (11000, "unlock_dog",             "🐶 'Good Dog' theme unlocked! (Settings → Theme)"),
+        (11500, "unlock_snake",           "🐍 'Snake Pit' theme unlocked! (Settings → Theme)"),
+        (12000, "unlock_ghost",           "👻 'Ghost' theme unlocked! (Settings → Theme)"),
+        (12500, "unlock_slime",           "🟢 'Slime' theme unlocked! (Settings → Theme)"),
     ]
 
     # Alternative unlock path: number of *alpha-fix files processed* required.
@@ -368,6 +471,7 @@ class MainWindow(QMainWindow):
         (50,   "unlock_ocean",        "🌊 'Deep Ocean' theme unlocked! (50 alpha fixes done)"),
         (250,  "unlock_midnight_forest", "🌲 'Midnight Forest' theme unlocked! (250 alpha fixes done)"),
         (1000, "unlock_nebula",       "🌌 'Nebula' theme unlocked! (1 000 alpha fixes done)"),
+        (2500, "unlock_ghost",        "👻 'Ghost' theme unlocked! (2 500 alpha fixes done)"),
         (5000, "unlock_golden_hour",  "🌇 'Golden Hour' theme unlocked! (5 000 alpha fixes done)"),
     ]
 
@@ -377,7 +481,94 @@ class MainWindow(QMainWindow):
         (50,   "unlock_dragon_fire",  "🐉 'Dragon Fire' theme unlocked! (50 conversions done)"),
         (250,  "unlock_spring_bloom", "🌷 'Spring Bloom' theme unlocked! (250 conversions done)"),
         (1000, "unlock_crystal_cave", "💎 'Crystal Cave' theme unlocked! (1 000 conversions done)"),
+        (2500, "unlock_slime",        "🟢 'Slime' theme unlocked! (2 500 conversions done)"),
         (5000, "unlock_coral_reef",   "🪸 'Coral Reef' theme unlocked! (5 000 conversions done)"),
+    ]
+
+    # -----------------------------------------------------------------------
+    # Easter-egg spots: (spot_id, click_threshold, unlock_key, collectible_emoji,
+    #                    collectible_tip, unlock_banner_msg)
+    # spot_id is used as a key in _easter_filters and _easter_collectibles.
+    # -----------------------------------------------------------------------
+    _EASTER_SPOTS = [
+        # Left banner panda — click 7× to summon a shark 🦈 → unlocks Deep Ocean
+        ("egg_banner_left",  7,
+         "unlock_ocean",
+         "🦈",
+         "✨ Secret found!  Click the shark to unlock Deep Ocean theme!",
+         "🌊 'Deep Ocean' theme unlocked via secret easter egg!"),
+        # Right banner panda — click 7× to summon a mermaid 🧜 → unlocks Midnight Forest
+        ("egg_banner_right", 7,
+         "unlock_midnight_forest",
+         "🧜",
+         "✨ Secret found!  Click the mermaid to unlock Midnight Forest theme!",
+         "🌙 'Midnight Forest' theme unlocked via secret easter egg!"),
+        # Help button — click 5× to summon a mushroom 🍄 → unlocks Magic Mushroom
+        ("egg_help_btn",     5,
+         "unlock_magic_mushroom",
+         "🍄",
+         "✨ Secret found!  Click the mushroom to unlock Magic Mushroom theme!",
+         "🍄 'Magic Mushroom' theme unlocked via secret easter egg!"),
+        # History tab header — click 6× to summon an otter 🦦 → unlocks Cyber Otter
+        ("egg_history_tab",  6,
+         "unlock_cyber_otter",
+         "🦦",
+         "✨ Secret found!  Click the otter to unlock Cyber Otter theme!",
+         "🦦 'Cyber Otter' theme unlocked via secret easter egg!"),
+        # Status bar — click 5× to summon a ghost 👻 → unlocks Ghost
+        ("egg_status_bar",   5,
+         "unlock_ghost",
+         "👻",
+         "✨ Secret found!  Click the ghost to unlock Ghost theme!",
+         "👻 'Ghost' theme unlocked via secret easter egg!"),
+        # Patreon button — click 8× to summon a pirate ☠ → unlocks Pirate
+        ("egg_patreon_btn",  8,
+         "unlock_pirate",
+         "☠",
+         "✨ Secret found!  Click the skull to unlock Pirate theme!",
+         "🏴‍☠️ 'Pirate' theme unlocked via secret easter egg!"),
+        # Converter tab header — click 9× to summon a UFO 🛸 → unlocks Alien
+        ("egg_converter_tab", 9,
+         "unlock_alien",
+         "🛸",
+         "🛸 Secret found!  Click the UFO to unlock Alien theme!",
+         "👽 'Alien' theme unlocked via secret easter egg!"),
+        # Alpha tab header — click 10× to summon a shark 🦈 → unlocks Shark Bait
+        ("egg_alpha_tab",    10,
+         "unlock_shark_bait",
+         "🦈",
+         "🦈 Secret found!  Click the shark to unlock Shark Bait theme!",
+         "🦈 'Shark Bait' theme unlocked via secret easter egg!"),
+        # Selective Alpha tab — click 8× to summon a noodle 🍜 → unlocks Noodle
+        ("egg_selective_tab", 8,
+         "unlock_noodle",
+         "🍜",
+         "🍜 Secret found!  Click the noodle to unlock Noodle theme!",
+         "🍜 'Noodle' theme unlocked via secret easter egg!"),
+        # Settings button — click 9× to summon a cowboy 🤠 → unlocks Wild West
+        ("egg_settings_btn", 9,
+         "unlock_wild_west",
+         "🤠",
+         "🤠 Secret found!  Click the cowboy to unlock Wild West theme!",
+         "🤠 'Wild West' theme unlocked via secret easter egg!"),
+        # SVG theme badge — click 7× to summon a rose 🌹 → unlocks Rose Gold
+        ("egg_svg_badge", 7,
+         "unlock_rose_gold",
+         "🌹",
+         "🌹 Secret found!  Click the rose to unlock Rose Gold theme!",
+         "🌹 'Rose Gold' theme unlocked via secret easter egg!"),
+        # Theme label — click 11× to summon a lightning bolt ⚡ → unlocks Thunder Storm
+        ("egg_theme_label", 11,
+         "unlock_thunder_storm",
+         "⚡",
+         "⚡ Secret found!  Click the bolt to unlock Thunder Storm theme!",
+         "⚡ 'Thunder Storm' theme unlocked via secret easter egg!"),
+        # Unlock status label — click 6× to summon a witch 🧙 → unlocks Witch's Brew
+        ("egg_unlock_lbl", 6,
+         "unlock_witchs_brew",
+         "🧙",
+         "🧙 Secret found!  Click the witch to unlock Witch's Brew theme!",
+         "🧙 'Witch\\'s Brew' theme unlocked via secret easter egg!"),
     ]
 
     def __init__(self, settings: SettingsManager):
@@ -413,6 +604,9 @@ class MainWindow(QMainWindow):
         self._settings_apply_timer.timeout.connect(self._apply_settings_now)
         # Cache last applied stylesheet to avoid redundant setStyleSheet calls
         self._last_stylesheet: str = ""
+        # Easter-egg state: per-spot event filters and collectible widgets
+        self._easter_filters: dict[str, _EasterClickFilter] = {}
+        self._easter_collectibles: dict[str, _EasterCollectible] = {}
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
         # is wasteful; coalesce them into a single update 50ms after the last
@@ -426,6 +620,7 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
         self._apply_theme()
         self._setup_effects()
+        self._setup_easter_eggs()
         # Connect to screen-topology and DPI-change signals so the window
         # geometry stays valid when the user plugs in / removes a monitor or
         # changes the system display-scale setting.
@@ -687,6 +882,9 @@ class MainWindow(QMainWindow):
         # File-remove sounds
         self._alpha_tab.files_removed.connect(self._on_files_removed)
         self._converter_tab.files_removed.connect(self._on_files_removed)
+        # List-cleared sound (dog bark)
+        self._alpha_tab.list_cleared.connect(self._on_list_cleared)
+        self._converter_tab.list_cleared.connect(self._on_list_cleared)
         # Drag-enter sounds
         self._alpha_tab.drag_entered.connect(self._on_drag_entered)
         self._converter_tab.drag_entered.connect(self._on_drag_entered)
@@ -700,6 +898,8 @@ class MainWindow(QMainWindow):
         from .sound_engine import SoundEngine
         self._sound = SoundEngine(self._settings, parent=self)
         self._sound.install_on_app(QApplication.instance())
+        # Wire sound engine into tools that need it.
+        self._selective_alpha_tab._sound = self._sound
 
         # Font size
         self._apply_font_size()
@@ -766,6 +966,105 @@ class MainWindow(QMainWindow):
         self._button_anim.set_enabled(True, mode)
 
     # ------------------------------------------------------------------
+    # Easter-egg discovery system
+    # ------------------------------------------------------------------
+
+    def _setup_easter_eggs(self) -> None:
+        """Create collectible widgets and attach click filters to secret spots."""
+        # Map spot_id → the widget to watch
+        spot_widgets: dict[str, QWidget] = {
+            "egg_banner_left":   self._banner_emoji_left,
+            "egg_banner_right":  self._banner_emoji_right,
+            "egg_help_btn":      self._btn_help,
+            "egg_history_tab":   self._history_tab,
+            "egg_status_bar":    self._status_bar,
+            "egg_patreon_btn":   self._btn_patreon,
+            "egg_converter_tab": self._converter_tab,
+            "egg_alpha_tab":     self._alpha_tab,
+            "egg_selective_tab": self._selective_alpha_tab,
+            "egg_settings_btn":  self._btn_settings,
+            "egg_svg_badge":     self._svg_badge,
+            "egg_theme_label":   self._theme_label,
+            "egg_unlock_lbl":    self._unlock_lbl,
+        }
+
+        for spot_id, threshold, unlock_key, emoji, tip, banner in self._EASTER_SPOTS:
+            widget = spot_widgets.get(spot_id)
+            if widget is None:
+                continue
+
+            # Create & store the collectible
+            collectible = _EasterCollectible(emoji, tip, self)
+            self._easter_collectibles[spot_id] = collectible
+
+            # Connect its "collected" signal (lambda captures spot_id & data)
+            def _make_collect_handler(sid, uk, bm, col):
+                def _on_collect():
+                    self._on_collectible_collected(sid, uk, bm, col)
+                return _on_collect
+
+            collectible.collected.connect(
+                _make_collect_handler(spot_id, unlock_key, banner, collectible)
+            )
+
+            # Create & attach the click filter
+            filt = _EasterClickFilter(threshold, self)
+            self._easter_filters[spot_id] = filt
+            widget.installEventFilter(filt)
+
+            # Connect the filter's "triggered" signal
+            def _make_trigger_handler(sid, col):
+                def _on_trigger(gpos: QPoint):
+                    self._on_easter_spot_triggered(sid, gpos, col)
+                return _on_trigger
+
+            filt.triggered.connect(_make_trigger_handler(spot_id, collectible))
+
+    def _on_easter_spot_triggered(
+        self, spot_id: str, gpos: QPoint, collectible: "_EasterCollectible"
+    ) -> None:
+        """A secret spot accumulated enough clicks — show the collectible."""
+        if collectible.isVisible():
+            return  # already showing
+        # Map global pos to main-window-local coords for positioning
+        local_pos = self.mapFromGlobal(gpos)
+        # Nudge upward a bit so the collectible appears above the click point
+        local_pos = QPoint(local_pos.x(), local_pos.y() - 30)
+        collectible.show_at(local_pos)
+        # Optionally play a discovery sound (soft chime)
+        try:
+            self._sound.play_file_add()
+        except Exception:
+            pass
+
+    def _on_collectible_collected(
+        self,
+        spot_id: str,
+        unlock_key: str,
+        banner_msg: str,
+        collectible: "_EasterCollectible",
+    ) -> None:
+        """The user clicked a collectible — unlock the theme and celebrate."""
+        try:
+            if not self._settings.get(unlock_key, False):
+                self._settings.set(unlock_key, True)
+                self._unlock_lbl.setText(banner_msg)
+                self._schedule_unlock_clear()
+                try:
+                    self._sound.play_unlock()
+                except Exception:
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
+            else:
+                # Theme was already unlocked — still celebrate with a message
+                self._unlock_lbl.setText(f"✅ Already unlocked!  {banner_msg}")
+                self._schedule_unlock_clear()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
     # Unlock hidden themes based on click count
     # ------------------------------------------------------------------
 
@@ -814,12 +1113,17 @@ class MainWindow(QMainWindow):
         Each file successfully processed is counted as a 'bonus click' so
         that heavy users who batch-process files naturally unlock themes
         without having to manually click thousands of times.  Also plays
-        the success chime if sound is enabled.
+        the success chime (or a special fanfare for large batches) if sound
+        is enabled.
         """
         if file_count <= 0:
             return
         try:
-            self._sound.play_success()
+            if file_count >= 100:
+                # Large batch — play the rising fanfare instead of the normal ping
+                self._sound.play_batch_done()
+            else:
+                self._sound.play_success()
         except Exception:
             pass
         try:
@@ -842,6 +1146,13 @@ class MainWindow(QMainWindow):
         """Play a short pop when files are removed from either tab's queue."""
         try:
             self._sound.play_file_remove()
+        except Exception:
+            pass
+
+    def _on_list_cleared(self) -> None:
+        """Play a dog bark when the entire file list is cleared at once."""
+        try:
+            self._sound.play_dog_bark()
         except Exception:
             pass
 
@@ -874,9 +1185,33 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_theme_changed_sound(self) -> None:
-        """Play a soft whoosh when the user switches to a different theme."""
+        """Play a sound when the user switches to a different theme.
+
+        The default is a soft whoosh.  Certain themes play their own
+        characteristic animal sound instead (if the user has that toggle on).
+        """
         try:
-            self._sound.play_theme_change()
+            theme_name = self._settings.get_theme().get("name", "")
+            if theme_name == "Bat Cave":
+                # Try bat screech first; fall back to the generic whoosh if
+                # the per-event toggle is off.
+                self._sound.play_bat_screech()
+                self._sound.play_theme_change()
+            elif theme_name in ("Panda Dark", "Panda Light",
+                                "Purrfect Cats", "Space Cat"):
+                # Cat / panda themes play a meow; fall back to whoosh.
+                self._sound.play_cat_meow()
+                self._sound.play_theme_change()
+            elif theme_name == "Good Dog":
+                # Dog theme plays a bark; fall back to whoosh.
+                self._sound.play_dog_bark()
+                self._sound.play_theme_change()
+            elif theme_name in ("Slime", "Snake Pit"):
+                # Swamp / nature themes get a frog croak; fall back to whoosh.
+                self._sound.play_frog_croak()
+                self._sound.play_theme_change()
+            else:
+                self._sound.play_theme_change()
         except Exception:
             pass
 
@@ -1116,14 +1451,14 @@ class MainWindow(QMainWindow):
         if app is not None:
             new_ss = build_stylesheet(theme, tooltip_style)
             if new_ss != self._last_stylesheet:
-                app.setUpdatesEnabled(False)
-                try:
-                    app.setStyleSheet(new_ss)
-                    self._last_stylesheet = new_ss
-                finally:
-                    app.setUpdatesEnabled(True)
+                app.setStyleSheet(new_ss)
+                self._last_stylesheet = new_ss
         theme_name = theme.get("name", "Custom")
         self._theme_label.setText(f"  Theme: {theme_name}  ")
+        # Keep the tooltip manager in sync so theme-aware tooltips display
+        # the correct theme name.
+        if self._tooltip_mgr is not None:
+            self._tooltip_mgr.set_active_theme(theme_name)
         # Update the banner emoji widget to the theme's representative icon.
         icon = get_theme_icon(theme_name)
         animated = self._settings.get("animated_banner_enabled", False)
@@ -1359,6 +1694,10 @@ class MainWindow(QMainWindow):
         dlg.first_tooltip_mode_change.connect(self._on_first_tooltip_mode_change)
         # First cursor animation enable unlocks Toxic Neon
         dlg.first_cursor_anim_enabled.connect(self._on_first_cursor_anim_enabled)
+        # First theme preset change unlocks Candy Land
+        dlg.first_theme_changed.connect(self._on_first_theme_changed)
+        # First trail enable unlocks Midnight Forest
+        dlg.first_trail_enabled.connect(self._on_first_trail_enabled)
 
         # Attach a click-effects overlay to the dialog so particle effects are
         # visible while the settings window is open (the main overlay is behind
@@ -1444,6 +1783,28 @@ class MainWindow(QMainWindow):
         if not self._settings.get("unlock_toxic_neon", False):
             self._settings.set("unlock_toxic_neon", True)
             self._unlock_lbl.setText("☢ 'Toxic Neon' theme unlocked! (cursor animation enabled!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_theme_changed(self) -> None:
+        """Unlock Candy Land the very first time the user selects a different theme."""
+        if not self._settings.get("unlock_candy_land", False):
+            self._settings.set("unlock_candy_land", True)
+            self._unlock_lbl.setText("🍭 'Candy Land' theme unlocked! (first theme change!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
+
+    def _on_first_trail_enabled(self) -> None:
+        """Unlock Midnight Forest the very first time the user enables the mouse trail."""
+        if not self._settings.get("unlock_midnight_forest", False):
+            self._settings.set("unlock_midnight_forest", True)
+            self._unlock_lbl.setText("🌲 'Midnight Forest' theme unlocked! (mouse trail enabled!)")
             try:
                 self._sound.play_unlock()
             except Exception:
@@ -1613,6 +1974,15 @@ class MainWindow(QMainWindow):
 
     def _open_patreon(self):
         webbrowser.open(PATREON_URL)
+        # First Patreon visit unlocks Rose Gold as a thank-you.
+        if not self._settings.get("unlock_rose_gold", False):
+            self._settings.set("unlock_rose_gold", True)
+            self._unlock_lbl.setText("🌹 'Rose Gold' theme unlocked! (thanks for supporting!)")
+            try:
+                self._sound.play_unlock()
+            except Exception:
+                pass
+            self._schedule_unlock_clear()
 
     def _show_help_menu(self):
         """Show a popup menu from the Help button with shortcuts, about, and I/O options."""
@@ -1678,6 +2048,13 @@ class MainWindow(QMainWindow):
         if self._click_effects is not None:
             self._click_effects.setGeometry(self.rect())
             self._click_effects.raise_()
+        # Keep any visible easter-egg collectibles on-screen
+        for collectible in self._easter_collectibles.values():
+            if collectible.isVisible():
+                x = max(0, min(self.width()  - collectible.width(),  collectible.x()))
+                y = max(0, min(self.height() - collectible.height(), collectible.y()))
+                collectible.move(x, y)
+                collectible.raise_()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -1697,15 +2074,38 @@ class MainWindow(QMainWindow):
         for tab in (self._alpha_tab, self._converter_tab):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
                 tab._worker.stop()
-                tab._worker.wait(3000)
+                # Allow up to 15 seconds for an in-flight batch to finish its
+                # current file so it can reach the abort check.  3 seconds was
+                # too short when processing large images or slow storage.
+                tab._worker.wait(15000)
             # Cancel any in-flight preview loaders so their threads don't
             # try to emit signals into already-destroyed Qt objects.
             if hasattr(tab, "_preview_loader") and tab._preview_loader is not None:
                 tab._preview_loader.stop()
+                # Wait for the preview thread to finish so it cannot emit into
+                # widgets that are being torn down below.
+                tab._preview_loader.wait(3000)
             # Stop preview debounce timers so pending timeouts don't fire
             # after the tab widgets have been torn down.
             if hasattr(tab, "_preview_debounce") and tab._preview_debounce is not None:
                 tab._preview_debounce.stop()
+        # Drain the global QThreadPool (used by thumbnail loaders in the drop
+        # lists).  Without this, runnables that are still running when Qt
+        # starts tearing down widgets may emit signals to deleted objects and
+        # crash.  We cancel all pending runnables first via the cancel events
+        # already held by each DropFileList, then give the pool 3 seconds to
+        # let any already-running runnable reach its own cancel check.
+        try:
+            from .drop_list import DropFileList
+            from PyQt6.QtCore import QThreadPool
+            for tab in (self._alpha_tab, self._converter_tab):
+                for attr in ("_file_list", "_drop_list"):
+                    widget = getattr(tab, attr, None)
+                    if isinstance(widget, DropFileList):
+                        widget._cancel_event.set()
+            QThreadPool.globalInstance().waitForDone(3000)
+        except Exception:
+            pass
         # Stop main-window timers before the window is destroyed
         for timer in (
             self._settings_apply_timer,

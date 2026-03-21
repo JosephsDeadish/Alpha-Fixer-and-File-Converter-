@@ -4,7 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QRect
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -119,6 +119,12 @@ class SettingsDialog(QDialog):
     # Emitted the very first time the user enables cursor animation.
     # MainWindow connects this to trigger the Toxic Neon unlock.
     first_cursor_anim_enabled = pyqtSignal()
+    # Emitted the very first time the user selects a different theme preset.
+    # MainWindow connects this to trigger the Candy Land unlock.
+    first_theme_changed = pyqtSignal()
+    # Emitted the very first time the user enables the mouse trail.
+    # MainWindow connects this to trigger the Midnight Forest unlock.
+    first_trail_enabled = pyqtSignal()
 
     def __init__(self, settings_manager, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -126,18 +132,25 @@ class SettingsDialog(QDialog):
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
         self.setWindowTitle("Settings & Customization 🐼")
-        # Adaptive minimum size: cap at 800×600 but shrink proportionally on
-        # small or low-resolution screens so the dialog is never forced off the
-        # visible area (e.g. 1280×720 laptop with a large taskbar at 125% DPI).
+        # Adaptive minimum size: shrink proportionally on small or low-resolution
+        # screens so the dialog is never forced off the visible area.  We keep the
+        # floor generous enough that all content remains usable; the scroll areas
+        # inside each tab mean even a 400×320 window can reach every control.
         screen = (self.parent().screen() if self.parent() is not None
                   else None) or QApplication.primaryScreen()
         if screen is not None:
             ag = screen.availableGeometry()
-            min_w = min(800, max(560, int(ag.width()  * 0.85)))
-            min_h = min(600, max(420, int(ag.height() * 0.85)))
+            min_w = min(720, max(460, int(ag.width()  * 0.55)))
+            min_h = min(560, max(360, int(ag.height() * 0.55)))
         else:
-            min_w, min_h = 800, 600
+            min_w, min_h = 720, 560
+            ag = None
         self.setMinimumSize(min_w, min_h)
+        # Set an initial size that fits the screen; the showEvent also clamps it
+        # but this avoids an initial oversized paint on some platforms.
+        init_w = min(880, max(min_w, ag.width() - 60)) if ag is not None else min_w
+        init_h = min(700, max(min_h, ag.height() - 80)) if ag is not None else min_h
+        self.resize(init_w, init_h)
         self._setup_ui()
         self._load_values()
         if tooltip_mgr is not None:
@@ -235,7 +248,6 @@ class SettingsDialog(QDialog):
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
         scroll.setMinimumHeight(220)
-        scroll.setMaximumHeight(320)
         tv.addWidget(scroll)
 
         # ---- Effect + Emoji in a single row of GroupBoxes ----
@@ -604,15 +616,65 @@ class SettingsDialog(QDialog):
             "Off by default. Individual events can still be muted below."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
-        self._use_theme_sound_check = QCheckBox("Use theme sound (click sound follows the active theme)")
+        self._use_theme_sound_check = QCheckBox("Use theme sound")
         self._use_theme_sound_check.setToolTip(
-            "When enabled the click sound changes to match the active theme.\n"
-            "Gore = deep thud, Panda = soft chime, Alien = bright ping, etc."
+            "When enabled the click sound uses the selected Sound Theme below.\n"
+            "Each theme has a distinct sound profile (e.g. Gore = deep thud,\n"
+            "Panda = soft chime, Alien = bright ping).\n"
+            "When disabled, the Sound profile dropdown below is used instead."
         )
         sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
 
+        # Sound theme dropdown (active when "Use theme sound" is ON)
+        sound_gl.addWidget(QLabel("Sound theme:"), 2, 0)
+        self._sound_theme_combo = QComboBox()
+        self._sound_theme_combo.addItem("Auto (follow active visual theme)", userData="")
+        _all_themes = sorted(PRESET_THEMES.keys()) + sorted(HIDDEN_THEMES.keys())
+        for _tname in _all_themes:
+            self._sound_theme_combo.addItem(_tname, userData=_tname)
+        self._sound_theme_combo.setToolTip(
+            "Select which theme's sound profile to use when 'Use theme sound' is enabled.\n"
+            "'Auto' means the click sound follows whichever visual theme is currently active.\n"
+            "Choosing a specific theme lets you use, say, Shark Bait sounds with any visual theme."
+        )
+        sound_gl.addWidget(self._sound_theme_combo, 2, 1)
+
+        # Sound profile dropdown (used when "Use theme sound" is OFF)
+        sound_gl.addWidget(QLabel("Sound profile:"), 3, 0)
+        self._sound_profile_combo = QComboBox()
+        _SOUND_PROFILE_OPTIONS = [
+            ("soft",    "Soft — gentle chime 🎵"),
+            ("bright",  "Bright — snappy ping ✨"),
+            ("dark",    "Dark — low thud 🌑"),
+            ("hard",    "Hard — punchy hit 💥"),
+            ("warm",    "Warm — mellow tone 🌅"),
+            ("icy",     "Icy — crystalline click ❄"),
+            ("sparkle", "Sparkle — shimmery tinkle 🌟"),
+            ("growl",   "Growl — gritty bass 🩸"),
+            ("bubble",  "Bubble — pop 🫧"),
+            ("chirp",   "Chirp — bird-like tweet 🐦"),
+            ("crunch",  "Crunch — bone snap 💀"),
+            ("purr",    "Purr — cat rumble 🐱"),
+            ("meow",    "Meow — cat cry 🐱"),
+            ("roar",    "Roar — fierce growl 🐉"),
+            ("bark",    "Bark — dog bark 🐶"),
+            ("howl",    "Howl — wolf howl 🐺"),
+            ("hiss",    "Hiss — serpent hiss 🐍"),
+            ("rock",    "Rock — cycling guitar riff 🎸"),
+            ("splash",  "Splash — water drop 💧"),
+            ("tweet",   "Tweet — forest bird 🌿"),
+        ]
+        for key, label in _SOUND_PROFILE_OPTIONS:
+            self._sound_profile_combo.addItem(label, userData=key)
+        self._sound_profile_combo.setToolTip(
+            "Click-sound profile used when 'Use theme sound' is disabled.\n"
+            "Each profile has a distinct tone that matches different moods.\n"
+            "Ignored when 'Use theme sound' is enabled."
+        )
+        sound_gl.addWidget(self._sound_profile_combo, 3, 1)
+
         # Volume slider
-        sound_gl.addWidget(QLabel("Volume:"), 2, 0)
+        sound_gl.addWidget(QLabel("Volume:"), 4, 0)
         vol_row = QHBoxLayout()
         self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._sound_volume_slider.setRange(0, 100)
@@ -628,81 +690,36 @@ class SettingsDialog(QDialog):
         )
         vol_row.addWidget(self._sound_volume_slider, 1)
         vol_row.addWidget(self._sound_volume_lbl)
-        sound_gl.addLayout(vol_row, 2, 1)
+        sound_gl.addLayout(vol_row, 4, 1)
 
-        sound_gl.addWidget(QLabel("Custom click .wav:"), 3, 0)
-        sound_row = QHBoxLayout()
-        self._click_sound_edit = QLineEdit()
-        self._click_sound_edit.setPlaceholderText("Leave blank for built-in sound")
-        self._btn_sound_browse = QPushButton("Browse…")
-        sound_row.addWidget(self._click_sound_edit, 1)
-        sound_row.addWidget(self._btn_sound_browse)
-        sound_gl.addLayout(sound_row, 3, 1)
+        # Sound event toggles (off by default; each controls a specific app event)
+        events_lbl = QLabel("Event sounds:")
+        events_lbl.setToolTip(
+            "Enable or disable individual application sound events.\n"
+            "All are off by default to keep the app unobtrusive."
+        )
+        sound_gl.addWidget(events_lbl, 5, 0)
+        self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
+        self._sound_theme_change_chk.setToolTip(
+            "Play a short whoosh sound whenever the active theme is switched.\n"
+            "Off by default."
+        )
+        sound_gl.addWidget(self._sound_theme_change_chk, 5, 1)
 
-        # Per-event sound toggles
-        sound_gl.addWidget(QLabel("Event sounds:"), 4, 0)
-        events_row = QHBoxLayout()
-        self._sound_success_check = QCheckBox("Completion")
-        self._sound_success_check.setToolTip(
-            "Play a cheerful chime when a batch finishes with no errors."
-        )
-        self._sound_error_check = QCheckBox("Error")
-        self._sound_error_check.setToolTip(
-            "Play a descending buzz when a batch finishes with file errors."
-        )
-        self._sound_unlock_check = QCheckBox("Unlock")
-        self._sound_unlock_check.setToolTip(
-            "Play an ascending fanfare when a secret theme is unlocked."
-        )
-        self._sound_file_add_check = QCheckBox("File added")
-        self._sound_file_add_check.setToolTip(
-            "Play a soft thunk when files are dropped into the queue."
-        )
-        self._sound_preview_check = QCheckBox("Preview")
-        self._sound_preview_check.setToolTip(
-            "Play a subtle ping every time the live preview image refreshes.\n"
-            "Off by default — can be distracting during rapid parameter changes."
-        )
-        self._sound_process_start_check = QCheckBox("Process start")
-        self._sound_process_start_check.setToolTip(
-            "Play a short ascending two-tone cue when a batch starts processing.\n"
+        self._sound_tab_switch_chk = QCheckBox("Play sound when switching tabs")
+        self._sound_tab_switch_chk.setToolTip(
+            "Play a soft tick when you click between the main tabs.\n"
             "Off by default."
         )
-        self._sound_file_remove_check = QCheckBox("File removed")
-        self._sound_file_remove_check.setToolTip(
-            "Play a short descending pop when files are removed from the queue.\n"
-            "Off by default."
-        )
-        for chk in (self._sound_success_check, self._sound_error_check,
-                    self._sound_unlock_check, self._sound_file_add_check,
-                    self._sound_preview_check, self._sound_process_start_check,
-                    self._sound_file_remove_check):
-            events_row.addWidget(chk)
-        sound_gl.addLayout(events_row, 4, 1)
+        sound_gl.addWidget(self._sound_tab_switch_chk, 6, 1)
 
-        # Additional event sounds (second row)
-        events_row2 = QHBoxLayout()
-        self._sound_theme_change_check = QCheckBox("Theme change")
-        self._sound_theme_change_check.setToolTip(
-            "Play a soft whoosh when switching to a different theme.\n"
+        self._sound_drag_enter_chk = QCheckBox("Play sound when files are dragged in")
+        self._sound_drag_enter_chk.setToolTip(
+            "Play a ping when files are dragged into the file list.\n"
             "Off by default."
         )
-        self._sound_tab_switch_check = QCheckBox("Tab switch")
-        self._sound_tab_switch_check.setToolTip(
-            "Play a quick soft tick when switching tabs.\n"
-            "Off by default."
-        )
-        self._sound_drag_enter_check = QCheckBox("Drag enter")
-        self._sound_drag_enter_check.setToolTip(
-            "Play a gentle rising ping when files are dragged over the drop zone.\n"
-            "Off by default."
-        )
-        for chk in (self._sound_theme_change_check,
-                    self._sound_tab_switch_check,
-                    self._sound_drag_enter_check):
-            events_row2.addWidget(chk)
-        events_row2.addStretch()
-        sound_gl.addLayout(events_row2, 5, 1)
+        sound_gl.addWidget(self._sound_drag_enter_chk, 7, 1)
+
         tv.addWidget(grp_sound)
 
         # ---- Button Press Animation GroupBox ----
@@ -957,25 +974,19 @@ class SettingsDialog(QDialog):
         self._btn_close.clicked.connect(self.accept)
         self._btn_reset.clicked.connect(self._reset_all_settings)
         self._btn_reset_unlocks.clicked.connect(self._reset_unlocks_only)
-        self._btn_sound_browse.clicked.connect(self._browse_sound)
         self._effect_combo.currentIndexChanged.connect(self._on_effect_changed_live)
         self._btn_emoji_add.clicked.connect(self._add_emoji)
         self._btn_emoji_clear.clicked.connect(self._clear_emoji)
         # All controls save+emit live
         self._sound_check.toggled.connect(self._on_sound_changed)
         self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_changed)
-        self._click_sound_edit.editingFinished.connect(self._on_sound_path_changed)
+        self._use_theme_sound_check.toggled.connect(self._on_use_theme_sound_toggled)
+        self._sound_theme_change_chk.toggled.connect(self._on_sound_theme_change_changed)
+        self._sound_tab_switch_chk.toggled.connect(self._on_sound_tab_switch_changed)
+        self._sound_drag_enter_chk.toggled.connect(self._on_sound_drag_enter_changed)
+        self._sound_theme_combo.currentIndexChanged.connect(self._on_sound_theme_preset_changed)
+        self._sound_profile_combo.currentIndexChanged.connect(self._on_sound_profile_changed)
         self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
-        self._sound_success_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_error_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_unlock_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_file_add_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_preview_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_process_start_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_file_remove_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_theme_change_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_tab_switch_check.toggled.connect(self._on_sound_event_changed)
-        self._sound_drag_enter_check.toggled.connect(self._on_sound_event_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
         self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
@@ -1070,7 +1081,7 @@ class SettingsDialog(QDialog):
         # trigger save-and-emit loops.
         controls = [
             self._theme_preset_combo, self._effect_combo, self._sound_check,
-            self._use_theme_sound_check, self._click_sound_edit, self._trail_check,
+            self._use_theme_sound_check, self._sound_theme_combo, self._trail_check,
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
             self._cursor_combo, self._use_theme_cursor_check, self._cursor_anim_check, self._font_size_spin,
             self._click_effects_theme_check,
@@ -1079,15 +1090,12 @@ class SettingsDialog(QDialog):
             self._banner_use_theme_anim_check, self._show_splash_check,
             self._button_anim_check, self._button_anim_style_combo,
             self._use_theme_button_anim_check,
+            self._sound_theme_change_chk, self._sound_tab_switch_chk,
+            self._sound_drag_enter_chk,
             # Sliders must also be signal-blocked during load; their valueChanged
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
             self._sound_volume_slider,
-            self._sound_success_check, self._sound_error_check, self._sound_unlock_check,
-            self._sound_file_add_check, self._sound_preview_check,
-            self._sound_process_start_check, self._sound_file_remove_check,
-            self._sound_theme_change_check, self._sound_tab_switch_check,
-            self._sound_drag_enter_check,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -1109,21 +1117,36 @@ class SettingsDialog(QDialog):
         self._update_emoji_display()
 
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
-        self._use_theme_sound_check.setChecked(self._settings.get("use_theme_sound", False))
-        self._click_sound_edit.setText(self._settings.get("click_sound_path", ""))
+        use_theme_sound = self._settings.get("use_theme_sound", False)
+        self._use_theme_sound_check.setChecked(use_theme_sound)
         vol = int(self._settings.get("sound_volume", 50))
         self._sound_volume_slider.setValue(max(0, min(100, vol)))
         self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
-        self._sound_success_check.setChecked(self._settings.get("sound_success", True))
-        self._sound_error_check.setChecked(self._settings.get("sound_error", True))
-        self._sound_unlock_check.setChecked(self._settings.get("sound_unlock", True))
-        self._sound_file_add_check.setChecked(self._settings.get("sound_file_add", True))
-        self._sound_preview_check.setChecked(self._settings.get("sound_preview", False))
-        self._sound_process_start_check.setChecked(self._settings.get("sound_process_start", False))
-        self._sound_file_remove_check.setChecked(self._settings.get("sound_file_remove", False))
-        self._sound_theme_change_check.setChecked(self._settings.get("sound_theme_change", False))
-        self._sound_tab_switch_check.setChecked(self._settings.get("sound_tab_switch", False))
-        self._sound_drag_enter_check.setChecked(self._settings.get("sound_drag_enter", False))
+        # Load sound theme preset combo
+        saved_sound_theme = str(self._settings.get("sound_theme_preset", ""))
+        _st_idx = self._sound_theme_combo.findData(saved_sound_theme)
+        if _st_idx >= 0:
+            self._sound_theme_combo.setCurrentIndex(_st_idx)
+        else:
+            self._sound_theme_combo.setCurrentIndex(0)  # "Auto"
+        self._sound_theme_combo.setEnabled(use_theme_sound)
+        # Load sound profile combo
+        saved_profile = str(self._settings.get("sound_manual_profile", "soft"))
+        _profile_idx = self._sound_profile_combo.findData(saved_profile)
+        if _profile_idx >= 0:
+            self._sound_profile_combo.setCurrentIndex(_profile_idx)
+        # Disable profile combo when "use theme sound" is ON
+        self._sound_profile_combo.setEnabled(not use_theme_sound)
+        # Load sound event toggles
+        self._sound_theme_change_chk.setChecked(
+            bool(self._settings.get("sound_theme_change", False))
+        )
+        self._sound_tab_switch_chk.setChecked(
+            bool(self._settings.get("sound_tab_switch", False))
+        )
+        self._sound_drag_enter_chk.setChecked(
+            bool(self._settings.get("sound_drag_enter", False))
+        )
         self._trail_check.setChecked(self._settings.get("trail_enabled", False))
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
@@ -1220,17 +1243,12 @@ class SettingsDialog(QDialog):
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
         mgr.register(self._sound_check, "sound_check")
         mgr.register(self._use_theme_sound_check, "use_theme_sound")
+        mgr.register(self._sound_theme_combo, "sound_theme_combo")
+        mgr.register(self._sound_profile_combo, "sound_profile_combo")
         mgr.register(self._sound_volume_slider, "sound_volume_slider")
-        mgr.register(self._sound_success_check, "sound_success_check")
-        mgr.register(self._sound_error_check, "sound_error_check")
-        mgr.register(self._sound_unlock_check, "sound_unlock_check")
-        mgr.register(self._sound_file_add_check, "sound_file_add_check")
-        mgr.register(self._sound_preview_check, "sound_preview_check")
-        mgr.register(self._sound_process_start_check, "sound_process_start_check")
-        mgr.register(self._sound_file_remove_check, "sound_file_remove_check")
-        mgr.register(self._sound_theme_change_check, "sound_theme_change_check")
-        mgr.register(self._sound_tab_switch_check, "sound_tab_switch_check")
-        mgr.register(self._sound_drag_enter_check, "sound_drag_enter_check")
+        mgr.register(self._sound_theme_change_chk, "sound_theme_change_check")
+        mgr.register(self._sound_tab_switch_chk, "sound_tab_switch_check")
+        mgr.register(self._sound_drag_enter_chk, "sound_drag_enter_check")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")
@@ -1256,8 +1274,6 @@ class SettingsDialog(QDialog):
         mgr.register(self._btn_delete_theme, "delete_custom_theme")
         mgr.register(self._btn_export_theme, "export_custom_theme")
         mgr.register(self._btn_import_theme, "import_custom_theme")
-        mgr.register(self._click_sound_edit, "sound_path")
-        mgr.register(self._btn_sound_browse, "sound_browse")
         mgr.register(self._btn_reset, "reset_all_settings")
         mgr.register(self._btn_reset_unlocks, "reset_unlocks_btn")
         # Settings dialog own tab bar (Theme / General tabs)
@@ -1268,6 +1284,43 @@ class SettingsDialog(QDialog):
         # Register all color swatch buttons with the same generic key
         for btn in self._color_buttons.values():
             mgr.register(btn, "theme_color_btn")
+
+    # ------------------------------------------------------------------
+    # Window positioning
+    # ------------------------------------------------------------------
+
+    def showEvent(self, event):  # noqa: N802
+        """Center the dialog on the screen it will appear on and clamp its
+        size to the available geometry so no part is hidden off-screen."""
+        super().showEvent(event)
+        # Determine which screen we're on (use parent's screen, fall back to primary)
+        screen = (self.parent().screen() if self.parent() is not None else None)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        ag = screen.availableGeometry()
+        # Relax the minimum size so the dialog can shrink to fit the screen.
+        # Without this, resize() cannot reduce below setMinimumSize(), leaving
+        # the bottom/right edge of the dialog off-screen on small monitors.
+        # Subtract 4 px to leave room for window decorations/shadows so the
+        # resize lands cleanly within the available area.
+        safe_w = max(320, ag.width() - 4)
+        safe_h = max(240, ag.height() - 4)
+        if self.minimumWidth() >= safe_w or self.minimumHeight() >= safe_h:
+            self.setMinimumSize(
+                min(self.minimumWidth(), safe_w),
+                min(self.minimumHeight(), safe_h),
+            )
+        # Ensure the dialog is no larger than the available area
+        w = min(self.width(), ag.width())
+        h = min(self.height(), ag.height())
+        if w != self.width() or h != self.height():
+            self.resize(w, h)
+        # Center on the available geometry
+        x = ag.x() + max(0, (ag.width() - w) // 2)
+        y = ag.y() + max(0, (ag.height() - h) // 2)
+        self.move(x, y)
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply
@@ -1302,7 +1355,13 @@ class SettingsDialog(QDialog):
         self._set_effect_combo(self._theme.get("_effect", "default"))
         # Persist and broadcast immediately
         self._settings.set_theme(self._theme)
-        self.theme_changed.emit(self._theme)
+        # Emit first-change signal before theme_changed so unlock fires once.
+        if not self._settings.get("theme_changed_once", False):
+            self._settings.set("theme_changed_once", True)
+            self.theme_changed.emit(self._theme)
+            self.first_theme_changed.emit()
+        else:
+            self.theme_changed.emit(self._theme)
         self._update_delete_btn()
 
     def _save_custom_theme(self):
@@ -1453,18 +1512,6 @@ class SettingsDialog(QDialog):
         self._update_emoji_display()
         self.settings_changed.emit()
 
-    # ------------------------------------------------------------------
-    # Sound file browser
-    # ------------------------------------------------------------------
-
-    def _browse_sound(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select Click Sound", "",
-            "WAV Files (*.wav);;All Files (*)",
-        )
-        if path:
-            self._click_sound_edit.setText(path)
-
     def _reset_all_settings(self) -> None:
         """Ask the user then wipe all settings back to factory defaults."""
         from PyQt6.QtWidgets import QMessageBox
@@ -1531,31 +1578,45 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_sound", self._use_theme_sound_check.isChecked())
         self.settings_changed.emit()
 
-    def _on_sound_path_changed(self) -> None:
-        self._settings.set("click_sound_path", self._click_sound_edit.text().strip())
-        self.settings_changed.emit()
+    def _on_use_theme_sound_toggled(self, checked: bool) -> None:
+        """Enable/disable the sound-theme combo and manual profile combo."""
+        self._sound_theme_combo.setEnabled(checked)
+        self._sound_profile_combo.setEnabled(not checked)
+
+    def _on_sound_theme_preset_changed(self) -> None:
+        """Save the selected sound theme preset."""
+        preset = self._sound_theme_combo.currentData()
+        self._settings.set("sound_theme_preset", preset if preset is not None else "")
+
+    def _on_sound_profile_changed(self) -> None:
+        """Save the manually selected sound profile."""
+        profile = self._sound_profile_combo.currentData()
+        if profile:
+            self._settings.set("sound_manual_profile", profile)
 
     def _on_sound_volume_changed(self, value: int) -> None:
         self._settings.set("sound_volume", value)
         # No settings_changed emit needed — volume is read at play time.
 
-    def _on_sound_event_changed(self) -> None:
-        """Save per-event sound toggle states."""
-        self._settings.set("sound_success", self._sound_success_check.isChecked())
-        self._settings.set("sound_error", self._sound_error_check.isChecked())
-        self._settings.set("sound_unlock", self._sound_unlock_check.isChecked())
-        self._settings.set("sound_file_add", self._sound_file_add_check.isChecked())
-        self._settings.set("sound_preview", self._sound_preview_check.isChecked())
-        self._settings.set("sound_process_start", self._sound_process_start_check.isChecked())
-        self._settings.set("sound_file_remove", self._sound_file_remove_check.isChecked())
-        self._settings.set("sound_theme_change", self._sound_theme_change_check.isChecked())
-        self._settings.set("sound_tab_switch", self._sound_tab_switch_check.isChecked())
-        self._settings.set("sound_drag_enter", self._sound_drag_enter_check.isChecked())
+    def _on_sound_theme_change_changed(self) -> None:
+        self._settings.set("sound_theme_change", self._sound_theme_change_chk.isChecked())
+
+    def _on_sound_tab_switch_changed(self) -> None:
+        self._settings.set("sound_tab_switch", self._sound_tab_switch_chk.isChecked())
+
+    def _on_sound_drag_enter_changed(self) -> None:
+        self._settings.set("sound_drag_enter", self._sound_drag_enter_chk.isChecked())
 
     def _on_trail_changed(self) -> None:
-        self._settings.set("trail_enabled", self._trail_check.isChecked())
+        enabled = self._trail_check.isChecked()
+        self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
-        self.settings_changed.emit()
+        if enabled and not self._settings.get("trail_enabled_once", False):
+            self._settings.set("trail_enabled_once", True)
+            self.settings_changed.emit()
+            self.first_trail_enabled.emit()
+        else:
+            self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
         _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow"]

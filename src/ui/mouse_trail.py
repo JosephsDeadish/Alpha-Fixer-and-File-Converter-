@@ -13,12 +13,16 @@ The overlay supports seven trail styles:
   • "comet"   – a long tapered line-segment comet tail following the cursor.
   • "ribbon"  – a smooth connected ribbon/noodle drawn between trail points.
   • "rainbow" – cycling full-spectrum hue dots, one revolution per trail length.
+  • "noodle"  – a physics-simulated dangling chain: each segment lags behind the
+                cursor with spring + gravity forces, creating a realistic noodle
+                that wobbles and swings as the mouse moves.
 """
 from collections import deque
+import math
 import random
 
 from PyQt6.QtCore import Qt, QTimer, QEvent, QObject
-from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen
+from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen, QPainterPath
 from PyQt6.QtWidgets import QWidget, QApplication
 
 
@@ -33,7 +37,16 @@ _EMOJI_LISTS  = {
     "wave":    _WAVE_DUST,
     "sparkle": _SPARKLE_DUST,
 }
-_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow"}
+_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow", "noodle"}
+
+# ── Noodle physics constants ───────────────────────────────────────────────────────────────────────────
+_NOODLE_SEGMENTS   = 18     # number of chain links
+_NOODLE_SEG_LEN    = 12.0   # rest length of each link (pixels)
+_NOODLE_SPRING_K   = 0.28   # spring stiffness (higher = stiffer, less lag)
+_NOODLE_DAMPING    = 0.72   # velocity damping per tick (lower = more swing)
+_NOODLE_GRAVITY    = 0.55   # downward gravity acceleration per tick
+_NOODLE_MAX_VEL    = 18.0   # cap on link velocity to prevent explosions
+
 
 
 class MouseTrailOverlay(QWidget):
@@ -82,6 +95,13 @@ class MouseTrailOverlay(QWidget):
         _MIN_MOVE_PX = 4  # minimum pixel distance before adding a new trail point
         self._min_move_sq: int = _MIN_MOVE_PX * _MIN_MOVE_PX
 
+        # Noodle physics state: list of [x, y, vx, vy] for each chain link.
+        # links[0] is anchored at the cursor; links[-1] is the dangling tip.
+        self._noodle_links: list = []
+        self._noodle_cx: float = 0.0  # last known cursor x (window coords)
+        self._noodle_cy: float = 0.0  # last known cursor y (window coords)
+        self._noodle_active: bool = False
+
         self._timer = QTimer(self)
         self._timer.setInterval(33)  # ~30 fps – smoother trail fade without hogging CPU
         self._timer.timeout.connect(self._tick)
@@ -105,7 +125,10 @@ class MouseTrailOverlay(QWidget):
         if enabled:
             if app is not None:
                 app.installEventFilter(self)
-            self._timer.start()
+            if self._style == "noodle":
+                self._init_noodle()
+            else:
+                self._timer.start()
             self.raise_()
             self.show()
         else:
@@ -113,6 +136,8 @@ class MouseTrailOverlay(QWidget):
                 app.removeEventFilter(self)
             self._timer.stop()
             self._trail.clear()
+            self._noodle_active = False
+            self._noodle_links = []
             # Reset throttle state so the next enable sees a fresh start.
             self._last_trail_x = -9999
             self._last_trail_y = -9999
@@ -122,9 +147,15 @@ class MouseTrailOverlay(QWidget):
         self._color = QColor(color)
 
     def set_style(self, style: str) -> None:
-        """Set trail style: 'dots', 'fairy', 'wave', 'sparkle', 'comet', or 'ribbon'."""
+        """Set trail style: 'dots', 'fairy', 'wave', 'sparkle', 'comet', 'ribbon',
+        'rainbow', or 'noodle'."""
         self._style = style if style in _ALL_STYLES else "dots"
         self._trail.clear()
+        if style == "noodle":
+            self._init_noodle()
+        else:
+            self._noodle_active = False
+            self._noodle_links = []
 
     def set_length(self, length: int) -> None:
         """Set trail length (number of trail points kept, 10–200)."""
@@ -172,6 +203,10 @@ class MouseTrailOverlay(QWidget):
                 emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
                 emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
                 self._trail.append([lx, ly, 1.0, emoji])
+                # Noodle: keep cursor position in sync
+                if self._style == "noodle":
+                    self._noodle_cx = float(lx)
+                    self._noodle_cy = float(ly)
                 # If the timer was stopped because the trail had emptied, restart it
                 # now that a new point has been added.
                 if not self._timer.isActive():
@@ -191,6 +226,10 @@ class MouseTrailOverlay(QWidget):
     # ------------------------------------------------------------------
 
     def _tick(self) -> None:
+        # Noodle style: advance physics and paint, bypassing the regular trail.
+        if self._style == "noodle" and self._noodle_active:
+            self._tick_noodle()
+            return
         if not self._trail:
             # Trail is empty — nothing to animate.  Stop the timer so we don't
             # fire 30 no-op callbacks per second while the mouse is idle.
@@ -243,7 +282,9 @@ class MouseTrailOverlay(QWidget):
 
         painter.setPen(Qt.PenStyle.NoPen)
 
-        if self._style in _EMOJI_STYLES:
+        if self._style == "noodle":
+            self._paint_noodle(painter)
+        elif self._style in _EMOJI_STYLES:
             self._paint_emoji(painter)
         elif self._style == "comet":
             self._paint_comet(painter)
@@ -355,3 +396,94 @@ class MouseTrailOverlay(QWidget):
     def _paint_fairy(self, painter: QPainter) -> None:
         """Legacy alias for _paint_emoji (kept for compatibility)."""
         self._paint_emoji(painter)
+
+    # ------------------------------------------------------------------
+    # Noodle physics helpers
+    # ------------------------------------------------------------------
+
+    def _init_noodle(self) -> None:
+        """Initialise the noodle chain with all links at the current cursor
+        position (or 0,0 if cursor has not been seen yet)."""
+        cx = self._noodle_cx if self._noodle_cx else 0.0
+        cy = self._noodle_cy if self._noodle_cy else 0.0
+        self._noodle_links = [
+            [cx, cy + i * _NOODLE_SEG_LEN, 0.0, 0.0]
+            for i in range(_NOODLE_SEGMENTS)
+        ]
+        self._noodle_active = True
+        if not self._timer.isActive():
+            self._timer.start()
+        self.raise_()
+        self.show()
+
+    def _tick_noodle(self) -> None:
+        """Advance the noodle spring-chain physics by one tick and repaint."""
+        if not self._noodle_links:
+            return
+        links = self._noodle_links
+        # link[0] is pulled strongly toward the cursor
+        cx, cy = self._noodle_cx, self._noodle_cy
+        lx0, ly0 = links[0][0], links[0][1]
+        links[0][2] += (cx - lx0) * 0.55  # strong attraction to cursor
+        links[0][3] += (cy - ly0) * 0.55
+        links[0][2] *= _NOODLE_DAMPING
+        links[0][3] *= _NOODLE_DAMPING
+        links[0][0] += links[0][2]
+        links[0][1] += links[0][3]
+        # Each subsequent link is attracted to the link before it
+        for i in range(1, len(links)):
+            px, py = links[i - 1][0], links[i - 1][1]
+            lx, ly, vx, vy = links[i]
+            # Spring force toward previous link
+            dx, dy = px - lx, py - ly
+            dist = math.hypot(dx, dy) or 1.0
+            stretch = dist - _NOODLE_SEG_LEN
+            force_x = (dx / dist) * stretch * _NOODLE_SPRING_K
+            force_y = (dy / dist) * stretch * _NOODLE_SPRING_K
+            vx = (vx + force_x + _NOODLE_GRAVITY) * _NOODLE_DAMPING
+            vy = (vy + force_y) * _NOODLE_DAMPING
+            # Cap velocity
+            speed = math.hypot(vx, vy)
+            if speed > _NOODLE_MAX_VEL:
+                vx = vx / speed * _NOODLE_MAX_VEL
+                vy = vy / speed * _NOODLE_MAX_VEL
+            links[i] = [lx + vx, ly + vy, vx, vy]
+        self.update()
+
+    def _paint_noodle(self, painter: QPainter) -> None:
+        """Draw the physics-based noodle chain.
+
+        The noodle is rendered as a smooth tapered ribbon: thicker near the
+        cursor end, thinner at the dangling tip, in the trail colour.
+        """
+        links = self._noodle_links
+        n = len(links)
+        if n < 2:
+            return
+        max_alpha = int(220 * self._intensity / 100)
+        painter.setPen(Qt.PenStyle.NoPen)
+        # Draw individual segments from head (index 0) to tail (index n-1)
+        for i in range(1, n):
+            x1, y1 = links[i - 1][0], links[i - 1][1]
+            x2, y2 = links[i][0], links[i][1]
+            # Opacity and width taper toward the tail
+            pos_frac = 1.0 - (i / (n - 1))  # 1.0 at head, 0.0 at tail
+            alpha = max(0, min(255, int(pos_frac * max_alpha)))
+            width = max(1.5, pos_frac * 9.0)
+            c = QColor(self._color)
+            c.setAlpha(alpha)
+            pen = QPen(
+                c, width,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+            painter.setPen(pen)
+            painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+        painter.setPen(Qt.PenStyle.NoPen)
+        # Draw a small dot at the tip
+        tx, ty = int(links[-1][0]), int(links[-1][1])
+        tip_c = QColor(self._color)
+        tip_c.setAlpha(max(0, min(255, int(0.4 * max_alpha))))
+        painter.setBrush(QBrush(tip_c))
+        painter.drawEllipse(tx - 3, ty - 3, 6, 6)

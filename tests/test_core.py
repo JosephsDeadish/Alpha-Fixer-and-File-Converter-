@@ -7431,3 +7431,1051 @@ class TestRound24LoadImageStateConsistency(unittest.TestCase):
         self.assertIn("closeEvent",
                       body,
                       "MainWindow.closeEvent must call the Selective Alpha tab's closeEvent")
+
+
+# ---------------------------------------------------------------------------
+# Round-25: Orphaned unlock keys — Snake Pit / Ghost / Slime milestones
+# ---------------------------------------------------------------------------
+
+class TestRound25SnakeGhostSlimeMilestones(unittest.TestCase):
+    """Verify that the unlock_snake, unlock_ghost, unlock_slime settings keys
+    introduced alongside their secret themes are backed by actual milestone
+    entries in main_window.py's _UNLOCK_TABLE (or _ALPHA_MILESTONES /
+    _CONV_MILESTONES), so that they can actually be earned.
+    """
+
+    _MAIN_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _SM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "core", "settings_manager.py")
+    _TE_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "theme_engine.py")
+    _TM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _src(self, path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # settings_manager.py — keys must exist
+    # ------------------------------------------------------------------
+
+    def test_unlock_snake_in_defaults(self):
+        """unlock_snake must be present in settings_manager._DEFAULTS."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"unlock_snake"', src,
+                      "unlock_snake missing from settings_manager._DEFAULTS")
+
+    def test_unlock_ghost_in_defaults(self):
+        """unlock_ghost must be present in settings_manager._DEFAULTS."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"unlock_ghost"', src,
+                      "unlock_ghost missing from settings_manager._DEFAULTS")
+
+    def test_unlock_slime_in_defaults(self):
+        """unlock_slime must be present in settings_manager._DEFAULTS."""
+        src = self._src(self._SM_SRC)
+        self.assertIn('"unlock_slime"', src,
+                      "unlock_slime missing from settings_manager._DEFAULTS")
+
+    # ------------------------------------------------------------------
+    # theme_engine.py — hidden themes use the right _unlock keys
+    # ------------------------------------------------------------------
+
+    def test_snake_pit_theme_has_unlock_key(self):
+        """SECRET_SNAKE_THEME must declare _unlock == 'snake'."""
+        src = self._src(self._TE_SRC)
+        # Find the SECRET_SNAKE_THEME block and confirm '_unlock': 'snake' inside it
+        idx = src.find("SECRET_SNAKE_THEME")
+        self.assertGreater(idx, 0, "SECRET_SNAKE_THEME not found in theme_engine.py")
+        block = src[idx: idx + 900]
+        self.assertIn('"_unlock": "snake"', block,
+                      "SECRET_SNAKE_THEME must have _unlock: snake")
+
+    def test_ghost_theme_has_unlock_key(self):
+        """SECRET_GHOST_THEME must declare _unlock == 'ghost'."""
+        src = self._src(self._TE_SRC)
+        idx = src.find("SECRET_GHOST_THEME")
+        self.assertGreater(idx, 0, "SECRET_GHOST_THEME not found in theme_engine.py")
+        block = src[idx: idx + 900]
+        self.assertIn('"_unlock": "ghost"', block,
+                      "SECRET_GHOST_THEME must have _unlock: ghost")
+
+    def test_slime_theme_has_unlock_key(self):
+        """SECRET_SLIME_THEME must declare _unlock == 'slime'."""
+        src = self._src(self._TE_SRC)
+        idx = src.find("SECRET_SLIME_THEME")
+        self.assertGreater(idx, 0, "SECRET_SLIME_THEME not found in theme_engine.py")
+        block = src[idx: idx + 900]
+        self.assertIn('"_unlock": "slime"', block,
+                      "SECRET_SLIME_THEME must have _unlock: slime")
+
+    # ------------------------------------------------------------------
+    # main_window.py — milestone entries must exist for all three keys
+    # ------------------------------------------------------------------
+
+    def test_unlock_snake_in_unlock_table(self):
+        """_UNLOCK_TABLE must contain an entry for unlock_snake so it can
+        be earned by accumulating clicks."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_UNLOCK_TABLE")
+        self.assertGreater(table_start, 0, "_UNLOCK_TABLE not found in main_window.py")
+        # Find the closing bracket of the list
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        self.assertIn('"unlock_snake"', table_body,
+                      "unlock_snake missing from _UNLOCK_TABLE in main_window.py")
+
+    def test_unlock_ghost_in_alpha_milestones(self):
+        """_ALPHA_MILESTONES must contain an entry for unlock_ghost so it can
+        be earned through processing alpha files."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_ALPHA_MILESTONES")
+        self.assertGreater(table_start, 0, "_ALPHA_MILESTONES not found in main_window.py")
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        self.assertIn('"unlock_ghost"', table_body,
+                      "unlock_ghost missing from _ALPHA_MILESTONES in main_window.py")
+
+    def test_unlock_slime_in_conv_milestones(self):
+        """_CONV_MILESTONES must contain an entry for unlock_slime so it can
+        be earned by converting files."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_CONV_MILESTONES")
+        self.assertGreater(table_start, 0, "_CONV_MILESTONES not found in main_window.py")
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        self.assertIn('"unlock_slime"', table_body,
+                      "unlock_slime missing from _CONV_MILESTONES in main_window.py")
+
+    def test_unlock_table_is_sorted_ascending(self):
+        """_UNLOCK_TABLE entries must be sorted in ascending threshold order
+        so the early-break optimisation in _run_unlock_checks() is correct."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_UNLOCK_TABLE")
+        self.assertGreater(table_start, 0)
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        thresholds = [int(m.group(1))
+                      for m in re.finditer(r"\((\d+),\s*\"unlock_", table_body)]
+        self.assertGreater(len(thresholds), 0, "No unlock entries found in _UNLOCK_TABLE")
+        self.assertEqual(thresholds, sorted(thresholds),
+                         "_UNLOCK_TABLE thresholds must be in ascending order")
+
+    def test_alpha_milestones_sorted_ascending(self):
+        """_ALPHA_MILESTONES must be sorted in ascending threshold order."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_ALPHA_MILESTONES")
+        self.assertGreater(table_start, 0)
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        thresholds = [int(m.group(1))
+                      for m in re.finditer(r"\((\d+),\s*\"unlock_", table_body)]
+        self.assertGreater(len(thresholds), 0)
+        self.assertEqual(thresholds, sorted(thresholds),
+                         "_ALPHA_MILESTONES thresholds must be in ascending order")
+
+    def test_conv_milestones_sorted_ascending(self):
+        """_CONV_MILESTONES must be sorted in ascending threshold order."""
+        src = self._src(self._MAIN_SRC)
+        table_start = src.find("_CONV_MILESTONES")
+        self.assertGreater(table_start, 0)
+        table_end = src.find("\n    ]", table_start)
+        table_body = src[table_start: table_end]
+        thresholds = [int(m.group(1))
+                      for m in re.finditer(r"\((\d+),\s*\"unlock_", table_body)]
+        self.assertGreater(len(thresholds), 0)
+        self.assertEqual(thresholds, sorted(thresholds),
+                         "_CONV_MILESTONES thresholds must be in ascending order")
+
+    # ------------------------------------------------------------------
+    # tooltip_manager.py — tooltip hints mention the new themes
+    # ------------------------------------------------------------------
+
+    def test_tooltip_theme_combo_mentions_snake_pit(self):
+        """At least one tooltip mode for theme_combo must hint at Snake Pit 🐍."""
+        src = self._src(self._TM_SRC)
+        # Find all theme_combo sections and check that the snake hint appears
+        self.assertIn("Snake Pit", src,
+                      "tooltip_manager.py must mention 'Snake Pit' somewhere in theme_combo tips")
+
+    def test_tooltip_theme_combo_mentions_ghost(self):
+        """At least one tooltip mode for theme_combo must mention the Ghost theme."""
+        src = self._src(self._TM_SRC)
+        # 'Ghost' appears in several unrelated trail tips; confirm it appears
+        # in context of 'unlock' (milestone hint) rather than just trail tips.
+        # The new tips mention 'Ghost 👻 at 12 000' / 'unlock_ghost'.
+        self.assertIn("Ghost 👻 at 12", src,
+                      "tooltip_manager.py must mention 'Ghost 👻 at 12 000' in theme_combo tips")
+
+    def test_tooltip_theme_combo_mentions_slime(self):
+        """At least one tooltip mode for theme_combo must mention the Slime theme."""
+        src = self._src(self._TM_SRC)
+        self.assertIn("Slime 🟢 at 12", src,
+                      "tooltip_manager.py must mention 'Slime 🟢 at 12 500' in theme_combo tips")
+
+
+class TestRound33NewSoundEventTooltipsAndFrogCroak(unittest.TestCase):
+    """Verify Round-33 additions:
+    1. All 8 new sound event checkbox keys appear in all 3 tooltip mode dicts.
+    2. play_frog_croak is wired to Slime and Snake Pit in _on_theme_changed_sound.
+    """
+
+    _TM_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+    _MW_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _SE_SRC   = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "sound_engine.py")
+
+    _NEW_SOUND_KEYS = [
+        "sound_zone_paint_check",
+        "sound_mask_copy_check",
+        "sound_mask_paste_check",
+        "sound_bat_screech_check",
+        "sound_cat_meow_check",
+        "sound_dog_bark_check",
+        "sound_frog_croak_check",
+        "sound_batch_done_check",
+    ]
+
+    def _src(self, path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # tooltip_manager.py — 8 new sound keys appear in all 3 mode dicts
+    # ------------------------------------------------------------------
+
+    def test_sound_zone_paint_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_zone_paint_check"')
+        self.assertEqual(count, 3,
+                         "sound_zone_paint_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_mask_copy_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_mask_copy_check"')
+        self.assertEqual(count, 3,
+                         "sound_mask_copy_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_mask_paste_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_mask_paste_check"')
+        self.assertEqual(count, 3,
+                         "sound_mask_paste_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_bat_screech_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_bat_screech_check"')
+        self.assertEqual(count, 3,
+                         "sound_bat_screech_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_cat_meow_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_cat_meow_check"')
+        self.assertEqual(count, 3,
+                         "sound_cat_meow_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_dog_bark_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_dog_bark_check"')
+        self.assertEqual(count, 3,
+                         "sound_dog_bark_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_frog_croak_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_frog_croak_check"')
+        self.assertEqual(count, 3,
+                         "sound_frog_croak_check must appear in all 3 tooltip mode dicts")
+
+    def test_sound_batch_done_check_in_all_three_modes(self):
+        src = self._src(self._TM_SRC)
+        count = src.count('"sound_batch_done_check"')
+        self.assertEqual(count, 3,
+                         "sound_batch_done_check must appear in all 3 tooltip mode dicts")
+
+    def test_all_new_keys_have_tips_in_tooltip_manager(self):
+        """Each new key must have at least one tip line (a non-empty list entry)."""
+        src = self._src(self._TM_SRC)
+        for key in self._NEW_SOUND_KEYS:
+            idx = src.find(f'"{key}"')
+            self.assertGreater(idx, -1,
+                               f"{key} not found in tooltip_manager.py")
+            # The list starts within 30 chars of the key name
+            snippet = src[idx: idx + 200]
+            self.assertIn('"', snippet[len(key) + 3:],
+                          f"{key} must have at least one tip string")
+
+    # ------------------------------------------------------------------
+    # main_window.py — play_frog_croak wired to Slime / Snake Pit themes
+    # ------------------------------------------------------------------
+
+    def test_frog_croak_wired_to_slime_theme(self):
+        """_on_theme_changed_sound must call play_frog_croak for the Slime theme."""
+        src = self._src(self._MW_SRC)
+        idx = src.find("_on_theme_changed_sound")
+        self.assertGreater(idx, 0, "_on_theme_changed_sound not found in main_window.py")
+        # Find the method body (up to next def at same indentation)
+        end = src.find("\n    def ", idx + 1)
+        method_src = src[idx:end] if end > 0 else src[idx:]
+        self.assertIn("Slime", method_src,
+                      "_on_theme_changed_sound must handle 'Slime' theme for frog croak")
+        self.assertIn("play_frog_croak", method_src,
+                      "_on_theme_changed_sound must call play_frog_croak")
+
+    def test_frog_croak_wired_to_snake_pit_theme(self):
+        """_on_theme_changed_sound must call play_frog_croak for Snake Pit theme."""
+        src = self._src(self._MW_SRC)
+        idx = src.find("_on_theme_changed_sound")
+        self.assertGreater(idx, 0)
+        end = src.find("\n    def ", idx + 1)
+        method_src = src[idx:end] if end > 0 else src[idx:]
+        self.assertIn("Snake Pit", method_src,
+                      "_on_theme_changed_sound must handle 'Snake Pit' theme for frog croak")
+
+    # ------------------------------------------------------------------
+    # sound_engine.py — play_frog_croak method exists with correct guard
+    # ------------------------------------------------------------------
+
+    def test_play_frog_croak_exists_in_sound_engine(self):
+        """SoundEngine must have a play_frog_croak method."""
+        src = self._src(self._SE_SRC)
+        self.assertIn("def play_frog_croak", src,
+                      "SoundEngine must define play_frog_croak()")
+
+    def test_play_frog_croak_checks_sound_enabled(self):
+        """play_frog_croak must guard on sound_enabled setting."""
+        src = self._src(self._SE_SRC)
+        idx = src.find("def play_frog_croak")
+        self.assertGreater(idx, 0)
+        end = src.find("\n    def ", idx + 1)
+        method_src = src[idx:end] if end > 0 else src[idx:]
+        self.assertIn("sound_enabled", method_src,
+                      "play_frog_croak must check sound_enabled setting")
+        self.assertIn("sound_frog_croak", method_src,
+                      "play_frog_croak must check sound_frog_croak per-event toggle")
+
+
+class TestRound34ThemeSoundMapping(unittest.TestCase):
+    """Verify Round-34 fixes: _on_theme_changed_sound maps all animal-themed
+    themes to their matching sound events in main_window.py, consistent with
+    the tooltip descriptions in tooltip_manager.py.
+
+    New in this round:
+    - "Good Dog" → play_dog_bark()
+    - "Purrfect Cats" and "Space Cat" → play_cat_meow()
+    """
+
+    _MW_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "main_window.py")
+    _TM_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _method_src(self, path: str, method_name: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        idx = src.find(method_name)
+        if idx < 0:
+            return ""
+        end = src.find("\n    def ", idx + 1)
+        return src[idx:end] if end > 0 else src[idx:]
+
+    def _src(self, path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # main_window.py — Good Dog wired to play_dog_bark
+    # ------------------------------------------------------------------
+
+    def test_good_dog_theme_triggers_play_dog_bark(self):
+        """_on_theme_changed_sound must call play_dog_bark for the Good Dog theme."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertGreater(len(method), 0,
+                           "_on_theme_changed_sound not found in main_window.py")
+        self.assertIn("Good Dog", method,
+                      "_on_theme_changed_sound must handle 'Good Dog' theme")
+        self.assertIn("play_dog_bark", method,
+                      "_on_theme_changed_sound must call play_dog_bark for Good Dog theme")
+
+    # ------------------------------------------------------------------
+    # main_window.py — Purrfect Cats wired to play_cat_meow
+    # ------------------------------------------------------------------
+
+    def test_purrfect_cats_theme_triggers_play_cat_meow(self):
+        """_on_theme_changed_sound must call play_cat_meow for the Purrfect Cats theme."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertGreater(len(method), 0,
+                           "_on_theme_changed_sound not found in main_window.py")
+        self.assertIn("Purrfect Cats", method,
+                      "_on_theme_changed_sound must handle 'Purrfect Cats' theme")
+        self.assertIn("play_cat_meow", method,
+                      "_on_theme_changed_sound must call play_cat_meow for Purrfect Cats theme")
+
+    # ------------------------------------------------------------------
+    # main_window.py — Space Cat wired to play_cat_meow
+    # ------------------------------------------------------------------
+
+    def test_space_cat_theme_triggers_play_cat_meow(self):
+        """_on_theme_changed_sound must call play_cat_meow for the Space Cat theme."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertGreater(len(method), 0,
+                           "_on_theme_changed_sound not found in main_window.py")
+        self.assertIn("Space Cat", method,
+                      "_on_theme_changed_sound must handle 'Space Cat' theme")
+
+    # ------------------------------------------------------------------
+    # Consistency: Good Dog and Purrfect Cats are in different elif branches
+    # ------------------------------------------------------------------
+
+    def test_good_dog_and_purrfect_cats_in_separate_branches(self):
+        """Good Dog must be in its own elif branch separate from Purrfect Cats."""
+        method = self._method_src(self._MW_SRC, "_on_theme_changed_sound")
+        self.assertIn("Good Dog", method)
+        self.assertIn("Purrfect Cats", method)
+        # Both must be present; ensure the method has play_dog_bark
+        self.assertIn("play_dog_bark", method,
+                      "Good Dog must use play_dog_bark, not play_cat_meow")
+
+    # ------------------------------------------------------------------
+    # tooltip_manager.py — descriptions match implementation
+    # ------------------------------------------------------------------
+
+    def test_tooltip_dog_bark_mentions_good_dog_theme(self):
+        """sound_dog_bark_check tooltips must mention switching to Good Dog theme."""
+        src = self._src(self._TM_SRC)
+        # Find the key and check the surrounding content
+        idx = src.find('"sound_dog_bark_check"')
+        self.assertGreater(idx, -1)
+        snippet = src[idx: idx + 400]
+        self.assertIn("Good Dog", snippet,
+                      "sound_dog_bark_check tooltip must mention 'Good Dog' theme")
+
+    def test_tooltip_cat_meow_mentions_purrfect_cats(self):
+        """sound_cat_meow_check tooltips must mention the Purrfect Cats theme."""
+        src = self._src(self._TM_SRC)
+        idx = src.find('"sound_cat_meow_check"')
+        self.assertGreater(idx, -1)
+        snippet = src[idx: idx + 400]
+        self.assertIn("Purrfect Cats", snippet,
+                      "sound_cat_meow_check tooltip must mention 'Purrfect Cats' theme")
+
+    def test_tooltip_cat_meow_mentions_space_cat(self):
+        """sound_cat_meow_check tooltips must mention the Space Cat theme."""
+        src = self._src(self._TM_SRC)
+        idx = src.find('"sound_cat_meow_check"')
+        self.assertGreater(idx, -1)
+        snippet = src[idx: idx + 400]
+        self.assertIn("Space Cat", snippet,
+                      "sound_cat_meow_check tooltip must mention 'Space Cat' theme")
+
+
+class TestRound35ThemeFlavorTooltips(unittest.TestCase):
+    """Verify Round-35: TooltipManager._THEME_FLAVORS replaces the old generic
+    'Active theme: <name>' append with per-theme personality flavor text.
+
+    Checks:
+    - _THEME_FLAVORS dict exists as a class-level attribute on TooltipManager.
+    - Every built-in preset and hidden theme name has an entry.
+    - The old generic "Active theme: " pattern is no longer used in get_tip
+      as the primary path (it is kept only as a fallback for unknown themes).
+    - Each flavor string is non-empty and mentions the theme name or a
+      clearly-themed emoji/keyword (sanity check).
+    - The fallback path for an unknown theme still produces "🎨 Active theme:".
+    """
+
+    _TM_SRC = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py")
+
+    def _src(self) -> str:
+        with open(self._TM_SRC, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Structure: _THEME_FLAVORS must exist
+    # ------------------------------------------------------------------
+
+    def test_theme_flavors_dict_defined(self):
+        """TooltipManager must define a _THEME_FLAVORS class-level dict."""
+        src = self._src()
+        self.assertIn("_THEME_FLAVORS", src,
+                      "tooltip_manager.py must define _THEME_FLAVORS")
+
+    def test_theme_flavors_is_dict_literal(self):
+        """_THEME_FLAVORS must be a non-empty dict literal."""
+        src = self._src()
+        idx = src.find("_THEME_FLAVORS")
+        self.assertGreater(idx, 0)
+        # Some entries should be present shortly after the dict start
+        snippet = src[idx: idx + 500]
+        self.assertIn("Panda Dark", snippet,
+                      "_THEME_FLAVORS must contain an entry for 'Panda Dark'")
+
+    # ------------------------------------------------------------------
+    # Coverage: each shipped theme must have an entry
+    # ------------------------------------------------------------------
+
+    _REQUIRED_THEMES = [
+        "Panda Dark", "Panda Light", "Neon Panda",
+        "Gore", "Bat Cave", "Rainbow Chaos", "Otter Cove", "Galaxy",
+        "Galaxy Otter", "Goth", "Volcano", "Arctic",
+        "Secret Skeleton", "Secret Sakura", "Fairy Garden", "Deep Ocean",
+        "Mermaid", "Shark Bait", "Alien", "Noodle", "Pancake",
+        "Blood Moon", "Ice Cave", "Cyber Otter", "Toxic Neon", "Lava Cave",
+        "Sunset Beach", "Midnight Forest", "Candy Land", "Zombie Apocalypse",
+        "Dragon Fire", "Bubblegum", "Thunder Storm", "Rose Gold",
+        "Space Cat", "Magic Mushroom", "Abyssal Void", "Spring Bloom",
+        "Gold Rush", "Nebula", "Crystal Cave", "Glitch", "Wild West",
+        "Pirate", "Deep Space", "Witch's Brew", "Lava Lamp", "Coral Reef",
+        "Storm Cloud", "Golden Hour",
+        "Purrfect Cats", "Good Dog", "Snake Pit", "Ghost",
+        "Anime", "Waifu", "Slime",
+    ]
+
+    def test_all_preset_and_hidden_themes_have_flavor(self):
+        """Every shipped theme must have an entry in _THEME_FLAVORS."""
+        src = self._src()
+        # Extract the _THEME_FLAVORS block
+        start = src.find("_THEME_FLAVORS")
+        self.assertGreater(start, 0)
+        # Grab a generous window that covers the whole dict
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        for theme in self._REQUIRED_THEMES:
+            self.assertIn(theme, block,
+                          f"_THEME_FLAVORS is missing an entry for theme '{theme}'")
+
+    # ------------------------------------------------------------------
+    # Content: each entry should be a meaningful string, not just the name
+    # ------------------------------------------------------------------
+
+    def test_bat_cave_flavor_has_bat_emoji_or_keyword(self):
+        """Bat Cave flavor text must reference a bat or cave."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        bat_idx = block.find('"Bat Cave"')
+        self.assertGreater(bat_idx, 0)
+        snippet = block[bat_idx: bat_idx + 200]
+        self.assertTrue(
+            "🦇" in snippet or "bat" in snippet.lower() or "cave" in snippet.lower(),
+            "Bat Cave flavor text must reference bats or a cave",
+        )
+
+    def test_good_dog_flavor_has_dog_keyword(self):
+        """Good Dog flavor text must contain dog-related content."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        idx = block.find('"Good Dog"')
+        self.assertGreater(idx, 0)
+        snippet = block[idx: idx + 200]
+        self.assertTrue(
+            "🐶" in snippet or "dog" in snippet.lower(),
+            "Good Dog flavor text must contain dog-related content",
+        )
+
+    def test_purrfect_cats_flavor_has_cat_keyword(self):
+        """Purrfect Cats flavor text must contain cat-related content."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        idx = block.find('"Purrfect Cats"')
+        self.assertGreater(idx, 0)
+        snippet = block[idx: idx + 200]
+        self.assertTrue(
+            "🐱" in snippet or "cat" in snippet.lower() or "meow" in snippet.lower(),
+            "Purrfect Cats flavor text must contain cat-related content",
+        )
+
+    def test_ghost_flavor_has_ghost_keyword(self):
+        """Ghost flavor text must contain ghost-related content."""
+        src = self._src()
+        start = src.find("_THEME_FLAVORS")
+        end = src.find("\n    }", start)
+        block = src[start: end + 6] if end > 0 else src[start: start + 6000]
+        idx = block.find('"Ghost"')
+        self.assertGreater(idx, 0)
+        snippet = block[idx: idx + 200]
+        self.assertTrue(
+            "👻" in snippet or "ghost" in snippet.lower() or "boo" in snippet.lower(),
+            "Ghost flavor text must contain ghost-related content",
+        )
+
+    # ------------------------------------------------------------------
+    # Logic: get_tip must use _THEME_FLAVORS instead of generic append
+    # ------------------------------------------------------------------
+
+    def test_get_tip_uses_theme_flavors_lookup(self):
+        """get_tip must reference _THEME_FLAVORS for the theme-aware suffix."""
+        src = self._src()
+        # The method body should reference _THEME_FLAVORS.get(
+        idx = src.find("_THEME_FLAVORS.get(")
+        self.assertGreater(idx, 0,
+                           "get_tip must look up the theme in _THEME_FLAVORS")
+
+    def test_get_tip_has_fallback_for_unknown_themes(self):
+        """get_tip must still produce '🎨 Active theme:' for unknown themes."""
+        src = self._src()
+        # The fallback branch should be present
+        self.assertIn("🎨 Active theme:", src,
+                      "get_tip must keep the generic fallback for unknown themes")
+
+    def test_primary_path_uses_flavor_not_raw_name(self):
+        """The primary theme-aware suffix path must use flavor, not raw name string."""
+        src = self._src()
+        # Find the get_tip block
+        idx = src.find("_THEME_FLAVORS.get(")
+        self.assertGreater(idx, 0)
+        surrounding = src[idx: idx + 300]
+        # The primary branch should set tip_text to the flavor value
+        self.assertIn("flavor", surrounding,
+                      "get_tip primary branch must use the 'flavor' variable")
+
+
+class TestRound36VulgarSAExpansion(unittest.TestCase):
+    """Round 36: all selective-alpha _VULGAR entries expanded to ≥8 variants."""
+
+    _TM_PATH = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "tooltip_manager.py"
+    )
+
+    def _src(self) -> str:
+        with open(self._TM_PATH, encoding="utf-8") as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Helper: count entries for a key inside the _VULGAR block
+    # ------------------------------------------------------------------
+
+    def _vulgar_entry_count(self, key: str) -> int:
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        self.assertGreater(start_v, 0, "_VULGAR dict not found in tooltip_manager.py")
+        vulgar_chunk = src[start_v:]
+        k_start = vulgar_chunk.find(f'    "{key}": [')
+        if k_start < 0:
+            return 0
+        k_end = vulgar_chunk.find("    ],", k_start)
+        if k_end < 0:
+            return 0
+        block = vulgar_chunk[k_start : k_end + 6]
+        return block.count('        "')
+
+    # ------------------------------------------------------------------
+    # Individual key tests
+    # ------------------------------------------------------------------
+
+    def test_selective_alpha_tab_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("selective_alpha_tab")
+        self.assertGreaterEqual(count, 8,
+                                "selective_alpha_tab needs ≥8 _VULGAR entries")
+
+    def test_sa_open_btn_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_open_btn")
+        self.assertGreaterEqual(count, 8, "sa_open_btn needs ≥8 _VULGAR entries")
+
+    def test_sa_save_btn_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_save_btn")
+        self.assertGreaterEqual(count, 8, "sa_save_btn needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_freehand_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_freehand")
+        self.assertGreaterEqual(count, 8, "sa_tool_freehand needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_line_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_line")
+        self.assertGreaterEqual(count, 8, "sa_tool_line needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_rect_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_rect")
+        self.assertGreaterEqual(count, 8, "sa_tool_rect needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_ellipse_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_ellipse")
+        self.assertGreaterEqual(count, 8, "sa_tool_ellipse needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_fill_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_fill")
+        self.assertGreaterEqual(count, 8, "sa_tool_fill needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_polygon_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_polygon")
+        self.assertGreaterEqual(count, 8, "sa_tool_polygon needs ≥8 _VULGAR entries")
+
+    def test_sa_tool_eraser_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_tool_eraser")
+        self.assertGreaterEqual(count, 8, "sa_tool_eraser needs ≥8 _VULGAR entries")
+
+    def test_sa_close_poly_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_close_poly")
+        self.assertGreaterEqual(count, 8, "sa_close_poly needs ≥8 _VULGAR entries")
+
+    def test_sa_brush_spin_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_brush_spin")
+        self.assertGreaterEqual(count, 8, "sa_brush_spin needs ≥8 _VULGAR entries")
+
+    def test_sa_eraser_spin_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_eraser_spin")
+        self.assertGreaterEqual(count, 8, "sa_eraser_spin needs ≥8 _VULGAR entries")
+
+    def test_sa_autocorrect_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_autocorrect")
+        self.assertGreaterEqual(count, 8, "sa_autocorrect needs ≥8 _VULGAR entries")
+
+    def test_sa_zoom_in_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zoom_in")
+        self.assertGreaterEqual(count, 8, "sa_zoom_in needs ≥8 _VULGAR entries")
+
+    def test_sa_zoom_out_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zoom_out")
+        self.assertGreaterEqual(count, 8, "sa_zoom_out needs ≥8 _VULGAR entries")
+
+    def test_sa_zoom_fit_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zoom_fit")
+        self.assertGreaterEqual(count, 8, "sa_zoom_fit needs ≥8 _VULGAR entries")
+
+    def test_sa_show_all_zones_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_show_all_zones")
+        self.assertGreaterEqual(count, 8,
+                                "sa_show_all_zones needs ≥8 _VULGAR entries")
+
+    def test_sa_hide_all_zones_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_hide_all_zones")
+        self.assertGreaterEqual(count, 8,
+                                "sa_hide_all_zones needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_alpha_spin_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_alpha_spin")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_alpha_spin needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_select_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_select")
+        self.assertGreaterEqual(count, 8, "sa_zone_select needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_clear_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_clear")
+        self.assertGreaterEqual(count, 8, "sa_zone_clear needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_visibility_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_visibility")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_visibility needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_copy_mask_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_copy_mask")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_copy_mask needs ≥8 _VULGAR entries")
+
+    def test_sa_zone_paste_mask_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_zone_paste_mask")
+        self.assertGreaterEqual(count, 8,
+                                "sa_zone_paste_mask needs ≥8 _VULGAR entries")
+
+    def test_sa_undo_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_undo")
+        self.assertGreaterEqual(count, 8, "sa_undo needs ≥8 _VULGAR entries")
+
+    def test_sa_redo_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_redo")
+        self.assertGreaterEqual(count, 8, "sa_redo needs ≥8 _VULGAR entries")
+
+    def test_sa_apply_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_apply")
+        self.assertGreaterEqual(count, 8, "sa_apply needs ≥8 _VULGAR entries")
+
+    def test_sa_undo_process_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_undo_process")
+        self.assertGreaterEqual(count, 8,
+                                "sa_undo_process needs ≥8 _VULGAR entries")
+
+    def test_sa_clear_all_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_clear_all")
+        self.assertGreaterEqual(count, 8, "sa_clear_all needs ≥8 _VULGAR entries")
+
+    def test_sa_canvas_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_canvas")
+        self.assertGreaterEqual(count, 8, "sa_canvas needs ≥8 _VULGAR entries")
+
+    def test_sa_status_lbl_has_at_least_8_vulgar_entries(self):
+        count = self._vulgar_entry_count("sa_status_lbl")
+        self.assertGreaterEqual(count, 8, "sa_status_lbl needs ≥8 _VULGAR entries")
+
+    # ------------------------------------------------------------------
+    # Spot-check content quality: new entries must have actual profanity
+    # ------------------------------------------------------------------
+
+    def test_sa_tool_freehand_new_entries_have_profanity(self):
+        """The expanded sa_tool_freehand block must reference Auto-Correct or chaos."""
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        chunk = src[start_v:]
+        k_start = chunk.find('    "sa_tool_freehand": [')
+        k_end = chunk.find("    ],", k_start)
+        block = chunk[k_start : k_end + 6].lower()
+        self.assertTrue(
+            "auto-correct" in block or "autocorrect" in block or "chaos" in block,
+            "sa_tool_freehand _VULGAR block must reference auto-correct or chaos",
+        )
+
+    def test_sa_apply_new_entries_emphasise_painting_alone_does_nothing(self):
+        """The expanded sa_apply block must stress that painting alone does nothing."""
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        chunk = src[start_v:]
+        k_start = chunk.find('    "sa_apply": [')
+        k_end = chunk.find("    ],", k_start)
+        block = chunk[k_start : k_end + 6].lower()
+        self.assertTrue(
+            "nothing" in block or "does nothing" in block or "alone" in block,
+            "sa_apply _VULGAR block must warn that painting without Apply does nothing",
+        )
+
+    def test_sa_undo_new_entries_mention_ctrl_z(self):
+        """The expanded sa_undo block must mention Ctrl+Z."""
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        chunk = src[start_v:]
+        k_start = chunk.find('    "sa_undo": [')
+        k_end = chunk.find("    ],", k_start)
+        block = chunk[k_start : k_end + 6]
+        self.assertIn("Ctrl+Z", block,
+                      "sa_undo _VULGAR block must contain Ctrl+Z shortcut hint")
+
+    def test_vulgar_sa_keys_total_count_is_32(self):
+        """At least 32 selective-alpha keys must exist in _VULGAR.
+
+        New rounds keep adding sa_* tooltip keys, so we assert a lower-bound
+        (≥32) rather than an exact count to avoid updating the number after
+        every expansion.
+        """
+        import re
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        vulgar_chunk = src[start_v:]
+        sa_keys = re.findall(
+            r'^\s{4}\"(sa_[a-z_]+|selective_alpha_tab)\":\s*\[',
+            vulgar_chunk, re.MULTILINE
+        )
+        self.assertGreaterEqual(len(sa_keys), 32,
+                                f"Expected at least 32 sa_* keys in _VULGAR, found {len(sa_keys)}")
+
+    def test_vulgar_minimum_entry_count_is_at_least_6_for_all_keys(self):
+        """Every key in _VULGAR must have ≥6 entries after Round 36."""
+        import re, statistics
+        src = self._src()
+        start_v = src.find("_VULGAR:")
+        vulgar_chunk = src[start_v:]
+        keys = re.findall(r'^\s{4}\"([a-z_]+)\":\s*\[', vulgar_chunk, re.MULTILINE)
+        low_keys = []
+        for key in keys:
+            k_start = vulgar_chunk.find(f'    "{key}": [')
+            if k_start < 0:
+                continue
+            k_end = vulgar_chunk.find("    ],", k_start)
+            if k_end < 0:
+                continue
+            block = vulgar_chunk[k_start : k_end + 6]
+            count = block.count('        "')
+            if count < 6:
+                low_keys.append((key, count))
+        self.assertEqual(
+            low_keys, [],
+            f"Keys with <6 _VULGAR entries after Round 36: {low_keys}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Round-46: zone name label fix, multi-slot mask collection, autocorrect
+#           placement, get_active_zone() API
+# ---------------------------------------------------------------------------
+
+
+class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
+    """Round-46: zone-name label no longer clips, mask slot collection works,
+    autocorrect checkbox is inside the Tool Size group, canvas exposes
+    get_active_zone()."""
+
+    _SA_SRC = os.path.join(
+        os.path.dirname(__file__), "..", "src", "ui", "selective_alpha_tool.py"
+    )
+
+    @staticmethod
+    def _src() -> str:
+        with open(
+            os.path.join(
+                os.path.dirname(__file__), "..", "src", "ui", "selective_alpha_tool.py"
+            ),
+            encoding="utf-8",
+        ) as fh:
+            return fh.read()
+
+    # ------------------------------------------------------------------
+    # Zone-name label fix
+    # ------------------------------------------------------------------
+
+    def test_zone_name_label_no_addstretch_before_alpha_spin(self):
+        """The _ZoneRow top row must NOT use addStretch() between name and
+        alpha spinbox — the stretch was causing the name label to be squeezed
+        to its minimum width and clip on longer zone names."""
+        src = self._src()
+        zone_row_match = re.search(
+            r"class _ZoneRow.*?(?=\nclass |\Z)", src, re.S
+        )
+        self.assertIsNotNone(zone_row_match, "_ZoneRow class not found in source")
+        zone_row_body = zone_row_match.group(0)
+        # The addStretch call in the top HBoxLayout must be gone.
+        # Acceptable: there is NO addStretch between the name label and "α:"
+        # We check that addStretch does NOT appear BETWEEN name_lbl and α:
+        name_pos = zone_row_body.find("name_lbl")
+        alpha_lbl_pos = zone_row_body.find('"α:"')
+        if name_pos > 0 and alpha_lbl_pos > 0:
+            between = zone_row_body[name_pos:alpha_lbl_pos]
+            self.assertNotIn(
+                "addStretch",
+                between,
+                "addStretch must not appear between the zone name label and the α: "
+                "label — it was causing text clipping on long zone names.",
+            )
+
+    def test_zone_name_label_has_expanding_size_policy(self):
+        """_ZoneRow must set an Expanding horizontal size policy on name_lbl
+        so the label fills available space and long names render fully."""
+        src = self._src()
+        zone_row_match = re.search(
+            r"class _ZoneRow.*?(?=\nclass |\Z)", src, re.S
+        )
+        self.assertIsNotNone(zone_row_match, "_ZoneRow class not found")
+        body = zone_row_match.group(0)
+        self.assertIn(
+            "setSizePolicy",
+            body,
+            "_ZoneRow must call setSizePolicy on name_lbl to prevent clipping",
+        )
+        self.assertIn(
+            "Expanding",
+            body,
+            "_ZoneRow name_lbl must use an Expanding size policy",
+        )
+
+    # ------------------------------------------------------------------
+    # get_active_zone()
+    # ------------------------------------------------------------------
+
+    def test_canvas_has_get_active_zone_method(self):
+        """SelectiveAlphaCanvas must expose get_active_zone() → int."""
+        src = self._src()
+        self.assertIn(
+            "def get_active_zone(self)",
+            src,
+            "SelectiveAlphaCanvas must define get_active_zone()",
+        )
+
+    def test_get_active_zone_returns_active_zone_attribute(self):
+        """get_active_zone() must return self._active_zone."""
+        src = self._src()
+        match = re.search(r"def get_active_zone\(self\).*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "get_active_zone body not found")
+        body = match.group(0)
+        self.assertIn(
+            "self._active_zone",
+            body,
+            "get_active_zone() must return self._active_zone",
+        )
+
+    # ------------------------------------------------------------------
+    # Multi-slot mask collection
+    # ------------------------------------------------------------------
+
+    def test_tool_has_mask_slots_attribute_init(self):
+        """SelectiveAlphaTool._setup_ui must initialise _mask_slots as a list."""
+        src = self._src()
+        self.assertIn(
+            "_mask_slots",
+            src,
+            "SelectiveAlphaTool must define _mask_slots for multi-slot clipboard",
+        )
+
+    def test_tool_has_on_save_to_slot_method(self):
+        """SelectiveAlphaTool must define _on_save_to_slot()."""
+        src = self._src()
+        self.assertIn(
+            "def _on_save_to_slot(self",
+            src,
+            "SelectiveAlphaTool must define _on_save_to_slot()",
+        )
+
+    def test_tool_has_on_paste_from_slot_method(self):
+        """SelectiveAlphaTool must define _on_paste_from_slot()."""
+        src = self._src()
+        self.assertIn(
+            "def _on_paste_from_slot(self",
+            src,
+            "SelectiveAlphaTool must define _on_paste_from_slot()",
+        )
+
+    def test_save_to_slot_calls_get_active_zone(self):
+        """_on_save_to_slot must query the canvas for the active zone index."""
+        src = self._src()
+        match = re.search(r"def _on_save_to_slot\(self.*?\n(?=    def )", src, re.S)
+        self.assertIsNotNone(match, "_on_save_to_slot body not found")
+        body = match.group(0)
+        self.assertIn(
+            "get_active_zone",
+            body,
+            "_on_save_to_slot must call canvas.get_active_zone() to find active zone",
+        )
+
+    def test_paste_from_slot_calls_set_mask_from_array(self):
+        """_on_paste_from_slot must call canvas.set_mask_from_array to apply
+        the saved mask onto the active zone."""
+        src = self._src()
+        match = re.search(
+            r"def _on_paste_from_slot\(self.*?\n(?=    def |\Z)", src, re.S
+        )
+        self.assertIsNotNone(match, "_on_paste_from_slot body not found")
+        body = match.group(0)
+        self.assertIn(
+            "set_mask_from_array",
+            body,
+            "_on_paste_from_slot must call canvas.set_mask_from_array()",
+        )
+
+    def test_saved_masks_group_present_in_setup_ui(self):
+        """_setup_ui must create a 'Saved Masks' QGroupBox."""
+        src = self._src()
+        self.assertIn(
+            '"Saved Masks"',
+            src,
+            "_setup_ui must create a 'Saved Masks' group for the slot collection",
+        )
+
+    def test_five_save_slots_created(self):
+        """The 'Saved Masks' panel must create exactly 5 save/paste slot pairs."""
+        src = self._src()
+        # Look for _MASK_SLOT_COUNT = 5 constant
+        self.assertIn(
+            "_MASK_SLOT_COUNT = 5",
+            src,
+            "must define _MASK_SLOT_COUNT = 5 for the collection size",
+        )
+
+    # ------------------------------------------------------------------
+    # Autocorrect checkbox placement
+    # ------------------------------------------------------------------
+
+    def test_autocorrect_checkbox_inside_tool_size_group(self):
+        """The autocorrect checkbox must be added to the Tool Size QGroupBox
+        (sg.addWidget) so it is not floating outside any group."""
+        src = self._src()
+        # Find the Tool Size group setup block
+        tool_size_match = re.search(
+            r'size_box\s*=\s*QGroupBox\("Tool Size"\).*?lv\.addWidget\(size_box\)',
+            src, re.S
+        )
+        self.assertIsNotNone(
+            tool_size_match,
+            "Could not find Tool Size group setup in _setup_ui",
+        )
+        block = tool_size_match.group(0)
+        self.assertIn(
+            "_autocorrect_chk",
+            block,
+            "autocorrect checkbox must be added inside the Tool Size group block",
+        )

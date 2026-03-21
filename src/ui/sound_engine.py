@@ -506,6 +506,192 @@ def _make_drag_enter_wav(sample_rate: int = 22050) -> str:
     return _write_wav(samples, sample_rate)
 
 
+def _make_zone_paint_wav(sample_rate: int = 22050) -> str:
+    """Soft brush-swipe sound for zone painting.
+
+    A short band of filtered noise with a quick decay mimics the feel of a
+    soft-bristle brush dragging across canvas.
+    """
+    n = int(sample_rate * 0.06)
+    samples: list = []
+    import random as _rng
+    rng = _rng.Random(42)
+    for i in range(n):
+        t = i / sample_rate
+        env = math.exp(-t * 35) * 0.7
+        noise = rng.uniform(-1.0, 1.0)
+        # Band-pass effect: mix noise with a low sine to add warmth
+        warm = 0.3 * math.sin(2 * math.pi * 220 * t)
+        samples.append(int(12000 * (noise * 0.7 + warm) * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_mask_copy_wav(sample_rate: int = 22050) -> str:
+    """Crisp camera-shutter click for copying a zone mask.
+
+    Two very short transients — a mechanical click followed by a faint echo —
+    imitate the feel of pressing a physical copy button.
+    """
+    n = int(sample_rate * 0.07)
+    samples: list = []
+    click_at = [0, int(sample_rate * 0.025)]
+    for i in range(n):
+        t = i / sample_rate
+        s = 0.0
+        for onset in click_at:
+            dt = i - onset
+            if dt >= 0:
+                env = math.exp(-dt / sample_rate * 120)
+                s += math.sin(2 * math.pi * 1800 * dt / sample_rate) * env
+        samples.append(int(16000 * s * 0.5))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_mask_paste_wav(sample_rate: int = 22050) -> str:
+    """Soft 'splat/plop' for pasting a zone mask.
+
+    A low-frequency tone with a quick non-linear decay simulates a dab or
+    stamp landing on a surface.
+    """
+    n = int(sample_rate * 0.08)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        # Pitch drops rapidly (stamp landing + resonance)
+        freq = 320 - 180 * (t / 0.08)
+        env = math.exp(-t * 40) * (1.0 - math.exp(-t * 300))
+        samples.append(int(18000 * math.sin(2 * math.pi * freq * t) * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_bat_screech_wav(sample_rate: int = 22050) -> str:
+    """Bat echolocation screech — rapid high-frequency chirp bursts.
+
+    Three short ultra-high sine pulses with very quick decay simulate a bat's
+    biosonar click train, giving the Bat Cave theme its own distinctive sound.
+    """
+    n = int(sample_rate * 0.12)
+    samples: list = []
+    pulse_onsets = [0, int(sample_rate * 0.035), int(sample_rate * 0.07)]
+    for i in range(n):
+        s = 0.0
+        for onset in pulse_onsets:
+            dt = i - onset
+            if 0 <= dt < int(sample_rate * 0.025):
+                t = dt / sample_rate
+                env = math.exp(-t * 200)
+                # High-frequency chirp that descends slightly (bat echolocation)
+                freq = 5500 - 1500 * t / 0.025
+                s += math.sin(2 * math.pi * freq * t) * env
+        samples.append(int(14000 * s))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_cat_meow_wav(sample_rate: int = 22050) -> str:
+    """Synthetic cat meow — falling pitch with nasal formant resonance.
+
+    A long tone starting at ~800 Hz and falling to ~400 Hz with a slow
+    amplitude envelope mimics the characteristic shape of a cat's meow.
+    """
+    duration = 0.30
+    n = int(sample_rate * duration)
+    samples: list = []
+    for i in range(n):
+        t = i / sample_rate
+        # Fundamental: pitch glide down
+        freq = 800 - 400 * (t / duration) ** 0.6
+        # Envelope: slow attack + long decay
+        env = (1.0 - math.exp(-t * 30)) * math.exp(-t * 6)
+        # Nasal second harmonic for realism
+        s = math.sin(2 * math.pi * freq * t) * 0.7
+        s += math.sin(2 * math.pi * freq * 2 * t) * 0.25 * math.exp(-t * 12)
+        samples.append(int(16000 * s * env))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_dog_bark_wav(sample_rate: int = 22050) -> str:
+    """Sharp dog bark — two staccato low-frequency bursts.
+
+    Two punchy tonal bursts at ~200 Hz with quick attack/decay simulate a
+    short double-bark sound.
+    """
+    n = int(sample_rate * 0.20)
+    samples: list = []
+    bark_onsets = [0, int(sample_rate * 0.10)]
+    for i in range(n):
+        s = 0.0
+        for onset in bark_onsets:
+            dt = i - onset
+            if 0 <= dt < int(sample_rate * 0.07):
+                t = dt / sample_rate
+                env = math.exp(-t * 55) * (1.0 - math.exp(-t * 400))
+                freq = 220 - 60 * (t / 0.07)
+                s += math.sin(2 * math.pi * freq * t) * env
+                # Add a little roughness for texture
+                s += math.sin(2 * math.pi * freq * 3 * t) * env * 0.18
+        samples.append(int(18000 * s))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_frog_croak_wav(sample_rate: int = 22050) -> str:
+    """Frog croak — two low, raspy pulses with rough timbre.
+
+    A pair of short tonal bursts at ~120 Hz with added odd harmonics give the
+    characteristic raspy quality of a tree-frog croak.
+    """
+    n = int(sample_rate * 0.25)
+    samples: list = []
+    croak_onsets = [0, int(sample_rate * 0.11)]
+    import random as _rng
+    rng = _rng.Random(7)
+    for i in range(n):
+        s = 0.0
+        for onset in croak_onsets:
+            dt = i - onset
+            if 0 <= dt < int(sample_rate * 0.08):
+                t = dt / sample_rate
+                env = math.exp(-t * 45) * (1.0 - math.exp(-t * 200))
+                base = 120.0
+                s += math.sin(2 * math.pi * base * t) * env
+                # Odd harmonics = raspiness
+                s += math.sin(2 * math.pi * base * 3 * t) * env * 0.40
+                s += math.sin(2 * math.pi * base * 5 * t) * env * 0.18
+                # Small noise component
+                s += rng.uniform(-0.1, 0.1) * env
+        samples.append(int(16000 * s))
+    return _write_wav(samples, sample_rate)
+
+
+def _make_batch_done_wav(sample_rate: int = 22050) -> str:
+    """Ascending victory fanfare for completing a large file batch.
+
+    Four rising notes (C4→E4→G4→C5) with a bright timbre celebrate the
+    completion of a big job — played only when the batch size is ≥ 100 files.
+    """
+    notes = [261.63, 329.63, 392.00, 523.25]   # C4, E4, G4, C5
+    note_dur = 0.09
+    gap = 0.025
+    total = len(notes) * note_dur + (len(notes) - 1) * gap
+    n = int(sample_rate * total)
+    samples: list = []
+    note_start = 0
+    schedule: list = []
+    for freq in notes:
+        schedule.append((note_start, freq))
+        note_start += note_dur + gap
+
+    for i in range(n):
+        t_abs = i / sample_rate
+        s = 0.0
+        for onset_t, freq in schedule:
+            dt = t_abs - onset_t
+            if 0 <= dt < note_dur:
+                env = math.exp(-dt * 10) * (1.0 - math.exp(-dt * 300))
+                s += math.sin(2 * math.pi * freq * dt) * env
+                # Bright second harmonic
+                s += math.sin(2 * math.pi * freq * 2 * dt) * env * 0.35
+        samples.append(int(14000 * s))
+    return _write_wav(samples, sample_rate)
 
 
 class _ButtonClickFilter(QObject):
@@ -559,6 +745,15 @@ class SoundEngine(QObject):
         self._theme_change_wav: str = ""
         self._tab_switch_wav: str = ""
         self._drag_enter_wav: str = ""
+        self._zone_paint_wav: str = ""
+        self._mask_copy_wav: str = ""
+        self._mask_paste_wav: str = ""
+        # Animal / event sounds
+        self._bat_screech_wav: str = ""
+        self._cat_meow_wav: str = ""
+        self._dog_bark_wav: str = ""
+        self._frog_croak_wav: str = ""
+        self._batch_done_wav: str = ""
         # Per-profile click WAVs keyed by profile name
         self._theme_click_wavs: dict[str, str] = {}
         self._filter: _ButtonClickFilter | None = None
@@ -582,6 +777,15 @@ class SoundEngine(QObject):
             self._theme_change_wav  = _make_theme_change_wav()
             self._tab_switch_wav    = _make_tab_switch_wav()
             self._drag_enter_wav    = _make_drag_enter_wav()
+            self._zone_paint_wav    = _make_zone_paint_wav()
+            self._mask_copy_wav     = _make_mask_copy_wav()
+            self._mask_paste_wav    = _make_mask_paste_wav()
+            # Animal / event sounds
+            self._bat_screech_wav   = _make_bat_screech_wav()
+            self._cat_meow_wav      = _make_cat_meow_wav()
+            self._dog_bark_wav      = _make_dog_bark_wav()
+            self._frog_croak_wav    = _make_frog_croak_wav()
+            self._batch_done_wav    = _make_batch_done_wav()
             # Generate one WAV per sound profile (all profiles)
             for profile in ("soft", "hard", "bright", "dark", "warm", "icy", "sparkle",
                             "growl", "bubble", "chirp", "crunch", "purr", "meow", "roar",
@@ -637,8 +841,14 @@ class SoundEngine(QObject):
         # Theme sound path
         if self._settings.get("use_theme_sound", False):
             try:
-                theme = self._settings.get_theme()
-                theme_name = theme.get("name", "")
+                # Use the explicitly-selected sound theme preset if one is set,
+                # otherwise fall back to the active visual theme.
+                preset_name = str(self._settings.get("sound_theme_preset", "")).strip()
+                if preset_name:
+                    theme_name = preset_name
+                else:
+                    theme = self._settings.get_theme()
+                    theme_name = theme.get("name", "")
                 # Goth/rock themes cycle between three rock sub-profiles
                 if theme_name in _GOTH_ROCK_THEMES:
                     profile = _ROCK_CYCLE[self._goth_rock_idx % len(_ROCK_CYCLE)]
@@ -649,9 +859,19 @@ class SoundEngine(QObject):
             except Exception:
                 wav_path = self._click_wav
         else:
-            # Custom user-supplied WAV or generic default
+            # Custom user-supplied WAV overrides the manual profile choice.
             custom = self._settings.get("click_sound_path", "").strip()
-            wav_path = custom if (custom and os.path.isfile(custom)) else self._click_wav
+            if custom and os.path.isfile(custom):
+                wav_path = custom
+            else:
+                # Use the manually-selected sound profile (default: "soft")
+                manual_profile = str(self._settings.get("sound_manual_profile", "soft"))
+                if manual_profile not in self._theme_click_wavs:
+                    logger.warning(
+                        "Unknown sound profile %r — falling back to default click sound.",
+                        manual_profile,
+                    )
+                wav_path = self._theme_click_wavs.get(manual_profile, self._click_wav)
 
         if not wav_path:
             return
@@ -747,9 +967,84 @@ class SoundEngine(QObject):
         if self._drag_enter_wav:
             self._play(self._drag_enter_wav)
 
+    def play_zone_paint(self) -> None:
+        """Play a soft brush swipe when zone paint is applied to the canvas."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_zone_paint", False):
+            return
+        if self._zone_paint_wav:
+            self._play(self._zone_paint_wav)
 
+    def play_mask_copy(self) -> None:
+        """Play a crisp click when a zone mask is copied to the clipboard."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_mask_copy", False):
+            return
+        if self._mask_copy_wav:
+            self._play(self._mask_copy_wav)
+
+    def play_mask_paste(self) -> None:
+        """Play a soft splat/plop when a zone mask is pasted from the clipboard."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_mask_paste", False):
+            return
+        if self._mask_paste_wav:
+            self._play(self._mask_paste_wav)
+
+    def play_bat_screech(self) -> None:
+        """Play a bat echolocation screech (e.g. when switching to Bat Cave theme)."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_bat_screech", False):
+            return
+        if self._bat_screech_wav:
+            self._play(self._bat_screech_wav)
+
+    def play_cat_meow(self) -> None:
+        """Play a synthetic cat meow (e.g. when switching to Panda Dark theme)."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_cat_meow", False):
+            return
+        if self._cat_meow_wav:
+            self._play(self._cat_meow_wav)
+
+    def play_dog_bark(self) -> None:
+        """Play a short dog bark (e.g. when clearing the file list)."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_dog_bark", False):
+            return
+        if self._dog_bark_wav:
+            self._play(self._dog_bark_wav)
+
+    def play_frog_croak(self) -> None:
+        """Play a frog croak when switching to swamp/nature-themed themes (Slime, Snake Pit)."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_frog_croak", False):
+            return
+        if self._frog_croak_wav:
+            self._play(self._frog_croak_wav)
+
+    def play_batch_done(self) -> None:
+        """Play an ascending fanfare when a large batch (≥ 100 files) completes."""
+        if not self._settings.get("sound_enabled", False):
+            return
+        if not self._settings.get("sound_batch_done", False):
+            return
+        if self._batch_done_wav:
+            self._play(self._batch_done_wav)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _play(self, wav_path: str) -> None:
+        """Route playback through QSoundEffect when available, else subprocess."""
         if self._effect is not None:
             try:
                 from PyQt6.QtCore import QUrl
@@ -802,7 +1097,10 @@ class SoundEngine(QObject):
                     self._file_add_wav, self._preview_wav,
                     self._process_start_wav, self._file_remove_wav,
                     self._theme_change_wav, self._tab_switch_wav,
-                    self._drag_enter_wav]
+                    self._drag_enter_wav,
+                    self._zone_paint_wav, self._mask_copy_wav, self._mask_paste_wav,
+                    self._bat_screech_wav, self._cat_meow_wav, self._dog_bark_wav,
+                    self._frog_croak_wav, self._batch_done_wav]
         all_wavs.extend(self._theme_click_wavs.values())
         for path in all_wavs:
             if path and os.path.isfile(path):

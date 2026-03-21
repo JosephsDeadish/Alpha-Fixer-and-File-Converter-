@@ -122,15 +122,21 @@ class _AlphaPreviewLoader(QThread):
 
                 after_qi = _pil_to_qimage(processed)
                 after_stats = self._alpha_stats(processed)
-                self.preview_ready.emit(before_qi, after_qi)
-                self.stats_ready.emit(before_stats, after_stats)
+                try:
+                    self.preview_ready.emit(before_qi, after_qi)
+                    self.stats_ready.emit(before_stats, after_stats)
+                except RuntimeError:
+                    return  # receiver destroyed; abort
             finally:
                 orig.close()
                 if processed is not None and processed is not orig:
                     processed.close()
         except Exception:
             import traceback
-            self.failed.emit(traceback.format_exc())
+            try:
+                self.failed.emit(traceback.format_exc())
+            except RuntimeError:
+                pass  # receiver destroyed; nothing to do
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +165,8 @@ class AlphaFixerTab(QWidget):
     files_added = pyqtSignal()
     # Emitted whenever files are removed from the queue.
     files_removed = pyqtSignal()
+    # Emitted when the entire file queue is cleared at once.
+    list_cleared = pyqtSignal()
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
     preview_refreshed = pyqtSignal()
@@ -605,6 +613,7 @@ class AlphaFixerTab(QWidget):
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_file_count)
         self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
@@ -868,7 +877,8 @@ class AlphaFixerTab(QWidget):
     def _alpha_vis_overlay(qi: QImage) -> QImage:
         """
         Return a copy of *qi* (Format_ARGB32) with a false-colour heat-map
-        blended over the alpha channel.
+        blended over the alpha channel, plus tiny text labels showing the
+        numeric alpha value sampled across the image on a sparse grid.
 
         Colour key:
           α = 0   → vivid red    (fully transparent)
@@ -876,10 +886,11 @@ class AlphaFixerTab(QWidget):
           α = 255 → vivid green  (fully opaque)
 
         The heat-map is drawn at 70 % opacity so the underlying colours remain
-        visible while the alpha structure is clearly legible.
+        visible while the alpha structure is clearly legible.  Text labels are
+        omitted for images smaller than 32 × 32 pixels.
         """
         import numpy as np
-        from PyQt6.QtGui import QImage as _QI
+        from PyQt6.QtGui import QImage as _QI, QPainter, QColor, QFont, QPen
 
         # Work in Format_ARGB32 so we have direct byte access
         src = qi.convertToFormat(_QI.Format.Format_ARGB32)
@@ -892,8 +903,12 @@ class AlphaFixerTab(QWidget):
         ptr.setsize(h * w * 4)
         arr = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4)).copy()
 
+        # Save the raw alpha channel before we modify the colour channels so
+        # the text labels can read the original (unmodified) alpha values.
+        alpha_raw = arr[:, :, 3].copy()
+
         # Qt ARGB32: channels are [B, G, R, A] per pixel
-        alpha = arr[:, :, 3].astype(np.float32) / 255.0  # 0.0 … 1.0
+        alpha = alpha_raw.astype(np.float32) / 255.0  # 0.0 … 1.0
 
         # Heat-map colours (R, G, B):
         #   0.0 → red   (255, 0, 0)
@@ -916,7 +931,40 @@ class AlphaFixerTab(QWidget):
         # (the overlay colour already encodes the alpha information visually)
 
         out = _QI(arr.tobytes(), w, h, w * 4, _QI.Format.Format_ARGB32)
-        return out.copy()  # detach from numpy buffer
+        out = out.copy()  # detach from numpy buffer
+
+        # --- Draw tiny alpha-value text labels on a sparse grid -------------
+        # Only add labels when the image is large enough to be legible.
+        _MIN_LABEL_DIM = 32
+        if w >= _MIN_LABEL_DIM and h >= _MIN_LABEL_DIM:
+            # Grid spacing: aim for roughly 8 × 8 labels maximum, adaptive to
+            # image size.  Minimum step of 20 px to avoid label clutter.
+            step = max(20, min(w, h) // 8)
+            font = QFont()
+            font.setPixelSize(max(7, step // 4))
+            font.setBold(True)
+            painter = QPainter(out)
+            painter.setFont(font)
+            fm = painter.fontMetrics()
+            half_step = step // 2
+            for gy in range(half_step, h, step):
+                for gx in range(half_step, w, step):
+                    a_val = int(alpha_raw[gy, gx])
+                    text = str(a_val)
+                    tw = fm.horizontalAdvance(text)
+                    th = fm.ascent()
+                    tx = gx - tw // 2
+                    ty = gy + th // 2
+                    # Black shadow/outline for contrast
+                    painter.setPen(QPen(QColor(0, 0, 0, 200)))
+                    for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                        painter.drawText(tx + ox, ty + oy, text)
+                    # White foreground text
+                    painter.setPen(QPen(QColor(255, 255, 255, 230)))
+                    painter.drawText(tx, ty, text)
+            painter.end()
+
+        return out
 
     @pyqtSlot(bool)
     def _on_alpha_vis_toggled(self, _checked: bool) -> None:

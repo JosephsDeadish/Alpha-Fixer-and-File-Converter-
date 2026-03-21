@@ -26,7 +26,7 @@ CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp"}
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
     ".gif", ".webp", ".tga", ".ico", ".dds",
-    ".ppm", ".pcx", ".avif", ".qoi", ".svg",
+    ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2",
 }
 
 SUPPORTED_WRITE = SUPPORTED_READ

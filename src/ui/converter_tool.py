@@ -39,6 +39,8 @@ class ConverterTab(QWidget):
     files_added = pyqtSignal()
     # Emitted whenever files are removed from the queue.
     files_removed = pyqtSignal()
+    # Emitted when the entire file queue is cleared at once.
+    list_cleared = pyqtSignal()
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
 
@@ -415,6 +417,7 @@ class ConverterTab(QWidget):
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
         self._file_list.file_removed.connect(self.files_removed)
+        self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
@@ -494,7 +497,7 @@ class ConverterTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg *.jp2);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))

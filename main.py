@@ -14,6 +14,8 @@ import os
 import traceback
 import logging
 import datetime
+import threading
+import time
 from pathlib import Path
 
 
@@ -277,6 +279,108 @@ def _acquire_single_instance_lock():
 
 
 # ---------------------------------------------------------------------------
+# Hang / UI-freeze watchdog
+# ---------------------------------------------------------------------------
+
+class _HangWatchdog:
+    """Lightweight watchdog that detects Qt event-loop freezes.
+
+    The UI thread resets a ``_heartbeat`` flag every ``tick_ms`` milliseconds
+    via a QTimer.  A background daemon thread checks the flag every
+    ``check_interval`` seconds; if the flag has *not* been reset the watchdog
+    concludes that the event loop is blocked and logs a warning together with
+    the current stack frames of all threads so the freeze can be diagnosed from
+    the crash log.
+
+    The watchdog is intentionally non-fatal: it logs and continues rather than
+    force-killing the process, because the UI may eventually unblock on its own
+    (e.g. waiting for a slow disk operation) and killing would lose unsaved work.
+    """
+
+    # How often the QTimer ticks (ms) — this is the resolution of "alive" pings.
+    _TICK_MS = 1_000
+    # If the flag has not been refreshed within this many seconds, declare a hang.
+    _HANG_THRESHOLD_S = 5.0
+    # How long the monitor thread sleeps between checks.
+    _CHECK_INTERVAL_S = 2.0
+    # Minimum gap (s) between consecutive hang log entries so the log isn't flooded.
+    _LOG_COOLDOWN_S = 15.0
+
+    def __init__(self):
+        self._heartbeat: float = time.monotonic()
+        self._running = False
+        self._thread: threading.Thread | None = None
+        self._timer = None          # QTimer — created in start() on the UI thread
+        self._last_log: float = 0.0
+
+    def start(self) -> None:
+        """Start the watchdog.  Must be called from the Qt main / UI thread."""
+        from PyQt6.QtCore import QTimer
+        self._heartbeat = time.monotonic()
+        self._running = True
+
+        # QTimer fires on the UI thread → proves the event loop is alive.
+        self._timer = QTimer()
+        self._timer.setInterval(self._TICK_MS)
+        self._timer.timeout.connect(self._on_tick)
+        self._timer.start()
+
+        # Monitor thread is a daemon so it never prevents clean exit.
+        self._thread = threading.Thread(
+            target=self._monitor, name="HangWatchdog", daemon=True
+        )
+        self._thread.start()
+        logger.info("Hang watchdog started (threshold=%.0fs).", self._HANG_THRESHOLD_S)
+
+    def stop(self) -> None:
+        """Stop the watchdog (call before the QApplication is destroyed)."""
+        self._running = False
+        if self._timer is not None:
+            try:
+                self._timer.stop()
+            except Exception:
+                pass
+
+    def _on_tick(self) -> None:
+        """Called by QTimer on the UI thread — proof the event loop is running."""
+        self._heartbeat = time.monotonic()
+
+    def _monitor(self) -> None:
+        """Background thread: periodically check whether the heartbeat is fresh."""
+        while self._running:
+            time.sleep(self._CHECK_INTERVAL_S)
+            if not self._running:
+                break
+            age = time.monotonic() - self._heartbeat
+            if age >= self._HANG_THRESHOLD_S:
+                now = time.monotonic()
+                if now - self._last_log >= self._LOG_COOLDOWN_S:
+                    self._last_log = now
+                    self._log_hang(age)
+
+    def _log_hang(self, age: float) -> None:
+        """Log a hang event with per-thread stack traces for diagnosis."""
+        lines = [
+            f"⚠  UI THREAD HANG DETECTED — event loop blocked for ≥{age:.1f}s",
+            "--- Thread stack traces ---",
+        ]
+        frames = sys._current_frames()
+        for tid, frame in frames.items():
+            name = "?"
+            for t in threading.enumerate():
+                if t.ident == tid:
+                    name = t.name
+                    break
+            lines.append(f"\nThread {tid} ({name}):")
+            lines.extend(
+                "  " + line
+                for line in traceback.format_stack(frame)
+            )
+        lines.append("--- End of hang report ---")
+        logger.warning("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -348,8 +452,14 @@ def main():
 
     window.show()
 
+    # Start the hang watchdog after the window is visible so normal startup
+    # I/O (settings load, theme apply, etc.) doesn't trigger false positives.
+    _watchdog = _HangWatchdog()
+    _watchdog.start()
+
     logger.info("Main window shown.")
     exit_code = app.exec()
+    _watchdog.stop()
     logger.info("Application exited with code %d", exit_code)
     sys.exit(exit_code)
 

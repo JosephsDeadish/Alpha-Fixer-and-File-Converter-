@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget, QFileDialog,
+    QTabWidget, QFileDialog, QLineEdit,
 )
 
 
@@ -79,6 +79,8 @@ class HistoryTab(QWidget):
         conv_widget = QWidget()
         conv_layout = QVBoxLayout(conv_widget)
         conv_layout.setContentsMargins(0, 6, 0, 0)
+        self._conv_search = self._make_search_field("converter")
+        conv_layout.addWidget(self._conv_search)
         self._conv_tree = _make_tree(
             ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
             col_tips=[
@@ -100,6 +102,8 @@ class HistoryTab(QWidget):
         alpha_widget = QWidget()
         alpha_layout = QVBoxLayout(alpha_widget)
         alpha_layout.setContentsMargins(0, 6, 0, 0)
+        self._alpha_search = self._make_search_field("alpha")
+        alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
             ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
             col_tips=[
@@ -121,6 +125,8 @@ class HistoryTab(QWidget):
         sel_widget = QWidget()
         sel_layout = QVBoxLayout(sel_widget)
         sel_layout.setContentsMargins(0, 6, 0, 0)
+        self._sel_search = self._make_search_field("selective")
+        sel_layout.addWidget(self._sel_search)
         self._sel_tree = _make_tree(
             ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
             col_tips=[
@@ -145,6 +151,44 @@ class HistoryTab(QWidget):
         self._btn_export.clicked.connect(self._export_csv)
         self._btn_clear.clicked.connect(self._clear_history)
 
+        self._conv_search.textChanged.connect(
+            lambda text: self._apply_filter(self._conv_tree, text)
+        )
+        self._alpha_search.textChanged.connect(
+            lambda text: self._apply_filter(self._alpha_tree, text)
+        )
+        self._sel_search.textChanged.connect(
+            lambda text: self._apply_filter(self._sel_tree, text)
+        )
+
+    # ------------------------------------------------------------------
+    # Search / filter helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_search_field(name: str) -> QLineEdit:
+        """Return a styled search QLineEdit for a history sub-tab."""
+        field = QLineEdit()
+        field.setObjectName(f"history_search_{name}")
+        field.setPlaceholderText("🔍  Filter by time, format, file name…")
+        field.setClearButtonEnabled(True)
+        return field
+
+    @staticmethod
+    def _apply_filter(tree: QTreeWidget, text: str) -> None:
+        """Show only rows whose text in any column contains *text* (case-insensitive)."""
+        needle = text.strip().lower()
+        root = tree.invisibleRootItem()
+        for row in range(root.childCount()):
+            item = root.child(row)
+            if not needle:
+                item.setHidden(False)
+                continue
+            row_text = " ".join(
+                item.text(col) for col in range(tree.columnCount())
+            ).lower()
+            item.setHidden(needle not in row_text)
+
     # ------------------------------------------------------------------
     # Tooltip registration
     # ------------------------------------------------------------------
@@ -163,6 +207,9 @@ class HistoryTab(QWidget):
         mgr.register(self._conv_summary, "history_conv_summary")
         mgr.register(self._alpha_summary, "history_alpha_summary")
         mgr.register(self._sel_summary, "history_sel_summary")
+        mgr.register(self._conv_search, "history_search")
+        mgr.register(self._alpha_search, "history_search")
+        mgr.register(self._sel_search, "history_search")
 
     # ------------------------------------------------------------------
     # Theme
@@ -189,10 +236,14 @@ class HistoryTab(QWidget):
 
     @pyqtSlot()
     def refresh(self):
-        """Reload all three history lists from settings."""
+        """Reload all three history lists from settings and reapply any active filters."""
         self._refresh_converter()
         self._refresh_alpha()
         self._refresh_selective_alpha()
+        # Re-apply search filters so existing text still works after refresh.
+        self._apply_filter(self._conv_tree, self._conv_search.text())
+        self._apply_filter(self._alpha_tree, self._alpha_search.text())
+        self._apply_filter(self._sel_tree, self._sel_search.text())
 
     def _refresh_converter(self):
         history = self._settings.get_converter_history()

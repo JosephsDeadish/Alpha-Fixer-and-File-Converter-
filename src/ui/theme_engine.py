@@ -516,7 +516,7 @@ MERMAID_THEME = {
     "scrollbar": "#0a1e2e",
     "scrollbar_handle": "#00ccaa",
     "_effect": "mermaid",
-    "_cursor": "emoji:🧜",
+    "_cursor": "emoji:🔱",
     "_trail_color": "#00ccaa",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
@@ -548,7 +548,7 @@ SHARK_BAIT_THEME = {
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
     "_banner_anim": "shake",
-    "_button_anim": "fall",
+    "_button_anim": "bite",
     "_trail": "wave",
 }
 
@@ -577,7 +577,7 @@ ALIEN_THEME = {
     "_cursor": "emoji:🛸",
     "_trail_color": "#00ff88",
     "_banner_anim": "bounce",
-    "_button_anim": "shake",
+    "_button_anim": "abduct",
     "_trail": "sparkle",
 }
 
@@ -617,7 +617,7 @@ NOODLE_THEME = {
     "_trail_color": "#ffdd44",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "ribbon",
+    "_trail": "noodle",
 }
 
 # ---------------------------------------------------------------------------
@@ -1875,6 +1875,13 @@ THEME_DESCRIPTIONS: dict[str, str] = {
     # ─── Animal themes ────────────────────────────────────────────────
     "Purrfect Cats":    "Warm orange & cream. Soft rounded shapes. Cats everywhere. 🐱",
     "Good Dog":         "Golden warm brown. Playful rounded shapes. Very good dog. 🐶",
+    # ─── Anime / Waifu preset themes ──────────────────────────────────
+    "Anime":            "Deep purple with hot-pink accents. Kawaii sparkle bounce effects. 🌸",
+    "Waifu":            "Dark rose-black with blush-pink candy. Fairy trail & petal showers. 💖",
+    # ─── New hidden themes (Snake Pit / Ghost / Slime) ────────────────
+    "Snake Pit":        "Near-black forest-green with venom-green accents. Serpent cursor & shake effects. 🐍",
+    "Ghost":            "Dark indigo with pale lavender. Ethereal pendulum banner & comet trail. 👻",
+    "Slime":            "Deep green swamp with bright lime accents. Oozy slime cursor & drip effects. 🟢",
 }
 
 import os as _os

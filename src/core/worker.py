@@ -84,7 +84,10 @@ class AlphaWorker(QThread):
             # for the last file so the UI reaches 100% progress.
             now = time.monotonic()
             if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
-                self.progress.emit(idx, total, src)
+                try:
+                    self.progress.emit(idx, total, src)
+                except RuntimeError:
+                    return  # receiver destroyed; abort processing
                 last_progress_time = now
             try:
                 img = load_image(src)
@@ -133,20 +136,32 @@ class AlphaWorker(QThread):
                     # the UI log from accumulating 50 000 lines, but always surface
                     # the alpha-loss warning so the user is not silently misled.
                     if not large_batch or warn:
-                        self.file_done.emit(src, True, warn)
+                        try:
+                            self.file_done.emit(src, True, warn)
+                        except RuntimeError:
+                            return  # receiver destroyed; abort
                 finally:
                     img.close()
             except MemoryError as exc:
                 errors += 1
                 msg = f"Out of memory — {exc}"
                 logger.error("Alpha worker MemoryError on %s: %s", src, msg)
-                self.file_done.emit(src, False, msg)
+                try:
+                    self.file_done.emit(src, False, msg)
+                except RuntimeError:
+                    return
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()
                 logger.error("Alpha worker error on %s:\n%s", src, msg)
-                self.file_done.emit(src, False, msg)  # always emit errors
-        self.finished.emit(success, errors)
+                try:
+                    self.file_done.emit(src, False, msg)  # always emit errors
+                except RuntimeError:
+                    return
+        try:
+            self.finished.emit(success, errors)
+        except RuntimeError:
+            pass  # receiver destroyed during shutdown; nothing to do
 
     def _resolve_output(self, src: str) -> str:
         p = Path(src)
@@ -229,7 +244,10 @@ class ConverterWorker(QThread):
                 break
             now = time.monotonic()
             if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
-                self.progress.emit(idx, total, src)
+                try:
+                    self.progress.emit(idx, total, src)
+                except RuntimeError:
+                    return  # receiver destroyed; abort processing
                 last_progress_time = now
             try:
                 dest = build_output_path(
@@ -249,15 +267,27 @@ class ConverterWorker(QThread):
                 )
                 success += 1
                 if not large_batch:
-                    self.file_done.emit(src, True, dest)
+                    try:
+                        self.file_done.emit(src, True, dest)
+                    except RuntimeError:
+                        return  # receiver destroyed; abort
             except MemoryError as exc:
                 errors += 1
                 msg = f"Out of memory — {exc}"
                 logger.error("Converter worker MemoryError on %s: %s", src, msg)
-                self.file_done.emit(src, False, msg)
+                try:
+                    self.file_done.emit(src, False, msg)
+                except RuntimeError:
+                    return
             except Exception:
                 errors += 1
                 msg = traceback.format_exc()
                 logger.error("Converter worker error on %s:\n%s", src, msg)
-                self.file_done.emit(src, False, msg)
-        self.finished.emit(success, errors)
+                try:
+                    self.file_done.emit(src, False, msg)
+                except RuntimeError:
+                    return
+        try:
+            self.finished.emit(success, errors)
+        except RuntimeError:
+            pass  # receiver destroyed during shutdown; nothing to do

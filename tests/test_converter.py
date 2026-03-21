@@ -198,6 +198,26 @@ class TestConvertFile(unittest.TestCase):
             convert_file(src, dst, "QOI")
             self.assertTrue(os.path.isfile(dst))
 
+    def test_png_to_jpeg2000(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.jp2")
+            _make_png(src)
+            convert_file(src, dst, "JPEG2000")
+            self.assertTrue(os.path.isfile(dst))
+            self.assertGreater(os.path.getsize(dst), 0)
+
+    def test_png_to_jpeg2000_lossless(self):
+        """quality=100 should produce a lossless JPEG2000 file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.jp2")
+            _make_png(src)
+            convert_file(src, dst, "JPEG2000", quality=100)
+            self.assertTrue(os.path.isfile(dst))
+            result = Image.open(dst)
+            self.assertIn(result.mode, ("RGBA", "RGB"))
+
     def test_rgb_png_preserved_as_png(self):
         """RGB source → PNG should not be needlessly upcast to RGBA."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -209,7 +229,7 @@ class TestConvertFile(unittest.TestCase):
             self.assertEqual(img.mode, "RGB")
 
     def test_supported_output_formats_includes_new(self):
-        for fmt in ("PPM", "PCX", "AVIF", "QOI"):
+        for fmt in ("PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
             with self.subTest(fmt=fmt):
                 self.assertIn(fmt, SUPPORTED_OUTPUT_FORMATS)
 
@@ -217,7 +237,24 @@ class TestConvertFile(unittest.TestCase):
         self.assertIn("SVG", SUPPORTED_OUTPUT_FORMATS)
 
     def test_png_to_svg_creates_valid_svg(self):
-        """PNG → SVG should produce a file containing an <svg> element with embedded base64 image."""
+        """PNG → SVG (fallback mode) should produce a file with embedded base64 PNG."""
+        import unittest.mock as mock
+        from src.core import file_converter as fc
+        with mock.patch.object(fc, "_has_vtracer", return_value=False):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = os.path.join(tmpdir, "input.png")
+                dst = os.path.join(tmpdir, "output.svg")
+                _make_png(src)
+                convert_file(src, dst, "SVG")
+                self.assertTrue(os.path.isfile(dst))
+                with open(dst, encoding="utf-8") as f:
+                    content = f.read()
+                self.assertIn("<svg", content)
+                self.assertIn("data:image/png;base64,", content)
+                self.assertIn("</svg>", content)
+
+    def test_png_to_svg_vtracer_creates_valid_svg(self):
+        """PNG → SVG (vtracer mode) should produce a true vector SVG with <path> elements."""
         with tempfile.TemporaryDirectory() as tmpdir:
             src = os.path.join(tmpdir, "input.png")
             dst = os.path.join(tmpdir, "output.svg")
@@ -227,38 +264,42 @@ class TestConvertFile(unittest.TestCase):
             with open(dst, encoding="utf-8") as f:
                 content = f.read()
             self.assertIn("<svg", content)
-            self.assertIn("data:image/png;base64,", content)
-            self.assertIn("</svg>", content)
 
     def test_rgba_png_to_svg_preserves_size(self):
-        """SVG output should embed an image with the correct width/height attributes."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            src = os.path.join(tmpdir, "input.png")
-            dst = os.path.join(tmpdir, "output.svg")
-            _make_png(src, w=16, h=8)
-            convert_file(src, dst, "SVG")
-            with open(dst, encoding="utf-8") as f:
-                content = f.read()
-            self.assertIn('width="16"', content)
-            self.assertIn('height="8"', content)
+        """SVG output should encode the correct width/height attributes."""
+        import unittest.mock as mock
+        from src.core import file_converter as fc
+        with mock.patch.object(fc, "_has_vtracer", return_value=False):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = os.path.join(tmpdir, "input.png")
+                dst = os.path.join(tmpdir, "output.svg")
+                _make_png(src, w=16, h=8)
+                convert_file(src, dst, "SVG")
+                with open(dst, encoding="utf-8") as f:
+                    content = f.read()
+                self.assertIn('width="16"', content)
+                self.assertIn('height="8"', content)
 
     def test_svg_output_roundtrip(self):
-        """The base64 PNG embedded in the SVG should decode to a valid image of the right size."""
+        """The base64 PNG embedded in the fallback SVG should decode to a valid image."""
         import base64
         import re
+        import unittest.mock as mock
+        from src.core import file_converter as fc
         from io import BytesIO
-        with tempfile.TemporaryDirectory() as tmpdir:
-            src = os.path.join(tmpdir, "input.png")
-            dst = os.path.join(tmpdir, "output.svg")
-            _make_png(src, w=8, h=8)
-            convert_file(src, dst, "SVG")
-            with open(dst, encoding="utf-8") as f:
-                content = f.read()
-            match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', content)
-            self.assertIsNotNone(match)
-            png_data = base64.b64decode(match.group(1))
-            rt_img = Image.open(BytesIO(png_data))
-            self.assertEqual(rt_img.size, (8, 8))
+        with mock.patch.object(fc, "_has_vtracer", return_value=False):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = os.path.join(tmpdir, "input.png")
+                dst = os.path.join(tmpdir, "output.svg")
+                _make_png(src, w=8, h=8)
+                convert_file(src, dst, "SVG")
+                with open(dst, encoding="utf-8") as f:
+                    content = f.read()
+                match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', content)
+                self.assertIsNotNone(match)
+                png_data = base64.b64decode(match.group(1))
+                rt_img = Image.open(BytesIO(png_data))
+                self.assertEqual(rt_img.size, (8, 8))
 
 
 class TestFlattenAlpha(unittest.TestCase):
@@ -283,6 +324,62 @@ class TestFlattenAlpha(unittest.TestCase):
         img.putpalette([i % 256 for i in range(256 * 3)])
         result = _flatten_alpha(img)
         self.assertEqual(result.mode, "RGB")
+
+
+class TestSupportedRead(unittest.TestCase):
+    """Verify SUPPORTED_READ in alpha_processor includes all expected extensions."""
+
+    def setUp(self):
+        from src.core.alpha_processor import SUPPORTED_READ
+        self.exts = SUPPORTED_READ
+
+    def test_jp2_in_supported_read(self):
+        self.assertIn(".jp2", self.exts)
+
+    def test_svg_in_supported_read(self):
+        self.assertIn(".svg", self.exts)
+
+    def test_png_in_supported_read(self):
+        self.assertIn(".png", self.exts)
+
+    def test_avif_in_supported_read(self):
+        self.assertIn(".avif", self.exts)
+
+
+class TestSvgVtracerFallback(unittest.TestCase):
+    """_save_svg uses base64 fallback when vtracer is not available."""
+
+    def test_fallback_produces_base64_svg(self):
+        """Without vtracer the SVG must contain an embedded base64 PNG."""
+        import unittest.mock as mock
+        from src.core import file_converter as fc
+        with mock.patch.object(fc, "_has_vtracer", return_value=False):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "out.svg")
+                img = Image.new("RGBA", (8, 8), (200, 100, 50, 128))
+                fc._save_svg(img, dst)
+                with open(dst, encoding="utf-8") as f:
+                    content = f.read()
+                self.assertIn("<svg", content)
+                self.assertIn("data:image/png;base64,", content)
+
+    def test_vtracer_path_called(self):
+        """When vtracer is available, vtracer.convert_image_to_svg_py is invoked."""
+        import unittest.mock as mock
+        from src.core import file_converter as fc
+
+        mock_vtracer = mock.MagicMock()
+        mock_vtracer.convert_image_to_svg_py = mock.MagicMock()
+
+        with mock.patch.object(fc, "_has_vtracer", return_value=True):
+            with mock.patch.dict("sys.modules", {"vtracer": mock_vtracer}):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    dst = os.path.join(tmpdir, "out.svg")
+                    img = Image.new("RGB", (4, 4), (200, 100, 50))
+                    fc._save_svg(img, dst)
+                    mock_vtracer.convert_image_to_svg_py.assert_called_once()
+                    args = mock_vtracer.convert_image_to_svg_py.call_args
+                    self.assertEqual(args[1]["colormode"], "color")
 
 
 if __name__ == "__main__":

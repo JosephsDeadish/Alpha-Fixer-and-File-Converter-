@@ -73,6 +73,8 @@ class SettingsManager:
         "sound_volume": 50,           # 0–100 master volume
         "click_sound_path": "",
         "use_theme_sound": False,
+        "sound_theme_preset": "",         # name of theme whose sounds to use (empty = follow active theme)
+        "sound_manual_profile": "soft",   # click-sound profile used when use_theme_sound=False
         # Per-event sound toggles (all on by default when sound_enabled=True)
         "sound_success": True,
         "sound_error": True,
@@ -84,6 +86,14 @@ class SettingsManager:
         "sound_theme_change": False,
         "sound_tab_switch": False,
         "sound_drag_enter": False,
+        "sound_zone_paint": False,
+        "sound_mask_copy": False,
+        "sound_mask_paste": False,
+        "sound_bat_screech": False,
+        "sound_cat_meow": False,
+        "sound_dog_bark": False,
+        "sound_frog_croak": False,
+        "sound_batch_done": False,
         # Cursor & trail
         "cursor": "Default",
         "use_theme_cursor": False,
@@ -93,6 +103,7 @@ class SettingsManager:
         "trail_color": "#e94560",
         "trail_style": "dots",
         "use_theme_trail": False,
+        "trail_enabled_once": False,  # set True the first time the trail is enabled
         "trail_length": 50,       # number of trail points kept (deque maxlen)
         "trail_fade_speed": 5,    # 1=slowest fade … 10=fastest fade
         "trail_intensity": 100,   # 10–100 % max trail opacity
@@ -124,6 +135,7 @@ class SettingsManager:
         "tooltip_mode_changed_once": False,
         "alpha_fix_done_once": False,
         "conversion_done_once": False,
+        "theme_changed_once": False,   # set True the first time the user picks a different theme
         # Click effects
         "click_effects_enabled": False,
         "use_theme_effect": False,
@@ -185,6 +197,11 @@ class SettingsManager:
         "unlock_snake": False,
         "unlock_ghost": False,
         "unlock_slime": False,
+        # Themes unlockable via easter-egg spots (Preset themes, so unlock
+        # only controls whether the fanfare/banner fires on first discovery)
+        "unlock_alien": False,
+        "unlock_shark_bait": False,
+        "unlock_noodle": False,
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------
@@ -198,12 +215,19 @@ class SettingsManager:
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
         # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)
-        "sa_zone_alphas": "[128,128,128,128,128,128,128]",
+        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128]",
+        # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
+        # Empty string = use built-in ZONE_COLORS palette.
+        "sa_zone_colors": "",
         # Brush and eraser sizes in pixels
         "sa_brush_size": 10,
         "sa_eraser_size": 10,
         # Auto-correct (snap to edges) enabled
         "sa_autocorrect": False,
+        # Show/hide zero-alpha highlight on canvas
+        "sa_show_zero_alpha": False,
+        # Show alpha value text at zone centroids on canvas
+        "sa_show_alpha_labels": False,
         # Last-used drawing tool key
         "sa_last_tool": "freehand",
     }
@@ -420,6 +444,34 @@ class SettingsManager:
             [max(0, min(255, int(v))) for v in alphas]
         ))
 
+    # ------------------------------------------------------------------
+    # Custom zone colors  (R, G, B, overlay_alpha) per zone
+    # ------------------------------------------------------------------
+
+    def get_sa_zone_colors(self) -> list[list[int]] | None:
+        """Return persisted zone overlay colors as list of [R,G,B,A] lists.
+
+        Returns *None* when no custom colors have been saved, signalling the
+        caller to fall back to the built-in ZONE_COLORS palette.
+        """
+        raw = self._qs.value("sa_zone_colors", "")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if (isinstance(data, list) and len(data) == 7
+                    and all(isinstance(c, list) and len(c) == 4 for c in data)):
+                return [[max(0, min(255, int(v))) for v in c] for c in data]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        return None
+
+    def set_sa_zone_colors(self, colors: list[list[int]]) -> None:
+        """Persist 7 zone overlay colors as [[R,G,B,A], …]."""
+        self._qs.setValue("sa_zone_colors", json.dumps(
+            [[max(0, min(255, int(v))) for v in c] for c in colors]
+        ))
+
     def reset_all(self) -> None:
         """Erase every setting and reset to factory defaults.
 
@@ -453,9 +505,13 @@ class SettingsManager:
         "theme", "theme_data", "saved_themes",
         # Sound settings
         "sound_enabled", "sound_volume", "click_sound_path", "use_theme_sound",
+        "sound_theme_preset", "sound_manual_profile",
         "sound_success", "sound_error", "sound_unlock", "sound_file_add",
         "sound_preview", "sound_process_start", "sound_file_remove",
         "sound_theme_change", "sound_tab_switch", "sound_drag_enter",
+        "sound_zone_paint", "sound_mask_copy", "sound_mask_paste",
+        "sound_bat_screech", "sound_cat_meow", "sound_dog_bark",
+        "sound_frog_croak", "sound_batch_done",
         "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",

@@ -22,6 +22,7 @@ boundary automatically.
 """
 
 import os
+import time
 from typing import Optional
 
 # File extensions that do not support a full per-pixel alpha channel.
@@ -44,7 +45,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
-    QButtonGroup, QFrame,
+    QButtonGroup, QFrame, QColorDialog, QMenu,
 )
 
 from ..core.selective_alpha_processor import (
@@ -56,6 +57,10 @@ from ..core.selective_alpha_processor import (
     autocorrect_mask,
     apply_selective_alpha,
     composite_zones,
+    detect_alpha_zones,
+    shift_mask,
+    rotate_mask,
+    scale_mask,
 )
 
 # ---------------------------------------------------------------------------
@@ -81,8 +86,20 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
     return qi.copy()
 
 
-def _zone_qcolor(zone_idx: int, alpha: int = 200) -> QColor:
-    r, g, b, _ = ZONE_COLORS[zone_idx]
+def _zone_qcolor(
+    zone_idx: int,
+    alpha: int = 200,
+    color_override: Optional[tuple[int, int, int, int]] = None,
+) -> QColor:
+    """Return a QColor for *zone_idx* with the given *alpha*.
+
+    If *color_override* is provided it is used in place of the default
+    ``ZONE_COLORS`` palette entry for that zone.
+    """
+    if color_override is not None:
+        r, g, b = color_override[0], color_override[1], color_override[2]
+    else:
+        r, g, b, _ = ZONE_COLORS[zone_idx]
     return QColor(r, g, b, alpha)
 
 
@@ -105,9 +122,11 @@ class SelectiveAlphaCanvas(QWidget):
     redo_available   : bool – True when there is at least one redo step available.
     """
 
-    mask_changed   = pyqtSignal(int)
-    undo_available = pyqtSignal(bool)
-    redo_available = pyqtSignal(bool)
+    mask_changed    = pyqtSignal(int)
+    undo_available  = pyqtSignal(bool)
+    redo_available  = pyqtSignal(bool)
+    copy_requested  = pyqtSignal(int)
+    paste_requested = pyqtSignal(int)
 
     # ------------------------------------------------------------------ init
 
@@ -171,6 +190,29 @@ class SelectiveAlphaCanvas(QWidget):
         # ---- Composite cache (invalidated when a mask changes) -----------
         self._composite_dirty: bool             = True
         self._composite_qimg:  QImage | None    = None
+
+        # ---- Zone-level visibility flags (True = overlay shown in canvas) -----
+        self._zone_visible: list[bool] = [True] * NUM_ZONES
+
+        # ---- Per-zone overlay colors (R,G,B,overlay_alpha) ------------------
+        # Starts as a mutable copy of the module-level palette so individual
+        # zones can be recoloured without touching the shared constant.
+        self._zone_colors: list[tuple[int, int, int, int]] = list(ZONE_COLORS)
+
+        # ---- Show-zero-alpha flag -----------------------------------------
+        # When True, fully-transparent source pixels inside a painted zone
+        # have their output alpha lifted so the overlay remains visible.
+        self._show_zero_alpha: bool = False
+
+        # ---- Show-alpha-labels flag (draw α value text at zone centroids) -
+        self._show_alpha_labels: bool = False
+        # Per-zone alpha values mirrored from the spinboxes for label drawing.
+        self._zone_alphas: list[int] = [255] * NUM_ZONES
+        # Cached image-pixel centroids per zone; recomputed in _rebuild_composite.
+        self._zone_centroids: list[tuple[float, float] | None] = [None] * NUM_ZONES
+
+        # ---- Paste-available flag (for context menu) ----------------------
+        self._paste_available: bool = False
 
         # ---- Cursor position for brush-size preview circle ---------------
         self._cursor_pos: QPointF | None = None
@@ -277,8 +319,192 @@ class SelectiveAlphaCanvas(QWidget):
         for i in range(NUM_ZONES):
             self.mask_changed.emit(i)
 
+    def set_zone_visible(self, idx: int, visible: bool) -> None:
+        """Show or hide the overlay for zone *idx* in the canvas.
+
+        Hidden zones still accumulate paint strokes; they are just not blended
+        into the on-screen composite.  This lets the user focus on one region
+        at a time without losing painted work.
+        """
+        if 0 <= idx < NUM_ZONES and self._zone_visible[idx] != visible:
+            self._zone_visible[idx] = visible
+            self._composite_dirty = True
+            self.update()
+
+    def set_zone_color(self, idx: int, r: int, g: int, b: int) -> None:
+        """Replace the overlay colour for zone *idx* with (r, g, b).
+
+        The overlay opacity (alpha) is preserved from the current entry.
+        """
+        if 0 <= idx < NUM_ZONES:
+            _, _, _, oa = self._zone_colors[idx]
+            self._zone_colors[idx] = (
+                max(0, min(255, r)),
+                max(0, min(255, g)),
+                max(0, min(255, b)),
+                oa,
+            )
+            self._composite_dirty = True
+            self.update()
+
+    def set_show_zero_alpha(self, enabled: bool) -> None:
+        """Control whether fully-transparent source pixels inside a zone are highlighted.
+
+        When *enabled* is ``True`` the overlay for painted zones is made
+        visible even over pixels whose source alpha is 0, so the user can see
+        and adjust zones on fully-transparent areas.
+        """
+        if self._show_zero_alpha != enabled:
+            self._show_zero_alpha = enabled
+            self._composite_dirty = True
+            self.update()
+
+    def set_show_alpha_labels(self, enabled: bool) -> None:
+        """Toggle drawing of per-zone alpha-value text at zone centroids."""
+        if self._show_alpha_labels != enabled:
+            self._show_alpha_labels = enabled
+            self.update()
+
+    def set_zone_alpha_label(self, idx: int, value: int) -> None:
+        """Update the cached alpha value for zone *idx* (used by label overlay)."""
+        if 0 <= idx < NUM_ZONES:
+            self._zone_alphas[idx] = value
+            if self._show_alpha_labels:
+                self.update()
+
+    def set_paste_available(self, enabled: bool) -> None:
+        """Set whether a mask is available to paste (controls context-menu state)."""
+        self._paste_available = enabled
+
+    def get_zone_color(self, idx: int) -> tuple[int, int, int, int]:
+        """Return the (R, G, B, overlay_alpha) tuple for zone *idx*."""
+        return self._zone_colors[idx]
+
+    def get_mask_as_array(self, idx: int) -> Optional[np.ndarray]:
+        """Return the painted mask for zone *idx* as a uint8 (h, w) numpy array.
+
+        Returns *None* if the zone has not been painted yet.  The array is a
+        fresh copy so the caller may modify it freely.
+        """
+        if not (0 <= idx < NUM_ZONES):
+            return None
+        m = self._masks[idx]
+        if m is None:
+            return None
+        return np.array(m, dtype=np.uint8)
+
+    def set_mask_from_array(self, idx: int, arr: np.ndarray) -> None:
+        """Replace the mask for zone *idx* with the uint8 array *arr*.
+
+        A snapshot is pushed onto the undo stack before the replacement so the
+        operation can be undone.  *arr* must have the same (h, w) shape as the
+        source image; if no image is loaded the call is silently ignored.
+        """
+        if self._src_img is None or not (0 <= idx < NUM_ZONES):
+            return
+        iw, ih = self._src_img.size
+        if arr.shape[:2] != (ih, iw):
+            return
+        self._push_history()
+        new_mask = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="L")
+        if self._masks[idx] is not None:
+            self._masks[idx].close()
+        self._masks[idx] = new_mask
+        self._composite_dirty = True
+        self.update()
+        self.mask_changed.emit(idx)
+        self.undo_available.emit(bool(self._history))
+        self.redo_available.emit(False)
+
+    def populate_zones_from_detection(
+        self, zones: list[tuple[int, np.ndarray]]
+    ) -> None:
+        """Bulk-load auto-detected alpha masks into the canvas.
+
+        All zone masks are set in a single undo step so the user can revert
+        the entire auto-population with one Ctrl+Z.  Only zones present in
+        *zones* are modified; any remaining zones keep their current (empty)
+        state.
+
+        Parameters
+        ----------
+        zones : list of ``(alpha_value, bool_mask)`` tuples as returned by
+                :func:`~selective_alpha_processor.detect_alpha_zones`.
+        """
+        if self._src_img is None or not zones:
+            return
+        iw, ih = self._src_img.size
+        self._push_history()
+        for i, (_, bool_mask) in enumerate(zones):
+            if i >= NUM_ZONES:
+                break
+            if bool_mask.shape != (ih, iw):
+                continue
+            mask_arr = (bool_mask.astype(np.uint8)) * 255
+            new_mask = Image.fromarray(mask_arr, mode="L")
+            if self._masks[i] is not None:
+                self._masks[i].close()
+            self._masks[i] = new_mask
+        self._composite_dirty = True
+        self.update()
+        for i in range(min(len(zones), NUM_ZONES)):
+            try:
+                self.mask_changed.emit(i)
+            except RuntimeError:
+                pass
+        self.undo_available.emit(bool(self._history))
+        self.redo_available.emit(False)
+
     def set_active_zone(self, idx: int) -> None:
         self._active_zone = max(0, min(NUM_ZONES - 1, idx))
+
+    def get_active_zone(self) -> int:
+        """Return the index of the currently active painting zone."""
+        return self._active_zone
+
+    def shift_zone_mask(self, zone_idx: int, dx: int, dy: int) -> None:
+        """Translate the mask for *zone_idx* by (dx, dy) pixels.
+
+        Pushes an undo snapshot before modifying the mask so the operation
+        can be reverted with Ctrl+Z.  Does nothing if the zone has no mask.
+        """
+        if self._src_img is None or not (0 <= zone_idx < NUM_ZONES):
+            return
+        arr = self.get_mask_as_array(zone_idx)
+        if arr is None:
+            return
+        shifted = shift_mask(arr, dx, dy)
+        self.set_mask_from_array(zone_idx, shifted)
+
+    def rotate_zone_mask(self, zone_idx: int, angle_degrees: float) -> None:
+        """Rotate the mask for *zone_idx* by *angle_degrees* (positive = CCW).
+
+        Pushes an undo snapshot before modifying the mask.
+        """
+        if self._src_img is None or not (0 <= zone_idx < NUM_ZONES):
+            return
+        arr = self.get_mask_as_array(zone_idx)
+        if arr is None:
+            return
+        rotated = rotate_mask(arr, angle_degrees)
+        self.set_mask_from_array(zone_idx, rotated)
+
+    def scale_zone_mask(self, zone_idx: int, factor: float) -> None:
+        """Scale the mask for *zone_idx* about the image centre by *factor*.
+
+        *factor* > 1 enlarges the highlighted region; 0 < *factor* < 1
+        shrinks it.  Pushes an undo snapshot before modifying the mask.
+        """
+        if self._src_img is None or not (0 <= zone_idx < NUM_ZONES):
+            return
+        arr = self.get_mask_as_array(zone_idx)
+        if arr is None:
+            return
+        try:
+            scaled = scale_mask(arr, factor)
+        except ValueError:
+            return
+        self.set_mask_from_array(zone_idx, scaled)
 
     def set_tool(self, tool: str) -> None:
         """Set the active tool name."""
@@ -560,14 +786,38 @@ class SelectiveAlphaCanvas(QWidget):
     # --------------------------------------------------- rendering
 
     def _rebuild_composite(self) -> None:
-        """Recompute the cached composite QImage."""
+        """Recompute the cached composite QImage.
+
+        Zones whose visibility flag is False are rendered as if their mask is
+        empty (the overlay is hidden) without discarding any painted data.
+        Custom per-zone colours stored in *_zone_colors* are forwarded to
+        :func:`composite_zones` so user colour choices are reflected live.
+        """
         if self._src_arr is None:
             self._composite_qimg = None
             return
-        bool_masks = self.get_masks_as_bool()
-        comp = composite_zones(self._src_arr, bool_masks)
+        raw_masks = self.get_masks_as_bool()
+        # Apply visibility: hide zones that have been toggled off.
+        visible_masks = [
+            m if vis else None
+            for m, vis in zip(raw_masks, self._zone_visible)
+        ]
+        comp = composite_zones(self._src_arr, visible_masks,
+                               zone_colors=self._zone_colors,
+                               show_zero_alpha=self._show_zero_alpha)
         self._composite_qimg = _np_to_qimage(comp)
         self._composite_dirty = False
+        # Recompute per-zone centroids (image-pixel coords) for label overlay.
+        for i, mask in enumerate(self._masks):
+            if mask is None:
+                self._zone_centroids[i] = None
+            else:
+                arr = np.array(mask, dtype=np.uint8)
+                ys, xs = np.where(arr > 127)
+                if len(xs):
+                    self._zone_centroids[i] = (float(xs.mean()), float(ys.mean()))
+                else:
+                    self._zone_centroids[i] = None
 
     def paintEvent(self, event) -> None:   # noqa: N802
         if self._src_img is None:
@@ -597,7 +847,7 @@ class SelectiveAlphaCanvas(QWidget):
         _draw_checker(p, cw, ch)
 
         # Draw the composite image scaled to the current view.
-        if self._composite_qimg is not None:
+        if self._composite_qimg is not None and self._src_img is not None:
             s, ox, oy = self._transform()
             iw, ih = self._src_img.size
             dst = QRectF(ox, oy, iw * s, ih * s)
@@ -613,7 +863,55 @@ class SelectiveAlphaCanvas(QWidget):
         # Draw brush / eraser size preview circle at the cursor position.
         self._draw_cursor_circle(p)
 
+        # Draw alpha-value labels at zone centroids when the toggle is on.
+        if self._show_alpha_labels and self._src_img is not None:
+            self._draw_alpha_labels(p)
+
         p.end()
+
+    def _draw_alpha_labels(self, painter: QPainter) -> None:
+        """Draw each visible zone's alpha value as text at its centroid."""
+        s, ox, oy = self._transform()
+        font = QFont("Arial", 10)
+        font.setBold(True)
+        painter.setFont(font)
+        for i in range(NUM_ZONES):
+            if not self._zone_visible[i]:
+                continue
+            centroid = self._zone_centroids[i]
+            if centroid is None:
+                continue
+            cx_img, cy_img = centroid
+            cx_w = cx_img * s + ox
+            cy_w = cy_img * s + oy
+            text = str(self._zone_alphas[i])
+            zc = _zone_qcolor(i, 255, color_override=self._zone_colors[i])
+            # Shadow for readability
+            painter.setPen(QColor(0, 0, 0, 200))
+            painter.drawText(QPointF(cx_w + 1.0, cy_w + 1.0), text)
+            # Foreground
+            painter.setPen(zc)
+            painter.drawText(QPointF(cx_w, cy_w), text)
+
+    def contextMenuEvent(self, event) -> None:   # noqa: N802
+        """Right-click context menu for copy/paste of the active zone mask."""
+        menu = QMenu(self)
+        copy_act  = menu.addAction("📋  Copy Mask (active zone)")
+        paste_act = menu.addAction("📌  Paste Mask (active zone)")
+        has_img = self._src_img is not None
+        copy_act.setEnabled(has_img)
+        paste_act.setEnabled(self._paste_available and has_img)
+        action = menu.exec(event.globalPos())
+        if action == copy_act:
+            try:
+                self.copy_requested.emit(self._active_zone)
+            except RuntimeError:
+                pass
+        elif action == paste_act:
+            try:
+                self.paste_requested.emit(self._active_zone)
+            except RuntimeError:
+                pass
 
     def _draw_preview(self, painter: QPainter) -> None:
         """Draw rubber-band shape preview during drag."""
@@ -622,7 +920,8 @@ class SelectiveAlphaCanvas(QWidget):
         if self._tool not in ("line", "rect", "ellipse"):
             return
 
-        zc = _zone_qcolor(self._active_zone, 200)
+        zc = _zone_qcolor(self._active_zone, 200,
+                          color_override=self._zone_colors[self._active_zone])
         pen = QPen(zc, 2, Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.setBrush(QBrush(QColor(zc.red(), zc.green(), zc.blue(), 60)))
@@ -643,7 +942,8 @@ class SelectiveAlphaCanvas(QWidget):
 
     def _draw_polygon_preview(self, painter: QPainter) -> None:
         """Draw in-progress polygon vertices and connecting lines."""
-        zc = _zone_qcolor(self._active_zone, 220)
+        zc = _zone_qcolor(self._active_zone, 220,
+                          color_override=self._zone_colors[self._active_zone])
         pen = QPen(zc, 2)
         painter.setPen(pen)
 
@@ -673,7 +973,8 @@ class SelectiveAlphaCanvas(QWidget):
             pen = QPen(QColor(255, 255, 255, 200), 1.5, Qt.PenStyle.DashLine)
         else:
             r = self._brush_size * s
-            zc = _zone_qcolor(self._active_zone, 220)
+            zc = _zone_qcolor(self._active_zone, 220,
+                              color_override=self._zone_colors[self._active_zone])
             pen = QPen(zc, 1.5)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -926,42 +1227,61 @@ def _draw_checker(painter: QPainter, w: int, h: int, sq: int = 10) -> None:
 
 
 class _ZoneRow(QWidget):
-    """A two-row widget showing zone colour swatch, name, alpha spinbox and
-    Paint/Clear buttons for one zone."""
+    """A three-row widget showing zone colour swatch, name, alpha spinbox,
+    visibility toggle, Paint/Clear buttons, and Copy/Paste mask buttons."""
 
-    selected = pyqtSignal(int)   # zone_idx
+    selected          = pyqtSignal(int)        # zone_idx  (or -(idx+1) for clear)
+    color_changed     = pyqtSignal(int, object) # zone_idx, (r,g,b) tuple
+    visibility_changed = pyqtSignal(int, bool) # zone_idx, visible
+    copy_requested    = pyqtSignal(int)        # zone_idx
+    paste_requested   = pyqtSignal(int)        # zone_idx
 
     def __init__(self, zone_idx: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._idx = zone_idx
+        r0, g0, b0, _ = ZONE_COLORS[zone_idx]
+        self._cur_rgb: tuple[int, int, int] = (r0, g0, b0)
+        color_name = ZONE_NAMES[zone_idx]
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(2, 3, 2, 3)
         outer.setSpacing(3)
 
-        # ── Row 1: swatch + name + alpha spinbox ─────────────────────────
+        # ── Row 1: visibility toggle + swatch + name + alpha spinbox ────
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(6)
+        top.setSpacing(4)
 
-        # Colour swatch
-        r, g, b, _ = ZONE_COLORS[zone_idx]
-        swatch = QLabel()
-        swatch.setFixedSize(18, 18)
-        color_name = ZONE_NAMES[zone_idx]
-        swatch.setStyleSheet(
-            f"background:{QColor(r,g,b).name()};"
-            "border:1px solid #666; border-radius:3px;"
+        # Visibility toggle (eye icon)
+        self._vis_btn = QPushButton("👁")
+        self._vis_btn.setCheckable(True)
+        self._vis_btn.setChecked(True)
+        self._vis_btn.setFixedSize(24, 24)
+        self._vis_btn.setToolTip(
+            f"Toggle visibility of the {color_name} overlay in the canvas.\n"
+            "Hidden zones keep their painted masks — they are just not shown."
         )
-        swatch.setToolTip(color_name)
-        top.addWidget(swatch)
+        self._vis_btn.clicked.connect(self._on_vis_toggled)
+        top.addWidget(self._vis_btn)
 
-        # Name — use the full "Zone N – Colour" label from ZONE_NAMES
+        # Colour swatch — clickable to open colour picker
+        self._swatch = QPushButton()
+        self._swatch.setFixedSize(18, 18)
+        self._swatch.setToolTip(
+            f"Click to choose a custom overlay colour for {color_name}."
+        )
+        self._swatch.setFlat(True)
+        self._update_swatch_style()
+        self._swatch.clicked.connect(self._on_pick_color)
+        top.addWidget(self._swatch)
+
+        # Name label — expanding so it fills available space and never clips
         name_lbl = QLabel(color_name)
-        name_lbl.setMinimumWidth(52)
+        name_lbl.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        name_lbl.setMinimumWidth(60)
         top.addWidget(name_lbl)
-
-        top.addStretch()
 
         # Alpha label + spinbox
         top.addWidget(QLabel("α:"))
@@ -970,7 +1290,8 @@ class _ZoneRow(QWidget):
         self._alpha_spin.setValue(128)
         self._alpha_spin.setMinimumWidth(62)
         self._alpha_spin.setToolTip(
-            "Alpha value applied to all pixels painted in this zone (0=transparent, 255=opaque)."
+            "Alpha value applied to all pixels painted in this zone "
+            "(0=transparent, 255=opaque)."
         )
         top.addWidget(self._alpha_spin)
         outer.addLayout(top)
@@ -978,7 +1299,7 @@ class _ZoneRow(QWidget):
         # ── Row 2: Paint + Clear buttons ─────────────────────────────────
         bot = QHBoxLayout()
         bot.setContentsMargins(0, 0, 0, 0)
-        bot.setSpacing(6)
+        bot.setSpacing(4)
 
         self._sel_btn = QPushButton("🖌  Paint")
         self._sel_btn.setCheckable(True)
@@ -995,9 +1316,61 @@ class _ZoneRow(QWidget):
 
         outer.addLayout(bot)
 
+        # ── Row 3: Copy + Paste mask buttons ─────────────────────────────
+        cp_row = QHBoxLayout()
+        cp_row.setContentsMargins(0, 0, 0, 0)
+        cp_row.setSpacing(4)
+
+        self._copy_btn = QPushButton("📋  Copy Mask")
+        self._copy_btn.setMinimumHeight(24)
+        self._copy_btn.setToolTip(
+            f"Copy the painted mask for {color_name} to the zone clipboard.\n"
+            "Use 'Paste Mask' on any zone to apply this copy."
+        )
+        self._copy_btn.clicked.connect(lambda: self.copy_requested.emit(self._idx))
+        cp_row.addWidget(self._copy_btn)
+
+        self._paste_btn = QPushButton("📌  Paste Mask")
+        self._paste_btn.setMinimumHeight(24)
+        self._paste_btn.setEnabled(False)
+        self._paste_btn.setToolTip(
+            f"Paste the copied mask onto {color_name}, replacing its current paint."
+        )
+        self._paste_btn.clicked.connect(lambda: self.paste_requested.emit(self._idx))
+        cp_row.addWidget(self._paste_btn)
+
+        outer.addLayout(cp_row)
+
+    # ---------------------------------------------------------------- helpers
+
+    def _update_swatch_style(self) -> None:
+        r, g, b = self._cur_rgb
+        self._swatch.setStyleSheet(
+            f"background:{QColor(r, g, b).name()};"
+            "border:1px solid #666; border-radius:3px;"
+            "padding:0;"
+        )
+
+    def _on_vis_toggled(self, checked: bool) -> None:
+        self.visibility_changed.emit(self._idx, checked)
+
+    def _on_pick_color(self) -> None:
+        """Open a colour-picker dialog and emit color_changed if the user confirms."""
+        r, g, b = self._cur_rgb
+        initial = QColor(r, g, b)
+        chosen = QColorDialog.getColor(
+            initial, self, f"Choose colour for {ZONE_NAMES[self._idx]}"
+        )
+        if chosen.isValid():
+            self._cur_rgb = (chosen.red(), chosen.green(), chosen.blue())
+            self._update_swatch_style()
+            self.color_changed.emit(self._idx, self._cur_rgb)
+
     def _on_clear(self) -> None:
         # Bubbles up to SelectiveAlphaTool via canvas
         self.selected.emit(-(self._idx + 1))  # negative = clear signal
+
+    # ---------------------------------------------------------------- public
 
     def alpha_value(self) -> int:
         return self._alpha_spin.value()
@@ -1014,11 +1387,23 @@ class _ZoneRow(QWidget):
         self.style().unpolish(self)
         self.style().polish(self)
 
+    def set_zone_color(self, rgb: tuple[int, int, int]) -> None:
+        """Update the swatch colour without opening a dialog."""
+        self._cur_rgb = (rgb[0], rgb[1], rgb[2])
+        self._update_swatch_style()
+
+    def set_paste_enabled(self, enabled: bool) -> None:
+        """Enable or disable the Paste Mask button."""
+        self._paste_btn.setEnabled(enabled)
+
     def register_tooltips(self, mgr) -> None:
         """Register zone-row widgets with the TooltipManager for cycling tips."""
-        mgr.register(self._alpha_spin, "sa_zone_alpha_spin")
-        mgr.register(self._sel_btn,   "sa_zone_select")
-        mgr.register(self._clear_btn, "sa_zone_clear")
+        mgr.register(self._alpha_spin,  "sa_zone_alpha_spin")
+        mgr.register(self._sel_btn,     "sa_zone_select")
+        mgr.register(self._clear_btn,   "sa_zone_clear")
+        mgr.register(self._vis_btn,     "sa_zone_visibility")
+        mgr.register(self._copy_btn,    "sa_zone_copy_mask")
+        mgr.register(self._paste_btn,   "sa_zone_paste_mask")
 
 
 # ---------------------------------------------------------------------------
@@ -1029,9 +1414,12 @@ class _ZoneRow(QWidget):
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
 
-    def __init__(self, settings_manager=None, parent: QWidget | None = None) -> None:
+    def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings_manager
+        self._sound = sound_engine
+        # Throttle zone-paint sound: play at most once per 200 ms during strokes.
+        self._last_zone_paint_sound_t: float = 0.0
         self._src_path: str = ""
         # Current applied result and history stack for the Undo Process feature.
         # _result_img holds the most recently applied image; _result_history
@@ -1041,6 +1429,9 @@ class SelectiveAlphaTool(QWidget):
         self._result_history: list[Image.Image] = []
         # Flag set during settings restoration to suppress spurious auto-saves.
         self._restoring: bool = False
+        # Zone-mask clipboard: stores a single uint8 ndarray (the most recent
+        # Copy Mask action).  Copying again silently replaces the previous entry.
+        self._mask_clipboard: Optional[np.ndarray] = None
         self._setup_ui()
         self._restore_settings()
 
@@ -1053,7 +1444,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Left panel (controls) ─────────────────────────────────────────
         left_panel = QWidget()
-        left_panel.setFixedWidth(290)
+        left_panel.setFixedWidth(330)
         lv = QVBoxLayout(left_panel)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
@@ -1071,6 +1462,19 @@ class SelectiveAlphaTool(QWidget):
         self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
+
+        # Row 1b: Show Highlights toggle — prominent master visibility control
+        self._btn_show_highlights = QPushButton("👁  Show Highlights")
+        self._btn_show_highlights.setCheckable(True)
+        self._btn_show_highlights.setChecked(False)
+        self._btn_show_highlights.setMinimumHeight(28)
+        self._btn_show_highlights.setToolTip(
+            "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
+            "Off by default — turn on to see the coloured highlights and alpha labels.\n"
+            "Automatically turns on when multiple alpha zones are detected in an image."
+        )
+        self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
+        wf_lay.addWidget(self._btn_show_highlights)
 
         # Row 2: Apply (primary action – most prominent)
         self._btn_apply = QPushButton("✅  Apply Alpha Zones")
@@ -1172,7 +1576,7 @@ class SelectiveAlphaTool(QWidget):
 
         lv.addWidget(tools_box)
 
-        # Tool sizes
+        # Tool sizes + Auto-correct grouped together
         size_box = QGroupBox("Tool Size")
         sg = QGridLayout(size_box)
         sg.setSpacing(4)
@@ -1194,9 +1598,10 @@ class SelectiveAlphaTool(QWidget):
             lambda v: self._canvas.set_eraser_size(v)
         )
         sg.addWidget(self._eraser_spin, 1, 1)
-        lv.addWidget(size_box)
 
-        # Auto-correct
+        # Auto-correct sits inside the Tool Size group so it is clearly
+        # associated with the drawing tools and is never hidden by the
+        # zone list scrolling out of view.
         self._autocorrect_chk = QCheckBox("Auto-correct (snap to edges)")
         self._autocorrect_chk.setToolTip(
             "When checked, freehand and line strokes are automatically snapped\n"
@@ -1206,7 +1611,8 @@ class SelectiveAlphaTool(QWidget):
         self._autocorrect_chk.toggled.connect(
             lambda v: self._canvas.set_autocorrect(v)
         )
-        lv.addWidget(self._autocorrect_chk)
+        sg.addWidget(self._autocorrect_chk, 2, 0, 1, 2)
+        lv.addWidget(size_box)
 
         # Zoom controls
         zoom_box = QGroupBox("Zoom")
@@ -1225,14 +1631,186 @@ class SelectiveAlphaTool(QWidget):
         zh.addWidget(self._btn_zoom_in)
         lv.addWidget(zoom_box)
 
+        # ── Mask Transform ─────────────────────────────────────────────────
+        transform_box = QGroupBox("Mask Transform (active zone)")
+        tx_lay = QGridLayout(transform_box)
+        tx_lay.setSpacing(4)
+
+        # Shift row
+        tx_lay.addWidget(QLabel("Shift (px):"), 0, 0)
+        self._transform_step_spin = QSpinBox()
+        self._transform_step_spin.setRange(1, 500)
+        self._transform_step_spin.setValue(10)
+        self._transform_step_spin.setMinimumWidth(52)
+        self._transform_step_spin.setToolTip(
+            "Number of pixels to shift the active zone mask per click."
+        )
+        tx_lay.addWidget(self._transform_step_spin, 0, 1)
+
+        shift_row = QHBoxLayout()
+        shift_row.setSpacing(2)
+        self._btn_shift_left  = QPushButton("←")
+        self._btn_shift_up    = QPushButton("↑")
+        self._btn_shift_down  = QPushButton("↓")
+        self._btn_shift_right = QPushButton("→")
+        for btn, tip in (
+            (self._btn_shift_left,  "Shift the active zone mask left."),
+            (self._btn_shift_up,    "Shift the active zone mask up."),
+            (self._btn_shift_down,  "Shift the active zone mask down."),
+            (self._btn_shift_right, "Shift the active zone mask right."),
+        ):
+            btn.setFixedSize(28, 28)
+            btn.setToolTip(tip)
+        self._btn_shift_left.clicked.connect(
+            lambda: self._on_transform_shift(-self._transform_step_spin.value(), 0)
+        )
+        self._btn_shift_up.clicked.connect(
+            lambda: self._on_transform_shift(0, -self._transform_step_spin.value())
+        )
+        self._btn_shift_down.clicked.connect(
+            lambda: self._on_transform_shift(0, self._transform_step_spin.value())
+        )
+        self._btn_shift_right.clicked.connect(
+            lambda: self._on_transform_shift(self._transform_step_spin.value(), 0)
+        )
+        for btn in (self._btn_shift_left, self._btn_shift_up,
+                    self._btn_shift_down, self._btn_shift_right):
+            shift_row.addWidget(btn)
+        shift_row.addStretch()
+        tx_lay.addLayout(shift_row, 0, 2)
+
+        # Rotate row
+        tx_lay.addWidget(QLabel("Rotate (°):"), 1, 0)
+        self._transform_angle_spin = QSpinBox()
+        self._transform_angle_spin.setRange(1, 180)
+        self._transform_angle_spin.setValue(15)
+        self._transform_angle_spin.setMinimumWidth(52)
+        self._transform_angle_spin.setToolTip(
+            "Degrees to rotate the active zone mask per click."
+        )
+        tx_lay.addWidget(self._transform_angle_spin, 1, 1)
+
+        rot_row = QHBoxLayout()
+        rot_row.setSpacing(2)
+        self._btn_rotate_ccw = QPushButton("↺")
+        self._btn_rotate_cw  = QPushButton("↻")
+        self._btn_rotate_ccw.setFixedSize(28, 28)
+        self._btn_rotate_cw.setFixedSize(28, 28)
+        self._btn_rotate_ccw.setToolTip(
+            "Rotate the active zone mask counter-clockwise by the angle value."
+        )
+        self._btn_rotate_cw.setToolTip(
+            "Rotate the active zone mask clockwise by the angle value."
+        )
+        self._btn_rotate_ccw.clicked.connect(
+            lambda: self._on_transform_rotate(self._transform_angle_spin.value())
+        )
+        self._btn_rotate_cw.clicked.connect(
+            lambda: self._on_transform_rotate(-self._transform_angle_spin.value())
+        )
+        rot_row.addWidget(self._btn_rotate_ccw)
+        rot_row.addWidget(self._btn_rotate_cw)
+        rot_row.addStretch()
+        tx_lay.addLayout(rot_row, 1, 2)
+
+        # Scale row
+        tx_lay.addWidget(QLabel("Scale:"), 2, 0)
+        self._transform_scale_spin = QSpinBox()
+        self._transform_scale_spin.setRange(101, 300)
+        self._transform_scale_spin.setValue(110)
+        self._transform_scale_spin.setSuffix("%")
+        self._transform_scale_spin.setMinimumWidth(52)
+        self._transform_scale_spin.setToolTip(
+            "Scale factor used to enlarge or shrink the active zone mask per click.\n"
+            "Enlarge multiplies by this factor; Shrink divides by it."
+        )
+        tx_lay.addWidget(self._transform_scale_spin, 2, 1)
+
+        scale_row = QHBoxLayout()
+        scale_row.setSpacing(2)
+        self._btn_scale_up   = QPushButton("⊕")
+        self._btn_scale_down = QPushButton("⊖")
+        self._btn_scale_up.setFixedSize(28, 28)
+        self._btn_scale_down.setFixedSize(28, 28)
+        self._btn_scale_up.setToolTip("Enlarge the active zone mask by the scale factor.")
+        self._btn_scale_down.setToolTip("Shrink the active zone mask by the scale factor.")
+        self._btn_scale_up.clicked.connect(
+            lambda: self._on_transform_scale(
+                self._transform_scale_spin.value() / 100.0
+            )
+        )
+        self._btn_scale_down.clicked.connect(
+            lambda: self._on_transform_scale(
+                100.0 / self._transform_scale_spin.value()
+            )
+        )
+        scale_row.addWidget(self._btn_scale_up)
+        scale_row.addWidget(self._btn_scale_down)
+        scale_row.addStretch()
+        tx_lay.addLayout(scale_row, 2, 2)
+
+        lv.addWidget(transform_box)
+
         # Zone rows
-        zones_box = QGroupBox("Alpha Zones  (🖌 Paint to assign alpha per zone)")
+        zones_box = QGroupBox("Alpha Zones")
         zv = QVBoxLayout(zones_box)
         zv.setSpacing(2)
+
+        # Master visibility toggle row
+        vis_all_row = QHBoxLayout()
+        vis_all_row.setContentsMargins(0, 0, 0, 2)
+        self._btn_show_all = QPushButton("👁  Show All")
+        self._btn_show_all.setMinimumHeight(24)
+        self._btn_show_all.setToolTip(
+            "Make all zone overlays visible in the canvas at once."
+        )
+        self._btn_show_all.clicked.connect(self._on_show_all_zones)
+        self._btn_hide_all = QPushButton("🙈  Hide All")
+        self._btn_hide_all.setMinimumHeight(24)
+        self._btn_hide_all.setToolTip(
+            "Hide all zone overlays in the canvas so the source image is shown clean.\n"
+            "Painted masks are preserved — click Show All to reveal them again."
+        )
+        self._btn_hide_all.clicked.connect(self._on_hide_all_zones)
+        vis_all_row.addWidget(self._btn_show_all)
+        vis_all_row.addWidget(self._btn_hide_all)
+        zv.addLayout(vis_all_row)
+
+        # "Highlight transparent pixels" checkbox
+        self._show_zero_alpha_chk = QCheckBox("Highlight transparent pixels")
+        self._show_zero_alpha_chk.setChecked(False)
+        self._show_zero_alpha_chk.setToolTip(
+            "When checked, zone highlights are shown even over fully-transparent\n"
+            "(alpha = 0) pixels so you can paint and see selections on\n"
+            "transparent areas of the image."
+        )
+        zv.addWidget(self._show_zero_alpha_chk)
+
+        # "Show α values" checkbox
+        self._show_alpha_labels_chk = QCheckBox("Show α values on canvas")
+        self._show_alpha_labels_chk.setChecked(False)
+        self._show_alpha_labels_chk.setToolTip(
+            "When checked, each zone's alpha value is drawn as text at the\n"
+            "centre of its painted area on the canvas.  Off by default."
+        )
+        zv.addWidget(self._show_alpha_labels_chk)
+
+        # Thin separator
+        sep0 = QFrame()
+        sep0.setFrameShape(QFrame.Shape.HLine)
+        sep0.setFrameShadow(QFrame.Shadow.Sunken)
+        sep0.setFixedHeight(1)
+        zv.addWidget(sep0)
+
         self._zone_rows: list[_ZoneRow] = []
         for i in range(NUM_ZONES):
             row = _ZoneRow(i)
             row.selected.connect(self._on_zone_action)
+            row.color_changed.connect(self._on_zone_color_changed)
+            row.copy_requested.connect(self._on_copy_mask)
+            row.paste_requested.connect(self._on_paste_mask)
+            # visibility_changed and canvas connections wired after canvas is
+            # created (further below in _setup_ui).
             zv.addWidget(row)
             self._zone_rows.append(row)
             # Thin separator between rows (not after the last one)
@@ -1246,6 +1824,75 @@ class SelectiveAlphaTool(QWidget):
         self._zone_rows[0].set_selected(True)
         lv.addWidget(zones_box)
 
+        # ── Saved Masks Collection ─────────────────────────────────────────
+        # Up to _MASK_SLOT_COUNT named slots that survive image changes, so
+        # the user can copy zones from one image and paste onto another.
+        _MASK_SLOT_COUNT = 5
+        self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_COUNT
+        self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_COUNT
+        self._slot_status_labels: list[QLabel] = []
+        self._slot_paste_btns: list[QPushButton] = []
+
+        slots_box = QGroupBox("Saved Masks")
+        sv = QVBoxLayout(slots_box)
+        sv.setSpacing(2)
+        sv.setContentsMargins(4, 4, 4, 4)
+
+        slots_note = QLabel(
+            "Save a zone's mask to a slot and load it onto any zone later,\n"
+            "even after switching to a different image."
+        )
+        slots_note.setWordWrap(True)
+        slots_note.setStyleSheet("color: #999; font-size: 10px;")
+        sv.addWidget(slots_note)
+
+        for slot_idx in range(_MASK_SLOT_COUNT):
+            slot_row = QHBoxLayout()
+            slot_row.setSpacing(4)
+
+            slot_lbl = QLabel(f"Slot {slot_idx + 1}:")
+            slot_lbl.setFixedWidth(46)
+            slot_row.addWidget(slot_lbl)
+
+            status_lbl = QLabel("(empty)")
+            status_lbl.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            )
+            status_lbl.setStyleSheet("color: #888; font-size: 10px;")
+            status_lbl.setToolTip(f"Slot {slot_idx + 1}: currently empty.")
+            slot_row.addWidget(status_lbl)
+            self._slot_status_labels.append(status_lbl)
+
+            save_btn = QPushButton("Save")
+            save_btn.setFixedWidth(46)
+            save_btn.setMinimumHeight(22)
+            save_btn.setToolTip(
+                f"Save the active zone's mask into Slot {slot_idx + 1}.\n"
+                "Overwrites any previously saved mask in this slot."
+            )
+            save_btn.clicked.connect(
+                lambda _checked, idx=slot_idx: self._on_save_to_slot(idx)
+            )
+            slot_row.addWidget(save_btn)
+
+            paste_btn = QPushButton("Paste")
+            paste_btn.setFixedWidth(46)
+            paste_btn.setMinimumHeight(22)
+            paste_btn.setEnabled(False)
+            paste_btn.setToolTip(
+                f"Paste the mask stored in Slot {slot_idx + 1} into the\n"
+                "currently active zone, replacing its painted mask."
+            )
+            paste_btn.clicked.connect(
+                lambda _checked, idx=slot_idx: self._on_paste_from_slot(idx)
+            )
+            slot_row.addWidget(paste_btn)
+            self._slot_paste_btns.append(paste_btn)
+
+            sv.addLayout(slot_row)
+
+        lv.addWidget(slots_box)
+
         lv.addStretch()
 
         # ── Wrap left panel in a scroll area so controls remain accessible
@@ -1254,7 +1901,7 @@ class SelectiveAlphaTool(QWidget):
         left_scroll.setWidget(left_panel)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        left_scroll.setFixedWidth(310)  # panel 290 + scroll bar ~20
+        left_scroll.setFixedWidth(350)  # panel 330 + scroll bar ~20
         root.addWidget(left_scroll)
 
         # ── Canvas ───────────────────────────────────────────────────────
@@ -1262,6 +1909,23 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.mask_changed.connect(self._on_mask_changed)
         self._canvas.undo_available.connect(self._btn_undo.setEnabled)
         self._canvas.redo_available.connect(self._btn_redo.setEnabled)
+        # Wire canvas context-menu copy/paste signals.
+        self._canvas.copy_requested.connect(self._on_copy_mask)
+        self._canvas.paste_requested.connect(self._on_paste_mask)
+
+        # Wire zone visibility signals now that _canvas exists.
+        for row in self._zone_rows:
+            row.visibility_changed.connect(self._canvas.set_zone_visible)
+
+        # Wire show-zero-alpha checkbox.
+        self._show_zero_alpha_chk.toggled.connect(self._canvas.set_show_zero_alpha)
+        # Wire show-alpha-labels checkbox.
+        self._show_alpha_labels_chk.toggled.connect(self._canvas.set_show_alpha_labels)
+        # Keep canvas alpha-label values in sync with spinboxes.
+        for i, row in enumerate(self._zone_rows):
+            row._alpha_spin.valueChanged.connect(
+                lambda v, idx=i: self._canvas.set_zone_alpha_label(idx, v)
+            )
 
         # Wrap canvas + status label in a vertical layout.
         right_widget = QWidget()
@@ -1288,6 +1952,8 @@ class SelectiveAlphaTool(QWidget):
         self._brush_spin.valueChanged.connect(lambda _: self._save_settings())
         self._eraser_spin.valueChanged.connect(lambda _: self._save_settings())
         self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
+        self._show_zero_alpha_chk.toggled.connect(lambda _: self._save_settings())
+        self._show_alpha_labels_chk.toggled.connect(lambda _: self._save_settings())
         for row in self._zone_rows:
             row._alpha_spin.valueChanged.connect(lambda _: self._save_settings())
 
@@ -1313,11 +1979,26 @@ class SelectiveAlphaTool(QWidget):
             alphas = self._settings.get_sa_zone_alphas()
             for row, alpha in zip(self._zone_rows, alphas):
                 row.set_alpha(alpha)
+            # Restore custom zone colours
+            saved_colors = self._settings.get_sa_zone_colors()
+            if saved_colors is not None:
+                for idx, (row, c) in enumerate(zip(self._zone_rows, saved_colors)):
+                    rgb = (c[0], c[1], c[2])
+                    row.set_zone_color(rgb)
+                    self._canvas.set_zone_color(idx, rgb[0], rgb[1], rgb[2])
             # Restore brush / eraser sizes
             self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
             self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
             # Restore autocorrect toggle
             self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
+            # Restore show-zero-alpha toggle
+            self._show_zero_alpha_chk.setChecked(
+                bool(self._settings.get("sa_show_zero_alpha", False))
+            )
+            # Restore show-alpha-labels toggle
+            self._show_alpha_labels_chk.setChecked(
+                bool(self._settings.get("sa_show_alpha_labels", False))
+            )
             # Restore last-used drawing tool
             last_tool = str(self._settings.get("sa_last_tool", "freehand"))
             if last_tool in self._tool_btns:
@@ -1333,9 +2014,15 @@ class SelectiveAlphaTool(QWidget):
         self._settings.set_sa_zone_alphas(
             [row.alpha_value() for row in self._zone_rows]
         )
+        # Persist custom zone colours: read from canvas which is the source of truth.
+        self._settings.set_sa_zone_colors(
+            [list(self._canvas.get_zone_color(i)) for i in range(NUM_ZONES)]
+        )
         self._settings.set("sa_brush_size",  self._brush_spin.value())
         self._settings.set("sa_eraser_size", self._eraser_spin.value())
         self._settings.set("sa_autocorrect", self._autocorrect_chk.isChecked())
+        self._settings.set("sa_show_zero_alpha", self._show_zero_alpha_chk.isChecked())
+        self._settings.set("sa_show_alpha_labels", self._show_alpha_labels_chk.isChecked())
         self._settings.set("sa_last_tool",   self._canvas._tool)
 
     def closeEvent(self, event) -> None:  # noqa: N802
@@ -1354,8 +2041,9 @@ class SelectiveAlphaTool(QWidget):
 
     def register_tooltips(self, mgr) -> None:
         """Register all Selective Alpha tab widgets with the TooltipManager."""
-        mgr.register(self._btn_open,         "sa_open_btn")
-        mgr.register(self._btn_save,         "sa_save_btn")
+        mgr.register(self._btn_open,            "sa_open_btn")
+        mgr.register(self._btn_show_highlights, "sa_show_highlights")
+        mgr.register(self._btn_save,            "sa_save_btn")
         mgr.register(self._tool_btns["freehand"], "sa_tool_freehand")
         mgr.register(self._tool_btns["line"],     "sa_tool_line")
         mgr.register(self._tool_btns["rect"],     "sa_tool_rect")
@@ -1370,6 +2058,19 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_zoom_in,      "sa_zoom_in")
         mgr.register(self._btn_zoom_out,     "sa_zoom_out")
         mgr.register(self._btn_zoom_fit,     "sa_zoom_fit")
+        mgr.register(self._transform_step_spin,  "sa_transform_step")
+        mgr.register(self._btn_shift_left,   "sa_shift_left")
+        mgr.register(self._btn_shift_right,  "sa_shift_right")
+        mgr.register(self._btn_shift_up,     "sa_shift_up")
+        mgr.register(self._btn_shift_down,   "sa_shift_down")
+        mgr.register(self._transform_angle_spin, "sa_transform_angle")
+        mgr.register(self._btn_rotate_ccw,   "sa_rotate_ccw")
+        mgr.register(self._btn_rotate_cw,    "sa_rotate_cw")
+        mgr.register(self._transform_scale_spin, "sa_transform_scale")
+        mgr.register(self._btn_scale_up,     "sa_scale_up")
+        mgr.register(self._btn_scale_down,   "sa_scale_down")
+        mgr.register(self._btn_show_all,     "sa_show_all_zones")
+        mgr.register(self._btn_hide_all,     "sa_hide_all_zones")
         for row in self._zone_rows:
             row.register_tooltips(mgr)
         mgr.register(self._btn_undo,         "sa_undo")
@@ -1424,6 +2125,111 @@ class SelectiveAlphaTool(QWidget):
 
     # ---------------------------------------------------------------- slots
 
+    def _on_show_highlights_toggled(self, checked: bool) -> None:
+        """Master toggle: show or hide all zone overlays from the top button."""
+        if checked:
+            self._on_show_all_zones()
+        else:
+            self._on_hide_all_zones()
+
+    def _on_show_all_zones(self) -> None:
+        """Make all zone overlays visible and sync the eye-icon toggles."""
+        for idx, row in enumerate(self._zone_rows):
+            row._vis_btn.setChecked(True)
+            self._canvas.set_zone_visible(idx, True)
+
+    def _on_hide_all_zones(self) -> None:
+        """Hide all zone overlays and sync the eye-icon toggles."""
+        for idx, row in enumerate(self._zone_rows):
+            row._vis_btn.setChecked(False)
+            self._canvas.set_zone_visible(idx, False)
+
+    def _on_zone_color_changed(self, zone_idx: int, rgb: tuple) -> None:
+        """Propagate a user-chosen zone colour to the canvas and save settings."""
+        r, g, b = rgb
+        self._canvas.set_zone_color(zone_idx, r, g, b)
+        self._save_settings()
+
+    def _on_copy_mask(self, zone_idx: int) -> None:
+        """Copy the painted mask of *zone_idx* into the single-slot clipboard."""
+        arr = self._canvas.get_mask_as_array(zone_idx)
+        if arr is None:
+            QMessageBox.information(
+                self, "Nothing to copy",
+                f"Zone {zone_idx + 1} has no painted mask to copy."
+            )
+            return
+        self._mask_clipboard = arr
+        # Enable Paste button on all zone rows and the canvas context menu.
+        for row in self._zone_rows:
+            row.set_paste_enabled(True)
+        self._canvas.set_paste_available(True)
+        if self._sound is not None:
+            self._sound.play_mask_copy()
+
+    def _on_paste_mask(self, zone_idx: int) -> None:
+        """Paste the clipboard mask into *zone_idx*, replacing its current mask."""
+        if self._mask_clipboard is None:
+            QMessageBox.information(
+                self, "Nothing to paste",
+                "Copy a zone mask first using the 📋 Copy Mask button."
+            )
+            return
+        if not self._canvas.has_image():
+            return
+        # Attempt to paste; set_mask_from_array validates dimensions.
+        self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard.copy())
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
+    def _on_save_to_slot(self, slot_idx: int) -> None:
+        """Save the active zone's mask into the named collection slot *slot_idx*."""
+        active_zone = self._canvas.get_active_zone() if self._canvas.has_image() else -1
+        if not self._canvas.has_image() or active_zone < 0:
+            QMessageBox.information(
+                self, "No image loaded",
+                "Please open an image and paint a zone mask before saving to a slot."
+            )
+            return
+        arr = self._canvas.get_mask_as_array(active_zone)
+        if arr is None:
+            QMessageBox.information(
+                self, "Nothing to save",
+                f"Zone {active_zone + 1} has no painted mask to save."
+            )
+            return
+        self._mask_slots[slot_idx] = arr.copy()
+        zone_name = ZONE_NAMES[active_zone] if active_zone < len(ZONE_NAMES) else f"Zone {active_zone + 1}"
+        info = zone_name
+        self._mask_slot_info[slot_idx] = info
+        # Update UI
+        lbl = self._slot_status_labels[slot_idx]
+        lbl.setText(info)
+        lbl.setStyleSheet("color: #aef; font-size: 10px;")
+        lbl.setToolTip(f"Slot {slot_idx + 1}: saved from {info}.")
+        self._slot_paste_btns[slot_idx].setEnabled(True)
+        if self._sound is not None:
+            self._sound.play_mask_copy()
+
+    def _on_paste_from_slot(self, slot_idx: int) -> None:
+        """Paste the mask stored in *slot_idx* into the currently active zone."""
+        if self._mask_slots[slot_idx] is None:
+            QMessageBox.information(
+                self, "Slot empty",
+                f"Slot {slot_idx + 1} is empty. Save a mask there first."
+            )
+            return
+        if not self._canvas.has_image():
+            QMessageBox.information(
+                self, "No image loaded",
+                "Please open an image before pasting a saved mask."
+            )
+            return
+        active_zone = self._canvas.get_active_zone()
+        self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx].copy())
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1471,6 +2277,63 @@ class SelectiveAlphaTool(QWidget):
             img.close()
         self._result_history.clear()
         self._btn_undo_process.setEnabled(False)
+        # Reset the Show Highlights toggle so a freshly-loaded image starts
+        # with highlights hidden; _auto_populate_zones_from_image will turn it
+        # back on if multiple distinct alpha zones are detected.
+        self._btn_show_highlights.setChecked(False)
+        self._on_hide_all_zones()
+        # Auto-populate zone masks if the image has multiple distinct alphas.
+        self._auto_populate_zones_from_image()
+
+    def _auto_populate_zones_from_image(self) -> None:
+        """Auto-detect distinct alpha zones in the loaded image and populate them.
+
+        When the source image contains 2–7 significant distinct alpha values
+        (each covering ≥ 0.5 % of pixels) the method automatically:
+          - Paints each zone mask to cover pixels sharing that alpha value.
+          - Sets the corresponding alpha spinbox to the detected value.
+          - Makes all populated zones visible.
+
+        The entire operation is a single undo step.  If the image has only one
+        alpha value, or more than NUM_ZONES distinct significant values (smooth
+        gradient), nothing happens.
+        """
+        src_img = self._canvas.get_source_image()
+        if src_img is None:
+            return
+
+        # Build RGBA array for analysis.
+        if src_img.mode == "RGBA":
+            arr = np.array(src_img, dtype=np.uint8)
+        else:
+            tmp = src_img.convert("RGBA")
+            try:
+                arr = np.array(tmp, dtype=np.uint8)
+            finally:
+                tmp.close()
+
+        zones = detect_alpha_zones(arr)
+        del arr  # free memory; masks will be stored inside the canvas
+
+        if not zones:
+            return
+
+        # Populate canvas masks in one undo step.
+        self._canvas.populate_zones_from_detection(zones)
+
+        # Sync alpha spinboxes and zone visibility.
+        for i, (alpha_val, _) in enumerate(zones):
+            if i >= len(self._zone_rows):
+                break
+            row = self._zone_rows[i]
+            row.set_alpha(alpha_val)
+            # Ensure the visibility toggle is on for this zone.
+            row._vis_btn.setChecked(True)
+            self._canvas.set_zone_visible(i, True)
+
+        # Reveal all populated zones and sync the master Show Highlights toggle.
+        self._on_show_all_zones()
+        self._btn_show_highlights.setChecked(True)
 
     def _on_save(self) -> None:
         if self._result_img is None:
@@ -1577,7 +2440,11 @@ class SelectiveAlphaTool(QWidget):
 
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
-        pass  # canvas handles dirty flag internally
+        if self._sound is not None:
+            now = time.monotonic()
+            if now - self._last_zone_paint_sound_t >= 0.2:
+                self._last_zone_paint_sound_t = now
+                self._sound.play_zone_paint()
 
     def _on_undo_mask(self) -> None:
         """Undo the last drawing / erase action on the canvas."""
@@ -1632,3 +2499,20 @@ class SelectiveAlphaTool(QWidget):
 
     def _zoom_reset(self) -> None:
         self._canvas.zoom_reset()
+
+    # ---------------------------------------------------------------- transform slots
+
+    def _on_transform_shift(self, dx: int, dy: int) -> None:
+        """Shift the active zone mask by (dx, dy) pixels."""
+        zone_idx = self._canvas.get_active_zone()
+        self._canvas.shift_zone_mask(zone_idx, dx, dy)
+
+    def _on_transform_rotate(self, angle: float) -> None:
+        """Rotate the active zone mask by *angle* degrees (positive = CCW)."""
+        zone_idx = self._canvas.get_active_zone()
+        self._canvas.rotate_zone_mask(zone_idx, angle)
+
+    def _on_transform_scale(self, factor: float) -> None:
+        """Scale the active zone mask by *factor* about the image centre."""
+        zone_idx = self._canvas.get_active_zone()
+        self._canvas.scale_zone_mask(zone_idx, factor)

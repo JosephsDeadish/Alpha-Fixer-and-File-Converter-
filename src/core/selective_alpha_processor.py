@@ -6,6 +6,7 @@ Provides utilities for the Selective Alpha editor:
   - Edge-constrained flood fill (smart-fill tool)
   - Mask auto-correct (snap drawn mask boundary to nearby edges)
   - Applying per-zone alpha values to the final image
+  - Auto-detection of distinct alpha zones in a source image
 """
 
 from __future__ import annotations
@@ -19,9 +20,9 @@ from PIL import Image
 # Constants
 # ---------------------------------------------------------------------------
 
-NUM_ZONES = 7
+NUM_ZONES = 10
 
-# Semi-transparent overlay colors (R, G, B, overlay-alpha) for the 7 zones.
+# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 10 zones.
 # overlay-alpha = 130 ≈ 51 % opacity so the source image stays visible.
 ZONE_COLORS: list[tuple[int, int, int, int]] = [
     (255,  60,  60, 130),   # zone 0 – Red
@@ -31,6 +32,9 @@ ZONE_COLORS: list[tuple[int, int, int, int]] = [
     (200,  60, 255, 130),   # zone 4 – Purple
     ( 50, 220, 220, 130),   # zone 5 – Cyan
     (255, 140,  50, 130),   # zone 6 – Orange
+    (255, 100, 180, 130),   # zone 7 – Pink
+    (100, 255, 180, 130),   # zone 8 – Mint
+    (180, 120,  60, 130),   # zone 9 – Brown
 ]
 
 # Human-readable zone names shown in the UI.
@@ -42,6 +46,9 @@ ZONE_NAMES: list[str] = [
     "Zone 5 – Purple",
     "Zone 6 – Cyan",
     "Zone 7 – Orange",
+    "Zone 8 – Pink",
+    "Zone 9 – Mint",
+    "Zone 10 – Brown",
 ]
 
 # ---------------------------------------------------------------------------
@@ -301,13 +308,23 @@ def apply_selective_alpha(
 def composite_zones(
     src_rgba: np.ndarray,
     zone_masks: list[Optional[np.ndarray]],
+    zone_colors: Optional[list[tuple[int, int, int, int]]] = None,
+    show_zero_alpha: bool = False,
 ) -> np.ndarray:
     """Blend zone-colour overlays onto *src_rgba* and return uint8 RGBA.
 
     Parameters
     ----------
-    src_rgba   : uint8 (h, w, 4) ndarray – source RGBA image.
-    zone_masks : list of :data:`NUM_ZONES` bool (h, w) ndarray or ``None``.
+    src_rgba        : uint8 (h, w, 4) ndarray – source RGBA image.
+    zone_masks      : list of :data:`NUM_ZONES` bool (h, w) ndarray or ``None``.
+    zone_colors     : optional list of ``(R, G, B, overlay_alpha)`` tuples, one
+                      per zone.  When *None* (default) the module-level
+                      :data:`ZONE_COLORS` palette is used.  Pass a custom list to
+                      support user-chosen zone colours.
+    show_zero_alpha : when *True*, pixels whose source alpha is 0 but that fall
+                      inside a painted zone have their output alpha lifted to
+                      the zone's overlay-alpha so the highlight is visible even
+                      on fully-transparent source areas.  Defaults to *False*.
 
     Returns
     -------
@@ -323,12 +340,207 @@ def composite_zones(
             f"zone_masks must have exactly {NUM_ZONES} elements, "
             f"got {len(zone_masks)}"
         )
+    colors = zone_colors if zone_colors is not None else ZONE_COLORS
     out = src_rgba.astype(np.float32, copy=True)
-    for mask, (r, g, b, oa) in zip(zone_masks, ZONE_COLORS):
+    for mask, (r, g, b, oa) in zip(zone_masks, colors):
         if mask is None or not mask.any():
             continue
         a = oa / 255.0
         out[mask, 0] = out[mask, 0] * (1.0 - a) + r * a
         out[mask, 1] = out[mask, 1] * (1.0 - a) + g * a
         out[mask, 2] = out[mask, 2] * (1.0 - a) + b * a
+        if show_zero_alpha:
+            # Lift fully-transparent masked pixels so the overlay is visible.
+            zero_mask = mask & (src_rgba[:, :, 3] == 0)
+            if zero_mask.any():
+                out[zero_mask, 3] = float(oa)
     return np.clip(out, 0, 255).astype(np.uint8)
+
+
+# ---------------------------------------------------------------------------
+# Auto-detection of distinct alpha zones
+# ---------------------------------------------------------------------------
+
+
+def detect_alpha_zones(
+    arr: np.ndarray,
+    min_pixel_fraction: float = 0.005,
+) -> list[tuple[int, np.ndarray]]:
+    """Detect distinct alpha-value zones in an RGBA uint8 array.
+
+    Looks at the alpha channel and identifies pixel groups that share the same
+    alpha value.  Only *significant* alpha values — those covering at least
+    *min_pixel_fraction* of all pixels — are returned.
+
+    The function returns an empty list when:
+      - The array is not RGBA (fewer than 4 channels).
+      - Fewer than 2 distinct significant alpha values exist (i.e. the image is
+        uniformly transparent or uniformly opaque).
+      - More than :data:`NUM_ZONES` distinct significant alpha values exist
+        (indicates a smooth gradient rather than discrete zones).
+
+    Parameters
+    ----------
+    arr               : uint8 ndarray (h, w, 4) – RGBA source array.
+    min_pixel_fraction: minimum fraction of total pixels a unique alpha value
+                        must occupy to be considered a zone.  Default 0.5%.
+
+    Returns
+    -------
+    list of ``(alpha_value, bool_mask)`` tuples, sorted by pixel count
+    (largest zone first), at most :data:`NUM_ZONES` entries.
+    """
+    if arr.ndim != 3 or arr.shape[2] < 4:
+        return []
+
+    alpha = arr[:, :, 3]
+    total = alpha.size
+    min_pixels = max(1, int(total * min_pixel_fraction))
+
+    unique_vals, counts = np.unique(alpha, return_counts=True)
+
+    # Keep only alpha values that represent at least min_pixel_fraction of pixels.
+    significant = [
+        (int(v), int(c))
+        for v, c in zip(unique_vals, counts)
+        if c >= min_pixels
+    ]
+
+    # Need at least 2 distinct values to auto-populate zones.
+    if len(significant) < 2:
+        return []
+
+    # Sort by descending pixel count (most common zone first).
+    # When there are more distinct values than NUM_ZONES, take only the
+    # most significant ones rather than silently giving up – this lets
+    # the tool auto-populate even for images with many distinct alpha
+    # levels, picking the zones that cover the most pixels.
+    significant.sort(key=lambda x: -x[1])
+    significant = significant[:NUM_ZONES]
+
+    result: list[tuple[int, np.ndarray]] = []
+    for alpha_val, _ in significant:
+        bool_mask = alpha == alpha_val
+        result.append((alpha_val, bool_mask))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Mask geometric transforms (shift / rotate / scale)
+# ---------------------------------------------------------------------------
+
+
+def shift_mask(mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
+    """Translate a uint8 or bool mask by (dx, dy) pixels.
+
+    Pixels that shift outside the image boundary are discarded; the vacated
+    area is filled with zeros.  Positive *dx* shifts right, positive *dy*
+    shifts down.
+
+    Parameters
+    ----------
+    mask : uint8 or bool ndarray, shape (h, w)
+    dx   : horizontal shift in pixels (right-positive)
+    dy   : vertical shift in pixels (down-positive)
+
+    Returns
+    -------
+    Same dtype ndarray, shape (h, w)
+    """
+    h, w = mask.shape[:2]
+    result = np.zeros_like(mask)
+    src_x0 = max(0, -dx)
+    src_x1 = min(w, w - dx)
+    dst_x0 = max(0,  dx)
+    dst_x1 = min(w, w + dx)
+    src_y0 = max(0, -dy)
+    src_y1 = min(h, h - dy)
+    dst_y0 = max(0,  dy)
+    dst_y1 = min(h, h + dy)
+    if src_x0 < src_x1 and src_y0 < src_y1 and dst_x0 < dst_x1 and dst_y0 < dst_y1:
+        result[dst_y0:dst_y1, dst_x0:dst_x1] = mask[src_y0:src_y1, src_x0:src_x1]
+    return result
+
+
+def rotate_mask(mask: np.ndarray, angle_degrees: float) -> np.ndarray:
+    """Rotate a uint8 or bool mask around the image centre.
+
+    Uses PIL nearest-neighbour resampling so the mask stays binary.  Positive
+    *angle_degrees* rotates **counter-clockwise** (PIL convention).  The image
+    size is unchanged; pixels that rotate outside the bounds are discarded.
+
+    Parameters
+    ----------
+    mask           : uint8 or bool ndarray, shape (h, w)
+    angle_degrees  : rotation angle in degrees (positive = counter-clockwise)
+
+    Returns
+    -------
+    Same dtype ndarray, shape (h, w)
+    """
+    original_dtype = mask.dtype
+    pil_src = Image.fromarray(mask.astype(np.uint8), mode="L")
+    try:
+        rotated = pil_src.rotate(
+            angle_degrees,
+            resample=Image.Resampling.NEAREST,
+            expand=False,
+            fillcolor=0,
+        )
+        result = np.array(rotated, dtype=np.uint8)
+        rotated.close()
+    finally:
+        pil_src.close()
+    if original_dtype == bool:
+        return result > 0
+    return result
+
+
+def scale_mask(mask: np.ndarray, factor: float) -> np.ndarray:
+    """Scale a uint8 or bool mask about the image centre by *factor*.
+
+    Uses a PIL affine transform with nearest-neighbour resampling so the mask
+    stays binary.  *factor* > 1 enlarges the masked region; 0 < *factor* < 1
+    shrinks it.  The image size is unchanged.
+
+    Parameters
+    ----------
+    mask   : uint8 or bool ndarray, shape (h, w)
+    factor : scale factor (must be > 0)
+
+    Returns
+    -------
+    Same dtype ndarray, shape (h, w)
+
+    Raises
+    ------
+    ValueError
+        If *factor* is not positive.
+    """
+    if factor <= 0.0:
+        raise ValueError(f"scale_mask: factor must be positive, got {factor!r}")
+    original_dtype = mask.dtype
+    h, w = mask.shape[:2]
+    inv_f = 1.0 / factor
+    cx = (w - 1) / 2.0
+    cy = (h - 1) / 2.0
+    tx = cx * (1.0 - inv_f)
+    ty = cy * (1.0 - inv_f)
+    pil_src = Image.fromarray(mask.astype(np.uint8), mode="L")
+    try:
+        transformed = pil_src.transform(
+            (w, h),
+            Image.Transform.AFFINE,
+            (inv_f, 0.0, tx, 0.0, inv_f, ty),
+            resample=Image.Resampling.NEAREST,
+            fillcolor=0,
+        )
+        result = np.array(transformed, dtype=np.uint8)
+        transformed.close()
+    finally:
+        pil_src.close()
+    if original_dtype == bool:
+        return result > 0
+    return result
+

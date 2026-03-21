@@ -46,7 +46,10 @@ _THUMB_AUTO_DISABLE = 3000
 # ---------------------------------------------------------------------------
 
 class _ThumbSignals(QObject):
-    loaded = pyqtSignal(str, QIcon)  # path, icon
+    # Emits QImage instead of QIcon so the heavy QPixmap/QIcon objects are
+    # always constructed on the main (GUI) thread.  QImage is safe to create
+    # and pass across threads; QPixmap and QPainter on a QPixmap are not.
+    loaded = pyqtSignal(str, QImage)  # path, composite QImage
 
 
 class _ThumbRunnable(QRunnable):
@@ -82,7 +85,8 @@ class _ThumbRunnable(QRunnable):
         img = None
         try:
             from PIL import Image
-            img = Image.open(self._path)
+            from src.core.file_converter import _open_image
+            img = _open_image(self._path)
             img.thumbnail((self._thumb_px, self._thumb_px), Image.LANCZOS)
             if img.mode == "RGBA":
                 data = img.tobytes("raw", "RGBA")
@@ -99,31 +103,40 @@ class _ThumbRunnable(QRunnable):
                               QImage.Format.Format_RGB888)
             # Scale the image to fit within the physical thumbnail cell while
             # preserving its aspect ratio, then letterbox it into an exact
-            # _thumb_px square transparent pixmap so Qt never stretches it.
+            # _thumb_px square transparent QImage.
+            #
+            # IMPORTANT: QPixmap and QPainter-on-QPixmap are NOT thread-safe —
+            # they must only be used on the main (GUI) thread.  QImage and
+            # QPainter-on-QImage are thread-safe for raster paint devices, so
+            # we build the composite QImage here and let _on_thumb_loaded
+            # (which runs on the main thread) convert it to a QIcon.
             phys = self._thumb_px
-            scaled = QPixmap.fromImage(qimg).scaled(
+            scaled = qimg.scaled(
                 phys, phys,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            out = QPixmap(phys, phys)
+            # Create a transparent ARGB32 QImage for the letterbox composite.
+            out = QImage(phys, phys, QImage.Format.Format_ARGB32_Premultiplied)
             out.fill(Qt.GlobalColor.transparent)
             painter = QPainter(out)
             if painter.isActive():
-                painter.drawPixmap(
+                painter.drawImage(
                     (phys - scaled.width()) // 2,
                     (phys - scaled.height()) // 2,
                     scaled,
                 )
                 painter.end()
-            # Tag the pixmap with the device-pixel ratio so Qt renders it at
+            # Tag the image with the device-pixel ratio so Qt renders it at
             # the correct logical size on HiDPI / Retina displays.
             out.setDevicePixelRatio(self._dpr)
-            icon = QIcon(out)
-            # Final cancel check before emitting so we don't deliver the icon
+            # Final cancel check before emitting so we don't deliver the image
             # to a list that was cleared while the thumbnail was being built.
             if not self._cancel.is_set():
-                self._signals.loaded.emit(self._path, icon)
+                try:
+                    self._signals.loaded.emit(self._path, out)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         except Exception:
             pass  # silently skip unreadable / non-image files
         finally:
@@ -142,6 +155,7 @@ class DropFileList(QListWidget):
     paths_dropped = pyqtSignal(list)   # list[str] – new paths dragged in
     count_changed = pyqtSignal(int)    # emitted after any add/remove
     file_removed  = pyqtSignal()       # emitted when items are explicitly removed by the user
+    list_cleared  = pyqtSignal()       # emitted when all items are cleared at once
     drag_entered  = pyqtSignal()       # emitted when files are first dragged over the list
 
     # Icon shown in the centre of the list when no files have been added yet
@@ -313,10 +327,18 @@ class DropFileList(QListWidget):
         else:
             self._load_tick.stop()
 
-    @pyqtSlot(str, QIcon)
-    def _on_thumb_loaded(self, path: str, icon: QIcon) -> None:
-        """Called from _ThumbSignals (main thread) when a thumbnail is ready."""
+    @pyqtSlot(str, QImage)
+    def _on_thumb_loaded(self, path: str, qimg: QImage) -> None:
+        """Called from _ThumbSignals (main thread) when a thumbnail is ready.
+
+        The runnable emits a QImage (thread-safe); we convert it to QPixmap
+        and QIcon here on the main thread where QPixmap construction is safe.
+        """
         self._pending.discard(path)
+
+        # Convert QImage → QIcon on the main thread (QPixmap is GUI-thread only)
+        pixmap = QPixmap.fromImage(qimg)
+        icon = QIcon(pixmap)
 
         # Evict oldest entry if cache is full
         if len(self._thumb_cache) >= _CACHE_MAX:
@@ -533,6 +555,7 @@ class DropFileList(QListWidget):
         self._cancel_event = threading.Event()
         super().clear()
         self.count_changed.emit(0)
+        self.list_cleared.emit()
 
     # Override clear() so external callers also get count_changed
     def clear(self):
