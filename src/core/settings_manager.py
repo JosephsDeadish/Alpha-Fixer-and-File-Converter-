@@ -210,7 +210,7 @@ class SettingsManager:
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
         # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)
-        "sa_zone_alphas": "[128,128,128,128,128,128,128]",
+        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128]",
         # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
         # Empty string = use built-in ZONE_COLORS palette.
         "sa_zone_colors": "",

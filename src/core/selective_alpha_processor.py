@@ -20,9 +20,9 @@ from PIL import Image
 # Constants
 # ---------------------------------------------------------------------------
 
-NUM_ZONES = 7
+NUM_ZONES = 10
 
-# Semi-transparent overlay colors (R, G, B, overlay-alpha) for the 7 zones.
+# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 10 zones.
 # overlay-alpha = 130 ≈ 51 % opacity so the source image stays visible.
 ZONE_COLORS: list[tuple[int, int, int, int]] = [
     (255,  60,  60, 130),   # zone 0 – Red
@@ -32,6 +32,9 @@ ZONE_COLORS: list[tuple[int, int, int, int]] = [
     (200,  60, 255, 130),   # zone 4 – Purple
     ( 50, 220, 220, 130),   # zone 5 – Cyan
     (255, 140,  50, 130),   # zone 6 – Orange
+    (255, 100, 180, 130),   # zone 7 – Pink
+    (100, 255, 180, 130),   # zone 8 – Mint
+    (180, 120,  60, 130),   # zone 9 – Brown
 ]
 
 # Human-readable zone names shown in the UI.
@@ -43,6 +46,9 @@ ZONE_NAMES: list[str] = [
     "Zone 5 – Purple",
     "Zone 6 – Cyan",
     "Zone 7 – Orange",
+    "Zone 8 – Pink",
+    "Zone 9 – Mint",
+    "Zone 10 – Brown",
 ]
 
 # ---------------------------------------------------------------------------
@@ -404,12 +410,13 @@ def detect_alpha_zones(
     if len(significant) < 2:
         return []
 
-    # More than NUM_ZONES distinct values → likely a gradient; skip auto-detect.
-    if len(significant) > NUM_ZONES:
-        return []
-
     # Sort by descending pixel count (most common zone first).
+    # When there are more distinct values than NUM_ZONES, take only the
+    # most significant ones rather than silently giving up – this lets
+    # the tool auto-populate even for images with many distinct alpha
+    # levels, picking the zones that cover the most pixels.
     significant.sort(key=lambda x: -x[1])
+    significant = significant[:NUM_ZONES]
 
     result: list[tuple[int, np.ndarray]] = []
     for alpha_val, _ in significant:
