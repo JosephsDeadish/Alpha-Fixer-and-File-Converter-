@@ -545,6 +545,30 @@ class MainWindow(QMainWindow):
          "🍜",
          "🍜 Secret found!  Click the noodle to unlock Noodle theme!",
          "🍜 'Noodle' theme unlocked via secret easter egg!"),
+        # Settings button — click 9× to summon a cowboy 🤠 → unlocks Wild West
+        ("egg_settings_btn", 9,
+         "unlock_wild_west",
+         "🤠",
+         "🤠 Secret found!  Click the cowboy to unlock Wild West theme!",
+         "🤠 'Wild West' theme unlocked via secret easter egg!"),
+        # SVG theme badge — click 7× to summon a rose 🌹 → unlocks Rose Gold
+        ("egg_svg_badge", 7,
+         "unlock_rose_gold",
+         "🌹",
+         "🌹 Secret found!  Click the rose to unlock Rose Gold theme!",
+         "🌹 'Rose Gold' theme unlocked via secret easter egg!"),
+        # Theme label — click 11× to summon a lightning bolt ⚡ → unlocks Thunder Storm
+        ("egg_theme_label", 11,
+         "unlock_thunder_storm",
+         "⚡",
+         "⚡ Secret found!  Click the bolt to unlock Thunder Storm theme!",
+         "⚡ 'Thunder Storm' theme unlocked via secret easter egg!"),
+        # Unlock status label — click 6× to summon a witch 🧙 → unlocks Witch's Brew
+        ("egg_unlock_lbl", 6,
+         "unlock_witchs_brew",
+         "🧙",
+         "🧙 Secret found!  Click the witch to unlock Witch's Brew theme!",
+         "🧙 'Witch\\'s Brew' theme unlocked via secret easter egg!"),
     ]
 
     def __init__(self, settings: SettingsManager):
@@ -958,6 +982,10 @@ class MainWindow(QMainWindow):
             "egg_converter_tab": self._converter_tab,
             "egg_alpha_tab":     self._alpha_tab,
             "egg_selective_tab": self._selective_alpha_tab,
+            "egg_settings_btn":  self._btn_settings,
+            "egg_svg_badge":     self._svg_badge,
+            "egg_theme_label":   self._theme_label,
+            "egg_unlock_lbl":    self._unlock_lbl,
         }
 
         for spot_id, threshold, unlock_key, emoji, tip, banner in self._EASTER_SPOTS:

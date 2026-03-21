@@ -197,6 +197,11 @@ class SettingsManager:
         "unlock_snake": False,
         "unlock_ghost": False,
         "unlock_slime": False,
+        # Themes unlockable via easter-egg spots (Preset themes, so unlock
+        # only controls whether the fanfare/banner fires on first discovery)
+        "unlock_alien": False,
+        "unlock_shark_bait": False,
+        "unlock_noodle": False,
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------
@@ -219,6 +224,10 @@ class SettingsManager:
         "sa_eraser_size": 10,
         # Auto-correct (snap to edges) enabled
         "sa_autocorrect": False,
+        # Show/hide zero-alpha highlight on canvas
+        "sa_show_zero_alpha": False,
+        # Show alpha value text at zone centroids on canvas
+        "sa_show_alpha_labels": False,
         # Last-used drawing tool key
         "sa_last_tool": "freehand",
     }

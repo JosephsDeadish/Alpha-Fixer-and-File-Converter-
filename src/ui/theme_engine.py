@@ -1875,6 +1875,13 @@ THEME_DESCRIPTIONS: dict[str, str] = {
     # ─── Animal themes ────────────────────────────────────────────────
     "Purrfect Cats":    "Warm orange & cream. Soft rounded shapes. Cats everywhere. 🐱",
     "Good Dog":         "Golden warm brown. Playful rounded shapes. Very good dog. 🐶",
+    # ─── Anime / Waifu preset themes ──────────────────────────────────
+    "Anime":            "Deep purple with hot-pink accents. Kawaii sparkle bounce effects. 🌸",
+    "Waifu":            "Dark rose-black with blush-pink candy. Fairy trail & petal showers. 💖",
+    # ─── New hidden themes (Snake Pit / Ghost / Slime) ────────────────
+    "Snake Pit":        "Near-black forest-green with venom-green accents. Serpent cursor & shake effects. 🐍",
+    "Ghost":            "Dark indigo with pale lavender. Ethereal pendulum banner & comet trail. 👻",
+    "Slime":            "Deep green swamp with bright lime accents. Oozy slime cursor & drip effects. 🟢",
 }
 
 import os as _os
