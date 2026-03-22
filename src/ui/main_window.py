@@ -890,6 +890,11 @@ class MainWindow(QMainWindow):
         self._converter_tab.drag_entered.connect(self._on_drag_entered)
         # Preview-refresh sounds
         self._alpha_tab.preview_refreshed.connect(self._on_preview_refreshed)
+        # Cross-tool zone sharing: zones copied from the Alpha tool preview flow
+        # directly into the Selective Alpha tool's import buffer.
+        self._alpha_tab.zone_masks_shared.connect(
+            self._selective_alpha_tab.receive_shared_zones
+        )
 
         # Cursor
         self._apply_cursor()

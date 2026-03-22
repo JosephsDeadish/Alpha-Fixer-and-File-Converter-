@@ -1893,6 +1893,45 @@ class SelectiveAlphaTool(QWidget):
 
         lv.addWidget(slots_box)
 
+        # ── Import from Alpha & RGBA Adjuster Tool ─────────────────────────
+        # When the user right-clicks the compare preview in the Alpha &
+        # RGBA Adjuster tab and selects "Copy zones → Selective Alpha tool",
+        # the zone data is deposited here so the user can import it into the
+        # painting canvas with a single button click.
+        import_box = QGroupBox("Import from Alpha & RGBA Adjuster")
+        iv = QVBoxLayout(import_box)
+        iv.setSpacing(4)
+        iv.setContentsMargins(4, 4, 4, 4)
+
+        import_note = QLabel(
+            "Right-click the compare preview in the Alpha & RGBA Adjuster tab\n"
+            "(with 'Highlight Alpha Values' enabled) and choose\n"
+            "'Copy zones → Selective Alpha tool', then click Import below."
+        )
+        import_note.setWordWrap(True)
+        import_note.setStyleSheet("color: #999; font-size: 10px;")
+        iv.addWidget(import_note)
+
+        self._import_shared_status = QLabel("No zones ready to import.")
+        self._import_shared_status.setWordWrap(True)
+        self._import_shared_status.setStyleSheet("color: #888; font-size: 10px;")
+        iv.addWidget(self._import_shared_status)
+
+        self._btn_import_shared = QPushButton("📥  Import Zones from Alpha Tool")
+        self._btn_import_shared.setEnabled(False)
+        self._btn_import_shared.setToolTip(
+            "Populate the painting canvas with zone masks that were copied from\n"
+            "the Alpha & RGBA Adjuster's compare preview.\n\n"
+            "Each detected alpha value becomes a separate coloured zone."
+        )
+        self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
+        iv.addWidget(self._btn_import_shared)
+
+        lv.addWidget(import_box)
+
+        # Internal storage for zones received from the Alpha tool.
+        self._shared_zones: list[tuple[int, "np.ndarray"]] = []
+
         lv.addStretch()
 
         # ── Wrap left panel in a scroll area so controls remain accessible
@@ -2230,6 +2269,83 @@ class SelectiveAlphaTool(QWidget):
         if self._sound is not None:
             self._sound.play_mask_paste()
 
+    # ------------------------------------------------------------------
+    # Cross-tool zone sharing: receive zones from the Alpha & RGBA tool
+    # ------------------------------------------------------------------
+
+    def receive_shared_zones(self, zones: list) -> None:
+        """Store alpha zone data shared from the Alpha & RGBA Adjuster tool.
+
+        Called by MainWindow when the user right-clicks the compare preview
+        in the Alpha & RGBA Adjuster and selects "Copy zones → Selective Alpha
+        tool".  The zones are held in memory until the user explicitly clicks
+        the Import button.
+
+        Parameters
+        ----------
+        zones : list of ``(alpha_value, bool_mask)`` tuples as produced by
+                :func:`~selective_alpha_processor.detect_alpha_zones`.
+        """
+        if not zones:
+            return
+        self._shared_zones = list(zones)
+        count = len(zones)
+        self._import_shared_status.setText(
+            f"✅  {count} zone(s) ready to import "
+            f"(α values: {', '.join(str(v) for v, _ in zones[:8])}"
+            + ("…" if count > 8 else "") + ")"
+        )
+        self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
+        self._btn_import_shared.setEnabled(True)
+
+    def _on_import_shared_zones(self) -> None:
+        """Import the zones previously received from the Alpha & RGBA Adjuster.
+
+        Populates the canvas masks and syncs the zone UI rows (alpha spinboxes
+        and visibility toggles) for each received zone.  The entire operation
+        is a single undo step so the user can revert with Ctrl+Z.
+        """
+        if not self._shared_zones:
+            QMessageBox.information(
+                self, "No zones to import",
+                "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
+                "In the Alpha & RGBA Adjuster tab:\n"
+                "1. Load an image with multiple alpha values.\n"
+                "2. Enable 'Highlight Alpha Values'.\n"
+                "3. Right-click the preview and choose 'Copy zones → Selective Alpha tool'."
+            )
+            return
+        if not self._canvas.has_image():
+            QMessageBox.information(
+                self, "No image loaded",
+                "Please open an image in the Selective Alpha tool before importing zones."
+            )
+            return
+
+        # populate_zones_from_detection handles undo snapshotting.
+        self._canvas.populate_zones_from_detection(self._shared_zones)
+
+        # Sync UI rows for each imported zone.
+        for i, (alpha_val, _) in enumerate(self._shared_zones):
+            if i >= len(self._zone_rows):
+                break
+            row = self._zone_rows[i]
+            row.set_alpha(alpha_val)
+            row._vis_btn.setChecked(True)
+            self._canvas.set_zone_visible(i, True)
+
+        self._on_show_all_zones()
+        self._btn_show_highlights.setChecked(True)
+
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
+        # Update import status to reflect that zones have been applied.
+        count = len(self._shared_zones)
+        self._import_shared_status.setText(
+            f"✅  {count} zone(s) imported successfully."
+        )
+
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -2288,15 +2404,15 @@ class SelectiveAlphaTool(QWidget):
     def _auto_populate_zones_from_image(self) -> None:
         """Auto-detect distinct alpha zones in the loaded image and populate them.
 
-        When the source image contains 2–7 significant distinct alpha values
+        When the source image contains 2–20 significant distinct alpha values
         (each covering ≥ 0.5 % of pixels) the method automatically:
           - Paints each zone mask to cover pixels sharing that alpha value.
           - Sets the corresponding alpha spinbox to the detected value.
           - Makes all populated zones visible.
 
-        The entire operation is a single undo step.  If the image has only one
-        alpha value, or more than NUM_ZONES distinct significant values (smooth
-        gradient), nothing happens.
+        If the image has more than NUM_ZONES significant alpha values (continuous
+        gradient), the NUM_ZONES most pixel-dominant zones are used.
+        The entire operation is a single undo step.
         """
         src_img = self._canvas.get_source_image()
         if src_img is None:

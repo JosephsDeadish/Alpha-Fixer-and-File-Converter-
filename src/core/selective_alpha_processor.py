@@ -20,21 +20,31 @@ from PIL import Image
 # Constants
 # ---------------------------------------------------------------------------
 
-NUM_ZONES = 10
+NUM_ZONES = 20
 
-# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 10 zones.
+# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 20 zones.
 # overlay-alpha = 130 ≈ 51 % opacity so the source image stays visible.
 ZONE_COLORS: list[tuple[int, int, int, int]] = [
-    (255,  60,  60, 130),   # zone 0 – Red
-    ( 60, 200,  60, 130),   # zone 1 – Green
-    ( 60, 120, 255, 130),   # zone 2 – Blue
-    (255, 210,  50, 130),   # zone 3 – Yellow
-    (200,  60, 255, 130),   # zone 4 – Purple
-    ( 50, 220, 220, 130),   # zone 5 – Cyan
-    (255, 140,  50, 130),   # zone 6 – Orange
-    (255, 100, 180, 130),   # zone 7 – Pink
-    (100, 255, 180, 130),   # zone 8 – Mint
-    (180, 120,  60, 130),   # zone 9 – Brown
+    (255,  60,  60, 130),   # zone 0  – Red
+    ( 60, 200,  60, 130),   # zone 1  – Green
+    ( 60, 120, 255, 130),   # zone 2  – Blue
+    (255, 210,  50, 130),   # zone 3  – Yellow
+    (200,  60, 255, 130),   # zone 4  – Purple
+    ( 50, 220, 220, 130),   # zone 5  – Cyan
+    (255, 140,  50, 130),   # zone 6  – Orange
+    (255, 100, 180, 130),   # zone 7  – Pink
+    (100, 255, 180, 130),   # zone 8  – Mint
+    (180, 120,  60, 130),   # zone 9  – Brown
+    (255, 255, 120, 130),   # zone 10 – Light Yellow
+    ( 80, 255, 255, 130),   # zone 11 – Aqua
+    (255,  80, 255, 130),   # zone 12 – Magenta
+    (150, 255,  80, 130),   # zone 13 – Lime
+    ( 80, 150, 255, 130),   # zone 14 – Sky Blue
+    (255, 170, 100, 130),   # zone 15 – Peach
+    (180,  80, 255, 130),   # zone 16 – Violet
+    ( 80, 255, 150, 130),   # zone 17 – Seafoam
+    (255, 120,  80, 130),   # zone 18 – Coral
+    (120, 120, 255, 130),   # zone 19 – Periwinkle
 ]
 
 # Human-readable zone names shown in the UI.
@@ -49,6 +59,16 @@ ZONE_NAMES: list[str] = [
     "Zone 8 – Pink",
     "Zone 9 – Mint",
     "Zone 10 – Brown",
+    "Zone 11 – Light Yellow",
+    "Zone 12 – Aqua",
+    "Zone 13 – Magenta",
+    "Zone 14 – Lime",
+    "Zone 15 – Sky Blue",
+    "Zone 16 – Peach",
+    "Zone 17 – Violet",
+    "Zone 18 – Seafoam",
+    "Zone 19 – Coral",
+    "Zone 20 – Periwinkle",
 ]
 
 # ---------------------------------------------------------------------------
@@ -376,8 +396,10 @@ def detect_alpha_zones(
       - The array is not RGBA (fewer than 4 channels).
       - Fewer than 2 distinct significant alpha values exist (i.e. the image is
         uniformly transparent or uniformly opaque).
-      - More than :data:`NUM_ZONES` distinct significant alpha values exist
-        (indicates a smooth gradient rather than discrete zones).
+
+    When the image has more distinct significant alpha values than :data:`NUM_ZONES`
+    (e.g. a smooth gradient), the :data:`NUM_ZONES` most pixel-dominant zones are
+    still returned so the tool can auto-populate even for complex images.
 
     Parameters
     ----------

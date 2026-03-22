@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QCheckBox, QFileDialog,
     QProgressBar, QGroupBox, QScrollArea,
     QGridLayout, QLineEdit, QSplitter,
-    QMessageBox, QTextEdit,
+    QMessageBox, QTextEdit, QMenu,
 )
 
 from ..core.presets import PresetManager
@@ -170,6 +170,10 @@ class AlphaFixerTab(QWidget):
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
     preview_refreshed = pyqtSignal()
+    # Emitted when the user right-clicks the alpha-vis preview and chooses to
+    # share detected zone masks with the Selective Alpha tool.
+    # Carries a list of (alpha_value: int, bool_mask: np.ndarray) tuples.
+    zone_masks_shared = pyqtSignal(list)
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -375,6 +379,10 @@ class AlphaFixerTab(QWidget):
 
         self._compare = BeforeAfterWidget()
         self._compare.setMinimumHeight(180)
+        # Right-click on the compare preview lets users export detected alpha
+        # zones directly to the Selective Alpha tool (cross-tool clipboard).
+        self._compare.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._compare.customContextMenuRequested.connect(self._on_compare_context_menu)
 
         compare_row.addWidget(self._before_stats_lbl, 0)
         compare_row.addWidget(self._compare, 1)
@@ -984,6 +992,64 @@ class AlphaFixerTab(QWidget):
         else:
             self._compare.set_before(before_raw)
             self._compare.set_after(after_raw)
+
+    def _on_compare_context_menu(self, pos) -> None:
+        """Right-click on the compare preview: offer to copy detected alpha zones
+        to the Selective Alpha tool via the ``zone_masks_shared`` signal.
+
+        The context menu is only shown when the alpha visualization overlay is
+        active *and* a preview image is available, so users see the zones they
+        are about to copy.
+        """
+        import numpy as np
+        from ..core.selective_alpha_processor import detect_alpha_zones
+
+        raw = self._compare.before_image()
+        if raw is None:
+            return
+
+        # Convert the stored raw QImage to a numpy RGBA array for zone analysis.
+        src = raw.convertToFormat(QImage.Format.Format_ARGB32)
+        w, h = src.width(), src.height()
+        if w == 0 or h == 0:
+            return
+        ptr = src.bits()
+        ptr.setsize(h * w * 4)
+        # Qt ARGB32 LE stores bytes as [B, G, R, A]; alpha is always index 3.
+        bgra = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4)).copy()
+
+        zones = detect_alpha_zones(bgra)
+
+        menu = QMenu(self)
+
+        if not zones:
+            no_act = menu.addAction("No distinct alpha zones detected in this image")
+            no_act.setEnabled(False)
+            menu.addSeparator()
+            menu.addAction(
+                "Hint: enable 'Highlight Alpha Values' to see the zone structure"
+            ).setEnabled(False)
+        else:
+            total_px = w * h
+            copy_all = menu.addAction(
+                f"📋  Copy all {len(zones)} detected zone(s) → Selective Alpha tool"
+            )
+            copy_all.setToolTip(
+                "Sends all detected alpha-value zones to the Selective Alpha tool.\n"
+                "Switch to the Selective Alpha tab and click 'Import from Alpha Tool'\n"
+                "to load the zones into the painting canvas."
+            )
+            copy_all.triggered.connect(lambda: self.zone_masks_shared.emit(zones))
+
+            menu.addSeparator()
+            for idx, (alpha_val, bool_mask) in enumerate(zones):
+                pct = round(bool_mask.sum() / max(total_px, 1) * 100, 1)
+                act = menu.addAction(
+                    f"   Zone {idx + 1}:  α = {alpha_val}  ({pct}% of pixels)"
+                )
+                act.setEnabled(False)  # informational row only
+
+        menu.exec(self._compare.mapToGlobal(pos))
 
     @pyqtSlot(QImage, QImage)
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):

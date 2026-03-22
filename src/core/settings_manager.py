@@ -214,8 +214,8 @@ class SettingsManager:
         # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
-        # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)
-        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128]",
+        # Zone alpha values (20 zones, defaults to 128 each – 50% transparent)
+        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128]",
         # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
         # Empty string = use built-in ZONE_COLORS palette.
         "sa_zone_colors": "",
@@ -425,21 +425,21 @@ class SettingsManager:
     # ------------------------------------------------------------------
 
     def get_sa_zone_alphas(self) -> list[int]:
-        """Return the 7 zone alpha values as a list of ints (0-255)."""
+        """Return the zone alpha values as a list of ints (0-255), up to NUM_ZONES."""
         raw = self._qs.value(
             "sa_zone_alphas",
             self._DEFAULTS["sa_zone_alphas"],
         )
         try:
             data = json.loads(raw)
-            if isinstance(data, list) and len(data) == 7:
+            if isinstance(data, list) and 1 <= len(data) <= 20:
                 return [max(0, min(255, int(v))) for v in data]
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
-        return [128] * 7
+        return [128] * 20
 
     def set_sa_zone_alphas(self, alphas: list[int]) -> None:
-        """Persist the 7 zone alpha values."""
+        """Persist the zone alpha values (up to 20 zones)."""
         self._qs.setValue("sa_zone_alphas", json.dumps(
             [max(0, min(255, int(v))) for v in alphas]
         ))
@@ -459,7 +459,7 @@ class SettingsManager:
             return None
         try:
             data = json.loads(raw)
-            if (isinstance(data, list) and len(data) == 7
+            if (isinstance(data, list) and 1 <= len(data) <= 20
                     and all(isinstance(c, list) and len(c) == 4 for c in data)):
                 return [[max(0, min(255, int(v))) for v in c] for c in data]
         except (json.JSONDecodeError, TypeError, ValueError):
@@ -467,7 +467,7 @@ class SettingsManager:
         return None
 
     def set_sa_zone_colors(self, colors: list[list[int]]) -> None:
-        """Persist 7 zone overlay colors as [[R,G,B,A], …]."""
+        """Persist zone overlay colors as [[R,G,B,A], …] (up to 20 zones)."""
         self._qs.setValue("sa_zone_colors", json.dumps(
             [[max(0, min(255, int(v))) for v in c] for c in colors]
         ))
