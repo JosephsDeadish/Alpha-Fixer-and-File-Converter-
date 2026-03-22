@@ -194,6 +194,10 @@ class SettingsDialog(QDialog):
         psl.addWidget(QLabel("Theme:"))
         self._theme_preset_combo = QComboBox()
         self._theme_preset_combo.setMinimumWidth(200)
+        self._theme_preset_combo.setToolTip(
+            "Choose a visual theme for the application.\n"
+            "Hover over each theme to see a description of its style."
+        )
         self._rebuild_theme_combo()
         psl.addWidget(self._theme_preset_combo, 1)
         self._btn_save_theme = QPushButton("Save as…")
@@ -580,6 +584,11 @@ class SettingsDialog(QDialog):
             "🎃 Pumpkin", "🧿 Evil Eye", "⚗ Flask", "🪸 Coral",
         ])
         cursor_gl.addWidget(self._cursor_combo, 0, 1)
+        self._cursor_combo.setToolTip(
+            "Choose the mouse cursor shape used throughout the application.\n"
+            "emoji cursors animate when 'Animate cursor' is enabled.\n"
+            "Greyed out when 'Use theme cursor' is checked."
+        )
         self._use_theme_cursor_check = QCheckBox(
             "Use theme cursor  (overrides the style above)"
         )

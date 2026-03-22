@@ -2290,10 +2290,12 @@ class SelectiveAlphaTool(QWidget):
             return
         self._shared_zones = list(zones)
         count = len(zones)
+        _display_max = 7
+        displayed = zones[:_display_max]
+        suffix = "…" if count > _display_max else ""
         self._import_shared_status.setText(
             f"✅  {count} zone(s) ready to import "
-            f"(α values: {', '.join(str(v) for v, _ in zones[:8])}"
-            + ("…" if count > 8 else "") + ")"
+            f"(α values: {', '.join(str(v) for v, _ in displayed)}{suffix})"
         )
         self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
         self._btn_import_shared.setEnabled(True)

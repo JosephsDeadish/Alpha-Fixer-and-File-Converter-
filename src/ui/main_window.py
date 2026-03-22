@@ -420,6 +420,66 @@ class _EasterClickFilter(QObject):
         return False  # never consume the event
 
 
+class _KeySecretFilter(QObject):
+    """Application-level event filter that watches for secret key sequences.
+
+    Installs on ``QApplication.instance()`` so it captures keyboard events
+    from every widget.  Emits ``triggered(name)`` when a full sequence is
+    matched, where *name* is the sequence identifier used to look up unlock
+    data in ``MainWindow._KEY_SECRETS``.
+
+    All matching is case-insensitive for letter keys; modifier keys (Shift,
+    Ctrl, Alt, Meta) are ignored so ordinary typing that happens to end in a
+    secret word doesn't accidentally fire (arrow-key and function-key
+    sequences can't be produced accidentally by typing).
+    """
+
+    triggered = pyqtSignal(str)  # sequence name
+
+    # Maximum key-buffer size: longest sequence + small slack
+    _MAX_BUF = 14
+
+    def __init__(self, sequences: dict, parent: QObject = None):
+        super().__init__(parent)
+        # sequences: {name: (key_int, ...)}
+        self._sequences = sequences
+        self._buf: list[int] = []
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() != QEvent.Type.KeyPress:
+            return False
+        key = event.key()
+        # Normalise letter keys to uppercase so typing produces consistent
+        # values regardless of Shift/caps-lock state.
+        if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+            pass  # already stored as uppercase Qt.Key values
+        elif key in (
+            Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right,
+            Qt.Key.Key_Return, Qt.Key.Key_Enter,
+        ):
+            pass  # navigation keys – allowed as-is
+        else:
+            return False  # ignore digits, punctuation, function keys, etc.
+
+        self._buf.append(key)
+        if len(self._buf) > self._MAX_BUF:
+            self._buf.pop(0)
+
+        # Check each registered sequence against the tail of the buffer.
+        for name, seq in self._sequences.items():
+            slen = len(seq)
+            if slen == 0:
+                continue
+            if tuple(self._buf[-slen:]) == seq:
+                self._buf.clear()
+                try:
+                    self.triggered.emit(name)
+                except RuntimeError:
+                    pass
+                break  # only fire one sequence per key event
+        return False  # never consume the event
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -571,6 +631,75 @@ class MainWindow(QMainWindow):
          "🧙 'Witch\\'s Brew' theme unlocked via secret easter egg!"),
     ]
 
+    # -----------------------------------------------------------------------
+    # Secret key sequences: typing these anywhere in the app unlocks a theme.
+    # Each entry is a tuple of Qt.Key integer values.  Letter sequences use
+    # the uppercase Key_A–Key_Z constants regardless of Shift/caps state.
+    # -----------------------------------------------------------------------
+    @classmethod
+    def _build_key_secrets(cls) -> dict:
+        """Build the _KEY_SECRETS dict deferred until Qt is initialised."""
+        K = Qt.Key
+
+        def _word_seq(s: str) -> tuple:
+            """Return a tuple of Qt.Key values for each uppercase letter in s."""
+            return tuple(getattr(K, f"Key_{c}") for c in s.upper())
+
+        return {
+            # Konami code: ↑↑↓↓←→←→BA
+            "konami": {
+                "seq": (
+                    K.Key_Up, K.Key_Up, K.Key_Down, K.Key_Down,
+                    K.Key_Left, K.Key_Right, K.Key_Left, K.Key_Right,
+                    K.Key_B, K.Key_A,
+                ),
+                "unlock_key":  "unlock_glitch",
+                "emoji":       "🎮",
+                "collectible_tip": "🎮 KONAMI CODE!  Click to unlock Glitch theme!",
+                "banner_msg":  "🎮 KONAMI CODE! 🕹  'Glitch' theme unlocked!",
+            },
+            # Secret word DRAGON → Dragon Fire
+            "dragon": {
+                "seq": _word_seq("DRAGON"),
+                "unlock_key":  "unlock_dragon_fire",
+                "emoji":       "🐉",
+                "collectible_tip": "🐉 Secret word found!  Click to unlock Dragon Fire!",
+                "banner_msg":  "🐉 Secret word: DRAGON!  'Dragon Fire' theme unlocked!",
+            },
+            # Secret word CANDY → Candy Land
+            "candy": {
+                "seq": _word_seq("CANDY"),
+                "unlock_key":  "unlock_candy_land",
+                "emoji":       "🍬",
+                "collectible_tip": "🍬 Secret word found!  Click to unlock Candy Land!",
+                "banner_msg":  "🍬 Secret word: CANDY!  'Candy Land' theme unlocked!",
+            },
+            # Secret word ZOMBIE → Zombie Apocalypse
+            "zombie": {
+                "seq": _word_seq("ZOMBIE"),
+                "unlock_key":  "unlock_zombie",
+                "emoji":       "🧟",
+                "collectible_tip": "🧟 Secret word found!  Click to unlock Zombie Apocalypse!",
+                "banner_msg":  "🧟 Secret word: ZOMBIE!  'Zombie Apocalypse' theme unlocked!",
+            },
+            # Secret word CORAL → Coral Reef
+            "coral": {
+                "seq": _word_seq("CORAL"),
+                "unlock_key":  "unlock_coral_reef",
+                "emoji":       "🪸",
+                "collectible_tip": "🪸 Secret word found!  Click to unlock Coral Reef!",
+                "banner_msg":  "🪸 Secret word: CORAL!  'Coral Reef' theme unlocked!",
+            },
+            # Secret word ABYSS → Abyssal Void
+            "abyss": {
+                "seq": _word_seq("ABYSS"),
+                "unlock_key":  "unlock_abyssal_void",
+                "emoji":       "🕳",
+                "collectible_tip": "🕳 Secret word found!  Click to unlock Abyssal Void!",
+                "banner_msg":  "🕳 Secret word: ABYSS!  'Abyssal Void' theme unlocked!",
+            },
+        }
+
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
@@ -607,6 +736,8 @@ class MainWindow(QMainWindow):
         # Easter-egg state: per-spot event filters and collectible widgets
         self._easter_filters: dict[str, _EasterClickFilter] = {}
         self._easter_collectibles: dict[str, _EasterCollectible] = {}
+        # Key-secret collectibles: shown when a key-sequence unlock fires
+        self._key_secret_collectibles: dict[str, _EasterCollectible] = {}
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
         # is wasteful; coalesce them into a single update 50ms after the last
@@ -621,6 +752,7 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._setup_effects()
         self._setup_easter_eggs()
+        self._setup_key_secrets()
         # Connect to screen-topology and DPI-change signals so the window
         # geometry stays valid when the user plugs in / removes a monitor or
         # changes the system display-scale setting.
@@ -1070,8 +1202,73 @@ class MainWindow(QMainWindow):
             pass
 
     # ------------------------------------------------------------------
-    # Unlock hidden themes based on click count
+    # Secret key-sequence unlocks
     # ------------------------------------------------------------------
+
+    def _setup_key_secrets(self) -> None:
+        """Install an app-level event filter that watches for secret key sequences.
+
+        Uses :class:`_KeySecretFilter` to track key-press events across every
+        widget.  When a registered sequence completes (Konami code or a secret
+        word), a :class:`_EasterCollectible` floats at the centre of the window
+        and the user can click it to unlock the corresponding hidden theme.
+        """
+        secrets = self._build_key_secrets()
+        # Build the raw {name: (key_int, ...)} mapping for the filter.
+        seq_map = {name: data["seq"] for name, data in secrets.items()}
+
+        self._key_secret_filter = _KeySecretFilter(seq_map, self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self._key_secret_filter)
+
+        # Pre-create a collectible for each secret so we can reuse them.
+        for name, data in secrets.items():
+            col = _EasterCollectible(data["emoji"], data["collectible_tip"], self)
+            self._key_secret_collectibles[name] = col
+
+            # Connect the "collected" signal.
+            def _make_handler(n, uk, bm, c):
+                def _on_collect():
+                    # Re-use the same collectible_collected logic as easter eggs.
+                    self._on_collectible_collected(
+                        f"key_secret_{n}", uk, bm, c
+                    )
+                return _on_collect
+
+            col.collected.connect(
+                _make_handler(name, data["unlock_key"], data["banner_msg"], col)
+            )
+
+        # Connect the filter's triggered signal to the handler.
+        self._key_secret_filter.triggered.connect(self._on_key_secret_triggered)
+
+    def _on_key_secret_triggered(self, name: str) -> None:
+        """A secret key sequence was completed — show the collectible.
+
+        The collectible appears near the centre of the main window.  For the
+        Konami code a brief special banner flash is shown before the collectible
+        so the player knows something happened.
+        """
+        col = self._key_secret_collectibles.get(name)
+        if col is None or col.isVisible():
+            return
+
+        # Konami code: briefly flash a hint in the unlock label first.
+        if name == "konami":
+            self._unlock_lbl.setText("🎮 ↑↑↓↓←→←→BA  …  CHEAT CODE DETECTED!")
+            self._schedule_unlock_clear()
+
+        # Show collectible near the horizontal centre, slightly above middle.
+        w, h = self.width(), self.height()
+        cx = w // 2
+        cy = max(60, h // 3)
+        col.show_at(QPoint(cx, cy))
+
+        try:
+            self._sound.play_file_add()
+        except Exception:
+            pass
 
     def _check_unlocks(self) -> None:
         """Check whether any hidden theme should be unlocked (click path)."""
