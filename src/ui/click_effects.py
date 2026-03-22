@@ -319,11 +319,14 @@ def _spawn_custom(x, y):
 
 
 def _spawn_ocean(x, y):
-    """Bubbles and sea creatures for Deep Ocean theme."""
+    """Bubbles and sea creatures for Deep Ocean theme, with a ripple ring."""
     particles = []
     ocean_emojis = ["🫧", "🐠", "🐟", "🐙", "🦑", "🌊", "💧", "🫧"]
     ocean_colors = ["#00d4ff", "#00aacc", "#0088aa", "#33ccff", "#006688", "#00ffcc"]
-    for _ in range(6):  # reduced from 10 to cut CPU
+    # One expanding ring for the watery feel
+    particles.append(_Particle(x, y, 0.0, 0.0, 0.9, "ring", 5,
+                                QColor("#00d4ff"), ""))
+    for _ in range(5):  # 5 splash particles + 1 ring = 6 total
         angle = random.uniform(-math.pi, 0)  # mostly upward, like bubbles rising
         speed = random.uniform(1.5, 6)
         vx = math.cos(angle) * speed * 0.5  # gentle sideways drift
@@ -357,31 +360,41 @@ def _spawn_sparkle(x, y):
 
 
 def _spawn_ripple(x, y):
-    """Water ripple / splash for aquatic / mermaid themes."""
+    """Water ripple / splash with true expanding ring particles."""
     particles = []
-    ripple_emojis = ["💧", "🫧", "🌊", "🐚", "🐬", "🦈"]
+    ripple_emojis = ["💧", "🫧", "🌊", "🐚", "🐬"]
     ripple_colors = ["#33aaff", "#00ddee", "#55ccff", "#0099cc", "#77ddff", "#22bbdd"]
-    for i in range(5):  # reduced from 8 to cut CPU
-        # Spray outward in all directions at low speed, simulating a ripple
-        angle = (i / 5) * 2 * math.pi + random.uniform(-0.3, 0.3)
-        speed = random.uniform(1.0, 5.0)
+    # Two expanding ring particles — the hallmark water ripple visual
+    for i in range(2):
+        ring_size = 5 + i * 4          # inner ring starts smaller
+        color = QColor(ripple_colors[i % len(ripple_colors)])
+        # Rings stay at the click point (vx=vy=0) and expand outward
+        life = 0.7 + i * 0.35
+        particles.append(_Particle(x, y, 0.0, 0.0, life, "ring", ring_size, color, ""))
+    # Radial splash particles
+    for i in range(3):
+        angle = (i / 3) * 2 * math.pi + random.uniform(-0.4, 0.4)
+        speed = random.uniform(1.0, 4.5)
         vx = math.cos(angle) * speed
         vy = math.sin(angle) * speed
-        kind = "circle" if random.random() < 0.55 else "text"
+        kind = "circle" if random.random() < 0.6 else "text"
         color = QColor(random.choice(ripple_colors))
         text = random.choice(ripple_emojis) if kind == "text" else ""
-        size = random.uniform(5, 12) if kind == "circle" else random.uniform(12, 20)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.4),
+        size = random.uniform(5, 11) if kind == "circle" else random.uniform(12, 19)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.2),
                                    kind, size, color, text))
     return particles
 
 
 def _spawn_mermaid(x, y):
-    """Mermaid-themed sparkles, fish, and ocean magic."""
+    """Mermaid-themed sparkles, fish, ocean magic, and a water ripple ring."""
     particles = []
     mermaid_emojis = ["🧜", "🐠", "🐟", "🦀", "🐚", "💧", "🫧", "🌊", "🪸", "✨"]
     mermaid_colors = ["#00ccaa", "#33ddff", "#aa44ff", "#ff66cc", "#77ffee", "#ff99cc"]
-    for _ in range(5):  # reduced from 8 to cut CPU
+    # One expanding ring for the watery click feel
+    particles.append(_Particle(x, y, 0.0, 0.0, 0.8, "ring", 6,
+                                QColor(mermaid_colors[0]), ""))
+    for _ in range(4):  # 4 splash particles + 1 ring = 5 total
         angle = random.uniform(0, 2 * math.pi)
         speed = random.uniform(1.5, 6.0)
         vx = math.cos(angle) * speed
@@ -433,6 +446,64 @@ def _spawn_shark(x, y):
     return particles
 
 
+def _spawn_ghost(x, y):
+    """Ghostly wisps for Ghost / haunted themes."""
+    particles = []
+    ghost_emojis = ["👻", "🕯", "💀", "🌙", "⚗", "🫧", "🌫", "🕷"]
+    ghost_colors = ["#ccccff", "#aaaaff", "#ffffff", "#8888cc", "#ddddff", "#9999ee"]
+    for _ in range(5):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(0.5, 3.0)  # slow, ethereal movement
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed - random.uniform(0.5, 2.0)  # drifting upward
+        kind = "text" if random.random() < 0.6 else "circle"
+        color = QColor(random.choice(ghost_colors))
+        text = random.choice(ghost_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(6, 14)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 2.2),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_slime(x, y):
+    """Gooey slime drips and blobs for Slime theme."""
+    particles = []
+    slime_emojis = ["🟢", "🫧", "💚", "🧪", "☣", "🌿"]
+    slime_colors = ["#44cc00", "#66ee00", "#22aa00", "#00cc44", "#88ff22", "#33bb00"]
+    for _ in range(5):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(1.0, 5.0)
+        vx = math.cos(angle) * speed * 0.7   # slower horizontal for gooey feel
+        vy = abs(math.sin(angle) * speed) + random.uniform(0.5, 2.0)  # downward drip
+        rng = random.random()
+        kind = "drop" if rng < 0.4 else ("text" if rng < 0.7 else "circle")
+        color = QColor(random.choice(slime_colors))
+        text = random.choice(slime_emojis) if kind == "text" else ""
+        size = random.uniform(6, 14) if kind in ("drop", "circle") else random.uniform(12, 20)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.8, 1.8),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_slither(x, y):
+    """Serpentine particles for Snake Pit theme."""
+    particles = []
+    snake_emojis = ["🐍", "🐉", "🌿", "💚", "🔪", "☠"]
+    snake_colors = ["#00aa44", "#228833", "#44cc00", "#007722", "#33bb55", "#66dd44"]
+    for _ in range(5):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(2.0, 6.0)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed + random.uniform(0.5, 1.5)  # slight gravity
+        kind = "text" if random.random() < 0.55 else "circle"
+        color = QColor(random.choice(snake_colors))
+        text = random.choice(snake_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 10)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.3),
+                                   kind, size, color, text))
+    return particles
+
+
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -454,6 +525,9 @@ _SPAWNERS = {
     "mermaid":      _spawn_mermaid,
     "alien":        _spawn_alien,
     "shark":        _spawn_shark,
+    "ghost":        _spawn_ghost,
+    "slime":        _spawn_slime,
+    "slither":      _spawn_slither,
     "custom":       _spawn_custom,
 }
 
@@ -614,6 +688,197 @@ class _FairyFlock(QObject):
             self._overlay._add_particle(fairy)
 
 
+# ---------------------------------------------------------------------------
+# Fish flock (periodic fish swimming for Mermaid theme)
+# ---------------------------------------------------------------------------
+
+class _FishFlock(QObject):
+    """Spawns fish that swim across the middle/lower portion of the window.
+
+    Activated whenever the active click-effect key is ``"mermaid"``.  Fish
+    swim from left-to-right (or right-to-left) through the window, giving
+    the impression of an underwater aquarium beneath the UI.
+    """
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._launch)
+        self._timer.setInterval(random.randint(4000, 9000))
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _launch(self) -> None:
+        self._timer.setInterval(random.randint(4000, 10000))
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        count = random.randint(1, 4)
+        left_to_right = random.random() < 0.5
+        speed_sign = 1 if left_to_right else -1
+        fish_emojis = ["🐠", "🐟", "🐡", "🦈", "🦑", "🐬", "🪸"]
+        fish_colors = ["#00ccaa", "#33ddff", "#0099cc", "#aa44ff", "#ff99cc"]
+        # Fish swim through the middle-to-lower band (40–85% of window height)
+        band_lo = max(80, int(h * 0.40))
+        band_hi = max(band_lo + 20, int(h * 0.85))
+        for i in range(count):
+            y_start = random.randint(band_lo, band_hi)
+            x_start = (random.randint(-30, -10) if left_to_right
+                       else w + random.randint(10, 30))
+            speed = random.uniform(2.0, 5.5) * speed_sign
+            vy = random.uniform(-0.5, 0.5)
+            life = (w + 80) / max(abs(speed), 1) * 0.05 + random.uniform(0.3, 1.0)
+            emoji = random.choice(fish_emojis)
+            color = QColor(random.choice(fish_colors))
+            p = _Particle(
+                x_start + i * random.randint(25, 65), y_start,
+                speed, vy, life,
+                "fairy_fly", random.uniform(16, 26),  # reuse pixmap-cached rendering
+                color, emoji,
+            )
+            self._overlay._add_particle(p)
+
+
+# ---------------------------------------------------------------------------
+# Alien beam (periodic tractor beam for Alien theme)
+# ---------------------------------------------------------------------------
+
+class _AlienBeam(QObject):
+    """Periodically fires a tractor-beam effect: green particles rise from a
+    random button toward the top of the window, simulating alien abduction.
+
+    Activated whenever the active click-effect key is ``"alien"``.
+    """
+
+    _INTERVAL_LO = 5000
+    _INTERVAL_HI = 12000
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._fire_beam)
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _fire_beam(self) -> None:
+        """Spawn a vertical column of rising green particles from a random button."""
+        from PyQt6.QtWidgets import QPushButton
+        from PyQt6.QtCore import QPoint as _QPoint
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+        main_window = self._overlay._main_window
+        if main_window is None or not main_window.isVisible():
+            return
+        btns = [w for w in main_window.findChildren(QPushButton)
+                if w.isVisible() and w.width() > 30]
+        if not btns:
+            return
+        btn = random.choice(btns)
+        global_pt = btn.mapToGlobal(_QPoint(btn.rect().center().x(), 0))
+        mw_pt = main_window.mapFromGlobal(global_pt)
+        bx, by = mw_pt.x(), mw_pt.y()
+        beam_colors = ["#00ff88", "#44ff44", "#88ff00", "#00ffcc", "#ccff00"]
+        # Spawn a dense column of particles rising from button top to window top
+        steps = max(4, by // 18)
+        for i in range(steps):
+            y_pos = by - i * 18
+            p = _Particle(
+                bx + random.uniform(-6, 6), y_pos,
+                random.uniform(-0.3, 0.3), random.uniform(-3.0, -1.5),
+                random.uniform(0.4, 0.9),
+                "circle", random.uniform(4, 9),
+                QColor(random.choice(beam_colors)), "",
+            )
+            self._overlay._add_particle(p)
+        # Abduction emoji at beam origin for dramatic flair
+        abduct_emojis = ["🛸", "👽", "⬆", "💫"]
+        for _ in range(2):
+            p = _Particle(
+                bx, by,
+                random.uniform(-1.0, 1.0), random.uniform(-4.0, -2.0),
+                random.uniform(0.8, 1.5),
+                "text", random.uniform(14, 22),
+                QColor(random.choice(beam_colors)), random.choice(abduct_emojis),
+            )
+            self._overlay._add_particle(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Slime drip (periodic green-slime drops for Slime theme)
+# ---------------------------------------------------------------------------
+
+class _SlimeDrip(QObject):
+    """Spawns gooey slime-drop particles falling from button tops periodically.
+
+    Activated whenever the active click-effect key is ``"slime"``.  Drops use
+    the ``"drop"`` particle kind (teardrop shape) in neon-green slime colours,
+    creating the impression of perpetually oozing buttons.
+    """
+
+    _DRIP_INTERVAL_MS = 1100  # slightly slower / lazier than gore drip
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._DRIP_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn_drip)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn_drip(self) -> None:
+        from PyQt6.QtWidgets import QPushButton
+        from PyQt6.QtCore import QPoint as _QPoint
+        main_window = self._overlay._main_window
+        if main_window is None or not main_window.isVisible():
+            return
+        btns = [w for w in main_window.findChildren(QPushButton)
+                if w.isVisible() and w.width() > 20]
+        if not btns:
+            return
+        btn = random.choice(btns)
+        global_pt = btn.mapToGlobal(_QPoint(btn.rect().center().x(), 0))
+        mw_pt = main_window.mapFromGlobal(global_pt)
+        x, y = mw_pt.x(), mw_pt.y()
+        slime_colors = ["#44cc00", "#66ee00", "#22aa00", "#00cc44", "#88ff22", "#33bb00"]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            p = _Particle(
+                x + random.uniform(-5, 5), y,
+                random.uniform(-0.5, 0.5), random.uniform(1.2, 3.0),
+                random.uniform(1.0, 2.5),
+                "drop", random.uniform(5, 10),
+                QColor(random.choice(slime_colors)), "",
+            )
+            self._overlay._add_particle(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
 class _BannerFlock(QObject):
     """Spawns themed emoji flying across the top band of the window periodically.
 
@@ -708,6 +973,9 @@ class ClickEffectsOverlay(QWidget):
         self._bat_flock: _BatFlock | None = None
         self._fairy_flock: _FairyFlock | None = None
         self._gore_drip: _GoreDrip | None = None
+        self._fish_flock: _FishFlock | None = None
+        self._alien_beam: _AlienBeam | None = None
+        self._slime_drip: _SlimeDrip | None = None
         self._banner_flock: _BannerFlock | None = None
         self._banner_flock_active: bool = False
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
@@ -758,6 +1026,12 @@ class ClickEffectsOverlay(QWidget):
                 self._fairy_flock.stop()
             if self._gore_drip:
                 self._gore_drip.stop()
+            if self._fish_flock:
+                self._fish_flock.stop()
+            if self._alien_beam:
+                self._alien_beam.stop()
+            if self._slime_drip:
+                self._slime_drip.stop()
             # Only hide the overlay if the banner flock is also inactive.
             # When banner flock is running we still need the overlay visible
             # so flying particles can be rendered even without click effects.
@@ -822,6 +1096,30 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._gore_drip:
                 self._gore_drip.stop()
+        # Manage fish flock (mermaid theme)
+        if effect_key == "mermaid" and self._enabled:
+            if self._fish_flock is None:
+                self._fish_flock = _FishFlock(self)
+            self._fish_flock.start()
+        else:
+            if self._fish_flock:
+                self._fish_flock.stop()
+        # Manage alien tractor beam
+        if effect_key == "alien" and self._enabled:
+            if self._alien_beam is None:
+                self._alien_beam = _AlienBeam(self)
+            self._alien_beam.start()
+        else:
+            if self._alien_beam:
+                self._alien_beam.stop()
+        # Manage slime drip (slime theme)
+        if effect_key == "slime" and self._enabled:
+            if self._slime_drip is None:
+                self._slime_drip = _SlimeDrip(self)
+            self._slime_drip.start()
+        else:
+            if self._slime_drip:
+                self._slime_drip.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
@@ -1076,6 +1374,19 @@ class ClickEffectsOverlay(QWidget):
                 w = max(2, int(p.size * 0.6))
                 h = max(2, int(p.size * 1.4))
                 painter.drawEllipse(int(p.x) - w // 2, int(p.y) - h // 2, w, h)
+            elif p.kind == "ring":
+                # Expanding hollow circle — grows as life fades, simulating a
+                # water ripple ring radiating outward from the click point.
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                pen_w = max(1, int(3.0 * p.alpha_frac))
+                painter.setPen(QPen(c, pen_w))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                progress = 1.0 - p.alpha_frac          # 0 at birth → 1 at death
+                r = max(2, int(p.size * (1.0 + progress * 5.0)))  # expands up to 6×
+                painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
             else:
                 c = QColor(p.color)
                 c.setAlpha(alpha)
