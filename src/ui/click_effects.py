@@ -446,6 +446,25 @@ def _spawn_shark(x, y):
     return particles
 
 
+def _spawn_slither(x, y):
+    """Serpentine particles for Snake Pit theme."""
+    particles = []
+    snake_emojis = ["🐍", "🐉", "🌿", "💚", "🔪", "☠"]
+    snake_colors = ["#00aa44", "#228833", "#44cc00", "#007722", "#33bb55", "#66dd44"]
+    for _ in range(5):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(2.0, 6.0)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed + random.uniform(0.5, 1.5)  # slight gravity
+        kind = "text" if random.random() < 0.55 else "circle"
+        color = QColor(random.choice(snake_colors))
+        text = random.choice(snake_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 10)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.3),
+                                   kind, size, color, text))
+    return particles
+
+
 def _spawn_ghost(x, y):
     """Ghostly wisps for Ghost / haunted themes."""
     particles = []
@@ -485,25 +504,6 @@ def _spawn_slime(x, y):
     return particles
 
 
-def _spawn_slither(x, y):
-    """Serpentine particles for Snake Pit theme."""
-    particles = []
-    snake_emojis = ["🐍", "🐉", "🌿", "💚", "🔪", "☠"]
-    snake_colors = ["#00aa44", "#228833", "#44cc00", "#007722", "#33bb55", "#66dd44"]
-    for _ in range(5):
-        angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(2.0, 6.0)
-        vx = math.cos(angle) * speed
-        vy = math.sin(angle) * speed + random.uniform(0.5, 1.5)  # slight gravity
-        kind = "text" if random.random() < 0.55 else "circle"
-        color = QColor(random.choice(snake_colors))
-        text = random.choice(snake_emojis) if kind == "text" else ""
-        size = random.uniform(12, 22) if kind == "text" else random.uniform(4, 10)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.3),
-                                   kind, size, color, text))
-    return particles
-
-
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -525,9 +525,9 @@ _SPAWNERS = {
     "mermaid":      _spawn_mermaid,
     "alien":        _spawn_alien,
     "shark":        _spawn_shark,
+    "slither":      _spawn_slither,
     "ghost":        _spawn_ghost,
     "slime":        _spawn_slime,
-    "slither":      _spawn_slither,
     "custom":       _spawn_custom,
 }
 

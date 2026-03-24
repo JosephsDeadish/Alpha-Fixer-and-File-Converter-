@@ -1,12 +1,13 @@
 """
 Main application window.
 """
+import collections
 import math
 import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter
+from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
@@ -738,6 +739,7 @@ class MainWindow(QMainWindow):
         self._easter_collectibles: dict[str, _EasterCollectible] = {}
         # Key-secret collectibles: shown when a key-sequence unlock fires
         self._key_secret_collectibles: dict[str, _EasterCollectible] = {}
+        self._key_secret_filter: _KeySecretFilter | None = None
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
         # is wasteful; coalesce them into a single update 50ms after the last
