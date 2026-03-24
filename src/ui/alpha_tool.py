@@ -1032,7 +1032,7 @@ class AlphaFixerTab(QWidget):
         else:
             total_px = w * h
             copy_all = menu.addAction(
-                f"📋  Copy all {len(zones)} detected zone(s) → Selective Alpha tool"
+                f"📋 Copy all {len(zones)} detected zone(s) → Selective Alpha tool"
             )
             copy_all.setToolTip(
                 "Sends all detected alpha-value zones to the Selective Alpha tool.\n"

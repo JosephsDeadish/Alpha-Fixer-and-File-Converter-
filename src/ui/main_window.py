@@ -655,48 +655,48 @@ class MainWindow(QMainWindow):
                 ),
                 "unlock_key":  "unlock_glitch",
                 "emoji":       "🎮",
-                "collectible_tip": "🎮 KONAMI CODE!  Click to unlock Glitch theme!",
-                "banner_msg":  "🎮 KONAMI CODE! 🕹  'Glitch' theme unlocked!",
+                "collectible_tip": "🎮 KONAMI CODE! Click to unlock Glitch theme!",
+                "banner_msg":  "🎮 KONAMI CODE! 🕹 'Glitch' theme unlocked!",
             },
             # Secret word DRAGON → Dragon Fire
             "dragon": {
                 "seq": _word_seq("DRAGON"),
                 "unlock_key":  "unlock_dragon_fire",
                 "emoji":       "🐉",
-                "collectible_tip": "🐉 Secret word found!  Click to unlock Dragon Fire!",
-                "banner_msg":  "🐉 Secret word: DRAGON!  'Dragon Fire' theme unlocked!",
+                "collectible_tip": "🐉 Secret word found! Click to unlock Dragon Fire!",
+                "banner_msg":  "🐉 Secret word: DRAGON! 'Dragon Fire' theme unlocked!",
             },
             # Secret word CANDY → Candy Land
             "candy": {
                 "seq": _word_seq("CANDY"),
                 "unlock_key":  "unlock_candy_land",
                 "emoji":       "🍬",
-                "collectible_tip": "🍬 Secret word found!  Click to unlock Candy Land!",
-                "banner_msg":  "🍬 Secret word: CANDY!  'Candy Land' theme unlocked!",
+                "collectible_tip": "🍬 Secret word found! Click to unlock Candy Land!",
+                "banner_msg":  "🍬 Secret word: CANDY! 'Candy Land' theme unlocked!",
             },
             # Secret word ZOMBIE → Zombie Apocalypse
             "zombie": {
                 "seq": _word_seq("ZOMBIE"),
                 "unlock_key":  "unlock_zombie",
                 "emoji":       "🧟",
-                "collectible_tip": "🧟 Secret word found!  Click to unlock Zombie Apocalypse!",
-                "banner_msg":  "🧟 Secret word: ZOMBIE!  'Zombie Apocalypse' theme unlocked!",
+                "collectible_tip": "🧟 Secret word found! Click to unlock Zombie Apocalypse!",
+                "banner_msg":  "🧟 Secret word: ZOMBIE! 'Zombie Apocalypse' theme unlocked!",
             },
             # Secret word CORAL → Coral Reef
             "coral": {
                 "seq": _word_seq("CORAL"),
                 "unlock_key":  "unlock_coral_reef",
                 "emoji":       "🪸",
-                "collectible_tip": "🪸 Secret word found!  Click to unlock Coral Reef!",
-                "banner_msg":  "🪸 Secret word: CORAL!  'Coral Reef' theme unlocked!",
+                "collectible_tip": "🪸 Secret word found! Click to unlock Coral Reef!",
+                "banner_msg":  "🪸 Secret word: CORAL! 'Coral Reef' theme unlocked!",
             },
             # Secret word ABYSS → Abyssal Void
             "abyss": {
                 "seq": _word_seq("ABYSS"),
                 "unlock_key":  "unlock_abyssal_void",
                 "emoji":       "🕳",
-                "collectible_tip": "🕳 Secret word found!  Click to unlock Abyssal Void!",
-                "banner_msg":  "🕳 Secret word: ABYSS!  'Abyssal Void' theme unlocked!",
+                "collectible_tip": "🕳 Secret word found! Click to unlock Abyssal Void!",
+                "banner_msg":  "🕳 Secret word: ABYSS! 'Abyssal Void' theme unlocked!",
             },
         }
 
@@ -1256,7 +1256,7 @@ class MainWindow(QMainWindow):
 
         # Konami code: briefly flash a hint in the unlock label first.
         if name == "konami":
-            self._unlock_lbl.setText("🎮 ↑↑↓↓←→←→BA  …  CHEAT CODE DETECTED!")
+            self._unlock_lbl.setText("🎮 ↑↑↓↓←→←→BA … CHEAT CODE DETECTED!")
             self._schedule_unlock_clear()
 
         # Show collectible near the horizontal centre, slightly above middle.

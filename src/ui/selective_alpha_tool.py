@@ -1917,7 +1917,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setStyleSheet("color: #888; font-size: 10px;")
         iv.addWidget(self._import_shared_status)
 
-        self._btn_import_shared = QPushButton("📥  Import Zones from Alpha Tool")
+        self._btn_import_shared = QPushButton("📥 Import Zones from Alpha Tool")
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
             "Populate the painting canvas with zone masks that were copied from\n"
@@ -2294,7 +2294,7 @@ class SelectiveAlphaTool(QWidget):
         displayed = zones[:_display_max]
         suffix = "…" if count > _display_max else ""
         self._import_shared_status.setText(
-            f"✅  {count} zone(s) ready to import "
+            f"✅ {count} zone(s) ready to import "
             f"(α values: {', '.join(str(v) for v, _ in displayed)}{suffix})"
         )
         self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
@@ -2345,7 +2345,7 @@ class SelectiveAlphaTool(QWidget):
         # Update import status to reflect that zones have been applied.
         count = len(self._shared_zones)
         self._import_shared_status.setText(
-            f"✅  {count} zone(s) imported successfully."
+            f"✅ {count} zone(s) imported successfully."
         )
 
     def _on_open(self) -> None:
