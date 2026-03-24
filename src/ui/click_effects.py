@@ -740,7 +740,9 @@ class _FishFlock(QObject):
             p = _Particle(
                 x_start + i * random.randint(25, 65), y_start,
                 speed, vy, life,
-                "fairy_fly", random.uniform(16, 26),  # reuse pixmap-cached rendering
+                # "fairy_fly" renders emoji text at a fixed size — ideal for
+                # emoji fish that just need to drift horizontally off-screen.
+                "fairy_fly", random.uniform(16, 26),
                 color, emoji,
             )
             self._overlay._add_particle(p)
