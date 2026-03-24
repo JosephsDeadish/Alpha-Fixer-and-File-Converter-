@@ -433,6 +433,64 @@ def _spawn_shark(x, y):
     return particles
 
 
+def _spawn_slither(x, y):
+    """Snake slithering effect for Snake Pit theme — serpentine streaks."""
+    particles = []
+    snake_emojis = ["🐍", "🌿", "☠", "💀", "🍃", "✦"]
+    snake_colors = ["#44dd44", "#22bb22", "#66ff44", "#ccffcc", "#33cc33", "#88ee44"]
+    for _ in range(5):
+        # Horizontal-biased velocities to simulate slithering
+        angle = random.choice([-1, 1]) * random.uniform(0, math.pi / 4)
+        speed = random.uniform(2.5, 7.0)
+        vx = math.cos(angle) * speed * random.choice([-1, 1])
+        vy = math.sin(angle) * speed + random.uniform(-0.5, 0.5)
+        kind = "text" if random.random() < 0.6 else "circle"
+        color = QColor(random.choice(snake_colors))
+        text = random.choice(snake_emojis) if kind == "text" else ""
+        size = random.uniform(12, 20) if kind == "text" else random.uniform(4, 8)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.6, 1.1),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_ghost(x, y):
+    """Ghostly apparition effect for Ghost theme — float upward and fade."""
+    particles = []
+    ghost_emojis = ["👻", "💀", "🕯", "🌙", "💨", "✦", "🫥"]
+    ghost_colors = ["#aaaaff", "#ccccff", "#8888ee", "#eeeeff", "#9999dd", "#bbbbff"]
+    for _ in range(5):
+        angle = random.uniform(-math.pi * 0.6, -math.pi * 0.4)  # strongly upward
+        speed = random.uniform(1.0, 4.0)
+        vx = math.cos(angle) * speed * random.uniform(0.3, 1.0)
+        vy = -abs(math.sin(angle) * speed) - random.uniform(0.5, 2.5)  # always up
+        kind = "text" if random.random() < 0.7 else "circle"
+        color = QColor(random.choice(ghost_colors))
+        text = random.choice(ghost_emojis) if kind == "text" else ""
+        size = random.uniform(12, 22) if kind == "text" else random.uniform(5, 10)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.7, 1.3),
+                                   kind, size, color, text))
+    return particles
+
+
+def _spawn_slime(x, y):
+    """Oozing slime effect for Slime theme — slow heavy blobs dripping down."""
+    particles = []
+    slime_emojis = ["🟢", "🫧", "💚", "🤢", "🫛", "✦"]
+    slime_colors = ["#55ee44", "#33cc33", "#22bb22", "#77ff55", "#44cc44", "#aaffaa"]
+    for _ in range(5):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(0.5, 3.5)  # slow, heavy
+        vx = math.cos(angle) * speed * 0.6
+        vy = math.sin(angle) * speed + random.uniform(0.5, 2.5)  # downward bias (dripping)
+        kind = "text" if random.random() < 0.55 else "circle"
+        color = QColor(random.choice(slime_colors))
+        text = random.choice(slime_emojis) if kind == "text" else ""
+        size = random.uniform(10, 20) if kind == "text" else random.uniform(6, 12)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.8, 1.5),
+                                   kind, size, color, text))
+    return particles
+
+
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -454,6 +512,9 @@ _SPAWNERS = {
     "mermaid":      _spawn_mermaid,
     "alien":        _spawn_alien,
     "shark":        _spawn_shark,
+    "slither":      _spawn_slither,
+    "ghost":        _spawn_ghost,
+    "slime":        _spawn_slime,
     "custom":       _spawn_custom,
 }
 
