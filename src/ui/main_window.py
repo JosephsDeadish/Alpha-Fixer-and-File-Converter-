@@ -435,25 +435,35 @@ class _KeySecretFilter(QObject):
     # Maximum buffer length — must be >= the longest registered sequence.
     _MAX_BUF = 12
 
+    # Map Qt arrow key values to canonical string names.
+    _ARROW_MAP: dict[Qt.Key, str] = {}  # populated lazily after Qt is initialised
+
+    @classmethod
+    def _ensure_arrow_map(cls) -> None:
+        """Populate _ARROW_MAP once Qt is fully initialised (lazy init)."""
+        if not cls._ARROW_MAP:
+            cls._ARROW_MAP = {
+                Qt.Key.Key_Up:    "UP",
+                Qt.Key.Key_Down:  "DOWN",
+                Qt.Key.Key_Left:  "LEFT",
+                Qt.Key.Key_Right: "RIGHT",
+            }
+
     def __init__(self, secrets: list, parent: QObject = None):
         super().__init__(parent)
         # secrets: list of (sequence: list[str], unlock_key: str,
         #                    emoji: str, banner_msg: str)
         self._secrets = secrets
         self._buf: collections.deque[str] = collections.deque(maxlen=self._MAX_BUF)
+        self._ensure_arrow_map()
 
-    @staticmethod
-    def _normalise(event: QKeyEvent) -> str | None:
+    @classmethod
+    def _normalise(cls, event: QKeyEvent) -> str | None:
         """Return a canonical key label or None if the key should be ignored."""
-        _arrow_map = {
-            Qt.Key.Key_Up:    "UP",
-            Qt.Key.Key_Down:  "DOWN",
-            Qt.Key.Key_Left:  "LEFT",
-            Qt.Key.Key_Right: "RIGHT",
-        }
         key = event.key()
-        if key in _arrow_map:
-            return _arrow_map[key]
+        arrow = cls._ARROW_MAP.get(key)
+        if arrow is not None:
+            return arrow
         text = event.text().upper()
         if text and len(text) == 1 and text.isalpha():
             return text
