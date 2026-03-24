@@ -708,6 +708,15 @@ class SettingsDialog(QDialog):
             "All are off by default to keep the app unobtrusive."
         )
         sound_gl.addWidget(events_lbl, 5, 0)
+        self._btn_mute_all_events = QPushButton("Mute all")
+        self._btn_mute_all_events.setToolTip(
+            "Turn off all three event-sound checkboxes at once.\n"
+            "Does not affect the master Enable sounds toggle."
+        )
+        self._btn_mute_all_events.setFixedWidth(72)
+        self._btn_mute_all_events.clicked.connect(self._on_mute_all_events)
+        sound_gl.addWidget(self._btn_mute_all_events, 5, 0,
+                           alignment=Qt.AlignmentFlag.AlignRight)
         self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
         self._sound_theme_change_chk.setToolTip(
             "Play a short whoosh sound whenever the active theme is switched.\n"
@@ -1615,6 +1624,15 @@ class SettingsDialog(QDialog):
 
     def _on_sound_drag_enter_changed(self) -> None:
         self._settings.set("sound_drag_enter", self._sound_drag_enter_chk.isChecked())
+
+    def _on_mute_all_events(self) -> None:
+        """Turn off all individual event-sound checkboxes at once."""
+        for chk in (
+            self._sound_theme_change_chk,
+            self._sound_tab_switch_chk,
+            self._sound_drag_enter_chk,
+        ):
+            chk.setChecked(False)
 
     def _on_trail_changed(self) -> None:
         enabled = self._trail_check.isChecked()
