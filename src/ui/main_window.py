@@ -1,12 +1,13 @@
 """
 Main application window.
 """
+import collections
 import math
 import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QPainter
+from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
@@ -420,6 +421,73 @@ class _EasterClickFilter(QObject):
         return False  # never consume the event
 
 
+class _KeySecretFilter(QObject):
+    """App-level event filter that detects keyboard sequences (easter-egg secrets).
+
+    Monitors all key-press events, normalises each to a canonical uppercase
+    string (arrow key names or single letters), maintains a rolling buffer and
+    checks whether its tail matches any registered secret sequence.  Emits
+    ``triggered(unlock_key, emoji, banner_msg)`` when a match is found.
+    """
+
+    triggered = pyqtSignal(str, str, str)  # unlock_key, emoji, banner_msg
+
+    # Maximum buffer length — must be >= the longest registered sequence.
+    _MAX_BUF = 12
+
+    # Map Qt arrow key values to canonical string names.
+    _ARROW_MAP: dict[Qt.Key, str] = {}  # populated lazily after Qt is initialised
+
+    @classmethod
+    def _ensure_arrow_map(cls) -> None:
+        """Populate _ARROW_MAP once Qt is fully initialised (lazy init)."""
+        if not cls._ARROW_MAP:
+            cls._ARROW_MAP = {
+                Qt.Key.Key_Up:    "UP",
+                Qt.Key.Key_Down:  "DOWN",
+                Qt.Key.Key_Left:  "LEFT",
+                Qt.Key.Key_Right: "RIGHT",
+            }
+
+    def __init__(self, secrets: list, parent: QObject = None):
+        super().__init__(parent)
+        # secrets: list of (sequence: list[str], unlock_key: str,
+        #                    emoji: str, banner_msg: str)
+        self._secrets = secrets
+        self._buf: collections.deque[str] = collections.deque(maxlen=self._MAX_BUF)
+        self._ensure_arrow_map()
+
+    @classmethod
+    def _normalise(cls, event: QKeyEvent) -> str | None:
+        """Return a canonical key label or None if the key should be ignored."""
+        key = event.key()
+        arrow = cls._ARROW_MAP.get(key)
+        if arrow is not None:
+            return arrow
+        text = event.text().upper()
+        if text and len(text) == 1 and text.isalpha():
+            return text
+        return None
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.KeyPress:
+            canonical = self._normalise(event)  # type: ignore[arg-type]
+            if canonical:
+                self._buf.append(canonical)
+                self._check_secrets()
+        return False  # never consume events
+
+    def _check_secrets(self) -> None:
+        buf = list(self._buf)
+        for seq, unlock_key, emoji, banner in self._secrets:
+            n = len(seq)
+            if len(buf) >= n and buf[-n:] == seq:
+                # Clear buffer so the same sequence cannot double-fire
+                self._buf.clear()
+                self.triggered.emit(unlock_key, emoji, banner)
+                return
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -571,6 +639,58 @@ class MainWindow(QMainWindow):
          "🧙 'Witch\\'s Brew' theme unlocked via secret easter egg!"),
     ]
 
+    # -----------------------------------------------------------------------
+    # Keyboard-sequence secrets (Round-54)
+    # Each entry: (sequence: list[str], unlock_key, emoji, banner_msg)
+    # Key names: single uppercase letter, or "UP"/"DOWN"/"LEFT"/"RIGHT".
+    # -----------------------------------------------------------------------
+    _KEY_SECRETS = [
+        # Konami code: ↑↑↓↓←→←→BA  →  Glitch
+        (
+            ["UP", "UP", "DOWN", "DOWN",
+             "LEFT", "RIGHT", "LEFT", "RIGHT",
+             "B", "A"],
+            "unlock_glitch",
+            "📡",
+            "📡 'Glitch' theme unlocked via the Konami Code! ↑↑↓↓←→←→BA",
+        ),
+        # Type "DRAGON"  →  Dragon Fire
+        (
+            list("DRAGON"),
+            "unlock_dragon_fire",
+            "🐉",
+            "🐉 'Dragon Fire' theme unlocked! (secret word: DRAGON)",
+        ),
+        # Type "CANDY"  →  Candy Land
+        (
+            list("CANDY"),
+            "unlock_candy_land",
+            "🍭",
+            "🍭 'Candy Land' theme unlocked! (secret word: CANDY)",
+        ),
+        # Type "ZOMBIE"  →  Zombie Apocalypse
+        (
+            list("ZOMBIE"),
+            "unlock_zombie",
+            "🧟",
+            "🧟 'Zombie Apocalypse' theme unlocked! (secret word: ZOMBIE)",
+        ),
+        # Type "CORAL"  →  Coral Reef
+        (
+            list("CORAL"),
+            "unlock_coral_reef",
+            "🪸",
+            "🪸 'Coral Reef' theme unlocked! (secret word: CORAL)",
+        ),
+        # Type "ABYSS"  →  Abyssal Void
+        (
+            list("ABYSS"),
+            "unlock_abyssal_void",
+            "🕳",
+            "🕳 'Abyssal Void' theme unlocked! (secret word: ABYSS)",
+        ),
+    ]
+
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
@@ -607,6 +727,7 @@ class MainWindow(QMainWindow):
         # Easter-egg state: per-spot event filters and collectible widgets
         self._easter_filters: dict[str, _EasterClickFilter] = {}
         self._easter_collectibles: dict[str, _EasterCollectible] = {}
+        self._key_secret_filter: _KeySecretFilter | None = None
         # Resize debounce timer: window resize fires very rapidly during an
         # interactive drag.  Repositioning the overlays on every pixel update
         # is wasteful; coalesce them into a single update 50ms after the last
@@ -621,6 +742,7 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._setup_effects()
         self._setup_easter_eggs()
+        self._setup_key_secrets()
         # Connect to screen-topology and DPI-change signals so the window
         # geometry stays valid when the user plugs in / removes a monitor or
         # changes the system display-scale setting.
@@ -1059,6 +1181,41 @@ class MainWindow(QMainWindow):
                         pass
             else:
                 # Theme was already unlocked — still celebrate with a message
+                self._unlock_lbl.setText(f"✅ Already unlocked!  {banner_msg}")
+                self._schedule_unlock_clear()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Keyboard-sequence easter-egg secrets (Round-54)
+    # ------------------------------------------------------------------
+
+    def _setup_key_secrets(self) -> None:
+        """Install the keyboard-sequence secret filter on the application."""
+        app = QApplication.instance()
+        if app is None:
+            return
+        self._key_secret_filter = _KeySecretFilter(self._KEY_SECRETS, self)
+        self._key_secret_filter.triggered.connect(self._on_key_secret_triggered)
+        app.installEventFilter(self._key_secret_filter)
+
+    def _on_key_secret_triggered(
+        self, unlock_key: str, emoji: str, banner_msg: str
+    ) -> None:
+        """A keyboard sequence matched — unlock the theme and celebrate."""
+        try:
+            if not self._settings.get(unlock_key, False):
+                self._settings.set(unlock_key, True)
+                self._unlock_lbl.setText(banner_msg)
+                self._schedule_unlock_clear()
+                try:
+                    self._sound.play_unlock()
+                except Exception:
+                    try:
+                        QApplication.instance().beep()
+                    except Exception:
+                        pass
+            else:
                 self._unlock_lbl.setText(f"✅ Already unlocked!  {banner_msg}")
                 self._schedule_unlock_clear()
         except Exception:

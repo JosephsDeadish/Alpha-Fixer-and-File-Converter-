@@ -20,21 +20,33 @@ from PIL import Image
 # Constants
 # ---------------------------------------------------------------------------
 
-NUM_ZONES = 10
+NUM_ZONES = 20
 
-# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 10 zones.
+# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 20 zones.
 # overlay-alpha = 130 ≈ 51 % opacity so the source image stays visible.
+# The palette cycles through a range of well-separated hues so that even images
+# with many distinct alpha levels get clearly distinguishable highlight colours.
 ZONE_COLORS: list[tuple[int, int, int, int]] = [
-    (255,  60,  60, 130),   # zone 0 – Red
-    ( 60, 200,  60, 130),   # zone 1 – Green
-    ( 60, 120, 255, 130),   # zone 2 – Blue
-    (255, 210,  50, 130),   # zone 3 – Yellow
-    (200,  60, 255, 130),   # zone 4 – Purple
-    ( 50, 220, 220, 130),   # zone 5 – Cyan
-    (255, 140,  50, 130),   # zone 6 – Orange
-    (255, 100, 180, 130),   # zone 7 – Pink
-    (100, 255, 180, 130),   # zone 8 – Mint
-    (180, 120,  60, 130),   # zone 9 – Brown
+    (255,  60,  60, 130),   # zone 0  – Red
+    ( 60, 200,  60, 130),   # zone 1  – Green
+    ( 60, 120, 255, 130),   # zone 2  – Blue
+    (255, 210,  50, 130),   # zone 3  – Yellow
+    (200,  60, 255, 130),   # zone 4  – Purple
+    ( 50, 220, 220, 130),   # zone 5  – Cyan
+    (255, 140,  50, 130),   # zone 6  – Orange
+    (255, 100, 180, 130),   # zone 7  – Pink
+    (100, 255, 180, 130),   # zone 8  – Mint
+    (180, 120,  60, 130),   # zone 9  – Brown
+    (255, 255,  80, 130),   # zone 10 – Lime Yellow
+    ( 80, 255, 255, 130),   # zone 11 – Sky Cyan
+    (255,  80, 255, 130),   # zone 12 – Magenta
+    (160, 255,  80, 130),   # zone 13 – Yellow-Green
+    ( 80, 160, 255, 130),   # zone 14 – Cornflower
+    (255, 160,  80, 130),   # zone 15 – Peach
+    (160,  80, 255, 130),   # zone 16 – Violet
+    ( 80, 255, 160, 130),   # zone 17 – Sea Green
+    (255,  80, 160, 130),   # zone 18 – Rose
+    (160, 200, 255, 130),   # zone 19 – Periwinkle
 ]
 
 # Human-readable zone names shown in the UI.
@@ -49,6 +61,16 @@ ZONE_NAMES: list[str] = [
     "Zone 8 – Pink",
     "Zone 9 – Mint",
     "Zone 10 – Brown",
+    "Zone 11 – Lime Yellow",
+    "Zone 12 – Sky Cyan",
+    "Zone 13 – Magenta",
+    "Zone 14 – Yellow-Green",
+    "Zone 15 – Cornflower",
+    "Zone 16 – Peach",
+    "Zone 17 – Violet",
+    "Zone 18 – Sea Green",
+    "Zone 19 – Rose",
+    "Zone 20 – Periwinkle",
 ]
 
 # ---------------------------------------------------------------------------
