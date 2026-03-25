@@ -202,6 +202,8 @@ class SettingsManager:
         "unlock_alien": False,
         "unlock_shark_bait": False,
         "unlock_noodle": False,
+        "unlock_anime": False,
+        "unlock_waifu": False,
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------

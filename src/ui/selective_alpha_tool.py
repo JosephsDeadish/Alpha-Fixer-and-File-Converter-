@@ -217,6 +217,17 @@ class SelectiveAlphaCanvas(QWidget):
         # ---- Cursor position for brush-size preview circle ---------------
         self._cursor_pos: QPointF | None = None
 
+        # ---- Transform-tool drag state -----------------------------------
+        # Active when tool == "transform" and the user is dragging.
+        # _tx_base_mask is the mask snapshot taken at drag-start so we can
+        # apply the cumulative delta from the original (no incremental drift).
+        self._tx_dragging:   bool = False
+        self._tx_zone:       int  = -1        # zone being transformed
+        self._tx_mode:       str  = "move"    # "move" | "rotate" | "scale"
+        self._tx_start_w:    QPointF = QPointF()   # widget coords at press
+        self._tx_base_mask:  "np.ndarray | None" = None  # copy at drag-start
+        self._tx_centroid:   "tuple[float, float] | None" = None  # img coords
+
     # ---------------------------------------------------------------- public
 
     def load_image(self, path: str) -> bool:
@@ -413,6 +424,92 @@ class SelectiveAlphaCanvas(QWidget):
         self._composite_dirty = True
         self.update()
         self.mask_changed.emit(idx)
+        self.undo_available.emit(bool(self._history))
+        self.redo_available.emit(False)
+
+    def _set_mask_direct(self, idx: int, arr: np.ndarray) -> None:
+        """Replace the mask for zone *idx* WITHOUT pushing an undo snapshot.
+
+        Used by the transform tool to apply intermediate drag-preview updates
+        without flooding the undo history.  The caller is responsible for
+        having pushed a single undo snapshot at drag-start.
+        """
+        if self._src_img is None or not (0 <= idx < NUM_ZONES):
+            return
+        iw, ih = self._src_img.size
+        if arr.shape[:2] != (ih, iw):
+            return
+        new_mask = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="L")
+        if self._masks[idx] is not None:
+            self._masks[idx].close()
+        self._masks[idx] = new_mask
+        self._composite_dirty = True
+        self.update()
+        self.mask_changed.emit(idx)
+
+    def get_all_masks(self) -> "list[tuple[int, np.ndarray] | None]":
+        """Return a snapshot of every zone mask.
+
+        Returns a list of length NUM_ZONES where each entry is either
+        ``(zone_idx, uint8_array)`` for a painted zone or ``None`` for an
+        empty zone.  All arrays are fresh copies safe to modify.
+        """
+        result = []
+        for i, m in enumerate(self._masks):
+            if m is None:
+                result.append(None)
+            else:
+                result.append((i, np.array(m, dtype=np.uint8)))
+        return result
+
+    def set_all_masks(
+        self,
+        masks: "list[tuple[int, np.ndarray] | None]",
+        alpha_values: "list[int] | None" = None,
+    ) -> None:
+        """Bulk-load zone masks from an all-zones clipboard.
+
+        *masks* must be a list of length NUM_ZONES where each entry is either
+        ``(zone_idx, uint8_array)`` or ``None``.  Arrays are automatically
+        resized to the current image dimensions using nearest-neighbour
+        resampling if they differ (enabling cross-image paste).
+
+        A single undo snapshot is pushed before any modifications.
+        """
+        if self._src_img is None:
+            return
+        iw, ih = self._src_img.size
+        self._push_history()
+        for i, entry in enumerate(masks):
+            if i >= NUM_ZONES:
+                break
+            if entry is None:
+                # Clear this zone
+                if self._masks[i] is not None:
+                    self._masks[i].close()
+                    self._masks[i] = None
+            else:
+                _, arr = entry
+                if arr.shape[:2] != (ih, iw):
+                    # Resize mask to match the target image
+                    src_pil = Image.fromarray(arr.astype(np.uint8), mode="L")
+                    resized = src_pil.resize((iw, ih), Image.Resampling.NEAREST)
+                    arr = np.array(resized, dtype=np.uint8)
+                    resized.close()
+                    src_pil.close()
+                new_mask = Image.fromarray(
+                    np.clip(arr, 0, 255).astype(np.uint8), mode="L"
+                )
+                if self._masks[i] is not None:
+                    self._masks[i].close()
+                self._masks[i] = new_mask
+        self._composite_dirty = True
+        self.update()
+        for i in range(min(len(masks), NUM_ZONES)):
+            try:
+                self.mask_changed.emit(i)
+            except RuntimeError:
+                pass
         self.undo_available.emit(bool(self._history))
         self.redo_available.emit(False)
 
@@ -1064,6 +1161,54 @@ class SelectiveAlphaCanvas(QWidget):
             self._preview_end = pt
             self.update()
 
+        elif self._tool == "transform":
+            # Determine drag mode from modifier keys:
+            #   plain drag  → move
+            #   Shift+drag  → rotate around zone centroid
+            #   Ctrl+drag   → scale around zone centroid
+            mods = event.modifiers()
+            if mods & Qt.KeyboardModifier.ShiftModifier:
+                mode = "rotate"
+            elif mods & Qt.KeyboardModifier.ControlModifier:
+                mode = "scale"
+            else:
+                mode = "move"
+            # Find which zone has a painted pixel at the click position.
+            zone = -1
+            for z in range(NUM_ZONES):
+                if not self._zone_visible[z]:
+                    continue
+                m = self._masks[z]
+                if m is None:
+                    continue
+                arr = np.array(m, dtype=np.uint8)
+                h_m, w_m = arr.shape[:2]
+                if 0 <= iy < h_m and 0 <= ix < w_m and arr[iy, ix] > 127:
+                    zone = z
+                    break
+            if zone < 0:
+                # No zone under cursor; default to active zone
+                zone = self._active_zone
+            base = self.get_mask_as_array(zone)
+            if base is None:
+                return
+            # Compute centroid in image coords for rotate/scale pivot
+            ys, xs = np.where(base > 127)
+            if len(xs):
+                centroid = (float(xs.mean()), float(ys.mean()))
+            else:
+                iw_s, ih_s = self._src_img.size
+                centroid = (iw_s / 2.0, ih_s / 2.0)
+            # Push a single undo snapshot for the entire drag
+            self._push_history()
+            self._tx_dragging  = True
+            self._tx_zone      = zone
+            self._tx_mode      = mode
+            self._tx_start_w   = pt
+            self._tx_base_mask = base
+            self._tx_centroid  = centroid
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._src_img is None:
             return
@@ -1075,6 +1220,12 @@ class SelectiveAlphaCanvas(QWidget):
             dy = pt.y() - self._pan_start_w.y()
             self._pan_x = self._pan_start_off[0] + dx
             self._pan_y = self._pan_start_off[1] + dy
+            self.update()
+            return
+
+        # Transform-tool live drag (handled independently of _drawing flag)
+        if self._tx_dragging and self._tx_base_mask is not None:
+            self._apply_tx_drag(pt)
             self.update()
             return
 
@@ -1120,6 +1271,17 @@ class SelectiveAlphaCanvas(QWidget):
         ):
             self._panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
+            return
+
+        # Finish transform drag
+        if self._tx_dragging and event.button() == Qt.MouseButton.LeftButton:
+            pt = event.position()
+            self._apply_tx_drag(pt)
+            self._tx_dragging  = False
+            self._tx_base_mask = None
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.undo_available.emit(bool(self._history))
+            self.redo_available.emit(False)
             return
 
         if event.button() != Qt.MouseButton.LeftButton:
@@ -1204,6 +1366,39 @@ class SelectiveAlphaCanvas(QWidget):
         self._cursor_pos = None
         self.update()
         super().leaveEvent(event)
+
+    # ---------------------------------------------------------------- transform
+
+    def _apply_tx_drag(self, pt: "QPointF") -> None:
+        """Apply the cumulative transform from drag-start to *pt* (widget coords).
+
+        Called both during move (live preview) and on release (final commit).
+        Always recomputes from ``_tx_base_mask`` so there is no incremental
+        drift and no extra undo entries.
+        """
+        if self._tx_base_mask is None or self._src_img is None:
+            return
+        s, ox, oy = self._transform()
+        dx_w = pt.x() - self._tx_start_w.x()
+        dy_w = pt.y() - self._tx_start_w.y()
+        if self._tx_mode == "move":
+            # Convert widget-pixel delta to image-pixel delta
+            dx_i = int(round(dx_w / s))
+            dy_i = int(round(dy_w / s))
+            new_arr = shift_mask(self._tx_base_mask, dx_i, dy_i)
+        elif self._tx_mode == "rotate":
+            # Angle proportional to horizontal drag (1 px ≈ 0.5°)
+            angle = dx_w * 0.5
+            new_arr = rotate_mask(self._tx_base_mask, angle)
+        else:  # scale
+            # Scale factor: drag right = enlarge, drag left = shrink
+            raw = 1.0 + dx_w * 0.005
+            factor = max(0.05, raw)
+            try:
+                new_arr = scale_mask(self._tx_base_mask, factor)
+            except ValueError:
+                new_arr = self._tx_base_mask.copy()
+        self._set_mask_direct(self._tx_zone, new_arr)
 
 
 # ---------------------------------------------------------------------------
