@@ -1305,7 +1305,7 @@ class SelectiveAlphaCanvas(QWidget):
         # Finish transform drag
         if self._tx_dragging and event.button() == Qt.MouseButton.LeftButton:
             pt = event.position()
-            self._apply_tx_drag(pt)
+            self._apply_tx_drag(pt, final=True)
             self._tx_dragging  = False
             self._tx_base_mask = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -1398,12 +1398,17 @@ class SelectiveAlphaCanvas(QWidget):
 
     # ---------------------------------------------------------------- transform
 
-    def _apply_tx_drag(self, pt: "QPointF") -> None:
+    def _apply_tx_drag(self, pt: "QPointF", final: bool = False) -> None:
         """Apply the cumulative transform from drag-start to *pt* (widget coords).
 
         Called both during move (live preview) and on release (final commit).
         Always recomputes from ``_tx_base_mask`` so there is no incremental
         drift and no extra undo entries.
+
+        When *final* is True and the mode is "move", the shift is clamped so
+        that the mask's non-zero pixel bounding box never fully leaves the
+        canvas.  This prevents permanent pixel loss when the mask is dragged
+        to (or past) the canvas edge and then released.
         """
         if self._tx_base_mask is None or self._src_img is None:
             return
@@ -1414,6 +1419,16 @@ class SelectiveAlphaCanvas(QWidget):
             # Convert widget-pixel delta to image-pixel delta
             dx_i = int(round(dx_w / s))
             dy_i = int(round(dy_w / s))
+            # On final commit, clamp so no mask pixels leave the canvas.
+            if final:
+                ys, xs = np.where(self._tx_base_mask > 127)
+                if len(xs):
+                    h_m, w_m = self._tx_base_mask.shape[:2]
+                    bx0, bx1 = int(xs.min()), int(xs.max())
+                    by0, by1 = int(ys.min()), int(ys.max())
+                    # Allow shift only while bounding-box stays inside [0, w_m-1]
+                    dx_i = max(-(bx0), min(w_m - 1 - bx1, dx_i))
+                    dy_i = max(-(by0), min(h_m - 1 - by1, dy_i))
             new_arr = shift_mask(self._tx_base_mask, dx_i, dy_i)
         elif self._tx_mode == "rotate":
             # Angle proportional to horizontal drag (1 px ≈ 0.5°)
@@ -1865,126 +1880,6 @@ class SelectiveAlphaTool(QWidget):
         zh.addWidget(self._btn_zoom_in)
         lv.addWidget(zoom_box)
 
-        # ── Mask Transform ─────────────────────────────────────────────────
-        transform_box = QGroupBox("Mask Transform (active zone)")
-        tx_lay = QGridLayout(transform_box)
-        tx_lay.setSpacing(4)
-
-        # Shift row
-        tx_lay.addWidget(QLabel("Shift (px):"), 0, 0)
-        self._transform_step_spin = QSpinBox()
-        self._transform_step_spin.setRange(1, 500)
-        self._transform_step_spin.setValue(10)
-        self._transform_step_spin.setMinimumWidth(52)
-        self._transform_step_spin.setToolTip(
-            "Number of pixels to shift the active zone mask per click."
-        )
-        tx_lay.addWidget(self._transform_step_spin, 0, 1)
-
-        shift_row = QHBoxLayout()
-        shift_row.setSpacing(2)
-        self._btn_shift_left  = QPushButton("←")
-        self._btn_shift_up    = QPushButton("↑")
-        self._btn_shift_down  = QPushButton("↓")
-        self._btn_shift_right = QPushButton("→")
-        for btn, tip in (
-            (self._btn_shift_left,  "Shift the active zone mask left."),
-            (self._btn_shift_up,    "Shift the active zone mask up."),
-            (self._btn_shift_down,  "Shift the active zone mask down."),
-            (self._btn_shift_right, "Shift the active zone mask right."),
-        ):
-            btn.setFixedSize(28, 28)
-            btn.setToolTip(tip)
-        self._btn_shift_left.clicked.connect(
-            lambda: self._on_transform_shift(-self._transform_step_spin.value(), 0)
-        )
-        self._btn_shift_up.clicked.connect(
-            lambda: self._on_transform_shift(0, -self._transform_step_spin.value())
-        )
-        self._btn_shift_down.clicked.connect(
-            lambda: self._on_transform_shift(0, self._transform_step_spin.value())
-        )
-        self._btn_shift_right.clicked.connect(
-            lambda: self._on_transform_shift(self._transform_step_spin.value(), 0)
-        )
-        for btn in (self._btn_shift_left, self._btn_shift_up,
-                    self._btn_shift_down, self._btn_shift_right):
-            shift_row.addWidget(btn)
-        shift_row.addStretch()
-        tx_lay.addLayout(shift_row, 0, 2)
-
-        # Rotate row
-        tx_lay.addWidget(QLabel("Rotate (°):"), 1, 0)
-        self._transform_angle_spin = QSpinBox()
-        self._transform_angle_spin.setRange(1, 180)
-        self._transform_angle_spin.setValue(15)
-        self._transform_angle_spin.setMinimumWidth(52)
-        self._transform_angle_spin.setToolTip(
-            "Degrees to rotate the active zone mask per click."
-        )
-        tx_lay.addWidget(self._transform_angle_spin, 1, 1)
-
-        rot_row = QHBoxLayout()
-        rot_row.setSpacing(2)
-        self._btn_rotate_ccw = QPushButton("↺")
-        self._btn_rotate_cw  = QPushButton("↻")
-        self._btn_rotate_ccw.setFixedSize(28, 28)
-        self._btn_rotate_cw.setFixedSize(28, 28)
-        self._btn_rotate_ccw.setToolTip(
-            "Rotate the active zone mask counter-clockwise by the angle value."
-        )
-        self._btn_rotate_cw.setToolTip(
-            "Rotate the active zone mask clockwise by the angle value."
-        )
-        self._btn_rotate_ccw.clicked.connect(
-            lambda: self._on_transform_rotate(self._transform_angle_spin.value())
-        )
-        self._btn_rotate_cw.clicked.connect(
-            lambda: self._on_transform_rotate(-self._transform_angle_spin.value())
-        )
-        rot_row.addWidget(self._btn_rotate_ccw)
-        rot_row.addWidget(self._btn_rotate_cw)
-        rot_row.addStretch()
-        tx_lay.addLayout(rot_row, 1, 2)
-
-        # Scale row
-        tx_lay.addWidget(QLabel("Scale:"), 2, 0)
-        self._transform_scale_spin = QSpinBox()
-        self._transform_scale_spin.setRange(101, 300)
-        self._transform_scale_spin.setValue(110)
-        self._transform_scale_spin.setSuffix("%")
-        self._transform_scale_spin.setMinimumWidth(52)
-        self._transform_scale_spin.setToolTip(
-            "Scale factor used to enlarge or shrink the active zone mask per click.\n"
-            "Enlarge multiplies by this factor; Shrink divides by it."
-        )
-        tx_lay.addWidget(self._transform_scale_spin, 2, 1)
-
-        scale_row = QHBoxLayout()
-        scale_row.setSpacing(2)
-        self._btn_scale_up   = QPushButton("⊕")
-        self._btn_scale_down = QPushButton("⊖")
-        self._btn_scale_up.setFixedSize(28, 28)
-        self._btn_scale_down.setFixedSize(28, 28)
-        self._btn_scale_up.setToolTip("Enlarge the active zone mask by the scale factor.")
-        self._btn_scale_down.setToolTip("Shrink the active zone mask by the scale factor.")
-        self._btn_scale_up.clicked.connect(
-            lambda: self._on_transform_scale(
-                self._transform_scale_spin.value() / 100.0
-            )
-        )
-        self._btn_scale_down.clicked.connect(
-            lambda: self._on_transform_scale(
-                100.0 / self._transform_scale_spin.value()
-            )
-        )
-        scale_row.addWidget(self._btn_scale_up)
-        scale_row.addWidget(self._btn_scale_down)
-        scale_row.addStretch()
-        tx_lay.addLayout(scale_row, 2, 2)
-
-        lv.addWidget(transform_box)
-
         # Zone rows
         zones_box = QGroupBox("Alpha Zones")
         zv = QVBoxLayout(zones_box)
@@ -2362,17 +2257,6 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_zoom_in,      "sa_zoom_in")
         mgr.register(self._btn_zoom_out,     "sa_zoom_out")
         mgr.register(self._btn_zoom_fit,     "sa_zoom_fit")
-        mgr.register(self._transform_step_spin,  "sa_transform_step")
-        mgr.register(self._btn_shift_left,   "sa_shift_left")
-        mgr.register(self._btn_shift_right,  "sa_shift_right")
-        mgr.register(self._btn_shift_up,     "sa_shift_up")
-        mgr.register(self._btn_shift_down,   "sa_shift_down")
-        mgr.register(self._transform_angle_spin, "sa_transform_angle")
-        mgr.register(self._btn_rotate_ccw,   "sa_rotate_ccw")
-        mgr.register(self._btn_rotate_cw,    "sa_rotate_cw")
-        mgr.register(self._transform_scale_spin, "sa_transform_scale")
-        mgr.register(self._btn_scale_up,     "sa_scale_up")
-        mgr.register(self._btn_scale_down,   "sa_scale_down")
         mgr.register(self._btn_show_all,     "sa_show_all_zones")
         mgr.register(self._btn_hide_all,     "sa_hide_all_zones")
         for row in self._zone_rows:
@@ -2909,19 +2793,3 @@ class SelectiveAlphaTool(QWidget):
     def _zoom_reset(self) -> None:
         self._canvas.zoom_reset()
 
-    # ---------------------------------------------------------------- transform slots
-
-    def _on_transform_shift(self, dx: int, dy: int) -> None:
-        """Shift the active zone mask by (dx, dy) pixels."""
-        zone_idx = self._canvas.get_active_zone()
-        self._canvas.shift_zone_mask(zone_idx, dx, dy)
-
-    def _on_transform_rotate(self, angle: float) -> None:
-        """Rotate the active zone mask by *angle* degrees (positive = CCW)."""
-        zone_idx = self._canvas.get_active_zone()
-        self._canvas.rotate_zone_mask(zone_idx, angle)
-
-    def _on_transform_scale(self, factor: float) -> None:
-        """Scale the active zone mask by *factor* about the image centre."""
-        zone_idx = self._canvas.get_active_zone()
-        self._canvas.scale_zone_mask(zone_idx, factor)

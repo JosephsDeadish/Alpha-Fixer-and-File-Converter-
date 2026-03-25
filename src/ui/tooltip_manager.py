@@ -3969,7 +3969,7 @@ _VULGAR: dict[str, list[str]] = {
         "Clear the list, start fresh, add the right files this time. We believe in you. Sort of.",
     ],
     "process_btn": [
-        "Hit this big-ass green button and make the magic happen. F5 also works, lazy.",
+        "Hit this process button and make the magic happen. F5 also works, lazy.",
         "CLICK THE DAMN PROCESS BUTTON. This is literally what we've been building toward.",
         "Every file in that list is about to get its alpha fixed. Hell yeah. Let's GO.",
         "Every single file in that queue is about to get alpha-fixed into glorious, beautiful submission. Watch the progress bar. Feel absolutely god-like.",
