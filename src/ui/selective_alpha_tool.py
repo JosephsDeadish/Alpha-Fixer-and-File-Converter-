@@ -1451,7 +1451,7 @@ class _ZoneRow(QWidget):
         self._vis_btn = QPushButton("👁")
         self._vis_btn.setCheckable(True)
         self._vis_btn.setChecked(True)
-        self._vis_btn.setFixedSize(24, 24)
+        self._vis_btn.setFixedSize(28, 24)
         self._vis_btn.setToolTip(
             f"Toggle visibility of the {color_name} overlay in the canvas.\n"
             "Hidden zones keep their painted masks — they are just not shown."
@@ -1547,6 +1547,7 @@ class _ZoneRow(QWidget):
         )
 
     def _on_vis_toggled(self, checked: bool) -> None:
+        self._vis_btn.setText("👁" if checked else "🚫")
         self.visibility_changed.emit(self._idx, checked)
 
     def _on_pick_color(self) -> None:
@@ -1586,6 +1587,11 @@ class _ZoneRow(QWidget):
         """Update the swatch colour without opening a dialog."""
         self._cur_rgb = (rgb[0], rgb[1], rgb[2])
         self._update_swatch_style()
+
+    def set_vis_state(self, visible: bool) -> None:
+        """Set visibility checked state and sync the eye/block icon."""
+        self._vis_btn.setChecked(visible)
+        self._vis_btn.setText("👁" if visible else "🚫")
 
     def set_paste_enabled(self, enabled: bool) -> None:
         """Enable or disable the Paste Mask button."""
@@ -2407,13 +2413,13 @@ class SelectiveAlphaTool(QWidget):
     def _on_show_all_zones(self) -> None:
         """Make all zone overlays visible and sync the eye-icon toggles."""
         for idx, row in enumerate(self._zone_rows):
-            row._vis_btn.setChecked(True)
+            row.set_vis_state(True)
             self._canvas.set_zone_visible(idx, True)
 
     def _on_hide_all_zones(self) -> None:
         """Hide all zone overlays and sync the eye-icon toggles."""
         for idx, row in enumerate(self._zone_rows):
-            row._vis_btn.setChecked(False)
+            row.set_vis_state(False)
             self._canvas.set_zone_visible(idx, False)
 
     def _on_zone_color_changed(self, zone_idx: int, rgb: tuple) -> None:
@@ -2586,7 +2592,7 @@ class SelectiveAlphaTool(QWidget):
                 break
             row = self._zone_rows[i]
             row.set_alpha(alpha_val)
-            row._vis_btn.setChecked(True)
+            row.set_vis_state(True)
             self._canvas.set_zone_visible(i, True)
 
         self._on_show_all_zones()

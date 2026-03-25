@@ -3608,6 +3608,16 @@ QPushButton:hover {{
 QPushButton:pressed {{
     background-color: {t['accent']};
 }}
+QPushButton:checked {{
+    background-color: {t['accent']};
+    color: {t['panda_white']};
+    border: 2px solid {t['button_hover']};
+    font-weight: 700;
+}}
+QPushButton:checked:hover {{
+    background-color: {t['button_hover']};
+    border-color: {t['panda_white']};
+}}
 QPushButton:disabled {{
     background-color: {t['border']};
     color: {t['text_secondary']};
