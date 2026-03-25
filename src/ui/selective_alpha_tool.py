@@ -45,7 +45,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
-    QButtonGroup, QFrame, QColorDialog, QMenu,
+    QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
 )
 
 from ..core.selective_alpha_processor import (
@@ -1954,17 +1954,16 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(zones_box)
 
         # ── Saved Masks Collection ─────────────────────────────────────────
-        # Up to _MASK_SLOT_COUNT named slots that survive image changes, so
+        # Compact dropdown-based slot chooser.  Slots survive image changes so
         # the user can copy zones from one image and paste onto another.
+        # The user can grow the list with "＋ Add Slot".
         _MASK_SLOT_COUNT = 5
         self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_COUNT
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_COUNT
-        self._slot_status_labels: list[QLabel] = []
-        self._slot_paste_btns: list[QPushButton] = []
 
         slots_box = QGroupBox("Saved Masks")
         sv = QVBoxLayout(slots_box)
-        sv.setSpacing(2)
+        sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
 
         slots_note = QLabel(
@@ -1975,50 +1974,66 @@ class SelectiveAlphaTool(QWidget):
         slots_note.setStyleSheet("color: #999; font-size: 10px;")
         sv.addWidget(slots_note)
 
-        for slot_idx in range(_MASK_SLOT_COUNT):
-            slot_row = QHBoxLayout()
-            slot_row.setSpacing(4)
+        # Slot selector row
+        sel_row = QHBoxLayout()
+        sel_row.setSpacing(4)
+        sel_row.addWidget(QLabel("Slot:"))
+        self._slot_combo = QComboBox()
+        self._slot_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        for i in range(_MASK_SLOT_COUNT):
+            self._slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
+        self._slot_combo.currentIndexChanged.connect(self._on_slot_selected)
+        sel_row.addWidget(self._slot_combo)
 
-            slot_lbl = QLabel(f"Slot {slot_idx + 1}:")
-            slot_lbl.setFixedWidth(46)
-            slot_row.addWidget(slot_lbl)
+        self._btn_slot_add = QPushButton("＋")
+        self._btn_slot_add.setFixedSize(26, 26)
+        self._btn_slot_add.setToolTip(
+            "Add a new empty slot to the list.\n"
+            "Useful when all existing slots are in use."
+        )
+        self._btn_slot_add.clicked.connect(self._on_slot_add)
+        sel_row.addWidget(self._btn_slot_add)
+        sv.addLayout(sel_row)
 
-            status_lbl = QLabel("(empty)")
-            status_lbl.setSizePolicy(
-                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-            )
-            status_lbl.setStyleSheet("color: #888; font-size: 10px;")
-            status_lbl.setToolTip(f"Slot {slot_idx + 1}: currently empty.")
-            slot_row.addWidget(status_lbl)
-            self._slot_status_labels.append(status_lbl)
+        # Status label for the selected slot
+        self._slot_info_lbl = QLabel("(empty)")
+        self._slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        self._slot_info_lbl.setWordWrap(True)
+        sv.addWidget(self._slot_info_lbl)
 
-            save_btn = QPushButton("Save")
-            save_btn.setFixedWidth(46)
-            save_btn.setMinimumHeight(22)
-            save_btn.setToolTip(
-                f"Save the active zone's mask into Slot {slot_idx + 1}.\n"
-                "Overwrites any previously saved mask in this slot."
-            )
-            save_btn.clicked.connect(
-                lambda _checked, idx=slot_idx: self._on_save_to_slot(idx)
-            )
-            slot_row.addWidget(save_btn)
+        # Save / Paste / Clear row
+        act_row = QHBoxLayout()
+        act_row.setSpacing(4)
+        self._btn_slot_save = QPushButton("💾  Save")
+        self._btn_slot_save.setMinimumHeight(26)
+        self._btn_slot_save.setToolTip(
+            "Save the active zone's mask into the selected slot.\n"
+            "Overwrites any previously saved mask in this slot."
+        )
+        self._btn_slot_save.clicked.connect(self._on_save_to_slot_current)
+        act_row.addWidget(self._btn_slot_save)
 
-            paste_btn = QPushButton("Paste")
-            paste_btn.setFixedWidth(46)
-            paste_btn.setMinimumHeight(22)
-            paste_btn.setEnabled(False)
-            paste_btn.setToolTip(
-                f"Paste the mask stored in Slot {slot_idx + 1} into the\n"
-                "currently active zone, replacing its painted mask."
-            )
-            paste_btn.clicked.connect(
-                lambda _checked, idx=slot_idx: self._on_paste_from_slot(idx)
-            )
-            slot_row.addWidget(paste_btn)
-            self._slot_paste_btns.append(paste_btn)
+        self._btn_slot_paste = QPushButton("📌  Paste")
+        self._btn_slot_paste.setMinimumHeight(26)
+        self._btn_slot_paste.setEnabled(False)
+        self._btn_slot_paste.setToolTip(
+            "Paste the mask stored in the selected slot into the\n"
+            "currently active zone, replacing its painted mask."
+        )
+        self._btn_slot_paste.clicked.connect(self._on_paste_from_slot_current)
+        act_row.addWidget(self._btn_slot_paste)
 
-            sv.addLayout(slot_row)
+        self._btn_slot_clear = QPushButton("✕  Clear")
+        self._btn_slot_clear.setMinimumHeight(26)
+        self._btn_slot_clear.setToolTip(
+            "Erase the mask stored in the selected slot.\n"
+            "The slot itself is kept; only its stored data is removed."
+        )
+        self._btn_slot_clear.clicked.connect(self._on_clear_slot_current)
+        act_row.addWidget(self._btn_slot_clear)
+        sv.addLayout(act_row)
 
         lv.addWidget(slots_box)
 
@@ -2268,7 +2283,11 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_clear_all,    "sa_clear_all")
         mgr.register(self._btn_copy_all_zones,  "sa_copy_all_zones")
         mgr.register(self._btn_paste_all_zones, "sa_paste_all_zones")
-        mgr.register(self._canvas,           "sa_canvas")
+        mgr.register(self._slot_combo,          "sa_slot_combo")
+        mgr.register(self._btn_slot_save,       "sa_slot_save")
+        mgr.register(self._btn_slot_paste,      "sa_slot_paste")
+        mgr.register(self._btn_slot_add,        "sa_slot_add")
+        mgr.register(self._canvas,              "sa_canvas")
         mgr.register(self._status_lbl,       "sa_status_lbl")
 
     @staticmethod
@@ -2377,7 +2396,7 @@ class SelectiveAlphaTool(QWidget):
             self._sound.play_mask_paste()
 
     def _on_save_to_slot(self, slot_idx: int) -> None:
-        """Save the active zone's mask into the named collection slot *slot_idx*."""
+        """Save the active zone's mask into slot *slot_idx* (internal helper)."""
         active_zone = self._canvas.get_active_zone() if self._canvas.has_image() else -1
         if not self._canvas.has_image() or active_zone < 0:
             QMessageBox.information(
@@ -2394,19 +2413,16 @@ class SelectiveAlphaTool(QWidget):
             return
         self._mask_slots[slot_idx] = arr.copy()
         zone_name = ZONE_NAMES[active_zone] if active_zone < len(ZONE_NAMES) else f"Zone {active_zone + 1}"
-        info = zone_name
-        self._mask_slot_info[slot_idx] = info
-        # Update UI
-        lbl = self._slot_status_labels[slot_idx]
-        lbl.setText(info)
-        lbl.setStyleSheet("color: #aef; font-size: 10px;")
-        lbl.setToolTip(f"Slot {slot_idx + 1}: saved from {info}.")
-        self._slot_paste_btns[slot_idx].setEnabled(True)
+        self._mask_slot_info[slot_idx] = zone_name
+        self._update_slot_combo_item(slot_idx)
+        # Refresh info label if this slot is currently selected
+        if self._slot_combo.currentIndex() == slot_idx:
+            self._on_slot_selected(slot_idx)
         if self._sound is not None:
             self._sound.play_mask_copy()
 
     def _on_paste_from_slot(self, slot_idx: int) -> None:
-        """Paste the mask stored in *slot_idx* into the currently active zone."""
+        """Paste the mask stored in slot *slot_idx* into the currently active zone."""
         if self._mask_slots[slot_idx] is None:
             QMessageBox.information(
                 self, "Slot empty",
@@ -2423,6 +2439,56 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx].copy())
         if self._sound is not None:
             self._sound.play_mask_paste()
+
+    # ---- dropdown slot helpers -----------------------------------------
+
+    def _update_slot_combo_item(self, idx: int) -> None:
+        """Refresh the combo text for a single slot index."""
+        info = self._mask_slot_info[idx]
+        if self._mask_slots[idx] is None:
+            label = f"Slot {idx + 1}  —  (empty)"
+        else:
+            label = f"Slot {idx + 1}  —  {info}"
+        self._slot_combo.setItemText(idx, label)
+
+    def _on_slot_selected(self, idx: int) -> None:
+        """Update info label and paste button state when the combo selection changes."""
+        if idx < 0 or idx >= len(self._mask_slots):
+            return
+        if self._mask_slots[idx] is None:
+            self._slot_info_lbl.setText("(empty)")
+            self._slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
+            self._btn_slot_paste.setEnabled(False)
+        else:
+            self._slot_info_lbl.setText(f"Saved from: {self._mask_slot_info[idx]}")
+            self._slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
+            self._btn_slot_paste.setEnabled(True)
+
+    def _on_save_to_slot_current(self) -> None:
+        """Save active zone's mask into the currently selected slot."""
+        self._on_save_to_slot(self._slot_combo.currentIndex())
+
+    def _on_paste_from_slot_current(self) -> None:
+        """Paste the currently selected slot's mask into the active zone."""
+        self._on_paste_from_slot(self._slot_combo.currentIndex())
+
+    def _on_clear_slot_current(self) -> None:
+        """Erase the stored mask from the currently selected slot."""
+        idx = self._slot_combo.currentIndex()
+        if idx < 0 or idx >= len(self._mask_slots):
+            return
+        self._mask_slots[idx] = None
+        self._mask_slot_info[idx] = "(empty)"
+        self._update_slot_combo_item(idx)
+        self._on_slot_selected(idx)
+
+    def _on_slot_add(self) -> None:
+        """Append a new empty slot to the list."""
+        idx = len(self._mask_slots)
+        self._mask_slots.append(None)
+        self._mask_slot_info.append("(empty)")
+        self._slot_combo.addItem(f"Slot {idx + 1}  —  (empty)")
+        self._slot_combo.setCurrentIndex(idx)
 
     def _on_copy_all_zones(self) -> None:
         """Copy all painted zone masks into the all-zones clipboard."""
