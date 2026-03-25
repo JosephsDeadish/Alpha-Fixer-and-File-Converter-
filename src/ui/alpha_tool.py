@@ -1042,12 +1042,22 @@ class AlphaFixerTab(QWidget):
             copy_all.triggered.connect(lambda: self.zone_masks_shared.emit(zones))
 
             menu.addSeparator()
+            menu.addAction("Copy individual zone to Selective Alpha:").setEnabled(False)
             for idx, (alpha_val, bool_mask) in enumerate(zones):
                 pct = round(bool_mask.sum() / max(total_px, 1) * 100, 1)
                 act = menu.addAction(
-                    f"   Zone {idx + 1}:  α = {alpha_val}  ({pct}% of pixels)"
+                    f"   📋 Zone {idx + 1}:  α = {alpha_val}  ({pct}% of pixels)"
                 )
-                act.setEnabled(False)  # informational row only
+                act.setToolTip(
+                    f"Send only Zone {idx + 1} (α={alpha_val}) to the Selective Alpha tool.\n"
+                    "Switch to the Selective Alpha tab and click 'Import from Alpha Tool' to load it."
+                )
+                # Capture loop variables explicitly to avoid late-binding closure issues.
+                def _make_single_zone_handler(av, bm):
+                    def _handler():
+                        self.zone_masks_shared.emit([(av, bm)])
+                    return _handler
+                act.triggered.connect(_make_single_zone_handler(alpha_val, bool_mask))
 
         menu.exec(self._compare.mapToGlobal(pos))
 
