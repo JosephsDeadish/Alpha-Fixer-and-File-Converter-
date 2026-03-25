@@ -1168,19 +1168,29 @@ class MainWindow(QMainWindow):
             widget.installEventFilter(filt)
 
             # Connect the filter's "triggered" signal
-            def _make_trigger_handler(sid, col):
+            def _make_trigger_handler(sid, uk, col):
                 def _on_trigger(gpos: QPoint):
-                    self._on_easter_spot_triggered(sid, gpos, col)
+                    self._on_easter_spot_triggered(sid, uk, gpos, col)
                 return _on_trigger
 
-            filt.triggered.connect(_make_trigger_handler(spot_id, collectible))
+            filt.triggered.connect(_make_trigger_handler(spot_id, unlock_key, collectible))
 
     def _on_easter_spot_triggered(
-        self, spot_id: str, gpos: QPoint, collectible: "_EasterCollectible"
+        self, spot_id: str, unlock_key: str, gpos: QPoint, collectible: "_EasterCollectible"
     ) -> None:
-        """A secret spot accumulated enough clicks — show the collectible."""
+        """A secret spot accumulated enough clicks — show the collectible.
+
+        Silently skips if the theme is already unlocked so the collectible
+        does not keep re-appearing after the player has collected it.
+        """
         if collectible.isVisible():
             return  # already showing
+        # Don't re-spawn if the theme was already unlocked
+        try:
+            if self._settings.get(unlock_key, False):
+                return
+        except Exception:
+            pass
         # Map global pos to main-window-local coords for positioning
         local_pos = self.mapFromGlobal(gpos)
         # Nudge upward a bit so the collectible appears above the click point
@@ -1243,6 +1253,7 @@ class MainWindow(QMainWindow):
         # Pre-create a collectible for each secret so we can reuse them.
         for name, data in secrets.items():
             col = _EasterCollectible(data["emoji"], data["collectible_tip"], self)
+            col._unlock_key = data["unlock_key"]  # stored for already-unlocked guard
             self._key_secret_collectibles[name] = col
 
             # Connect the "collected" signal.
@@ -1271,6 +1282,13 @@ class MainWindow(QMainWindow):
         col = self._key_secret_collectibles.get(name)
         if col is None or col.isVisible():
             return
+        # Don't re-spawn if the theme was already unlocked
+        try:
+            uk = getattr(col, "_unlock_key", None)
+            if uk and self._settings.get(uk, False):
+                return
+        except Exception:
+            pass
 
         # Konami code: briefly flash a hint in the unlock label first.
         if name == "konami":

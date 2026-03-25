@@ -1470,12 +1470,12 @@ class _ZoneRow(QWidget):
         self._swatch.clicked.connect(self._on_pick_color)
         top.addWidget(self._swatch)
 
-        # Name label — expanding so it fills available space and never clips
+        # Name label — expanding so it fills available space; wraps if needed
         name_lbl = QLabel(color_name)
         name_lbl.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
-        name_lbl.setMinimumWidth(60)
+        name_lbl.setWordWrap(True)
         top.addWidget(name_lbl)
 
         # Alpha label + spinbox
@@ -2705,7 +2705,7 @@ class SelectiveAlphaTool(QWidget):
             row = self._zone_rows[i]
             row.set_alpha(alpha_val)
             # Ensure the visibility toggle is on for this zone.
-            row._vis_btn.setChecked(True)
+            row.set_vis_state(True)
             self._canvas.set_zone_visible(i, True)
 
         # Reveal all populated zones and sync the master Show Highlights toggle.
