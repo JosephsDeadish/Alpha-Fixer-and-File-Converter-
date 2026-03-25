@@ -1799,13 +1799,10 @@ SECRET_SLIME_THEME = {
     "_unlock": "slime",
 }
 
-# Anime/Waifu go in PRESET_THEMES (unlocked by default); Snake/Ghost/Slime in HIDDEN_THEMES
-PRESET_THEMES.update({
-    "Anime": ANIME_THEME,
-    "Waifu": WAIFU_THEME,
-})
-
+# Anime/Waifu are secret/unlockable themes — moved to HIDDEN_THEMES alongside Snake/Ghost/Slime
 HIDDEN_THEMES.update({
+    "Anime":      ANIME_THEME,
+    "Waifu":      WAIFU_THEME,
     "Snake Pit":  SECRET_SNAKE_THEME,
     "Ghost":      SECRET_GHOST_THEME,
     "Slime":      SECRET_SLIME_THEME,

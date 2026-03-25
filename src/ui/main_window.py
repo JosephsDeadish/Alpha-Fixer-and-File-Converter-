@@ -522,6 +522,8 @@ class MainWindow(QMainWindow):
         (11500, "unlock_snake",           "🐍 'Snake Pit' theme unlocked! (Settings → Theme)"),
         (12000, "unlock_ghost",           "👻 'Ghost' theme unlocked! (Settings → Theme)"),
         (12500, "unlock_slime",           "🟢 'Slime' theme unlocked! (Settings → Theme)"),
+        (13000, "unlock_anime",           "🌸 'Anime' theme unlocked! (Settings → Theme)"),
+        (13500, "unlock_waifu",           "💖 'Waifu' theme unlocked! (Settings → Theme)"),
     ]
 
     # Alternative unlock path: number of *alpha-fix files processed* required.
@@ -630,6 +632,18 @@ class MainWindow(QMainWindow):
          "🧙",
          "🧙 Secret found!  Click the witch to unlock Witch's Brew theme!",
          "🧙 'Witch\\'s Brew' theme unlocked via secret easter egg!"),
+        # Center banner text — click 8× to summon a sakura blossom 🌸 → unlocks Anime
+        ("egg_banner_text", 8,
+         "unlock_anime",
+         "🌸",
+         "🌸 Secret found!  Click the sakura to unlock Anime theme!",
+         "🌸 'Anime' theme unlocked via secret easter egg!"),
+        # Tab bar header row — click 9× to summon a heart 💖 → unlocks Waifu
+        ("egg_tab_bar", 9,
+         "unlock_waifu",
+         "💖",
+         "💖 Secret found!  Click the heart to unlock Waifu theme!",
+         "💖 'Waifu' theme unlocked via secret easter egg!"),
     ]
 
     # -----------------------------------------------------------------------
@@ -1125,6 +1139,8 @@ class MainWindow(QMainWindow):
             "egg_svg_badge":     self._svg_badge,
             "egg_theme_label":   self._theme_label,
             "egg_unlock_lbl":    self._unlock_lbl,
+            "egg_banner_text":   self._banner_lbl,
+            "egg_tab_bar":       self._tabs.tabBar(),
         }
 
         for spot_id, threshold, unlock_key, emoji, tip, banner in self._EASTER_SPOTS:
