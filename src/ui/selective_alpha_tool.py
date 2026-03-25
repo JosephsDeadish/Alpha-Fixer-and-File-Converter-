@@ -1677,9 +1677,11 @@ class SelectiveAlphaTool(QWidget):
         # Zone-mask clipboard: stores a single uint8 ndarray (the most recent
         # Copy Mask action).  Copying again silently replaces the previous entry.
         self._mask_clipboard: Optional[np.ndarray] = None
-        # All-zones clipboard: stores a snapshot of every zone mask so the
-        # user can copy all painted zones at once and paste onto a different image.
-        self._all_zones_clipboard: "list | None" = None
+        # All-zones clipboard: multi-slot store that survives image changes.
+        # Each slot holds a snapshot of every zone mask.
+        _AZ_SLOT_COUNT = 3
+        self._az_slots: list["list | None"] = [None] * _AZ_SLOT_COUNT
+        self._az_slot_info: list[str] = ["(empty)"] * _AZ_SLOT_COUNT
         self._setup_ui()
         self._restore_settings()
 
@@ -2039,29 +2041,75 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
         all_zones_box = QGroupBox("All-Zones Clipboard")
-        av = QHBoxLayout(all_zones_box)
-        av.setSpacing(4)
-        av.setContentsMargins(4, 4, 4, 4)
+        azv = QVBoxLayout(all_zones_box)
+        azv.setSpacing(4)
+        azv.setContentsMargins(4, 4, 4, 4)
 
-        self._btn_copy_all_zones = QPushButton("📋  Copy All Zones")
+        az_note = QLabel(
+            "Save all painted zone masks to a slot and restore them later,\n"
+            "even after switching to a different image."
+        )
+        az_note.setWordWrap(True)
+        az_note.setStyleSheet("color: #999; font-size: 10px;")
+        azv.addWidget(az_note)
+
+        # Slot selector row
+        az_sel_row = QHBoxLayout()
+        az_sel_row.setSpacing(4)
+        az_sel_row.addWidget(QLabel("Slot:"))
+        self._az_slot_combo = QComboBox()
+        self._az_slot_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        for i in range(_AZ_SLOT_COUNT):
+            self._az_slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
+        self._az_slot_combo.currentIndexChanged.connect(self._on_az_slot_selected)
+        az_sel_row.addWidget(self._az_slot_combo)
+
+        self._btn_az_slot_add = QPushButton("＋")
+        self._btn_az_slot_add.setFixedSize(26, 26)
+        self._btn_az_slot_add.setToolTip(
+            "Add a new empty all-zones slot to the list."
+        )
+        self._btn_az_slot_add.clicked.connect(self._on_az_slot_add)
+        az_sel_row.addWidget(self._btn_az_slot_add)
+        azv.addLayout(az_sel_row)
+
+        self._az_slot_info_lbl = QLabel("(empty)")
+        self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        self._az_slot_info_lbl.setWordWrap(True)
+        azv.addWidget(self._az_slot_info_lbl)
+
+        az_act_row = QHBoxLayout()
+        az_act_row.setSpacing(4)
+        self._btn_copy_all_zones = QPushButton("📋  Copy All")
         self._btn_copy_all_zones.setMinimumHeight(26)
         self._btn_copy_all_zones.setToolTip(
-            "Copy every painted zone mask into the all-zones clipboard.\n"
+            "Copy every painted zone mask into the selected slot.\n"
             "Masks are preserved even if you open a different image."
         )
         self._btn_copy_all_zones.clicked.connect(self._on_copy_all_zones)
+        az_act_row.addWidget(self._btn_copy_all_zones)
 
-        self._btn_paste_all_zones = QPushButton("📌  Paste All Zones")
+        self._btn_paste_all_zones = QPushButton("📌  Paste All")
         self._btn_paste_all_zones.setMinimumHeight(26)
         self._btn_paste_all_zones.setEnabled(False)
         self._btn_paste_all_zones.setToolTip(
-            "Paste all zone masks from the all-zones clipboard onto the\n"
+            "Paste all zone masks from the selected slot onto the\n"
             "current image. Masks are resized automatically if needed."
         )
         self._btn_paste_all_zones.clicked.connect(self._on_paste_all_zones)
+        az_act_row.addWidget(self._btn_paste_all_zones)
 
-        av.addWidget(self._btn_copy_all_zones)
-        av.addWidget(self._btn_paste_all_zones)
+        self._btn_az_slot_clear = QPushButton("✕  Clear")
+        self._btn_az_slot_clear.setMinimumHeight(26)
+        self._btn_az_slot_clear.setToolTip(
+            "Erase the zone snapshot stored in the selected slot."
+        )
+        self._btn_az_slot_clear.clicked.connect(self._on_az_slot_clear)
+        az_act_row.addWidget(self._btn_az_slot_clear)
+        azv.addLayout(az_act_row)
+
         lv.addWidget(all_zones_box)
 
         # ── Import from Alpha & RGBA Adjuster Tool ─────────────────────────
@@ -2283,6 +2331,8 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_clear_all,    "sa_clear_all")
         mgr.register(self._btn_copy_all_zones,  "sa_copy_all_zones")
         mgr.register(self._btn_paste_all_zones, "sa_paste_all_zones")
+        mgr.register(self._az_slot_combo,       "sa_az_slot_combo")
+        mgr.register(self._btn_az_slot_add,     "sa_az_slot_add")
         mgr.register(self._slot_combo,          "sa_slot_combo")
         mgr.register(self._btn_slot_save,       "sa_slot_save")
         mgr.register(self._btn_slot_paste,      "sa_slot_paste")
@@ -2491,14 +2541,20 @@ class SelectiveAlphaTool(QWidget):
         self._slot_combo.setCurrentIndex(idx)
 
     def _on_copy_all_zones(self) -> None:
-        """Copy all painted zone masks into the all-zones clipboard."""
+        """Copy all painted zone masks into the currently selected all-zones slot."""
         snapshot = self._canvas.get_all_masks()
-        self._all_zones_clipboard = snapshot
-        self._btn_paste_all_zones.setEnabled(True)
+        idx = self._az_slot_combo.currentIndex()
+        self._az_slots[idx] = snapshot
+        self._az_slot_info[idx] = "all zones"
+        self._update_az_slot_combo_item(idx)
+        self._on_az_slot_selected(idx)
+        if self._sound is not None:
+            self._sound.play_mask_copy()
 
     def _on_paste_all_zones(self) -> None:
-        """Paste all zone masks from the all-zones clipboard onto the current image."""
-        if self._all_zones_clipboard is None:
+        """Paste all zone masks from the currently selected all-zones slot."""
+        idx = self._az_slot_combo.currentIndex()
+        if self._az_slots[idx] is None:
             return
         if not self._canvas.has_image():
             QMessageBox.information(
@@ -2506,9 +2562,50 @@ class SelectiveAlphaTool(QWidget):
                 "Please open an image before pasting zones."
             )
             return
-        self._canvas.set_all_masks(self._all_zones_clipboard)
+        self._canvas.set_all_masks(self._az_slots[idx])
         if self._sound is not None:
             self._sound.play_mask_paste()
+
+    # ---- all-zones slot helpers ----------------------------------------
+
+    def _update_az_slot_combo_item(self, idx: int) -> None:
+        """Refresh the combo text for a single all-zones slot index."""
+        if self._az_slots[idx] is None:
+            label = f"Slot {idx + 1}  —  (empty)"
+        else:
+            label = f"Slot {idx + 1}  —  {self._az_slot_info[idx]}"
+        self._az_slot_combo.setItemText(idx, label)
+
+    def _on_az_slot_selected(self, idx: int) -> None:
+        """Update info label and paste button when the all-zones combo changes."""
+        if idx < 0 or idx >= len(self._az_slots):
+            return
+        if self._az_slots[idx] is None:
+            self._az_slot_info_lbl.setText("(empty)")
+            self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
+            self._btn_paste_all_zones.setEnabled(False)
+        else:
+            self._az_slot_info_lbl.setText(f"Saved: {self._az_slot_info[idx]}")
+            self._az_slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
+            self._btn_paste_all_zones.setEnabled(True)
+
+    def _on_az_slot_clear(self) -> None:
+        """Erase the snapshot stored in the currently selected all-zones slot."""
+        idx = self._az_slot_combo.currentIndex()
+        if idx < 0 or idx >= len(self._az_slots):
+            return
+        self._az_slots[idx] = None
+        self._az_slot_info[idx] = "(empty)"
+        self._update_az_slot_combo_item(idx)
+        self._on_az_slot_selected(idx)
+
+    def _on_az_slot_add(self) -> None:
+        """Append a new empty all-zones slot to the list."""
+        idx = len(self._az_slots)
+        self._az_slots.append(None)
+        self._az_slot_info.append("(empty)")
+        self._az_slot_combo.addItem(f"Slot {idx + 1}  —  (empty)")
+        self._az_slot_combo.setCurrentIndex(idx)
 
     # ------------------------------------------------------------------
     # Cross-tool zone sharing: receive zones from the Alpha & RGBA tool

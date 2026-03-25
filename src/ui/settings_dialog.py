@@ -713,7 +713,6 @@ class SettingsDialog(QDialog):
             "Turn off all three event-sound checkboxes at once.\n"
             "Does not affect the master Enable sounds toggle."
         )
-        self._btn_mute_all_events.setFixedWidth(90)
         self._btn_mute_all_events.clicked.connect(self._on_mute_all_events)
         sound_gl.addWidget(self._btn_mute_all_events, 8, 0,
                            alignment=Qt.AlignmentFlag.AlignRight)
