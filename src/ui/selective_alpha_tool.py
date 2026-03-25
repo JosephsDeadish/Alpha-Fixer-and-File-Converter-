@@ -1627,6 +1627,9 @@ class SelectiveAlphaTool(QWidget):
         # Zone-mask clipboard: stores a single uint8 ndarray (the most recent
         # Copy Mask action).  Copying again silently replaces the previous entry.
         self._mask_clipboard: Optional[np.ndarray] = None
+        # All-zones clipboard: stores a snapshot of every zone mask so the
+        # user can copy all painted zones at once and paste onto a different image.
+        self._all_zones_clipboard: "list | None" = None
         self._setup_ui()
         self._restore_settings()
 
@@ -1737,13 +1740,14 @@ class SelectiveAlphaTool(QWidget):
 
         self._tool_btns: dict[str, QPushButton] = {}
         tool_defs = [
-            ("freehand", "✏  Freehand",  0, 0),
-            ("line",     "╱  Line",      0, 1),
-            ("rect",     "▭  Rectangle", 1, 0),
-            ("ellipse",  "◯  Ellipse",   1, 1),
-            ("fill",     "🪣  Fill",      2, 0),
-            ("polygon",  "⬠  Polygon",   2, 1),
-            ("eraser",   "⌫  Eraser",    3, 0),
+            ("freehand",   "✏  Freehand",   0, 0),
+            ("line",       "╱  Line",       0, 1),
+            ("rect",       "▭  Rectangle",  1, 0),
+            ("ellipse",    "◯  Ellipse",    1, 1),
+            ("fill",       "🪣  Fill",       2, 0),
+            ("polygon",    "⬠  Polygon",    2, 1),
+            ("eraser",     "⌫  Eraser",     3, 0),
+            ("transform",  "✥  Transform",  3, 1),
         ]
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
@@ -2088,6 +2092,33 @@ class SelectiveAlphaTool(QWidget):
 
         lv.addWidget(slots_box)
 
+        # ── Copy / Paste all zones ──────────────────────────────────────────
+        all_zones_box = QGroupBox("All-Zones Clipboard")
+        av = QHBoxLayout(all_zones_box)
+        av.setSpacing(4)
+        av.setContentsMargins(4, 4, 4, 4)
+
+        self._btn_copy_all_zones = QPushButton("📋  Copy All Zones")
+        self._btn_copy_all_zones.setMinimumHeight(26)
+        self._btn_copy_all_zones.setToolTip(
+            "Copy every painted zone mask into the all-zones clipboard.\n"
+            "Masks are preserved even if you open a different image."
+        )
+        self._btn_copy_all_zones.clicked.connect(self._on_copy_all_zones)
+
+        self._btn_paste_all_zones = QPushButton("📌  Paste All Zones")
+        self._btn_paste_all_zones.setMinimumHeight(26)
+        self._btn_paste_all_zones.setEnabled(False)
+        self._btn_paste_all_zones.setToolTip(
+            "Paste all zone masks from the all-zones clipboard onto the\n"
+            "current image. Masks are resized automatically if needed."
+        )
+        self._btn_paste_all_zones.clicked.connect(self._on_paste_all_zones)
+
+        av.addWidget(self._btn_copy_all_zones)
+        av.addWidget(self._btn_paste_all_zones)
+        lv.addWidget(all_zones_box)
+
         # ── Import from Alpha & RGBA Adjuster Tool ─────────────────────────
         # When the user right-clicks the compare preview in the Alpha &
         # RGBA Adjuster tab and selects "Copy zones → Selective Alpha tool",
@@ -2284,7 +2315,8 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._tool_btns["ellipse"],  "sa_tool_ellipse")
         mgr.register(self._tool_btns["fill"],     "sa_tool_fill")
         mgr.register(self._tool_btns["polygon"],  "sa_tool_polygon")
-        mgr.register(self._tool_btns["eraser"],   "sa_tool_eraser")
+        mgr.register(self._tool_btns["eraser"],     "sa_tool_eraser")
+        mgr.register(self._tool_btns["transform"],  "sa_tool_transform")
         mgr.register(self._btn_close_poly,   "sa_close_poly")
         mgr.register(self._brush_spin,       "sa_brush_spin")
         mgr.register(self._eraser_spin,      "sa_eraser_spin")
@@ -2312,34 +2344,40 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_apply,        "sa_apply")
         mgr.register(self._btn_undo_process, "sa_undo_process")
         mgr.register(self._btn_clear_all,    "sa_clear_all")
+        mgr.register(self._btn_copy_all_zones,  "sa_copy_all_zones")
+        mgr.register(self._btn_paste_all_zones, "sa_paste_all_zones")
         mgr.register(self._canvas,           "sa_canvas")
         mgr.register(self._status_lbl,       "sa_status_lbl")
 
     @staticmethod
     def _tool_tooltip(key: str) -> str:
         tips = {
-            "freehand": "Paint freehand.  Hold & drag to brush over the image.",
-            "line":     "Draw a straight filled line.  Drag from start to end.",
-            "rect":     "Fill a rectangle.  Drag from one corner to the opposite.",
-            "ellipse":  "Fill an ellipse.  Drag bounding box corner-to-corner.",
-            "fill":     "Click to flood-fill a region.  Stops at image edges.",
-            "polygon":  "Click to add vertices; double-click to close & fill.\n"
-                        "Press Esc to cancel.",
-            "eraser":   "Erase painted highlights from all zones.\n"
-                        "Hold & drag to remove previously painted areas.",
+            "freehand":  "Paint freehand.  Hold & drag to brush over the image.",
+            "line":      "Draw a straight filled line.  Drag from start to end.",
+            "rect":      "Fill a rectangle.  Drag from one corner to the opposite.",
+            "ellipse":   "Fill an ellipse.  Drag bounding box corner-to-corner.",
+            "fill":      "Click to flood-fill a region.  Stops at image edges.",
+            "polygon":   "Click to add vertices; double-click to close & fill.\n"
+                         "Press Esc to cancel.",
+            "eraser":    "Erase painted highlights from all zones.\n"
+                         "Hold & drag to remove previously painted areas.",
+            "transform": "Drag to move the zone mask under the cursor.\n"
+                         "Shift+drag to rotate.  Ctrl+drag to scale.\n"
+                         "One undo entry is created per drag gesture.",
         }
         return tips.get(key, "")
 
     def _update_status(self) -> None:
         """Refresh the status label with current tool / zone / size info."""
         tool_names = {
-            "freehand": "Freehand",
-            "line":     "Line",
-            "rect":     "Rectangle",
-            "ellipse":  "Ellipse",
-            "fill":     "Fill",
-            "polygon":  "Polygon",
-            "eraser":   "Eraser",
+            "freehand":  "Freehand",
+            "line":      "Line",
+            "rect":      "Rectangle",
+            "ellipse":   "Ellipse",
+            "fill":      "Fill",
+            "polygon":   "Polygon",
+            "eraser":    "Eraser",
+            "transform": "Transform",
         }
         tool_key  = self._canvas._tool
         tool_name = tool_names.get(tool_key, tool_key.title())
@@ -2461,6 +2499,26 @@ class SelectiveAlphaTool(QWidget):
             return
         active_zone = self._canvas.get_active_zone()
         self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx].copy())
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
+    def _on_copy_all_zones(self) -> None:
+        """Copy all painted zone masks into the all-zones clipboard."""
+        snapshot = self._canvas.get_all_masks()
+        self._all_zones_clipboard = snapshot
+        self._btn_paste_all_zones.setEnabled(True)
+
+    def _on_paste_all_zones(self) -> None:
+        """Paste all zone masks from the all-zones clipboard onto the current image."""
+        if self._all_zones_clipboard is None:
+            return
+        if not self._canvas.has_image():
+            QMessageBox.information(
+                self, "No image loaded",
+                "Please open an image before pasting zones."
+            )
+            return
+        self._canvas.set_all_masks(self._all_zones_clipboard)
         if self._sound is not None:
             self._sound.play_mask_paste()
 
