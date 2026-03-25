@@ -122,11 +122,13 @@ class SelectiveAlphaCanvas(QWidget):
     redo_available   : bool – True when there is at least one redo step available.
     """
 
-    mask_changed    = pyqtSignal(int)
-    undo_available  = pyqtSignal(bool)
-    redo_available  = pyqtSignal(bool)
-    copy_requested  = pyqtSignal(int)
-    paste_requested = pyqtSignal(int)
+    mask_changed       = pyqtSignal(int)
+    undo_available     = pyqtSignal(bool)
+    redo_available     = pyqtSignal(bool)
+    copy_requested     = pyqtSignal(int)
+    paste_requested    = pyqtSignal(int)
+    copy_all_requested = pyqtSignal()
+    paste_all_requested = pyqtSignal()
 
     # ------------------------------------------------------------------ init
 
@@ -227,6 +229,7 @@ class SelectiveAlphaCanvas(QWidget):
         self._tx_start_w:    QPointF = QPointF()   # widget coords at press
         self._tx_base_mask:  "np.ndarray | None" = None  # copy at drag-start
         self._tx_centroid:   "tuple[float, float] | None" = None  # img coords
+        self._tx_last_apply: float = 0.0      # time.monotonic() of last apply
 
     # ---------------------------------------------------------------- public
 
@@ -998,11 +1001,16 @@ class SelectiveAlphaCanvas(QWidget):
     def contextMenuEvent(self, event) -> None:   # noqa: N802
         """Right-click context menu for copy/paste of the active zone mask."""
         menu = QMenu(self)
-        copy_act  = menu.addAction("📋  Copy Mask (active zone)")
-        paste_act = menu.addAction("📌  Paste Mask (active zone)")
+        copy_act      = menu.addAction("📋  Copy Mask (active zone)")
+        paste_act     = menu.addAction("📌  Paste Mask (active zone)")
+        menu.addSeparator()
+        copy_all_act  = menu.addAction("📋  Copy All Zones")
+        paste_all_act = menu.addAction("📌  Paste All Zones")
         has_img = self._src_img is not None
         copy_act.setEnabled(has_img)
         paste_act.setEnabled(self._paste_available and has_img)
+        copy_all_act.setEnabled(has_img)
+        paste_all_act.setEnabled(has_img)
         action = menu.exec(event.globalPos())
         if action == copy_act:
             try:
@@ -1012,6 +1020,16 @@ class SelectiveAlphaCanvas(QWidget):
         elif action == paste_act:
             try:
                 self.paste_requested.emit(self._active_zone)
+            except RuntimeError:
+                pass
+        elif action == copy_all_act:
+            try:
+                self.copy_all_requested.emit()
+            except RuntimeError:
+                pass
+        elif action == paste_all_act:
+            try:
+                self.paste_all_requested.emit()
             except RuntimeError:
                 pass
 
@@ -1230,7 +1248,13 @@ class SelectiveAlphaCanvas(QWidget):
 
         # Transform-tool live drag (handled independently of _drawing flag)
         if self._tx_dragging and self._tx_base_mask is not None:
-            self._apply_tx_drag(pt)
+            now = time.monotonic()
+            # Throttle to ~30 fps (33 ms) for rotate/scale which are PIL-heavy.
+            # Move is cheap so allow it every frame.
+            min_interval = 0.033 if self._tx_mode in ("rotate", "scale") else 0.0
+            if now - self._tx_last_apply >= min_interval:
+                self._apply_tx_drag(pt)
+                self._tx_last_apply = now
             self.update()
             return
 
@@ -2188,6 +2212,9 @@ class SelectiveAlphaTool(QWidget):
         # Wire canvas context-menu copy/paste signals.
         self._canvas.copy_requested.connect(self._on_copy_mask)
         self._canvas.paste_requested.connect(self._on_paste_mask)
+        # Wire canvas context-menu copy/paste all-zones signals.
+        self._canvas.copy_all_requested.connect(self._on_copy_all_zones)
+        self._canvas.paste_all_requested.connect(self._on_paste_all_zones)
 
         # Wire zone visibility signals now that _canvas exists.
         for row in self._zone_rows:
