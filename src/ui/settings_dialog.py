@@ -715,7 +715,7 @@ class SettingsDialog(QDialog):
         )
         self._btn_mute_all_events.setFixedWidth(72)
         self._btn_mute_all_events.clicked.connect(self._on_mute_all_events)
-        sound_gl.addWidget(self._btn_mute_all_events, 5, 0,
+        sound_gl.addWidget(self._btn_mute_all_events, 8, 0,
                            alignment=Qt.AlignmentFlag.AlignRight)
         self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
         self._sound_theme_change_chk.setToolTip(

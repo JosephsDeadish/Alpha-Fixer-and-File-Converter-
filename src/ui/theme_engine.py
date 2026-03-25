@@ -2015,6 +2015,20 @@ THEME_BANNER = {
     # Newest preset themes
     "Anime":             "🌸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌸",
     "Waifu":             "💖🌸  Alpha & RGBA Adjuster  |  File Converter  🌸💖",
+    # Latest hidden themes
+    "Crystal Cave":      "💎❄  Alpha & RGBA Adjuster  |  File Converter  ❄💎",
+    "Glitch":            "📡⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡📡",
+    "Wild West":         "🤠⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🤠",
+    "Pirate":            "🏴‍☠️⚓  Alpha & RGBA Adjuster  |  File Converter  ⚓🏴‍☠️",
+    "Deep Space":        "🛸🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🛸",
+    "Witch's Brew":      "🧙🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🧙",
+    "Lava Lamp":         "🪔🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🪔",
+    "Coral Reef":        "🪸🐠  Alpha & RGBA Adjuster  |  File Converter  🐠🪸",
+    "Storm Cloud":       "⛈⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡⛈",
+    "Golden Hour":       "🌇✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌇",
+    "Ghost":             "👻🌙  Alpha & RGBA Adjuster  |  File Converter  🌙👻",
+    "Snake Pit":         "🐍☠  Alpha & RGBA Adjuster  |  File Converter  ☠🐍",
+    "Slime":             "🟢🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🟢",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -2066,6 +2080,20 @@ THEME_STATUS_MESSAGES = {
     # Newest preset themes
     "Anime":             "🌸  Anime — Kawaii conversions unlocked!",
     "Waifu":             "💖  Waifu — Your perfect pixel companion.",
+    # Latest hidden themes
+    "Crystal Cave":      "💎  Crystal Cave — Crystalline precision in every pixel.",
+    "Glitch":            "📡  Glitch — Error 404: normalcy not found.",
+    "Wild West":         "🤠  Wild West — Rounding up them alphas, partner.",
+    "Pirate":            "🏴‍☠️  Pirate — Arr, ye files shall be converted, matey.",
+    "Deep Space":        "🛸  Deep Space — Boldly processing where none have gone.",
+    "Witch's Brew":      "🧙  Witch's Brew — Bubbling with pure image magic.",
+    "Lava Lamp":         "🪔  Lava Lamp — Slow, hypnotic, and surprisingly functional.",
+    "Coral Reef":        "🪸  Coral Reef — Vibrant depths, vivid output.",
+    "Storm Cloud":       "⛈  Storm Cloud — Charged and crackling with energy.",
+    "Golden Hour":       "🌇  Golden Hour — That perfect warm glow at its best.",
+    "Ghost":             "👻  Ghost — Boo! Processing through the ethereal plane.",
+    "Snake Pit":         "🐍  Snake Pit — Ssslithering through your file queue.",
+    "Slime":             "🟢  Slime — Oozing through your files with slimy efficiency.",
 }
 
 
@@ -2124,6 +2152,17 @@ THEME_ICON: dict[str, str] = {
     "Snake Pit":         "🐍",
     "Ghost":             "👻",
     "Slime":             "🟢",
+    # Latest hidden themes
+    "Crystal Cave":      "💎",
+    "Glitch":            "📡",
+    "Wild West":         "🤠",
+    "Pirate":            "🏴‍☠️",
+    "Deep Space":        "🛸",
+    "Witch's Brew":      "🧙",
+    "Lava Lamp":         "🪔",
+    "Coral Reef":        "🪸",
+    "Storm Cloud":       "⛈",
+    "Golden Hour":       "🌇",
 }
 
 
@@ -2189,6 +2228,17 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
     "Snake Pit":        ("🐍🖼", "🐍🔄", "🐍📋"),
     "Ghost":            ("👻🖼", "👻🔄", "👻📋"),
     "Slime":            ("🟢🖼", "🟢🔄", "🟢📋"),
+    # Latest hidden themes
+    "Crystal Cave":     ("💎🖼", "💎🔄", "💎📋"),
+    "Glitch":           ("📡🖼", "📡🔄", "📡📋"),
+    "Wild West":        ("🤠🖼", "🤠🔄", "🤠📋"),
+    "Pirate":           ("🏴‍☠️🖼", "🏴‍☠️🔄", "🏴‍☠️📋"),
+    "Deep Space":       ("🛸🖼", "🛸🔄", "🛸📋"),
+    "Witch's Brew":     ("🧙🖼", "🧙🔄", "🧙📋"),
+    "Lava Lamp":        ("🪔🖼", "🪔🔄", "🪔📋"),
+    "Coral Reef":       ("🪸🖼", "🪸🔄", "🪸📋"),
+    "Storm Cloud":      ("⛈🖼", "⛈🔄", "⛈📋"),
+    "Golden Hour":      ("🌇🖼", "🌇🔄", "🌇📋"),
 }
 
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
