@@ -1267,6 +1267,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._sound_theme_change_chk, "sound_theme_change_check")
         mgr.register(self._sound_tab_switch_chk, "sound_tab_switch_check")
         mgr.register(self._sound_drag_enter_chk, "sound_drag_enter_check")
+        mgr.register(self._btn_mute_all_events, "sound_mute_all_btn")
         mgr.register(self._trail_check, "trail_check")
         mgr.register(self._trail_color_btn, "trail_color")
         mgr.register(self._trail_style_combo, "trail_style")

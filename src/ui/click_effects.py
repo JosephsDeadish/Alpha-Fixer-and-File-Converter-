@@ -504,6 +504,26 @@ def _spawn_slime(x, y):
     return particles
 
 
+def _spawn_noodle(x, y):
+    """Wiggly noodle strands and food emojis for the Noodle theme."""
+    particles = []
+    noodle_emojis = ["🍜", "🥢", "🍝", "🍲", "🥡", "🫕", "🫙", "🌾"]
+    noodle_colors = ["#ffdd44", "#ffcc22", "#ffee77", "#ffe055", "#ccaa00", "#ffd700"]
+    for _ in range(5):
+        angle = random.uniform(0, 2 * math.pi)
+        # Noodles have a droopy, gravity-affected arc — more downward drift
+        speed = random.uniform(1.5, 5.5)
+        vx = math.cos(angle) * speed * random.uniform(0.5, 1.0)
+        vy = math.sin(angle) * speed + random.uniform(0.5, 2.5)  # noodles droop down
+        kind = "text" if random.random() < 0.7 else "circle"
+        color = QColor(random.choice(noodle_colors))
+        text = random.choice(noodle_emojis) if kind == "text" else ""
+        size = random.uniform(13, 24) if kind == "text" else random.uniform(4, 9)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(0.8, 1.6),
+                                   kind, size, color, text))
+    return particles
+
+
 _SPAWNERS = {
     "default":      _spawn_default,
     "gore":         _spawn_gore,
@@ -528,6 +548,7 @@ _SPAWNERS = {
     "slither":      _spawn_slither,
     "ghost":        _spawn_ghost,
     "slime":        _spawn_slime,
+    "noodle":       _spawn_noodle,
     "custom":       _spawn_custom,
 }
 
