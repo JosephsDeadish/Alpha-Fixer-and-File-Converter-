@@ -601,11 +601,11 @@ class SettingsDialog(QDialog):
             lambda checked: self._cursor_combo.setEnabled(not checked)
         )
         self._cursor_anim_check = QCheckBox(
-            "Animate cursor  (cycles through themed frames for emoji cursors)"
+            "Animate cursor  (cycles themed frames for emoji cursors)"
         )
         self._cursor_anim_check.setToolTip(
             "When enabled, emoji cursors with defined animation sequences cycle\n"
-            "through frames at ~2.5 fps (e.g. 🦈 snapping, 🔥 flickering, ✨ sparkling).\n"
+            "through frames at ~4 fps (e.g. 🦈 snapping, 🔥 flickering, ✨ sparkling).\n"
             "Disable if you prefer a static cursor or need to reduce CPU usage."
         )
         cursor_gl.addWidget(self._cursor_anim_check, 2, 0, 1, 2)

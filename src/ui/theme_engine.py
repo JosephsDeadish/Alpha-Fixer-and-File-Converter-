@@ -202,12 +202,7 @@ OTTER_THEME = {
     "scrollbar": "#2e1f09",
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
-    "_cursor": "emoji:🤘",
-    "_trail_color": "#e8a040",
-    "_banner_anim": "bounce",
-    "_button_anim": "fall",
-    "_trail": "ribbon",
-}
+    "_cursor": "emoji:🦦",
 
 GALAXY_THEME = {
     "name": "Galaxy",

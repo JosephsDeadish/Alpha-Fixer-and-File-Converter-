@@ -509,17 +509,17 @@ def _spawn_noodle(x, y):
     particles = []
     noodle_emojis = ["🍜", "🥢", "🍝", "🍲", "🥡", "🫕", "🫙", "🌾"]
     noodle_colors = ["#ffdd44", "#ffcc22", "#ffee77", "#ffe055", "#ccaa00", "#ffd700"]
-    for _ in range(5):
-        angle = random.uniform(0, 2 * math.pi)
-        # Noodles have a droopy, gravity-affected arc — more downward drift
-        speed = random.uniform(1.5, 5.5)
-        vx = math.cos(angle) * speed * random.uniform(0.5, 1.0)
-        vy = math.sin(angle) * speed + random.uniform(0.5, 2.5)  # noodles droop down
-        kind = "text" if random.random() < 0.7 else "circle"
+    for _ in range(6):
+        # Noodles spread in a wide arc — bias upward so they arc nicely
+        angle = random.uniform(math.pi * 0.8, math.pi * 2.2)
+        speed = random.uniform(1.5, 4.0)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed - random.uniform(1.0, 3.0)  # initial upward kick
+        kind = "text" if random.random() < 0.65 else "circle"
         color = QColor(random.choice(noodle_colors))
         text = random.choice(noodle_emojis) if kind == "text" else ""
-        size = random.uniform(13, 24) if kind == "text" else random.uniform(4, 9)
-        particles.append(_Particle(x, y, vx, vy, random.uniform(0.8, 1.6),
+        size = random.uniform(14, 22) if kind == "text" else random.uniform(5, 9)
+        particles.append(_Particle(x, y, vx, vy, random.uniform(1.0, 1.8),
                                    kind, size, color, text))
     return particles
 
@@ -1010,7 +1010,7 @@ class ClickEffectsOverlay(QWidget):
         self._prev_dirty = None
 
         self._timer = QTimer(self)
-        self._timer.setInterval(50)   # 20 fps – reduces CPU load, still smooth enough
+        self._timer.setInterval(33)   # ~30 fps – smooth animation with reasonable CPU cost
         self._timer.timeout.connect(self._tick)
 
         self.setGeometry(main_window.rect())

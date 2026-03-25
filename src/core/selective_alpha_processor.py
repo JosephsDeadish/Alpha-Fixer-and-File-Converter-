@@ -368,15 +368,17 @@ def composite_zones(
         if mask is None or not mask.any():
             continue
         a = oa / 255.0
-        out[mask, 0] = out[mask, 0] * (1.0 - a) + r * a
-        out[mask, 1] = out[mask, 1] * (1.0 - a) + g * a
-        out[mask, 2] = out[mask, 2] * (1.0 - a) + b * a
+        inv_a = 1.0 - a
+        out[mask, 0] = out[mask, 0] * inv_a + r * a
+        out[mask, 1] = out[mask, 1] * inv_a + g * a
+        out[mask, 2] = out[mask, 2] * inv_a + b * a
         if show_zero_alpha:
             # Lift fully-transparent masked pixels so the overlay is visible.
             zero_mask = mask & (src_rgba[:, :, 3] == 0)
             if zero_mask.any():
                 out[zero_mask, 3] = float(oa)
-    return np.clip(out, 0, 255).astype(np.uint8)
+    np.clip(out, 0, 255, out=out)
+    return out.astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------

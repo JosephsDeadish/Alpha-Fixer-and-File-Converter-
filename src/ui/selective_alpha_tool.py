@@ -904,17 +904,22 @@ class SelectiveAlphaCanvas(QWidget):
                                show_zero_alpha=self._show_zero_alpha)
         self._composite_qimg = _np_to_qimage(comp)
         self._composite_dirty = False
-        # Recompute per-zone centroids (image-pixel coords) for label overlay.
-        for i, mask in enumerate(self._masks):
-            if mask is None:
-                self._zone_centroids[i] = None
-            else:
-                arr = np.array(mask, dtype=np.uint8)
-                ys, xs = np.where(arr > 127)
-                if len(xs):
-                    self._zone_centroids[i] = (float(xs.mean()), float(ys.mean()))
-                else:
+        # Recompute per-zone centroids only when the alpha-label overlay is
+        # visible — skipping this loop is the largest single speedup for the
+        # normal (labels-off) painting path on large images.
+        if self._show_alpha_labels:
+            for i, mask in enumerate(self._masks):
+                if mask is None:
                     self._zone_centroids[i] = None
+                else:
+                    arr = np.frombuffer(mask.tobytes(), dtype=np.uint8).reshape(
+                        mask.size[1], mask.size[0]
+                    )
+                    ys, xs = np.where(arr > 127)
+                    if len(xs):
+                        self._zone_centroids[i] = (float(xs.mean()), float(ys.mean()))
+                    else:
+                        self._zone_centroids[i] = None
 
     def paintEvent(self, event) -> None:   # noqa: N802
         if self._src_img is None:

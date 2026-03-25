@@ -1535,7 +1535,7 @@ class MainWindow(QMainWindow):
         if self._cursor_anim_timer is None:
             self._cursor_anim_timer = QTimer(self)
             self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
-        self._cursor_anim_timer.setInterval(400)  # 400 ms per frame ≈ 2.5 fps
+        self._cursor_anim_timer.setInterval(250)  # 250 ms per frame ≈ 4 fps – noticeably animated
         self._cursor_anim_timer.start()
 
     def _stop_cursor_anim(self) -> None:
