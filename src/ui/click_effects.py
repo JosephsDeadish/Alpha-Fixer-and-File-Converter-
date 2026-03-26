@@ -19,7 +19,8 @@ import math
 import random
 
 from PyQt6.QtCore import QEvent, QObject, QRect, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap
+from PyQt6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
+                         QPainterPath, QPen, QPixmap)
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI as _DEFAULT_EMOJI_STR
