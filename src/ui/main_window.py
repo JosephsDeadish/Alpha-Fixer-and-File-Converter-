@@ -180,6 +180,62 @@ def _make_emoji_cursor(emoji: str, size: int = 48) -> QCursor:
         return QCursor(Qt.CursorShape.ArrowCursor)
 
 
+# ---------------------------------------------------------------------------
+# Cursor spin-animation support
+# ---------------------------------------------------------------------------
+
+# Emoji that look good when they physically spin (rather than just cycling to
+# different symbols).  The cursor animation system renders N rotated frames and
+# cycles through them so the glyph visibly rotates.
+_CURSOR_SPIN_EMOJI: frozenset = frozenset([
+    "🪄", "⭐", "🌟", "✨", "❄", "🔮", "💎", "💫", "🌀", "🎯",
+    "🌸", "🪸", "🍄", "🌺", "🎪",
+])
+
+# Number of rotation frames for spinning cursor animation
+_CURSOR_SPIN_FRAMES = 12
+
+
+def _make_spin_cursor_frames(emoji: str, size: int = 48) -> list[QCursor]:
+    """Pre-render *n* evenly-spaced rotation frames of *emoji* as QCursor objects.
+
+    Returns a list of ``_CURSOR_SPIN_FRAMES`` cursors, each rotated by
+    ``360 / n`` degrees relative to the previous one.  Cycling through them
+    at ~80 ms/frame produces a smooth ~15 fps spin effect.
+    """
+    try:
+        from PyQt6.QtWidgets import QApplication  # local import to avoid circular
+        screen = QApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen else 1.0
+        phys = max(1, int(size * dpr))
+        n = _CURSOR_SPIN_FRAMES
+        cursors: list[QCursor] = []
+        for i in range(n):
+            angle = 360.0 * i / n
+            pix = QPixmap(phys, phys)
+            pix.setDevicePixelRatio(dpr)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+            # Rotate around the logical centre
+            cx = size / 2.0
+            cy = size / 2.0
+            p.translate(cx, cy)
+            p.rotate(angle)
+            p.translate(-cx, -cy)
+            font = QFont()
+            font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+            font.setPixelSize(max(8, int(size * 0.65)))
+            p.setFont(font)
+            p.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, emoji)
+            p.end()
+            cursors.append(QCursor(pix, size // 2, size // 2))
+        return cursors
+    except Exception:
+        return []
+
+
 class _SpinningEmojiLabel(QWidget):
     """Renders a single emoji with one of several animation modes.
 

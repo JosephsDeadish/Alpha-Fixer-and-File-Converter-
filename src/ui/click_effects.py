@@ -592,7 +592,6 @@ class _GoreDrip(QObject):
             return
         btn = random.choice(btns)
         # Map top-center of button into main-window coordinates
-        top_local = btn.rect().topLeft() + btn.rect().topRight()
         top_local_x = btn.rect().center().x()
         top_local_y = 0
         from PyQt6.QtCore import QPoint
@@ -600,20 +599,50 @@ class _GoreDrip(QObject):
         mw_pt = main_window.mapFromGlobal(global_pt)
         x, y = mw_pt.x(), mw_pt.y()
 
-        drip_colors = ["#880000", "#aa0000", "#cc1133", "#660000", "#990000", "#bb0022"]
-        count = random.randint(1, 3)
+        drip_colors = ["#880000", "#aa0000", "#cc1133", "#660000", "#990000", "#bb0022",
+                       "#7a0000", "#9e1010"]
+        # Spawn 1-4 realistic blood drips of mixed sizes
+        count = random.randint(1, 4)
         for _ in range(count):
-            vx = random.uniform(-0.4, 0.4)
-            vy = random.uniform(1.5, 3.5)  # falling downward
+            # Slow horizontal drift + fast downward fall for flowing blood effect
+            vx = random.uniform(-0.6, 0.6)
+            vy = random.uniform(1.8, 4.5)
             color = QColor(random.choice(drip_colors))
-            size = random.uniform(4, 8)
-            life = random.uniform(1.0, 2.2)
+            # Mix large heavy blobs with thin fast-dripping streaks
+            rng = random.random()
+            if rng < 0.55:
+                # Elongated drip streak (most realistic blood drop)
+                size = random.uniform(6, 14)
+                kind = "drip_streak"
+            elif rng < 0.80:
+                # Heavy goopy blob
+                size = random.uniform(8, 16)
+                kind = "circle"
+            else:
+                # Small satellite droplet
+                size = random.uniform(3, 6)
+                kind = "circle"
+            life = random.uniform(1.2, 2.8)
             p = _Particle(
-                x + random.uniform(-4, 4), y,
+                x + random.uniform(-8, 8), y,
                 vx, vy, life,
-                "circle", size, color, "",
+                kind, size, color, "",
             )
             self._overlay._particles.append(p)
+
+        # Occasionally spawn a splat cluster (multiple tiny blobs spreading sideways)
+        # to simulate a drop hitting a surface below.
+        if random.random() < 0.20:
+            splat_y = y + random.randint(30, 80)
+            splat_color = QColor(random.choice(drip_colors))
+            for _ in range(random.randint(2, 4)):
+                svx = random.uniform(-3.0, 3.0)
+                svy = random.uniform(-0.5, 1.0)
+                self._overlay._particles.append(_Particle(
+                    x + random.uniform(-4, 4), splat_y,
+                    svx, svy, random.uniform(0.4, 0.9),
+                    "circle", random.uniform(3, 7), splat_color, "",
+                ))
 
         if not self._overlay._timer.isActive():
             self._overlay._timer.start()
@@ -902,6 +931,84 @@ class _SlimeDrip(QObject):
             self._overlay.show()
 
 
+# ---------------------------------------------------------------------------
+# Water drip (periodic water-drop particles for aquatic / ripple themes)
+# ---------------------------------------------------------------------------
+
+class _WaterDrip(QObject):
+    """Spawns thin, fast water-drop particles from button tops periodically.
+
+    Activated for ``"ripple"``, ``"ocean"``, and ``"mermaid"`` effect keys.
+    Uses the ``"drip_streak"`` particle kind in translucent cyan/blue tones,
+    creating the impression of water trickling down the UI — thinner and more
+    fluid than the blood-drip counterpart.
+    """
+
+    _DRIP_INTERVAL_MS = 700  # slightly faster than gore drip — water runs freely
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._DRIP_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn_drip)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn_drip(self) -> None:
+        from PyQt6.QtWidgets import QPushButton
+        from PyQt6.QtCore import QPoint as _QPoint
+        main_window = self._overlay._main_window
+        if main_window is None or not main_window.isVisible():
+            return
+        btns = [w for w in main_window.findChildren(QPushButton)
+                if w.isVisible() and w.width() > 20]
+        if not btns:
+            return
+        btn = random.choice(btns)
+        global_pt = btn.mapToGlobal(_QPoint(btn.rect().center().x(), 0))
+        mw_pt = main_window.mapFromGlobal(global_pt)
+        x, y = mw_pt.x(), mw_pt.y()
+
+        # Translucent blue/cyan palette — lighter than blood, more fluid
+        water_colors = [
+            "#00aacc", "#00ccee", "#22aabb", "#0088bb", "#33ccdd",
+            "#44bbdd", "#007799", "#00ddff",
+        ]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            vx = random.uniform(-0.3, 0.3)   # thin drips run almost straight down
+            vy = random.uniform(2.5, 5.5)    # faster than blood — water is thinner
+            color = QColor(random.choice(water_colors))
+            # Water drops are thinner than blood
+            rng = random.random()
+            if rng < 0.65:
+                kind = "drip_streak"
+                size = random.uniform(3, 8)
+            else:
+                # Tiny bubble / droplet
+                kind = "circle"
+                size = random.uniform(2, 5)
+            # Water is partially transparent — reduce max alpha via short life
+            life = random.uniform(0.8, 1.8)
+            p = _Particle(
+                x + random.uniform(-6, 6), y,
+                vx, vy, life,
+                kind, size, color, "",
+            )
+            self._overlay._add_particle(p)
+
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
 class _BannerFlock(QObject):
     """Spawns themed emoji flying across the top band of the window periodically.
 
@@ -999,6 +1106,7 @@ class ClickEffectsOverlay(QWidget):
         self._fish_flock: _FishFlock | None = None
         self._alien_beam: _AlienBeam | None = None
         self._slime_drip: _SlimeDrip | None = None
+        self._water_drip: _WaterDrip | None = None
         self._banner_flock: _BannerFlock | None = None
         self._banner_flock_active: bool = False
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
@@ -1055,6 +1163,8 @@ class ClickEffectsOverlay(QWidget):
                 self._alien_beam.stop()
             if self._slime_drip:
                 self._slime_drip.stop()
+            if self._water_drip:
+                self._water_drip.stop()
             # Only hide the overlay if the banner flock is also inactive.
             # When banner flock is running we still need the overlay visible
             # so flying particles can be rendered even without click effects.
@@ -1143,6 +1253,14 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._slime_drip:
                 self._slime_drip.stop()
+        # Manage water drip (ripple / ocean / mermaid themes)
+        if effect_key in ("ripple", "ocean", "mermaid") and self._enabled:
+            if self._water_drip is None:
+                self._water_drip = _WaterDrip(self)
+            self._water_drip.start()
+        else:
+            if self._water_drip:
+                self._water_drip.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
@@ -1397,6 +1515,43 @@ class ClickEffectsOverlay(QWidget):
                 w = max(2, int(p.size * 0.6))
                 h = max(2, int(p.size * 1.4))
                 painter.drawEllipse(int(p.x) - w // 2, int(p.y) - h // 2, w, h)
+            elif p.kind == "drip_streak":
+                # Realistic drip: rounded drop head with a tapered streak tail
+                # trailing upward — the streak lengthens as the drop falls further.
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                painter.setBrush(QBrush(c))
+                body_w = max(2, int(p.size * 0.55))
+                body_h = max(2, int(p.size * 0.85))
+                # Draw the rounded drop body
+                painter.drawEllipse(
+                    int(p.x) - body_w // 2,
+                    int(p.y) - body_h // 2,
+                    body_w, body_h,
+                )
+                # Trailing streak: grows longer as the drop falls (life decreases)
+                streak_len = max(2, int(p.size * (1.2 + (1.0 - p.alpha_frac) * 4.0)))
+                streak_w = max(1, body_w // 2)
+                streak_c = QColor(p.color)
+                streak_c.setAlpha(max(0, int(alpha * 0.55)))
+                painter.setBrush(QBrush(streak_c))
+                # Tapered rect above the drop center
+                painter.drawRect(
+                    int(p.x) - streak_w // 2,
+                    int(p.y) - body_h // 2 - streak_len,
+                    streak_w, streak_len,
+                )
+                # Tiny tapered tip at the very top of the streak (half-width)
+                tip_w = max(1, streak_w // 2)
+                tip_h = max(1, int(streak_len * 0.25))
+                tip_c = QColor(p.color)
+                tip_c.setAlpha(max(0, int(alpha * 0.25)))
+                painter.setBrush(QBrush(tip_c))
+                painter.drawRect(
+                    int(p.x) - tip_w // 2,
+                    int(p.y) - body_h // 2 - streak_len - tip_h,
+                    tip_w, tip_h,
+                )
             elif p.kind == "ring":
                 # Expanding hollow circle — grows as life fades, simulating a
                 # water ripple ring radiating outward from the click point.
