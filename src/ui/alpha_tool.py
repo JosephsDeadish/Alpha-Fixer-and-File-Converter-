@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QGroupBox, QScrollArea,
     QGridLayout, QLineEdit, QSplitter,
     QMessageBox, QTextEdit, QMenu,
+    QAbstractSpinBox,
 )
 
 from ..core.presets import PresetManager
@@ -459,7 +460,7 @@ class AlphaFixerTab(QWidget):
         lbl_cmin.setMinimumHeight(24)
         gt_layout.addWidget(lbl_cmin, 1, 0)
         self._clamp_min_spin = QSpinBox()
-        self._clamp_min_spin.setRange(0, 255)
+        self._clamp_min_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._clamp_min_spin.setValue(0)
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
@@ -477,6 +478,7 @@ class AlphaFixerTab(QWidget):
         lbl_cmax.setMinimumHeight(24)
         gt_layout.addWidget(lbl_cmax, 2, 0)
         self._clamp_max_spin = QSpinBox()
+        self._clamp_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._clamp_max_spin.setRange(0, 255)
         self._clamp_max_spin.setValue(255)
         self._clamp_max_spin.setMinimumHeight(26)

@@ -2245,8 +2245,8 @@ _DUMBED: dict[str, list[str]] = {
         "Yes, you can add files after clearing. That's how lists work. Mind = blown.",
     ],
     "process_btn": [
-        "Green means go! Click it and things will HAPPEN.",
         "This is the 'do the thing' button. Click it. Do the thing.",
+        "Processing will start immediately. Click with confidence.",
         "Pressing this button starts processing. Shocking, I know.",
         "F5 also works. You know, if clicking is too much effort.",
         "The progress bar will fill up. Exciting. Wait for it. Waaait.",
