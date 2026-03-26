@@ -827,7 +827,9 @@ class MainWindow(QMainWindow):
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         # Cursor animation state
         self._cursor_anim_timer: "QTimer | None" = None
-        self._cursor_anim_frames: list[str] = []  # current animation sequence
+        self._cursor_anim_frames: list[str] = []  # current animation sequence (text cycling)
+        self._cursor_spin_cursors: list = []       # pre-rendered QCursor spin frames (physical rotation)
+        self._cursor_spin_emoji: str = ""          # which emoji is currently spinning
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -1608,11 +1610,43 @@ class MainWindow(QMainWindow):
                     self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def _start_cursor_anim(self, emoji: str) -> None:
-        """Start cursor animation for *emoji* if frames are defined.
+        """Start cursor animation for *emoji*.
 
-        If no animation frames exist for this emoji, stop any current
-        animation and render the emoji as a static cursor instead.
+        If the emoji is in ``_CURSOR_SPIN_EMOJI`` (round/symmetric glyphs that
+        look good spinning) the cursor is pre-rendered as *N* rotated QCursor
+        frames and cycled at ~80 ms/frame for a smooth physical rotation effect.
+
+        Otherwise the emoji is looked up in ``_CURSOR_ANIM_FRAMES`` for a slower
+        symbol-cycling animation (e.g. 🔥↔🕯️).  If neither lookup produces
+        frames the emoji is rendered as a static cursor.
         """
+        # ── Physical spin animation for round/symmetric emoji ──────────────
+        if emoji in _CURSOR_SPIN_EMOJI:
+            # Avoid re-generating frames if the same emoji is already spinning.
+            if (self._cursor_spin_emoji == emoji
+                    and self._cursor_spin_cursors
+                    and self._cursor_anim_timer is not None
+                    and self._cursor_anim_timer.isActive()):
+                return
+            spin_cursors = _make_spin_cursor_frames(emoji)
+            if spin_cursors:
+                self._cursor_anim_frames = []
+                self._cursor_spin_cursors = spin_cursors
+                self._cursor_spin_emoji = emoji
+                self._cursor_anim_idx = 0
+                # Show the first frame immediately so there is no blank gap.
+                self.setCursor(spin_cursors[0])
+                if self._cursor_anim_timer is None:
+                    self._cursor_anim_timer = QTimer(self)
+                    self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
+                self._cursor_anim_timer.setInterval(80)  # ~12 fps — smooth spin
+                self._cursor_anim_timer.start()
+                return
+            # Fall through to static rendering if frame generation failed.
+
+        # ── Symbol-cycling animation ────────────────────────────────────────
+        self._cursor_spin_cursors = []
+        self._cursor_spin_emoji = ""
         frames = _CURSOR_ANIM_FRAMES.get(emoji)
         if not frames:
             # No animation frames defined for this emoji – render it static.
@@ -1638,10 +1672,22 @@ class MainWindow(QMainWindow):
         if self._cursor_anim_timer is not None:
             self._cursor_anim_timer.stop()
         self._cursor_anim_frames = []
+        self._cursor_spin_cursors = []
+        self._cursor_spin_emoji = ""
         self._cursor_anim_idx = 0
 
     def _tick_cursor_anim(self) -> None:
         """Advance to the next cursor animation frame."""
+        # ── Physical spin frames (list[QCursor]) ─────────────────────────
+        if self._cursor_spin_cursors:
+            self._cursor_anim_idx = (self._cursor_anim_idx + 1) % len(self._cursor_spin_cursors)
+            try:
+                self.setCursor(self._cursor_spin_cursors[self._cursor_anim_idx])
+            except RuntimeError:
+                if self._cursor_anim_timer is not None:
+                    self._cursor_anim_timer.stop()
+            return
+        # ── Symbol-cycling frames (list[str]) ─────────────────────────────
         if not self._cursor_anim_frames:
             if self._cursor_anim_timer is not None:
                 self._cursor_anim_timer.stop()

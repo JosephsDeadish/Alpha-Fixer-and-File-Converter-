@@ -471,6 +471,7 @@ class SettingsDialog(QDialog):
             ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
             ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
             ("Rainbow 🌈",        "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
+            ("Distortion Wave 〜", "Distortion Wave  – A wavy sinusoidal ribbon that writhes and ripples as you move the cursor."),
         ]
         for label, tip in _TRAIL_STYLE_OPTIONS:
             self._trail_style_combo.addItem(label)
@@ -479,7 +480,8 @@ class SettingsDialog(QDialog):
         self._trail_style_combo.setToolTip(
             "Choose the visual style of the mouse trail.\n"
             "Ribbon draws a connected smooth line, Comet draws a tapered tail,\n"
-            "Fairy/Wave/Sparkle use themed emoji that float and fade."
+            "Fairy/Wave/Sparkle use themed emoji that float and fade,\n"
+            "Distortion Wave draws a wavy sinusoidal ribbon that writhes as you move."
         )
         trail_gl.addWidget(self._trail_style_combo, 2, 1)
         self._use_theme_trail_check = QCheckBox(
@@ -1181,6 +1183,7 @@ class SettingsDialog(QDialog):
         # Load persisted trail style into combo
         _TRAIL_STYLE_MAP = {
             "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5, "rainbow": 6,
+            "distortion": 7,
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
@@ -1654,7 +1657,7 @@ class SettingsDialog(QDialog):
             self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
-        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow"]
+        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow", "distortion"]
         idx = self._trail_style_combo.currentIndex()
         style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
         self._settings.set("trail_style", style)

@@ -37,7 +37,7 @@ _EMOJI_LISTS  = {
     "wave":    _WAVE_DUST,
     "sparkle": _SPARKLE_DUST,
 }
-_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow", "noodle"}
+_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow", "noodle", "distortion"}
 
 # ── Noodle physics constants ───────────────────────────────────────────────────────────────────────────
 _NOODLE_SEGMENTS   = 18     # number of chain links
@@ -102,6 +102,9 @@ class MouseTrailOverlay(QWidget):
         self._noodle_cy: float = 0.0  # last known cursor y (window coords)
         self._noodle_active: bool = False
 
+        # Distortion wave style: running phase counter advanced each tick.
+        self._distortion_phase: float = 0.0
+
         self._timer = QTimer(self)
         self._timer.setInterval(33)  # ~30 fps – smoother trail fade without hogging CPU
         self._timer.timeout.connect(self._tick)
@@ -148,7 +151,7 @@ class MouseTrailOverlay(QWidget):
 
     def set_style(self, style: str) -> None:
         """Set trail style: 'dots', 'fairy', 'wave', 'sparkle', 'comet', 'ribbon',
-        'rainbow', or 'noodle'."""
+        'rainbow', 'noodle', or 'distortion'."""
         self._style = style if style in _ALL_STYLES else "dots"
         self._trail.clear()
         if style == "noodle":
@@ -246,6 +249,9 @@ class MouseTrailOverlay(QWidget):
         # Emoji styles get slightly slower base fade for a lingering sparkle feel
         if self._style in _EMOJI_STYLES:
             base_decay *= 0.7
+        # Distortion wave: advance the sinusoidal phase each tick for animation
+        if self._style == "distortion":
+            self._distortion_phase += 0.18
         new_trail = deque(maxlen=self._trail.maxlen)
         for entry in self._trail:
             x, y, a = entry[0], entry[1], entry[2]
@@ -292,6 +298,8 @@ class MouseTrailOverlay(QWidget):
             self._paint_ribbon(painter)
         elif self._style == "rainbow":
             self._paint_rainbow(painter)
+        elif self._style == "distortion":
+            self._paint_distortion(painter)
         else:
             self._paint_dots(painter)
 
@@ -392,6 +400,45 @@ class MouseTrailOverlay(QWidget):
             radius = max(2, int(alpha_frac * 9))
             painter.setBrush(QBrush(c))
             painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
+
+    def _paint_distortion(self, painter: QPainter) -> None:
+        """Paint a wavy sinusoidal ribbon — the trail path is bent perpendicular
+        to each segment by a sine wave that advances each tick, creating a
+        living, writhing distortion effect as the cursor moves.
+        """
+        trail_list = list(self._trail)
+        n = len(trail_list)
+        if n < 2:
+            return
+        max_alpha = int(220 * self._intensity / 100)
+        # Maximum perpendicular displacement in pixels (shrinks as trail fades)
+        amp_base = 12.0
+        for i in range(1, n):
+            x1, y1, a1 = trail_list[i-1][0], trail_list[i-1][1], trail_list[i-1][2]
+            x2, y2, a2 = trail_list[i][0], trail_list[i][1], trail_list[i][2]
+            # Perpendicular unit vector to this segment
+            dx, dy = x2 - x1, y2 - y1
+            seg_len = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / seg_len, dx / seg_len
+            # Sinusoidal displacement fades proportionally with trail opacity
+            avg_a = (a1 + a2) * 0.5
+            amp = amp_base * avg_a
+            w1 = math.sin(self._distortion_phase + i * 1.2) * amp
+            w2 = math.sin(self._distortion_phase + (i + 1) * 1.2) * amp
+            px1 = x1 + nx * w1
+            py1 = y1 + ny * w1
+            px2 = x2 + nx * w2
+            py2 = y2 + ny * w2
+            alpha = max(0, min(255, int(avg_a * max_alpha)))
+            pos_frac = i / max(n - 1, 1)
+            width = max(1.5, pos_frac * 6.0)
+            c = QColor(self._color)
+            c.setAlpha(alpha)
+            pen = QPen(c, width, Qt.PenStyle.SolidLine,
+                       Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.drawLine(int(px1), int(py1), int(px2), int(py2))
+        painter.setPen(Qt.PenStyle.NoPen)
 
     def _paint_fairy(self, painter: QPainter) -> None:
         """Legacy alias for _paint_emoji (kept for compatibility)."""
