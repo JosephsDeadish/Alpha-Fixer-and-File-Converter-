@@ -717,8 +717,7 @@ class SettingsDialog(QDialog):
             "Does not affect the master Enable sounds toggle."
         )
         self._btn_mute_all_events.clicked.connect(self._on_mute_all_events)
-        sound_gl.addWidget(self._btn_mute_all_events, 8, 0,
-                           alignment=Qt.AlignmentFlag.AlignRight)
+        sound_gl.addWidget(self._btn_mute_all_events, 8, 0, 1, 2)
         self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
         self._sound_theme_change_chk.setToolTip(
             "Play a short whoosh sound whenever the active theme is switched.\n"

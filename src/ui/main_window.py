@@ -1002,6 +1002,9 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget()
         self._tabs.setUsesScrollButtons(True)
         self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        # Prevent tabs from stretching to fill available space; scroll buttons
+        # will appear automatically when the window is narrower than all tabs.
+        self._tabs.tabBar().setExpanding(False)
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)

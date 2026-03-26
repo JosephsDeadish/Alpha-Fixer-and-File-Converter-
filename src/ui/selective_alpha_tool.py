@@ -1404,12 +1404,10 @@ class SelectiveAlphaCanvas(QWidget):
 
         Called both during move (live preview) and on release (final commit).
         Always recomputes from ``_tx_base_mask`` so there is no incremental
-        drift and no extra undo entries.
-
-        When *final* is True and the mode is "move", the shift is clamped so
-        that the mask's non-zero pixel bounding box never fully leaves the
-        canvas.  This prevents permanent pixel loss when the mask is dragged
-        to (or past) the canvas edge and then released.
+        drift and no extra undo entries.  The mask is allowed to move freely,
+        including partially off the canvas edge; pixels that shift outside the
+        image boundaries are simply discarded (and the drag can be undone with
+        Ctrl+Z).
         """
         if self._tx_base_mask is None or self._src_img is None:
             return
@@ -1417,19 +1415,12 @@ class SelectiveAlphaCanvas(QWidget):
         dx_w = pt.x() - self._tx_start_w.x()
         dy_w = pt.y() - self._tx_start_w.y()
         if self._tx_mode == "move":
-            # Convert widget-pixel delta to image-pixel delta
+            # Convert widget-pixel delta to image-pixel delta.
+            # Pixels that shift outside the canvas are naturally discarded by
+            # shift_mask (zeros fill the vacated region); the drag can be
+            # reverted with Ctrl+Z if pixels are accidentally moved off-canvas.
             dx_i = int(round(dx_w / s))
             dy_i = int(round(dy_w / s))
-            # On final commit, clamp so no mask pixels leave the canvas.
-            if final:
-                ys, xs = np.where(self._tx_base_mask > 127)
-                if len(xs):
-                    h_m, w_m = self._tx_base_mask.shape[:2]
-                    bx0, bx1 = int(xs.min()), int(xs.max())
-                    by0, by1 = int(ys.min()), int(ys.max())
-                    # Allow shift only while bounding-box stays inside [0, w_m-1]
-                    dx_i = max(-(bx0), min(w_m - 1 - bx1, dx_i))
-                    dy_i = max(-(by0), min(h_m - 1 - by1, dy_i))
             new_arr = shift_mask(self._tx_base_mask, dx_i, dy_i)
         elif self._tx_mode == "rotate":
             # Angle proportional to horizontal drag (1 px ≈ 0.5°)
