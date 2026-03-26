@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
     QProgressBar, QGroupBox, QGridLayout, QScrollArea,
     QLineEdit, QSplitter, QMessageBox, QTextEdit,
+    QAbstractSpinBox,
 )
 
 from ..core.alpha_processor import collect_files
@@ -324,6 +325,7 @@ class ConverterTab(QWidget):
         lbl_quality.setMinimumHeight(24)
         gf_layout.addWidget(lbl_quality, 1, 0)
         self._quality_spin = QSpinBox()
+        self._quality_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._quality_spin.setRange(1, 100)
         self._quality_spin.setMinimumHeight(28)
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
@@ -359,6 +361,7 @@ class ConverterTab(QWidget):
         lbl_w.setMinimumHeight(24)
         gr_layout.addWidget(lbl_w, 1, 0)
         self._width_spin = QSpinBox()
+        self._width_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._width_spin.setRange(1, 32768)
         self._width_spin.setValue(1024)
         self._width_spin.setMinimumHeight(26)
@@ -369,6 +372,7 @@ class ConverterTab(QWidget):
         lbl_h.setMinimumHeight(24)
         gr_layout.addWidget(lbl_h, 2, 0)
         self._height_spin = QSpinBox()
+        self._height_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._height_spin.setRange(1, 32768)
         self._height_spin.setValue(1024)
         self._height_spin.setMinimumHeight(26)

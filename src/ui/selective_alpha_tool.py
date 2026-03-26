@@ -46,6 +46,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
+    QAbstractSpinBox,
 )
 
 from ..core.selective_alpha_processor import (
@@ -1525,6 +1526,7 @@ class _ZoneRow(QWidget):
         # Alpha label + spinbox
         top.addWidget(QLabel("α:"))
         self._alpha_spin = QSpinBox()
+        self._alpha_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(128)
         self._alpha_spin.setMinimumWidth(62)
@@ -1833,6 +1835,7 @@ class SelectiveAlphaTool(QWidget):
         sg.setSpacing(4)
         sg.addWidget(QLabel("Highlighter (px):"), 0, 0)
         self._brush_spin = QSpinBox()
+        self._brush_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._brush_spin.setRange(1, 200)
         self._brush_spin.setValue(10)
         self._brush_spin.setToolTip("Radius of the freehand / line / shape brush in image pixels.")
@@ -1842,6 +1845,7 @@ class SelectiveAlphaTool(QWidget):
         sg.addWidget(self._brush_spin, 0, 1)
         sg.addWidget(QLabel("Eraser (px):"), 1, 0)
         self._eraser_spin = QSpinBox()
+        self._eraser_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._eraser_spin.setRange(1, 200)
         self._eraser_spin.setValue(10)
         self._eraser_spin.setToolTip("Radius of the eraser brush in image pixels.")
