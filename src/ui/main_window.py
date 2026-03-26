@@ -202,22 +202,30 @@ class _SpinningEmojiLabel(QWidget):
     _BOUNCE_STEP        = 0.12  # rad/tick ≈ full cycle / ~4 s
     _SHAKE_STEP         = 0.40  # rad/tick ≈ full cycle / ~0.5 s
     _PENDULUM_STEP      = 0.06  # rad/tick ≈ full cycle / ~10 s
+    _PULSE_STEP         = 0.10  # rad/tick ≈ full cycle / ~5 s
+    _FLOAT_STEP         = 0.04  # rad/tick ≈ very slow drift
+    _FLIP_STEP          = 0.18  # rad/tick for horizontal squeeze-flip
 
     _BOUNCE_AMPLITUDE   = 6     # pixels
     _SHAKE_AMPLITUDE    = 5     # pixels
+    _FLOAT_AMPLITUDE    = 8     # pixels vertical drift
     _PENDULUM_MAX_ANGLE = 30.0  # degrees
+    _PULSE_MIN_SCALE    = 0.75
+    _PULSE_MAX_SCALE    = 1.25
 
-    _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "static"})
+    _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "pulse", "float", "flip", "static"})
 
     def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
         super().__init__(parent)
         self._emoji = emoji
         self._font_size = font_size
         self._mode = "spin"
-        self._angle = 0.0     # degrees – used by spin / pendulum
-        self._phase = 0.0     # radians – used by bounce / shake / pendulum
-        self._offset_x = 0.0  # pixel offset for bounce / shake
+        self._angle = 0.0     # degrees – used by spin / pendulum / flip
+        self._phase = 0.0     # radians – used by bounce / shake / pendulum / pulse / float / flip
+        self._offset_x = 0.0  # pixel offset for bounce / shake / float
         self._offset_y = 0.0
+        self._scale = 1.0     # scale factor for pulse mode
+        self._flip_sx = 1.0   # horizontal scale for flip (-1 reverses)
         self._update_size()
         self._timer = QTimer(self)
         self._timer.setInterval(self._INTERVAL_MS)
