@@ -709,7 +709,7 @@ class SettingsDialog(QDialog):
             "All are off by default to keep the app unobtrusive."
         )
         sound_gl.addWidget(events_lbl, 5, 0)
-        self._btn_mute_all_events = QPushButton("Mute all")
+        self._btn_mute_all_events = QPushButton("Mute all events")
         self._btn_mute_all_events.setToolTip(
             "Turn off all three event-sound checkboxes at once.\n"
             "Does not affect the master Enable sounds toggle."
@@ -900,6 +900,7 @@ class SettingsDialog(QDialog):
         misc_gl.setVerticalSpacing(6)
         misc_gl.addWidget(QLabel("Tooltip Font Size (pt):"), 0, 0)
         self._font_size_spin = QSpinBox()
+        self._font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._font_size_spin.setRange(8, 24)
         self._font_size_spin.setValue(10)
         self._font_size_spin.setMaximumWidth(80)
