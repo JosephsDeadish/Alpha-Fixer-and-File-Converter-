@@ -832,6 +832,9 @@ class SettingsDialog(QDialog):
             ("bounce",   "Bounce – gentle vertical bobbing"),
             ("shake",    "Shake – rapid horizontal quiver"),
             ("pendulum", "Pendulum – swinging back and forth"),
+            ("pulse",    "Pulse – rhythmic scale in/out"),
+            ("float",    "Float – slow dreamy vertical drift"),
+            ("flip",     "Flip – horizontal squeeze-and-flip"),
             ("flock",    "Flock – emoji fly across the top of the window"),
         ]
         _BANNER_ANIM_TIPS = {
@@ -839,6 +842,9 @@ class SettingsDialog(QDialog):
             "bounce":   "The emoji bobs up and down with a smooth sine-wave motion.",
             "shake":    "The emoji vibrates rapidly side to side — great for aggressive themes.",
             "pendulum": "The emoji swings back and forth like a pendulum clock.",
+            "pulse":    "The emoji slowly breathes in and out, pulsing between 75% and 125% size.",
+            "float":    "The emoji drifts up and down lazily — perfect for calm or dreamy themes.",
+            "flip":     "The emoji periodically squishes flat and pops back, like a coin flip.",
             "flock":    "A small group of themed emoji periodically flies across the top of\n"
                         "the window (similar to the bat flock in Bat Cave theme).",
         }

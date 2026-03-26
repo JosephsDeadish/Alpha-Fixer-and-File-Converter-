@@ -245,6 +245,8 @@ class _SpinningEmojiLabel(QWidget):
         self._phase = 0.0
         self._offset_x = 0.0
         self._offset_y = 0.0
+        self._scale = 1.0
+        self._flip_sx = 1.0
         self._update_size()
         self.update()
 
@@ -270,6 +272,8 @@ class _SpinningEmojiLabel(QWidget):
             self._phase = 0.0
             self._offset_x = 0.0
             self._offset_y = 0.0
+            self._scale = 1.0
+            self._flip_sx = 1.0
             self.update()
 
     def set_font_size(self, size: int) -> None:
@@ -288,6 +292,11 @@ class _SpinningEmojiLabel(QWidget):
             self.setFixedSize(base, base + self._BOUNCE_AMPLITUDE * 2)
         elif self._mode == "shake":
             self.setFixedSize(base + self._SHAKE_AMPLITUDE * 2, base)
+        elif self._mode == "float":
+            self.setFixedSize(base, base + self._FLOAT_AMPLITUDE * 2)
+        elif self._mode == "pulse":
+            extra = int(base * (self._PULSE_MAX_SCALE - 1.0)) + 2
+            self.setFixedSize(base + extra * 2, base + extra * 2)
         else:
             self.setFixedSize(base, base)
 
@@ -304,6 +313,19 @@ class _SpinningEmojiLabel(QWidget):
         elif mode == "pendulum":
             self._phase = (self._phase + self._PENDULUM_STEP) % (2 * math.pi)
             self._angle = math.sin(self._phase) * self._PENDULUM_MAX_ANGLE
+        elif mode == "pulse":
+            self._phase = (self._phase + self._PULSE_STEP) % (2 * math.pi)
+            # Oscillate between _PULSE_MIN_SCALE and _PULSE_MAX_SCALE
+            mid = (self._PULSE_MAX_SCALE + self._PULSE_MIN_SCALE) / 2.0
+            amp = (self._PULSE_MAX_SCALE - self._PULSE_MIN_SCALE) / 2.0
+            self._scale = mid + math.sin(self._phase) * amp
+        elif mode == "float":
+            self._phase = (self._phase + self._FLOAT_STEP) % (2 * math.pi)
+            self._offset_y = math.sin(self._phase) * self._FLOAT_AMPLITUDE
+        elif mode == "flip":
+            self._phase = (self._phase + self._FLIP_STEP) % (2 * math.pi)
+            # abs(cos) collapses to 0 then recovers – looks like a flip
+            self._flip_sx = abs(math.cos(self._phase))
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
@@ -317,6 +339,13 @@ class _SpinningEmojiLabel(QWidget):
         # Apply rotation for spin / pendulum modes.
         if self._angle != 0.0:
             painter.rotate(self._angle)
+        # Apply scale for pulse mode.
+        if self._mode == "pulse" and self._scale != 1.0:
+            painter.scale(self._scale, self._scale)
+        # Apply horizontal squeeze for flip mode.
+        elif self._mode == "flip":
+            sx = max(self._flip_sx, 0.01)  # avoid degenerate zero-width transform
+            painter.scale(sx, 1.0)
 
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
