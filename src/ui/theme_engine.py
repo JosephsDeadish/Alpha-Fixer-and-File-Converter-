@@ -3652,8 +3652,9 @@ QComboBox::drop-down {{
     background: {t['primary']};
 }}
 QComboBox::down-arrow {{
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0L10 0L5 6z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
     width: 10px;
-    height: 10px;
+    height: 6px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {t['surface']};
@@ -3697,6 +3698,16 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {{
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
     background: {t['accent']};
+}}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M4 0L8 5H0z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
+    width: 8px;
+    height: 5px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M0 0L8 0L4 5z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
+    width: 8px;
+    height: 5px;
 }}
 
 /* ===== Sliders ===== */
