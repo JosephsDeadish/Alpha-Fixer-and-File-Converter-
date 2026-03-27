@@ -203,6 +203,7 @@ OTTER_THEME = {
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
     "_cursor": "emoji:🦦",
+}
 
 GALAXY_THEME = {
     "name": "Galaxy",
@@ -256,6 +257,9 @@ GALAXY_OTTER_THEME = {
     "scrollbar_handle": "#a06aff",
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🦦",
+}
+
+GOTH_THEME = {
     "name": "Goth",
     "background": "#0a0a0a",
     "surface": "#111111",

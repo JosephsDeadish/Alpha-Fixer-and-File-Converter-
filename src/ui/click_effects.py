@@ -612,9 +612,9 @@ class _GoreDrip(QObject):
             # Mix large heavy blobs with thin fast-dripping streaks
             rng = random.random()
             if rng < 0.55:
-                # Elongated drip streak (most realistic blood drop)
+                # Smooth teardrop blood drop
                 size = random.uniform(6, 14)
-                kind = "drip_streak"
+                kind = "blood_drip"
             elif rng < 0.80:
                 # Heavy goopy blob
                 size = random.uniform(8, 16)
@@ -989,7 +989,7 @@ class _WaterDrip(QObject):
             # Water drops are thinner than blood
             rng = random.random()
             if rng < 0.65:
-                kind = "drip_streak"
+                kind = "water_drip"
                 size = random.uniform(3, 8)
             else:
                 # Tiny bubble / droplet
@@ -1553,6 +1553,75 @@ class ClickEffectsOverlay(QWidget):
                     int(p.y) - body_h // 2 - streak_len - tip_h,
                     tip_w, tip_h,
                 )
+            elif p.kind == "blood_drip":
+                # Smooth goopy teardrop for blood.  The rounded head is at the
+                # bottom (where the drop has gathered mass) and a tapered tail
+                # trails upward behind it.  A QLinearGradient gives the blob a
+                # deep crimson core that lightens slightly at the tip.
+                head_r = max(2, int(p.size * 0.55))
+                tail_len = max(4, int(p.size * (1.6 + (1.0 - p.alpha_frac) * 3.5)))
+                cx = int(p.x)
+                head_y = int(p.y)
+                tail_y = head_y - head_r - tail_len
+
+                grad = QLinearGradient(cx, tail_y, cx, head_y + head_r)
+                tip_c = QColor(p.color)
+                tip_c.setAlpha(max(0, int(alpha * 0.18)))
+                mid_c = QColor(p.color)
+                mid_c.setAlpha(max(0, int(alpha * 0.65)))
+                head_c = QColor(p.color)
+                head_c.setAlpha(alpha)
+                grad.setColorAt(0.0, tip_c)
+                grad.setColorAt(0.45, mid_c)
+                grad.setColorAt(1.0, head_c)
+
+                path = QPainterPath()
+                # Teardrop: start at the tail tip, curve down to the rounded head
+                path.moveTo(cx, tail_y)
+                path.quadTo(cx + head_r * 0.9, head_y - head_r, cx + head_r, head_y)
+                # bottom arc of the round head
+                path.arcTo(cx - head_r, head_y - head_r, head_r * 2, head_r * 2, 0, -180)
+                path.quadTo(cx - head_r * 0.9, head_y - head_r, cx, tail_y)
+                path.closeSubpath()
+
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(grad))
+                painter.drawPath(path)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+
+            elif p.kind == "water_drip":
+                # Slim fluid teardrop for water.  Much thinner than blood and
+                # more translucent; the gradient fades to near-invisible at the
+                # tail tip to suggest a thin trickle.
+                head_r = max(1, int(p.size * 0.38))
+                tail_len = max(3, int(p.size * (1.2 + (1.0 - p.alpha_frac) * 2.5)))
+                cx = int(p.x)
+                head_y = int(p.y)
+                tail_y = head_y - head_r - tail_len
+
+                grad = QLinearGradient(cx, tail_y, cx, head_y + head_r)
+                tip_c = QColor(p.color)
+                tip_c.setAlpha(0)
+                mid_c = QColor(p.color)
+                mid_c.setAlpha(max(0, int(alpha * 0.45)))
+                head_c = QColor(p.color)
+                head_c.setAlpha(max(0, int(alpha * 0.80)))
+                grad.setColorAt(0.0, tip_c)
+                grad.setColorAt(0.5, mid_c)
+                grad.setColorAt(1.0, head_c)
+
+                path = QPainterPath()
+                path.moveTo(cx, tail_y)
+                path.quadTo(cx + head_r * 0.85, head_y - head_r, cx + head_r, head_y)
+                path.arcTo(cx - head_r, head_y - head_r, head_r * 2, head_r * 2, 0, -180)
+                path.quadTo(cx - head_r * 0.85, head_y - head_r, cx, tail_y)
+                path.closeSubpath()
+
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(grad))
+                painter.drawPath(path)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+
             elif p.kind == "ring":
                 # Expanding hollow circle — grows as life fades, simulating a
                 # water ripple ring radiating outward from the click point.
