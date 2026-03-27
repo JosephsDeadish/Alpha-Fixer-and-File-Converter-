@@ -35,7 +35,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from PyQt6.QtCore import (
-    Qt, QEvent, QPointF, QRectF, pyqtSignal,
+    Qt, QEvent, QPointF, QRectF, QTimer, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QColor, QFont, QImage, QPainter, QPen,
@@ -231,6 +231,11 @@ class SelectiveAlphaCanvas(QWidget):
         self._tx_base_mask:  "np.ndarray | None" = None  # copy at drag-start
         self._tx_centroid:   "tuple[float, float] | None" = None  # img coords
         self._tx_last_apply: float = 0.0      # time.monotonic() of last apply
+        # Batching state: latest pending drag point and flush-scheduled flag.
+        # Mouse events are coalesced so composite_zones() runs at most once per
+        # Qt event-loop tick instead of once per mouse-move event.
+        self._tx_pending_pt: "QPointF | None" = None
+        self._tx_flush_scheduled: bool = False
 
     # ---------------------------------------------------------------- public
 
@@ -1249,14 +1254,24 @@ class SelectiveAlphaCanvas(QWidget):
 
         # Transform-tool live drag (handled independently of _drawing flag)
         if self._tx_dragging and self._tx_base_mask is not None:
+            # Always store the latest cursor position so the final position is
+            # never lost when events are coalesced.
+            self._tx_pending_pt = pt
             now = time.monotonic()
-            # Throttle to ~30 fps (33 ms) for rotate/scale which are PIL-heavy.
-            # Move is cheap so allow it every frame.
-            min_interval = 0.033 if self._tx_mode in ("rotate", "scale") else 0.0
-            if now - self._tx_last_apply >= min_interval:
-                self._apply_tx_drag(pt)
-                self._tx_last_apply = now
-            self.update()
+            if self._tx_mode in ("rotate", "scale"):
+                # PIL resampling is heavy: hard-cap at ~30 fps (33 ms).
+                if now - self._tx_last_apply >= 0.033:
+                    self._apply_tx_drag(pt)
+                    self._tx_pending_pt = None
+                    self._tx_last_apply = now
+                self.update()
+            else:
+                # Move mode: batch consecutive mouse events into one composite
+                # rebuild per event-loop tick via a 0-ms singleShot.  This
+                # prevents flooding composite_zones() on fast mouse moves.
+                if not self._tx_flush_scheduled:
+                    self._tx_flush_scheduled = True
+                    QTimer.singleShot(0, self._flush_tx_drag)
             return
 
         if not self._drawing:
@@ -1306,6 +1321,9 @@ class SelectiveAlphaCanvas(QWidget):
         # Finish transform drag
         if self._tx_dragging and event.button() == Qt.MouseButton.LeftButton:
             pt = event.position()
+            # Cancel any pending batched update; apply final position directly.
+            self._tx_flush_scheduled = False
+            self._tx_pending_pt = None
             self._apply_tx_drag(pt, final=True)
             self._tx_dragging  = False
             self._tx_base_mask = None
@@ -1398,6 +1416,18 @@ class SelectiveAlphaCanvas(QWidget):
         super().leaveEvent(event)
 
     # ---------------------------------------------------------------- transform
+
+    def _flush_tx_drag(self) -> None:
+        """Apply the buffered pending transform-drag point.
+
+        Called via ``QTimer.singleShot(0, ...)`` so that multiple consecutive
+        mouseMoveEvents that arrive within the same Qt event-loop tick are
+        coalesced into a single composite rebuild.
+        """
+        self._tx_flush_scheduled = False
+        if self._tx_dragging and self._tx_pending_pt is not None:
+            self._apply_tx_drag(self._tx_pending_pt)
+            self._tx_pending_pt = None
 
     def _apply_tx_drag(self, pt: "QPointF", final: bool = False) -> None:
         """Apply the cumulative transform from drag-start to *pt* (widget coords).
