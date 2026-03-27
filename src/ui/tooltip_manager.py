@@ -823,6 +823,9 @@ _NORMAL: dict[str, list[str]] = {
         "Some styles look better at faster speeds. Experiment until one looks right.",
         "Congratulations on finding the Trail Style dropdown. There are a surprising number of options.",
         "You can override this with Use Theme Trail if you want fully automatic styling.",
+        "Fire 🔥 trail: glowing embers drift upward — hot yellow fading to deep red. Pairs great with Gore or Volcano themes.",
+        "Lightning ⚡ trail: brief bright bolt flashes that crackle along the path and vanish almost instantly.",
+        "Noodle 🍜 style: a physics-simulated dangling chain that wobbles and swings as you move the mouse.",
     ],
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
@@ -980,6 +983,8 @@ _NORMAL: dict[str, list[str]] = {
         "Try each option. The banner updates live. Very easy to experiment.",
         "Congratulations on finding the banner animation style dropdown. Many options exist.",
         "Flock is the fancy one with floating particles around the header. Very extra.",
+        "Orbit mode: the banner emoji circles around its centre point like a satellite. Great for space/alien themes.",
+        "Glitch mode: the emoji stutters and jitters in random positions each frame. Perfect for gore, cyber, or alien vibes.",
     ],
     "banner_use_theme_anim_check": [
         "When enabled, the banner animation style is chosen automatically by the active theme.",
@@ -2911,6 +2916,9 @@ _DUMBED: dict[str, list[str]] = {
         "Some styles look better at faster speeds. Experiment until one looks right.",
         "Congratulations on finding the Trail Style dropdown. There are a surprising number of options.",
         "You can override this with Use Theme Trail if you want fully automatic styling.",
+        "Fire trail: warm embers drift upward — yellow at the mouse, red further back. Looks great on Gore.",
+        "Lightning trail: flash-bang bolt segments appear and disappear super fast. Very electric.",
+        "Noodle style: physics chain dangling behind cursor. It wobbles. It's great.",
     ],
     "use_theme_trail": [
         "Check this and the trail changes color automatically for each theme. Smart.",
@@ -3031,6 +3039,8 @@ _DUMBED: dict[str, list[str]] = {
         "Try each option. The banner updates live. Very easy to experiment.",
         "Congratulations on finding the banner animation style dropdown. Many options exist.",
         "Flock is the fancy one with floating particles around the header. Very extra.",
+        "Orbit mode: the banner emoji circles around its centre point like a satellite. Great for space/alien themes.",
+        "Glitch mode: the emoji stutters and jitters in random positions each frame. Perfect for gore, cyber, or alien vibes.",
     ],
     "banner_use_theme_anim_check": [
         "Tick this and the banner animation style is picked automatically by the active theme.",
@@ -4410,6 +4420,9 @@ _VULGAR: dict[str, list[str]] = {
         "Wave trail: ocean-themed emoji floating behind your cursor. 🫧💧🌊🐠 Perfection.",
         "Sparkle trail: ✦❄✧💎 trailing behind you. Ice cave theme + sparkle = aesthetic af.",
         "Fairy trail: ✨💫⭐ following your cursor. Fairy Garden theme + fairy trail = magical bullshit.",
+        "Fire trail 🔥: your cursor becomes a goddamn flamethrower. Embers drift upward, yellow to red. Use with Gore or Volcano.",
+        "Lightning trail ⚡: crackling bolt flashes appear and vanish instantly. It's over-the-top. It's perfect.",
+        "Noodle trail 🍜: physics noodle drags behind cursor. It jiggles. This is the one.",
     ],
     "use_theme_trail": [
         "Check this and your trail auto-matches the theme. Fairy Garden gets fairy fucking dust. ✨",
@@ -4530,6 +4543,8 @@ _VULGAR: dict[str, list[str]] = {
         "Each theme has a default that suits its vibe. Override it here if you disagree with the theme's taste.",
         "None of these options are wrong. Some are more chaotic than others. Choose accordingly.",
         "Pendulum is the most unhinged option. If you pick Pendulum you are a specific kind of person. Embrace it.",
+        "Orbit: the emoji circles its own centre point like a moon. Best for space, alien, or mermaid themes. Highly stylish.",
+        "Glitch: the banner emoji stutters and jumps all over the place. Looks like a corrupted file. Perfect for gore or alien vibes.",
     ],
     "banner_use_theme_anim_check": [
         "Lets the active theme pick the banner animation automatically. Delegation in action.",

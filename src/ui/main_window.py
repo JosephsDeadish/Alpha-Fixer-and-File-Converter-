@@ -3,6 +3,7 @@ Main application window.
 """
 import collections
 import math
+import random
 import sys
 import webbrowser
 
@@ -236,6 +237,60 @@ def _make_spin_cursor_frames(emoji: str, size: int = 48) -> list[QCursor]:
         return []
 
 
+# Emoji that look good when they physically wobble (rock ±20° back and forth).
+# Most non-round themed glyphs belong here rather than in _CURSOR_SPIN_EMOJI.
+_CURSOR_WOBBLE_EMOJI: frozenset = frozenset([
+    "🦈", "🐉", "🧙", "🧟", "🛸", "🧜", "🌹", "🌈", "🎃", "🦇",
+    "🌙", "🐼", "🦦", "🌋", "🏴‍☠️", "💰", "🔥", "⚡", "🌊", "🫧",
+    "🐱", "🌌", "🍜",
+])
+
+# Number of frames for the wobble animation (rocking ±_CURSOR_WOBBLE_MAX_ANGLE°)
+_CURSOR_WOBBLE_FRAMES = 16
+_CURSOR_WOBBLE_MAX_ANGLE = 20.0
+
+
+def _make_wobble_cursor_frames(emoji: str, size: int = 48) -> list[QCursor]:
+    """Pre-render *n* frames of *emoji* rocking ±``_CURSOR_WOBBLE_MAX_ANGLE``°.
+
+    The result is a list of ``_CURSOR_WOBBLE_FRAMES`` cursors that, when
+    cycled through, produce a pendulum-like physical wobble — a genuine
+    animation instead of emoji cycling.
+    """
+    try:
+        from PyQt6.QtWidgets import QApplication  # local import to avoid circular
+        screen = QApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen else 1.0
+        phys = max(1, int(size * dpr))
+        n = _CURSOR_WOBBLE_FRAMES
+        cursors: list[QCursor] = []
+        for i in range(n):
+            # Sinusoidal angle: 0 → +max → 0 → -max → 0 over n frames
+            phase = 2.0 * math.pi * i / n
+            angle = math.sin(phase) * _CURSOR_WOBBLE_MAX_ANGLE
+            pix = QPixmap(phys, phys)
+            pix.setDevicePixelRatio(dpr)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+            cx = size / 2.0
+            cy = size / 2.0
+            p.translate(cx, cy)
+            p.rotate(angle)
+            p.translate(-cx, -cy)
+            font = QFont()
+            font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])
+            font.setPixelSize(max(8, int(size * 0.65)))
+            p.setFont(font)
+            p.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, emoji)
+            p.end()
+            cursors.append(QCursor(pix, size // 2, size // 2))
+        return cursors
+    except Exception:
+        return []
+
+
 class _SpinningEmojiLabel(QWidget):
     """Renders a single emoji with one of several animation modes.
 
@@ -261,6 +316,8 @@ class _SpinningEmojiLabel(QWidget):
     _PULSE_STEP         = 0.10  # rad/tick ≈ full cycle / ~5 s
     _FLOAT_STEP         = 0.04  # rad/tick ≈ very slow drift
     _FLIP_STEP          = 0.18  # rad/tick for horizontal squeeze-flip
+    _ORBIT_STEP         = 0.08  # rad/tick ≈ full orbit / ~8 s
+    _GLITCH_STEP        = 0.45  # rad/tick ≈ glitch strobe speed
 
     _BOUNCE_AMPLITUDE   = 6     # pixels
     _SHAKE_AMPLITUDE    = 5     # pixels
@@ -268,8 +325,10 @@ class _SpinningEmojiLabel(QWidget):
     _PENDULUM_MAX_ANGLE = 30.0  # degrees
     _PULSE_MIN_SCALE    = 0.75
     _PULSE_MAX_SCALE    = 1.25
+    _ORBIT_RADIUS       = 7     # pixels orbital radius
 
-    _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "pulse", "float", "flip", "static"})
+    _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "pulse", "float", "flip",
+                               "orbit", "glitch", "static"})
 
     def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
         super().__init__(parent)
@@ -353,6 +412,9 @@ class _SpinningEmojiLabel(QWidget):
         elif self._mode == "pulse":
             extra = int(base * (self._PULSE_MAX_SCALE - 1.0)) + 2
             self.setFixedSize(base + extra * 2, base + extra * 2)
+        elif self._mode == "orbit":
+            pad = self._ORBIT_RADIUS + 2
+            self.setFixedSize(base + pad * 2, base + pad * 2)
         else:
             self.setFixedSize(base, base)
 
@@ -382,6 +444,22 @@ class _SpinningEmojiLabel(QWidget):
             self._phase = (self._phase + self._FLIP_STEP) % (2 * math.pi)
             # abs(cos) collapses to 0 then recovers – looks like a flip
             self._flip_sx = abs(math.cos(self._phase))
+        elif mode == "orbit":
+            # Emoji orbits in a small circle around the centre of the widget
+            self._phase = (self._phase + self._ORBIT_STEP) % (2 * math.pi)
+            self._offset_x = math.cos(self._phase) * self._ORBIT_RADIUS
+            self._offset_y = math.sin(self._phase) * self._ORBIT_RADIUS
+        elif mode == "glitch":
+            # Rapid stuttering: emoji randomly pops to an offset position each frame
+            self._phase = (self._phase + self._GLITCH_STEP) % (2 * math.pi)
+            # Jitter resets to zero periodically so it "snaps" back to centre
+            if int(self._phase * 4) % 3 == 0:
+                self._offset_x = 0.0
+                self._offset_y = 0.0
+            else:
+                amp = 4 + 3 * abs(math.sin(self._phase * 3))
+                self._offset_x = random.uniform(-amp, amp)
+                self._offset_y = random.uniform(-amp, amp)
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
@@ -828,8 +906,8 @@ class MainWindow(QMainWindow):
         # Cursor animation state
         self._cursor_anim_timer: "QTimer | None" = None
         self._cursor_anim_frames: list[str] = []  # current animation sequence (text cycling)
-        self._cursor_spin_cursors: list = []       # pre-rendered QCursor spin frames (physical rotation)
-        self._cursor_spin_emoji: str = ""          # which emoji is currently spinning
+        self._cursor_spin_cursors: list = []       # pre-rendered QCursor frames (spin or wobble)
+        self._cursor_spin_emoji: str = ""          # which emoji is currently spin/wobble-animated
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -1615,15 +1693,14 @@ class MainWindow(QMainWindow):
     def _start_cursor_anim(self, emoji: str) -> None:
         """Start cursor animation for *emoji*.
 
-        If the emoji is in ``_CURSOR_SPIN_EMOJI`` (round/symmetric glyphs that
-        look good spinning) the cursor is pre-rendered as *N* rotated QCursor
-        frames and cycled at ~80 ms/frame for a smooth physical rotation effect.
-
-        Otherwise the emoji is looked up in ``_CURSOR_ANIM_FRAMES`` for a slower
-        symbol-cycling animation (e.g. 🔥↔🕯️).  If neither lookup produces
-        frames the emoji is rendered as a static cursor.
+        Priority:
+        1. ``_CURSOR_SPIN_EMOJI`` — round/symmetric glyphs get a smooth 360° spin.
+        2. ``_CURSOR_WOBBLE_EMOJI`` — directional/elongated glyphs get a ±20° pendulum
+           wobble rendered as pre-composited QCursor frames (a true physical animation).
+        3. ``_CURSOR_ANIM_FRAMES`` — symbol-cycling fallback.
+        4. Static cursor if nothing else matches.
         """
-        # ── Physical spin animation for round/symmetric emoji ──────────────
+        # ── 1. Physical spin animation for round/symmetric emoji ──────────────
         if emoji in _CURSOR_SPIN_EMOJI:
             # Avoid re-generating frames if the same emoji is already spinning.
             if (self._cursor_spin_emoji == emoji
@@ -1645,9 +1722,31 @@ class MainWindow(QMainWindow):
                 self._cursor_anim_timer.setInterval(80)  # ~12 fps — smooth spin
                 self._cursor_anim_timer.start()
                 return
-            # Fall through to static rendering if frame generation failed.
+            # Fall through if frame generation failed.
 
-        # ── Symbol-cycling animation ────────────────────────────────────────
+        # ── 2. Physical wobble animation for directional/themed emoji ─────────
+        if emoji in _CURSOR_WOBBLE_EMOJI:
+            if (self._cursor_spin_emoji == emoji
+                    and self._cursor_spin_cursors
+                    and self._cursor_anim_timer is not None
+                    and self._cursor_anim_timer.isActive()):
+                return
+            wobble_cursors = _make_wobble_cursor_frames(emoji)
+            if wobble_cursors:
+                self._cursor_anim_frames = []
+                self._cursor_spin_cursors = wobble_cursors
+                self._cursor_spin_emoji = emoji
+                self._cursor_anim_idx = 0
+                self.setCursor(wobble_cursors[0])
+                if self._cursor_anim_timer is None:
+                    self._cursor_anim_timer = QTimer(self)
+                    self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
+                self._cursor_anim_timer.setInterval(60)  # ~16 fps — smooth wobble
+                self._cursor_anim_timer.start()
+                return
+            # Fall through if frame generation failed.
+
+        # ── 3. Symbol-cycling animation ────────────────────────────────────────
         self._cursor_spin_cursors = []
         self._cursor_spin_emoji = ""
         frames = _CURSOR_ANIM_FRAMES.get(emoji)

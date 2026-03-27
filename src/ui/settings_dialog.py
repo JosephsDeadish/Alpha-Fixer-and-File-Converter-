@@ -465,13 +465,16 @@ class SettingsDialog(QDialog):
         self._trail_style_combo = QComboBox()
         _TRAIL_STYLE_OPTIONS = [
             ("Dots (default)",    "Dots  – Small colored dots fade out behind the cursor."),
-            ("Ribbon / Noodle",   "Ribbon  – Smooth connected line trails the cursor like a ribbon or noodle."),
+            ("Ribbon / Noodle",   "Ribbon  – Smooth connected line trails the cursor like a ribbon."),
+            ("Noodle 🍜",         "Noodle  – Physics-simulated dangling chain that wobbles and swings as you move the mouse."),
             ("Comet tail",        "Comet tail  – Tapered bright streak that fades to nothing behind the cursor."),
             ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
             ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
             ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
             ("Rainbow 🌈",        "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
             ("Distortion Wave 〜", "Distortion Wave  – A wavy sinusoidal ribbon that writhes and ripples as you move the cursor."),
+            ("Fire 🔥",           "Fire  – Glowing embers drift upward behind the cursor, hot yellow to deep red."),
+            ("Lightning ⚡",      "Lightning  – Brief bright bolt-flashes crackle along the trail and vanish instantly."),
         ]
         for label, tip in _TRAIL_STYLE_OPTIONS:
             self._trail_style_combo.addItem(label)
@@ -479,9 +482,10 @@ class SettingsDialog(QDialog):
             self._trail_style_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._trail_style_combo.setToolTip(
             "Choose the visual style of the mouse trail.\n"
-            "Ribbon draws a connected smooth line, Comet draws a tapered tail,\n"
-            "Fairy/Wave/Sparkle use themed emoji that float and fade,\n"
-            "Distortion Wave draws a wavy sinusoidal ribbon that writhes as you move."
+            "Ribbon draws a connected smooth line, Noodle adds physics-based swing,\n"
+            "Comet draws a tapered tail, Fairy/Wave/Sparkle use themed emoji,\n"
+            "Distortion Wave writhes sinusoidally, Fire🔥 glows and drifts upward,\n"
+            "Lightning⚡ flashes bright bolt segments that vanish instantly."
         )
         trail_gl.addWidget(self._trail_style_combo, 2, 1)
         self._use_theme_trail_check = QCheckBox(
@@ -837,6 +841,8 @@ class SettingsDialog(QDialog):
             ("pulse",    "Pulse – rhythmic scale in/out"),
             ("float",    "Float – slow dreamy vertical drift"),
             ("flip",     "Flip – horizontal squeeze-and-flip"),
+            ("orbit",    "Orbit – emoji circles around the centre point"),
+            ("glitch",   "Glitch – jittery digital glitch stutter"),
             ("flock",    "Flock – emoji fly across the top of the window"),
         ]
         _BANNER_ANIM_TIPS = {
@@ -847,6 +853,10 @@ class SettingsDialog(QDialog):
             "pulse":    "The emoji slowly breathes in and out, pulsing between 75% and 125% size.",
             "float":    "The emoji drifts up and down lazily — perfect for calm or dreamy themes.",
             "flip":     "The emoji periodically squishes flat and pops back, like a coin flip.",
+            "orbit":    "The emoji circles around its centre point in a small orbit — great for\n"
+                        "themes like space, alien, or mermaid.",
+            "glitch":   "The emoji stutters and jumps to random nearby positions each frame —\n"
+                        "great for gore, alien, or cyber/glitch themes.",
             "flock":    "A small group of themed emoji periodically flies across the top of\n"
                         "the window (similar to the bat flock in Bat Cave theme).",
         }
@@ -1182,8 +1192,9 @@ class SettingsDialog(QDialog):
         self._trail_style_combo.setEnabled(not use_theme_trail)
         # Load persisted trail style into combo
         _TRAIL_STYLE_MAP = {
-            "dots": 0, "ribbon": 1, "comet": 2, "fairy": 3, "wave": 4, "sparkle": 5, "rainbow": 6,
-            "distortion": 7,
+            "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
+            "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
+            "distortion": 8, "fire": 9, "lightning": 10,
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
@@ -1223,7 +1234,8 @@ class SettingsDialog(QDialog):
         )
         # Load banner animation style combo
         _BANNER_ANIM_IDX_MAP = {
-            "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3, "flock": 4,
+            "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
+            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "flock": 9,
         }
         saved_banner_anim = self._settings.get("banner_anim_style", "spin")
         self._banner_anim_combo.setCurrentIndex(
@@ -1657,7 +1669,8 @@ class SettingsDialog(QDialog):
             self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
-        _IDX_TO_STYLE = ["dots", "ribbon", "comet", "fairy", "wave", "sparkle", "rainbow", "distortion"]
+        _IDX_TO_STYLE = ["dots", "ribbon", "noodle", "comet", "fairy", "wave",
+                         "sparkle", "rainbow", "distortion", "fire", "lightning"]
         idx = self._trail_style_combo.currentIndex()
         style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
         self._settings.set("trail_style", style)

@@ -37,7 +37,8 @@ _EMOJI_LISTS  = {
     "wave":    _WAVE_DUST,
     "sparkle": _SPARKLE_DUST,
 }
-_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow", "noodle", "distortion"}
+_ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow", "noodle", "distortion",
+               "fire", "lightning"}
 
 # ── Noodle physics constants ───────────────────────────────────────────────────────────────────────────
 _NOODLE_SEGMENTS   = 18     # number of chain links
@@ -203,9 +204,19 @@ class MouseTrailOverlay(QWidget):
                 self._last_trail_x = lx
                 self._last_trail_y = ly
                 # Store extra data for emoji styles: which emoji to show
-                emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
-                emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
-                self._trail.append([lx, ly, 1.0, emoji])
+                if self._style == "fire":
+                    # Fire particles drift upward; store per-particle x-velocity
+                    vx = random.uniform(-0.9, 0.9)
+                    self._trail.append([lx, ly, 1.0, "", vx])
+                elif self._style == "lightning":
+                    # Lightning: store random angle and half-length for the bolt line
+                    angle = random.uniform(0.0, 2.0 * math.pi)
+                    hl = random.uniform(9.0, 22.0)
+                    self._trail.append([lx, ly, 1.0, "", angle, hl])
+                else:
+                    emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
+                    emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
+                    self._trail.append([lx, ly, 1.0, emoji])
                 # Noodle: keep cursor position in sync
                 if self._style == "noodle":
                     self._noodle_cx = float(lx)
@@ -249,16 +260,33 @@ class MouseTrailOverlay(QWidget):
         # Emoji styles get slightly slower base fade for a lingering sparkle feel
         if self._style in _EMOJI_STYLES:
             base_decay *= 0.7
+        # Lightning: very fast fade so bolts flash briefly
+        if self._style == "lightning":
+            base_decay *= 4.0
         # Distortion wave: advance the sinusoidal phase each tick for animation
         if self._style == "distortion":
             self._distortion_phase += 0.18
         new_trail = deque(maxlen=self._trail.maxlen)
         for entry in self._trail:
             x, y, a = entry[0], entry[1], entry[2]
-            emoji = entry[3] if len(entry) > 3 else ""
-            a -= base_decay
-            if a > 0.0:
-                new_trail.append([x, y, a, emoji])
+            if self._style == "fire":
+                # Drift upward; older (lower alpha) particles have already moved more
+                x += entry[4] if len(entry) > 4 else 0.0
+                y -= 1.6
+                a -= base_decay
+                if a > 0.0:
+                    new_trail.append([x, y, a, "", entry[4] if len(entry) > 4 else 0.0])
+            elif self._style == "lightning":
+                a -= base_decay
+                if a > 0.0:
+                    new_trail.append([x, y, a, "",
+                                      entry[4] if len(entry) > 4 else 0.0,
+                                      entry[5] if len(entry) > 5 else 15.0])
+            else:
+                emoji = entry[3] if len(entry) > 3 else ""
+                a -= base_decay
+                if a > 0.0:
+                    new_trail.append([x, y, a, emoji])
         self._trail = new_trail
         if not self._trail:
             # Last particles just faded out — stop the timer until new points
@@ -300,6 +328,10 @@ class MouseTrailOverlay(QWidget):
             self._paint_rainbow(painter)
         elif self._style == "distortion":
             self._paint_distortion(painter)
+        elif self._style == "fire":
+            self._paint_fire(painter)
+        elif self._style == "lightning":
+            self._paint_lightning(painter)
         else:
             self._paint_dots(painter)
 
@@ -438,6 +470,52 @@ class MouseTrailOverlay(QWidget):
                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
             painter.drawLine(int(px1), int(py1), int(px2), int(py2))
+        painter.setPen(Qt.PenStyle.NoPen)
+
+    def _paint_fire(self, painter: QPainter) -> None:
+        """Fire trail – warm-colored discs that drift upward and fade.
+
+        Young (high alpha) particles are bright yellow; older ones are orange
+        then deep red, simulating cooling embers rising from a flame.
+        """
+        max_alpha = int(210 * self._intensity / 100)
+        for entry in self._trail:
+            x, y, alpha_frac = int(entry[0]), int(entry[1]), entry[2]
+            alpha = max(0, min(255, int(alpha_frac * max_alpha)))
+            # Hue: 60° (yellow) at peak → 15° (orange-red) as it fades
+            hue = int(60 * alpha_frac + 10 * (1.0 - alpha_frac))
+            sat = 255
+            val = max(160, int(255 * alpha_frac))
+            c = QColor.fromHsv(hue, sat, val, alpha)
+            radius = max(2, int(alpha_frac * 8 + 2))
+            painter.setBrush(QBrush(c))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
+        painter.setPen(Qt.PenStyle.NoPen)
+
+    def _paint_lightning(self, painter: QPainter) -> None:
+        """Lightning trail – brief bright bolt segments that flash and vanish.
+
+        Each particle is a short bright line at a stored random angle.  The
+        bolts are white-to-cyan and fade out very rapidly (high decay in tick).
+        """
+        max_alpha = int(255 * self._intensity / 100)
+        for entry in self._trail:
+            x, y, alpha_frac = entry[0], entry[1], entry[2]
+            angle = entry[4] if len(entry) > 4 else 0.0
+            hl    = entry[5] if len(entry) > 5 else 15.0
+            alpha = max(0, min(255, int(alpha_frac * max_alpha)))
+            # Colour: bright white-cyan at peak, cooler blue as it fades
+            hue = int(195 + 30 * (1.0 - alpha_frac))   # 195–225 (cyan → blue)
+            c = QColor.fromHsv(hue, max(0, int(220 * (1.0 - alpha_frac))),
+                                255, alpha)
+            width = max(1.0, alpha_frac * 3.0)
+            pen = QPen(c, width, Qt.PenStyle.SolidLine,
+                       Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            dx = math.cos(angle) * hl
+            dy = math.sin(angle) * hl
+            painter.drawLine(int(x - dx), int(y - dy), int(x + dx), int(y + dy))
         painter.setPen(Qt.PenStyle.NoPen)
 
     def _paint_fairy(self, painter: QPainter) -> None:
