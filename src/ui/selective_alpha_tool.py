@@ -2086,7 +2086,7 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        for i in range(_AZ_SLOT_COUNT):
+        for i in range(len(self._az_slots)):
             self._az_slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
         self._az_slot_combo.currentIndexChanged.connect(self._on_az_slot_selected)
         az_sel_row.addWidget(self._az_slot_combo)
