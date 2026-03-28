@@ -565,8 +565,8 @@ class MouseTrailOverlay(QWidget):
             stretch = dist - _NOODLE_SEG_LEN
             force_x = (dx / dist) * stretch * _NOODLE_SPRING_K
             force_y = (dy / dist) * stretch * _NOODLE_SPRING_K
-            vx = (vx + force_x + _NOODLE_GRAVITY) * _NOODLE_DAMPING
-            vy = (vy + force_y) * _NOODLE_DAMPING
+            vx = (vx + force_x) * _NOODLE_DAMPING
+            vy = (vy + force_y + _NOODLE_GRAVITY) * _NOODLE_DAMPING
             # Cap velocity
             speed = math.hypot(vx, vy)
             if speed > _NOODLE_MAX_VEL:

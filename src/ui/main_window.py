@@ -88,37 +88,11 @@ _CURSOR_MAP = {
 # Themes that map to one of these emoji automatically get an animated cursor
 # when "Animate cursor" is enabled in settings.
 _CURSOR_ANIM_FRAMES: dict[str, list[str]] = {
-    "🦈": ["🦈", "🫦", "🦈"],           # shark jaw-snap
-    "🔥": ["🔥", "🕯️", "🔥"],           # fire flicker
-    "❄":  ["❄", "🌨️"],                  # snowflake / snowing
-    "✨": ["✨", "⭐", "🌟", "⭐"],       # sparkling
-    "⚡": ["⚡", "🌩️"],                  # lightning strike
-    "🌊": ["🌊", "💧", "🌊"],            # wave ripple
-    "🪄": ["🪄", "✨", "🪄"],            # magic wand sparkle
-    "🐉": ["🐉", "🔥", "🐉"],            # dragon fire
-    "🧙": ["🧙", "🔮", "🧙"],            # witch crystal ball
-    "🌸": ["🌸", "🌺", "🌸"],            # blossom / rose
-    "🫧": ["🫧", "💧", "🫧"],            # bubbles
-    "🧟": ["🧟", "💀", "🧟"],            # zombie skull
-    "🌌": ["🌌", "⭐", "🌟", "⭐"],      # nebula stars
-    "🐱": ["🐱", "😺", "🐱"],            # cat face smile
-    "🛸": ["🛸", "👽", "🛸"],            # UFO alien
-    "🧜": ["🧜", "🌊", "🧜"],            # mermaid wave
-    "🌹": ["🌹", "🥀", "🌹"],            # rose / wilted
-    "🍄": ["🍄", "✨", "🍄"],            # mushroom sparkle
-    "🔮": ["🔮", "✨", "🔮"],            # crystal ball
-    "🌈": ["🌈", "⛅", "🌈"],            # rainbow cloud
-    "💎": ["💎", "✨", "💎"],            # diamond sparkle
-    "🌟": ["🌟", "⭐", "✨", "⭐"],      # star shimmer
-    "🎃": ["🎃", "👻", "🎃"],            # pumpkin ghost
-    "🦇": ["🦇", "🌙", "🦇"],            # bat moon
-    "🌙": ["🌙", "⭐", "🌙"],            # moon star
-    "🐼": ["🐼", "🎋", "🐼"],            # panda bamboo
-    "🦦": ["🦦", "💦", "🦦"],            # otter splash
-    "🌋": ["🌋", "🔥", "🌋"],            # volcano fire
-    "🏴‍☠️": ["🏴‍☠️", "⚔️", "🏴‍☠️"],       # pirate sword
-    "💰": ["💰", "✨", "💰"],            # gold sparkle
-    "🪸": ["🪸", "🐠", "🪸"],            # coral fish
+    # All previously listed entries are now shadowed by _CURSOR_SPIN_EMOJI
+    # (checked first) or _CURSOR_WOBBLE_EMOJI (checked second) in
+    # _start_cursor_anim, so the cycling fallback is never reached for any
+    # of the themed emoji.  The dict is kept as the extension point for
+    # future emoji that belong in neither the spin nor the wobble set.
 }
 
 
@@ -414,6 +388,9 @@ class _SpinningEmojiLabel(QWidget):
             self.setFixedSize(base + extra * 2, base + extra * 2)
         elif self._mode == "orbit":
             pad = self._ORBIT_RADIUS + 2
+            self.setFixedSize(base + pad * 2, base + pad * 2)
+        elif self._mode == "glitch":
+            pad = 9  # max jitter (7 px) + 2 px safety margin
             self.setFixedSize(base + pad * 2, base + pad * 2)
         else:
             self.setFixedSize(base, base)

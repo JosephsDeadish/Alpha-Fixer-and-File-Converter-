@@ -2358,10 +2358,12 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_paste_all_zones, "sa_paste_all_zones")
         mgr.register(self._az_slot_combo,       "sa_az_slot_combo")
         mgr.register(self._btn_az_slot_add,     "sa_az_slot_add")
+        mgr.register(self._btn_az_slot_clear,   "sa_az_slot_clear")
         mgr.register(self._slot_combo,          "sa_slot_combo")
         mgr.register(self._btn_slot_save,       "sa_slot_save")
         mgr.register(self._btn_slot_paste,      "sa_slot_paste")
         mgr.register(self._btn_slot_add,        "sa_slot_add")
+        mgr.register(self._btn_slot_clear,      "sa_slot_clear")
         mgr.register(self._canvas,              "sa_canvas")
         mgr.register(self._status_lbl,       "sa_status_lbl")
 
