@@ -461,6 +461,7 @@ class AlphaFixerTab(QWidget):
         gt_layout.addWidget(lbl_cmin, 1, 0)
         self._clamp_min_spin = QSpinBox()
         self._clamp_min_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self._clamp_min_spin.setRange(0, 255)
         self._clamp_min_spin.setValue(0)
         self._clamp_min_spin.setMinimumHeight(26)
         self._clamp_min_spin.setToolTip(
@@ -495,6 +496,11 @@ class AlphaFixerTab(QWidget):
 
         # ── Simple checkboxes ───────────────────────────────────────────────────
         self._invert_check = QCheckBox("Invert alpha (swap transparent ↔ opaque)")
+        self._invert_check.setToolTip(
+            "Flip every alpha value: 0 becomes 255 and 255 becomes 0.\n"
+            "Use this when a texture's transparency is inside-out —\n"
+            "e.g. the opaque area should be transparent and vice versa."
+        )
         gt_layout.addWidget(self._invert_check, 3, 0, 1, 2)
 
         self._binary_cut_check = QCheckBox("Binary cut (\u2265 threshold \u2192 255, else \u2192 0)")
