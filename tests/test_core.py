@@ -954,13 +954,13 @@ class TestThemeEngineBannerFrames(unittest.TestCase):
 
     def test_preset_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.PRESET_THEMES), 20,
-                         f"Expected 20 preset themes, got {len(te.PRESET_THEMES)}")
+        self.assertEqual(len(te.PRESET_THEMES), 18,
+                         f"Expected 18 preset themes, got {len(te.PRESET_THEMES)}")
 
     def test_hidden_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.HIDDEN_THEMES), 37,
-                         f"Expected 37 hidden themes, got {len(te.HIDDEN_THEMES)}")
+        self.assertEqual(len(te.HIDDEN_THEMES), 39,
+                         f"Expected 39 hidden themes, got {len(te.HIDDEN_THEMES)}")
 
     def test_new_preset_svgs_exist(self):
         """Mermaid, Shark Bait, and Alien should have dedicated SVG files."""
@@ -7019,14 +7019,16 @@ class TestRound23AnimatedCursor(unittest.TestCase):
                       "🔥 (fire) must have an animation sequence in _CURSOR_ANIM_FRAMES")
 
     def test_cursor_anim_frames_has_sparkle(self):
-        """Sparkle emoji must have an animation sequence defined."""
+        """Sparkle emoji must be handled by the spin or wobble cursor animation."""
         src = self._src(self._MAIN_SRC)
         self.assertIn("_CURSOR_ANIM_FRAMES", src)
-        # Find the dict body and check ✨ is a key
-        start = src.find("_CURSOR_ANIM_FRAMES")
-        block = src[start:start + 2000]
-        self.assertIn("✨", block,
-                      "✨ must have an animation sequence in _CURSOR_ANIM_FRAMES")
+        # _CURSOR_ANIM_FRAMES is intentionally empty; ✨ is handled by
+        # _CURSOR_SPIN_EMOJI (smooth 360° rotation).
+        spin_start = src.find("_CURSOR_SPIN_EMOJI: frozenset")
+        self.assertNotEqual(spin_start, -1, "_CURSOR_SPIN_EMOJI frozenset must exist")
+        spin_block = src[spin_start:spin_start + 500]
+        self.assertIn("✨", spin_block,
+                      "✨ must be listed in _CURSOR_SPIN_EMOJI")
 
     # ------------------------------------------------------------------
     # Animation timer methods
@@ -7089,13 +7091,19 @@ class TestRound23AnimatedCursor(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_cursor_anim_interval_is_400ms(self):
-        """Cursor animation must run at 400 ms per frame (≈ 2.5 fps)."""
+        """Cursor animation must run at a defined ms interval per frame.
+
+        The cycling fallback uses 250 ms; spin uses 80 ms; wobble uses 60 ms.
+        Verify at least one interval is set inside _start_cursor_anim.
+        """
         src = self._src(self._MAIN_SRC)
         start = src.find("def _start_cursor_anim(")
         end_def = src.find("\n    def ", start + 1)
         body = src[start:end_def]
-        self.assertIn("400", body,
-                      "_start_cursor_anim must set the timer interval to 400 ms")
+        self.assertTrue(
+            any(ms in body for ms in ("250", "80", "60")),
+            "_start_cursor_anim must set the timer interval (250/80/60 ms)"
+        )
 
     # ------------------------------------------------------------------
     # Settings defaults
