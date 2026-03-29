@@ -1,7 +1,7 @@
 """
 Selective Alpha editor tab.
 
-Lets the user paint up to 7 coloured mask zones on top of a single image
+Lets the user paint up to 40 coloured mask zones on top of a single image
 and assign a distinct alpha value to each zone.  On "Apply" the alpha
 channel of every painted pixel is replaced with its zone's alpha value.
 
@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
-    QAbstractSpinBox,
+    QAbstractSpinBox, QInputDialog,
 )
 
 from ..core.selective_alpha_processor import (
@@ -1488,8 +1488,8 @@ def _draw_checker(painter: QPainter, w: int, h: int, sq: int = 10) -> None:
 
 
 class _ZoneRow(QWidget):
-    """A three-row widget showing zone colour swatch, name, alpha spinbox,
-    visibility toggle, Paint/Clear buttons, and Copy/Paste mask buttons."""
+    """A two-row widget showing zone colour swatch, name, alpha spinbox,
+    visibility toggle, Clear button, and Copy/Paste mask buttons."""
 
     selected          = pyqtSignal(int)        # zone_idx  (or -(idx+1) for clear)
     color_changed     = pyqtSignal(int, object) # zone_idx, (r,g,b) tuple
@@ -1558,19 +1558,10 @@ class _ZoneRow(QWidget):
         top.addWidget(self._alpha_spin)
         outer.addLayout(top)
 
-        # ── Row 2: Paint + Clear buttons ─────────────────────────────────
+        # ── Row 2: Clear button ───────────────────────────────────────────
         bot = QHBoxLayout()
         bot.setContentsMargins(0, 0, 0, 0)
         bot.setSpacing(4)
-
-        self._sel_btn = QPushButton("🖌  Paint")
-        self._sel_btn.setCheckable(True)
-        self._sel_btn.setMinimumHeight(26)
-        self._sel_btn.setToolTip(f"Activate {color_name} for painting")
-        self._sel_btn.clicked.connect(lambda: self.selected.emit(self._idx))
-        bot.addWidget(self._sel_btn)
-
-        self._clear_btn = QPushButton("✕  Clear")
         self._clear_btn.setMinimumHeight(26)
         self._clear_btn.setToolTip(f"Erase all painted pixels in {color_name}")
         self._clear_btn.clicked.connect(self._on_clear)
@@ -1645,7 +1636,6 @@ class _ZoneRow(QWidget):
         self._alpha_spin.blockSignals(False)
 
     def set_selected(self, selected: bool) -> None:
-        self._sel_btn.setChecked(selected)
         self.setProperty("active", str(selected).lower())
         self.style().unpolish(self)
         self.style().polish(self)
@@ -1667,7 +1657,6 @@ class _ZoneRow(QWidget):
     def register_tooltips(self, mgr) -> None:
         """Register zone-row widgets with the TooltipManager for cycling tips."""
         mgr.register(self._alpha_spin,  "sa_zone_alpha_spin")
-        mgr.register(self._sel_btn,     "sa_zone_select")
         mgr.register(self._clear_btn,   "sa_zone_clear")
         mgr.register(self._vis_btn,     "sa_zone_visibility")
         mgr.register(self._copy_btn,    "sa_zone_copy_mask")
@@ -1702,9 +1691,10 @@ class SelectiveAlphaTool(QWidget):
         self._mask_clipboard: Optional[np.ndarray] = None
         # All-zones clipboard: multi-slot store that survives image changes.
         # Each slot holds a snapshot of every zone mask.
-        _AZ_SLOT_COUNT = 3
+        _AZ_SLOT_COUNT = 9
         self._az_slots: list["list | None"] = [None] * _AZ_SLOT_COUNT
         self._az_slot_info: list[str] = ["(empty)"] * _AZ_SLOT_COUNT
+        self._az_slot_names: list[str] = [""] * _AZ_SLOT_COUNT
         self._setup_ui()
         self._restore_settings()
 
@@ -1958,6 +1948,33 @@ class SelectiveAlphaTool(QWidget):
         sep0.setFixedHeight(1)
         zv.addWidget(sep0)
 
+        # Active zone selector dropdown (replaces per-row Paint buttons)
+        az_sel_row = QHBoxLayout()
+        az_sel_row.setContentsMargins(0, 2, 0, 2)
+        az_sel_row.setSpacing(4)
+        az_sel_row.addWidget(QLabel("Active:"))
+        self._active_zone_combo = QComboBox()
+        self._active_zone_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        for i in range(NUM_ZONES):
+            self._active_zone_combo.addItem(ZONE_NAMES[i])
+        self._active_zone_combo.setToolTip(
+            "Select the zone to paint into.  The chosen zone becomes the\n"
+            "active paint target for all drawing tools."
+        )
+        self._active_zone_combo.currentIndexChanged.connect(
+            lambda idx: self._on_zone_action(idx)
+        )
+        az_sel_row.addWidget(self._active_zone_combo)
+        zv.addLayout(az_sel_row)
+
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.Shape.HLine)
+        sep1.setFrameShadow(QFrame.Shadow.Sunken)
+        sep1.setFixedHeight(1)
+        zv.addWidget(sep1)
+
         self._zone_rows: list[_ZoneRow] = []
         for i in range(NUM_ZONES):
             row = _ZoneRow(i)
@@ -1984,9 +2001,10 @@ class SelectiveAlphaTool(QWidget):
         # Compact dropdown-based slot chooser.  Slots survive image changes so
         # the user can copy zones from one image and paste onto another.
         # The user can grow the list with "＋ Add Slot".
-        _MASK_SLOT_COUNT = 5
+        _MASK_SLOT_COUNT = 15
         self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_COUNT
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_COUNT
+        self._mask_slot_names: list[str] = [""] * _MASK_SLOT_COUNT
 
         slots_box = QGroupBox("Saved Masks")
         sv = QVBoxLayout(slots_box)
@@ -2030,7 +2048,7 @@ class SelectiveAlphaTool(QWidget):
         self._slot_info_lbl.setWordWrap(True)
         sv.addWidget(self._slot_info_lbl)
 
-        # Save / Paste / Clear row
+        # Save / Paste / Clear / Rename row
         act_row = QHBoxLayout()
         act_row.setSpacing(4)
         self._btn_slot_save = QPushButton("💾  Save")
@@ -2062,6 +2080,17 @@ class SelectiveAlphaTool(QWidget):
         act_row.addWidget(self._btn_slot_clear)
         sv.addLayout(act_row)
 
+        rename_row = QHBoxLayout()
+        rename_row.setSpacing(4)
+        self._btn_slot_rename = QPushButton("✏  Rename")
+        self._btn_slot_rename.setMinimumHeight(26)
+        self._btn_slot_rename.setToolTip(
+            "Give the selected slot a custom name so you can identify it easily."
+        )
+        self._btn_slot_rename.clicked.connect(self._on_slot_rename)
+        rename_row.addWidget(self._btn_slot_rename)
+        sv.addLayout(rename_row)
+
         lv.addWidget(slots_box)
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
@@ -2079,9 +2108,9 @@ class SelectiveAlphaTool(QWidget):
         azv.addWidget(az_note)
 
         # Slot selector row
-        az_sel_row = QHBoxLayout()
-        az_sel_row.setSpacing(4)
-        az_sel_row.addWidget(QLabel("Slot:"))
+        az_sel_row2 = QHBoxLayout()
+        az_sel_row2.setSpacing(4)
+        az_sel_row2.addWidget(QLabel("Slot:"))
         self._az_slot_combo = QComboBox()
         self._az_slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
@@ -2089,7 +2118,7 @@ class SelectiveAlphaTool(QWidget):
         for i in range(len(self._az_slots)):
             self._az_slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
         self._az_slot_combo.currentIndexChanged.connect(self._on_az_slot_selected)
-        az_sel_row.addWidget(self._az_slot_combo)
+        az_sel_row2.addWidget(self._az_slot_combo)
 
         self._btn_az_slot_add = QPushButton("＋")
         self._btn_az_slot_add.setFixedSize(26, 26)
@@ -2097,8 +2126,8 @@ class SelectiveAlphaTool(QWidget):
             "Add a new empty all-zones slot to the list."
         )
         self._btn_az_slot_add.clicked.connect(self._on_az_slot_add)
-        az_sel_row.addWidget(self._btn_az_slot_add)
-        azv.addLayout(az_sel_row)
+        az_sel_row2.addWidget(self._btn_az_slot_add)
+        azv.addLayout(az_sel_row2)
 
         self._az_slot_info_lbl = QLabel("(empty)")
         self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
@@ -2134,6 +2163,17 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_clear.clicked.connect(self._on_az_slot_clear)
         az_act_row.addWidget(self._btn_az_slot_clear)
         azv.addLayout(az_act_row)
+
+        az_rename_row = QHBoxLayout()
+        az_rename_row.setSpacing(4)
+        self._btn_az_slot_rename = QPushButton("✏  Rename")
+        self._btn_az_slot_rename.setMinimumHeight(26)
+        self._btn_az_slot_rename.setToolTip(
+            "Give the selected all-zones slot a custom name."
+        )
+        self._btn_az_slot_rename.clicked.connect(self._on_az_slot_rename)
+        az_rename_row.addWidget(self._btn_az_slot_rename)
+        azv.addLayout(az_rename_row)
 
         lv.addWidget(all_zones_box)
 
@@ -2359,11 +2399,14 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._az_slot_combo,       "sa_az_slot_combo")
         mgr.register(self._btn_az_slot_add,     "sa_az_slot_add")
         mgr.register(self._btn_az_slot_clear,   "sa_az_slot_clear")
+        mgr.register(self._btn_az_slot_rename,  "sa_az_slot_rename")
         mgr.register(self._slot_combo,          "sa_slot_combo")
         mgr.register(self._btn_slot_save,       "sa_slot_save")
         mgr.register(self._btn_slot_paste,      "sa_slot_paste")
         mgr.register(self._btn_slot_add,        "sa_slot_add")
         mgr.register(self._btn_slot_clear,      "sa_slot_clear")
+        mgr.register(self._btn_slot_rename,     "sa_slot_rename")
+        mgr.register(self._active_zone_combo,   "sa_active_zone_combo")
         mgr.register(self._canvas,              "sa_canvas")
         mgr.register(self._status_lbl,       "sa_status_lbl")
 
@@ -2521,11 +2564,13 @@ class SelectiveAlphaTool(QWidget):
 
     def _update_slot_combo_item(self, idx: int) -> None:
         """Refresh the combo text for a single slot index."""
+        custom = self._mask_slot_names[idx] if idx < len(self._mask_slot_names) else ""
+        prefix = custom if custom else f"Slot {idx + 1}"
         info = self._mask_slot_info[idx]
         if self._mask_slots[idx] is None:
-            label = f"Slot {idx + 1}  —  (empty)"
+            label = f"{prefix}  —  (empty)"
         else:
-            label = f"Slot {idx + 1}  —  {info}"
+            label = f"{prefix}  —  {info}"
         self._slot_combo.setItemText(idx, label)
 
     def _on_slot_selected(self, idx: int) -> None:
@@ -2564,8 +2609,25 @@ class SelectiveAlphaTool(QWidget):
         idx = len(self._mask_slots)
         self._mask_slots.append(None)
         self._mask_slot_info.append("(empty)")
+        self._mask_slot_names.append("")
         self._slot_combo.addItem(f"Slot {idx + 1}  —  (empty)")
         self._slot_combo.setCurrentIndex(idx)
+
+    def _on_slot_rename(self) -> None:
+        """Rename the currently selected saved-mask slot."""
+        idx = self._slot_combo.currentIndex()
+        if idx < 0 or idx >= len(self._mask_slots):
+            return
+        current_name = self._mask_slot_names[idx] if self._mask_slot_names[idx] else f"Slot {idx + 1}"
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Slot", "Enter a new name for this slot:", text=current_name
+        )
+        if not ok:
+            return
+        new_name = new_name.strip()
+        self._mask_slot_names[idx] = new_name
+        self._update_slot_combo_item(idx)
+        self._on_slot_selected(idx)
 
     def _on_copy_all_zones(self) -> None:
         """Copy all painted zone masks into the currently selected all-zones slot."""
@@ -2597,10 +2659,12 @@ class SelectiveAlphaTool(QWidget):
 
     def _update_az_slot_combo_item(self, idx: int) -> None:
         """Refresh the combo text for a single all-zones slot index."""
+        custom = self._az_slot_names[idx] if idx < len(self._az_slot_names) else ""
+        prefix = custom if custom else f"Slot {idx + 1}"
         if self._az_slots[idx] is None:
-            label = f"Slot {idx + 1}  —  (empty)"
+            label = f"{prefix}  —  (empty)"
         else:
-            label = f"Slot {idx + 1}  —  {self._az_slot_info[idx]}"
+            label = f"{prefix}  —  {self._az_slot_info[idx]}"
         self._az_slot_combo.setItemText(idx, label)
 
     def _on_az_slot_selected(self, idx: int) -> None:
@@ -2631,8 +2695,25 @@ class SelectiveAlphaTool(QWidget):
         idx = len(self._az_slots)
         self._az_slots.append(None)
         self._az_slot_info.append("(empty)")
+        self._az_slot_names.append("")
         self._az_slot_combo.addItem(f"Slot {idx + 1}  —  (empty)")
         self._az_slot_combo.setCurrentIndex(idx)
+
+    def _on_az_slot_rename(self) -> None:
+        """Rename the currently selected all-zones slot."""
+        idx = self._az_slot_combo.currentIndex()
+        if idx < 0 or idx >= len(self._az_slots):
+            return
+        current_name = self._az_slot_names[idx] if self._az_slot_names[idx] else f"Slot {idx + 1}"
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Slot", "Enter a new name for this slot:", text=current_name
+        )
+        if not ok:
+            return
+        new_name = new_name.strip()
+        self._az_slot_names[idx] = new_name
+        self._update_az_slot_combo_item(idx)
+        self._on_az_slot_selected(idx)
 
     # ------------------------------------------------------------------
     # Cross-tool zone sharing: receive zones from the Alpha & RGBA tool
@@ -2955,6 +3036,11 @@ class SelectiveAlphaTool(QWidget):
             self._canvas.set_active_zone(val)
             for i, row in enumerate(self._zone_rows):
                 row.set_selected(i == val)
+            # Keep the dropdown in sync when activated by other means
+            if self._active_zone_combo.currentIndex() != val:
+                self._active_zone_combo.blockSignals(True)
+                self._active_zone_combo.setCurrentIndex(val)
+                self._active_zone_combo.blockSignals(False)
             self._update_status()
         else:
             zone_idx = -(val + 1)

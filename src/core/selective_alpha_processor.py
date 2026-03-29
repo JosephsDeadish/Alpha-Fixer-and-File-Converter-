@@ -20,9 +20,9 @@ from PIL import Image
 # Constants
 # ---------------------------------------------------------------------------
 
-NUM_ZONES = 20
+NUM_ZONES = 40
 
-# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 20 zones.
+# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 40 zones.
 # overlay-alpha = 130 ≈ 51 % opacity so the source image stays visible.
 # The palette cycles through a range of well-separated hues so that even images
 # with many distinct alpha levels get clearly distinguishable highlight colours.
@@ -47,6 +47,26 @@ ZONE_COLORS: list[tuple[int, int, int, int]] = [
     ( 80, 255, 160, 130),   # zone 17 – Sea Green
     (255,  80, 160, 130),   # zone 18 – Rose
     (160, 200, 255, 130),   # zone 19 – Periwinkle
+    (220,  80,  80, 130),   # zone 20 – Crimson
+    ( 80, 220, 120, 130),   # zone 21 – Jade
+    (100, 100, 240, 130),   # zone 22 – Indigo
+    (240, 200,  80, 130),   # zone 23 – Gold
+    (180, 100, 220, 130),   # zone 24 – Lavender
+    ( 80, 200, 200, 130),   # zone 25 – Teal
+    (230, 120,  60, 130),   # zone 26 – Tangerine
+    (220, 140, 180, 130),   # zone 27 – Blush
+    (140, 230, 200, 130),   # zone 28 – Seafoam
+    (160, 100,  60, 130),   # zone 29 – Copper
+    (200, 220,  60, 130),   # zone 30 – Chartreuse
+    ( 60, 220, 240, 130),   # zone 31 – Aqua
+    (240,  60, 220, 130),   # zone 32 – Fuchsia
+    (120, 220,  60, 130),   # zone 33 – Grass
+    ( 60, 140, 220, 130),   # zone 34 – Denim
+    (220, 140,  60, 130),   # zone 35 – Amber
+    (140,  60, 220, 130),   # zone 36 – Plum
+    ( 60, 220, 140, 130),   # zone 37 – Emerald
+    (220,  60, 140, 130),   # zone 38 – Berry
+    (140, 180, 220, 130),   # zone 39 – Steel Blue
 ]
 
 # Human-readable zone names shown in the UI.
@@ -71,6 +91,26 @@ ZONE_NAMES: list[str] = [
     "Zone 18 – Sea Green",
     "Zone 19 – Rose",
     "Zone 20 – Periwinkle",
+    "Zone 21 – Crimson",
+    "Zone 22 – Jade",
+    "Zone 23 – Indigo",
+    "Zone 24 – Gold",
+    "Zone 25 – Lavender",
+    "Zone 26 – Teal",
+    "Zone 27 – Tangerine",
+    "Zone 28 – Blush",
+    "Zone 29 – Seafoam",
+    "Zone 30 – Copper",
+    "Zone 31 – Chartreuse",
+    "Zone 32 – Aqua",
+    "Zone 33 – Fuchsia",
+    "Zone 34 – Grass",
+    "Zone 35 – Denim",
+    "Zone 36 – Amber",
+    "Zone 37 – Plum",
+    "Zone 38 – Emerald",
+    "Zone 39 – Berry",
+    "Zone 40 – Steel Blue",
 ]
 
 # ---------------------------------------------------------------------------

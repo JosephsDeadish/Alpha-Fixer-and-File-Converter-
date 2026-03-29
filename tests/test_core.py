@@ -8455,13 +8455,13 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
         )
 
     def test_five_save_slots_created(self):
-        """The 'Saved Masks' panel must create exactly 5 save/paste slot pairs."""
+        """The 'Saved Masks' panel must create at least 5 save/paste slot pairs."""
         src = self._src()
-        # Look for _MASK_SLOT_COUNT = 5 constant
+        # Look for _MASK_SLOT_COUNT constant (now 15, tripled from 5)
         self.assertIn(
-            "_MASK_SLOT_COUNT = 5",
+            "_MASK_SLOT_COUNT = 15",
             src,
-            "must define _MASK_SLOT_COUNT = 5 for the collection size",
+            "must define _MASK_SLOT_COUNT = 15 for the collection size (tripled)",
         )
 
     # ------------------------------------------------------------------
