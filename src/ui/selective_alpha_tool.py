@@ -2338,7 +2338,7 @@ class SelectiveAlphaTool(QWidget):
         self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
         self._show_zero_alpha_chk.toggled.connect(lambda _: self._save_settings())
         self._show_alpha_labels_chk.toggled.connect(lambda _: self._save_settings())
-        # Note: _ze_alpha_spin already saves via _on_ze_alpha_changed; no duplicate needed.
+        # _ze_alpha_spin is intentionally absent here: _on_ze_alpha_changed (line 2307) already calls _save_settings().
         self._refresh_zone_editor(0)
 
         # Keyboard shortcuts
