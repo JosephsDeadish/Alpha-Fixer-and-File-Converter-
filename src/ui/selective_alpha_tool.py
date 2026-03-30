@@ -1562,6 +1562,7 @@ class _ZoneRow(QWidget):
         bot = QHBoxLayout()
         bot.setContentsMargins(0, 0, 0, 0)
         bot.setSpacing(4)
+        self._clear_btn = QPushButton("🗑  Clear")
         self._clear_btn.setMinimumHeight(26)
         self._clear_btn.setToolTip(f"Erase all painted pixels in {color_name}")
         self._clear_btn.clicked.connect(self._on_clear)
