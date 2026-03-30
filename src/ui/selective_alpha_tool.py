@@ -417,14 +417,21 @@ class SelectiveAlphaCanvas(QWidget):
         """Replace the mask for zone *idx* with the uint8 array *arr*.
 
         A snapshot is pushed onto the undo stack before the replacement so the
-        operation can be undone.  *arr* must have the same (h, w) shape as the
-        source image; if no image is loaded the call is silently ignored.
+        operation can be undone.  If *arr* has different dimensions from the
+        current image, it is automatically resampled to fit using nearest-
+        neighbour interpolation so cross-image paste always succeeds.  If no
+        image is loaded the call is silently ignored.
         """
         if self._src_img is None or not (0 <= idx < NUM_ZONES):
             return
         iw, ih = self._src_img.size
         if arr.shape[:2] != (ih, iw):
-            return
+            # Resize mask to match the target image (enables cross-image paste).
+            src_pil = Image.fromarray(arr.astype(np.uint8), mode="L")
+            resized = src_pil.resize((iw, ih), Image.Resampling.NEAREST)
+            arr = np.array(resized, dtype=np.uint8)
+            resized.close()
+            src_pil.close()
         self._push_history()
         new_mask = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="L")
         if self._masks[idx] is not None:
@@ -2049,7 +2056,7 @@ class SelectiveAlphaTool(QWidget):
         self._slot_info_lbl.setWordWrap(True)
         sv.addWidget(self._slot_info_lbl)
 
-        # Save / Paste / Clear / Rename row
+        # Row 1: Save | Paste
         act_row = QHBoxLayout()
         act_row.setSpacing(4)
         self._btn_slot_save = QPushButton("💾  Save")
@@ -2070,17 +2077,9 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_slot_paste.clicked.connect(self._on_paste_from_slot_current)
         act_row.addWidget(self._btn_slot_paste)
-
-        self._btn_slot_clear = QPushButton("✕  Clear")
-        self._btn_slot_clear.setMinimumHeight(26)
-        self._btn_slot_clear.setToolTip(
-            "Erase the mask stored in the selected slot.\n"
-            "The slot itself is kept; only its stored data is removed."
-        )
-        self._btn_slot_clear.clicked.connect(self._on_clear_slot_current)
-        act_row.addWidget(self._btn_slot_clear)
         sv.addLayout(act_row)
 
+        # Row 2: Rename | Clear
         rename_row = QHBoxLayout()
         rename_row.setSpacing(4)
         self._btn_slot_rename = QPushButton("✏  Rename")
@@ -2090,6 +2089,15 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_slot_rename.clicked.connect(self._on_slot_rename)
         rename_row.addWidget(self._btn_slot_rename)
+
+        self._btn_slot_clear = QPushButton("✕  Clear")
+        self._btn_slot_clear.setMinimumHeight(26)
+        self._btn_slot_clear.setToolTip(
+            "Erase the mask stored in the selected slot.\n"
+            "The slot itself is kept; only its stored data is removed."
+        )
+        self._btn_slot_clear.clicked.connect(self._on_clear_slot_current)
+        rename_row.addWidget(self._btn_slot_clear)
         sv.addLayout(rename_row)
 
         lv.addWidget(slots_box)
@@ -2135,6 +2143,7 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_info_lbl.setWordWrap(True)
         azv.addWidget(self._az_slot_info_lbl)
 
+        # Row 1: Copy All | Paste All
         az_act_row = QHBoxLayout()
         az_act_row.setSpacing(4)
         self._btn_copy_all_zones = QPushButton("📋  Copy All")
@@ -2155,16 +2164,9 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_paste_all_zones.clicked.connect(self._on_paste_all_zones)
         az_act_row.addWidget(self._btn_paste_all_zones)
-
-        self._btn_az_slot_clear = QPushButton("✕  Clear")
-        self._btn_az_slot_clear.setMinimumHeight(26)
-        self._btn_az_slot_clear.setToolTip(
-            "Erase the zone snapshot stored in the selected slot."
-        )
-        self._btn_az_slot_clear.clicked.connect(self._on_az_slot_clear)
-        az_act_row.addWidget(self._btn_az_slot_clear)
         azv.addLayout(az_act_row)
 
+        # Row 2: Rename | Clear
         az_rename_row = QHBoxLayout()
         az_rename_row.setSpacing(4)
         self._btn_az_slot_rename = QPushButton("✏  Rename")
@@ -2174,6 +2176,14 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_az_slot_rename.clicked.connect(self._on_az_slot_rename)
         az_rename_row.addWidget(self._btn_az_slot_rename)
+
+        self._btn_az_slot_clear = QPushButton("✕  Clear")
+        self._btn_az_slot_clear.setMinimumHeight(26)
+        self._btn_az_slot_clear.setToolTip(
+            "Erase the zone snapshot stored in the selected slot."
+        )
+        self._btn_az_slot_clear.clicked.connect(self._on_az_slot_clear)
+        az_rename_row.addWidget(self._btn_az_slot_clear)
         azv.addLayout(az_rename_row)
 
         lv.addWidget(all_zones_box)

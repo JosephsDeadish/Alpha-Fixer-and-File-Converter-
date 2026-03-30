@@ -2221,8 +2221,8 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
 
 
-def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
-    """Return theme-specific (alpha_fixer_label, converter_label, history_label).
+def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str, str]:
+    """Return theme-specific (alpha_fixer_label, converter_label, history_label, selective_alpha_label).
 
     Each theme has its own emoji prefix from ``_THEME_TAB_EMOJIS``, so the
     tabs visually reflect the active theme.  The labels are *static* per theme
@@ -2234,6 +2234,7 @@ def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
         f"{e[0]}  Alpha & RGBA Adjuster",
         f"{e[1]}  Converter",
         f"{e[2]}  History",
+        f"🎨  Selective Alpha",
     )
 
 
