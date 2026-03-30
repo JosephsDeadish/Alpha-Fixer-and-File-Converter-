@@ -519,9 +519,15 @@ class SelectiveAlphaCanvas(QWidget):
                 if self._masks[i] is not None:
                     self._masks[i].close()
                 self._masks[i] = new_mask
+        # Clear any zones that weren't covered by the snapshot (e.g. when
+        # pasting an older snapshot saved before NUM_ZONES was increased).
+        for i in range(len(masks), NUM_ZONES):
+            if self._masks[i] is not None:
+                self._masks[i].close()
+                self._masks[i] = None
         self._composite_dirty = True
         self.update()
-        for i in range(min(len(masks), NUM_ZONES)):
+        for i in range(NUM_ZONES):
             try:
                 self.mask_changed.emit(i)
             except RuntimeError:
@@ -2146,7 +2152,7 @@ class SelectiveAlphaTool(QWidget):
         # Row 1: Copy All | Paste All
         az_act_row = QHBoxLayout()
         az_act_row.setSpacing(4)
-        self._btn_copy_all_zones = QPushButton("📋  Copy All")
+        self._btn_copy_all_zones = QPushButton("Copy All")
         self._btn_copy_all_zones.setMinimumHeight(26)
         self._btn_copy_all_zones.setToolTip(
             "Copy every painted zone mask into the selected slot.\n"
@@ -2155,7 +2161,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_copy_all_zones.clicked.connect(self._on_copy_all_zones)
         az_act_row.addWidget(self._btn_copy_all_zones)
 
-        self._btn_paste_all_zones = QPushButton("📌  Paste All")
+        self._btn_paste_all_zones = QPushButton("Paste All")
         self._btn_paste_all_zones.setMinimumHeight(26)
         self._btn_paste_all_zones.setEnabled(False)
         self._btn_paste_all_zones.setToolTip(

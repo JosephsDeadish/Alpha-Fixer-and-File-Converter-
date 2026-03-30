@@ -1056,7 +1056,7 @@ class MainWindow(QMainWindow):
 
         self._tabs = QTabWidget()
         self._tabs.setUsesScrollButtons(True)
-        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         # Prevent tabs from stretching to fill available space; scroll buttons
         # will appear automatically when the window is narrower than all tabs.
         self._tabs.tabBar().setExpanding(False)
