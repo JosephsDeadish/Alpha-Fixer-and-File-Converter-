@@ -237,6 +237,11 @@ class SelectiveAlphaCanvas(QWidget):
         self._tx_pending_pt: "QPointF | None" = None
         self._tx_flush_scheduled: bool = False
 
+        # Freehand paint flush throttling (cap composite rebuild at ~30 fps)
+        self._paint_last_flush: float = 0.0
+        self._paint_flush_scheduled: bool = False
+        self._paint_pending_pt: "QPointF | None" = None
+
     # ---------------------------------------------------------------- public
 
     def load_image(self, path: str) -> bool:
@@ -1010,12 +1015,15 @@ class SelectiveAlphaCanvas(QWidget):
             cy_w = cy_img * s + oy
             text = str(self._zone_alphas[i])
             zc = _zone_qcolor(i, 255, color_override=self._zone_colors[i])
+            fm = painter.fontMetrics()
+            tw = fm.horizontalAdvance(text)
+            th = fm.height()
             # Shadow for readability
             painter.setPen(QColor(0, 0, 0, 200))
-            painter.drawText(QPointF(cx_w + 1.0, cy_w + 1.0), text)
+            painter.drawText(QPointF(cx_w - tw / 2.0 + 1.0, cy_w + th / 4.0 + 1.0), text)
             # Foreground
             painter.setPen(zc)
-            painter.drawText(QPointF(cx_w, cy_w), text)
+            painter.drawText(QPointF(cx_w - tw / 2.0, cy_w + th / 4.0), text)
 
     def contextMenuEvent(self, event) -> None:   # noqa: N802
         """Right-click context menu for copy/paste of the active zone mask."""
@@ -1299,8 +1307,6 @@ class SelectiveAlphaCanvas(QWidget):
 
         if self._tool == "freehand":
             lx, ly = self._last_img_pt
-            # Paint a circle at the new position AND a line between the last
-            # and current position to fill in gaps at high speeds.
             mask = self._ensure_mask(self._active_zone)
             draw = ImageDraw.Draw(mask)
             r = self._brush_size
@@ -1310,7 +1316,11 @@ class SelectiveAlphaCanvas(QWidget):
             self._composite_dirty = True
             self._last_img_pt = (ix, iy)
             self.mask_changed.emit(self._active_zone)
-            self.update()
+            # Throttle composite rebuild to ~30 fps (33 ms) to reduce lag.
+            now = time.monotonic()
+            if now - self._paint_last_flush >= 0.033:
+                self._paint_last_flush = now
+                self.update()
         elif self._tool == "eraser":
             lx, ly = self._last_img_pt
             self._erase_brush_move(lx, ly, ix, iy)
@@ -1990,25 +2000,57 @@ class SelectiveAlphaTool(QWidget):
         zv.addWidget(sep1)
 
         self._zone_rows: list[_ZoneRow] = []
-        for i in range(NUM_ZONES):
-            row = _ZoneRow(i)
-            row.selected.connect(self._on_zone_action)
-            row.color_changed.connect(self._on_zone_color_changed)
-            row.copy_requested.connect(self._on_copy_mask)
-            row.paste_requested.connect(self._on_paste_mask)
-            # visibility_changed and canvas connections wired after canvas is
-            # created (further below in _setup_ui).
-            zv.addWidget(row)
-            self._zone_rows.append(row)
-            # Thin separator between rows (not after the last one)
-            if i < NUM_ZONES - 1:
-                sep = QFrame()
-                sep.setFrameShape(QFrame.Shape.HLine)
-                sep.setFrameShadow(QFrame.Shadow.Sunken)
-                sep.setFixedHeight(1)
-                sep.setStyleSheet("color: #3a3a5a; background: #3a3a5a;")
-                zv.addWidget(sep)
-        self._zone_rows[0].set_selected(True)
+        self._ze_cur_idx: int = 0
+
+        ze_frame = QFrame()
+        ze_frame.setStyleSheet("QFrame { border: 1px solid #444; border-radius: 4px; padding: 2px; }")
+        ze_vlay = QVBoxLayout(ze_frame)
+        ze_vlay.setSpacing(4)
+        ze_vlay.setContentsMargins(4, 4, 4, 4)
+
+        # Row 1: vis toggle + color swatch + name label + alpha spinbox
+        ze_row1 = QHBoxLayout()
+        ze_row1.setSpacing(4)
+        self._ze_vis_btn = QPushButton("👁")
+        self._ze_vis_btn.setCheckable(True)
+        self._ze_vis_btn.setChecked(True)
+        self._ze_vis_btn.setFixedSize(28, 24)
+        ze_row1.addWidget(self._ze_vis_btn)
+        self._ze_swatch_btn = QPushButton()
+        self._ze_swatch_btn.setFlat(True)
+        self._ze_swatch_btn.setFixedSize(18, 18)
+        self._ze_swatch_btn.setStyleSheet(
+            "background:#ff4444;border:1px solid #666;border-radius:3px;padding:0;"
+        )
+        ze_row1.addWidget(self._ze_swatch_btn)
+        self._ze_name_lbl = QLabel(ZONE_NAMES[0])
+        self._ze_name_lbl.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        ze_row1.addWidget(self._ze_name_lbl)
+        ze_row1.addWidget(QLabel("α:"))
+        self._ze_alpha_spin = QSpinBox()
+        self._ze_alpha_spin.setRange(0, 255)
+        self._ze_alpha_spin.setValue(128)
+        self._ze_alpha_spin.setMinimumWidth(62)
+        ze_row1.addWidget(self._ze_alpha_spin)
+        ze_vlay.addLayout(ze_row1)
+
+        # Row 2: Clear button
+        self._ze_clear_btn = QPushButton("🗑  Clear")
+        ze_vlay.addWidget(self._ze_clear_btn)
+
+        # Row 3: Copy + Paste buttons
+        ze_row3 = QHBoxLayout()
+        ze_row3.setSpacing(4)
+        self._ze_copy_btn = QPushButton("📋  Copy Mask")
+        self._ze_paste_btn = QPushButton("📌  Paste Mask")
+        self._ze_paste_btn.setEnabled(False)
+        ze_row3.addWidget(self._ze_copy_btn)
+        ze_row3.addWidget(self._ze_paste_btn)
+        ze_vlay.addLayout(ze_row3)
+
+        zv.addWidget(ze_frame)
         lv.addWidget(zones_box)
 
         # ── Saved Masks Collection ─────────────────────────────────────────
@@ -2256,19 +2298,18 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.copy_all_requested.connect(self._on_copy_all_zones)
         self._canvas.paste_all_requested.connect(self._on_paste_all_zones)
 
-        # Wire zone visibility signals now that _canvas exists.
-        for row in self._zone_rows:
-            row.visibility_changed.connect(self._canvas.set_zone_visible)
+        # Wire single zone editor controls
+        self._ze_vis_btn.clicked.connect(self._on_ze_vis_toggled)
+        self._ze_swatch_btn.clicked.connect(self._on_ze_pick_color)
+        self._ze_clear_btn.clicked.connect(self._on_ze_clear)
+        self._ze_copy_btn.clicked.connect(self._on_ze_copy_mask)
+        self._ze_paste_btn.clicked.connect(self._on_ze_paste_mask)
+        self._ze_alpha_spin.valueChanged.connect(self._on_ze_alpha_changed)
 
         # Wire show-zero-alpha checkbox.
         self._show_zero_alpha_chk.toggled.connect(self._canvas.set_show_zero_alpha)
         # Wire show-alpha-labels checkbox.
         self._show_alpha_labels_chk.toggled.connect(self._canvas.set_show_alpha_labels)
-        # Keep canvas alpha-label values in sync with spinboxes.
-        for i, row in enumerate(self._zone_rows):
-            row._alpha_spin.valueChanged.connect(
-                lambda v, idx=i: self._canvas.set_zone_alpha_label(idx, v)
-            )
 
         # Wrap canvas + status label in a vertical layout.
         right_widget = QWidget()
@@ -2297,8 +2338,8 @@ class SelectiveAlphaTool(QWidget):
         self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
         self._show_zero_alpha_chk.toggled.connect(lambda _: self._save_settings())
         self._show_alpha_labels_chk.toggled.connect(lambda _: self._save_settings())
-        for row in self._zone_rows:
-            row._alpha_spin.valueChanged.connect(lambda _: self._save_settings())
+        self._ze_alpha_spin.valueChanged.connect(lambda _: self._save_settings())
+        self._refresh_zone_editor(0)
 
         # Keyboard shortcuts
         self._setup_shortcuts()
@@ -2320,15 +2361,15 @@ class SelectiveAlphaTool(QWidget):
         try:
             # Restore zone alpha values
             alphas = self._settings.get_sa_zone_alphas()
-            for row, alpha in zip(self._zone_rows, alphas):
-                row.set_alpha(alpha)
+            for idx, alpha in enumerate(alphas):
+                self._canvas.set_zone_alpha_label(idx, alpha)
             # Restore custom zone colours
             saved_colors = self._settings.get_sa_zone_colors()
             if saved_colors is not None:
-                for idx, (row, c) in enumerate(zip(self._zone_rows, saved_colors)):
+                for idx, c in enumerate(saved_colors):
                     rgb = (c[0], c[1], c[2])
-                    row.set_zone_color(rgb)
                     self._canvas.set_zone_color(idx, rgb[0], rgb[1], rgb[2])
+            self._refresh_zone_editor(self._ze_cur_idx)
             # Restore brush / eraser sizes
             self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
             self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
@@ -2355,7 +2396,7 @@ class SelectiveAlphaTool(QWidget):
         if self._settings is None or self._restoring:
             return
         self._settings.set_sa_zone_alphas(
-            [row.alpha_value() for row in self._zone_rows]
+            [self._canvas._zone_alphas[i] for i in range(NUM_ZONES)]
         )
         # Persist custom zone colours: read from canvas which is the source of truth.
         self._settings.set_sa_zone_colors(
@@ -2404,8 +2445,11 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_zoom_fit,     "sa_zoom_fit")
         mgr.register(self._btn_show_all,     "sa_show_all_zones")
         mgr.register(self._btn_hide_all,     "sa_hide_all_zones")
-        for row in self._zone_rows:
-            row.register_tooltips(mgr)
+        mgr.register(self._ze_vis_btn,    "sa_zone_visibility")
+        mgr.register(self._ze_alpha_spin, "sa_zone_alpha_spin")
+        mgr.register(self._ze_clear_btn,  "sa_zone_clear")
+        mgr.register(self._ze_copy_btn,   "sa_zone_copy_mask")
+        mgr.register(self._ze_paste_btn,  "sa_zone_paste_mask")
         mgr.register(self._btn_undo,         "sa_undo")
         mgr.register(self._btn_redo,         "sa_redo")
         mgr.register(self._btn_apply,        "sa_apply")
@@ -2483,16 +2527,16 @@ class SelectiveAlphaTool(QWidget):
             self._on_hide_all_zones()
 
     def _on_show_all_zones(self) -> None:
-        """Make all zone overlays visible and sync the eye-icon toggles."""
-        for idx, row in enumerate(self._zone_rows):
-            row.set_vis_state(True)
+        """Make all zone overlays visible and sync the zone editor."""
+        for idx in range(NUM_ZONES):
             self._canvas.set_zone_visible(idx, True)
+        self._refresh_zone_editor(self._ze_cur_idx)
 
     def _on_hide_all_zones(self) -> None:
-        """Hide all zone overlays and sync the eye-icon toggles."""
-        for idx, row in enumerate(self._zone_rows):
-            row.set_vis_state(False)
+        """Hide all zone overlays and sync the zone editor."""
+        for idx in range(NUM_ZONES):
             self._canvas.set_zone_visible(idx, False)
+        self._refresh_zone_editor(self._ze_cur_idx)
 
     def _on_zone_color_changed(self, zone_idx: int, rgb: tuple) -> None:
         """Propagate a user-chosen zone colour to the canvas and save settings."""
@@ -2510,9 +2554,8 @@ class SelectiveAlphaTool(QWidget):
             )
             return
         self._mask_clipboard = arr
-        # Enable Paste button on all zone rows and the canvas context menu.
-        for row in self._zone_rows:
-            row.set_paste_enabled(True)
+        # Enable Paste button and the canvas context menu.
+        self._ze_paste_btn.setEnabled(True)
         self._canvas.set_paste_available(True)
         if self._sound is not None:
             self._sound.play_mask_copy()
@@ -2790,14 +2833,13 @@ class SelectiveAlphaTool(QWidget):
         # populate_zones_from_detection handles undo snapshotting.
         self._canvas.populate_zones_from_detection(self._shared_zones)
 
-        # Sync UI rows for each imported zone.
+        # Sync UI for each imported zone.
         for i, (alpha_val, _) in enumerate(self._shared_zones):
-            if i >= len(self._zone_rows):
+            if i >= NUM_ZONES:
                 break
-            row = self._zone_rows[i]
-            row.set_alpha(alpha_val)
-            row.set_vis_state(True)
+            self._canvas.set_zone_alpha_label(i, alpha_val)
             self._canvas.set_zone_visible(i, True)
+        self._refresh_zone_editor(self._ze_cur_idx)
 
         self._on_show_all_zones()
         self._btn_show_highlights.setChecked(True)
@@ -2902,15 +2944,31 @@ class SelectiveAlphaTool(QWidget):
         # Populate canvas masks in one undo step.
         self._canvas.populate_zones_from_detection(zones)
 
-        # Sync alpha spinboxes and zone visibility.
+        # Sync alpha values and zone visibility.
         for i, (alpha_val, _) in enumerate(zones):
-            if i >= len(self._zone_rows):
+            if i >= NUM_ZONES:
                 break
-            row = self._zone_rows[i]
-            row.set_alpha(alpha_val)
-            # Ensure the visibility toggle is on for this zone.
-            row.set_vis_state(True)
+            self._canvas.set_zone_alpha_label(i, alpha_val)
             self._canvas.set_zone_visible(i, True)
+
+        # Sample per-zone colors from the source image pixels
+        src_img = self._canvas.get_source_image()
+        if src_img is not None:
+            try:
+                rgba_arr = np.array(src_img.convert("RGBA"), dtype=np.uint8)
+                for i, (_, bool_mask) in enumerate(zones):
+                    if i >= NUM_ZONES:
+                        break
+                    if not bool_mask.any():
+                        continue
+                    avg_r = int(rgba_arr[bool_mask, 0].mean())
+                    avg_g = int(rgba_arr[bool_mask, 1].mean())
+                    avg_b = int(rgba_arr[bool_mask, 2].mean())
+                    self._canvas.set_zone_color(i, avg_r, avg_g, avg_b)
+            except Exception:
+                pass  # Fall back to preset colors
+
+        self._refresh_zone_editor(self._ze_cur_idx)
 
         # Reveal all populated zones and sync the master Show Highlights toggle.
         self._on_show_all_zones()
@@ -2955,7 +3013,7 @@ class SelectiveAlphaTool(QWidget):
                     "timestamp": _dt.now().isoformat(timespec="seconds"),
                     "source": self._src_path,
                     "output": path,
-                    "zone_alphas": [row.alpha_value() for row in self._zone_rows],
+                    "zone_alphas": list(self._canvas._zone_alphas),
                 }
                 self._settings.add_selective_alpha_history(entry)
         except MemoryError:
@@ -2971,7 +3029,7 @@ class SelectiveAlphaTool(QWidget):
         if not self._canvas.has_image():
             return
         bool_masks = self._canvas.get_masks_as_bool()
-        zone_alphas = [row.alpha_value() for row in self._zone_rows]
+        zone_alphas = list(self._canvas._zone_alphas)
 
         # Warn if no zones are painted.
         if all(m is None or not m.any() for m in bool_masks):
@@ -3051,18 +3109,66 @@ class SelectiveAlphaTool(QWidget):
         """val >= 0 → select zone; val < 0 → clear zone -(val+1)."""
         if val >= 0:
             self._canvas.set_active_zone(val)
-            for i, row in enumerate(self._zone_rows):
-                row.set_selected(i == val)
             # Keep the dropdown in sync when activated by other means
             if self._active_zone_combo.currentIndex() != val:
                 self._active_zone_combo.blockSignals(True)
                 self._active_zone_combo.setCurrentIndex(val)
                 self._active_zone_combo.blockSignals(False)
+            self._refresh_zone_editor(val)
             self._update_status()
         else:
             zone_idx = -(val + 1)
             if 0 <= zone_idx < NUM_ZONES:
                 self._canvas.clear_mask(zone_idx)
+
+    def _refresh_zone_editor(self, idx: int) -> None:
+        """Update the single zone editor panel to reflect zone *idx*."""
+        self._ze_cur_idx = idx
+        self._ze_name_lbl.setText(ZONE_NAMES[idx])
+        r, g, b, _ = self._canvas.get_zone_color(idx)
+        self._ze_swatch_btn.setStyleSheet(
+            f"background:{QColor(r, g, b).name()};"
+            "border:1px solid #666;border-radius:3px;padding:0;"
+        )
+        visible = self._canvas._zone_visible[idx]
+        self._ze_vis_btn.setChecked(visible)
+        self._ze_vis_btn.setText("👁" if visible else "🚫")
+        self._ze_alpha_spin.blockSignals(True)
+        self._ze_alpha_spin.setValue(self._canvas._zone_alphas[idx])
+        self._ze_alpha_spin.blockSignals(False)
+
+    def _on_ze_vis_toggled(self, checked: bool) -> None:
+        self._ze_vis_btn.setText("👁" if checked else "🚫")
+        self._canvas.set_zone_visible(self._ze_cur_idx, checked)
+
+    def _on_ze_pick_color(self) -> None:
+        r, g, b, _ = self._canvas.get_zone_color(self._ze_cur_idx)
+        chosen = QColorDialog.getColor(
+            QColor(r, g, b), self,
+            f"Choose colour for {ZONE_NAMES[self._ze_cur_idx]}"
+        )
+        if chosen.isValid():
+            self._canvas.set_zone_color(
+                self._ze_cur_idx, chosen.red(), chosen.green(), chosen.blue()
+            )
+            self._ze_swatch_btn.setStyleSheet(
+                f"background:{chosen.name()};"
+                "border:1px solid #666;border-radius:3px;padding:0;"
+            )
+            self._save_settings()
+
+    def _on_ze_clear(self) -> None:
+        self._canvas.clear_mask(self._ze_cur_idx)
+
+    def _on_ze_copy_mask(self) -> None:
+        self._on_copy_mask(self._ze_cur_idx)
+
+    def _on_ze_paste_mask(self) -> None:
+        self._on_paste_mask(self._ze_cur_idx)
+
+    def _on_ze_alpha_changed(self, value: int) -> None:
+        self._canvas.set_zone_alpha_label(self._ze_cur_idx, value)
+        self._save_settings()
 
     def _on_tool_selected(self, key: str) -> None:
         self._canvas.set_tool(key)
