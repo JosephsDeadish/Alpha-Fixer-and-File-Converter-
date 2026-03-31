@@ -5710,6 +5710,16 @@ _VULGAR: dict[str, list[str]] = {
         "One click. Slot deleted. Snapshot deleted. Done. Very tidy.",
         "You're not clearing it. You're deleting it. There's a difference. This is the deletion one.",
     ],
+    "sa_slot_del": [
+        "Deletes the selected mask slot entirely. Slot and mask both go. Poof. Gone.",
+        "Permanent. No undo. You wanted it gone, now it's really gone. The slot too.",
+        "Disabled when only one slot remains. Can't delete the last one. Rules.",
+        "Different from Clear — Clear wipes the mask but keeps the slot. This removes both.",
+        "Use this when your mask dropdown is full of slots you'll never use again.",
+        "Remaining slots renumber themselves after deletion.",
+        "One click. Slot deleted. Mask deleted. Done. Very tidy.",
+        "You're not clearing it. You're deleting it. There's a difference. This is the deletion one.",
+    ],
     "sa_slot_combo": [
         "Pick which single-zone mask slot to save a mask into or paste a mask from.",
         "Each slot holds exactly one painted zone mask. Small but useful.",
