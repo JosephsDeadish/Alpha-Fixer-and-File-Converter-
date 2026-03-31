@@ -2093,6 +2093,7 @@ class SelectiveAlphaTool(QWidget):
 
         self._btn_slot_add = QPushButton("＋ Add Slot")
         self._btn_slot_add.setMinimumHeight(26)
+        self._btn_slot_add.setMinimumWidth(90)
         self._btn_slot_add.setToolTip(
             "Add a new empty slot to the list.\n"
             "Useful when all existing slots are in use."
@@ -2102,6 +2103,7 @@ class SelectiveAlphaTool(QWidget):
 
         self._btn_slot_del = QPushButton("✕ Del Slot")
         self._btn_slot_del.setMinimumHeight(26)
+        self._btn_slot_del.setMinimumWidth(90)
         self._btn_slot_del.setToolTip(
             "Delete the currently selected slot from the list.\n"
             "Any mask stored in it will be lost."
@@ -2191,6 +2193,7 @@ class SelectiveAlphaTool(QWidget):
 
         self._btn_az_slot_add = QPushButton("＋ Add Slot")
         self._btn_az_slot_add.setMinimumHeight(26)
+        self._btn_az_slot_add.setMinimumWidth(90)
         self._btn_az_slot_add.setToolTip(
             "Add a new empty all-zones slot to the list."
         )
@@ -2199,6 +2202,7 @@ class SelectiveAlphaTool(QWidget):
 
         self._btn_az_slot_del = QPushButton("✕ Del Slot")
         self._btn_az_slot_del.setMinimumHeight(26)
+        self._btn_az_slot_del.setMinimumWidth(90)
         self._btn_az_slot_del.setToolTip(
             "Delete the currently selected all-zones slot from the list.\n"
             "Any snapshot stored in it will be lost."
@@ -2479,6 +2483,7 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._btn_paste_all_zones, "sa_paste_all_zones")
         mgr.register(self._az_slot_combo,       "sa_az_slot_combo")
         mgr.register(self._btn_az_slot_add,     "sa_az_slot_add")
+        mgr.register(self._btn_az_slot_del,     "sa_az_slot_del")
         mgr.register(self._btn_az_slot_clear,   "sa_az_slot_clear")
         mgr.register(self._btn_az_slot_rename,  "sa_az_slot_rename")
         mgr.register(self._slot_combo,          "sa_slot_combo")
