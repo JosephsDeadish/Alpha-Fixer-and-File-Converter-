@@ -448,6 +448,46 @@ class SettingsDialog(QDialog):
 
         tv.addLayout(effect_emoji_row)
 
+        # ---- Background Drip Effects GroupBox ----
+        grp_bg_drip = QGroupBox("Background Drip Effects")
+        bg_drip_layout = QVBoxLayout(grp_bg_drip)
+        bg_drip_layout.setSpacing(6)
+        self._bg_drip_check = QCheckBox("Enable background drip effect (off by default)")
+        self._bg_drip_check.setToolTip(
+            "When enabled, a continuous drip animation plays in the background\n"
+            "independently of click effects. Blood drip for gore/dark themes;\n"
+            "water drip for ocean/aquatic themes."
+        )
+        bg_drip_layout.addWidget(self._bg_drip_check)
+        self._use_theme_drip_check = QCheckBox(
+            "Use theme drip  (auto-selects Blood or Water based on the active theme)"
+        )
+        self._use_theme_drip_check.setToolTip(
+            "When enabled the drip type is chosen automatically:\n"
+            "Gore / Shark themes → Blood Drip\n"
+            "Ocean / Ripple / Mermaid themes → Water Drip\n"
+            "All other themes → use the manual selection below."
+        )
+        bg_drip_layout.addWidget(self._use_theme_drip_check)
+        bg_drip_inner = QHBoxLayout()
+        bg_drip_inner.addWidget(QLabel("Drip Style:"))
+        self._bg_drip_combo = QComboBox()
+        self._bg_drip_combo.setMinimumWidth(180)
+        self._bg_drip_combo.addItem("🩸 Blood Drip", userData="blood")
+        self._bg_drip_combo.addItem("💧 Water Drip", userData="water")
+        self._bg_drip_combo.setToolTip(
+            "Choose the drip style when 'Use theme drip' is off.\n"
+            "Blood Drip: crimson tear-shaped drops fall from the top.\n"
+            "Water Drip: translucent cyan drops fall from the top."
+        )
+        bg_drip_inner.addWidget(self._bg_drip_combo, 1)
+        bg_drip_layout.addLayout(bg_drip_inner)
+        # Disable combo when use-theme is checked
+        self._use_theme_drip_check.toggled.connect(
+            lambda checked: self._bg_drip_combo.setEnabled(not checked)
+        )
+        tv.addWidget(grp_bg_drip)
+
         # ---- Mouse Trail and Cursor GroupBoxes (belong with theme settings) ----
         mouse_row = QHBoxLayout()
         mouse_row.setSpacing(8)
@@ -1044,6 +1084,9 @@ class SettingsDialog(QDialog):
         self._button_anim_check.toggled.connect(self._on_button_anim_changed)
         self._button_anim_style_combo.currentIndexChanged.connect(self._on_button_anim_style_changed)
         self._use_theme_button_anim_check.toggled.connect(self._on_use_theme_button_anim_changed)
+        self._bg_drip_check.toggled.connect(self._on_bg_drip_changed)
+        self._use_theme_drip_check.toggled.connect(self._on_bg_drip_changed)
+        self._bg_drip_combo.currentIndexChanged.connect(self._on_bg_drip_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -1266,6 +1309,18 @@ class SettingsDialog(QDialog):
             btn_anim_enabled and not use_theme_btn_anim
         )
         self._use_theme_button_anim_check.setEnabled(btn_anim_enabled)
+
+        # Load background drip settings
+        bg_drip_enabled = self._settings.get("bg_drip_enabled", False)
+        self._bg_drip_check.setChecked(bg_drip_enabled)
+        use_theme_drip = self._settings.get("use_theme_drip", False)
+        self._use_theme_drip_check.setChecked(use_theme_drip)
+        bg_drip_type = self._settings.get("bg_drip_type", "blood")
+        for i in range(self._bg_drip_combo.count()):
+            if self._bg_drip_combo.itemData(i) == bg_drip_type:
+                self._bg_drip_combo.setCurrentIndex(i)
+                break
+        self._bg_drip_combo.setEnabled(not use_theme_drip)
 
         for c in controls:
             c.blockSignals(False)
@@ -1786,3 +1841,10 @@ class SettingsDialog(QDialog):
         self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 
+
+    def _on_bg_drip_changed(self) -> None:
+        self._settings.set("bg_drip_enabled", self._bg_drip_check.isChecked())
+        self._settings.set("use_theme_drip", self._use_theme_drip_check.isChecked())
+        drip_type = self._bg_drip_combo.currentData() or "blood"
+        self._settings.set("bg_drip_type", drip_type)
+        self.settings_changed.emit()

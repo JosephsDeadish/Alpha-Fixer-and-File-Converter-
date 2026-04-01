@@ -1165,6 +1165,7 @@ class MainWindow(QMainWindow):
         from .click_effects import ButtonPressAnimator
         self._button_anim = ButtonPressAnimator(self, self._click_effects)
         self._apply_button_anim()
+        self._apply_bg_drip()
 
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
@@ -1274,6 +1275,28 @@ class MainWindow(QMainWindow):
         else:
             mode = self._settings.get("button_anim_style", "press")
         self._button_anim.set_enabled(True, mode)
+
+    def _apply_bg_drip(self) -> None:
+        """Apply the background drip effect based on current settings."""
+        if self._click_effects is None:
+            return
+        enabled = self._settings.get("bg_drip_enabled", False)
+        if not enabled:
+            self._click_effects.set_bg_drip("blood", False)
+            return
+        if self._settings.get("use_theme_drip", False):
+            theme = self._settings.get_theme()
+            effect_key = theme.get("_effect", "default")
+            # Map theme effects to drip types
+            if effect_key in ("gore", "shark"):
+                drip_type = "blood"
+            elif effect_key in ("ocean", "ripple", "mermaid"):
+                drip_type = "water"
+            else:
+                drip_type = self._settings.get("bg_drip_type", "blood")
+        else:
+            drip_type = self._settings.get("bg_drip_type", "blood")
+        self._click_effects.set_bg_drip(drip_type, True)
 
     # ------------------------------------------------------------------
     # Easter-egg discovery system
@@ -1989,6 +2012,7 @@ class MainWindow(QMainWindow):
             self._apply_trail()
         if self._click_effects is not None:
             self._apply_theme_effect()
+            self._apply_bg_drip()
         if self._button_anim is not None:
             self._apply_button_anim()
         # On Windows 11+, colour the native title bar to match the theme's
@@ -2204,6 +2228,7 @@ class MainWindow(QMainWindow):
         self._apply_theme_effect()
         self._apply_trail()
         self._apply_button_anim()
+        self._apply_bg_drip()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
                 self._settings.get("click_effects_enabled", False)

@@ -1110,6 +1110,9 @@ class ClickEffectsOverlay(QWidget):
         self._water_drip: _WaterDrip | None = None
         self._banner_flock: _BannerFlock | None = None
         self._banner_flock_active: bool = False
+        # Background drip state (independent of click effects)
+        self._bg_drip_enabled: bool = False
+        self._bg_drip_type: str = "blood"  # "blood" or "water"
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
         # Cache QFont objects per integer point-size to avoid repeated
         # mutations and implicit font-metric recalculations each frame.
@@ -1156,20 +1159,16 @@ class ClickEffectsOverlay(QWidget):
                 self._bat_flock.stop()
             if self._fairy_flock:
                 self._fairy_flock.stop()
-            if self._gore_drip:
-                self._gore_drip.stop()
             if self._fish_flock:
                 self._fish_flock.stop()
             if self._alien_beam:
                 self._alien_beam.stop()
             if self._slime_drip:
                 self._slime_drip.stop()
-            if self._water_drip:
-                self._water_drip.stop()
             # Only hide the overlay if the banner flock is also inactive.
             # When banner flock is running we still need the overlay visible
             # so flying particles can be rendered even without click effects.
-            if not self._banner_flock_active:
+            if not self._banner_flock_active and not self._bg_drip_enabled:
                 self.hide()
             else:
                 # Ensure the banner-flock timer keeps running even though
@@ -1199,8 +1198,8 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._banner_flock is not None:
                 self._banner_flock.stop()
-            # If click effects are also disabled, stop the timer and hide.
-            if not self._enabled:
+            # If click effects and bg drip are also disabled, stop the timer and hide.
+            if not self._enabled and not self._bg_drip_enabled:
                 self._timer.stop()
                 self.hide()
 
@@ -1222,14 +1221,9 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._fairy_flock:
                 self._fairy_flock.stop()
-        # Manage gore drip timer
-        if effect_key == "gore" and self._enabled:
-            if self._gore_drip is None:
-                self._gore_drip = _GoreDrip(self)
-            self._gore_drip.start()
-        else:
-            if self._gore_drip:
-                self._gore_drip.stop()
+        # gore_drip is no longer tied to click effects; it is driven by
+        # the background drip system (set_bg_drip). Any active gore drip
+        # should remain untouched here.
         # Manage fish flock (mermaid theme)
         if effect_key == "mermaid" and self._enabled:
             if self._fish_flock is None:
@@ -1246,7 +1240,7 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._alien_beam:
                 self._alien_beam.stop()
-        # Manage slime drip (slime theme)
+        # Manage slime drip (slime theme click effect)
         if effect_key == "slime" and self._enabled:
             if self._slime_drip is None:
                 self._slime_drip = _SlimeDrip(self)
@@ -1254,14 +1248,50 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._slime_drip:
                 self._slime_drip.stop()
-        # Manage water drip (ripple / ocean / mermaid themes)
-        if effect_key in ("ripple", "ocean", "mermaid") and self._enabled:
-            if self._water_drip is None:
-                self._water_drip = _WaterDrip(self)
-            self._water_drip.start()
+        # water_drip is no longer tied to click effects; it is driven by
+        # the background drip system (set_bg_drip). Any active water drip
+        # should remain untouched here.
+
+    def set_bg_drip(self, drip_type: str, enabled: bool) -> None:
+        """Enable or disable the background drip effect independently of click effects.
+
+        *drip_type* is ``"blood"`` (crimson teardrops via :class:`_GoreDrip`) or
+        ``"water"`` (translucent cyan teardrops via :class:`_WaterDrip``).
+        The drip overlay is independent of the click-effects enabled state so
+        blood/water drips can run even when click effects are off.
+        """
+        self._bg_drip_enabled = enabled
+        self._bg_drip_type = drip_type if drip_type in ("blood", "water") else "blood"
+
+        if enabled:
+            # Make overlay visible and timer running
+            self.show()
+            if not self._timer.isActive():
+                self._timer.start()
+            if self._bg_drip_type == "blood":
+                # Stop water drip if it was running
+                if self._water_drip:
+                    self._water_drip.stop()
+                if self._gore_drip is None:
+                    self._gore_drip = _GoreDrip(self)
+                self._gore_drip.start()
+            else:
+                # Stop blood drip if it was running
+                if self._gore_drip:
+                    self._gore_drip.stop()
+                if self._water_drip is None:
+                    self._water_drip = _WaterDrip(self)
+                self._water_drip.start()
         else:
+            # Stop both drip types
+            if self._gore_drip:
+                self._gore_drip.stop()
             if self._water_drip:
                 self._water_drip.stop()
+            # Hide if nothing else needs the overlay
+            if not self._enabled and not self._banner_flock_active:
+                self._timer.stop()
+                self.hide()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""

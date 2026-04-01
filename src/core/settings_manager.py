@@ -215,6 +215,15 @@ class SettingsManager:
         # When True the animation mode comes from the active theme's _button_anim key.
         "use_theme_button_anim": True,
         # ------------------------------------------------------------------
+        # Background drip effects (independent of click effects)
+        # ------------------------------------------------------------------
+        # When True the drip overlay is active (off by default).
+        "bg_drip_enabled": False,
+        # Drip style: "blood" (gore red teardrops) or "water" (translucent cyan teardrops).
+        "bg_drip_type": "blood",
+        # When True the drip type is auto-selected based on the active theme.
+        "use_theme_drip": False,
+        # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
         # Zone alpha values (20 zones, defaults to 128 each – 50% transparent)
@@ -519,6 +528,7 @@ class SettingsManager:
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
+        "bg_drip_enabled", "bg_drip_type", "use_theme_drip",
         "animated_banner_enabled", "banner_anim_style", "banner_use_theme_anim",
         "show_splash_screen",
         "button_anim_enabled", "button_anim_style", "use_theme_button_anim",
