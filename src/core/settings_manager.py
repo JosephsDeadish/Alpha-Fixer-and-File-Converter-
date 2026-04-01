@@ -123,12 +123,13 @@ class SettingsManager:
         "converter_recursive": True,
         "converter_keep_metadata": False,
         # Window geometry
-        # Window geometry – default to 1100×800 which comfortably fits on a
-        # typical 1080p display and stays above the 900×700 enforced minimum.
-        "window_x": 100,
-        "window_y": 100,
-        "window_w": 1100,
-        "window_h": 800,
+        # Window geometry – default to 960×700 which fits comfortably on common
+        # laptop displays (1366×768) as well as larger 1080p monitors while
+        # staying above the 900×700 enforced minimum.
+        "window_x": 80,
+        "window_y": 60,
+        "window_w": 960,
+        "window_h": 700,
         "window_maximized": False,
         # Tooltip
         "tooltip_mode": "No Filter 🤬",

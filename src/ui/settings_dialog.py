@@ -141,16 +141,17 @@ class SettingsDialog(QDialog):
                   else None) or QApplication.primaryScreen()
         if screen is not None:
             ag = screen.availableGeometry()
-            min_w = min(720, max(460, int(ag.width()  * 0.55)))
-            min_h = min(560, max(360, int(ag.height() * 0.55)))
+            min_w = min(680, max(440, int(ag.width()  * 0.45)))
+            min_h = min(520, max(340, int(ag.height() * 0.45)))
         else:
-            min_w, min_h = 720, 560
+            min_w, min_h = 680, 520
             ag = None
         self.setMinimumSize(min_w, min_h)
         # Set an initial size that fits the screen; the showEvent also clamps it
-        # but this avoids an initial oversized paint on some platforms.
-        init_w = min(880, max(min_w, ag.width() - 60)) if ag is not None else min_w
-        init_h = min(700, max(min_h, ag.height() - 80)) if ag is not None else min_h
+        # but this avoids an initial oversized paint on some platforms.  Leave at
+        # least 100 px of margin so the dialog doesn't crowd the desktop.
+        init_w = min(860, max(min_w, ag.width() - 80)) if ag is not None else min_w
+        init_h = min(680, max(min_h, ag.height() - 100)) if ag is not None else min_h
         self.resize(init_w, init_h)
         self._setup_ui()
         self._load_values()
@@ -252,7 +253,7 @@ class SettingsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
-        scroll.setMinimumHeight(220)
+        scroll.setMinimumHeight(160)
         tv.addWidget(scroll)
 
         # ---- Effect + Emoji in a single row of GroupBoxes ----

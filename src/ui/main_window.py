@@ -944,10 +944,12 @@ class MainWindow(QMainWindow):
         screen = self.screen() or QApplication.primaryScreen()
         if screen is not None:
             ag = screen.availableGeometry()
-            # Use at most 88 % of the available width/height, but never below
-            # a sensible floor that still allows the interface to be usable.
-            min_w = min(900, max(640, int(ag.width()  * 0.88)))
-            min_h = min(700, max(520, int(ag.height() * 0.88)))
+            # Use at most 75 % of the available width/height so there is
+            # meaningful margin on common laptop screens (e.g. 1366×768).
+            # The caps of 900×700 are the design-target minimums; the floors
+            # of 640×520 ensure the UI is still usable on very small displays.
+            min_w = min(900, max(640, int(ag.width()  * 0.75)))
+            min_h = min(700, max(520, int(ag.height() * 0.75)))
         else:
             min_w, min_h = 900, 700
         self.setMinimumSize(min_w, min_h)
@@ -1823,10 +1825,14 @@ class MainWindow(QMainWindow):
                 y = ag.y() + max(0, (ag.height() - h) // 2)
         # Clamp saved size so it doesn't exceed the available area
         # (e.g. the user previously ran on a larger monitor or higher resolution)
+        # and clamp position so the window is fully within the available area.
         if primary is not None:
             ag = primary.availableGeometry()
             w = min(w, ag.width())
             h = min(h, ag.height())
+            # Shift the window left/up if the right/bottom edge extends off screen.
+            x = max(ag.x(), min(x, ag.x() + ag.width()  - w))
+            y = max(ag.y(), min(y, ag.y() + ag.height() - h))
         self.setGeometry(x, y, w, h)
 
     def _save_geometry(self):
