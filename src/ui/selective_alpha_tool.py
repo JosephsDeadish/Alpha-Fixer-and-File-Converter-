@@ -1325,9 +1325,15 @@ class SelectiveAlphaCanvas(QWidget):
             lx, ly = self._last_img_pt
             self._erase_brush_move(lx, ly, ix, iy)
             self._last_img_pt = (ix, iy)
-            for i in range(NUM_ZONES):
-                self.mask_changed.emit(i)
-            self.update()
+            # Only emit mask_changed for zones that actually have a mask.
+            for i, m in enumerate(self._masks):
+                if m is not None:
+                    self.mask_changed.emit(i)
+            # Throttle composite rebuild to ~30 fps (33 ms) to reduce lag.
+            now = time.monotonic()
+            if now - self._paint_last_flush >= 0.033:
+                self._paint_last_flush = now
+                self.update()
         else:
             # Just update rubber-band preview
             self.update()

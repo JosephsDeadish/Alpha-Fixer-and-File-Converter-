@@ -856,8 +856,22 @@ class ConverterTab(QWidget):
         if errors > 0:
             self.processing_error.emit(errors)
 
+    _LOG_MAX_LINES = 2_000
+
     def _log_msg(self, msg: str) -> None:
         self._log.append(msg)
+        # Trim the log when it grows too large to prevent unbounded memory
+        # use and UI lag when scrolling through thousands of lines.
+        doc = self._log.document()
+        if doc.blockCount() > self._LOG_MAX_LINES:
+            cursor = self._log.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            cursor.movePosition(
+                cursor.MoveOperation.Down,
+                cursor.MoveMode.KeepAnchor,
+                doc.blockCount() - self._LOG_MAX_LINES,
+            )
+            cursor.removeSelectedText()
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
 

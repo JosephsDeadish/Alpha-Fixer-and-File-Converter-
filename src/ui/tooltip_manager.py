@@ -1639,7 +1639,7 @@ _NORMAL: dict[str, list[str]] = {
     # ---------------------------------------------------------------- Selective Alpha tab
     "selective_alpha_tab": [
         "Paint coloured zones on your image and assign a distinct alpha value to each zone.",
-        "Up to 7 independent zones — each with its own colour overlay and alpha level.",
+        "Up to 40 independent zones — each with its own colour overlay and alpha level.",
         "Freehand, line, rectangle, ellipse, polygon, fill, and eraser tools are available.",
         "Paint regions, set alpha values per zone, then click Apply Alpha Zones.",
         "Full undo/redo for both drawing strokes and Apply operations.",
@@ -1828,7 +1828,7 @@ _NORMAL: dict[str, list[str]] = {
         "Switch between slots to compare different zone arrangements without repainting.",
         "Slots are numbered and can be renamed by saving new content into them.",
         "Select a slot then use Copy All or Paste All to interact with it.",
-        "Pick the all-zones slot to work with. Each slot holds a complete 20-zone layout.",
+        "Pick the all-zones slot to work with. Each slot holds a complete 40-zone layout.",
         "Congratulations on using multiple all-zones slots. Very organised.",
         "Select a slot, copy all zones into it, switch images, select the slot, paste. Simple.",
     ],
@@ -3615,7 +3615,7 @@ _DUMBED: dict[str, list[str]] = {
     # ---------------------------------------------------------------- Selective Alpha tab
     "selective_alpha_tab": [
         "This is the paint-on-it tab. Draw zones on the image, each zone gets its own see-through level.",
-        "Up to 7 coloured zones. Paint them. Give each an alpha value. Click Apply.",
+        "Up to 40 coloured zones. Paint them. Give each an alpha value. Click Apply.",
         "Draw, set numbers, click Apply. That's the whole workflow. You've totally got this.",
         "The coloured blobs are just previews. Don't panic. They show up as transparency after Apply.",
         "Paint by numbers but for transparency. More artistic than it sounds.",
@@ -3744,7 +3744,7 @@ _DUMBED: dict[str, list[str]] = {
         "Saves the current state of all 40 zones to a clipboard.",
         "Clipboard survives opening a new image. Paste later.",
         "Combine with Paste All Zones to clone a layout across images.",
-        "Each mask is stored as a separate array. All 20 of them.",
+        "Each mask is stored as a separate array. All 40 of them.",
         "Not the same as the single-zone clipboard. Separate thing.",
         "Good for when you want to reuse zone work on a similar image.",
         "Copies everything. All zones. Even the empty ones.",
@@ -3757,7 +3757,7 @@ _DUMBED: dict[str, list[str]] = {
         "Use after Copy All Zones. That's the workflow.",
         "Greyed out until you've done a Copy All Zones first.",
         "Replaces all current zone masks in one go.",
-        "Pasting zones from clipboard. All 20. Simultaneously.",
+        "Pasting zones from clipboard. All 40. Simultaneously.",
     ],
     "sa_az_slot_combo": [
         "Pick which all-zones slot to copy into or paste from.",
@@ -5526,13 +5526,13 @@ _VULGAR: dict[str, list[str]] = {
     # ---------------------------------------------------------------- Selective Alpha tab
     "selective_alpha_tab": [
         "Welcome to the paint-on-transparency tab. Zone your image like a goddamn professional.",
-        "Up to 7 zones of selective alpha power. Paint, set the alpha, click Apply. Surgical transparency.",
+        "Up to 40 zones of selective alpha power. Paint, set the alpha, click Apply. Surgical transparency.",
         "This tab lets you assign different alpha values to different parts of your image. Pretty advanced stuff.",
-        "Seven zones, each with its own colour and opacity level. More flexibility than you'll ever actually need.",
+        "Forty zones, each with its own colour and opacity level. More flexibility than you'll ever actually need.",
         "Draw regions, assign see-through levels, click Apply. Undo exists if you screw it up. Use it.",
         "Holy shit, you can make DIFFERENT parts of your image have DIFFERENT transparency levels. Mind-blowing. I know.",
         "This is the advanced tab. If you're scared, go back to the baby tools. No judgment. Okay, a little judgment.",
-        "Zone 1 for the background, Zone 2 for the foreground, Zones 3-7 for whatever unholy mess you're making.",
+        "Zone 1 for the background, Zone 2 for the foreground, Zones 3-40 for whatever unholy mess you're making.",
     ],
     "sa_open_btn": [
         "Open an image. Load the damn thing onto the canvas so you can start painting zones.",
@@ -5651,7 +5651,7 @@ _VULGAR: dict[str, list[str]] = {
         "The mask moves, rotates, or scales. Your cursor determines the mode. Your patience determines the result.",
     ],
     "sa_copy_all_zones": [
-        "Copy every zone mask at once. All 20. One click. Done.",
+        "Copy every zone mask at once. All 40. One click. Done.",
         "Clipboard persists when you load a different image. Intentional and useful.",
         "All 40 zone masks. Even the empty ones. Especially the empty ones.",
         "Pair with Paste All Zones to clone your entire zone layout onto a new canvas.",
@@ -5671,13 +5671,13 @@ _VULGAR: dict[str, list[str]] = {
         "All 40 zones replaced in one atomic paste. Beautiful. Terrifying. Both.",
     ],
     "sa_az_slot_combo": [
-        "Pick which all-zones slot to dump your 20-mask snapshot into or pull one out of.",
+        "Pick which all-zones slot to dump your 40-mask snapshot into or pull one out of.",
         "Multiple slots so you can hoard zone layouts like a digital pack rat. Very on-brand.",
         "Slots survive image switches. Copy, open a new image, paste, profit.",
         "Slot label shows what's in there from last time. If it's empty it says empty.",
         "Select a slot and then hit Copy All or Paste All. That's the whole thing.",
         "It's a dropdown. It contains slots. Pick one. Use the buttons. Wow.",
-        "Each slot holds a full 20-zone snapshot. As many slots as you can stomach.",
+        "Each slot holds a full 40-zone snapshot. As many slots as you can stomach.",
         "Select here before using Copy All or Paste All. Order of operations matters.",
     ],
     "sa_az_slot_add": [
