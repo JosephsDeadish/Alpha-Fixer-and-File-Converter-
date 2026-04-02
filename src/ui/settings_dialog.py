@@ -141,16 +141,16 @@ class SettingsDialog(QDialog):
                   else None) or QApplication.primaryScreen()
         if screen is not None:
             ag = screen.availableGeometry()
-            min_w = min(680, max(440, int(ag.width()  * 0.45)))
+            min_w = min(760, max(440, int(ag.width()  * 0.45)))
             min_h = min(520, max(340, int(ag.height() * 0.45)))
         else:
-            min_w, min_h = 680, 520
+            min_w, min_h = 760, 520
             ag = None
         self.setMinimumSize(min_w, min_h)
         # Set an initial size that fits the screen; the showEvent also clamps it
         # but this avoids an initial oversized paint on some platforms.  Leave at
         # least 100 px of margin so the dialog doesn't crowd the desktop.
-        init_w = min(860, max(min_w, ag.width() - 80)) if ag is not None else min_w
+        init_w = min(1020, max(min_w, ag.width() - 80)) if ag is not None else min_w
         init_h = min(680, max(min_h, ag.height() - 100)) if ag is not None else min_h
         self.resize(init_w, init_h)
         self._setup_ui()
@@ -941,6 +941,7 @@ class SettingsDialog(QDialog):
         theme_scroll.setWidget(theme_tab)
         theme_scroll.setWidgetResizable(True)
         theme_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        theme_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         tabs.addTab(theme_scroll, "🎨 Theme")
 
         # ================================================================
@@ -1015,6 +1016,7 @@ class SettingsDialog(QDialog):
         gen_scroll.setWidget(gen_tab)
         gen_scroll.setWidgetResizable(True)
         gen_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        gen_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         tabs.addTab(gen_scroll, "⚙ General")
 
         layout.addWidget(tabs, 1)
