@@ -55,7 +55,7 @@ Convert between image formats with optional resize and quality control.
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
-- **Selective Alpha Tool** – paint alpha zones directly on an image with up to 20 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
+- **Selective Alpha Tool** – paint alpha zones directly on an image with up to 40 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
 - **HiDPI & multi-monitor aware** – fractional DPI scaling (125 %, 150 %, 200 %) and multiple displays are fully supported; window position is automatically corrected if a monitor is disconnected
 - **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
