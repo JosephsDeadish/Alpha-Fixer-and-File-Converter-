@@ -444,14 +444,14 @@ class SettingsManager:
         )
         try:
             data = json.loads(raw)
-            if isinstance(data, list) and 1 <= len(data) <= 20:
+            if isinstance(data, list) and 1 <= len(data) <= 40:
                 return [max(0, min(255, int(v))) for v in data]
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
-        return [128] * 20
+        return [128] * 40
 
     def set_sa_zone_alphas(self, alphas: list[int]) -> None:
-        """Persist the zone alpha values (up to 20 zones)."""
+        """Persist the zone alpha values (up to 40 zones)."""
         self._qs.setValue("sa_zone_alphas", json.dumps(
             [max(0, min(255, int(v))) for v in alphas]
         ))
@@ -471,7 +471,7 @@ class SettingsManager:
             return None
         try:
             data = json.loads(raw)
-            if (isinstance(data, list) and 1 <= len(data) <= 20
+            if (isinstance(data, list) and 1 <= len(data) <= 40
                     and all(isinstance(c, list) and len(c) == 4 for c in data)):
                 return [[max(0, min(255, int(v))) for v in c] for c in data]
         except (json.JSONDecodeError, TypeError, ValueError):
@@ -479,7 +479,7 @@ class SettingsManager:
         return None
 
     def set_sa_zone_colors(self, colors: list[list[int]]) -> None:
-        """Persist zone overlay colors as [[R,G,B,A], …] (up to 20 zones)."""
+        """Persist zone overlay colors as [[R,G,B,A], …] (up to 40 zones)."""
         self._qs.setValue("sa_zone_colors", json.dumps(
             [[max(0, min(255, int(v))) for v in c] for c in colors]
         ))

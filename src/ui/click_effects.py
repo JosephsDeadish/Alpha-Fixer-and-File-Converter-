@@ -1010,6 +1010,439 @@ class _WaterDrip(QObject):
             self._overlay.show()
 
 
+# ---------------------------------------------------------------------------
+# Snow drift (ambient snowfall for Ice / Arctic themes)
+# ---------------------------------------------------------------------------
+
+class _SnowDrift(QObject):
+    """Continuously drifts snowflakes down from the top of the window.
+
+    Activated for ``"ice"`` effect key.  Flakes spawn from the entire top edge
+    at varying speeds and sizes, creating a gentle layered snowfall effect.
+    """
+
+    _SPAWN_INTERVAL_MS = 400
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        snow_colors = [
+            "#ffffff", "#e8f4ff", "#cce8ff", "#ddeeff",
+            "#aaccff", "#bbddff", "#f0f8ff",
+        ]
+        count = random.randint(2, 5)
+        for _ in range(count):
+            x = random.uniform(0, w)
+            vx = random.uniform(-0.4, 0.4)
+            vy = random.uniform(0.4, 1.5)
+            size = random.uniform(2.5, 6.0)
+            life = (h / max(vy, 0.1)) * 0.05 + random.uniform(0.5, 2.0)
+            p = _Particle(
+                x, random.uniform(-10, 5),
+                vx, vy, life,
+                "snow", size, QColor(random.choice(snow_colors)), "",
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Ember drift (rising embers for Fire / Lava themes)
+# ---------------------------------------------------------------------------
+
+class _EmberDrift(QObject):
+    """Continuously drifts glowing embers upward from the bottom of the window.
+
+    Activated for ``"fire"`` effect key.  Particles rise with a gentle
+    horizontal wobble and fade, suggesting heat haze rising off burning coals.
+    """
+
+    _SPAWN_INTERVAL_MS = 280
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        ember_colors = [
+            "#ff8800", "#ff6600", "#ffaa00", "#ff4400",
+            "#ffcc44", "#ff3300", "#ffdd00", "#cc2200",
+        ]
+        count = random.randint(2, 5)
+        for _ in range(count):
+            x = random.uniform(0, w)
+            vx = random.uniform(-0.8, 0.8)
+            vy = random.uniform(-3.5, -1.5)
+            size = random.uniform(1.5, 4.5)
+            life = (h / max(abs(vy), 0.1)) * 0.05 + random.uniform(0.3, 1.5)
+            p = _Particle(
+                x, h + random.uniform(0, 20),
+                vx, vy, life,
+                "ember", size, QColor(random.choice(ember_colors)), "",
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Sakura petal drift (falling petals for Sakura / Spring themes)
+# ---------------------------------------------------------------------------
+
+class _SakuraPetal(QObject):
+    """Spawns drifting cherry-blossom petals for the Sakura / Spring themes.
+
+    Petals enter from the top edge and drift diagonally downward with gentle
+    side sway.  The ``"fairy_fly"`` particle kind is reused so the existing
+    size-oscillation produces a pleasing tumble animation.
+    """
+
+    _SPAWN_INTERVAL_MS = 700
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._launch)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _launch(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        petal_emojis = ["🌸", "🌺", "🌼", "🌷"]
+        petal_colors = [
+            "#ffb7c5", "#ff99aa", "#ffd4dc", "#ffaabb",
+            "#ff88aa", "#ffc0cb", "#f5c6d0",
+        ]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            x = random.uniform(-20, w + 20)
+            vy = random.uniform(0.4, 1.2)
+            vx = random.uniform(-0.6, 0.6)
+            life = (h / max(vy, 0.1)) * 0.05 + random.uniform(0.5, 2.0)
+            size = random.uniform(14, 22)
+            emoji = random.choice(petal_emojis)
+            color = QColor(random.choice(petal_colors))
+            p = _Particle(
+                x, random.uniform(-20, 0),
+                vx, vy, life,
+                "fairy_fly", size, color, emoji,
+            )
+            self._overlay._add_particle(p)
+
+
+# ---------------------------------------------------------------------------
+# Star shoot (shooting stars for Galaxy / Space themes)
+# ---------------------------------------------------------------------------
+
+class _StarShoot(QObject):
+    """Periodically fires shooting-star streaks across the window.
+
+    Activated for ``"galaxy"`` and ``"galaxy_otter"`` effect keys.  A dense
+    cluster of bright white/gold particles is spawned along a diagonal
+    trajectory; brightness fades head-to-tail to simulate a single fast streak.
+    """
+
+    _INTERVAL_LO = 3500
+    _INTERVAL_HI = 9000
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._shoot)
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _shoot(self) -> None:
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        angle_deg = random.uniform(10, 40)
+        angle = math.radians(angle_deg)
+        x_start = random.uniform(-30, w * 0.35)
+        y_start = random.uniform(0, h * 0.45)
+        speed = random.uniform(18, 32)
+        dx = math.cos(angle) * speed
+        dy = math.sin(angle) * speed
+        star_colors = [
+            "#ffffff", "#ffffee", "#ffffcc", "#aaaaff", "#ddddff", "#ffff88",
+        ]
+        n = random.randint(8, 14)
+        for i in range(n):
+            frac = i / n
+            tail_x = x_start - dx * frac * 0.15
+            tail_y = y_start - dy * frac * 0.15
+            size = max(1.5, 5.5 - frac * 4.0)
+            life_base = random.uniform(0.6, 1.2)
+            life = life_base * (1.0 - frac * 0.6)
+            p = _Particle(
+                tail_x + random.uniform(-1, 1),
+                tail_y + random.uniform(-1, 1),
+                dx * 0.18, dy * 0.18,
+                life,
+                "circle", size,
+                QColor(random.choice(star_colors)), "",
+            )
+            self._overlay._particles.append(p)
+        emoji_p = _Particle(
+            x_start, y_start,
+            dx * 0.12, dy * 0.12,
+            random.uniform(0.5, 0.9),
+            "text", 16, QColor("#ffffcc"), "✨",
+        )
+        self._overlay._particles.append(emoji_p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Bubble rise (rising bubbles for Ocean / Ripple themes)
+# ---------------------------------------------------------------------------
+
+class _BubbleRise(QObject):
+    """Continuously rises translucent bubbles from the bottom of the window.
+
+    Activated for ``"ocean"`` and ``"ripple"`` effect keys.  Bubbles sway
+    gently as they ascend and fade near the top, giving an underwater atmosphere.
+    """
+
+    _SPAWN_INTERVAL_MS = 550
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        bubble_colors = [
+            "#aaddff", "#bbeeff", "#99ccff", "#cceeff",
+            "#88bbff", "#ddf4ff", "#b3e5fc",
+        ]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            x = random.uniform(20, w - 20)
+            vx = random.uniform(-0.25, 0.25)
+            vy = random.uniform(-2.0, -0.8)
+            size = random.uniform(6, 18)
+            life = (h / max(abs(vy), 0.1)) * 0.05 + random.uniform(0.3, 1.2)
+            p = _Particle(
+                x, h + random.uniform(0, 30),
+                vx, vy, life,
+                "bubble", size, QColor(random.choice(bubble_colors)), "",
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Neon flicker (spark arcs for Neon / Cyber themes)
+# ---------------------------------------------------------------------------
+
+class _NeonFlicker(QObject):
+    """Randomly sparks neon-coloured flashes near UI buttons.
+
+    Activated for ``"neon"`` effect key.  Bright short-lived sparks arc
+    outward from button edges in all directions, mimicking unstable neon-tube
+    discharge.
+    """
+
+    _INTERVAL_LO = 1200
+    _INTERVAL_HI = 3200
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._flicker)
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _flicker(self) -> None:
+        from PyQt6.QtWidgets import QPushButton
+        from PyQt6.QtCore import QPoint as _QPoint
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+        main_window = self._overlay._main_window
+        if main_window is None or not main_window.isVisible():
+            return
+        btns = [w for w in main_window.findChildren(QPushButton)
+                if w.isVisible() and w.width() > 20]
+        if not btns:
+            return
+        btn = random.choice(btns)
+        r = btn.rect()
+        edge = random.choice(["top", "bottom", "left", "right"])
+        if edge == "top":
+            lx, ly = random.randint(0, r.width()), 0
+        elif edge == "bottom":
+            lx, ly = random.randint(0, r.width()), r.height()
+        elif edge == "left":
+            lx, ly = 0, random.randint(0, r.height())
+        else:
+            lx, ly = r.width(), random.randint(0, r.height())
+        global_pt = btn.mapToGlobal(_QPoint(lx, ly))
+        mw_pt = main_window.mapFromGlobal(global_pt)
+        bx, by = mw_pt.x(), mw_pt.y()
+        neon_colors = [
+            "#00ffff", "#ff00ff", "#00ff88", "#ff0099",
+            "#aaff00", "#ff6600", "#cc00ff", "#00ccff",
+        ]
+        count = random.randint(5, 12)
+        for _ in range(count):
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(2.0, 6.0)
+            p = _Particle(
+                bx + random.uniform(-3, 3),
+                by + random.uniform(-3, 3),
+                math.cos(angle) * speed, math.sin(angle) * speed,
+                random.uniform(0.25, 0.70),
+                "circle", random.uniform(2, 5),
+                QColor(random.choice(neon_colors)), "",
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Ghost wisp (drifting spectral figures for Goth / Ghost themes)
+# ---------------------------------------------------------------------------
+
+class _GhostWisp(QObject):
+    """Slowly drifts ghostly emoji wisps across the window.
+
+    Activated for ``"goth"`` and ``"ghost"`` effect keys.  Spectral figures
+    drift with slow, eerie undulation — barely visible, just enough to create
+    a haunted atmosphere without distracting from the UI.
+    """
+
+    _INTERVAL_LO = 5000
+    _INTERVAL_HI = 12000
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._haunt)
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _haunt(self) -> None:
+        self._timer.setInterval(random.randint(self._INTERVAL_LO, self._INTERVAL_HI))
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        ghost_emojis = ["👻", "💀", "🕷️", "🌑", "🕸️"]
+        ghost_colors = [
+            "#aaaacc", "#bbbbdd", "#9999bb", "#ccccee",
+            "#8888aa", "#ffffff", "#ddddff",
+        ]
+        count = random.randint(1, 2)
+        left_to_right = random.random() < 0.5
+        speed_sign = 1 if left_to_right else -1
+        for i in range(count):
+            y_start = random.randint(20, max(21, int(h * 0.8)))
+            x_start = (random.randint(-40, -10) if left_to_right
+                       else w + random.randint(10, 40))
+            speed = random.uniform(0.6, 2.2) * speed_sign
+            vy = random.uniform(-0.3, 0.3)
+            life = (w + 80) / max(abs(speed), 1) * 0.05 + random.uniform(0.5, 1.5)
+            size = random.uniform(18, 28)
+            emoji = random.choice(ghost_emojis)
+            color = QColor(random.choice(ghost_colors))
+            p = _Particle(
+                x_start + i * random.randint(30, 80), y_start,
+                speed, vy, life,
+                "fairy_fly", size, color, emoji,
+            )
+            self._overlay._add_particle(p)
+
+
 class _BannerFlock(QObject):
     """Spawns themed emoji flying across the top band of the window periodically.
 
@@ -1110,6 +1543,13 @@ class ClickEffectsOverlay(QWidget):
         self._water_drip: _WaterDrip | None = None
         self._banner_flock: _BannerFlock | None = None
         self._banner_flock_active: bool = False
+        self._snow_drift: _SnowDrift | None = None
+        self._ember_drift: _EmberDrift | None = None
+        self._sakura_petal: _SakuraPetal | None = None
+        self._star_shoot: _StarShoot | None = None
+        self._bubble_rise: _BubbleRise | None = None
+        self._neon_flicker: _NeonFlicker | None = None
+        self._ghost_wisp: _GhostWisp | None = None
         # Background drip state (independent of click effects)
         self._bg_drip_enabled: bool = False
         self._bg_drip_type: str = "blood"  # "blood" or "water"
@@ -1165,6 +1605,20 @@ class ClickEffectsOverlay(QWidget):
                 self._alien_beam.stop()
             if self._slime_drip:
                 self._slime_drip.stop()
+            if self._snow_drift:
+                self._snow_drift.stop()
+            if self._ember_drift:
+                self._ember_drift.stop()
+            if self._sakura_petal:
+                self._sakura_petal.stop()
+            if self._star_shoot:
+                self._star_shoot.stop()
+            if self._bubble_rise:
+                self._bubble_rise.stop()
+            if self._neon_flicker:
+                self._neon_flicker.stop()
+            if self._ghost_wisp:
+                self._ghost_wisp.stop()
             # Only hide the overlay if the banner flock is also inactive.
             # When banner flock is running we still need the overlay visible
             # so flying particles can be rendered even without click effects.
@@ -1251,6 +1705,62 @@ class ClickEffectsOverlay(QWidget):
         # water_drip is no longer tied to click effects; it is driven by
         # the background drip system (set_bg_drip). Any active water drip
         # should remain untouched here.
+        # Manage snow drift (ice theme)
+        if effect_key == "ice" and self._enabled:
+            if self._snow_drift is None:
+                self._snow_drift = _SnowDrift(self)
+            self._snow_drift.start()
+        else:
+            if self._snow_drift:
+                self._snow_drift.stop()
+        # Manage ember drift (fire theme)
+        if effect_key == "fire" and self._enabled:
+            if self._ember_drift is None:
+                self._ember_drift = _EmberDrift(self)
+            self._ember_drift.start()
+        else:
+            if self._ember_drift:
+                self._ember_drift.stop()
+        # Manage sakura petals (sakura theme)
+        if effect_key == "sakura" and self._enabled:
+            if self._sakura_petal is None:
+                self._sakura_petal = _SakuraPetal(self)
+            self._sakura_petal.start()
+        else:
+            if self._sakura_petal:
+                self._sakura_petal.stop()
+        # Manage shooting stars (galaxy / galaxy_otter themes)
+        if effect_key in ("galaxy", "galaxy_otter") and self._enabled:
+            if self._star_shoot is None:
+                self._star_shoot = _StarShoot(self)
+            self._star_shoot.start()
+        else:
+            if self._star_shoot:
+                self._star_shoot.stop()
+        # Manage bubble rise (ocean / ripple themes)
+        if effect_key in ("ocean", "ripple") and self._enabled:
+            if self._bubble_rise is None:
+                self._bubble_rise = _BubbleRise(self)
+            self._bubble_rise.start()
+        else:
+            if self._bubble_rise:
+                self._bubble_rise.stop()
+        # Manage neon flicker (neon theme)
+        if effect_key == "neon" and self._enabled:
+            if self._neon_flicker is None:
+                self._neon_flicker = _NeonFlicker(self)
+            self._neon_flicker.start()
+        else:
+            if self._neon_flicker:
+                self._neon_flicker.stop()
+        # Manage ghost wisps (goth / ghost themes)
+        if effect_key in ("goth", "ghost") and self._enabled:
+            if self._ghost_wisp is None:
+                self._ghost_wisp = _GhostWisp(self)
+            self._ghost_wisp.start()
+        else:
+            if self._ghost_wisp:
+                self._ghost_wisp.stop()
 
     def set_bg_drip(self, drip_type: str, enabled: bool) -> None:
         """Enable or disable the background drip effect independently of click effects.
@@ -1344,6 +1854,8 @@ class ClickEffectsOverlay(QWidget):
     # ------------------------------------------------------------------
 
     _GRAVITY = 0.4
+    # Particle kinds that behave as ambient (no gravity, off-screen culling).
+    _AMBIENT_KINDS = frozenset(("bat_fly", "fairy_fly", "snow", "ember", "bubble"))
     # Margin in pixels around each particle's bounding box added to the dirty
     # rect to ensure antialiased edges are fully covered.
     _DIRTY_MARGIN = 6
@@ -1389,7 +1901,7 @@ class ClickEffectsOverlay(QWidget):
         for p in self._particles:
             p.x += p.vx
             p.y += p.vy
-            if p.kind not in ("bat_fly", "fairy_fly"):
+            if p.kind not in self._AMBIENT_KINDS:
                 p.vy += self._GRAVITY
             p.life -= 0.05   # slightly faster decay → shorter burst, fewer frames rendered
             # Wing-flap animation: oscillate particle size for flying bat/fairy
@@ -1403,7 +1915,7 @@ class ClickEffectsOverlay(QWidget):
                 p.size = p.base_size * (1.0 + self._FLAP_AMPLITUDE * flap)
             # Cull ambient (bat/fairy) particles that have completely left the
             # window so they never accumulate off-screen indefinitely.
-            if p.kind in ("bat_fly", "fairy_fly"):
+            if p.kind in self._AMBIENT_KINDS:
                 if p.x < -100 or p.x > ow + 100 or p.y < -100 or p.y > oh + 100:
                     continue
             if p.life > 0:
@@ -1651,6 +2163,57 @@ class ClickEffectsOverlay(QWidget):
                 painter.setBrush(QBrush(grad))
                 painter.drawPath(path)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
+
+            elif p.kind == "snow":
+                # Soft white snowflake: two overlapping ellipses for a cross shape,
+                # with a faint outer glow circle.
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                painter.setBrush(QBrush(c))
+                r = max(2, int(p.size * 0.5))
+                # Horizontal bar
+                painter.drawEllipse(int(p.x) - r, int(p.y) - max(1, r // 2),
+                                    r * 2, max(1, r))
+                # Vertical bar
+                painter.drawEllipse(int(p.x) - max(1, r // 2), int(p.y) - r,
+                                    max(1, r), r * 2)
+                # Bright centre dot
+                bright = QColor(255, 255, 255, min(255, alpha + 40))
+                painter.setBrush(QBrush(bright))
+                cr = max(1, r // 2)
+                painter.drawEllipse(int(p.x) - cr, int(p.y) - cr, cr * 2, cr * 2)
+            elif p.kind == "ember":
+                # Glowing ember: bright hot centre that cools to a dim red edge.
+                cx, cy = int(p.x), int(p.y)
+                r = max(2, int(p.size))
+                grad = QLinearGradient(cx - r, cy - r, cx + r, cy + r)
+                hot_c = QColor(p.color)
+                hot_c.setAlpha(alpha)
+                cool_c = QColor(p.color)
+                cool_c.setAlpha(max(0, int(alpha * 0.25)))
+                bright_c = QColor(255, 220, 100, min(255, int(alpha * 1.3)))
+                grad.setColorAt(0.0, bright_c)
+                grad.setColorAt(0.45, hot_c)
+                grad.setColorAt(1.0, cool_c)
+                painter.setBrush(QBrush(grad))
+                painter.drawEllipse(cx - r, cy - r, r * 2, r * 2)
+            elif p.kind == "bubble":
+                # Translucent ring with a bright highlight dot (top-left).
+                cx, cy = int(p.x), int(p.y)
+                r = max(4, int(p.size))
+                ring_c = QColor(p.color)
+                ring_c.setAlpha(max(0, int(alpha * 0.55)))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                pen = QPen(ring_c)
+                pen.setWidth(2)
+                painter.setPen(pen)
+                painter.drawEllipse(cx - r, cy - r, r * 2, r * 2)
+                painter.setPen(Qt.PenStyle.NoPen)
+                # Bright highlight in upper-left quadrant
+                highlight_c = QColor(255, 255, 255, max(0, int(alpha * 0.70)))
+                painter.setBrush(QBrush(highlight_c))
+                hr = max(1, r // 3)
+                painter.drawEllipse(cx - r + hr // 2, cy - r + hr // 2, hr, hr)
 
             elif p.kind == "ring":
                 # Expanding hollow circle — grows as life fades, simulating a
