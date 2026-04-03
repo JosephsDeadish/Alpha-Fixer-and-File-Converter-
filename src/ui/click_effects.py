@@ -2002,6 +2002,11 @@ class ClickEffectsOverlay(QWidget):
         # Background drip state (independent of click effects)
         self._bg_drip_enabled: bool = False
         self._bg_drip_type: str = "blood"  # "blood" or "water"
+        # Background flock state (independent of banner animation)
+        self._bg_flock_enabled: bool = False
+        # Background ambient state (independent of click effects / theme)
+        self._bg_ambient_enabled: bool = False
+        self._bg_ambient_type: str = "none"
         self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
         # Cache QFont objects per integer point-size to avoid repeated
         # mutations and implicit font-metric recalculations each frame.
@@ -2054,24 +2059,24 @@ class ClickEffectsOverlay(QWidget):
                 self._alien_beam.stop()
             if self._slime_drip:
                 self._slime_drip.stop()
-            if self._snow_drift:
+            if self._snow_drift and not (self._bg_ambient_enabled and self._bg_ambient_type == "snow"):
                 self._snow_drift.stop()
-            if self._ember_drift:
+            if self._ember_drift and not (self._bg_ambient_enabled and self._bg_ambient_type == "ember"):
                 self._ember_drift.stop()
-            if self._sakura_petal:
+            if self._sakura_petal and not (self._bg_ambient_enabled and self._bg_ambient_type == "sakura"):
                 self._sakura_petal.stop()
-            if self._star_shoot:
+            if self._star_shoot and not (self._bg_ambient_enabled and self._bg_ambient_type == "stars"):
                 self._star_shoot.stop()
-            if self._bubble_rise:
+            if self._bubble_rise and not (self._bg_ambient_enabled and self._bg_ambient_type == "bubbles"):
                 self._bubble_rise.stop()
-            if self._neon_flicker:
+            if self._neon_flicker and not (self._bg_ambient_enabled and self._bg_ambient_type == "neon"):
                 self._neon_flicker.stop()
-            if self._ghost_wisp:
+            if self._ghost_wisp and not (self._bg_ambient_enabled and self._bg_ambient_type == "ghost"):
                 self._ghost_wisp.stop()
             # Only hide the overlay if the banner flock is also inactive.
             # When banner flock is running we still need the overlay visible
             # so flying particles can be rendered even without click effects.
-            if not self._banner_flock_active and not self._bg_drip_enabled:
+            if not self._banner_flock_active and not self._bg_drip_enabled and not self._bg_ambient_enabled:
                 self.hide()
             else:
                 # Ensure the banner-flock timer keeps running even though
@@ -2102,7 +2107,7 @@ class ClickEffectsOverlay(QWidget):
             if self._banner_flock is not None:
                 self._banner_flock.stop()
             # If click effects and bg drip are also disabled, stop the timer and hide.
-            if not self._enabled and not self._bg_drip_enabled:
+            if not self._enabled and not self._bg_drip_enabled and not self._bg_ambient_enabled:
                 self._timer.stop()
                 self.hide()
 
@@ -2155,7 +2160,7 @@ class ClickEffectsOverlay(QWidget):
         # the background drip system (set_bg_drip). Any active water drip
         # should remain untouched here.
         # Manage snow drift (ice theme)
-        if effect_key == "ice" and self._enabled:
+        if (effect_key == "ice" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "snow"):
             if self._snow_drift is None:
                 self._snow_drift = _SnowDrift(self)
             self._snow_drift.start()
@@ -2163,7 +2168,7 @@ class ClickEffectsOverlay(QWidget):
             if self._snow_drift:
                 self._snow_drift.stop()
         # Manage ember drift (fire theme)
-        if effect_key == "fire" and self._enabled:
+        if (effect_key == "fire" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "ember"):
             if self._ember_drift is None:
                 self._ember_drift = _EmberDrift(self)
             self._ember_drift.start()
@@ -2171,7 +2176,7 @@ class ClickEffectsOverlay(QWidget):
             if self._ember_drift:
                 self._ember_drift.stop()
         # Manage sakura petals (sakura theme)
-        if effect_key == "sakura" and self._enabled:
+        if (effect_key == "sakura" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "sakura"):
             if self._sakura_petal is None:
                 self._sakura_petal = _SakuraPetal(self)
             self._sakura_petal.start()
@@ -2179,7 +2184,7 @@ class ClickEffectsOverlay(QWidget):
             if self._sakura_petal:
                 self._sakura_petal.stop()
         # Manage shooting stars (galaxy / galaxy_otter themes)
-        if effect_key in ("galaxy", "galaxy_otter") and self._enabled:
+        if (effect_key in ("galaxy", "galaxy_otter") and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "stars"):
             if self._star_shoot is None:
                 self._star_shoot = _StarShoot(self)
             self._star_shoot.start()
@@ -2187,7 +2192,7 @@ class ClickEffectsOverlay(QWidget):
             if self._star_shoot:
                 self._star_shoot.stop()
         # Manage bubble rise (ocean / ripple themes)
-        if effect_key in ("ocean", "ripple") and self._enabled:
+        if (effect_key in ("ocean", "ripple") and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "bubbles"):
             if self._bubble_rise is None:
                 self._bubble_rise = _BubbleRise(self)
             self._bubble_rise.start()
@@ -2195,7 +2200,7 @@ class ClickEffectsOverlay(QWidget):
             if self._bubble_rise:
                 self._bubble_rise.stop()
         # Manage neon flicker (neon theme)
-        if effect_key == "neon" and self._enabled:
+        if (effect_key == "neon" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "neon"):
             if self._neon_flicker is None:
                 self._neon_flicker = _NeonFlicker(self)
             self._neon_flicker.start()
@@ -2203,7 +2208,7 @@ class ClickEffectsOverlay(QWidget):
             if self._neon_flicker:
                 self._neon_flicker.stop()
         # Manage ghost wisps (goth / ghost themes)
-        if effect_key in ("goth", "ghost") and self._enabled:
+        if (effect_key in ("goth", "ghost") and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "ghost"):
             if self._ghost_wisp is None:
                 self._ghost_wisp = _GhostWisp(self)
             self._ghost_wisp.start()
@@ -2304,15 +2309,93 @@ class ClickEffectsOverlay(QWidget):
             if self._water_drip:
                 self._water_drip.stop()
             # Hide if nothing else needs the overlay
-            if not self._enabled and not self._banner_flock_active:
+            if not self._enabled and not self._banner_flock_active and not self._bg_ambient_enabled:
                 self._timer.stop()
                 self.hide()
+
+    def set_bg_flock(self, enabled: bool, emoji: str = "🐼", color: str = "#e94560") -> None:
+        """Enable or disable a background flock independently of the banner animation."""
+        self._bg_flock_enabled = enabled
+        # Delegate to banner_flock mechanism (reuses same overlay infrastructure)
+        self.set_banner_flock(enabled, emoji, color)
+
+    def set_bg_ambient(self, ambient_type: str, enabled: bool) -> None:
+        """Enable or disable a manual ambient background effect.
+
+        *ambient_type* is one of: ``"snow"``, ``"ember"``, ``"sakura"``,
+        ``"stars"``, ``"bubbles"``, ``"neon"``, ``"ghost"``, ``"none"``.
+        The ambient effect is independent of the click-effects enabled state.
+        """
+        # Stop old ambient if type changed or disabling
+        if not enabled or ambient_type != self._bg_ambient_type:
+            self._stop_bg_ambient()
+        self._bg_ambient_enabled = enabled
+        self._bg_ambient_type = ambient_type if enabled else "none"
+
+        if not enabled or ambient_type == "none":
+            # If nothing else needs overlay, stop timer and hide
+            if not self._enabled and not self._banner_flock_active and not self._bg_drip_enabled:
+                self._timer.stop()
+                self.hide()
+            return
+
+        # Ensure overlay and timer are running
+        self.show()
+        if not self._timer.isActive():
+            self._timer.start()
+
+        # Start the appropriate ambient effect instance
+        _AM = ambient_type
+        if _AM == "snow":
+            if self._snow_drift is None:
+                self._snow_drift = _SnowDrift(self)
+            self._snow_drift.start()
+        elif _AM == "ember":
+            if self._ember_drift is None:
+                self._ember_drift = _EmberDrift(self)
+            self._ember_drift.start()
+        elif _AM == "sakura":
+            if self._sakura_petal is None:
+                self._sakura_petal = _SakuraPetal(self)
+            self._sakura_petal.start()
+        elif _AM == "stars":
+            if self._star_shoot is None:
+                self._star_shoot = _StarShoot(self)
+            self._star_shoot.start()
+        elif _AM == "bubbles":
+            if self._bubble_rise is None:
+                self._bubble_rise = _BubbleRise(self)
+            self._bubble_rise.start()
+        elif _AM == "neon":
+            if self._neon_flicker is None:
+                self._neon_flicker = _NeonFlicker(self)
+            self._neon_flicker.start()
+        elif _AM == "ghost":
+            if self._ghost_wisp is None:
+                self._ghost_wisp = _GhostWisp(self)
+            self._ghost_wisp.start()
+
+    def _stop_bg_ambient(self) -> None:
+        """Stop whichever ambient is currently running as the manual bg ambient."""
+        _AM = self._bg_ambient_type
+        if _AM == "snow" and self._snow_drift:
+            self._snow_drift.stop()
+        elif _AM == "ember" and self._ember_drift:
+            self._ember_drift.stop()
+        elif _AM == "sakura" and self._sakura_petal:
+            self._sakura_petal.stop()
+        elif _AM == "stars" and self._star_shoot:
+            self._star_shoot.stop()
+        elif _AM == "bubbles" and self._bubble_rise:
+            self._bubble_rise.stop()
+        elif _AM == "neon" and self._neon_flicker:
+            self._neon_flicker.stop()
+        elif _AM == "ghost" and self._ghost_wisp:
+            self._ghost_wisp.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
         set_custom_emoji(emoji_list)
-
-    def record_click(self) -> int:
         self._click_count += 1
         return self._click_count
 

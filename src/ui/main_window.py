@@ -1166,6 +1166,8 @@ class MainWindow(QMainWindow):
         self._button_anim = ButtonPressAnimator(self, self._click_effects)
         self._apply_button_anim()
         self._apply_bg_drip()
+        self._apply_bg_flock()
+        self._apply_bg_ambient()
 
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
@@ -1297,6 +1299,39 @@ class MainWindow(QMainWindow):
         else:
             drip_type = self._settings.get("bg_drip_type", "blood")
         self._click_effects.set_bg_drip(drip_type, True)
+
+    def _apply_bg_flock(self) -> None:
+        """Apply the background flock effect based on current settings."""
+        if self._click_effects is None:
+            return
+        enabled = self._settings.get("bg_flock_enabled", False)
+        if not enabled:
+            self._click_effects.set_bg_flock(False)
+            return
+        flock_style = self._settings.get("bg_flock_style", "theme")
+        theme = self._settings.get_theme()
+        icon = theme.get("_icon", "🐼")
+        trail_color = theme.get("_trail_color", "#e94560")
+        _FLOCK_EMOJI = {
+            "theme":       icon,
+            "bats":        "🦇",
+            "fairies":     "🧚",
+            "fish":        "🐟",
+            "butterflies": "🦋",
+            "birds":       "🐦",
+            "stars":       "⭐",
+            "petals":      "🌸",
+        }
+        emoji = _FLOCK_EMOJI.get(flock_style, icon)
+        self._click_effects.set_bg_flock(True, emoji, trail_color)
+
+    def _apply_bg_ambient(self) -> None:
+        """Apply the background ambient effect based on current settings."""
+        if self._click_effects is None:
+            return
+        enabled = self._settings.get("bg_ambient_enabled", False)
+        ambient_type = self._settings.get("bg_ambient_type", "none")
+        self._click_effects.set_bg_ambient(ambient_type if enabled else "none", enabled)
 
     # ------------------------------------------------------------------
     # Easter-egg discovery system
@@ -1955,32 +1990,19 @@ class MainWindow(QMainWindow):
             anim_mode = theme.get("_banner_anim", "spin")
         else:
             anim_mode = self._settings.get("banner_anim_style", "spin")
-        # "flock" mode: keep emoji widgets static; activate a banner flock on
-        # the click-effects overlay so themed emoji fly across the top of the
-        # window periodically (independent of click-effect enable state).
+        # "flock" has moved to Background Effects; map it to "bounce" for banner.
         if anim_mode == "flock":
-            if self._banner_emoji_left is not None:
-                self._banner_emoji_left.set_emoji(icon)
-                self._banner_emoji_left.set_mode("static")
-                self._banner_emoji_left.set_animated(False)
-            if self._banner_emoji_right is not None:
-                self._banner_emoji_right.set_emoji(icon)
-                self._banner_emoji_right.set_mode("static")
-                self._banner_emoji_right.set_animated(False)
-            if self._click_effects is not None:
-                trail_color = theme.get("_trail_color", "#e94560")
-                self._click_effects.set_banner_flock(animated, icon, trail_color)
-        else:
-            if self._banner_emoji_left is not None:
-                self._banner_emoji_left.set_emoji(icon)
-                self._banner_emoji_left.set_mode(anim_mode)
-                self._banner_emoji_left.set_animated(animated)
-            if self._banner_emoji_right is not None:
-                self._banner_emoji_right.set_emoji(icon)
-                self._banner_emoji_right.set_mode(anim_mode)
-                self._banner_emoji_right.set_animated(animated)
-            if self._click_effects is not None:
-                self._click_effects.set_banner_flock(False, icon, "#e94560")
+            anim_mode = "bounce"
+        if self._banner_emoji_left is not None:
+            self._banner_emoji_left.set_emoji(icon)
+            self._banner_emoji_left.set_mode(anim_mode)
+            self._banner_emoji_left.set_animated(animated)
+        if self._banner_emoji_right is not None:
+            self._banner_emoji_right.set_emoji(icon)
+            self._banner_emoji_right.set_mode(anim_mode)
+            self._banner_emoji_right.set_animated(animated)
+        if self._click_effects is not None:
+            self._click_effects.set_banner_flock(False, icon, "#e94560")
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
             self._banner_lbl.setText("Alpha & RGBA Adjuster  |  File Converter")
@@ -2013,6 +2035,8 @@ class MainWindow(QMainWindow):
         if self._click_effects is not None:
             self._apply_theme_effect()
             self._apply_bg_drip()
+            self._apply_bg_flock()
+            self._apply_bg_ambient()
         if self._button_anim is not None:
             self._apply_button_anim()
         # On Windows 11+, colour the native title bar to match the theme's
@@ -2229,6 +2253,8 @@ class MainWindow(QMainWindow):
         self._apply_trail()
         self._apply_button_anim()
         self._apply_bg_drip()
+        self._apply_bg_flock()
+        self._apply_bg_ambient()
         if self._click_effects is not None:
             self._click_effects.set_enabled(
                 self._settings.get("click_effects_enabled", False)

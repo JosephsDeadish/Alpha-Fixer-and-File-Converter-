@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
-    QAbstractSpinBox,
+    QAbstractSpinBox, QFrame,
 )
 
 from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS
@@ -448,8 +448,8 @@ class SettingsDialog(QDialog):
 
         tv.addLayout(effect_emoji_row)
 
-        # ---- Background Drip Effects GroupBox ----
-        grp_bg_drip = QGroupBox("Background Drip Effects")
+        # ---- Background Effects GroupBox ----
+        grp_bg_drip = QGroupBox("Background Effects")
         bg_drip_layout = QVBoxLayout(grp_bg_drip)
         bg_drip_layout.setSpacing(6)
         self._bg_drip_check = QCheckBox("Enable background drip effect (off by default)")
@@ -486,6 +486,77 @@ class SettingsDialog(QDialog):
         self._use_theme_drip_check.toggled.connect(
             lambda checked: self._bg_drip_combo.setEnabled(not checked)
         )
+
+        # Separator between drip and flock sections
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.Shape.HLine)
+        sep1.setFrameShadow(QFrame.Shadow.Sunken)
+        bg_drip_layout.addWidget(sep1)
+
+        # ---- Flock sub-section ----
+        self._bg_flock_check = QCheckBox("Enable background flock (emoji fly across the window)")
+        self._bg_flock_check.setToolTip(
+            "When enabled, themed emoji periodically fly across the top of the window\n"
+            "as a background animation, independent of click effects."
+        )
+        bg_drip_layout.addWidget(self._bg_flock_check)
+        bg_flock_inner = QHBoxLayout()
+        bg_flock_inner.addWidget(QLabel("Flock Style:"))
+        self._bg_flock_combo = QComboBox()
+        self._bg_flock_combo.setMinimumWidth(180)
+        self._bg_flock_combo.addItem("🎨 Match Theme", userData="theme")
+        self._bg_flock_combo.addItem("🦇 Bats", userData="bats")
+        self._bg_flock_combo.addItem("🧚 Fairies", userData="fairies")
+        self._bg_flock_combo.addItem("🐟 Fish", userData="fish")
+        self._bg_flock_combo.addItem("🦋 Butterflies", userData="butterflies")
+        self._bg_flock_combo.addItem("🐦 Birds", userData="birds")
+        self._bg_flock_combo.addItem("⭐ Stars", userData="stars")
+        self._bg_flock_combo.addItem("🌸 Petals", userData="petals")
+        self._bg_flock_combo.setToolTip(
+            "Choose the emoji used for the background flock.\n"
+            "'Match Theme' uses the active theme's icon emoji."
+        )
+        bg_flock_inner.addWidget(self._bg_flock_combo, 1)
+        bg_drip_layout.addLayout(bg_flock_inner)
+        self._bg_flock_check.toggled.connect(
+            lambda checked: self._bg_flock_combo.setEnabled(checked)
+        )
+        self._bg_flock_combo.setEnabled(False)  # disabled until checked
+
+        # Separator
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setFrameShadow(QFrame.Shadow.Sunken)
+        bg_drip_layout.addWidget(sep2)
+
+        # ---- Ambient Effect sub-section ----
+        self._bg_ambient_check = QCheckBox("Enable background ambient effect")
+        self._bg_ambient_check.setToolTip(
+            "When enabled, a continuous ambient animation plays in the background\n"
+            "regardless of the active theme. Pairs beautifully with any theme."
+        )
+        bg_drip_layout.addWidget(self._bg_ambient_check)
+        bg_ambient_inner = QHBoxLayout()
+        bg_ambient_inner.addWidget(QLabel("Ambient Style:"))
+        self._bg_ambient_combo = QComboBox()
+        self._bg_ambient_combo.setMinimumWidth(180)
+        self._bg_ambient_combo.addItem("❄️ Snow Drift", userData="snow")
+        self._bg_ambient_combo.addItem("🔥 Ember Drift", userData="ember")
+        self._bg_ambient_combo.addItem("🌸 Sakura Petals", userData="sakura")
+        self._bg_ambient_combo.addItem("✨ Shooting Stars", userData="stars")
+        self._bg_ambient_combo.addItem("🫧 Rising Bubbles", userData="bubbles")
+        self._bg_ambient_combo.addItem("🌈 Neon Flicker", userData="neon")
+        self._bg_ambient_combo.addItem("👻 Ghost Wisps", userData="ghost")
+        self._bg_ambient_combo.setToolTip(
+            "Choose the ambient background animation style."
+        )
+        bg_ambient_inner.addWidget(self._bg_ambient_combo, 1)
+        bg_drip_layout.addLayout(bg_ambient_inner)
+        self._bg_ambient_check.toggled.connect(
+            lambda checked: self._bg_ambient_combo.setEnabled(checked)
+        )
+        self._bg_ambient_combo.setEnabled(False)  # disabled until checked
+
         tv.addWidget(grp_bg_drip)
 
         # ---- Mouse Trail and Cursor GroupBoxes (belong with theme settings) ----
@@ -884,7 +955,6 @@ class SettingsDialog(QDialog):
             ("flip",     "Flip – horizontal squeeze-and-flip"),
             ("orbit",    "Orbit – emoji circles around the centre point"),
             ("glitch",   "Glitch – jittery digital glitch stutter"),
-            ("flock",    "Flock – emoji fly across the top of the window"),
         ]
         _BANNER_ANIM_TIPS = {
             "spin":     "The emoji rotates continuously like a gear (~6 s per full turn).",
@@ -898,8 +968,6 @@ class SettingsDialog(QDialog):
                         "themes like space, alien, or mermaid.",
             "glitch":   "The emoji stutters and jumps to random nearby positions each frame —\n"
                         "great for gore, alien, or cyber/glitch themes.",
-            "flock":    "A small group of themed emoji periodically flies across the top of\n"
-                        "the window (similar to the bat flock in Bat Cave theme).",
         }
         for key, label in _BANNER_ANIM_OPTIONS:
             self._banner_anim_combo.addItem(label, userData=key)
@@ -919,7 +987,7 @@ class SettingsDialog(QDialog):
         )
         self._banner_use_theme_anim_check.setToolTip(
             "When checked the animation style is chosen automatically by the active\n"
-            "theme (e.g. Bat Cave uses flock, Alien uses bounce, Goth uses pendulum).\n"
+            "theme (e.g. Bat Cave uses bounce, Alien uses orbit, Goth uses pendulum).\n"
             "Uncheck to override with your own style from the dropdown above."
         )
         banner_gl.addWidget(self._banner_use_theme_anim_check, 2, 0, 1, 2)
@@ -1089,6 +1157,10 @@ class SettingsDialog(QDialog):
         self._bg_drip_check.toggled.connect(self._on_bg_drip_changed)
         self._use_theme_drip_check.toggled.connect(self._on_bg_drip_changed)
         self._bg_drip_combo.currentIndexChanged.connect(self._on_bg_drip_changed)
+        self._bg_flock_check.toggled.connect(self._on_bg_flock_changed)
+        self._bg_flock_combo.currentIndexChanged.connect(self._on_bg_flock_changed)
+        self._bg_ambient_check.toggled.connect(self._on_bg_ambient_changed)
+        self._bg_ambient_combo.currentIndexChanged.connect(self._on_bg_ambient_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -1281,7 +1353,7 @@ class SettingsDialog(QDialog):
         # Load banner animation style combo
         _BANNER_ANIM_IDX_MAP = {
             "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
-            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "flock": 9,
+            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8,
         }
         saved_banner_anim = self._settings.get("banner_anim_style", "spin")
         self._banner_anim_combo.setCurrentIndex(
@@ -1323,6 +1395,26 @@ class SettingsDialog(QDialog):
                 self._bg_drip_combo.setCurrentIndex(i)
                 break
         self._bg_drip_combo.setEnabled(not use_theme_drip)
+
+        # Load background flock settings
+        bg_flock_enabled = self._settings.get("bg_flock_enabled", False)
+        self._bg_flock_check.setChecked(bg_flock_enabled)
+        bg_flock_style = self._settings.get("bg_flock_style", "theme")
+        for i in range(self._bg_flock_combo.count()):
+            if self._bg_flock_combo.itemData(i) == bg_flock_style:
+                self._bg_flock_combo.setCurrentIndex(i)
+                break
+        self._bg_flock_combo.setEnabled(bg_flock_enabled)
+
+        # Load background ambient settings
+        bg_ambient_enabled = self._settings.get("bg_ambient_enabled", False)
+        self._bg_ambient_check.setChecked(bg_ambient_enabled)
+        bg_ambient_type = self._settings.get("bg_ambient_type", "snow")
+        for i in range(self._bg_ambient_combo.count()):
+            if self._bg_ambient_combo.itemData(i) == bg_ambient_type:
+                self._bg_ambient_combo.setCurrentIndex(i)
+                break
+        self._bg_ambient_combo.setEnabled(bg_ambient_enabled)
 
         for c in controls:
             c.blockSignals(False)
@@ -1850,3 +1942,13 @@ class SettingsDialog(QDialog):
         drip_type = self._bg_drip_combo.currentData() or "blood"
         self._settings.set("bg_drip_type", drip_type)
         self.settings_changed.emit()
+
+    def _on_bg_flock_changed(self) -> None:
+        self._settings.set("bg_flock_enabled", self._bg_flock_check.isChecked())
+        flock_style = self._bg_flock_combo.currentData() or "theme"
+        self._settings.set("bg_flock_style", flock_style)
+
+    def _on_bg_ambient_changed(self) -> None:
+        self._settings.set("bg_ambient_enabled", self._bg_ambient_check.isChecked())
+        ambient_type = self._bg_ambient_combo.currentData() or "snow"
+        self._settings.set("bg_ambient_type", ambient_type)
