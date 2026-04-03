@@ -1947,8 +1947,10 @@ class SettingsDialog(QDialog):
         self._settings.set("bg_flock_enabled", self._bg_flock_check.isChecked())
         flock_style = self._bg_flock_combo.currentData() or "theme"
         self._settings.set("bg_flock_style", flock_style)
+        self.settings_changed.emit()
 
     def _on_bg_ambient_changed(self) -> None:
         self._settings.set("bg_ambient_enabled", self._bg_ambient_check.isChecked())
         ambient_type = self._bg_ambient_combo.currentData() or "snow"
         self._settings.set("bg_ambient_type", ambient_type)
+        self.settings_changed.emit()
