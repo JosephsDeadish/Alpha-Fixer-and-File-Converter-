@@ -1725,6 +1725,10 @@ class SelectiveAlphaTool(QWidget):
         self._az_slots: list["list | None"] = [None] * _AZ_SLOT_COUNT
         self._az_slot_info: list[str] = ["(empty)"] * _AZ_SLOT_COUNT
         self._az_slot_names: list[str] = [""] * _AZ_SLOT_COUNT
+        # Per-zone display names: start from the static defaults but update
+        # whenever the user picks a new colour so the active-zone combo always
+        # shows the correct colour label.
+        self._zone_display_names: list[str] = list(ZONE_NAMES)
         self._setup_ui()
         self._restore_settings()
 
@@ -2084,7 +2088,7 @@ class SelectiveAlphaTool(QWidget):
         slots_note.setStyleSheet("color: #999; font-size: 10px;")
         sv.addWidget(slots_note)
 
-        # Slot selector row
+        # Slot selector row (combo on its own row so the name shows in full)
         sel_row = QHBoxLayout()
         sel_row.setSpacing(4)
         sel_row.addWidget(QLabel("Slot:"))
@@ -2092,31 +2096,36 @@ class SelectiveAlphaTool(QWidget):
         self._slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
+        self._slot_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
         for i in range(_MASK_SLOT_COUNT):
             self._slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
         self._slot_combo.currentIndexChanged.connect(self._on_slot_selected)
         sel_row.addWidget(self._slot_combo)
+        sv.addLayout(sel_row)
 
+        # Add / Delete buttons on a separate row so neither is cut off
+        slot_btn_row = QHBoxLayout()
+        slot_btn_row.setSpacing(4)
         self._btn_slot_add = QPushButton("＋ Add Slot")
         self._btn_slot_add.setMinimumHeight(26)
-        self._btn_slot_add.setMinimumWidth(98)
         self._btn_slot_add.setToolTip(
             "Add a new empty slot to the list.\n"
             "Useful when all existing slots are in use."
         )
         self._btn_slot_add.clicked.connect(self._on_slot_add)
-        sel_row.addWidget(self._btn_slot_add)
+        slot_btn_row.addWidget(self._btn_slot_add)
 
         self._btn_slot_del = QPushButton("✕ Del Slot")
         self._btn_slot_del.setMinimumHeight(26)
-        self._btn_slot_del.setMinimumWidth(98)
         self._btn_slot_del.setToolTip(
             "Delete the currently selected slot from the list.\n"
             "Any mask stored in it will be lost."
         )
         self._btn_slot_del.clicked.connect(self._on_slot_del)
-        sel_row.addWidget(self._btn_slot_del)
-        sv.addLayout(sel_row)
+        slot_btn_row.addWidget(self._btn_slot_del)
+        sv.addLayout(slot_btn_row)
 
         # Status label for the selected slot
         self._slot_info_lbl = QLabel("(empty)")
@@ -2184,7 +2193,7 @@ class SelectiveAlphaTool(QWidget):
         az_note.setStyleSheet("color: #999; font-size: 10px;")
         azv.addWidget(az_note)
 
-        # Slot selector row
+        # Slot selector row (combo on its own row so the name shows in full)
         az_sel_row2 = QHBoxLayout()
         az_sel_row2.setSpacing(4)
         az_sel_row2.addWidget(QLabel("Slot:"))
@@ -2192,30 +2201,35 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
+        self._az_slot_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
         for i in range(len(self._az_slots)):
             self._az_slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
         self._az_slot_combo.currentIndexChanged.connect(self._on_az_slot_selected)
         az_sel_row2.addWidget(self._az_slot_combo)
+        azv.addLayout(az_sel_row2)
 
+        # Add / Delete buttons on a separate row so neither is cut off
+        az_slot_btn_row = QHBoxLayout()
+        az_slot_btn_row.setSpacing(4)
         self._btn_az_slot_add = QPushButton("＋ Add Slot")
         self._btn_az_slot_add.setMinimumHeight(26)
-        self._btn_az_slot_add.setMinimumWidth(98)
         self._btn_az_slot_add.setToolTip(
             "Add a new empty all-zones slot to the list."
         )
         self._btn_az_slot_add.clicked.connect(self._on_az_slot_add)
-        az_sel_row2.addWidget(self._btn_az_slot_add)
+        az_slot_btn_row.addWidget(self._btn_az_slot_add)
 
         self._btn_az_slot_del = QPushButton("✕ Del Slot")
         self._btn_az_slot_del.setMinimumHeight(26)
-        self._btn_az_slot_del.setMinimumWidth(98)
         self._btn_az_slot_del.setToolTip(
             "Delete the currently selected all-zones slot from the list.\n"
             "Any snapshot stored in it will be lost."
         )
         self._btn_az_slot_del.clicked.connect(self._on_az_slot_del)
-        az_sel_row2.addWidget(self._btn_az_slot_del)
-        azv.addLayout(az_sel_row2)
+        az_slot_btn_row.addWidget(self._btn_az_slot_del)
+        azv.addLayout(az_slot_btn_row)
 
         self._az_slot_info_lbl = QLabel("(empty)")
         self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
@@ -2401,6 +2415,7 @@ class SelectiveAlphaTool(QWidget):
                     self._canvas.set_zone_color(idx, rgb[0], rgb[1], rgb[2])
             self._refresh_zone_editor(self._ze_cur_idx)
             self._refresh_zone_combo_icons()
+            self._refresh_zone_display_names()
             self._brush_spin.setValue(int(self._settings.get("sa_brush_size", 10)))
             self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
             # Restore autocorrect toggle
@@ -3192,6 +3207,71 @@ class SelectiveAlphaTool(QWidget):
         pm.fill(QColor(r, g, b))
         return QIcon(pm)
 
+    # Palette used by _color_name_for to map arbitrary RGB to a human-readable
+    # colour label (nearest Euclidean distance in RGB space).
+    _COLOR_PALETTE: list[tuple[str, tuple[int, int, int]]] = [
+        ("Red",        (220,  20,  20)),
+        ("Green",      ( 30, 180,  30)),
+        ("Blue",       ( 30,  30, 210)),
+        ("Yellow",     (230, 220,   0)),
+        ("Orange",     (230, 115,   0)),
+        ("Purple",     (130,   0, 200)),
+        ("Pink",       (255, 100, 160)),
+        ("Cyan",       (  0, 210, 210)),
+        ("Magenta",    (200,   0, 200)),
+        ("Lime",       ( 50, 230,  50)),
+        ("Teal",       (  0, 180, 150)),
+        ("Indigo",     ( 60,   0, 160)),
+        ("Violet",     (150,   0, 210)),
+        ("Gold",       (210, 170,   0)),
+        ("Brown",      (130,  70,  30)),
+        ("Navy",       (  0,   0, 130)),
+        ("Coral",      (255,  80,  70)),
+        ("Salmon",     (255, 140, 110)),
+        ("Olive",      (100, 100,   0)),
+        ("Maroon",     (130,   0,   0)),
+        ("Sky Blue",   ( 80, 160, 220)),
+        ("Forest",     (  0, 100,  50)),
+        ("Rose",       (230,  50, 100)),
+        ("Lavender",   (170, 130, 220)),
+        ("Peach",      (255, 190, 140)),
+        ("Mint",       (150, 230, 180)),
+        ("Crimson",    (180,   0,  40)),
+        ("Amber",      (255, 180,   0)),
+        ("Slate",      ( 80, 100, 120)),
+        ("Silver",     (190, 190, 190)),
+        ("Steel Blue", ( 70, 130, 180)),
+        ("Dark Red",   (150,   0,   0)),
+        ("Dark Green", (  0, 110,   0)),
+        ("Dark Blue",  (  0,   0, 139)),
+        ("Dark Gray",  ( 80,  80,  80)),
+        ("Light Gray", (200, 200, 200)),
+        ("Tan",        (210, 180, 140)),
+        ("Turquoise",  ( 64, 224, 208)),
+        ("White",      (255, 255, 255)),
+        ("Black",      (  0,   0,   0)),
+    ]
+
+    @classmethod
+    def _color_name_for(cls, r: int, g: int, b: int) -> str:
+        """Return the nearest named colour for the given (r, g, b) value."""
+        best, best_d = "Color", float("inf")
+        for name, (cr, cg, cb) in cls._COLOR_PALETTE:
+            d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2
+            if d < best_d:
+                best_d, best = d, name
+        return best
+
+    def _refresh_zone_display_names(self) -> None:
+        """Derive zone display names from current canvas colours and update the
+        active-zone combo so names always reflect the real colour of each zone."""
+        for i in range(NUM_ZONES):
+            r, g, b, _ = self._canvas.get_zone_color(i)
+            color_name = self._color_name_for(r, g, b)
+            label = f"Zone {i + 1} – {color_name}"
+            self._zone_display_names[i] = label
+            self._active_zone_combo.setItemText(i, label)
+
     def _refresh_zone_combo_icons(self) -> None:
         """Sync all active-zone combo item icons to current canvas zone colors."""
         for i in range(NUM_ZONES):
@@ -3216,7 +3296,7 @@ class SelectiveAlphaTool(QWidget):
     def _refresh_zone_editor(self, idx: int) -> None:
         """Update the single zone editor panel to reflect zone *idx*."""
         self._ze_cur_idx = idx
-        self._ze_name_lbl.setText(ZONE_NAMES[idx])
+        self._ze_name_lbl.setText(self._zone_display_names[idx])
         r, g, b, _ = self._canvas.get_zone_color(idx)
         self._ze_swatch_btn.setStyleSheet(
             f"background:{QColor(r, g, b).name()};"
@@ -3237,7 +3317,7 @@ class SelectiveAlphaTool(QWidget):
         r, g, b, _ = self._canvas.get_zone_color(self._ze_cur_idx)
         chosen = QColorDialog.getColor(
             QColor(r, g, b), self,
-            f"Choose colour for {ZONE_NAMES[self._ze_cur_idx]}"
+            f"Choose colour for {self._zone_display_names[self._ze_cur_idx]}"
         )
         if chosen.isValid():
             self._canvas.set_zone_color(
@@ -3251,6 +3331,12 @@ class SelectiveAlphaTool(QWidget):
                 self._ze_cur_idx,
                 self._make_zone_color_icon(chosen.red(), chosen.green(), chosen.blue())
             )
+            # Update the display name to reflect the new colour
+            color_name = self._color_name_for(chosen.red(), chosen.green(), chosen.blue())
+            new_label = f"Zone {self._ze_cur_idx + 1} – {color_name}"
+            self._zone_display_names[self._ze_cur_idx] = new_label
+            self._active_zone_combo.setItemText(self._ze_cur_idx, new_label)
+            self._ze_name_lbl.setText(new_label)
             self._save_settings()
 
     def _on_ze_clear(self) -> None:
