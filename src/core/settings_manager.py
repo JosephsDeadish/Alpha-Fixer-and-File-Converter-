@@ -174,8 +174,8 @@ class SettingsManager:
         # Animated banner SVGs / spinning emojis (off by default for performance)
         "animated_banner_enabled": False,
         # Banner animation style when animated_banner_enabled is True.
-        # Valid values: "spin", "bounce", "shake", "pendulum", "flock".
-        # "flock" spawns themed emoji flying across the top of the window.
+        # Valid values: "spin", "bounce", "shake", "pendulum", "pulse", "float", "flip", "orbit", "glitch".
+        # (Note: "flock" has moved to Background Effects – see bg_flock_enabled.)
         "banner_anim_style": "spin",
         # When True the banner animation mode comes from the active theme's
         # _banner_anim key rather than the manual banner_anim_style setting.

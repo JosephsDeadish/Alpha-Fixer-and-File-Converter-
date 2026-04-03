@@ -1886,6 +1886,7 @@ class _NoodleStrand(QObject):
 
 
 
+class _BannerFlock(QObject):
     """Spawns themed emoji flying across the top band of the window periodically.
 
     Unlike *_BatFlock* and *_FairyFlock* (which are activated by the click
@@ -2309,7 +2310,7 @@ class ClickEffectsOverlay(QWidget):
             if self._water_drip:
                 self._water_drip.stop()
             # Hide if nothing else needs the overlay
-            if not self._enabled and not self._banner_flock_active and not self._bg_ambient_enabled:
+            if not self._enabled and not self._banner_flock_active and not self._bg_ambient_enabled and not self._bg_flock_enabled:
                 self._timer.stop()
                 self.hide()
 

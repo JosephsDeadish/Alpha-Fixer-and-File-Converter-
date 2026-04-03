@@ -2002,7 +2002,8 @@ class MainWindow(QMainWindow):
             self._banner_emoji_right.set_mode(anim_mode)
             self._banner_emoji_right.set_animated(animated)
         if self._click_effects is not None:
-            self._click_effects.set_banner_flock(False, icon, "#e94560")
+            trail_color = theme.get("_trail_color", "#e94560")
+            self._click_effects.set_banner_flock(False, icon, trail_color)
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
             self._banner_lbl.setText("Alpha & RGBA Adjuster  |  File Converter")
