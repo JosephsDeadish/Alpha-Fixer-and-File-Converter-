@@ -2035,6 +2035,7 @@ class SelectiveAlphaTool(QWidget):
         self._ze_swatch_btn.setStyleSheet(
             "background:#ff4444;border:1px solid #666;border-radius:3px;padding:0;"
         )
+        self._ze_swatch_btn.setToolTip("Click to choose a colour for this zone")
         ze_row1.addWidget(self._ze_swatch_btn)
         self._ze_name_lbl = QLabel(ZONE_NAMES[0])
         self._ze_name_lbl.setSizePolicy(
@@ -3064,6 +3065,8 @@ class SelectiveAlphaTool(QWidget):
                 pass  # Fall back to preset colors
 
         self._refresh_zone_editor(self._ze_cur_idx)
+        self._refresh_zone_combo_icons()
+        self._refresh_zone_display_names()
 
         # Reveal all populated zones and sync the master Show Highlights toggle.
         self._on_show_all_zones()

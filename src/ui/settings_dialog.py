@@ -577,7 +577,7 @@ class SettingsDialog(QDialog):
         self._trail_style_combo = QComboBox()
         _TRAIL_STYLE_OPTIONS = [
             ("Dots (default)",    "Dots  – Small colored dots fade out behind the cursor."),
-            ("Ribbon / Noodle",   "Ribbon  – Smooth connected line trails the cursor like a ribbon."),
+            ("Ribbon 🎀",          "Ribbon  – Smooth connected line trails the cursor like a ribbon."),
             ("Noodle 🍜",         "Noodle  – Physics-simulated dangling chain that wobbles and swings as you move the mouse."),
             ("Comet tail",        "Comet tail  – Tapered bright streak that fades to nothing behind the cursor."),
             ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
@@ -1422,7 +1422,7 @@ class SettingsDialog(QDialog):
         # Load background ambient settings
         bg_ambient_enabled = self._settings.get("bg_ambient_enabled", False)
         self._bg_ambient_check.setChecked(bg_ambient_enabled)
-        bg_ambient_type = self._settings.get("bg_ambient_type", "snow")
+        bg_ambient_type = self._settings.get("bg_ambient_type", "none")
         for i in range(self._bg_ambient_combo.count()):
             if self._bg_ambient_combo.itemData(i) == bg_ambient_type:
                 self._bg_ambient_combo.setCurrentIndex(i)
@@ -1975,7 +1975,8 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_bg_ambient_changed(self) -> None:
-        self._settings.set("bg_ambient_enabled", self._bg_ambient_check.isChecked())
-        ambient_type = self._bg_ambient_combo.currentData() or "snow"
+        enabled = self._bg_ambient_check.isChecked()
+        self._settings.set("bg_ambient_enabled", enabled)
+        ambient_type = (self._bg_ambient_combo.currentData() or "snow") if enabled else "none"
         self._settings.set("bg_ambient_type", ambient_type)
         self.settings_changed.emit()
