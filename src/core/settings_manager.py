@@ -451,7 +451,11 @@ class SettingsManager:
         try:
             data = json.loads(raw)
             if isinstance(data, list) and 1 <= len(data) <= 40:
-                return [max(0, min(255, int(v))) for v in data]
+                result = [max(0, min(255, int(v))) for v in data]
+                # Pad to exactly 40 for backward-compat with older saves
+                if len(result) < 40:
+                    result += [128] * (40 - len(result))
+                return result
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
         return [128] * 40

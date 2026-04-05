@@ -1701,6 +1701,9 @@ class _ZoneRow(QWidget):
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
 
+    _MASK_SLOT_COUNT: int = 15   # Maximum number of saved-mask slots
+    _AZ_SLOT_COUNT:   int = 9    # Maximum number of all-zones slots
+
     def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings_manager
@@ -1721,7 +1724,7 @@ class SelectiveAlphaTool(QWidget):
         self._mask_clipboard: Optional[np.ndarray] = None
         # All-zones clipboard: multi-slot store that survives image changes.
         # Each slot holds a snapshot of every zone mask.
-        _AZ_SLOT_COUNT = 9
+        _AZ_SLOT_COUNT = self._AZ_SLOT_COUNT
         self._az_slots: list["list | None"] = [None] * _AZ_SLOT_COUNT
         self._az_slot_info: list[str] = ["(empty)"] * _AZ_SLOT_COUNT
         self._az_slot_names: list[str] = [""] * _AZ_SLOT_COUNT
@@ -2071,7 +2074,7 @@ class SelectiveAlphaTool(QWidget):
         # Compact dropdown-based slot chooser.  Slots survive image changes so
         # the user can copy zones from one image and paste onto another.
         # The user can grow the list with "＋ Add Slot".
-        _MASK_SLOT_COUNT = 15
+        _MASK_SLOT_COUNT = self._MASK_SLOT_COUNT
         self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_COUNT
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_COUNT
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_COUNT
@@ -2651,6 +2654,8 @@ class SelectiveAlphaTool(QWidget):
 
     def _on_paste_from_slot(self, slot_idx: int) -> None:
         """Paste the mask stored in slot *slot_idx* into the currently active zone."""
+        if slot_idx < 0 or slot_idx >= len(self._mask_slots):
+            return
         if self._mask_slots[slot_idx] is None:
             QMessageBox.information(
                 self, "Slot empty",
@@ -2713,7 +2718,9 @@ class SelectiveAlphaTool(QWidget):
         self._on_slot_selected(idx)
 
     def _on_slot_add(self) -> None:
-        """Append a new empty slot to the list."""
+        """Append a new empty slot to the list (max _MASK_SLOT_COUNT)."""
+        if len(self._mask_slots) >= self._MASK_SLOT_COUNT:
+            return
         idx = len(self._mask_slots)
         self._mask_slots.append(None)
         self._mask_slot_info.append("(empty)")
@@ -2775,6 +2782,8 @@ class SelectiveAlphaTool(QWidget):
     def _on_paste_all_zones(self) -> None:
         """Paste all zone masks from the currently selected all-zones slot."""
         idx = self._az_slot_combo.currentIndex()
+        if idx < 0 or idx >= len(self._az_slots):
+            return
         if self._az_slots[idx] is None:
             return
         if not self._canvas.has_image():
@@ -2823,7 +2832,9 @@ class SelectiveAlphaTool(QWidget):
         self._on_az_slot_selected(idx)
 
     def _on_az_slot_add(self) -> None:
-        """Append a new empty all-zones slot to the list."""
+        """Append a new empty all-zones slot to the list (max _AZ_SLOT_COUNT)."""
+        if len(self._az_slots) >= self._AZ_SLOT_COUNT:
+            return
         idx = len(self._az_slots)
         self._az_slots.append(None)
         self._az_slot_info.append("(empty)")
