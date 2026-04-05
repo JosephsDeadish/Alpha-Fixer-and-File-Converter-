@@ -2577,6 +2577,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event):
+        # Remove the global keyboard-secret event filter so it cannot fire
+        # against partially-torn-down widgets after close begins.
+        if self._key_secret_filter is not None:
+            app = QApplication.instance()
+            if app is not None:
+                app.removeEventFilter(self._key_secret_filter)
         # Disable overlays first so their event filters are unregistered and
         # their internal timers (animation, bat/fairy flock, etc.) are stopped
         # before any Qt objects start being torn down.

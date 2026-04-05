@@ -1137,7 +1137,7 @@ class SettingsDialog(QDialog):
         self._sound_volume_slider.valueChanged.connect(self._on_sound_volume_changed)
         self._trail_check.toggled.connect(self._on_trail_changed)
         self._trail_color_btn.color_changed.connect(self._on_trail_color_changed)
-        self._use_theme_trail_check.toggled.connect(self._on_trail_changed)
+        self._use_theme_trail_check.toggled.connect(self._on_use_theme_trail_changed)
         self._trail_style_combo.currentIndexChanged.connect(self._on_trail_style_changed)
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
@@ -1251,6 +1251,13 @@ class SettingsDialog(QDialog):
             # is connected to _on_trail_*_changed which emits settings_changed.
             self._trail_length_slider, self._trail_fade_slider, self._trail_intensity_slider,
             self._sound_volume_slider,
+            # Background effects controls – their handlers write to QSettings and
+            # emit settings_changed, so they must be blocked during initial load.
+            self._bg_drip_check, self._use_theme_drip_check, self._bg_drip_combo,
+            self._bg_flock_check, self._bg_flock_combo,
+            self._bg_ambient_check, self._bg_ambient_combo,
+            # Sound profile combo also saves settings on currentIndexChanged.
+            self._sound_profile_combo,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -1817,6 +1824,17 @@ class SettingsDialog(QDialog):
             self.first_trail_enabled.emit()
         else:
             self.settings_changed.emit()
+
+    def _on_use_theme_trail_changed(self) -> None:
+        """Handle the 'use theme trail' checkbox independently.
+
+        Saves use_theme_trail and trail_enabled but never fires
+        first_trail_enabled — that unlock is only triggered when the
+        user explicitly turns on the trail via _on_trail_changed.
+        """
+        self._settings.set("trail_enabled", self._trail_check.isChecked())
+        self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
+        self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
         _IDX_TO_STYLE = ["dots", "ribbon", "noodle", "comet", "fairy", "wave",
