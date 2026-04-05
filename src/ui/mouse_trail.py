@@ -38,7 +38,7 @@ _EMOJI_LISTS  = {
     "sparkle": _SPARKLE_DUST,
 }
 _ALL_STYLES = {"dots", "fairy", "wave", "sparkle", "comet", "ribbon", "rainbow", "noodle", "distortion",
-               "fire", "lightning"}
+               "fire", "lightning", "plasma", "sakura", "smoke"}
 
 # ── Noodle physics constants ───────────────────────────────────────────────────────────────────────────
 _NOODLE_SEGMENTS   = 18     # number of chain links
@@ -213,6 +213,20 @@ class MouseTrailOverlay(QWidget):
                     angle = random.uniform(0.0, 2.0 * math.pi)
                     hl = random.uniform(9.0, 22.0)
                     self._trail.append([lx, ly, 1.0, "", angle, hl])
+                elif self._style == "plasma":
+                    # Plasma: store per-particle hue offset and base angle
+                    hue_off = random.randint(0, 359)
+                    base_ang = random.uniform(0.0, 2.0 * math.pi)
+                    self._trail.append([lx, ly, 1.0, "", hue_off, base_ang])
+                elif self._style == "sakura":
+                    # Sakura: store rotation angle and horizontal drift velocity
+                    rotation = random.uniform(0.0, 2.0 * math.pi)
+                    drift_x = random.uniform(-0.7, 0.7)
+                    self._trail.append([lx, ly, 1.0, "", rotation, drift_x])
+                elif self._style == "smoke":
+                    # Smoke: store initial expand radius
+                    init_r = random.uniform(4.0, 8.0)
+                    self._trail.append([lx, ly, 1.0, "", init_r])
                 else:
                     emoji_list = _EMOJI_LISTS.get(self._style, _FAIRY_DUST)
                     emoji = random.choice(emoji_list) if self._style in _EMOJI_STYLES else ""
@@ -263,6 +277,9 @@ class MouseTrailOverlay(QWidget):
         # Lightning: very fast fade so bolts flash briefly
         if self._style == "lightning":
             base_decay *= 4.0
+        # Plasma: fast fade so arcs crackle and vanish
+        if self._style == "plasma":
+            base_decay *= 3.0
         # Distortion wave: advance the sinusoidal phase each tick for animation
         if self._style == "distortion":
             self._distortion_phase += 0.18
@@ -282,6 +299,29 @@ class MouseTrailOverlay(QWidget):
                     new_trail.append([x, y, a, "",
                                       entry[4] if len(entry) > 4 else 0.0,
                                       entry[5] if len(entry) > 5 else 15.0])
+            elif self._style == "plasma":
+                # Particles stay in place; fast fade reveals crackling arc effect
+                a -= base_decay
+                if a > 0.0:
+                    new_trail.append([x, y, a, "",
+                                      entry[4] if len(entry) > 4 else 0,
+                                      entry[5] if len(entry) > 5 else 0.0])
+            elif self._style == "sakura":
+                # Petals drift downward and sideways, rotating as they fall
+                drift_x = entry[5] if len(entry) > 5 else 0.0
+                rotation = (entry[4] if len(entry) > 4 else 0.0) + 0.06
+                x += drift_x * 0.5
+                y += 0.8
+                a -= base_decay
+                if a > 0.0:
+                    new_trail.append([x, y, a, "", rotation, drift_x])
+            elif self._style == "smoke":
+                # Smoke puffs drift upward and expand
+                expand_r = (entry[4] if len(entry) > 4 else 4.0) + 0.8
+                y -= 0.5
+                a -= base_decay * 1.2
+                if a > 0.0:
+                    new_trail.append([x, y, a, "", expand_r])
             else:
                 emoji = entry[3] if len(entry) > 3 else ""
                 a -= base_decay
@@ -332,6 +372,12 @@ class MouseTrailOverlay(QWidget):
             self._paint_fire(painter)
         elif self._style == "lightning":
             self._paint_lightning(painter)
+        elif self._style == "plasma":
+            self._paint_plasma(painter)
+        elif self._style == "sakura":
+            self._paint_sakura(painter)
+        elif self._style == "smoke":
+            self._paint_smoke(painter)
         else:
             self._paint_dots(painter)
 
@@ -521,6 +567,84 @@ class MouseTrailOverlay(QWidget):
     def _paint_fairy(self, painter: QPainter) -> None:
         """Legacy alias for _paint_emoji (kept for compatibility)."""
         self._paint_emoji(painter)
+
+    def _paint_plasma(self, painter: QPainter) -> None:
+        """Plasma trail – electric arc sparks in cycling cyan/purple/white.
+
+        Each particle emits three radiating spark lines 120° apart at a
+        randomly assigned base angle, creating a crackling arc-burst effect.
+        The colour sweeps through purple→cyan at high saturation and fades fast.
+        """
+        max_alpha = int(230 * self._intensity / 100)
+        for entry in self._trail:
+            x, y, alpha_frac = entry[0], entry[1], entry[2]
+            hue_off = int(entry[4]) if len(entry) > 4 else 0
+            base_ang = entry[5] if len(entry) > 5 else 0.0
+            alpha = max(0, min(255, int(alpha_frac * max_alpha)))
+            # Hue: purple (270°) at peak → cyan (180°) as it fades, shifted by hue_off
+            hue = (270 - int(90 * (1.0 - alpha_frac)) + hue_off) % 360
+            sat = max(80, int(220 * alpha_frac + 60 * (1.0 - alpha_frac)))
+            val = min(255, int(220 * alpha_frac + 100 * (1.0 - alpha_frac)))
+            c = QColor.fromHsv(hue, sat, val, alpha)
+            spark_len = max(3, int(alpha_frac * 14))
+            width = max(1.0, alpha_frac * 2.5)
+            pen = QPen(c, width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            for ang_off in (0.0, math.pi * 2.0 / 3.0, math.pi * 4.0 / 3.0):
+                angle = base_ang + ang_off
+                dx = math.cos(angle) * spark_len
+                dy = math.sin(angle) * spark_len
+                painter.drawLine(int(x - dx), int(y - dy), int(x + dx), int(y + dy))
+        painter.setPen(Qt.PenStyle.NoPen)
+
+    def _paint_sakura(self, painter: QPainter) -> None:
+        """Sakura trail – small pink petal-shaped ellipses that drift and rotate.
+
+        Each particle is a slightly elongated ellipse rotated by a per-particle
+        angle that advances each tick, simulating petals drifting in a breeze.
+        Colour fades from deep pink at peak to near-white as the petal ages.
+        """
+        max_alpha = int(200 * self._intensity / 100)
+        for entry in self._trail:
+            x, y, alpha_frac = entry[0], entry[1], entry[2]
+            rotation = entry[4] if len(entry) > 4 else 0.0
+            alpha = max(0, min(255, int(alpha_frac * max_alpha)))
+            # Deep pink (HSV 338°) at peak → near-white as it fades
+            hue = 338
+            sat = max(0, int(180 * alpha_frac))
+            val = min(255, int(200 + 55 * alpha_frac))
+            c = QColor.fromHsv(hue, sat, val, alpha)
+            petal_w = max(2, int(alpha_frac * 9 + 2))
+            petal_h = max(1, int(alpha_frac * 5 + 1))
+            painter.save()
+            painter.translate(int(x), int(y))
+            painter.rotate(math.degrees(rotation))
+            painter.setBrush(QBrush(c))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(-petal_w, -petal_h, petal_w * 2, petal_h * 2)
+            painter.restore()
+        painter.setPen(Qt.PenStyle.NoPen)
+
+    def _paint_smoke(self, painter: QPainter) -> None:
+        """Smoke trail – soft expanding gray puffs that rise and dissipate.
+
+        Each particle is a circle whose radius grows each tick as alpha fades,
+        mimicking a smoke puff that expands and thins out as it rises.
+        """
+        max_alpha = int(160 * self._intensity / 100)
+        for entry in self._trail:
+            x, y, alpha_frac = entry[0], entry[1], entry[2]
+            expand_r = int(entry[4]) if len(entry) > 4 else 4
+            # Translucency ramps down as puff expands; cap to avoid overdraw
+            effective_alpha = max(0, min(255, int(alpha_frac * max_alpha * 0.65)))
+            # Light gray at fresh, slightly darker as it ages
+            gray_val = min(255, int(180 + 60 * alpha_frac))
+            c = QColor(gray_val, gray_val, gray_val, effective_alpha)
+            painter.setBrush(QBrush(c))
+            painter.setPen(Qt.PenStyle.NoPen)
+            r = max(3, expand_r)
+            painter.drawEllipse(int(x - r), int(y - r), r * 2, r * 2)
+        painter.setPen(Qt.PenStyle.NoPen)
 
     # ------------------------------------------------------------------
     # Noodle physics helpers

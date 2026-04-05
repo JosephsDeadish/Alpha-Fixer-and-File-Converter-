@@ -826,6 +826,9 @@ _NORMAL: dict[str, list[str]] = {
         "Fire 🔥 trail: glowing embers drift upward — hot yellow fading to deep red. Pairs great with Gore or Volcano themes.",
         "Lightning ⚡ trail: brief bright bolt flashes that crackle along the path and vanish almost instantly.",
         "Noodle 🍜 style: a physics-simulated dangling chain that wobbles and swings as you move the mouse.",
+        "Plasma 🔵 trail: electric arc sparks crackle in purple and cyan — they flash and vanish like static discharge.",
+        "Sakura 🌸 trail: soft pink petals drift, spin, and fall gently behind the cursor.",
+        "Smoke 💨 trail: soft gray puffs expand and rise behind the cursor as they fade away.",
     ],
     "use_theme_trail": [
         "When enabled, the trail color is chosen automatically to match the active theme.",
@@ -2989,6 +2992,9 @@ _DUMBED: dict[str, list[str]] = {
         "Fire trail: warm embers drift upward — yellow at the mouse, red further back. Looks great on Gore.",
         "Lightning trail: flash-bang bolt segments appear and disappear super fast. Very electric.",
         "Noodle style: physics chain dangling behind cursor. It wobbles. It's great.",
+        "Plasma trail: purple-cyan electric arcs crackle and vanish. Static discharge energy.",
+        "Sakura trail: pink spinning petals drift and fall. Pairs great with floral themes.",
+        "Smoke trail: expanding gray puffs rise and fade. Subtle and satisfying.",
     ],
     "use_theme_trail": [
         "Check this and the trail changes color automatically for each theme. Smart.",
@@ -4563,6 +4569,9 @@ _VULGAR: dict[str, list[str]] = {
         "Fire trail 🔥: your cursor becomes a goddamn flamethrower. Embers drift upward, yellow to red. Use with Gore or Volcano.",
         "Lightning trail ⚡: crackling bolt flashes appear and vanish instantly. It's over-the-top. It's perfect.",
         "Noodle trail 🍜: physics noodle drags behind cursor. It jiggles. This is the one.",
+        "Plasma trail 🔵: electric arc sparks in purple and cyan. Like your cursor is a Tesla coil.",
+        "Sakura trail 🌸: pink petals spin and drift behind cursor. Pair with a floral theme. You know you want to.",
+        "Smoke trail 💨: expanding gray puffs rise and dissolve. Understated. Classy. Different.",
     ],
     "use_theme_trail": [
         "Check this and your trail auto-matches the theme. Fairy Garden gets fairy fucking dust. ✨",

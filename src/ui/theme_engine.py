@@ -90,7 +90,7 @@ NEON_THEME = {
     "_trail_color": "#00ff88",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "sparkle",
+    "_trail": "plasma",
 }
 
 GORE_THEME = {
@@ -285,7 +285,7 @@ GOTH_THEME = {
     "_trail_color": "#8800aa",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
-    "_trail": "comet",
+    "_trail": "smoke",
 }
 
 VOLCANO_THEME = {
@@ -374,7 +374,7 @@ SECRET_SKELETON_THEME = {
     "_unlock": "skeleton",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
-    "_trail": "dots",
+    "_trail": "smoke",
 }
 
 SECRET_SAKURA_THEME = {
@@ -404,7 +404,7 @@ SECRET_SAKURA_THEME = {
     "_unlock": "sakura",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "fairy",
+    "_trail": "sakura",
 }
 
 FAIRY_THEME = {
@@ -765,7 +765,7 @@ SECRET_TOXIC_NEON_THEME = {
     "_unlock": "toxic_neon",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "sparkle",
+    "_trail": "plasma",
 }
 
 SECRET_LAVA_CAVE_THEME = {
@@ -1018,7 +1018,7 @@ SECRET_THUNDER_THEME = {
     "_unlock": "thunder_storm",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "comet",
+    "_trail": "plasma",
 }
 
 SECRET_ROSE_GOLD_THEME = {
@@ -1048,7 +1048,7 @@ SECRET_ROSE_GOLD_THEME = {
     "_unlock": "rose_gold",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "fairy",
+    "_trail": "sakura",
 }
 
 SECRET_SPACE_CAT_THEME = {
@@ -1138,7 +1138,7 @@ SECRET_ABYSSAL_THEME = {
     "_unlock": "abyssal_void",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
-    "_trail": "comet",
+    "_trail": "smoke",
 }
 
 SECRET_SPRING_THEME = {
@@ -1307,7 +1307,7 @@ SECRET_GLITCH_THEME = {
     "_unlock": "glitch",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "sparkle",
+    "_trail": "plasma",
 }
 
 SECRET_WILD_WEST_THEME = {
@@ -1421,7 +1421,7 @@ SECRET_WITCHS_BREW_THEME = {
     "_cursor": "emoji:🧙",
     "_banner_anim": "pendulum",
     "_button_anim": "bounce",
-    "_trail": "sparkle",
+    "_trail": "smoke",
 }
 
 SECRET_LAVA_LAMP_THEME = {
@@ -1511,7 +1511,7 @@ SECRET_STORM_CLOUD_THEME = {
     "_unlock": "storm_cloud",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "comet",
+    "_trail": "plasma",
 }
 
 SECRET_GOLDEN_HOUR_THEME = {
@@ -1685,7 +1685,7 @@ SECRET_GHOST_THEME = {
     "_trail_color": "#ccccff",
     "_banner_anim": "pendulum",
     "_button_anim": "bounce",
-    "_trail": "comet",
+    "_trail": "smoke",
     "_unlock": "ghost",
 }
 
@@ -3681,8 +3681,8 @@ QSpinBox:focus, QDoubleSpinBox:focus {{
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 20px;
-    height: 14px;
+    width: 22px;
+    height: 16px;
     background: {t['primary']};
     border: 1px solid {t['border']};
     border-top-right-radius: 4px;
@@ -3690,8 +3690,8 @@ QSpinBox::up-button, QDoubleSpinBox::up-button {{
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 20px;
-    height: 14px;
+    width: 22px;
+    height: 16px;
     background: {t['primary']};
     border: 1px solid {t['border']};
     border-bottom-right-radius: 4px;
@@ -3701,14 +3701,14 @@ QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
     background: {t['accent']};
 }}
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
-    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M4 0L8 5H0z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
-    width: 8px;
-    height: 5px;
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7'%3E%3Cpath d='M5 0L10 7H0z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
+    width: 10px;
+    height: 7px;
 }}
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
-    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M0 0L8 0L4 5z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
-    width: 8px;
-    height: 5px;
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7'%3E%3Cpath d='M0 0L10 0L5 7z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
+    width: 10px;
+    height: 7px;
 }}
 
 /* ===== Sliders ===== */

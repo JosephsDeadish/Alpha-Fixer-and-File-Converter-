@@ -587,6 +587,9 @@ class SettingsDialog(QDialog):
             ("Distortion Wave 〜", "Distortion Wave  – A wavy sinusoidal ribbon that writhes and ripples as you move the cursor."),
             ("Fire 🔥",           "Fire  – Glowing embers drift upward behind the cursor, hot yellow to deep red."),
             ("Lightning ⚡",      "Lightning  – Brief bright bolt-flashes crackle along the trail and vanish instantly."),
+            ("Plasma 🔵",         "Plasma  – Electric arc sparks crackle in purple and cyan, fading fast like a static discharge."),
+            ("Sakura 🌸",         "Sakura  – Soft pink petals drift and spin behind the cursor, fading gently as they fall."),
+            ("Smoke 💨",          "Smoke  – Soft gray puffs expand and rise behind the cursor, dissipating into nothing."),
         ]
         for label, tip in _TRAIL_STYLE_OPTIONS:
             self._trail_style_combo.addItem(label)
@@ -597,7 +600,9 @@ class SettingsDialog(QDialog):
             "Ribbon draws a connected smooth line, Noodle adds physics-based swing,\n"
             "Comet draws a tapered tail, Fairy/Wave/Sparkle use themed emoji,\n"
             "Distortion Wave writhes sinusoidally, Fire🔥 glows and drifts upward,\n"
-            "Lightning⚡ flashes bright bolt segments that vanish instantly."
+            "Lightning⚡ flashes bright bolt segments that vanish instantly,\n"
+            "Plasma🔵 crackles with electric arcs, Sakura🌸 drifts pink petals,\n"
+            "Smoke💨 puffs expand and rise as they fade."
         )
         trail_gl.addWidget(self._trail_style_combo, 2, 1)
         self._use_theme_trail_check = QCheckBox(
@@ -1320,6 +1325,7 @@ class SettingsDialog(QDialog):
             "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
             "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
             "distortion": 8, "fire": 9, "lightning": 10,
+            "plasma": 11, "sakura": 12, "smoke": 13,
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
@@ -1838,7 +1844,8 @@ class SettingsDialog(QDialog):
 
     def _on_trail_style_changed(self) -> None:
         _IDX_TO_STYLE = ["dots", "ribbon", "noodle", "comet", "fairy", "wave",
-                         "sparkle", "rainbow", "distortion", "fire", "lightning"]
+                         "sparkle", "rainbow", "distortion", "fire", "lightning",
+                         "plasma", "sakura", "smoke"]
         idx = self._trail_style_combo.currentIndex()
         style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
         self._settings.set("trail_style", style)
