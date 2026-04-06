@@ -100,6 +100,7 @@ def _zone_qcolor(
     if color_override is not None:
         r, g, b = color_override[0], color_override[1], color_override[2]
     else:
+        zone_idx = max(0, min(len(ZONE_COLORS) - 1, zone_idx))
         r, g, b, _ = ZONE_COLORS[zone_idx]
     return QColor(r, g, b, alpha)
 

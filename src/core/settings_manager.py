@@ -232,8 +232,8 @@ class SettingsManager:
         # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
-        # Zone alpha values (20 zones, defaults to 128 each – 50% transparent)
-        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128]",
+        # Zone alpha values (40 zones, defaults to 128 each – 50% transparent)
+        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128]",
         # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
         # Empty string = use built-in ZONE_COLORS palette.
         "sa_zone_colors": "",
@@ -550,7 +550,8 @@ class SettingsManager:
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
         "custom_presets",
         # Selective Alpha Tool
-        "sa_zone_alphas", "sa_brush_size", "sa_eraser_size", "sa_autocorrect", "sa_last_tool",
+        "sa_zone_alphas", "sa_zone_colors", "sa_brush_size", "sa_eraser_size",
+        "sa_autocorrect", "sa_show_zero_alpha", "sa_show_alpha_labels", "sa_last_tool",
     ]
 
     def export_settings(self, path: str) -> None:

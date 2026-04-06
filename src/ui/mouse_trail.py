@@ -5,17 +5,23 @@ trail following the mouse cursor over the main application window.
 Works on any platform that supports Qt child widgets with transparent
 backgrounds (i.e., all modern Qt6 deployments).
 
-The overlay supports seven trail styles:
-  • "dots"    – the default: fading coloured dots (original behaviour).
-  • "fairy"   – fairy-dust sparkle emoji (✨💫⭐) that float and fade gently.
-  • "wave"    – ocean-themed bubbles and sea emoji (🫧💧🌊) for aquatic themes.
-  • "sparkle" – icy crystal sparkle emoji (✦❄✧💎) for arctic/ice themes.
-  • "comet"   – a long tapered line-segment comet tail following the cursor.
-  • "ribbon"  – a smooth connected ribbon/noodle drawn between trail points.
-  • "rainbow" – cycling full-spectrum hue dots, one revolution per trail length.
-  • "noodle"  – a physics-simulated dangling chain: each segment lags behind the
-                cursor with spring + gravity forces, creating a realistic noodle
-                that wobbles and swings as the mouse moves.
+The overlay supports fourteen trail styles:
+  • "dots"        – the default: fading coloured dots (original behaviour).
+  • "fairy"       – fairy-dust sparkle emoji (✨💫⭐) that float and fade gently.
+  • "wave"        – ocean-themed bubbles and sea emoji (🫧💧🌊) for aquatic themes.
+  • "sparkle"     – icy crystal sparkle emoji (✦❄✧💎) for arctic/ice themes.
+  • "comet"       – a long tapered line-segment comet tail following the cursor.
+  • "ribbon"      – a smooth connected ribbon/noodle drawn between trail points.
+  • "rainbow"     – cycling full-spectrum hue dots, one revolution per trail length.
+  • "noodle"      – a physics-simulated dangling chain: each segment lags behind the
+                    cursor with spring + gravity forces, creating a realistic noodle
+                    that wobbles and swings as the mouse moves.
+  • "distortion"  – a sinusoidal ribbon that writhes and ripples as the cursor moves.
+  • "fire"        – glowing embers drift upward behind the cursor (yellow→red).
+  • "lightning"   – brief bright bolt-flashes crackle along the trail and vanish.
+  • "plasma"      – electric arc sparks crackle in purple and cyan, fast fade.
+  • "sakura"      – soft pink rotating petal ellipses drift and fall gently.
+  • "smoke"       – expanding gray puffs rise and dissipate behind the cursor.
 """
 from collections import deque
 import math
