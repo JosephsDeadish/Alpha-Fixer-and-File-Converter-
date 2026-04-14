@@ -1702,8 +1702,10 @@ class _ZoneRow(QWidget):
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
 
-    _MASK_SLOT_COUNT: int = 15   # Maximum number of saved-mask slots
-    _AZ_SLOT_COUNT:   int = 9    # Maximum number of all-zones slots
+    _MASK_SLOT_COUNT: int = 150  # Maximum number of saved-mask slots
+    _MASK_SLOT_INIT:  int = 3    # Number of slots created on first launch
+    _AZ_SLOT_COUNT:   int = 150  # Maximum number of all-zones slots
+    _AZ_SLOT_INIT:    int = 3    # Number of all-zones slots created on first launch
 
     def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1725,10 +1727,10 @@ class SelectiveAlphaTool(QWidget):
         self._mask_clipboard: Optional[np.ndarray] = None
         # All-zones clipboard: multi-slot store that survives image changes.
         # Each slot holds a snapshot of every zone mask.
-        _AZ_SLOT_COUNT = self._AZ_SLOT_COUNT
-        self._az_slots: list["list | None"] = [None] * _AZ_SLOT_COUNT
-        self._az_slot_info: list[str] = ["(empty)"] * _AZ_SLOT_COUNT
-        self._az_slot_names: list[str] = [""] * _AZ_SLOT_COUNT
+        _AZ_SLOT_INIT = self._AZ_SLOT_INIT
+        self._az_slots: list["list | None"] = [None] * _AZ_SLOT_INIT
+        self._az_slot_info: list[str] = ["(empty)"] * _AZ_SLOT_INIT
+        self._az_slot_names: list[str] = [""] * _AZ_SLOT_INIT
         # Per-zone display names: start from the static defaults but update
         # whenever the user picks a new colour so the active-zone combo always
         # shows the correct colour label.
@@ -2075,10 +2077,10 @@ class SelectiveAlphaTool(QWidget):
         # Compact dropdown-based slot chooser.  Slots survive image changes so
         # the user can copy zones from one image and paste onto another.
         # The user can grow the list with "＋ Add Slot".
-        _MASK_SLOT_COUNT = self._MASK_SLOT_COUNT
-        self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_COUNT
-        self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_COUNT
-        self._mask_slot_names: list[str] = [""] * _MASK_SLOT_COUNT
+        _MASK_SLOT_INIT = self._MASK_SLOT_INIT
+        self._mask_slots: list[Optional[np.ndarray]] = [None] * _MASK_SLOT_INIT
+        self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_INIT
+        self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
         slots_box = QGroupBox("Saved Masks")
         sv = QVBoxLayout(slots_box)
@@ -2104,7 +2106,7 @@ class SelectiveAlphaTool(QWidget):
         self._slot_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
-        for i in range(_MASK_SLOT_COUNT):
+        for i in range(_MASK_SLOT_INIT):
             self._slot_combo.addItem(f"Slot {i + 1}  —  (empty)")
         self._slot_combo.currentIndexChanged.connect(self._on_slot_selected)
         sel_row.addWidget(self._slot_combo)
@@ -2122,7 +2124,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_add.clicked.connect(self._on_slot_add)
         slot_btn_row.addWidget(self._btn_slot_add)
 
-        self._btn_slot_del = QPushButton("✕ Del Slot")
+        self._btn_slot_del = QPushButton("✕ Delete Slot")
         self._btn_slot_del.setMinimumHeight(26)
         self._btn_slot_del.setToolTip(
             "Delete the currently selected slot from the list.\n"
@@ -2226,7 +2228,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_add.clicked.connect(self._on_az_slot_add)
         az_slot_btn_row.addWidget(self._btn_az_slot_add)
 
-        self._btn_az_slot_del = QPushButton("✕ Del Slot")
+        self._btn_az_slot_del = QPushButton("✕ Delete Slot")
         self._btn_az_slot_del.setMinimumHeight(26)
         self._btn_az_slot_del.setToolTip(
             "Delete the currently selected all-zones slot from the list.\n"
@@ -2729,6 +2731,7 @@ class SelectiveAlphaTool(QWidget):
         self._slot_combo.addItem(f"Slot {idx + 1}  —  (empty)")
         self._slot_combo.setCurrentIndex(idx)
         self._btn_slot_del.setEnabled(len(self._mask_slots) > 1)
+        self._btn_slot_add.setEnabled(len(self._mask_slots) < self._MASK_SLOT_COUNT)
 
     def _on_slot_del(self) -> None:
         """Delete the currently selected slot from the list."""
@@ -2752,6 +2755,7 @@ class SelectiveAlphaTool(QWidget):
         self._slot_combo.setCurrentIndex(new_idx)
         self._on_slot_selected(new_idx)
         self._btn_slot_del.setEnabled(len(self._mask_slots) > 1)
+        self._btn_slot_add.setEnabled(len(self._mask_slots) < self._MASK_SLOT_COUNT)
 
     def _on_slot_rename(self) -> None:
         """Rename the currently selected saved-mask slot."""
@@ -2843,6 +2847,7 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_combo.addItem(f"Slot {idx + 1}  —  (empty)")
         self._az_slot_combo.setCurrentIndex(idx)
         self._btn_az_slot_del.setEnabled(len(self._az_slots) > 1)
+        self._btn_az_slot_add.setEnabled(len(self._az_slots) < self._AZ_SLOT_COUNT)
 
     def _on_az_slot_del(self) -> None:
         """Delete the currently selected all-zones slot from the list."""
@@ -2866,6 +2871,7 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_combo.setCurrentIndex(new_idx)
         self._on_az_slot_selected(new_idx)
         self._btn_az_slot_del.setEnabled(len(self._az_slots) > 1)
+        self._btn_az_slot_add.setEnabled(len(self._az_slots) < self._AZ_SLOT_COUNT)
 
     def _on_az_slot_rename(self) -> None:
         """Rename the currently selected all-zones slot."""

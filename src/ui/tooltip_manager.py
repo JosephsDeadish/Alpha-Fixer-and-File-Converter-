@@ -6620,7 +6620,7 @@ class TooltipManager(QObject):
             pass
 
     def mode(self) -> str:
-        default = _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
+        default = _SettingsManager._DEFAULTS.get("tooltip_mode", "Dumbed Down")
         return self._settings.get("tooltip_mode", default)
 
     def _cleanup_tab_bar(self, bar_id: int) -> None:

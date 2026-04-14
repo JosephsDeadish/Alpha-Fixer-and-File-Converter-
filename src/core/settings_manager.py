@@ -132,13 +132,13 @@ class SettingsManager:
         "window_h": 700,
         "window_maximized": False,
         # Tooltip
-        "tooltip_mode": "No Filter 🤬",
+        "tooltip_mode": "Dumbed Down",
         "tooltip_mode_changed_once": False,
         "alpha_fix_done_once": False,
         "conversion_done_once": False,
         "theme_changed_once": False,   # set True the first time the user picks a different theme
         # Click effects
-        "click_effects_enabled": False,
+        "click_effects_enabled": True,
         "use_theme_effect": False,
         # Custom emoji particles
         "custom_emoji": DEFAULT_CUSTOM_EMOJI,
