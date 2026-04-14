@@ -876,8 +876,9 @@ class VideoToolDialog(QDialog):
             else:
                 import imageio
                 import numpy as np
+                _MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
                 with imageio.get_writer(out_path, fps=fps, codec="libx264",
-                                        quality=8) as writer:
+                                        quality=_MP4_QUALITY) as writer:
                     for f in rendered:
                         writer.append_data(np.array(f.convert("RGB")))
         except Exception as exc:
