@@ -2335,7 +2335,7 @@ class SelectiveAlphaTool(QWidget):
         # RGBA Adjuster tab and selects "Copy zones → Selective Alpha tool",
         # the zone data is deposited here so the user can import it into the
         # painting canvas with a single button click.
-        import_box = QGroupBox("Import from Alpha & RGBA Adjuster")
+        import_box = QGroupBox("Import Zones from Alpha Tool")
         iv = QVBoxLayout(import_box)
         iv.setSpacing(4)
         iv.setContentsMargins(4, 4, 4, 4)
@@ -2346,12 +2346,12 @@ class SelectiveAlphaTool(QWidget):
             "3. Use the buttons below to import or save to slot/clipboard."
         )
         import_note.setWordWrap(True)
-        import_note.setStyleSheet("color: #999; font-size: 10px;")
+        import_note.setStyleSheet("color: #999; font-size: 11px;")
         iv.addWidget(import_note)
 
         self._import_shared_status = QLabel("No zones ready to import.")
         self._import_shared_status.setWordWrap(True)
-        self._import_shared_status.setStyleSheet("color: #888; font-size: 10px;")
+        self._import_shared_status.setStyleSheet("color: #888; font-size: 11px;")
         iv.addWidget(self._import_shared_status)
 
         self._btn_import_shared = QPushButton("📥 Import Zones to Canvas")

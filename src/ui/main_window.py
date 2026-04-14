@@ -2524,6 +2524,13 @@ class MainWindow(QMainWindow):
             "<tr><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
             "<tr><td><b>Ctrl+S</b></td><td>Export GIF</td></tr>"
             "</table>"
+
+            "<h3>Video Editor</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Export Video</td></tr>"
+            "<tr><td><b>Delete</b></td><td>Remove selected clip from list</td></tr>"
+            "</table>"
         )
         content_lbl.setWordWrap(True)
         content_lbl.setTextInteractionFlags(
@@ -2754,12 +2761,18 @@ class MainWindow(QMainWindow):
         """
         if self.isMinimized():
             return  # another minimise happened before the timer fired
-        QTimer.singleShot(0, self._apply_theme_effect)
-        QTimer.singleShot(50, self._apply_bg_flock)
-        QTimer.singleShot(100, self._apply_bg_ambient)
-        QTimer.singleShot(150, self._apply_bg_drip)
-        if self._trail_overlay is not None:
-            QTimer.singleShot(200, self._trail_overlay.show)
+        # Show overlays then apply all effect settings in a single deferred call.
+        if self._click_effects is not None:
+            try:
+                self._click_effects.show()
+            except Exception:
+                pass
+        if self._trail_overlay is not None and self._settings.get("trail_enabled", False):
+            try:
+                self._trail_overlay.show()
+            except Exception:
+                pass
+        QTimer.singleShot(0, self._apply_settings_now)
 
     def _reposition_overlays(self) -> None:
         """Reposition both overlays to fill the window after a resize burst."""
