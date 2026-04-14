@@ -2460,6 +2460,19 @@ class MainWindow(QMainWindow):
         dlg.setWindowTitle("⌨  Keyboard Shortcuts")
         dlg.setMinimumSize(540, 460)
         dlg.setSizeGripEnabled(True)
+        # Open at a comfortable initial size, centered on the parent window
+        screen = self.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            init_w = max(640, min(800, int(avail.width() * 0.5)))
+            init_h = max(540, min(700, int(avail.height() * 0.65)))
+        else:
+            init_w, init_h = 640, 540
+        dlg.resize(init_w, init_h)
+        dlg.move(
+            self.x() + (self.width() - init_w) // 2,
+            self.y() + (self.height() - init_h) // 2,
+        )
 
         outer = QVBoxLayout(dlg)
         outer.setContentsMargins(12, 12, 12, 8)
@@ -2537,6 +2550,19 @@ class MainWindow(QMainWindow):
         dlg.setWindowTitle("About 🐼 Alpha & RGBA Adjuster  |  File Converter")
         dlg.setMinimumSize(520, 420)
         dlg.setSizeGripEnabled(True)
+        # Open at a comfortable initial size, centered on the parent window
+        screen = self.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            init_w = max(640, min(800, int(avail.width() * 0.5)))
+            init_h = max(520, min(700, int(avail.height() * 0.6)))
+        else:
+            init_w, init_h = 640, 520
+        dlg.resize(init_w, init_h)
+        dlg.move(
+            self.x() + (self.width() - init_w) // 2,
+            self.y() + (self.height() - init_h) // 2,
+        )
 
         outer = QVBoxLayout(dlg)
         outer.setContentsMargins(12, 12, 12, 8)
@@ -2668,16 +2694,7 @@ class MainWindow(QMainWindow):
             self._video_tool_dlg.show()
             self._video_tool_dlg.raise_()
             self._video_tool_dlg.activateWindow()
-        super().resizeEvent(event)
-        # Debounce overlay repositioning: during an interactive window drag,
-        # Qt fires resizeEvent on every pixel of movement.  Repositioning
-        # overlays immediately each time spends unnecessary GPU/CPU on geometry
-        # recalculations.  Schedule a single coalesced update 50ms after the
-        # last resize event instead.  The overlays also self-correct via their
-        # own eventFilter (QEvent.Type.Resize on the main window), which provides
-        # the immediate fine-grained correction; the timer fires for any cases
-        # where the eventFilter is not installed (e.g., effects disabled).
-        self._resize_timer.start()
+        super().contextMenuEvent(event)
 
     def changeEvent(self, event: "QEvent") -> None:
         """Handle runtime display/DPI changes and minimize/restore events.
