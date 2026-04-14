@@ -274,9 +274,7 @@ class SettingsDialog(QDialog):
             "the active theme — e.g. Gore gets blood splatter, Bat Cave gets bats."
         )
         effect_layout.addWidget(self._use_theme_effect_check)
-        self._use_theme_effect_check.toggled.connect(
-            lambda checked: self._effect_combo.setEnabled(not checked)
-        )
+        self._use_theme_effect_check.setEnabled(False)  # disabled until click effects enabled
         effect_inner = QHBoxLayout()
         effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
@@ -482,10 +480,16 @@ class SettingsDialog(QDialog):
         )
         bg_drip_inner.addWidget(self._bg_drip_combo, 1)
         bg_drip_layout.addLayout(bg_drip_inner)
-        # Disable combo when use-theme is checked
-        self._use_theme_drip_check.toggled.connect(
-            lambda checked: self._bg_drip_combo.setEnabled(not checked)
-        )
+        # Enable/disable sub-controls based on both enable and use-theme checkboxes
+        def _update_drip_combo_state():
+            enabled = self._bg_drip_check.isChecked()
+            use_theme = self._use_theme_drip_check.isChecked()
+            self._use_theme_drip_check.setEnabled(enabled)
+            self._bg_drip_combo.setEnabled(enabled and not use_theme)
+        self._bg_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
+        self._use_theme_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
+        self._use_theme_drip_check.setEnabled(False)  # disabled until drip is enabled
+        self._bg_drip_combo.setEnabled(False)         # disabled until drip is enabled
 
         # Separator between drip and flock sections
         sep1 = QFrame()
@@ -1402,12 +1406,14 @@ class SettingsDialog(QDialog):
         self._sound_drag_enter_chk.setChecked(
             bool(self._settings.get("sound_drag_enter", False))
         )
-        self._trail_check.setChecked(self._settings.get("trail_enabled", False))
+        trail_enabled = self._settings.get("trail_enabled", False)
+        self._trail_check.setChecked(trail_enabled)
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
-        self._trail_color_btn.setEnabled(not use_theme_trail)
-        self._trail_style_combo.setEnabled(not use_theme_trail)
+        self._use_theme_trail_check.setEnabled(trail_enabled)
+        self._trail_color_btn.setEnabled(trail_enabled and not use_theme_trail)
+        self._trail_style_combo.setEnabled(trail_enabled and not use_theme_trail)
         # Load persisted trail style into combo
         _TRAIL_STYLE_MAP = {
             "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
@@ -1417,7 +1423,7 @@ class SettingsDialog(QDialog):
         }
         saved_style = self._settings.get("trail_style", "dots")
         self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
-        # Load trail sliders
+        # Load trail sliders and apply enabled state
         saved_length = int(self._settings.get("trail_length", _TRAIL_LENGTH_DEFAULT))
         self._trail_length_slider.setValue(max(_TRAIL_LENGTH_MIN, min(_TRAIL_LENGTH_MAX, saved_length)))
         self._trail_length_val_lbl.setText(str(self._trail_length_slider.value()))
@@ -1427,6 +1433,8 @@ class SettingsDialog(QDialog):
         saved_intensity = int(self._settings.get("trail_intensity", _TRAIL_INTENSITY_DEFAULT))
         self._trail_intensity_slider.setValue(max(_TRAIL_INTENSITY_MIN, min(_TRAIL_INTENSITY_MAX, saved_intensity)))
         self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
+        self._trail_length_slider.setEnabled(trail_enabled)
+        self._trail_fade_slider.setEnabled(trail_enabled)
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -1442,12 +1450,12 @@ class SettingsDialog(QDialog):
         # History max entries
         self._history_max_spin.setValue(self._settings.get("history_max_entries", 100))
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
-        self._click_effects_theme_check.setChecked(
-            self._settings.get("click_effects_enabled", False)
-        )
+        click_effects_enabled = self._settings.get("click_effects_enabled", False)
+        self._click_effects_theme_check.setChecked(click_effects_enabled)
         use_theme_effect = self._settings.get("use_theme_effect", False)
         self._use_theme_effect_check.setChecked(use_theme_effect)
-        self._effect_combo.setEnabled(not use_theme_effect)
+        self._use_theme_effect_check.setEnabled(click_effects_enabled)
+        self._effect_combo.setEnabled(click_effects_enabled and not use_theme_effect)
         mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
@@ -1502,7 +1510,8 @@ class SettingsDialog(QDialog):
             if self._bg_drip_combo.itemData(i) == bg_drip_type:
                 self._bg_drip_combo.setCurrentIndex(i)
                 break
-        self._bg_drip_combo.setEnabled(not use_theme_drip)
+        self._use_theme_drip_check.setEnabled(bg_drip_enabled)
+        self._bg_drip_combo.setEnabled(bg_drip_enabled and not use_theme_drip)
 
         # Load background flock settings
         bg_flock_enabled = self._settings.get("bg_flock_enabled", False)
@@ -1931,8 +1940,14 @@ class SettingsDialog(QDialog):
 
     def _on_trail_changed(self) -> None:
         enabled = self._trail_check.isChecked()
+        use_theme = self._use_theme_trail_check.isChecked()
         self._settings.set("trail_enabled", enabled)
-        self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
+        self._settings.set("use_theme_trail", use_theme)
+        self._use_theme_trail_check.setEnabled(enabled)
+        self._trail_color_btn.setEnabled(enabled and not use_theme)
+        self._trail_style_combo.setEnabled(enabled and not use_theme)
+        self._trail_length_slider.setEnabled(enabled)
+        self._trail_fade_slider.setEnabled(enabled)
         if enabled and not self._settings.get("trail_enabled_once", False):
             self._settings.set("trail_enabled_once", True)
             self.settings_changed.emit()
@@ -1947,8 +1962,12 @@ class SettingsDialog(QDialog):
         first_trail_enabled — that unlock is only triggered when the
         user explicitly turns on the trail via _on_trail_changed.
         """
-        self._settings.set("trail_enabled", self._trail_check.isChecked())
-        self._settings.set("use_theme_trail", self._use_theme_trail_check.isChecked())
+        enabled = self._trail_check.isChecked()
+        use_theme = self._use_theme_trail_check.isChecked()
+        self._settings.set("trail_enabled", enabled)
+        self._settings.set("use_theme_trail", use_theme)
+        self._trail_color_btn.setEnabled(enabled and not use_theme)
+        self._trail_style_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
@@ -2025,12 +2044,16 @@ class SettingsDialog(QDialog):
     def _on_effects_enabled_changed(self) -> None:
         enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("click_effects_enabled", enabled)
+        use_theme = self._use_theme_effect_check.isChecked()
+        self._use_theme_effect_check.setEnabled(enabled)
+        self._effect_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 
     def _on_use_theme_effect_changed(self) -> None:
         use_theme = self._use_theme_effect_check.isChecked()
+        enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("use_theme_effect", use_theme)
-        self._effect_combo.setEnabled(not use_theme)
+        self._effect_combo.setEnabled(enabled and not use_theme)
         if use_theme:
             # Select the theme's effect in the combo so the user can see what is
             # being used, and update the tooltip to confirm.
