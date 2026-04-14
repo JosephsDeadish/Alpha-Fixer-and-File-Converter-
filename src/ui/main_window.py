@@ -1840,8 +1840,13 @@ class MainWindow(QMainWindow):
                 self._cursor_anim_timer.stop()
 
     def _apply_font_size(self):
-        size = self._settings.get("font_size", 10)
-        size = max(8, min(24, int(size)))
+        base_size = self._settings.get("font_size", 10)
+        base_size = max(8, min(24, int(base_size)))
+        # Apply UI scale factor on top of the base font size.
+        _scale_factors = {"Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30}
+        scale_key = self._settings.get("ui_scale", "Normal")
+        factor = _scale_factors.get(scale_key, 1.0)
+        size = max(7, int(round(base_size * factor)))
         app = QApplication.instance()
         if app is None:
             return

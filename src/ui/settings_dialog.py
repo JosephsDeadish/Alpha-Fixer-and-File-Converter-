@@ -1089,6 +1089,74 @@ class SettingsDialog(QDialog):
 
         gv.addWidget(grp_misc)
 
+        # ---- UI Scaling GroupBox ----
+        grp_scale = QGroupBox("UI Scaling")
+        scale_gl = QGridLayout(grp_scale)
+        scale_gl.setColumnStretch(1, 1)
+        scale_gl.setHorizontalSpacing(10)
+        scale_gl.setVerticalSpacing(6)
+
+        scale_gl.addWidget(QLabel("UI Scale:"), 0, 0)
+        self._ui_scale_combo = QComboBox()
+        _SCALE_OPTIONS = [
+            ("Compact  (85%)",    "Compact",    "Slightly smaller text and controls — useful on small or dense-DPI screens."),
+            ("Normal  (100%)",    "Normal",     "Default size. Best for most standard 1080p and larger displays."),
+            ("Large  (115%)",     "Large",      "Slightly larger — good for high-DPI displays or accessibility needs."),
+            ("Extra Large  (130%)","Extra Large","Maximum size. Best for 4K monitors or low-vision users."),
+        ]
+        for label, _key, tip in _SCALE_OPTIONS:
+            self._ui_scale_combo.addItem(label)
+            idx = self._ui_scale_combo.count() - 1
+            self._ui_scale_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._ui_scale_combo.setToolTip(
+            "Scale the application's base font size for all UI elements.\n"
+            "Takes effect after a restart or when re-opening the settings dialog."
+        )
+        self._ui_scale_combo.setMaximumWidth(220)
+        scale_gl.addWidget(self._ui_scale_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
+
+        scale_note = QLabel(
+            "ℹ  Full rescaling requires an app restart.  "
+            "Font size (Appearance & Effects) updates live."
+        )
+        scale_note.setWordWrap(True)
+        scale_note.setStyleSheet("color: #888; font-size: 10px;")
+        scale_gl.addWidget(scale_note, 1, 0, 1, 2)
+
+        gv.addWidget(grp_scale)
+
+        # ---- History GroupBox ----
+        grp_history = QGroupBox("History")
+        hist_gl = QGridLayout(grp_history)
+        hist_gl.setColumnStretch(1, 1)
+        hist_gl.setHorizontalSpacing(10)
+        hist_gl.setVerticalSpacing(6)
+
+        hist_gl.addWidget(QLabel("Max History Entries per Tool:"), 0, 0)
+        self._history_max_spin = QSpinBox()
+        self._history_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self._history_max_spin.setRange(10, 1000)
+        self._history_max_spin.setValue(100)
+        self._history_max_spin.setSingleStep(10)
+        self._history_max_spin.setMaximumWidth(100)
+        self._history_max_spin.setToolTip(
+            "How many processing sessions to keep in History for each tool\n"
+            "(Converter, Alpha & RGBA Adjuster, Selective Alpha).\n"
+            "Oldest entries are automatically removed when the limit is reached.\n"
+            "Default: 100.  Maximum: 1000."
+        )
+        hist_gl.addWidget(self._history_max_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
+
+        hist_note = QLabel(
+            "ℹ  Existing history entries are not trimmed immediately — the limit "
+            "only applies to new entries going forward."
+        )
+        hist_note.setWordWrap(True)
+        hist_note.setStyleSheet("color: #888; font-size: 10px;")
+        hist_gl.addWidget(hist_note, 1, 0, 1, 2)
+
+        gv.addWidget(grp_history)
+
         # Wrap the general tab contents in a scroll area so checkboxes
         # are always reachable regardless of screen/window size.
         gen_scroll = QScrollArea()
@@ -1154,6 +1222,8 @@ class SettingsDialog(QDialog):
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
         self._cursor_anim_check.toggled.connect(self._on_cursor_anim_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
+        self._ui_scale_combo.currentTextChanged.connect(self._on_ui_scale_changed)
+        self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
@@ -1353,6 +1423,12 @@ class SettingsDialog(QDialog):
         self._cursor_combo.setEnabled(not use_theme_cur)
         self._cursor_anim_check.setChecked(bool(self._settings.get("cursor_anim_enabled", True)))
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
+        # UI Scale
+        scale_val = self._settings.get("ui_scale", "Normal")
+        _scale_map = {"Compact": 0, "Normal": 1, "Large": 2, "Extra Large": 3}
+        self._ui_scale_combo.setCurrentIndex(_scale_map.get(scale_val, 1))
+        # History max entries
+        self._history_max_spin.setValue(self._settings.get("history_max_entries", 100))
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         self._click_effects_theme_check.setChecked(
             self._settings.get("click_effects_enabled", False)
@@ -1479,6 +1555,8 @@ class SettingsDialog(QDialog):
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._cursor_anim_check, "cursor_anim")
         mgr.register(self._font_size_spin, "font_size")
+        mgr.register(self._ui_scale_combo, "ui_scale_combo")
+        mgr.register(self._history_max_spin, "history_max_spin")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
         mgr.register(self._animated_banner_check, "animated_banner_check")
@@ -1902,6 +1980,31 @@ class SettingsDialog(QDialog):
     def _on_font_size_changed(self, value: int) -> None:
         self._settings.set("font_size", value)
         self.settings_changed.emit()
+
+    def _on_ui_scale_changed(self) -> None:
+        _scale_keys = ["Compact", "Normal", "Large", "Extra Large"]
+        idx = self._ui_scale_combo.currentIndex()
+        key = _scale_keys[idx] if 0 <= idx < len(_scale_keys) else "Normal"
+        self._settings.set("ui_scale", key)
+        # Apply the scale immediately by adjusting the base font size
+        _scale_factors = {"Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30}
+        factor = _scale_factors.get(key, 1.0)
+        base_pt = self._settings.get("font_size", 10)
+        scaled_pt = max(7, int(round(base_pt * factor)))
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtGui import QFont
+            app = QApplication.instance()
+            if app is not None:
+                f = app.font()
+                f.setPointSize(scaled_pt)
+                app.setFont(f)
+        except Exception:
+            pass
+        self.settings_changed.emit()
+
+    def _on_history_max_changed(self, value: int) -> None:
+        self._settings.set("history_max_entries", value)
 
     def _on_effects_enabled_changed(self) -> None:
         enabled = self._click_effects_theme_check.isChecked()

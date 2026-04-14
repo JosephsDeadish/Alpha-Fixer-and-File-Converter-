@@ -44,7 +44,7 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
 
 
 class HistoryTab(QWidget):
-    """View of the last 50 sessions for the Converter, Alpha & RGBA Adjuster, and Selective Alpha."""
+    """View of the last 100 sessions for the Converter, Alpha & RGBA Adjuster, and Selective Alpha."""
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -64,7 +64,7 @@ class HistoryTab(QWidget):
 
         btn_row = QHBoxLayout()
         self._btn_refresh = QPushButton("🔄  Refresh")
-        self._btn_export = QPushButton("📥  Export CSV…")
+        self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
         btn_row.addWidget(self._btn_refresh)
         btn_row.addWidget(self._btn_export)
@@ -148,7 +148,7 @@ class HistoryTab(QWidget):
 
         # Connections
         self._btn_refresh.clicked.connect(self.refresh)
-        self._btn_export.clicked.connect(self._export_csv)
+        self._btn_export.clicked.connect(self._export_history)
         self._btn_clear.clicked.connect(self._clear_history)
 
         self._conv_search.textChanged.connect(
@@ -331,44 +331,98 @@ class HistoryTab(QWidget):
     # Export
     # ------------------------------------------------------------------
 
-    def _export_csv(self) -> None:
-        """Export the currently visible history sub-tab to a CSV file."""
+    def _export_history(self) -> None:
+        """Export the currently visible history sub-tab to a file.
+
+        Supported formats (TXT default): Plain Text, CSV, JSON, HTML.
+        """
+        import json as _json
+
         # Determine which sub-tab is active
-        idx = self._sub_tabs.currentIndex()
-        if idx == 0:
+        tab_idx = self._sub_tabs.currentIndex()
+        if tab_idx == 0:
             tree = self._conv_tree
-            default_name = "converter_history.csv"
+            tab_name = "converter"
             headers = ["Time", "Format", "Files", "OK", "Errors", "File names (first 10)"]
-        elif idx == 1:
+        elif tab_idx == 1:
             tree = self._alpha_tree
-            default_name = "alpha_fixer_history.csv"
+            tab_name = "alpha_fixer"
             headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names (first 10)"]
         else:
             tree = self._sel_tree
-            default_name = "selective_alpha_history.csv"
+            tab_name = "selective_alpha"
             headers = ["Time", "Mode", "Files", "OK", "Errors", "File names (first 10)"]
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export History as CSV", default_name,
-            "CSV Files (*.csv);;All Files (*)",
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export History",
+            f"{tab_name}_history.txt",
+            "Text Files (*.txt);;"
+            "CSV Files (*.csv);;"
+            "JSON Files (*.json);;"
+            "HTML Files (*.html *.htm);;"
+            "All Files (*)",
         )
         if not path:
             return
 
+        # Collect rows from the tree
+        root = tree.invisibleRootItem()
+        rows = [
+            [root.child(r).text(c) for c in range(tree.columnCount())]
+            for r in range(root.childCount())
+        ]
+
+        ext = path.rsplit(".", 1)[-1].lower() if "." in path else "txt"
+
         try:
-            with io.StringIO(newline="") as buf:
-                writer = csv.writer(buf)
-                writer.writerow(headers)
-                root = tree.invisibleRootItem()
-                for row in range(root.childCount()):
-                    item = root.child(row)
-                    writer.writerow([item.text(col) for col in range(tree.columnCount())])
-                content = buf.getvalue()
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                f.write(content)
+            if ext == "csv":
+                with io.StringIO(newline="") as buf:
+                    writer = csv.writer(buf)
+                    writer.writerow(headers)
+                    writer.writerows(rows)
+                    content = buf.getvalue()
+                with open(path, "w", newline="", encoding="utf-8") as f:
+                    f.write(content)
+
+            elif ext == "json":
+                data = [dict(zip(headers, row)) for row in rows]
+                with open(path, "w", encoding="utf-8") as f:
+                    _json.dump(data, f, indent=2, ensure_ascii=False)
+
+            elif ext in ("html", "htm"):
+                th_cells = "".join(f"<th>{h}</th>" for h in headers)
+                tr_rows = "".join(
+                    "<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>"
+                    for row in rows
+                )
+                content = (
+                    "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                    "<style>table{border-collapse:collapse}th,td{border:1px solid #888;"
+                    "padding:4px 8px;text-align:left}th{background:#333;color:#eee}"
+                    "tr:nth-child(even){background:#f5f5f5}</style></head><body>"
+                    f"<h2>{tab_name.replace('_', ' ').title()} History</h2>"
+                    f"<table><thead><tr>{th_cells}</tr></thead><tbody>{tr_rows}</tbody></table>"
+                    "</body></html>"
+                )
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+
+            else:
+                # Plain text (default)
+                col_widths = [max(len(h), *(len(r[i]) for r in rows), 4)
+                              for i, h in enumerate(headers)] if rows else [len(h) for h in headers]
+                def _fmt_row(cells):
+                    return "  ".join(c.ljust(w) for c, w in zip(cells, col_widths))
+                sep = "-" * (sum(col_widths) + 2 * len(col_widths))
+                lines = [_fmt_row(headers), sep] + [_fmt_row(r) for r in rows]
+                content = "\n".join(lines) + "\n"
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+
             QMessageBox.information(
                 self, "Export Complete",
                 f"History exported to:\n{path}",
             )
         except OSError as exc:
-            QMessageBox.warning(self, "Export Failed", f"Could not write CSV:\n{exc}")
+            QMessageBox.warning(self, "Export Failed", f"Could not write file:\n{exc}")

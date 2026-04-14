@@ -109,6 +109,9 @@ class SettingsManager:
         "trail_intensity": 100,   # 10–100 % max trail opacity
         # Appearance
         "font_size": 10,
+        "ui_scale": "Normal",          # Compact / Normal / Large / Extra Large
+        # History settings
+        "history_max_entries": 100,     # Max history entries saved per tool
         # Last-used state
         "last_input_dir": "",
         "last_output_dir": "",
@@ -378,10 +381,11 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_converter_history(self, entry: dict, max_entries: int = 50):
+    def add_converter_history(self, entry: dict, max_entries: int = 100):
         history = self.get_converter_history()
         history.insert(0, entry)
-        history = history[:max_entries]
+        limit = self.get("history_max_entries", max_entries)
+        history = history[:limit]
         self._qs.setValue("converter_history", json.dumps(history))
         self._qs.sync()
 
@@ -397,10 +401,11 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_alpha_history(self, entry: dict, max_entries: int = 50):
+    def add_alpha_history(self, entry: dict, max_entries: int = 100):
         history = self.get_alpha_history()
         history.insert(0, entry)
-        history = history[:max_entries]
+        limit = self.get("history_max_entries", max_entries)
+        history = history[:limit]
         self._qs.setValue("alpha_history", json.dumps(history))
         self._qs.sync()
 
@@ -426,10 +431,11 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_selective_alpha_history(self, entry: dict, max_entries: int = 50):
+    def add_selective_alpha_history(self, entry: dict, max_entries: int = 100):
         history = self.get_selective_alpha_history()
         history.insert(0, entry)
-        history = history[:max_entries]
+        limit = self.get("history_max_entries", max_entries)
+        history = history[:limit]
         self._qs.setValue("selective_alpha_history", json.dumps(history))
         self._qs.sync()
 
@@ -536,7 +542,7 @@ class SettingsManager:
         "sound_frog_croak", "sound_batch_done",
         "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
-        "font_size",
+        "font_size", "ui_scale", "history_max_entries",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
         "bg_drip_enabled", "bg_drip_type", "use_theme_drip",
         "bg_flock_enabled", "bg_flock_style",
