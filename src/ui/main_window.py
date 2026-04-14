@@ -8,7 +8,7 @@ import sys
 import webbrowser
 
 from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPixmap, QPainter
+from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPixmap, QPainter, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
@@ -957,6 +957,8 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}")
         self._update_minimum_size()
+        # Enable whole-window drag-and-drop (item 28).
+        self.setAcceptDrops(True)
         # Set the panda SVG as the window / taskbar icon (initial default).
         # Prefer the pre-generated multi-size ICO (embedded by PyInstaller)
         # which contains all shell sizes (16 → 256 px) for crisp display at
@@ -2678,7 +2680,7 @@ class MainWindow(QMainWindow):
         self._resize_timer.start()
 
     def changeEvent(self, event: "QEvent") -> None:
-        """Handle runtime display/DPI changes.
+        """Handle runtime display/DPI changes and minimize/restore events.
 
         Qt fires ``QEvent.Type.ScreenChangeInternal`` whenever:
         • The window is dragged to a monitor with a different device-pixel ratio
@@ -2691,6 +2693,10 @@ class MainWindow(QMainWindow):
         3. Re-apply the saved font size so point-size metrics are correct on
            the new display (the font family/size stays the same, but Qt must
            recalculate layout metrics after a DPI change).
+
+        We also pause background visual effects when the window is minimised
+        and resume them when it is restored to prevent timers stacking up
+        while the window is hidden (which can cause lag/crash on restore).
         """
         super().changeEvent(event)
         if event.type() == _SCREEN_CHANGE_INTERNAL:
@@ -2698,6 +2704,42 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(150, self._update_minimum_size)
             QTimer.singleShot(150, self._clamp_to_screen)
             QTimer.singleShot(150, self._apply_font_size)
+        elif event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized():
+                self._pause_visual_effects()
+            elif not self.isMinimized():
+                # Defer resume briefly so Qt has finished compositing the window
+                QTimer.singleShot(200, self._resume_visual_effects)
+
+    def _pause_visual_effects(self) -> None:
+        """Stop all background visual effect timers while the window is minimised."""
+        if self._click_effects is not None:
+            try:
+                self._click_effects._timer.stop()
+                self._click_effects.hide()
+            except Exception:
+                pass
+        if self._trail_overlay is not None:
+            try:
+                self._trail_overlay.hide()
+            except Exception:
+                pass
+
+    def _resume_visual_effects(self) -> None:
+        """Re-apply all visual effects after the window is restored from minimise.
+
+        Re-applying from settings is safer than resuming timers directly because
+        it guarantees only the currently-enabled effects are started and prevents
+        timers from accumulating from multiple pause/resume cycles.
+        """
+        if self.isMinimized():
+            return  # another minimise happened before the timer fired
+        QTimer.singleShot(0, self._apply_theme_effect)
+        QTimer.singleShot(50, self._apply_bg_flock)
+        QTimer.singleShot(100, self._apply_bg_ambient)
+        QTimer.singleShot(150, self._apply_bg_drip)
+        if self._trail_overlay is not None:
+            QTimer.singleShot(200, self._trail_overlay.show)
 
     def _reposition_overlays(self) -> None:
         """Reposition both overlays to fill the window after a resize burst."""
@@ -2714,6 +2756,73 @@ class MainWindow(QMainWindow):
                 y = max(0, min(self.height() - collectible.height(), collectible.y()))
                 collectible.move(x, y)
                 collectible.raise_()
+
+    # ------------------------------------------------------------------
+    # Whole-window drag-and-drop (item 28)
+    # ------------------------------------------------------------------
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        """Accept file drops anywhere on the main window."""
+        mime = event.mimeData()
+        if mime.hasUrls() and any(u.isLocalFile() for u in mime.urls()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
+        """Keep accepting moves while the user drags over the window."""
+        mime = event.mimeData()
+        if mime.hasUrls() and any(u.isLocalFile() for u in mime.urls()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        """Route dropped files to the appropriate tool.
+
+        If the active tab is Alpha & RGBA Adjuster or Converter the files go
+        there directly.  If the active tab is Settings or History (tabs 2/3 in
+        the tab widget) a small dialog asks which tool to use.
+        Selective Alpha always asks because it handles only single images.
+        """
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox
+        mime = event.mimeData()
+        if not mime.hasUrls():
+            event.ignore()
+            return
+        paths = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
+        if not paths:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+
+        active_widget = self._tabs.currentWidget()
+        # For Alpha / Converter tabs, route directly
+        if active_widget is self._alpha_tab:
+            self._alpha_tab._add_to_list(paths)
+            return
+        if active_widget is self._converter_tab:
+            self._converter_tab._add_to_list(paths)
+            return
+
+        # For History, Settings, Selective Alpha tabs → ask the user
+        from PyQt6.QtWidgets import QInputDialog
+        choices = ["Alpha & RGBA Adjuster", "Converter"]
+        choice, ok = QInputDialog.getItem(
+            self,
+            "Open With…",
+            f"You dropped {len(paths)} file(s) on the {self._tabs.tabText(self._tabs.currentIndex())} tab.\n"
+            "Which tool should receive the file(s)?",
+            choices, 0, False,
+        )
+        if not ok:
+            return
+        if choice == "Alpha & RGBA Adjuster":
+            self._tabs.setCurrentWidget(self._alpha_tab)
+            self._alpha_tab._add_to_list(paths)
+        else:
+            self._tabs.setCurrentWidget(self._converter_tab)
+            self._converter_tab._add_to_list(paths)
 
     # ------------------------------------------------------------------
     # Lifecycle
