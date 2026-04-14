@@ -2255,10 +2255,51 @@ class MainWindow(QMainWindow):
             dlg_overlay.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
             dlg_overlay.set_enabled(True)
 
+        # Attach a mouse-trail overlay to the dialog if trail is enabled.
+        dlg_trail = None
+        if (self._trail_overlay is not None
+                and self._settings.get("trail_enabled", False)):
+            try:
+                from .mouse_trail import MouseTrailOverlay
+                dlg_trail = MouseTrailOverlay(dlg)
+                dlg_trail.setGeometry(dlg.rect())
+                dlg_trail.raise_()
+                self._apply_trail_to(dlg_trail)
+                dlg_trail.set_enabled(True)
+            except Exception:
+                dlg_trail = None
+
         dlg.exec()
 
         if dlg_overlay is not None:
             dlg_overlay.set_enabled(False)
+        if dlg_trail is not None:
+            try:
+                dlg_trail.set_enabled(False)
+            except Exception:
+                pass
+
+    def _apply_trail_to(self, overlay) -> None:
+        """Apply the current trail settings to *overlay* (a MouseTrailOverlay)."""
+        if overlay is None:
+            return
+        from .theme_engine import ALL_THEMES
+        trail_enabled = self._settings.get("trail_enabled", False)
+        use_theme_trail = self._settings.get("use_theme_trail", True)
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        if use_theme_trail:
+            color = theme.get("_trail_color") or "#ffffff"
+            style = theme.get("_trail") or "dots"
+        else:
+            color = self._settings.get("trail_color", "#ffffff")
+            style = self._settings.get("trail_style", "dots")
+        overlay.set_color(color)
+        overlay.set_style(style)
+        overlay.set_length(int(self._settings.get("trail_length", 50)))
+        overlay.set_fade_speed(int(self._settings.get("trail_fade_speed", 5)))
+        overlay.set_intensity(int(self._settings.get("trail_intensity", 100)))
+        overlay.set_enabled(trail_enabled)
 
     def _on_settings_changed(self):
         """Schedule a deferred re-apply of all effect-related settings.
