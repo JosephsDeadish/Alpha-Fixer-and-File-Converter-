@@ -13,7 +13,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QThread, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QFont, QFontMetrics,
-    QPixmap, QImage, QColor,
+    QPixmap, QImage, QColor, QMovie,
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame,
@@ -308,6 +308,8 @@ class BeforeAfterWidget(QWidget):
         # re-running the background worker.
         self._raw_before: QImage | None = None
         self._raw_after: QImage | None = None
+        # QMovie used to animate the "before" side when the source is a GIF.
+        self._movie: QMovie | None = None
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -325,6 +327,7 @@ class BeforeAfterWidget(QWidget):
 
     def set_before(self, qimg: QImage) -> None:
         """Set the 'before' (original) side."""
+        self._stop_movie()
         self._pix_before = QPixmap.fromImage(qimg)
         self._loading = False
         self.update()
@@ -358,6 +361,7 @@ class BeforeAfterWidget(QWidget):
 
     def clear(self) -> None:
         """Reset to empty / placeholder state."""
+        self._stop_movie()
         self._pix_before = None
         self._pix_after = None
         self._loading = False
@@ -561,6 +565,48 @@ class BeforeAfterWidget(QWidget):
     def _update_split(self, x: int) -> None:
         self._split = max(0.02, min(0.98, x / max(self.width(), 1)))
         self.update()
+
+    # ------------------------------------------------------------------
+    # Animated GIF support
+    # ------------------------------------------------------------------
+
+    def animate_before(self, path: str) -> None:
+        """Animate an animated GIF on the 'before' side using QMovie.
+
+        Each decoded frame is captured as a QPixmap and painted into the
+        split-view's left panel so the animation plays inside the normal
+        before/after comparison widget.  Any previously running movie is
+        stopped first.  The 'after' side (converted output) is not affected.
+        """
+        self._stop_movie()
+        movie = QMovie(path)
+        if not movie.isValid():
+            movie.deleteLater()
+            return
+        self._movie = movie
+        self._movie.frameChanged.connect(self._on_movie_frame)
+        self._movie.start()
+        self._loading = False
+        self.update()
+
+    def _stop_movie(self) -> None:
+        """Stop and clean up any running QMovie."""
+        if self._movie is not None:
+            try:
+                self._movie.stop()
+                self._movie.frameChanged.disconnect(self._on_movie_frame)
+            except RuntimeError:
+                pass  # already disconnected / destroyed
+            self._movie.deleteLater()
+            self._movie = None
+
+    def _on_movie_frame(self, _frame_no: int) -> None:
+        """Slot called by QMovie on each new frame; updates the before pixmap."""
+        if self._movie is not None:
+            pix = self._movie.currentPixmap()
+            if not pix.isNull():
+                self._pix_before = pix
+                self.update()
 
 
 # ---------------------------------------------------------------------------

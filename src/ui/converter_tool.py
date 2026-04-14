@@ -74,6 +74,10 @@ class ConverterTab(QWidget):
         # dialog and the conversion worker.  Created on demand; cleaned up when
         # a new batch starts (old temp files no longer needed).
         self._gif_temp_dir: tempfile.TemporaryDirectory | None = None
+        # Flag: True when the 'before' side of the compare widget is showing an
+        # animated GIF via QMovie.  When set, _on_preview_ready skips
+        # set_before() so the animation isn't replaced by a static first-frame.
+        self._before_is_animated: bool = False
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -541,6 +545,7 @@ class ConverterTab(QWidget):
         item = self._file_list.item(row)
         # Invalidate cached aspect ratio whenever the selection changes
         self._cached_aspect = None
+        self._before_is_animated = False
         if item:
             self._refresh_preview(item.text())
         else:
@@ -628,11 +633,13 @@ class ConverterTab(QWidget):
     def _refresh_preview(self, path: str) -> None:
         """Show *path* in the compare pane using the current format and quality.
 
-        Loads the source image and an in-memory converted version in a
-        background thread, then sets both sides of the BeforeAfterWidget
-        so the user can see exactly how the format conversion changes the image.
+        For animated GIFs the 'before' side is animated via QMovie.  For all
+        other files the source image is loaded statically.  The 'after' side
+        always shows an in-memory converted version so the user can see the
+        effect of the chosen format and quality before committing.
         """
         if not path or not os.path.isfile(path):
+            self._before_is_animated = False
             self._compare.clear()
             self._source_info_lbl.setText("")
             self._output_info_lbl.setText("")
@@ -640,7 +647,6 @@ class ConverterTab(QWidget):
 
         # Disconnect any stale previous loader to prevent it from overwriting
         # the current preview after the selection or format has changed.
-        # Also ask the thread to abandon work so it doesn't waste CPU.
         if self._preview_loader is not None:
             self._preview_loader.stop()
             try:
@@ -653,7 +659,43 @@ class ConverterTab(QWidget):
         target_fmt = fmt_data[0] if fmt_data else "PNG"
         quality = self._quality_spin.value()
 
-        self._compare.set_loading()
+        # Detect animated GIF so we can play it in the before side
+        is_animated_gif = (
+            Path(path).suffix.lower() == ".gif"
+            and get_gif_frame_count(path) > 1
+        )
+
+        if is_animated_gif:
+            self._before_is_animated = True
+            # Animate the source side using Qt's built-in QMovie so every
+            # frame plays back at the correct delay.
+            self._compare.animate_before(path)
+            # Set the after side to "loading" while we convert the first frame.
+            self._compare.set_loading()
+            # Populate source info panel directly (frame count etc.) since the
+            # background loader only gets the first PIL frame.
+            try:
+                from PIL import Image
+                with Image.open(path) as _im:
+                    _w, _h = _im.size
+                    _n = getattr(_im, "n_frames", 1)
+                    _sz = os.path.getsize(path)
+                _sz_str = (
+                    f"{_sz} B" if _sz < 1024
+                    else (f"{_sz / 1024:.1f} KB" if _sz < 1024 ** 2
+                          else f"{_sz / 1024 ** 2:.1f} MB")
+                )
+                self._source_info_lbl.setText(
+                    f"<b>SRC</b><br>size<br><b>{_w} × {_h}</b><br>"
+                    f"mode<br><b>GIF · {_n} frames</b><br>"
+                    f"<b>{_sz_str}</b>"
+                )
+            except Exception:
+                self._source_info_lbl.setText("<b>SRC</b><br>GIF animation")
+        else:
+            self._before_is_animated = False
+            self._compare.set_loading()
+
         self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality)
         self._preview_loader.ready.connect(self._on_preview_ready)
         self._preview_loader.failed.connect(self._on_preview_failed)
@@ -668,7 +710,11 @@ class ConverterTab(QWidget):
     @pyqtSlot(QImage, QImage, str, str)
     def _on_preview_ready(self, src_qi: QImage, out_qi: QImage, src_meta: str, out_meta: str):
         """Called when the converter preview loader finishes loading both images."""
-        self._compare.set_before(src_qi)
+        # When the source is an animated GIF, the 'before' side is already
+        # playing via QMovie.  Only update the 'after' (converted output) side
+        # so the animation is not replaced by a static first-frame snapshot.
+        if not self._before_is_animated:
+            self._compare.set_before(src_qi)
         self._compare.set_after(out_qi)
 
         def _info_text(label: str, meta: str, skip_first: bool = False) -> str:
@@ -757,7 +803,7 @@ class ConverterTab(QWidget):
         # Selected frames are extracted to a temp directory and the GIF path
         # is replaced in the expanded list with one path per chosen frame.
         # ------------------------------------------------------------------
-        expanded = self._expand_gif_frames(expanded)
+        expanded, gif_fallback_dir = self._expand_gif_frames(expanded)
         if expanded is None:
             # User cancelled the frame-picker dialog for at least one GIF.
             return
@@ -765,6 +811,12 @@ class ConverterTab(QWidget):
             QMessageBox.information(self, "No Frames Selected",
                                     "No frames were selected for export.")
             return
+
+        # When GIF frames were extracted to a temp directory but the user has
+        # not specified an output folder, use the original GIF's parent directory
+        # so converted files appear next to the source GIF rather than being
+        # lost inside a temporary directory.
+        effective_out_dir = out_dir or gif_fallback_dir or None
 
         # Determine a common root directory for relative path preservation
         input_root = None
@@ -804,7 +856,7 @@ class ConverterTab(QWidget):
             files=expanded,
             target_format=target_format,
             target_ext=target_ext,
-            output_dir=out_dir,
+            output_dir=effective_out_dir,
             input_root=input_root,
             quality=quality,
             resize=resize,
@@ -816,22 +868,33 @@ class ConverterTab(QWidget):
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
-    def _expand_gif_frames(self, files: list[str]) -> list[str] | None:
+    def _expand_gif_frames(self, files: list[str]) -> tuple[list[str] | None, str | None]:
         """
         For every animated GIF in *files*, show :class:`GifFramePickerDialog`
         and replace the GIF path with one temporary PNG path per selected frame.
 
         Non-GIF files (and single-frame GIFs) are passed through unchanged.
 
-        Returns the expanded list on success, or ``None`` if the user cancelled
-        the dialog for any GIF.
+        Returns a tuple ``(expanded, fallback_out_dir)``:
+        - *expanded* is the new file list on success, or ``None`` if the user
+          cancelled the dialog for any GIF.
+        - *fallback_out_dir* is the parent directory of the first animated GIF
+          encountered, or ``None`` when no animated GIFs were processed.  The
+          caller uses this as the output directory when the user has not
+          specified one explicitly, preventing extracted frames from being
+          silently saved into a temporary directory.
         """
-        from PIL import Image, ImageSequence
+        from PIL import Image
 
         # Collect GIFs that actually have multiple frames
         animated_gifs = [f for f in files if get_gif_frame_count(f) > 1]
         if not animated_gifs:
-            return files  # nothing to expand
+            return files, None  # nothing to expand
+
+        # The fallback output dir is the parent of the first animated GIF so
+        # that converted frames land next to the source file when the user has
+        # not chosen an explicit output directory.
+        fallback_out_dir = str(Path(animated_gifs[0]).parent)
 
         # Clean up any temp dir from the previous run before creating a new one
         if self._gif_temp_dir is not None:
@@ -852,33 +915,42 @@ class ConverterTab(QWidget):
             dlg = GifFramePickerDialog(src, parent=self)
             if dlg.exec() != dlg.DialogCode.Accepted:
                 # User cancelled – abort the whole run
-                return None
+                return None, fallback_out_dir
 
             chosen = dlg.selected_indices()
             if not chosen:
                 # User left everything unchecked for this GIF; skip it
                 continue
 
-            # Extract chosen frames as temporary PNG files
+            # Extract chosen frames as temporary PNG files.
+            # IMPORTANT: We seek to each frame individually rather than using
+            # ImageSequence.Iterator + list(), because the iterator yields the
+            # *same* PIL Image object seeked to each position.  Materialising
+            # the iterator into a list gives a list where every element is the
+            # same object at the final seek position, so every frame extracted
+            # later would be identical.  Seeking explicitly ensures each frame
+            # is read while the image is positioned at that index.
             stem = Path(src).stem
             try:
                 gif = Image.open(src)
-                frames = list(ImageSequence.Iterator(gif))
-                for idx in chosen:
-                    frame = frames[idx].copy().convert("RGBA")
-                    frame_path = str(tmp_root / f"{stem}_frame{idx + 1:04d}.png")
-                    frame.save(frame_path, format="PNG")
-                    frame.close()
-                    result.append(frame_path)
-                gif.close()
+                try:
+                    for idx in chosen:
+                        gif.seek(idx)
+                        frame = gif.convert("RGBA")
+                        frame_path = str(tmp_root / f"{stem}_frame{idx + 1:04d}.png")
+                        frame.save(frame_path, format="PNG")
+                        frame.close()
+                        result.append(frame_path)
+                finally:
+                    gif.close()
             except Exception as exc:
                 QMessageBox.warning(
                     self, "GIF Frame Extraction Error",
                     f"Could not extract frames from {Path(src).name}:\n{exc}"
                 )
-                return None
+                return None, fallback_out_dir
 
-        return result
+        return result, fallback_out_dir
 
     def _stop(self):
         if self._worker:

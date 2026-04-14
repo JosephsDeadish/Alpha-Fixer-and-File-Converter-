@@ -134,13 +134,20 @@ class GifFramePickerDialog(QDialog):
             self._info_lbl.setText(f"Error opening GIF: {exc}")
             return
 
+        # IMPORTANT: ImageSequence.Iterator yields the *same* PIL Image object
+        # seeked to each frame position.  Calling list() on the iterator only
+        # stores references to the same object, all at the last seek position,
+        # causing every frame thumbnail to look identical.  We must copy each
+        # frame *while* the iterator is still positioned on that frame.
         try:
-            frames = list(ImageSequence.Iterator(gif))
+            frames = [f.copy() for f in ImageSequence.Iterator(gif)]
             self._frame_count = len(frames)
         except Exception as exc:
             self._info_lbl.setText(f"Error reading frames: {exc}")
             gif.close()
             return
+        finally:
+            gif.close()
 
         self._info_lbl.setText(
             f"{Path(self._path).name}  —  {self._frame_count} frame"
@@ -148,7 +155,8 @@ class GifFramePickerDialog(QDialog):
         )
 
         for idx, frame in enumerate(frames):
-            thumb = frame.copy().convert("RGBA")
+            thumb = frame.convert("RGBA")
+            frame.close()
             thumb.thumbnail((_THUMB_W, _THUMB_H), Image.LANCZOS)
             pixmap = _pil_to_qpixmap(thumb)
             thumb.close()
@@ -175,7 +183,6 @@ class GifFramePickerDialog(QDialog):
             row, col = divmod(idx, _COLS)
             self._grid.addWidget(cell, row, col)
 
-        gif.close()
         self._update_selection_label()
 
     # ------------------------------------------------------------------
