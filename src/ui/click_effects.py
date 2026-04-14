@@ -2425,8 +2425,11 @@ class ClickEffectsOverlay(QWidget):
 
     def set_effect(self, effect_key: str) -> None:
         self._effect_key = effect_key if effect_key in _SPAWNERS else "default"
+        # Background floating animations (bat, fairy, fish, alien, slime, etc.) are
+        # independent of click effects being enabled.  They should run whenever the
+        # theme is active so they don't disappear if the user disables click effects.
         # Manage bat flock timer
-        if effect_key == "bat" and self._enabled:
+        if effect_key == "bat":
             if self._bat_flock is None:
                 self._bat_flock = _BatFlock(self)
             self._bat_flock.start()
@@ -2434,7 +2437,7 @@ class ClickEffectsOverlay(QWidget):
             if self._bat_flock:
                 self._bat_flock.stop()
         # Manage fairy flock timer
-        if effect_key == "fairy" and self._enabled:
+        if effect_key == "fairy":
             if self._fairy_flock is None:
                 self._fairy_flock = _FairyFlock(self)
             self._fairy_flock.start()
@@ -2445,7 +2448,7 @@ class ClickEffectsOverlay(QWidget):
         # the background drip system (set_bg_drip). Any active gore drip
         # should remain untouched here.
         # Manage fish flock (mermaid theme)
-        if effect_key == "mermaid" and self._enabled:
+        if effect_key == "mermaid":
             if self._fish_flock is None:
                 self._fish_flock = _FishFlock(self)
             self._fish_flock.start()
@@ -2453,7 +2456,7 @@ class ClickEffectsOverlay(QWidget):
             if self._fish_flock:
                 self._fish_flock.stop()
         # Manage alien tractor beam
-        if effect_key == "alien" and self._enabled:
+        if effect_key == "alien":
             if self._alien_beam is None:
                 self._alien_beam = _AlienBeam(self)
             self._alien_beam.start()
@@ -2461,7 +2464,7 @@ class ClickEffectsOverlay(QWidget):
             if self._alien_beam:
                 self._alien_beam.stop()
         # Manage slime drip (slime theme click effect)
-        if effect_key == "slime" and self._enabled:
+        if effect_key == "slime":
             if self._slime_drip is None:
                 self._slime_drip = _SlimeDrip(self)
             self._slime_drip.start()
@@ -2471,112 +2474,114 @@ class ClickEffectsOverlay(QWidget):
         # water_drip is no longer tied to click effects; it is driven by
         # the background drip system (set_bg_drip). Any active water drip
         # should remain untouched here.
-        # Manage snow drift (ice theme)
-        if (effect_key == "ice" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "snow"):
+        # Manage snow drift (ice theme) – also triggered by ambient "snow" setting
+        if effect_key == "ice" or (self._bg_ambient_enabled and self._bg_ambient_type == "snow"):
             if self._snow_drift is None:
                 self._snow_drift = _SnowDrift(self)
             self._snow_drift.start()
         else:
             if self._snow_drift:
                 self._snow_drift.stop()
-        # Manage ember drift (fire theme)
-        if (effect_key == "fire" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "ember"):
+        # Manage ember drift (fire theme) – also triggered by ambient "ember" setting
+        if effect_key == "fire" or (self._bg_ambient_enabled and self._bg_ambient_type == "ember"):
             if self._ember_drift is None:
                 self._ember_drift = _EmberDrift(self)
             self._ember_drift.start()
         else:
             if self._ember_drift:
                 self._ember_drift.stop()
-        # Manage sakura petals (sakura theme)
-        if (effect_key == "sakura" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "sakura"):
+        # Manage sakura petals (sakura theme) – also triggered by ambient "sakura" setting
+        if effect_key == "sakura" or (self._bg_ambient_enabled and self._bg_ambient_type == "sakura"):
             if self._sakura_petal is None:
                 self._sakura_petal = _SakuraPetal(self)
             self._sakura_petal.start()
         else:
             if self._sakura_petal:
                 self._sakura_petal.stop()
-        # Manage shooting stars (galaxy / galaxy_otter themes)
-        if (effect_key in ("galaxy", "galaxy_otter") and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "stars"):
+        # Manage shooting stars (galaxy / galaxy_otter themes) – also triggered by ambient "stars"
+        if effect_key in ("galaxy", "galaxy_otter") or (self._bg_ambient_enabled and self._bg_ambient_type == "stars"):
             if self._star_shoot is None:
                 self._star_shoot = _StarShoot(self)
             self._star_shoot.start()
         else:
             if self._star_shoot:
                 self._star_shoot.stop()
-        # Manage bubble rise (ocean / ripple themes)
-        if (effect_key in ("ocean", "ripple") and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "bubbles"):
+        # Manage bubble rise (ocean / ripple themes) – also triggered by ambient "bubbles"
+        if effect_key in ("ocean", "ripple") or (self._bg_ambient_enabled and self._bg_ambient_type == "bubbles"):
             if self._bubble_rise is None:
                 self._bubble_rise = _BubbleRise(self)
             self._bubble_rise.start()
         else:
             if self._bubble_rise:
                 self._bubble_rise.stop()
-        # Manage neon flicker (neon theme)
-        if (effect_key == "neon" and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "neon"):
+        # Manage neon flicker (neon theme) – also triggered by ambient "neon"
+        if effect_key == "neon" or (self._bg_ambient_enabled and self._bg_ambient_type == "neon"):
             if self._neon_flicker is None:
                 self._neon_flicker = _NeonFlicker(self)
             self._neon_flicker.start()
         else:
             if self._neon_flicker:
                 self._neon_flicker.stop()
-        # Manage ghost wisps (goth / ghost themes)
-        if (effect_key in ("goth", "ghost") and self._enabled) or (self._bg_ambient_enabled and self._bg_ambient_type == "ghost"):
+        # Manage ghost wisps (goth / ghost themes) – also triggered by ambient "ghost"
+        if effect_key in ("goth", "ghost") or (self._bg_ambient_enabled and self._bg_ambient_type == "ghost"):
             if self._ghost_wisp is None:
                 self._ghost_wisp = _GhostWisp(self)
             self._ghost_wisp.start()
         else:
             if self._ghost_wisp:
                 self._ghost_wisp.stop()
-        # Manage rainbow confetti (rainbow theme)
-        if effect_key == "rainbow" and self._enabled:
+        # Manage rainbow confetti (rainbow theme) – background animation
+        if effect_key == "rainbow":
             if self._rainbow_confetti is None:
                 self._rainbow_confetti = _RainbowConfetti(self)
             self._rainbow_confetti.start()
         else:
             if self._rainbow_confetti:
                 self._rainbow_confetti.stop()
-        # Manage star dust (sparkle theme)
-        if effect_key == "sparkle" and self._enabled:
+        # Manage star dust (sparkle theme) – background animation
+        if effect_key == "sparkle":
             if self._star_dust is None:
                 self._star_dust = _StarDust(self)
             self._star_dust.start()
         else:
             if self._star_dust:
                 self._star_dust.stop()
-        # Manage bamboo leaf drift (panda theme)
-        if effect_key == "panda" and self._enabled:
+        # Manage bamboo leaf drift (panda theme) – background animation, independent of click effects
+        if effect_key == "panda":
             if self._bamboo_leaf is None:
                 self._bamboo_leaf = _BambooLeaf(self)
             self._bamboo_leaf.start()
         else:
             if self._bamboo_leaf:
                 self._bamboo_leaf.stop()
-        # Manage otter bubble clusters (otter theme)
-        if effect_key == "otter" and self._enabled:
+        # Manage otter bubble clusters (otter theme) – background animation
+        if effect_key == "otter":
             if self._otter_bubble is None:
                 self._otter_bubble = _OtterBubble(self)
             self._otter_bubble.start()
         else:
             if self._otter_bubble:
                 self._otter_bubble.stop()
-        # Manage shark fin glide (shark theme)
-        if effect_key == "shark" and self._enabled:
+        # Manage shark fin glide (shark theme) – background animation, NOT tied to click effects
+        # Previously was gated by self._enabled which caused fins to vanish when click effects
+        # were disabled and fins to play from click effect particles unexpectedly.
+        if effect_key == "shark":
             if self._shark_fin is None:
                 self._shark_fin = _SharkFin(self)
             self._shark_fin.start()
         else:
             if self._shark_fin:
                 self._shark_fin.stop()
-        # Manage slither wiggler (slither theme)
-        if effect_key == "slither" and self._enabled:
+        # Manage slither wiggler (slither theme) – background animation
+        if effect_key == "slither":
             if self._slither_wiggler is None:
                 self._slither_wiggler = _SlitherWiggler(self)
             self._slither_wiggler.start()
         else:
             if self._slither_wiggler:
                 self._slither_wiggler.stop()
-        # Manage noodle strand drift (noodle theme)
-        if effect_key == "noodle" and self._enabled:
+        # Manage noodle strand drift (noodle theme) – background animation
+        if effect_key == "noodle":
             if self._noodle_strand is None:
                 self._noodle_strand = _NoodleStrand(self)
             self._noodle_strand.start()

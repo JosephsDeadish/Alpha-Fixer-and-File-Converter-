@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox, QFrame,
 )
 
-from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS
+from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
 from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 
@@ -899,7 +899,6 @@ class SettingsDialog(QDialog):
         btn_anim_gl.addWidget(QLabel("Animation style:"), 2, 0)
         self._button_anim_style_combo = QComboBox()
         _BUTTON_ANIM_OPTIONS = [
-            ("none",    "None — no animation"),
             ("press",   "Press — subtle 2 px downward nudge"),
             ("fall",    "Fall — 8 px drop and spring back"),
             ("bounce",  "Bounce — button leaps up and bounces back"),
@@ -907,7 +906,6 @@ class SettingsDialog(QDialog):
             ("shatter", "Shatter — particle burst from button centre"),
         ]
         _BUTTON_ANIM_TIPS = {
-            "none":    "No animation. Buttons respond instantly with no visual movement.",
             "press":   "The button shifts 2 pixels down on press then springs back.\n"
                        "Subtle and satisfying — closest to a real physical button.",
             "fall":    "The button slides 8 pixels down over ~220 ms then springs back.\n"
@@ -1467,12 +1465,13 @@ class SettingsDialog(QDialog):
         self._button_anim_check.setChecked(btn_anim_enabled)
         use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
         self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
+        # "none" was removed from the dropdown (index 0 is now "press").
         _BUTTON_ANIM_IDX_MAP = {
-            "none": 0, "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
+            "none": 0, "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
         }
         saved_btn_anim = self._settings.get("button_anim_style", "press")
         self._button_anim_style_combo.setCurrentIndex(
-            _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 1)
+            _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
         )
         self._button_anim_style_combo.setEnabled(
             btn_anim_enabled and not use_theme_btn_anim
@@ -2015,6 +2014,32 @@ class SettingsDialog(QDialog):
         use_theme = self._use_theme_effect_check.isChecked()
         self._settings.set("use_theme_effect", use_theme)
         self._effect_combo.setEnabled(not use_theme)
+        if use_theme:
+            # Select the theme's effect in the combo so the user can see what is
+            # being used, and update the tooltip to confirm.
+            theme = self._settings.get_theme()
+            theme_name = theme.get("name", "")
+            effect_key = THEME_EFFECTS.get(theme_name, theme.get("_effect", "default"))
+            for i in range(self._effect_combo.count()):
+                if self._effect_combo.itemData(i) == effect_key:
+                    self._effect_combo.setCurrentIndex(i)
+                    break
+            effect_label = self._effect_combo.currentText().split("—")[0].strip()
+            if not effect_key or effect_key == "none":
+                self._effect_combo.setToolTip(
+                    f"No click effect defined for the '{theme_name}' theme."
+                )
+            else:
+                self._effect_combo.setToolTip(
+                    f"Using theme click effect: {effect_label}\n"
+                    f"(set by the '{theme_name}' theme)\n"
+                    "Uncheck 'Use theme effect' to override manually."
+                )
+        else:
+            self._effect_combo.setToolTip(
+                "Choose the click particle effect for this theme.\n"
+                "Select 'Custom' to use your own emoji as particles."
+            )
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:
@@ -2076,14 +2101,66 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_button_anim", use_theme)
         enabled = self._button_anim_check.isChecked()
         self._button_anim_style_combo.setEnabled(enabled and not use_theme)
+        if use_theme:
+            # Show what this theme's animation would be
+            theme = self._settings.get_theme()
+            theme_style = theme.get("_button_anim", "press")
+            _STYLE_LABELS = {
+                "press": "Press", "fall": "Fall", "bounce": "Bounce",
+                "shake": "Shake", "shatter": "Shatter", "none": "(none)",
+            }
+            label = _STYLE_LABELS.get(theme_style, theme_style.title())
+            theme_name = theme.get("name", "")
+            if not theme_style or theme_style == "none":
+                self._button_anim_style_combo.setToolTip(
+                    f"No button animation for the '{theme_name}' theme."
+                )
+            else:
+                self._button_anim_style_combo.setToolTip(
+                    f"Using theme animation: {label}\n"
+                    f"(set by the '{theme_name}' theme)"
+                )
+        else:
+            self._button_anim_style_combo.setToolTip(
+                "Choose the press-animation style applied to every button.\n"
+                "Greyed out while 'Use theme animation' is checked."
+            )
         self.settings_changed.emit()
 
 
     def _on_bg_drip_changed(self) -> None:
         self._settings.set("bg_drip_enabled", self._bg_drip_check.isChecked())
-        self._settings.set("use_theme_drip", self._use_theme_drip_check.isChecked())
+        use_theme_drip = self._use_theme_drip_check.isChecked()
+        self._settings.set("use_theme_drip", use_theme_drip)
         drip_type = self._bg_drip_combo.currentData() or "blood"
         self._settings.set("bg_drip_type", drip_type)
+        # Update combo tooltip and selection to reflect theme drip when "use theme" is on
+        if use_theme_drip:
+            theme = self._settings.get_theme()
+            effect_key = theme.get("_effect", "default")
+            theme_name = theme.get("name", "")
+            if effect_key in ("gore", "shark"):
+                theme_drip = "blood"
+            elif effect_key in ("ocean", "ripple", "mermaid"):
+                theme_drip = "water"
+            else:
+                theme_drip = drip_type
+            # Select the matching drip in the combo so user sees what's active
+            for i in range(self._bg_drip_combo.count()):
+                if self._bg_drip_combo.itemData(i) == theme_drip:
+                    self._bg_drip_combo.setCurrentIndex(i)
+                    break
+            drip_label = self._bg_drip_combo.currentText().split("—")[0].strip()
+            self._bg_drip_combo.setToolTip(
+                f"Using theme drip: {drip_label}\n"
+                f"(auto-selected for '{theme_name}' theme)\n"
+                "Uncheck 'Use theme drip' to override manually."
+            )
+        else:
+            self._bg_drip_combo.setToolTip(
+                "Choose the background drip effect style.\n"
+                "Greyed out while 'Use theme drip' is checked."
+            )
         self.settings_changed.emit()
 
     def _on_bg_flock_changed(self) -> None:
