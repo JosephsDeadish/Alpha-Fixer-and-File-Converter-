@@ -9,16 +9,23 @@ exporting.
 Opening the dialog:
   • Selecting "GIF" in the Converter output combo and clicking Process
   • Right-clicking anywhere on the main window → "Open GIF Builder"
+
+UX highlights (Round-90):
+  • Drag frames inside the grid to reorder them – no Up/Down buttons needed.
+    External file drops also accepted.
+  • Frame order stays in sync via item UserRole data + rowsMoved signal.
+  • Global delay + FPS controlled by a smooth drag-slider; per-frame delay
+    also uses a slider (no arrow-button spinboxes).
+  • Scrubber slider lets you jump to any frame without playing.
+  • Live preview updates immediately when sliders are moved.
 """
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QSize, QMimeData, pyqtSignal,
+    Qt, QTimer, QSize, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QDragEnterEvent, QDropEvent, QDragMoveEvent,
@@ -26,10 +33,10 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QFileDialog, QSpinBox,
+    QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
-    QProgressDialog, QSplitter, QWidget, QScrollArea,
-    QAbstractSpinBox, QFrame, QSizePolicy,
+    QProgressDialog, QSplitter, QWidget,
+    QFrame, QSpinBox, QAbstractSpinBox,
 )
 
 # Supported input extensions (what PIL can open)
@@ -40,6 +47,9 @@ _SUPPORTED_EXTS = {
 
 _THUMB_W = 120
 _THUMB_H = 100
+
+# UserRole key for storing _FrameEntry in QListWidgetItem
+_ENTRY_ROLE = Qt.ItemDataRole.UserRole
 
 
 def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
@@ -77,7 +87,7 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
 
 
 def _pil_to_pixmap(pil_img) -> QPixmap:
-    from PIL import Image
+    from PIL import Image  # noqa: F401 – needed for convert
     rgba = pil_img.convert("RGBA")
     data = rgba.tobytes("raw", "RGBA")
     qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
@@ -108,9 +118,15 @@ class _FrameEntry:
 
 
 class _FrameListWidget(QListWidget):
-    """Drag-to-reorder list widget that also accepts dropped image files."""
+    """Icon-grid list widget with drag-to-reorder AND external file drop support.
+
+    Each ``QListWidgetItem`` stores its ``_FrameEntry`` in ``_ENTRY_ROLE`` so
+    the order can be re-synced after any internal drag.  The ``order_changed``
+    signal fires after every internal reorder.
+    """
 
     files_dropped = pyqtSignal(list)   # list[str]
+    order_changed = pyqtSignal()       # emitted after internal drag-reorder
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -119,10 +135,13 @@ class _FrameListWidget(QListWidget):
         self.setAcceptDrops(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.setIconSize(QSize(_THUMB_W, _THUMB_H))
-        self.setSpacing(4)
+        self.setSpacing(6)
         self.setViewMode(QListWidget.ViewMode.IconMode)
         self.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.setWrapping(True)
+        self.setWordWrap(True)
+        # Fire order_changed whenever rows move (internal drag-reorder)
+        self.model().rowsMoved.connect(lambda *_: self.order_changed.emit())
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
@@ -150,28 +169,41 @@ class _FrameListWidget(QListWidget):
         super().dropEvent(event)
 
 
+def _make_hslider(lo: int, hi: int, val: int,
+                  tick_interval: int = 0) -> QSlider:
+    """Return a horizontal QSlider pre-configured with the given range."""
+    s = QSlider(Qt.Orientation.Horizontal)
+    s.setRange(lo, hi)
+    s.setValue(val)
+    s.setTracking(True)
+    if tick_interval:
+        s.setTickPosition(QSlider.TickPosition.TicksBelow)
+        s.setTickInterval(tick_interval)
+    return s
+
+
 class GifBuilderDialog(QDialog):
     """Full-featured animated GIF builder.
 
     Provides:
     • Add images from any supported format (PNG, JPEG, WEBP, GIF, etc.)
-    • Drag-and-drop support for both file-drop and internal reordering
-    • Global frame delay + optional per-frame overrides
-    • Loop count (0 = infinite)
-    • Live preview with play / pause
+    • Drag-and-drop for file import AND grid reordering (no Up/Down buttons)
+    • Global frame delay set by a smooth slider – live preview updates
+    • Per-frame delay override also via slider
+    • Scrubber to jump to any frame
+    • Loop count and optional resize on export
     • Export (Process) to a user-chosen GIF file
 
     :param initial_files: Optional list of file paths to pre-populate.
     :param parent:        Optional parent widget.
     """
 
-    # Emitted after a successful export with the output path
-    exported = pyqtSignal(str)
+    exported = pyqtSignal(str)  # emitted with output path on successful export
 
     def __init__(self, initial_files: Optional[list[str]] = None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("GIF Builder")
-        self.setMinimumSize(820, 600)
+        self.setWindowTitle("🎞 GIF Builder")
+        self.setMinimumSize(860, 620)
         self.setModal(False)
         self._frames: list[_FrameEntry] = []
         self._preview_idx: int = 0
@@ -181,6 +213,7 @@ class GifBuilderDialog(QDialog):
         if initial_files:
             self._add_paths(initial_files)
         QShortcut(QKeySequence("Delete"), self).activated.connect(self._remove_selected)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._export)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -191,154 +224,199 @@ class GifBuilderDialog(QDialog):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
 
-        # Title
+        # Title bar row
+        title_row = QHBoxLayout()
         title = QLabel("🎞  GIF Builder")
         title.setObjectName("subheader")
-        root.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        self._frame_count_lbl = QLabel("0 frames")
+        self._frame_count_lbl.setObjectName("subheader")
+        title_row.addWidget(self._frame_count_lbl)
+        root.addLayout(title_row)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         root.addWidget(splitter, 1)
 
-        # ---- Left side: frame list + controls ----
+        # ── Left: frame grid ─────────────────────────────────────────────
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(6)
 
-        # Toolbar: add / remove / move
+        # Toolbar
         tb = QHBoxLayout()
-        self._btn_add = QPushButton("➕ Add Images")
+        self._btn_add = QPushButton("➕  Add Images")
         self._btn_add.setToolTip(
             "Add one or more images to the GIF.\n"
-            "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (frames), ICO, and more."
+            "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (all frames), ICO, and more.\n"
+            "You can also drag image files directly onto the grid below."
         )
+        self._btn_add.setMinimumHeight(32)
         self._btn_add.clicked.connect(self._on_add_clicked)
-        tb.addWidget(self._btn_add)
+        tb.addWidget(self._btn_add, 2)
 
-        self._btn_remove = QPushButton("🗑 Remove")
-        self._btn_remove.setToolTip("Remove the selected frames from the list.")
+        self._btn_remove = QPushButton("🗑  Remove")
+        self._btn_remove.setToolTip("Remove selected frame(s).  Shortcut: Delete")
         self._btn_remove.clicked.connect(self._remove_selected)
-        tb.addWidget(self._btn_remove)
+        tb.addWidget(self._btn_remove, 1)
 
-        self._btn_up = QPushButton("⬆ Up")
-        self._btn_up.setToolTip("Move selected frame earlier in the sequence.")
-        self._btn_up.clicked.connect(self._move_up)
-        tb.addWidget(self._btn_up)
-
-        self._btn_down = QPushButton("⬇ Down")
-        self._btn_down.setToolTip("Move selected frame later in the sequence.")
-        self._btn_down.clicked.connect(self._move_down)
-        tb.addWidget(self._btn_down)
-
-        self._btn_clear = QPushButton("✖ Clear All")
+        self._btn_clear = QPushButton("✖  Clear All")
         self._btn_clear.setToolTip("Remove all frames.")
         self._btn_clear.clicked.connect(self._clear_all)
-        tb.addWidget(self._btn_clear)
-        tb.addStretch()
-        self._frame_count_lbl = QLabel("0 frames")
-        self._frame_count_lbl.setObjectName("subheader")
-        tb.addWidget(self._frame_count_lbl)
+        tb.addWidget(self._btn_clear, 1)
         left_layout.addLayout(tb)
+
+        # Hint label
+        hint = QLabel("💡 Drag frames to reorder  •  Drop image files to add")
+        hint.setStyleSheet("color: gray; font-style: italic; font-size: 11px;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(hint)
 
         # Frame grid
         self._frame_list = _FrameListWidget()
         self._frame_list.files_dropped.connect(self._add_paths)
+        self._frame_list.order_changed.connect(self._sync_frames_from_list)
         self._frame_list.currentRowChanged.connect(self._on_selection_changed)
         left_layout.addWidget(self._frame_list, 1)
 
-        # Per-frame delay override
+        # Per-frame delay override  (slider-based)
         pf_box = QGroupBox("Per-Frame Delay Override")
-        pf_layout = QHBoxLayout(pf_box)
-        self._pf_check = QCheckBox("Override delay for selected frame:")
+        pf_layout = QVBoxLayout(pf_box)
+        pf_top = QHBoxLayout()
+        self._pf_check = QCheckBox("Override delay for selected frame")
         self._pf_check.toggled.connect(self._on_pf_check)
-        pf_layout.addWidget(self._pf_check)
-        self._pf_spin = QSpinBox()
-        self._pf_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._pf_spin.setRange(10, 60000)
-        self._pf_spin.setValue(100)
-        self._pf_spin.setSuffix(" ms")
-        self._pf_spin.setEnabled(False)
-        self._pf_spin.valueChanged.connect(self._on_pf_delay_changed)
-        pf_layout.addWidget(self._pf_spin)
-        pf_layout.addStretch()
+        pf_top.addWidget(self._pf_check)
+        self._pf_val_lbl = QLabel("100 ms")
+        self._pf_val_lbl.setFixedWidth(60)
+        self._pf_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pf_top.addWidget(self._pf_val_lbl)
+        pf_layout.addLayout(pf_top)
+        self._pf_slider = _make_hslider(10, 3000, 100)
+        self._pf_slider.setEnabled(False)
+        self._pf_slider.setToolTip("Per-frame delay in milliseconds.  Drag left = faster.")
+        self._pf_slider.valueChanged.connect(self._on_pf_slider_changed)
+        pf_layout.addWidget(self._pf_slider)
         left_layout.addWidget(pf_box)
 
         splitter.addWidget(left)
 
-        # ---- Right side: settings + preview ----
+        # ── Right: settings + preview ─────────────────────────────────────
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
 
-        # Global settings group
+        # Global settings
         grp_settings = QGroupBox("GIF Settings")
-        sl = QGridLayout(grp_settings)
-        sl.setHorizontalSpacing(10)
-        sl.setVerticalSpacing(6)
+        gl = QGridLayout(grp_settings)
+        gl.setHorizontalSpacing(8)
+        gl.setVerticalSpacing(8)
 
-        sl.addWidget(QLabel("Global Frame Delay:"), 0, 0)
-        self._delay_spin = QSpinBox()
-        self._delay_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._delay_spin.setRange(10, 60000)
-        self._delay_spin.setValue(100)
-        self._delay_spin.setSuffix(" ms")
-        self._delay_spin.setToolTip(
-            "Duration each frame is shown when no per-frame delay is set.\n"
-            "100 ms = 10 fps, 50 ms ≈ 20 fps, 33 ms ≈ 30 fps."
+        # Delay slider  (10–3000 ms)
+        gl.addWidget(QLabel("Frame speed:"), 0, 0)
+        delay_row = QHBoxLayout()
+        self._delay_slider = _make_hslider(10, 3000, 100)
+        self._delay_slider.setToolTip(
+            "How long each frame is shown (milliseconds).\n"
+            "Drag left for faster animation, right for slower.\n"
+            "100 ms ≈ 10 fps  |  50 ms ≈ 20 fps  |  33 ms ≈ 30 fps"
         )
-        sl.addWidget(self._delay_spin, 0, 1)
+        self._delay_val_lbl = QLabel("100 ms")
+        self._delay_val_lbl.setFixedWidth(60)
+        self._delay_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._delay_slider.valueChanged.connect(self._on_delay_changed)
+        delay_row.addWidget(self._delay_slider, 1)
+        delay_row.addWidget(self._delay_val_lbl)
+        gl.addLayout(delay_row, 0, 1)
 
-        sl.addWidget(QLabel("Loop count:"), 1, 0)
-        self._loop_spin = QSpinBox()
-        self._loop_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._loop_spin.setRange(0, 9999)
-        self._loop_spin.setValue(0)
-        self._loop_spin.setToolTip("0 = loop forever.  1 = play once.  N = repeat N times.")
-        sl.addWidget(self._loop_spin, 1, 1)
+        # Loop count
+        gl.addWidget(QLabel("Loop count:"), 1, 0)
+        loop_row = QHBoxLayout()
+        self._loop_slider = _make_hslider(0, 20, 0)
+        self._loop_slider.setToolTip("0 = loop forever.  1 = play once.  N = repeat N times.")
+        self._loop_val_lbl = QLabel("∞")
+        self._loop_val_lbl.setFixedWidth(40)
+        self._loop_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._loop_slider.valueChanged.connect(
+            lambda v: self._loop_val_lbl.setText("∞" if v == 0 else str(v))
+        )
+        loop_row.addWidget(self._loop_slider, 1)
+        loop_row.addWidget(self._loop_val_lbl)
+        gl.addLayout(loop_row, 1, 1)
 
-        sl.addWidget(QLabel("Max width (0 = original):"), 2, 0)
-        self._width_spin = QSpinBox()
-        self._width_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._width_spin.setRange(0, 32768)
-        self._width_spin.setValue(0)
-        self._width_spin.setSuffix(" px")
-        self._width_spin.setToolTip("Resize all frames to this width (aspect-ratio preserved). 0 = no resize.")
-        sl.addWidget(self._width_spin, 2, 1)
+        # Max width
+        gl.addWidget(QLabel("Max width:"), 2, 0)
+        w_row = QHBoxLayout()
+        self._width_slider = _make_hslider(0, 3840, 0)
+        self._width_slider.setToolTip("Resize frames to this width (preserves aspect ratio).  0 = no resize.")
+        self._width_val_lbl = QLabel("original")
+        self._width_val_lbl.setFixedWidth(65)
+        self._width_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._width_slider.valueChanged.connect(
+            lambda v: self._width_val_lbl.setText("original" if v == 0 else f"{v} px")
+        )
+        w_row.addWidget(self._width_slider, 1)
+        w_row.addWidget(self._width_val_lbl)
+        gl.addLayout(w_row, 2, 1)
 
-        sl.addWidget(QLabel("Max height (0 = original):"), 3, 0)
-        self._height_spin = QSpinBox()
-        self._height_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._height_spin.setRange(0, 32768)
-        self._height_spin.setValue(0)
-        self._height_spin.setSuffix(" px")
-        self._height_spin.setToolTip("Resize all frames to this height (aspect-ratio preserved). 0 = no resize.")
-        sl.addWidget(self._height_spin, 3, 1)
+        # Max height
+        gl.addWidget(QLabel("Max height:"), 3, 0)
+        h_row = QHBoxLayout()
+        self._height_slider = _make_hslider(0, 2160, 0)
+        self._height_slider.setToolTip("Resize frames to this height (preserves aspect ratio).  0 = no resize.")
+        self._height_val_lbl = QLabel("original")
+        self._height_val_lbl.setFixedWidth(65)
+        self._height_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._height_slider.valueChanged.connect(
+            lambda v: self._height_val_lbl.setText("original" if v == 0 else f"{v} px")
+        )
+        h_row.addWidget(self._height_slider, 1)
+        h_row.addWidget(self._height_val_lbl)
+        gl.addLayout(h_row, 3, 1)
 
-        self._optimize_check = QCheckBox("Optimize (smaller file, slower export)")
+        self._optimize_check = QCheckBox("Optimize palette (smaller file, slightly slower export)")
         self._optimize_check.setChecked(True)
-        sl.addWidget(self._optimize_check, 4, 0, 1, 2)
+        gl.addWidget(self._optimize_check, 4, 0, 1, 2)
 
         right_layout.addWidget(grp_settings)
 
-        # Preview group
+        # Live preview
         grp_preview = QGroupBox("Live Preview")
         pv_layout = QVBoxLayout(grp_preview)
+        pv_layout.setSpacing(6)
 
         self._preview_lbl = QLabel()
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_lbl.setMinimumSize(260, 200)
+        self._preview_lbl.setMinimumSize(280, 220)
         self._preview_lbl.setFrameShape(QFrame.Shape.StyledPanel)
         self._preview_lbl.setText("(no frames yet)")
         pv_layout.addWidget(self._preview_lbl, 1)
 
+        # Scrubber
+        self._scrubber = _make_hslider(0, 0, 0)
+        self._scrubber.setToolTip("Drag to jump to any frame.")
+        self._scrubber.valueChanged.connect(self._on_scrub)
+        pv_layout.addWidget(self._scrubber)
+
+        # Transport controls
         pv_ctrl = QHBoxLayout()
-        self._btn_play = QPushButton("▶ Play")
+        self._btn_rewind = QPushButton("⏮")
+        self._btn_rewind.setFixedWidth(36)
+        self._btn_rewind.setToolTip("Rewind to first frame")
+        self._btn_rewind.clicked.connect(self._rewind)
+        pv_ctrl.addWidget(self._btn_rewind)
+
+        self._btn_play = QPushButton("▶  Play")
         self._btn_play.setCheckable(True)
-        self._btn_play.setToolTip("Start / stop the animated preview.")
+        self._btn_play.setToolTip("Start / stop the animated preview.  Space bar also works.")
         self._btn_play.toggled.connect(self._on_play_toggled)
+        QShortcut(QKeySequence("Space"), self).activated.connect(
+            lambda: self._btn_play.setChecked(not self._btn_play.isChecked())
+        )
         pv_ctrl.addWidget(self._btn_play)
-        self._preview_frame_lbl = QLabel("Frame 0 / 0")
+
+        self._preview_frame_lbl = QLabel("0 / 0")
         self._preview_frame_lbl.setObjectName("subheader")
         pv_ctrl.addWidget(self._preview_frame_lbl)
         pv_ctrl.addStretch()
@@ -348,19 +426,16 @@ class GifBuilderDialog(QDialog):
 
         # Export row
         export_row = QHBoxLayout()
-        self._btn_export = QPushButton("💾 Export GIF…")
-        self._btn_export.setToolTip(
-            "Build and save the animated GIF to a file you choose.\n"
-            "Shortcut: Ctrl+S"
-        )
+        self._btn_export = QPushButton("💾  Export GIF…")
+        self._btn_export.setToolTip("Build and save the animated GIF.  Shortcut: Ctrl+S")
+        self._btn_export.setMinimumHeight(34)
         self._btn_export.clicked.connect(self._export)
-        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._export)
         export_row.addStretch()
         export_row.addWidget(self._btn_export)
         right_layout.addLayout(export_row)
 
         splitter.addWidget(right)
-        splitter.setSizes([500, 320])
+        splitter.setSizes([520, 340])
 
     # ------------------------------------------------------------------
     # Frame management
@@ -368,8 +443,7 @@ class GifBuilderDialog(QDialog):
 
     def _on_add_clicked(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Add Images",
-            "",
+            self, "Add Images", "",
             "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif *.gif "
             "*.ico *.ppm *.pcx *.tga *.avif);;All Files (*)",
         )
@@ -380,7 +454,7 @@ class GifBuilderDialog(QDialog):
         """Load image files and append their frames to the list."""
         progress = QProgressDialog("Loading images…", "Cancel", 0, len(paths), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(600)
+        progress.setMinimumDuration(500)
         for i, path in enumerate(paths):
             progress.setValue(i)
             if progress.wasCanceled():
@@ -400,12 +474,23 @@ class GifBuilderDialog(QDialog):
                 item.setIcon(QIcon(entry.thumbnail(_THUMB_W, _THUMB_H)))
                 label = Path(path).stem
                 if len(pil_frames) > 1:
-                    label += f" [{frame_idx + 1}]"
+                    label += f"\n[{frame_idx + 1}]"
                 item.setText(label)
                 item.setToolTip(f"{path}\nFrame {frame_idx + 1} / {len(pil_frames)}")
+                item.setData(_ENTRY_ROLE, entry)
                 self._frame_list.addItem(item)
         progress.setValue(len(paths))
         self._update_count()
+        self._update_scrubber()
+        self._update_preview_frame()
+
+    def _sync_frames_from_list(self) -> None:
+        """Rebuild ``self._frames`` from current list-widget item order."""
+        self._frames = []
+        for i in range(self._frame_list.count()):
+            entry = self._frame_list.item(i).data(_ENTRY_ROLE)
+            if entry is not None:
+                self._frames.append(entry)
         self._update_preview_frame()
 
     def _remove_selected(self) -> None:
@@ -414,39 +499,12 @@ class GifBuilderDialog(QDialog):
             reverse=True,
         )
         for row in rows:
-            self._frames[row].close()
-            del self._frames[row]
+            if 0 <= row < len(self._frames):
+                self._frames[row].close()
+                del self._frames[row]
             self._frame_list.takeItem(row)
         self._update_count()
-        self._update_preview_frame()
-
-    def _move_up(self) -> None:
-        rows = sorted({self._frame_list.row(item) for item in self._frame_list.selectedItems()})
-        if not rows or rows[0] == 0:
-            return
-        for row in rows:
-            self._frames[row - 1], self._frames[row] = self._frames[row], self._frames[row - 1]
-            item = self._frame_list.takeItem(row)
-            self._frame_list.insertItem(row - 1, item)
-        self._frame_list.clearSelection()
-        for row in rows:
-            self._frame_list.item(row - 1).setSelected(True)
-        self._update_preview_frame()
-
-    def _move_down(self) -> None:
-        rows = sorted(
-            {self._frame_list.row(item) for item in self._frame_list.selectedItems()},
-            reverse=True,
-        )
-        if not rows or rows[0] >= len(self._frames) - 1:
-            return
-        for row in rows:
-            self._frames[row], self._frames[row + 1] = self._frames[row + 1], self._frames[row]
-            item = self._frame_list.takeItem(row)
-            self._frame_list.insertItem(row + 1, item)
-        self._frame_list.clearSelection()
-        for row in rows:
-            self._frame_list.item(row + 1).setSelected(True)
+        self._update_scrubber()
         self._update_preview_frame()
 
     def _clear_all(self) -> None:
@@ -455,6 +513,7 @@ class GifBuilderDialog(QDialog):
         self._frames.clear()
         self._frame_list.clear()
         self._update_count()
+        self._update_scrubber()
         self._update_preview_frame()
 
     def _update_count(self) -> None:
@@ -462,7 +521,7 @@ class GifBuilderDialog(QDialog):
         self._frame_count_lbl.setText(f"{n} frame{'s' if n != 1 else ''}")
 
     # ------------------------------------------------------------------
-    # Per-frame delay override
+    # Per-frame delay override (slider-based)
     # ------------------------------------------------------------------
 
     def _on_selection_changed(self, row: int) -> None:
@@ -470,42 +529,70 @@ class GifBuilderDialog(QDialog):
             self._pf_check.blockSignals(True)
             self._pf_check.setChecked(False)
             self._pf_check.blockSignals(False)
-            self._pf_spin.setEnabled(False)
+            self._pf_slider.setEnabled(False)
             return
         delay = self._frames[row].delay_ms
         self._pf_check.blockSignals(True)
-        self._pf_spin.blockSignals(True)
+        self._pf_slider.blockSignals(True)
         self._pf_check.setChecked(delay is not None)
-        self._pf_spin.setValue(delay if delay is not None else self._delay_spin.value())
-        self._pf_spin.setEnabled(delay is not None)
+        val = delay if delay is not None else self._delay_slider.value()
+        self._pf_slider.setValue(max(10, min(3000, val)))
+        self._pf_val_lbl.setText(f"{self._pf_slider.value()} ms")
+        self._pf_slider.setEnabled(delay is not None)
         self._pf_check.blockSignals(False)
-        self._pf_spin.blockSignals(False)
+        self._pf_slider.blockSignals(False)
 
     def _on_pf_check(self, checked: bool) -> None:
-        self._pf_spin.setEnabled(checked)
+        self._pf_slider.setEnabled(checked)
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames):
-            self._frames[row].delay_ms = self._pf_spin.value() if checked else None
+            self._frames[row].delay_ms = self._pf_slider.value() if checked else None
 
-    def _on_pf_delay_changed(self, value: int) -> None:
+    def _on_pf_slider_changed(self, value: int) -> None:
+        self._pf_val_lbl.setText(f"{value} ms")
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames) and self._pf_check.isChecked():
             self._frames[row].delay_ms = value
 
     # ------------------------------------------------------------------
-    # Preview
+    # Global delay slider
     # ------------------------------------------------------------------
+
+    def _on_delay_changed(self, value: int) -> None:
+        self._delay_val_lbl.setText(f"{value} ms")
+        if self._preview_timer.isActive():
+            self._preview_timer.setInterval(max(10, value))
+
+    # ------------------------------------------------------------------
+    # Preview / transport
+    # ------------------------------------------------------------------
+
+    def _update_scrubber(self) -> None:
+        total = len(self._frames)
+        self._scrubber.blockSignals(True)
+        self._scrubber.setRange(0, max(0, total - 1))
+        self._scrubber.setValue(min(self._preview_idx, max(0, total - 1)))
+        self._scrubber.blockSignals(False)
+
+    def _on_scrub(self, value: int) -> None:
+        self._preview_idx = value
+        self._update_preview_frame()
+
+    def _rewind(self) -> None:
+        self._preview_idx = 0
+        self._scrubber.setValue(0)
+        self._update_preview_frame()
 
     def _on_play_toggled(self, playing: bool) -> None:
         if playing:
             if len(self._frames) < 2:
                 self._btn_play.setChecked(False)
                 return
-            self._preview_timer.start(self._delay_spin.value())
-            self._btn_play.setText("⏸ Pause")
+            self._preview_timer.start(max(10, self._delay_slider.value()))
+            self._btn_play.setText("⏸  Pause")
         else:
             self._preview_timer.stop()
-            self._btn_play.setText("▶ Play")
+            self._btn_play.setText("▶  Play")
 
     def _advance_preview(self) -> None:
         if not self._frames:
@@ -513,26 +600,29 @@ class GifBuilderDialog(QDialog):
             self._btn_play.setChecked(False)
             return
         self._preview_idx = (self._preview_idx + 1) % len(self._frames)
+        self._scrubber.blockSignals(True)
+        self._scrubber.setValue(self._preview_idx)
+        self._scrubber.blockSignals(False)
         self._update_preview_frame()
-        # Honour per-frame delay for next tick
+        # Honour per-frame delay for the next tick
         entry = self._frames[self._preview_idx]
-        interval = entry.delay_ms if entry.delay_ms is not None else self._delay_spin.value()
+        interval = entry.delay_ms if entry.delay_ms is not None else self._delay_slider.value()
         self._preview_timer.setInterval(max(10, interval))
 
     def _update_preview_frame(self) -> None:
         total = len(self._frames)
         if total == 0:
             self._preview_lbl.setText("(no frames yet)")
-            self._preview_frame_lbl.setText("Frame 0 / 0")
+            self._preview_frame_lbl.setText("0 / 0")
             return
         self._preview_idx = max(0, min(self._preview_idx, total - 1))
         entry = self._frames[self._preview_idx]
         pix = entry.thumbnail(
-            self._preview_lbl.width() - 8,
-            self._preview_lbl.height() - 8,
+            max(60, self._preview_lbl.width() - 8),
+            max(60, self._preview_lbl.height() - 8),
         )
         self._preview_lbl.setPixmap(pix)
-        self._preview_frame_lbl.setText(f"Frame {self._preview_idx + 1} / {total}")
+        self._preview_frame_lbl.setText(f"{self._preview_idx + 1} / {total}")
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -548,8 +638,7 @@ class GifBuilderDialog(QDialog):
             return
 
         out_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Animated GIF",
-            "animation.gif",
+            self, "Save Animated GIF", "animation.gif",
             "GIF Files (*.gif);;All Files (*)",
         )
         if not out_path:
@@ -559,10 +648,10 @@ class GifBuilderDialog(QDialog):
 
         from PIL import Image
 
-        max_w = self._width_spin.value()
-        max_h = self._height_spin.value()
-        global_delay = self._delay_spin.value()
-        loop = self._loop_spin.value()
+        max_w = self._width_slider.value()
+        max_h = self._height_slider.value()
+        global_delay = self._delay_slider.value()
+        loop = self._loop_slider.value()
         optimize = self._optimize_check.isChecked()
 
         progress = QProgressDialog("Building GIF…", "Cancel", 0, len(self._frames), self)
@@ -579,12 +668,10 @@ class GifBuilderDialog(QDialog):
                         f.close()
                     return
                 frame = entry._pil.copy()
-                # Optional resize
                 if max_w > 0 or max_h > 0:
                     target_w = max_w if max_w > 0 else 99999
                     target_h = max_h if max_h > 0 else 99999
                     frame.thumbnail((target_w, target_h), Image.LANCZOS)
-                # Quantize to palette for smaller GIF
                 frame_p = frame.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
                 pil_frames.append(frame_p)
                 durations.append(entry.delay_ms if entry.delay_ms is not None else global_delay)
@@ -596,8 +683,7 @@ class GifBuilderDialog(QDialog):
                 except Exception:
                     pass
             progress.close()
-            QMessageBox.critical(self, "Build Error",
-                                 f"Error preparing frames:\n{exc}")
+            QMessageBox.critical(self, "Build Error", f"Error preparing frames:\n{exc}")
             return
 
         progress.setLabelText("Saving GIF…")

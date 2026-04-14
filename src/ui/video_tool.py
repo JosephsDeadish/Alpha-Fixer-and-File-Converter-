@@ -3,9 +3,11 @@ Video Tool Dialog.
 
 Provides a lightweight video editor that lets the user:
   • Add one or more video clips (via imageio + ffmpeg, or image sequences)
-  • Reorder / trim clips (start/end frame per clip)
-  • Adjust white point, black point, brightness, contrast, tone (Pillow)
-  • Apply visual filters: greyscale, sepia, invert, sharpen, blur, vignette
+  • Drag clips in the list to reorder them (no Up/Down buttons)
+  • Trim clips with start/end sliders
+  • Adjust white point, black point, brightness, contrast, saturation, sharpness
+    – all via smooth drag-sliders with live value readouts
+  • Apply visual filters: greyscale, sepia, invert, sharpen, blur, vignette, etc.
   • Preview with play/pause/rewind and a position scrubber
   • Export to MP4 (via imageio+ffmpeg) or animated GIF (via Pillow)
 
@@ -13,28 +15,33 @@ Provides a lightweight video editor that lets the user:
 imageio-ffmpeg package.  If ffmpeg is unavailable the dialog can still process
 image-sequence "videos" (folders of PNGs) and export animated GIFs.
 
+UX highlights (Round-90):
+  • All numeric controls use drag-sliders – no arrow-button spinboxes.
+  • Clip list is drag-to-reorder; clip data stays in sync via item UserRole.
+  • Trim sliders auto-update when a clip is selected.
+  • Live preview refreshes immediately on any slider change.
+
 Opening the dialog:
   • Right-clicking anywhere on the main window → "Open Video Editor"
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QThread, pyqtSignal, QSize,
+    Qt, QTimer, QSize, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QKeySequence, QShortcut, QIcon,
+    QDragEnterEvent, QDropEvent, QDragMoveEvent,
 )
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QFileDialog, QSpinBox,
-    QSlider, QComboBox, QCheckBox, QGroupBox, QGridLayout,
+    QListWidget, QListWidgetItem, QFileDialog, QSlider,
+    QComboBox, QGroupBox, QGridLayout,
     QMessageBox, QProgressDialog, QSplitter, QWidget,
-    QAbstractSpinBox, QDoubleSpinBox, QFrame, QSizePolicy,
-    QScrollArea,
+    QFrame, QScrollArea,
 )
 
 _VIDEO_EXTS = {
@@ -45,8 +52,10 @@ _IMAGE_EXTS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",
 }
 
-_PREVIEW_MAX_W = 400
-_PREVIEW_MAX_H = 300
+_PREVIEW_MAX_W = 420
+_PREVIEW_MAX_H = 320
+
+_CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
 
 
 def _has_ffmpeg() -> bool:
@@ -71,7 +80,7 @@ def _has_ffmpeg() -> bool:
 
 
 def _pil_to_pixmap(pil_img) -> QPixmap:
-    from PIL import Image
+    from PIL import Image  # noqa: F401
     rgba = pil_img.convert("RGBA")
     data = rgba.tobytes("raw", "RGBA")
     qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
@@ -84,24 +93,18 @@ def _apply_adjustments(pil_img, brightness: float, contrast: float,
     """Apply brightness/contrast/levels/saturation/sharpness to a PIL RGBA image."""
     from PIL import Image, ImageEnhance, ImageOps
     img = pil_img.convert("RGB")
-    # Levels: remap [black_point, white_point] → [0, 255]
     if black_point > 0 or white_point < 255:
-        img = ImageOps.autocontrast(img, cutoff=0)
-        # Manual levels via point()
         def _levels(v: int) -> int:
-            bp, wp = max(0, min(254, black_point)), max(black_point + 1, min(255, white_point))
+            bp = max(0, min(254, black_point))
+            wp = max(bp + 1, min(255, white_point))
             return max(0, min(255, int((v - bp) * 255 / max(1, wp - bp))))
         img = img.point(lambda v: _levels(v))
-    # Brightness
     if abs(brightness - 1.0) > 0.01:
         img = ImageEnhance.Brightness(img).enhance(brightness)
-    # Contrast
     if abs(contrast - 1.0) > 0.01:
         img = ImageEnhance.Contrast(img).enhance(contrast)
-    # Saturation / colour
     if abs(saturation - 1.0) > 0.01:
         img = ImageEnhance.Color(img).enhance(saturation)
-    # Sharpness
     if abs(sharpness - 1.0) > 0.01:
         img = ImageEnhance.Sharpness(img).enhance(sharpness)
     return img.convert("RGBA")
@@ -116,7 +119,6 @@ def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
     elif filter_name == "greyscale":
         img = img.convert("L").convert("RGB")
     elif filter_name == "sepia":
-        from PIL import ImageOps
         grey = img.convert("L")
         sepia = Image.new("RGB", img.size)
         pixels = grey.load()
@@ -143,9 +145,7 @@ def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
         img = img.filter(ImageFilter.EMBOSS)
     elif filter_name == "vignette":
         import math
-        from PIL import Image as PILImage
-        mask = PILImage.new("L", img.size, 0)
-        import struct
+        mask = Image.new("L", img.size, 0)
         w, h = img.size
         cx, cy = w / 2, h / 2
         mx = cx * 1.4
@@ -153,9 +153,9 @@ def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
         for y in range(h):
             for x in range(w):
                 d = math.hypot((x - cx) / mx, (y - cy) / mx)
-                pix[x, y] = max(0, min(255, int((1 - min(1, d)) * 255)))
-        dark = PILImage.new("RGB", img.size, (0, 0, 0))
-        img = PILImage.composite(img, dark, mask)
+                pix[x, y] = max(0, min(255, int((1 - min(1.0, d)) * 255)))
+        dark = Image.new("RGB", img.size, (0, 0, 0))
+        img = Image.composite(img, dark, mask)
     return img.convert("RGBA")
 
 
@@ -186,7 +186,6 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
         reader = imageio.get_reader(path)
         meta = reader.get_meta_data()
         fps = float(meta.get("fps", 25))
-        # Cache all frames in memory (for short clips/demos)
         frames = []
         try:
             for frame in reader:
@@ -219,6 +218,56 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
         return None
 
 
+def _make_hslider(lo: int, hi: int, val: int) -> QSlider:
+    """Return a horizontal QSlider."""
+    s = QSlider(Qt.Orientation.Horizontal)
+    s.setRange(lo, hi)
+    s.setValue(val)
+    s.setTracking(True)
+    return s
+
+
+class _ClipListWidget(QListWidget):
+    """Drag-to-reorder clip list that also accepts dropped video/image files.
+
+    Each item stores its ``_ClipEntry`` in ``_CLIP_ROLE``.  ``order_changed``
+    fires after any internal drag so the caller can re-sync ``_clips``.
+    """
+
+    files_dropped = pyqtSignal(list)  # list[str]
+    order_changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragDropMode(QListWidget.DragDropMode.DragDrop)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setAcceptDrops(True)
+        self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.model().rowsMoved.connect(lambda *_: self.order_changed.emit())
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        if event.mimeData().hasUrls():
+            paths = [url.toLocalFile() for url in event.mimeData().urls()
+                     if url.toLocalFile()]
+            if paths:
+                self.files_dropped.emit(paths)
+                event.acceptProposedAction()
+                return
+        super().dropEvent(event)
+
+
 class VideoToolDialog(QDialog):
     """Lightweight video editor dialog.
 
@@ -229,19 +278,18 @@ class VideoToolDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Video Editor")
-        self.setMinimumSize(900, 640)
+        self.setWindowTitle("🎬 Video Editor")
+        self.setMinimumSize(960, 660)
         self.setModal(False)
         self._clips: list[_ClipEntry] = []
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
-        self._preview_clip_idx: int = 0
-        self._preview_frame_in_clip: int = 0
         self._is_playing: bool = False
         self._ffmpeg_available = _has_ffmpeg()
         self._build_ui()
         QShortcut(QKeySequence("Delete"), self).activated.connect(self._remove_selected)
         QShortcut(QKeySequence("Space"), self).activated.connect(self._toggle_play)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._export)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -258,8 +306,8 @@ class VideoToolDialog(QDialog):
 
         if not self._ffmpeg_available:
             warn = QLabel(
-                "⚠  ffmpeg / imageio-ffmpeg not found.  Video file import and MP4 export "
-                "are unavailable.  You can still add image files and export an animated GIF."
+                "⚠  ffmpeg / imageio-ffmpeg not found — video import and MP4 export unavailable.  "
+                "You can still add images and export an animated GIF."
             )
             warn.setWordWrap(True)
             warn.setStyleSheet("color: orange;")
@@ -268,70 +316,80 @@ class VideoToolDialog(QDialog):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         root.addWidget(splitter, 1)
 
-        # ---- Left: clip list + trim controls ----
+        # ── Left: clip list ──────────────────────────────────────────────
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(6)
 
         tb = QHBoxLayout()
-        self._btn_add_video = QPushButton("🎞 Add Video")
+        self._btn_add_video = QPushButton("🎞  Add Video")
         self._btn_add_video.setEnabled(self._ffmpeg_available)
-        self._btn_add_video.setToolTip(
-            "Add a video file to the timeline.\n(Requires ffmpeg)"
-        )
+        self._btn_add_video.setToolTip("Add a video file to the timeline. (Requires ffmpeg)")
         self._btn_add_video.clicked.connect(self._add_video)
         tb.addWidget(self._btn_add_video)
 
-        self._btn_add_img = QPushButton("🖼 Add Images")
+        self._btn_add_img = QPushButton("🖼  Add Images")
         self._btn_add_img.setToolTip("Add still image(s) as single-frame clips.")
         self._btn_add_img.clicked.connect(self._add_images)
         tb.addWidget(self._btn_add_img)
 
-        self._btn_remove = QPushButton("🗑 Remove")
+        self._btn_remove = QPushButton("🗑  Remove")
+        self._btn_remove.setToolTip("Remove selected clip.  Shortcut: Delete")
         self._btn_remove.clicked.connect(self._remove_selected)
         tb.addWidget(self._btn_remove)
-
-        self._btn_up = QPushButton("⬆ Up")
-        self._btn_up.clicked.connect(self._move_up)
-        tb.addWidget(self._btn_up)
-
-        self._btn_down = QPushButton("⬇ Down")
-        self._btn_down.clicked.connect(self._move_down)
-        tb.addWidget(self._btn_down)
-
-        tb.addStretch()
         left_layout.addLayout(tb)
 
-        self._clip_list = QListWidget()
-        self._clip_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        hint = QLabel("💡 Drag clips to reorder  •  Drop files to add")
+        hint.setStyleSheet("color: gray; font-style: italic; font-size: 11px;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(hint)
+
+        self._clip_list = _ClipListWidget()
+        self._clip_list.files_dropped.connect(self._on_files_dropped)
+        self._clip_list.order_changed.connect(self._sync_clips_from_list)
         self._clip_list.currentRowChanged.connect(self._on_clip_selected)
         left_layout.addWidget(self._clip_list, 1)
 
-        # Trim group
+        # Trim sliders
         grp_trim = QGroupBox("Trim Selected Clip")
-        trim_gl = QGridLayout(grp_trim)
-        trim_gl.addWidget(QLabel("Start frame:"), 0, 0)
-        self._trim_start_spin = QSpinBox()
-        self._trim_start_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._trim_start_spin.setRange(0, 999999)
-        self._trim_start_spin.setValue(0)
-        self._trim_start_spin.valueChanged.connect(self._on_trim_start_changed)
-        trim_gl.addWidget(self._trim_start_spin, 0, 1)
-        trim_gl.addWidget(QLabel("End frame:"), 1, 0)
-        self._trim_end_spin = QSpinBox()
-        self._trim_end_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._trim_end_spin.setRange(0, 999999)
-        self._trim_end_spin.setValue(0)
-        self._trim_end_spin.valueChanged.connect(self._on_trim_end_changed)
-        trim_gl.addWidget(self._trim_end_spin, 1, 1)
+        trim_vl = QVBoxLayout(grp_trim)
+        trim_vl.setSpacing(6)
+
+        # Start trim
+        start_row = QHBoxLayout()
+        start_row.addWidget(QLabel("In:"))
+        self._trim_start_slider = _make_hslider(0, 0, 0)
+        self._trim_start_slider.setToolTip("Drag to set the clip's start (in) point.")
+        self._trim_start_slider.valueChanged.connect(self._on_trim_start_changed)
+        start_row.addWidget(self._trim_start_slider, 1)
+        self._trim_start_lbl = QLabel("0")
+        self._trim_start_lbl.setFixedWidth(48)
+        self._trim_start_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        start_row.addWidget(self._trim_start_lbl)
+        trim_vl.addLayout(start_row)
+
+        # End trim
+        end_row = QHBoxLayout()
+        end_row.addWidget(QLabel("Out:"))
+        self._trim_end_slider = _make_hslider(0, 0, 0)
+        self._trim_end_slider.setToolTip("Drag to set the clip's end (out) point.")
+        self._trim_end_slider.valueChanged.connect(self._on_trim_end_changed)
+        end_row.addWidget(self._trim_end_slider, 1)
+        self._trim_end_lbl = QLabel("0")
+        self._trim_end_lbl.setFixedWidth(48)
+        self._trim_end_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        end_row.addWidget(self._trim_end_lbl)
+        trim_vl.addLayout(end_row)
+
         self._clip_info_lbl = QLabel("")
-        trim_gl.addWidget(self._clip_info_lbl, 2, 0, 1, 2)
+        self._clip_info_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        trim_vl.addWidget(self._clip_info_lbl)
         left_layout.addWidget(grp_trim)
 
         splitter.addWidget(left)
 
-        # ---- Centre: preview ----
+        # ── Centre: preview ──────────────────────────────────────────────
         centre = QWidget()
         centre_layout = QVBoxLayout(centre)
         centre_layout.setContentsMargins(0, 0, 0, 0)
@@ -339,6 +397,7 @@ class VideoToolDialog(QDialog):
 
         grp_preview = QGroupBox("Preview")
         pv_layout = QVBoxLayout(grp_preview)
+        pv_layout.setSpacing(6)
 
         self._preview_lbl = QLabel()
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -348,99 +407,118 @@ class VideoToolDialog(QDialog):
         pv_layout.addWidget(self._preview_lbl, 1)
 
         # Scrubber
-        self._scrubber = QSlider(Qt.Orientation.Horizontal)
-        self._scrubber.setRange(0, 0)
-        self._scrubber.setValue(0)
+        self._scrubber = _make_hslider(0, 0, 0)
         self._scrubber.setToolTip("Drag to scrub through the timeline.")
-        self._scrubber.sliderMoved.connect(self._on_scrub)
+        self._scrubber.valueChanged.connect(self._on_scrub)
         pv_layout.addWidget(self._scrubber)
 
-        # Transport controls
+        # Transport
         ctrl = QHBoxLayout()
-        self._btn_rewind = QPushButton("⏮ Rewind")
+        self._btn_rewind = QPushButton("⏮")
+        self._btn_rewind.setFixedWidth(36)
+        self._btn_rewind.setToolTip("Rewind to beginning")
         self._btn_rewind.clicked.connect(self._rewind)
         ctrl.addWidget(self._btn_rewind)
-        self._btn_play = QPushButton("▶ Play")
+
+        self._btn_play = QPushButton("▶  Play")
         self._btn_play.setCheckable(True)
+        self._btn_play.setToolTip("Play / Pause.  Space bar also works.")
         self._btn_play.toggled.connect(self._on_play_toggled)
         ctrl.addWidget(self._btn_play)
+
         self._pos_lbl = QLabel("0 / 0")
         self._pos_lbl.setObjectName("subheader")
         ctrl.addWidget(self._pos_lbl)
         ctrl.addStretch()
         pv_layout.addLayout(ctrl)
 
-        centre_layout.addWidget(grp_preview, 1)
+        # FPS row
+        fps_row = QHBoxLayout()
+        fps_row.addWidget(QLabel("Preview FPS:"))
+        self._fps_slider = _make_hslider(1, 60, 25)
+        self._fps_slider.setToolTip("Playback speed for preview and export.")
+        self._fps_val_lbl = QLabel("25 fps")
+        self._fps_val_lbl.setFixedWidth(50)
+        self._fps_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._fps_slider.valueChanged.connect(
+            lambda v: self._fps_val_lbl.setText(f"{v} fps")
+        )
+        fps_row.addWidget(self._fps_slider, 1)
+        fps_row.addWidget(self._fps_val_lbl)
+        pv_layout.addLayout(fps_row)
 
+        centre_layout.addWidget(grp_preview, 1)
         splitter.addWidget(centre)
 
-        # ---- Right: adjustments + export ----
+        # ── Right: adjustments + export ──────────────────────────────────
         right_scroll = QScrollArea()
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QFrame.Shape.NoFrame)
         right_inner = QWidget()
         right_layout = QVBoxLayout(right_inner)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setContentsMargins(4, 0, 4, 0)
         right_layout.setSpacing(6)
         right_scroll.setWidget(right_inner)
 
         grp_adj = QGroupBox("Visual Adjustments")
-        adj_gl = QGridLayout(grp_adj)
-        adj_gl.setHorizontalSpacing(8)
-        adj_gl.setVerticalSpacing(6)
+        adj_vl = QVBoxLayout(grp_adj)
+        adj_vl.setSpacing(8)
 
-        def _make_dbl_spin(lo, hi, val, step, suffix=""):
-            s = QDoubleSpinBox()
-            s.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-            s.setRange(lo, hi)
-            s.setValue(val)
-            s.setSingleStep(step)
-            if suffix:
-                s.setSuffix(suffix)
-            s.valueChanged.connect(self._refresh_preview_adjustments)
-            return s
+        def _adj_row(label: str, lo: int, hi: int, val: int,
+                     fmt_fn=None, tooltip: str = "") -> QSlider:
+            """Add a labelled slider row; return the slider."""
+            row = QHBoxLayout()
+            lbl = QLabel(label)
+            lbl.setFixedWidth(90)
+            row.addWidget(lbl)
+            slider = _make_hslider(lo, hi, val)
+            if tooltip:
+                slider.setToolTip(tooltip)
+            row.addWidget(slider, 1)
+            val_lbl = QLabel()
+            val_lbl.setFixedWidth(52)
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            if fmt_fn is None:
+                fmt_fn = str
+            val_lbl.setText(fmt_fn(val))
+            slider.valueChanged.connect(lambda v, fn=fmt_fn, lb=val_lbl: lb.setText(fn(v)))
+            slider.valueChanged.connect(self._refresh_preview_adjustments)
+            row.addWidget(val_lbl)
+            adj_vl.addLayout(row)
+            return slider
 
-        adj_gl.addWidget(QLabel("Brightness:"), 0, 0)
-        self._brightness_spin = _make_dbl_spin(0.1, 4.0, 1.0, 0.05)
-        self._brightness_spin.setToolTip("1.0 = original.  >1 = brighter.  <1 = darker.")
-        adj_gl.addWidget(self._brightness_spin, 0, 1)
+        # Float sliders use ×100 integer range, divide by 100.0 when reading
+        def _f(v: int) -> str:  # format 100-scale int as 2-dp float
+            return f"{v / 100:.2f}"
 
-        adj_gl.addWidget(QLabel("Contrast:"), 1, 0)
-        self._contrast_spin = _make_dbl_spin(0.1, 4.0, 1.0, 0.05)
-        self._contrast_spin.setToolTip("1.0 = original.  >1 = more contrast.")
-        adj_gl.addWidget(self._contrast_spin, 1, 1)
+        self._brightness_slider = _adj_row(
+            "Brightness:", 10, 400, 100, _f,
+            "1.00 = original  •  >1 = brighter  •  <1 = darker"
+        )
+        self._contrast_slider = _adj_row(
+            "Contrast:", 10, 400, 100, _f,
+            "1.00 = original  •  >1 = more contrast"
+        )
+        self._saturation_slider = _adj_row(
+            "Saturation:", 0, 400, 100, _f,
+            "1.00 = original  •  0.00 = greyscale  •  >1 = vivid"
+        )
+        self._sharpness_slider = _adj_row(
+            "Sharpness:", 0, 400, 100, _f,
+            "1.00 = original  •  >1 = sharper  •  <1 = softer"
+        )
+        self._black_slider = _adj_row(
+            "Black point:", 0, 254, 0,
+            tooltip="Input level mapped to black — lifts shadows"
+        )
+        self._white_slider = _adj_row(
+            "White point:", 1, 255, 255,
+            tooltip="Input level mapped to white — pulls down highlights"
+        )
 
-        adj_gl.addWidget(QLabel("Saturation:"), 2, 0)
-        self._saturation_spin = _make_dbl_spin(0.0, 4.0, 1.0, 0.05)
-        self._saturation_spin.setToolTip("1.0 = original.  0.0 = greyscale.  >1 = vivid.")
-        adj_gl.addWidget(self._saturation_spin, 2, 1)
-
-        adj_gl.addWidget(QLabel("Sharpness:"), 3, 0)
-        self._sharpness_spin = _make_dbl_spin(0.0, 4.0, 1.0, 0.1)
-        self._sharpness_spin.setToolTip("1.0 = original.  >1 = sharper.  <1 = softer.")
-        adj_gl.addWidget(self._sharpness_spin, 3, 1)
-
-        adj_gl.addWidget(QLabel("Black point:"), 4, 0)
-        self._black_spin = QSpinBox()
-        self._black_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._black_spin.setRange(0, 254)
-        self._black_spin.setValue(0)
-        self._black_spin.setToolTip("Input level remapped to black (0).  Lifts the shadows.")
-        self._black_spin.valueChanged.connect(self._refresh_preview_adjustments)
-        adj_gl.addWidget(self._black_spin, 4, 1)
-
-        adj_gl.addWidget(QLabel("White point:"), 5, 0)
-        self._white_spin = QSpinBox()
-        self._white_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._white_spin.setRange(1, 255)
-        self._white_spin.setValue(255)
-        self._white_spin.setToolTip("Input level remapped to white (255).  Pulls down highlights.")
-        self._white_spin.valueChanged.connect(self._refresh_preview_adjustments)
-        adj_gl.addWidget(self._white_spin, 5, 1)
-
-        btn_reset_adj = QPushButton("Reset All")
-        btn_reset_adj.clicked.connect(self._reset_adjustments)
-        adj_gl.addWidget(btn_reset_adj, 6, 0, 1, 2)
+        btn_reset = QPushButton("↺  Reset All Adjustments")
+        btn_reset.clicked.connect(self._reset_adjustments)
+        adj_vl.addWidget(btn_reset)
 
         right_layout.addWidget(grp_adj)
 
@@ -461,52 +539,69 @@ class VideoToolDialog(QDialog):
         right_layout.addWidget(grp_filter)
 
         grp_export = QGroupBox("Export")
-        ex_gl = QGridLayout(grp_export)
+        ex_vl = QVBoxLayout(grp_export)
+        ex_vl.setSpacing(8)
 
-        ex_gl.addWidget(QLabel("Format:"), 0, 0)
+        fmt_row = QHBoxLayout()
+        fmt_row.addWidget(QLabel("Format:"))
         self._export_fmt_combo = QComboBox()
         self._export_fmt_combo.addItem("Animated GIF (.gif)", userData="gif")
         if self._ffmpeg_available:
             self._export_fmt_combo.addItem("MP4 Video (.mp4)", userData="mp4")
-        ex_gl.addWidget(self._export_fmt_combo, 0, 1)
+        fmt_row.addWidget(self._export_fmt_combo, 1)
+        ex_vl.addLayout(fmt_row)
 
-        ex_gl.addWidget(QLabel("FPS (for MP4/GIF):"), 1, 0)
-        self._fps_spin = QDoubleSpinBox()
-        self._fps_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._fps_spin.setRange(0.5, 120.0)
-        self._fps_spin.setValue(25.0)
-        self._fps_spin.setSingleStep(1.0)
-        ex_gl.addWidget(self._fps_spin, 1, 1)
-
-        self._btn_export = QPushButton("💾 Export…")
-        self._btn_export.setToolTip("Render and export the edited video/GIF.")
+        self._btn_export = QPushButton("💾  Export…")
+        self._btn_export.setToolTip("Render and export.  Shortcut: Ctrl+S")
+        self._btn_export.setMinimumHeight(34)
         self._btn_export.clicked.connect(self._export)
-        ex_gl.addWidget(self._btn_export, 2, 0, 1, 2)
+        ex_vl.addWidget(self._btn_export)
 
         right_layout.addWidget(grp_export)
         right_layout.addStretch()
 
         splitter.addWidget(right_scroll)
-        splitter.setSizes([230, 380, 250])
+        splitter.setSizes([240, 420, 260])
 
     # ------------------------------------------------------------------
     # Clip management
     # ------------------------------------------------------------------
+
+    def _on_files_dropped(self, paths: list[str]) -> None:
+        vid, img = [], []
+        for p in paths:
+            ext = Path(p).suffix.lower()
+            if ext in _VIDEO_EXTS:
+                vid.append(p)
+            elif ext in _IMAGE_EXTS:
+                img.append(p)
+        if vid:
+            self._load_video_paths(vid)
+        if img:
+            self._load_image_paths(img)
 
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Video Files", "",
             "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.mpg);;All Files (*)",
         )
+        self._load_video_paths(paths)
+
+    def _load_video_paths(self, paths: list[str]) -> None:
         for path in paths:
             clip = _load_video_clip(path)
             if clip is None:
-                QMessageBox.warning(self, "Load Error",
-                                    f"Could not open video:\n{Path(path).name}\n"
-                                    "Ensure ffmpeg is installed.")
+                QMessageBox.warning(
+                    self, "Load Error",
+                    f"Could not open video:\n{Path(path).name}\n"
+                    "Ensure ffmpeg is installed."
+                )
                 continue
             self._clips.append(clip)
-            self._clip_list.addItem(f"🎞 {Path(path).name}  [{clip.total_frames} frames @ {clip.fps:.1f} fps]")
+            item = QListWidgetItem(f"🎞  {Path(path).name}  "
+                                   f"[{clip.total_frames} fr @ {clip.fps:.1f} fps]")
+            item.setData(_CLIP_ROLE, clip)
+            self._clip_list.addItem(item)
         self._update_scrubber()
         self._update_preview()
 
@@ -515,12 +610,17 @@ class VideoToolDialog(QDialog):
             self, "Add Images", "",
             "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif);;All Files (*)",
         )
+        self._load_image_paths(paths)
+
+    def _load_image_paths(self, paths: list[str]) -> None:
         for path in paths:
             clip = _load_image_as_clip(path)
             if clip is None:
                 continue
             self._clips.append(clip)
-            self._clip_list.addItem(f"🖼 {Path(path).name}")
+            item = QListWidgetItem(f"🖼  {Path(path).name}")
+            item.setData(_CLIP_ROLE, clip)
+            self._clip_list.addItem(item)
         self._update_scrubber()
         self._update_preview()
 
@@ -533,61 +633,61 @@ class VideoToolDialog(QDialog):
         self._update_scrubber()
         self._update_preview()
 
-    def _move_up(self) -> None:
-        row = self._clip_list.currentRow()
-        if row <= 0:
-            return
-        self._clips[row - 1], self._clips[row] = self._clips[row], self._clips[row - 1]
-        item = self._clip_list.takeItem(row)
-        self._clip_list.insertItem(row - 1, item)
-        self._clip_list.setCurrentRow(row - 1)
-
-    def _move_down(self) -> None:
-        row = self._clip_list.currentRow()
-        if row < 0 or row >= len(self._clips) - 1:
-            return
-        self._clips[row], self._clips[row + 1] = self._clips[row + 1], self._clips[row]
-        item = self._clip_list.takeItem(row)
-        self._clip_list.insertItem(row + 1, item)
-        self._clip_list.setCurrentRow(row + 1)
+    def _sync_clips_from_list(self) -> None:
+        """Rebuild ``self._clips`` from current list-item order."""
+        self._clips = []
+        for i in range(self._clip_list.count()):
+            clip = self._clip_list.item(i).data(_CLIP_ROLE)
+            if clip is not None:
+                self._clips.append(clip)
+        self._update_scrubber()
+        self._update_preview()
 
     def _on_clip_selected(self, row: int) -> None:
         if row < 0 or row >= len(self._clips):
             self._clip_info_lbl.setText("")
+            self._trim_start_slider.blockSignals(True)
+            self._trim_end_slider.blockSignals(True)
+            self._trim_start_slider.setRange(0, 0)
+            self._trim_end_slider.setRange(0, 0)
+            self._trim_start_slider.blockSignals(False)
+            self._trim_end_slider.blockSignals(False)
             return
         clip = self._clips[row]
-        self._trim_start_spin.blockSignals(True)
-        self._trim_end_spin.blockSignals(True)
-        self._trim_start_spin.setMaximum(max(0, clip.total_frames - 1))
-        self._trim_end_spin.setMaximum(max(0, clip.total_frames - 1))
-        self._trim_start_spin.setValue(clip.trim_start)
-        self._trim_end_spin.setValue(clip.trim_end)
-        self._trim_start_spin.blockSignals(False)
-        self._trim_end_spin.blockSignals(False)
+        self._trim_start_slider.blockSignals(True)
+        self._trim_end_slider.blockSignals(True)
+        mx = max(0, clip.total_frames - 1)
+        self._trim_start_slider.setRange(0, mx)
+        self._trim_end_slider.setRange(0, mx)
+        self._trim_start_slider.setValue(clip.trim_start)
+        self._trim_end_slider.setValue(clip.trim_end)
+        self._trim_start_lbl.setText(str(clip.trim_start))
+        self._trim_end_lbl.setText(str(clip.trim_end))
+        self._trim_start_slider.blockSignals(False)
+        self._trim_end_slider.blockSignals(False)
         self._clip_info_lbl.setText(
-            f"{clip.total_frames} total frames  |  "
-            f"{clip.active_frames} active  |  {clip.fps:.1f} fps"
+            f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
         )
 
     def _on_trim_start_changed(self, val: int) -> None:
+        self._trim_start_lbl.setText(str(val))
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
             clip.trim_start = min(val, clip.trim_end)
             self._clip_info_lbl.setText(
-                f"{clip.total_frames} total frames  |  "
-                f"{clip.active_frames} active  |  {clip.fps:.1f} fps"
+                f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
             )
             self._update_scrubber()
 
     def _on_trim_end_changed(self, val: int) -> None:
+        self._trim_end_lbl.setText(str(val))
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
             clip.trim_end = max(val, clip.trim_start)
             self._clip_info_lbl.setText(
-                f"{clip.total_frames} total frames  |  "
-                f"{clip.active_frames} active  |  {clip.fps:.1f} fps"
+                f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
             )
             self._update_scrubber()
 
@@ -600,11 +700,12 @@ class VideoToolDialog(QDialog):
 
     def _update_scrubber(self) -> None:
         total = max(0, self._total_preview_frames() - 1)
+        self._scrubber.blockSignals(True)
         self._scrubber.setRange(0, total)
+        self._scrubber.blockSignals(False)
         self._pos_lbl.setText(f"0 / {self._total_preview_frames()}")
 
     def _global_frame_to_clip(self, global_idx: int):
-        """Return (clip_idx, frame_in_clip) for a global frame index."""
         idx = global_idx
         for ci, clip in enumerate(self._clips):
             n = clip.active_frames
@@ -619,19 +720,18 @@ class VideoToolDialog(QDialog):
             self._preview_lbl.setText("(no clips)")
             self._pos_lbl.setText("0 / 0")
             return
-        ci, fi = self._global_frame_to_clip(self._scrubber.value())
-        self._preview_clip_idx = ci
-        self._preview_frame_in_clip = fi
+        g = max(0, min(self._scrubber.value(), total - 1))
+        ci, fi = self._global_frame_to_clip(g)
         try:
             pil = self._clips[ci].get_frame(fi)
             pil = _apply_adjustments(
                 pil,
-                brightness=self._brightness_spin.value(),
-                contrast=self._contrast_spin.value(),
-                black_point=self._black_spin.value(),
-                white_point=self._white_spin.value(),
-                saturation=self._saturation_spin.value(),
-                sharpness=self._sharpness_spin.value(),
+                brightness=self._brightness_slider.value() / 100.0,
+                contrast=self._contrast_slider.value() / 100.0,
+                black_point=self._black_slider.value(),
+                white_point=self._white_slider.value(),
+                saturation=self._saturation_slider.value() / 100.0,
+                sharpness=self._sharpness_slider.value() / 100.0,
             )
             filter_key = self._filter_combo.currentData() or "none"
             pil = _apply_filter(pil, filter_key)
@@ -645,13 +745,12 @@ class VideoToolDialog(QDialog):
         except Exception as exc:
             self._preview_lbl.setText(f"(preview error: {exc})")
 
-        g = self._scrubber.value()
         self._pos_lbl.setText(f"{g + 1} / {total}")
 
     def _refresh_preview_adjustments(self) -> None:
         self._update_preview()
 
-    def _on_scrub(self, value: int) -> None:
+    def _on_scrub(self, _value: int) -> None:
         self._update_preview()
 
     def _toggle_play(self) -> None:
@@ -663,12 +762,12 @@ class VideoToolDialog(QDialog):
             if self._total_preview_frames() == 0:
                 self._btn_play.setChecked(False)
                 return
-            fps = max(0.1, self._fps_spin.value())
+            fps = max(0.1, float(self._fps_slider.value()))
             self._preview_timer.start(int(1000 / fps))
-            self._btn_play.setText("⏸ Pause")
+            self._btn_play.setText("⏸  Pause")
         else:
             self._preview_timer.stop()
-            self._btn_play.setText("▶ Play")
+            self._btn_play.setText("▶  Play")
 
     def _advance_preview(self) -> None:
         total = self._total_preview_frames()
@@ -706,7 +805,7 @@ class VideoToolDialog(QDialog):
         if not out_path:
             return
 
-        fps = max(0.1, self._fps_spin.value())
+        fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"
 
         progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
@@ -725,12 +824,12 @@ class VideoToolDialog(QDialog):
                 pil = self._clips[ci].get_frame(fi)
                 pil = _apply_adjustments(
                     pil,
-                    brightness=self._brightness_spin.value(),
-                    contrast=self._contrast_spin.value(),
-                    black_point=self._black_spin.value(),
-                    white_point=self._white_spin.value(),
-                    saturation=self._saturation_spin.value(),
-                    sharpness=self._sharpness_spin.value(),
+                    brightness=self._brightness_slider.value() / 100.0,
+                    contrast=self._contrast_slider.value() / 100.0,
+                    black_point=self._black_slider.value(),
+                    white_point=self._white_slider.value(),
+                    saturation=self._saturation_slider.value() / 100.0,
+                    sharpness=self._sharpness_slider.value() / 100.0,
                 )
                 pil = _apply_filter(pil, filter_key)
                 rendered.append(pil)
@@ -775,7 +874,6 @@ class VideoToolDialog(QDialog):
                     except Exception:
                         pass
             else:
-                # MP4 via imageio
                 import imageio
                 import numpy as np
                 with imageio.get_writer(out_path, fps=fps, codec="libx264",
@@ -792,25 +890,24 @@ class VideoToolDialog(QDialog):
                 except Exception:
                     pass
 
-        QMessageBox.information(self, "Export Complete",
-                                f"Output saved to:\n{out_path}")
+        QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
 
     # ------------------------------------------------------------------
     # Misc
     # ------------------------------------------------------------------
 
     def _reset_adjustments(self) -> None:
-        for spin in (self._brightness_spin, self._contrast_spin,
-                     self._saturation_spin, self._sharpness_spin):
-            spin.blockSignals(True)
-            spin.setValue(1.0)
-            spin.blockSignals(False)
-        self._black_spin.blockSignals(True)
-        self._white_spin.blockSignals(True)
-        self._black_spin.setValue(0)
-        self._white_spin.setValue(255)
-        self._black_spin.blockSignals(False)
-        self._white_spin.blockSignals(False)
+        for slider, val in [
+            (self._brightness_slider, 100),
+            (self._contrast_slider, 100),
+            (self._saturation_slider, 100),
+            (self._sharpness_slider, 100),
+            (self._black_slider, 0),
+            (self._white_slider, 255),
+        ]:
+            slider.blockSignals(True)
+            slider.setValue(val)
+            slider.blockSignals(False)
         self._filter_combo.blockSignals(True)
         self._filter_combo.setCurrentIndex(0)
         self._filter_combo.blockSignals(False)
