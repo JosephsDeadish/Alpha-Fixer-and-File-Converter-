@@ -228,7 +228,8 @@ class SettingsManager:
         "use_theme_drip": False,
         # Background flock (independent animated flock of themed emoji)
         "bg_flock_enabled": False,
-        "bg_flock_style": "theme",   # "theme" or emoji key (same keys as custom_emoji)
+        "use_theme_flock": False,        # True → use theme icon emoji; False → use bg_flock_style
+        "bg_flock_style": "bats",        # emoji key: bats/fairies/fish/butterflies/birds/stars/petals
         # Background ambient effect (independent ambient overlay)
         "bg_ambient_enabled": False,
         "bg_ambient_type": "none",   # snow/ember/sakura/stars/bubbles/neon/ghost/none
@@ -545,7 +546,7 @@ class SettingsManager:
         "font_size", "ui_scale", "history_max_entries",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
         "bg_drip_enabled", "bg_drip_type", "use_theme_drip",
-        "bg_flock_enabled", "bg_flock_style",
+        "bg_flock_enabled", "use_theme_flock", "bg_flock_style",
         "bg_ambient_enabled", "bg_ambient_type",
         "animated_banner_enabled", "banner_anim_style", "banner_use_theme_anim",
         "show_splash_screen",

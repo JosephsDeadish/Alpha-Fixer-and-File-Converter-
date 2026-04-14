@@ -500,11 +500,18 @@ class SettingsDialog(QDialog):
             "as a background animation, independent of click effects."
         )
         bg_drip_layout.addWidget(self._bg_flock_check)
+        self._use_theme_flock_check = QCheckBox(
+            "Use theme flock  (auto-selects the active theme's emoji)"
+        )
+        self._use_theme_flock_check.setToolTip(
+            "When enabled the flock emoji is chosen automatically from the active theme.\n"
+            "Uncheck to manually pick an emoji style from the list below."
+        )
+        bg_drip_layout.addWidget(self._use_theme_flock_check)
         bg_flock_inner = QHBoxLayout()
         bg_flock_inner.addWidget(QLabel("Flock Style:"))
         self._bg_flock_combo = QComboBox()
         self._bg_flock_combo.setMinimumWidth(180)
-        self._bg_flock_combo.addItem("🎨 Match Theme", userData="theme")
         self._bg_flock_combo.addItem("🦇 Bats", userData="bats")
         self._bg_flock_combo.addItem("🧚 Fairies", userData="fairies")
         self._bg_flock_combo.addItem("🐟 Fish", userData="fish")
@@ -514,13 +521,19 @@ class SettingsDialog(QDialog):
         self._bg_flock_combo.addItem("🌸 Petals", userData="petals")
         self._bg_flock_combo.setToolTip(
             "Choose the emoji used for the background flock.\n"
-            "'Match Theme' uses the active theme's icon emoji."
+            "Greyed out while 'Use theme flock' is checked."
         )
         bg_flock_inner.addWidget(self._bg_flock_combo, 1)
         bg_drip_layout.addLayout(bg_flock_inner)
-        self._bg_flock_check.toggled.connect(
-            lambda checked: self._bg_flock_combo.setEnabled(checked)
-        )
+        # Enable/disable combo based on both the flock enable checkbox and the use-theme checkbox
+        def _update_flock_combo_state():
+            enabled = self._bg_flock_check.isChecked()
+            use_theme = self._use_theme_flock_check.isChecked()
+            self._use_theme_flock_check.setEnabled(enabled)
+            self._bg_flock_combo.setEnabled(enabled and not use_theme)
+        self._bg_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
+        self._use_theme_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
+        self._use_theme_flock_check.setEnabled(False)  # disabled until flock is enabled
         self._bg_flock_combo.setEnabled(False)  # disabled until checked
 
         # Separator
@@ -1237,6 +1250,7 @@ class SettingsDialog(QDialog):
         self._use_theme_drip_check.toggled.connect(self._on_bg_drip_changed)
         self._bg_drip_combo.currentIndexChanged.connect(self._on_bg_drip_changed)
         self._bg_flock_check.toggled.connect(self._on_bg_flock_changed)
+        self._use_theme_flock_check.toggled.connect(self._on_bg_flock_changed)
         self._bg_flock_combo.currentIndexChanged.connect(self._on_bg_flock_changed)
         self._bg_ambient_check.toggled.connect(self._on_bg_ambient_changed)
         self._bg_ambient_combo.currentIndexChanged.connect(self._on_bg_ambient_changed)
@@ -1333,7 +1347,7 @@ class SettingsDialog(QDialog):
             # Background effects controls – their handlers write to QSettings and
             # emit settings_changed, so they must be blocked during initial load.
             self._bg_drip_check, self._use_theme_drip_check, self._bg_drip_combo,
-            self._bg_flock_check, self._bg_flock_combo,
+            self._bg_flock_check, self._use_theme_flock_check, self._bg_flock_combo,
             self._bg_ambient_check, self._bg_ambient_combo,
             # Sound profile combo also saves settings on currentIndexChanged.
             self._sound_profile_combo,
@@ -1493,12 +1507,15 @@ class SettingsDialog(QDialog):
         # Load background flock settings
         bg_flock_enabled = self._settings.get("bg_flock_enabled", False)
         self._bg_flock_check.setChecked(bg_flock_enabled)
-        bg_flock_style = self._settings.get("bg_flock_style", "theme")
+        use_theme_flock = self._settings.get("use_theme_flock", False)
+        self._use_theme_flock_check.setChecked(use_theme_flock)
+        bg_flock_style = self._settings.get("bg_flock_style", "bats")
         for i in range(self._bg_flock_combo.count()):
             if self._bg_flock_combo.itemData(i) == bg_flock_style:
                 self._bg_flock_combo.setCurrentIndex(i)
                 break
-        self._bg_flock_combo.setEnabled(bg_flock_enabled)
+        self._use_theme_flock_check.setEnabled(bg_flock_enabled)
+        self._bg_flock_combo.setEnabled(bg_flock_enabled and not use_theme_flock)
 
         # Load background ambient settings
         bg_ambient_enabled = self._settings.get("bg_ambient_enabled", False)
@@ -2165,8 +2182,22 @@ class SettingsDialog(QDialog):
 
     def _on_bg_flock_changed(self) -> None:
         self._settings.set("bg_flock_enabled", self._bg_flock_check.isChecked())
-        flock_style = self._bg_flock_combo.currentData() or "theme"
+        use_theme_flock = self._use_theme_flock_check.isChecked()
+        self._settings.set("use_theme_flock", use_theme_flock)
+        flock_style = self._bg_flock_combo.currentData() or "bats"
         self._settings.set("bg_flock_style", flock_style)
+        if use_theme_flock:
+            theme = self._settings.get_theme()
+            theme_name = theme.get("name", "")
+            self._bg_flock_combo.setToolTip(
+                f"Using theme flock emoji for '{theme_name}' theme.\n"
+                "Uncheck 'Use theme flock' to override manually."
+            )
+        else:
+            self._bg_flock_combo.setToolTip(
+                "Choose the emoji used for the background flock.\n"
+                "Greyed out while 'Use theme flock' is checked."
+            )
         self.settings_changed.emit()
 
     def _on_bg_ambient_changed(self) -> None:

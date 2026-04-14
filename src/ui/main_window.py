@@ -1310,21 +1310,24 @@ class MainWindow(QMainWindow):
         if not enabled:
             self._click_effects.set_bg_flock(False)
             return
-        flock_style = self._settings.get("bg_flock_style", "theme")
         theme = self._settings.get_theme()
         icon = theme.get("_icon", "🐼")
         trail_color = theme.get("_trail_color", "#e94560")
-        _FLOCK_EMOJI = {
-            "theme":       icon,
-            "bats":        "🦇",
-            "fairies":     "🧚",
-            "fish":        "🐟",
-            "butterflies": "🦋",
-            "birds":       "🐦",
-            "stars":       "⭐",
-            "petals":      "🌸",
-        }
-        emoji = _FLOCK_EMOJI.get(flock_style, icon)
+        use_theme_flock = self._settings.get("use_theme_flock", False)
+        if use_theme_flock:
+            emoji = icon
+        else:
+            flock_style = self._settings.get("bg_flock_style", "bats")
+            _FLOCK_EMOJI = {
+                "bats":        "🦇",
+                "fairies":     "🧚",
+                "fish":        "🐟",
+                "butterflies": "🦋",
+                "birds":       "🐦",
+                "stars":       "⭐",
+                "petals":      "🌸",
+            }
+            emoji = _FLOCK_EMOJI.get(flock_style, icon)
         self._click_effects.set_bg_flock(True, emoji, trail_color)
 
     def _apply_bg_ambient(self) -> None:
