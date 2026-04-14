@@ -17,12 +17,64 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame,
+    QPushButton, QHBoxLayout,
 )
 
 
 # ---------------------------------------------------------------------------
-# Shared PIL → QImage helper
+# Floating zoom overlay reused by preview widgets
 # ---------------------------------------------------------------------------
+
+class _ZoomOverlayBar(QFrame):
+    """Compact semi-transparent zoom control bar (－ / ⊡ / ＋).
+
+    Create as a *child* of the widget it should float over, then call
+    ``reposition(parent_size)`` in the parent's ``resizeEvent`` to keep it
+    pinned to the top-right corner.
+    """
+
+    def __init__(self, zoom_in_cb, zoom_out_cb, zoom_fit_cb, parent=None):
+        super().__init__(parent)
+        self.setObjectName("zoomOverlayBar")
+        self.setStyleSheet(
+            "QFrame#zoomOverlayBar {"
+            "  background: rgba(20, 20, 20, 155);"
+            "  border-radius: 6px;"
+            "  border: 1px solid rgba(255,255,255,35);"
+            "}"
+            "QPushButton {"
+            "  background: rgba(55,55,55,190);"
+            "  color: #eee;"
+            "  border: none;"
+            "  border-radius: 4px;"
+            "  font-size: 13px;"
+            "  min-width: 24px; max-width: 24px;"
+            "  min-height: 20px; max-height: 20px;"
+            "  padding: 0;"
+            "}"
+            "QPushButton:hover  { background: rgba(95,95,95,210); }"
+            "QPushButton:pressed{ background: rgba(35,35,35,240); }"
+        )
+        row = QHBoxLayout(self)
+        row.setContentsMargins(3, 2, 3, 2)
+        row.setSpacing(3)
+        for label, tip, cb in [
+            ("－", "Zoom out  (Ctrl + scroll-down)", zoom_out_cb),
+            ("⊡", "Reset zoom / fit to window",      zoom_fit_cb),
+            ("＋", "Zoom in  (Ctrl + scroll-up)",     zoom_in_cb),
+        ]:
+            btn = QPushButton(label)
+            btn.setToolTip(tip)
+            btn.clicked.connect(cb)
+            row.addWidget(btn)
+        self.adjustSize()
+        self.raise_()
+
+    def reposition(self, parent_size) -> None:
+        """Pin to top-right corner of *parent_size*."""
+        margin = 6
+        self.move(parent_size.width() - self.width() - margin, margin)
+
 
 def _pil_to_qimage(img) -> QImage:
     """Convert any PIL Image to a detached RGBA QImage."""
@@ -310,6 +362,12 @@ class BeforeAfterWidget(QWidget):
         self._raw_after: QImage | None = None
         # QMovie used to animate the "before" side when the source is a GIF.
         self._movie: QMovie | None = None
+        # Zoom & pan state
+        self._zoom: float = 1.0          # 1.0 = fit-to-widget
+        self._pan_x: float = 0.0         # pixel offset (applied when _zoom > 1)
+        self._pan_y: float = 0.0
+        self._panning: bool = False
+        self._pan_start_pos: "QPoint | None" = None
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -318,12 +376,48 @@ class BeforeAfterWidget(QWidget):
         )
         self.setMouseTracking(True)
         self.setToolTip(
-            "Drag the ◀▶ handle to compare original and processed image"
+            "Drag the ◀▶ handle to compare original and processed image.\n"
+            "Ctrl+Scroll to zoom; middle-drag to pan when zoomed."
         )
 
+        # Floating zoom overlay (top-right corner)
+        self._zoom_bar = _ZoomOverlayBar(
+            self.zoom_in, self.zoom_out, self.zoom_reset, self
+        )
+        self._zoom_bar.reposition(self.size())
+
     # ------------------------------------------------------------------
-    # Public API
+    # Zoom API
     # ------------------------------------------------------------------
+
+    def zoom_in(self) -> None:
+        """Zoom in by 25%."""
+        self._zoom = min(8.0, self._zoom * 1.25)
+        self._clamp_pan()
+        self.update()
+
+    def zoom_out(self) -> None:
+        """Zoom out by 25%."""
+        self._zoom = max(0.2, self._zoom / 1.25)
+        self._clamp_pan()
+        self.update()
+
+    def zoom_reset(self) -> None:
+        """Reset zoom to fit-to-widget and clear pan offset."""
+        self._zoom = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self.update()
+
+    def _clamp_pan(self) -> None:
+        """Clamp pan offsets so the image cannot be dragged completely off-screen."""
+        w, h = self.width(), self.height()
+        # Allow panning by at most half the scaled image dimension
+        max_px = w * (self._zoom - 1) / 2 + w * 0.5
+        max_py = h * (self._zoom - 1) / 2 + h * 0.5
+        self._pan_x = max(-max_px, min(max_px, self._pan_x))
+        self._pan_y = max(-max_py, min(max_py, self._pan_y))
+
 
     def set_before(self, qimg: QImage) -> None:
         """Set the 'before' (original) side."""
@@ -396,6 +490,22 @@ class BeforeAfterWidget(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._checker = None  # invalidate; rebuilt lazily in paintEvent
+        self._clamp_pan()
+        self._zoom_bar.reposition(event.size())
+        self._zoom_bar.raise_()
+
+    def wheelEvent(self, event):  # noqa: N802
+        """Ctrl+scroll zooms in/out; plain scroll is passed to the parent."""
+        from PyQt6.QtCore import Qt as _Qt
+        if event.modifiers() & _Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoom_in()
+            elif delta < 0:
+                self.zoom_out()
+            event.accept()
+        else:
+            event.ignore()
 
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
@@ -410,16 +520,27 @@ class BeforeAfterWidget(QWidget):
         painter.drawPixmap(0, 0, self._checker)
 
         # ── Helper: draw pixmap scaled to widget, clipped to x-band ─
+        zoom = self._zoom
+
         def _draw_pix(pix: QPixmap, clip_x: int, clip_w: int):
             if clip_w <= 0:
                 return
-            scaled = pix.scaled(
-                w, h,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            ox = (w - scaled.width()) // 2
-            oy = (h - scaled.height()) // 2
+            if zoom <= 1.0:
+                scaled = pix.scaled(
+                    w, h,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                ox = (w - scaled.width()) // 2
+                oy = (h - scaled.height()) // 2
+            else:
+                scaled = pix.scaled(
+                    int(w * zoom), int(h * zoom),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                ox = (w - scaled.width()) // 2 + int(self._pan_x)
+                oy = (h - scaled.height()) // 2 + int(self._pan_y)
             painter.setClipRect(QRect(clip_x, 0, clip_w, h))
             painter.drawPixmap(ox, oy, scaled)
             painter.setClipping(False)
@@ -540,19 +661,35 @@ class BeforeAfterWidget(QWidget):
             if self._near_divider(event.pos().x()):
                 self._dragging = True
                 self._update_split(event.pos().x())
+        if event.button() == Qt.MouseButton.MiddleButton and self._zoom > 1.0:
+            self._panning = True
+            self._pan_start_pos = event.pos()
 
     def mouseMoveEvent(self, event):  # noqa: N802
-        if self._dragging:
+        if self._panning and self._pan_start_pos is not None:
+            delta = event.pos() - self._pan_start_pos
+            self._pan_x += delta.x()
+            self._pan_y += delta.y()
+            self._pan_start_pos = event.pos()
+            self._clamp_pan()
+            self.update()
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif self._dragging:
             self._update_split(event.pos().x())
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         elif self._near_divider(event.pos().x()):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif self._zoom > 1.0:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, event):  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = False
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._panning = False
+            self._pan_start_pos = None
 
     # ------------------------------------------------------------------
     # Helpers

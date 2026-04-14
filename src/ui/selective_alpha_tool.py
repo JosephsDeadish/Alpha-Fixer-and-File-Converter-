@@ -112,7 +112,63 @@ def _zone_qcolor(
 _MAX_HISTORY = 50   # maximum number of undo steps kept
 
 
-class SelectiveAlphaCanvas(QWidget):
+class _FloatingZoomOverlay(QFrame):
+    """Semi-transparent floating overlay with Zoom In / Fit / Zoom Out buttons.
+
+    Positioned at the top-right corner of its parent widget.  Reparent to the
+    widget you want it to float over and call ``reposition()`` from the parent's
+    ``resizeEvent`` to keep it pinned.
+    """
+
+    def __init__(self, zoom_in_cb, zoom_out_cb, zoom_fit_cb, parent=None):
+        super().__init__(parent)
+        self.setObjectName("zoomOverlay")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setStyleSheet(
+            "QFrame#zoomOverlay {"
+            "  background: rgba(30, 30, 30, 160);"
+            "  border-radius: 6px;"
+            "  border: 1px solid rgba(255,255,255,40);"
+            "}"
+            "QPushButton {"
+            "  background: rgba(60,60,60,200);"
+            "  color: #eee;"
+            "  border: none;"
+            "  border-radius: 4px;"
+            "  font-size: 13px;"
+            "  min-width: 26px;"
+            "  max-width: 26px;"
+            "  min-height: 22px;"
+            "  max-height: 22px;"
+            "  padding: 0;"
+            "}"
+            "QPushButton:hover { background: rgba(100,100,100,220); }"
+            "QPushButton:pressed { background: rgba(40,40,40,255); }"
+        )
+        row = QHBoxLayout(self)
+        row.setContentsMargins(4, 3, 4, 3)
+        row.setSpacing(3)
+        btn_out = QPushButton("－")
+        btn_out.setToolTip("Zoom out  (Ctrl+scroll)")
+        btn_out.clicked.connect(zoom_out_cb)
+        btn_fit = QPushButton("⊡")
+        btn_fit.setToolTip("Reset zoom / fit to window")
+        btn_fit.clicked.connect(zoom_fit_cb)
+        btn_in = QPushButton("＋")
+        btn_in.setToolTip("Zoom in  (Ctrl+scroll)")
+        btn_in.clicked.connect(zoom_in_cb)
+        row.addWidget(btn_out)
+        row.addWidget(btn_fit)
+        row.addWidget(btn_in)
+        self.adjustSize()
+        self.raise_()
+
+    def reposition(self, parent_size) -> None:
+        """Pin the overlay to the top-right corner of *parent_size*."""
+        margin = 6
+        self.move(parent_size.width() - self.width() - margin, margin)
+
+
     """
     Interactive canvas that shows the source image with coloured mask
     overlays and handles all drawing operations.
@@ -1921,21 +1977,7 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(size_box)
 
         # Zoom controls
-        zoom_box = QGroupBox("Zoom")
-        zh = QHBoxLayout(zoom_box)
-        self._btn_zoom_in = QPushButton("＋  In")
-        self._btn_zoom_in.setMinimumHeight(26)
-        self._btn_zoom_in.clicked.connect(self._zoom_in)
-        self._btn_zoom_out = QPushButton("－  Out")
-        self._btn_zoom_out.setMinimumHeight(26)
-        self._btn_zoom_out.clicked.connect(self._zoom_out)
-        self._btn_zoom_fit = QPushButton("⊡  Fit")
-        self._btn_zoom_fit.setMinimumHeight(26)
-        self._btn_zoom_fit.clicked.connect(self._zoom_reset)
-        zh.addWidget(self._btn_zoom_out)
-        zh.addWidget(self._btn_zoom_fit)
-        zh.addWidget(self._btn_zoom_in)
-        lv.addWidget(zoom_box)
+        # Zoom controls are in a floating overlay on the canvas (see _zoom_overlay below).
 
         # Zone rows
         zones_box = QGroupBox("Alpha Zones")
@@ -2398,6 +2440,15 @@ class SelectiveAlphaTool(QWidget):
         rv.addWidget(self._status_lbl)
         root.addWidget(right_widget, 1)
 
+        # ── Floating zoom overlay pinned to the top-right of the canvas ───
+        self._zoom_overlay = _FloatingZoomOverlay(
+            self._zoom_in, self._zoom_out, self._zoom_reset, self._canvas
+        )
+        self._zoom_overlay.adjustSize()
+        # Install an event filter on the canvas so the overlay stays pinned
+        # whenever the canvas is resized.
+        self._canvas.installEventFilter(self)
+
         # Sync initial tool to canvas
         self._canvas.set_tool("freehand")
         self._canvas.set_active_zone(0)
@@ -2514,9 +2565,8 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._brush_spin,       "sa_brush_spin")
         mgr.register(self._eraser_spin,      "sa_eraser_spin")
         mgr.register(self._autocorrect_chk,  "sa_autocorrect")
-        mgr.register(self._btn_zoom_in,      "sa_zoom_in")
-        mgr.register(self._btn_zoom_out,     "sa_zoom_out")
-        mgr.register(self._btn_zoom_fit,     "sa_zoom_fit")
+        # Zoom buttons are in the floating overlay; register the overlay frame itself
+        mgr.register(self._zoom_overlay, "sa_zoom_overlay")
         mgr.register(self._btn_show_all,     "sa_show_all_zones")
         mgr.register(self._btn_hide_all,     "sa_hide_all_zones")
         mgr.register(self._ze_vis_btn,    "sa_zone_visibility")
@@ -3486,4 +3536,11 @@ class SelectiveAlphaTool(QWidget):
 
     def _zoom_reset(self) -> None:
         self._canvas.zoom_reset()
+
+    def eventFilter(self, obj, event) -> bool:
+        """Reposition the floating zoom overlay when the canvas is resized."""
+        if obj is self._canvas and event.type() == QEvent.Type.Resize:
+            self._zoom_overlay.reposition(event.size())
+            self._zoom_overlay.raise_()
+        return False
 
