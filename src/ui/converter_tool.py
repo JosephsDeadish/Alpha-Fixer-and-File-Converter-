@@ -3,6 +3,7 @@ File Converter tab widget.
 """
 import datetime
 import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -17,9 +18,10 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.alpha_processor import collect_files
-from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
+from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, get_gif_frame_count
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
+from .gif_frame_picker import GifFramePickerDialog
 from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader
 
 
@@ -68,6 +70,10 @@ class ConverterTab(QWidget):
         self._preview_debounce.setSingleShot(True)
         self._preview_debounce.setInterval(150)
         self._preview_debounce.timeout.connect(self._update_converted_preview)
+        # Temp directory used to hold extracted GIF frames between the picker
+        # dialog and the conversion worker.  Created on demand; cleaned up when
+        # a new batch starts (old temp files no longer needed).
+        self._gif_temp_dir: tempfile.TemporaryDirectory | None = None
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -745,6 +751,21 @@ class ConverterTab(QWidget):
         if self._resize_check.isChecked():
             resize = (self._width_spin.value(), self._height_spin.value())
 
+        # ------------------------------------------------------------------
+        # GIF frame picker: for each animated GIF in the file list, show the
+        # frame-picker dialog so the user can choose which frames to export.
+        # Selected frames are extracted to a temp directory and the GIF path
+        # is replaced in the expanded list with one path per chosen frame.
+        # ------------------------------------------------------------------
+        expanded = self._expand_gif_frames(expanded)
+        if expanded is None:
+            # User cancelled the frame-picker dialog for at least one GIF.
+            return
+        if not expanded:
+            QMessageBox.information(self, "No Frames Selected",
+                                    "No frames were selected for export.")
+            return
+
         # Determine a common root directory for relative path preservation
         input_root = None
         if len(expanded) > 1:
@@ -794,6 +815,70 @@ class ConverterTab(QWidget):
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _expand_gif_frames(self, files: list[str]) -> list[str] | None:
+        """
+        For every animated GIF in *files*, show :class:`GifFramePickerDialog`
+        and replace the GIF path with one temporary PNG path per selected frame.
+
+        Non-GIF files (and single-frame GIFs) are passed through unchanged.
+
+        Returns the expanded list on success, or ``None`` if the user cancelled
+        the dialog for any GIF.
+        """
+        from PIL import Image, ImageSequence
+
+        # Collect GIFs that actually have multiple frames
+        animated_gifs = [f for f in files if get_gif_frame_count(f) > 1]
+        if not animated_gifs:
+            return files  # nothing to expand
+
+        # Clean up any temp dir from the previous run before creating a new one
+        if self._gif_temp_dir is not None:
+            try:
+                self._gif_temp_dir.cleanup()
+            except Exception:
+                pass
+        self._gif_temp_dir = tempfile.TemporaryDirectory(prefix="alpha_fixer_gif_")
+        tmp_root = Path(self._gif_temp_dir.name)
+
+        result: list[str] = []
+        for src in files:
+            if get_gif_frame_count(src) <= 1:
+                result.append(src)
+                continue
+
+            # Show frame picker for this GIF
+            dlg = GifFramePickerDialog(src, parent=self)
+            if dlg.exec() != dlg.DialogCode.Accepted:
+                # User cancelled – abort the whole run
+                return None
+
+            chosen = dlg.selected_indices()
+            if not chosen:
+                # User left everything unchecked for this GIF; skip it
+                continue
+
+            # Extract chosen frames as temporary PNG files
+            stem = Path(src).stem
+            try:
+                gif = Image.open(src)
+                frames = list(ImageSequence.Iterator(gif))
+                for idx in chosen:
+                    frame = frames[idx].copy().convert("RGBA")
+                    frame_path = str(tmp_root / f"{stem}_frame{idx + 1:04d}.png")
+                    frame.save(frame_path, format="PNG")
+                    frame.close()
+                    result.append(frame_path)
+                gif.close()
+            except Exception as exc:
+                QMessageBox.warning(
+                    self, "GIF Frame Extraction Error",
+                    f"Could not extract frames from {Path(src).name}:\n{exc}"
+                )
+                return None
+
+        return result
 
     def _stop(self):
         if self._worker:

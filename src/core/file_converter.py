@@ -591,6 +591,23 @@ def convert_file(
         src_img.close()
 
 
+def get_gif_frame_count(path: str) -> int:
+    """
+    Return the number of frames in a GIF file.
+
+    Returns 1 for non-animated GIFs or any non-GIF file.
+    Returns 1 on any error (safe fallback so callers need no try/except).
+    """
+    try:
+        ext = Path(path).suffix.lower()
+        if ext != ".gif":
+            return 1
+        with Image.open(path) as img:
+            return getattr(img, "n_frames", 1)
+    except Exception:
+        return 1
+
+
 def build_output_path(
     input_path: str,
     target_ext: str,
