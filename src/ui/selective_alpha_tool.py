@@ -2299,9 +2299,9 @@ class SelectiveAlphaTool(QWidget):
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
-            "Right-click the compare preview in the Alpha & RGBA Adjuster tab\n"
-            "(with 'Highlight Alpha Values' enabled) and choose\n"
-            "'Copy zones → Selective Alpha tool', then click Import below."
+            "1. Enable 'Highlight Alpha Values' in the Alpha & RGBA Adjuster.\n"
+            "2. Right-click the compare preview → 'Copy zones → Selective Alpha'.\n"
+            "3. Use the buttons below to import or save to slot/clipboard."
         )
         import_note.setWordWrap(True)
         import_note.setStyleSheet("color: #999; font-size: 10px;")
@@ -2312,7 +2312,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setStyleSheet("color: #888; font-size: 10px;")
         iv.addWidget(self._import_shared_status)
 
-        self._btn_import_shared = QPushButton("📥 Import Zones from Alpha Tool")
+        self._btn_import_shared = QPushButton("📥 Import Zones to Canvas")
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
             "Populate the painting canvas with zone masks that were copied from\n"
@@ -2321,6 +2321,28 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
         iv.addWidget(self._btn_import_shared)
+
+        # Item 22: save ALL shared zones into the current all-zones slot
+        self._btn_import_to_az_slot = QPushButton("💾 Save All Zones → Current AZ Slot")
+        self._btn_import_to_az_slot.setEnabled(False)
+        self._btn_import_to_az_slot.setToolTip(
+            "Save ALL imported zones from the Alpha tool directly into the\n"
+            "currently selected All-Zones Slot so they can be pasted onto\n"
+            "any image later without re-importing."
+        )
+        self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
+        iv.addWidget(self._btn_import_to_az_slot)
+
+        # Item 23: copy one shared zone to the single-zone clipboard
+        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Zone → Clipboard")
+        self._btn_import_zone_to_clipboard.setEnabled(False)
+        self._btn_import_zone_to_clipboard.setToolTip(
+            "Copy a single imported zone to the zone clipboard.\n"
+            "If more than one zone was imported, a picker will appear.\n"
+            "The copied mask can then be pasted via 'Paste Mask'."
+        )
+        self._btn_import_zone_to_clipboard.clicked.connect(self._on_import_zone_to_clipboard)
+        iv.addWidget(self._btn_import_zone_to_clipboard)
 
         lv.addWidget(import_box)
 
@@ -2524,6 +2546,9 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._active_zone_combo,   "sa_active_zone_combo")
         mgr.register(self._canvas,              "sa_canvas")
         mgr.register(self._status_lbl,       "sa_status_lbl")
+        mgr.register(self._btn_import_shared,            "sa_import_shared")
+        mgr.register(self._btn_import_to_az_slot,        "sa_import_to_az_slot")
+        mgr.register(self._btn_import_zone_to_clipboard, "sa_import_zone_clipboard")
 
     @staticmethod
     def _tool_tooltip(key: str) -> str:
@@ -2919,6 +2944,8 @@ class SelectiveAlphaTool(QWidget):
         )
         self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
         self._btn_import_shared.setEnabled(True)
+        self._btn_import_to_az_slot.setEnabled(True)
+        self._btn_import_zone_to_clipboard.setEnabled(True)
 
     def _on_import_shared_zones(self) -> None:
         """Import the zones previously received from the Alpha & RGBA Adjuster.
@@ -2966,6 +2993,71 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setText(
             f"✅ {count} zone(s) imported successfully."
         )
+
+    def _on_import_to_az_slot(self) -> None:
+        """Save all shared zones to the currently selected all-zones slot (item 22).
+
+        Converts the (alpha_value, bool_mask) pairs from the Alpha tool into the
+        snapshot format expected by _az_slots and stores them in the active slot.
+        """
+        if not self._shared_zones:
+            return
+        import numpy as np_imp
+        idx = self._az_slot_combo.currentIndex()
+        if idx < 0 or idx >= len(self._az_slots):
+            return
+        # Build a NUM_ZONES-length snapshot list (same format as get_all_masks())
+        num_z = len(self._shared_zones)
+        snapshot: list = [None] * NUM_ZONES
+        for i, (_alpha_val, bool_mask) in enumerate(self._shared_zones):
+            if i >= NUM_ZONES:
+                break
+            mask_u8 = (bool_mask.astype(np_imp.uint8) * 255)
+            snapshot[i] = (i, mask_u8)
+        self._az_slots[idx] = snapshot
+        self._az_slot_info[idx] = f"{num_z} zone(s) from Alpha tool"
+        self._update_az_slot_combo_item(idx)
+        self._on_az_slot_selected(idx)
+        self._import_shared_status.setText(
+            f"✅ {num_z} zone(s) saved to All-Zones Slot {idx + 1}."
+        )
+        if self._sound is not None:
+            self._sound.play_mask_copy()
+
+    def _on_import_zone_to_clipboard(self) -> None:
+        """Copy one zone from shared zones to the single-zone clipboard (item 23).
+
+        If more than one zone was imported, a small picker dialog is shown so
+        the user can select which zone to copy.  The mask is placed in
+        ``_mask_clipboard`` so it can be pasted via the 'Paste Mask' button.
+        """
+        if not self._shared_zones:
+            return
+        import numpy as np_imp
+        if len(self._shared_zones) == 1:
+            zone_idx = 0
+        else:
+            from PyQt6.QtWidgets import QInputDialog
+            items = [
+                f"Zone {i + 1}  (α = {av})"
+                for i, (av, _) in enumerate(self._shared_zones)
+            ]
+            item, ok = QInputDialog.getItem(
+                self, "Select Zone",
+                "Choose a zone to copy to the clipboard:",
+                items, 0, False,
+            )
+            if not ok:
+                return
+            zone_idx = items.index(item)
+        _alpha_val, bool_mask = self._shared_zones[zone_idx]
+        self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
+        self._ze_paste_btn.setEnabled(True)
+        self._import_shared_status.setText(
+            f"✅ Zone {zone_idx + 1} copied to clipboard — use 'Paste Mask' to apply."
+        )
+        if self._sound is not None:
+            self._sound.play_mask_copy()
 
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

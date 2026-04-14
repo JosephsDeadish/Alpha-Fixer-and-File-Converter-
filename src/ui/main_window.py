@@ -2447,46 +2447,144 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _show_shortcuts(self):
-        QMessageBox.information(
-            self,
-            "Keyboard Shortcuts",
-            "<table>"
-            "<tr><td><b>F5</b></td><td>Run / Process / Convert</td></tr>"
-            "<tr><td><b>Esc</b></td><td>Stop current operation</td></tr>"
-            "<tr><td><b>Ctrl+O</b></td><td>Add files</td></tr>"
-            "<tr><td><b>Ctrl+Shift+O</b></td><td>Add folder</td></tr>"
-            "<tr><td><b>Delete</b></td><td>Remove selected files from list</td></tr>"
+        from PyQt6.QtWidgets import QDialog, QScrollArea, QDialogButtonBox
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("⌨  Keyboard Shortcuts")
+        dlg.setMinimumSize(540, 460)
+        dlg.setSizeGripEnabled(True)
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(12, 12, 12, 8)
+        outer.setSpacing(8)
+
+        content_lbl = QLabel(
+            "<h3>Global Shortcuts</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>F1</b></td><td>Show this keyboard shortcuts help</td></tr>"
             "<tr><td><b>Ctrl+,</b></td><td>Open Settings</td></tr>"
-            "<tr><td><b>Ctrl+Q</b></td><td>Quit</td></tr>"
-            "<tr><td><b>F1</b></td><td>This help</td></tr>"
-            "</table>",
+            "<tr><td><b>Ctrl+Q</b></td><td>Quit the application</td></tr>"
+            "<tr><td><b>Ctrl+1</b></td><td>Switch to Alpha &amp; RGBA Adjuster tab</td></tr>"
+            "<tr><td><b>Ctrl+2</b></td><td>Switch to Converter tab</td></tr>"
+            "<tr><td><b>Ctrl+3</b></td><td>Switch to History tab</td></tr>"
+            "<tr><td><b>Ctrl+4</b></td><td>Switch to Selective Alpha tab</td></tr>"
+            "</table>"
+
+            "<h3>Alpha &amp; RGBA Adjuster / Converter</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>F5</b></td><td>Run / Process / Convert</td></tr>"
+            "<tr><td><b>Esc</b></td><td>Stop current processing operation</td></tr>"
+            "<tr><td><b>Ctrl+O</b></td><td>Add files to the queue</td></tr>"
+            "<tr><td><b>Ctrl+Shift+O</b></td><td>Add entire folder to the queue</td></tr>"
+            "<tr><td><b>Delete</b></td><td>Remove selected files from the queue</td></tr>"
+            "<tr><td><b>Ctrl+A</b></td><td>Select all files in the queue</td></tr>"
+            "</table>"
+
+            "<h3>Selective Alpha Tool</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Ctrl+Z</b></td><td>Undo last paint operation</td></tr>"
+            "<tr><td><b>Ctrl+Shift+Z</b></td><td>Redo</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Save current mask to file</td></tr>"
+            "<tr><td><b>B</b></td><td>Switch to Brush tool</td></tr>"
+            "<tr><td><b>E</b></td><td>Switch to Eraser tool</td></tr>"
+            "<tr><td><b>F</b></td><td>Switch to Flood Fill tool</td></tr>"
+            "<tr><td><b>M</b></td><td>Switch to Magic Select tool</td></tr>"
+            "<tr><td><b>T</b></td><td>Switch to Transform tool</td></tr>"
+            "<tr><td><b>[ / ]</b></td><td>Decrease / Increase brush size</td></tr>"
+            "<tr><td><b>Ctrl+Wheel</b></td><td>Zoom in / out on canvas</td></tr>"
+            "<tr><td><b>Middle-drag</b></td><td>Pan the canvas</td></tr>"
+            "<tr><td><b>Space+drag</b></td><td>Pan the canvas (hold Space)</td></tr>"
+            "</table>"
+
+            "<h3>GIF Builder</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Export GIF</td></tr>"
+            "</table>"
+        )
+        content_lbl.setWordWrap(True)
+        content_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
         )
 
+        from PyQt6.QtWidgets import QSizePolicy
+        content_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(scroll.Shape.NoFrame)
+        scroll.setWidget(content_lbl)
+        outer.addWidget(scroll, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dlg.accept)
+        outer.addWidget(buttons)
+
+        dlg.exec()
+
     def _show_about(self):
-        QMessageBox.about(
-            self,
-            "About 🐼 Alpha & RGBA Adjuster  |  File Converter",
-            f"<h2>🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}</h2>"
+        from PyQt6.QtWidgets import QDialog, QScrollArea, QDialogButtonBox, QSizePolicy
+        from PyQt6.QtCore import QSize
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("About 🐼 Alpha & RGBA Adjuster  |  File Converter")
+        dlg.setMinimumSize(520, 420)
+        dlg.setSizeGripEnabled(True)
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(12, 12, 12, 8)
+        outer.setSpacing(8)
+
+        content_lbl = QLabel(
+            f"<h2>🐼 Alpha &amp; RGBA Adjuster  |  File Converter  v{__version__}</h2>"
             "<p>A panda-themed tool for fixing alpha channels and converting image files.</p>"
             "<ul>"
-            "<li><b>Alpha &amp; RGBA Adjuster:</b> PS2, N64, No Alpha, Max Alpha presets + custom fine-tune (set/multiply/add/subtract)</li>"
-            "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, QOI and more</li>"
-            "<li>Drag-and-drop + batch folder/subfolder processing</li>"
+            "<li><b>Alpha &amp; RGBA Adjuster:</b> PS2, N64, No Alpha, Max Alpha presets + "
+            "custom fine-tune (set / multiply / add / subtract)</li>"
+            "<li><b>Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, "
+            "QOI and more</li>"
+            "<li><b>Selective Alpha Tool:</b> paint alpha zones on images (up to 40 zones), "
+            "brush / eraser / transform / fill / magic-select tools</li>"
+            "<li>Batch folder/subfolder processing</li>"
             "<li>Before/after comparison slider preview with live RGB/alpha stats</li>"
-            "<li>Image preview, conversion history + CSV export, export/import settings</li>"
-            "<li><b>Selective Alpha Tool:</b> paint alpha zones on images (up to 20 zones), brush/eraser/transform/fill/magic-select tools</li>"
-            "<li>18 preset themes + 32 hidden unlockables (keep clicking to find them!)</li>"
-            "<li>21+ click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, Fire 🔥,"
-            " Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, Shark 🦈, and more…</li>"
-            "<li>11 mouse trail styles: Dots, Ribbon, Noodle 🍜, Comet, Fairy ✨, Wave 🌊, Sparkle ❄, Rainbow 🌈, Distortion, Fire 🔥, Lightning ⚡</li>"
-            "<li>Animated banner (10 modes) + animated emoji cursors: spin, wobble, and symbol-cycling</li>"
-            "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting game textures</li>"
+            "<li>Conversion history with export options, export/import settings</li>"
+            "<li>50+ preset themes + hidden unlockables (keep clicking to find them!)</li>"
+            "<li>21+ click effects: Gore 🩸, Bat Cave 🦇, Rainbow 🌈, Galaxy ✦, Neon ⚡, "
+            "Fire 🔥, Ice ❄, Panda 🐼, Sakura 🌸, Ocean 🌊, Mermaid 🧜, Alien 🛸, "
+            "Shark 🦈, and more…</li>"
+            "<li>14 mouse trail styles: Dots, Ribbon 🎀, Noodle 🍜, Comet, Fairy ✨, "
+            "Wave 🌊, Sparkle ❄, Rainbow 🌈, Distortion, Fire 🔥, Lightning ⚡, "
+            "Plasma, Sakura 🌸, Smoke</li>"
+            "<li>Background ambient effects: Snow, Ember, Sakura, Stars, Bubbles, Neon, "
+            "Ghost, Confetti, Firefly, Matrix, Leaves, Rainbow</li>"
+            "<li>Animated banner (10 modes) + animated emoji cursors: spin, wobble, cycling</li>"
+            "<li>Per-channel RGBA delta adjustments (R/G/B/A ±255) for colour-correcting "
+            "game textures</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
-            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · Ctrl+1/2/3/4 switch tabs · F1 shortcuts</li>"
+            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · "
+            "Ctrl+1/2/3/4 switch tabs · F1 shortcuts</li>"
             "</ul>"
-            "<p>Built with Python + PyQt6 + Pillow.</p>"
-            f'<p><a href="{PATREON_URL}">❤ Support on Patreon</a></p>',
+            "<p>Built with <b>Python + PyQt6 + Pillow</b>.</p>"
+            f'<p><a href="{PATREON_URL}">❤ Support on Patreon</a></p>'
         )
+        content_lbl.setWordWrap(True)
+        content_lbl.setOpenExternalLinks(True)
+        content_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction
+        )
+        content_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(scroll.Shape.NoFrame)
+        scroll.setWidget(content_lbl)
+        outer.addWidget(scroll, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dlg.accept)
+        outer.addWidget(buttons)
+
+        dlg.exec()
 
     def _open_patreon(self):
         webbrowser.open(PATREON_URL)
@@ -2504,16 +2602,30 @@ class MainWindow(QMainWindow):
         """Show a popup menu from the Help button with shortcuts, about, and I/O options."""
         menu = QMenu(self)
         act_shortcuts = menu.addAction("⌨  Keyboard Shortcuts  (F1)")
+        act_shortcuts.setToolTip("View all keyboard shortcuts for every tool (also F1).")
+        act_shortcuts.setStatusTip("View keyboard shortcuts for all tools.")
         act_shortcuts.triggered.connect(self._show_shortcuts)
         act_about = menu.addAction("ℹ  About")
+        act_about.setToolTip("Show the About dialog with app version and feature list.")
+        act_about.setStatusTip("About this application – version and features.")
         act_about.triggered.connect(self._show_about)
         menu.addSeparator()
         act_patreon = menu.addAction("❤  Support on Patreon…")
+        act_patreon.setToolTip("Open the Patreon page to support development.")
+        act_patreon.setStatusTip("Support the developer on Patreon.")
         act_patreon.triggered.connect(self._open_patreon)
         menu.addSeparator()
         act_export = menu.addAction("📤  Export Settings…")
+        act_export.setToolTip(
+            "Save all current settings to a JSON file for backup or transfer."
+        )
+        act_export.setStatusTip("Export all settings to a JSON backup file.")
         act_export.triggered.connect(self._export_settings)
         act_import = menu.addAction("📥  Import Settings…")
+        act_import.setToolTip(
+            "Restore settings from a previously exported JSON file."
+        )
+        act_import.setStatusTip("Import settings from a JSON backup file.")
         act_import.triggered.connect(self._import_settings)
         # Show the menu just below the Help button
         btn = self._btn_help

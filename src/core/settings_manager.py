@@ -208,8 +208,8 @@ class SettingsManager:
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------
-        # When True button presses are animated (off by default).
-        "button_anim_enabled": False,
+        # When True button presses are animated (on by default).
+        "button_anim_enabled": True,
         # Animation style: "none", "press", "fall", "shake", "shatter", "bounce"
         "button_anim_style": "press",
         # When True the animation mode comes from the active theme's _button_anim key.

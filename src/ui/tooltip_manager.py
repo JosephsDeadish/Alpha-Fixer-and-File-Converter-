@@ -500,7 +500,7 @@ _NORMAL: dict[str, list[str]] = {
         "F1 opens the shortcuts dialog directly.",
         "Export Settings saves a full INI backup so you can restore if something goes wrong.",
         "Import Settings restores from a previously exported INI — useful when moving to a new machine.",
-        "The About dialog shows app version, build date, and a link to the project repository.",
+        "The About dialog shows the app version and feature summary.",
         "The Help menu. Wild concept: press F1 instead and skip this button entirely.",
         "Keyboard shortcuts are listed in here. You'll use them eventually.",
         "Congratulations on finding the Help menu. The irony of getting a tooltip for Help is not lost.",
@@ -6573,10 +6573,25 @@ class TooltipManager(QObject):
         self._active_theme_name = theme_name or ""
 
     def register(self, widget, tip_key: str) -> None:
-        """Map widget → tip_key so tooltips cycle through variants."""
-        self._widget_keys[id(widget)] = tip_key
+        """Map widget → tip_key so tooltips cycle through variants.
+
+        Connects to widget.destroyed to remove the stale id() entry when the
+        widget is deleted.  Without this cleanup, a new widget allocated later
+        could inherit the same CPython id() and receive the wrong tooltip.
+        """
+        wid = id(widget)
+        self._widget_keys[wid] = tip_key
         # Ensure native tooltip is cleared so we control it fully
         widget.setToolTip("")
+        # Remove the id mapping when the widget is destroyed so that a later
+        # widget allocated at the same address does not accidentally pick up
+        # this tip key (e.g., settings-dialog widgets vs main-tool widgets).
+        try:
+            widget.destroyed.connect(
+                lambda *_args, _wid=wid: self._widget_keys.pop(_wid, None)
+            )
+        except Exception:
+            pass
 
     def register_tab_bar(self, tab_bar, tip_keys: list) -> None:
         """Register a QTabBar so each tab index maps to its own tip_key.
