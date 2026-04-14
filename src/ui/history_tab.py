@@ -40,6 +40,9 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
                 header_item.setToolTip(i, tip)
     tree.setAlternatingRowColors(True)
     tree.setRootIsDecorated(False)
+    tree.setSortingEnabled(True)
+    tree.header().setSectionsClickable(True)
+    tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
     return tree
 
 
@@ -254,8 +257,17 @@ class HistoryTab(QWidget):
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
-            files = ", ".join(entry.get("files", []))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, fmt, n_files, n_ok, n_err, files])
+            if file_list:
+                tooltip = (
+                    f"Batch: {ts}\nFormat: {fmt}\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Files processed (first 10):\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -276,8 +288,17 @@ class HistoryTab(QWidget):
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
-            files = ", ".join(entry.get("files", []))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, preset, n_files, n_ok, n_err, files])
+            if file_list:
+                tooltip = (
+                    f"Batch: {ts}\nPreset / Mode: {preset}\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Files processed (first 10):\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -298,8 +319,17 @@ class HistoryTab(QWidget):
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
-            files = ", ".join(entry.get("files", []))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
+            if file_list:
+                tooltip = (
+                    f"Batch: {ts}\nMode: {mode}\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Files processed (first 10):\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
