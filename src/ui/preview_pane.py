@@ -589,6 +589,15 @@ class BeforeAfterWidget(QWidget):
         self._loading = False
         self.update()
 
+    def set_animation_speed(self, percent: int) -> None:
+        """Set the playback speed of the GIF animation as a percentage of normal speed.
+
+        100 = normal speed, 200 = twice as fast, 50 = half speed.
+        Has no effect when no animation is currently playing.
+        """
+        if self._movie is not None:
+            self._movie.setSpeed(percent)
+
     def _stop_movie(self) -> None:
         """Stop and clean up any running QMovie."""
         if self._movie is not None:

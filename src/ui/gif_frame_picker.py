@@ -126,28 +126,61 @@ class GifFramePickerDialog(QDialog):
 
     def _load_frames(self):
         """Extract frame thumbnails from the GIF and populate the grid."""
-        from PIL import Image, ImageSequence
+        from PIL import Image
 
+        gif = None
+        frames = []
         try:
             gif = Image.open(self._path)
-        except Exception as exc:
-            self._info_lbl.setText(f"Error opening GIF: {exc}")
-            return
+            n_frames = getattr(gif, 'n_frames', 1)
+            gif_size = gif.size
 
-        # IMPORTANT: ImageSequence.Iterator yields the *same* PIL Image object
-        # seeked to each frame position.  Calling list() on the iterator only
-        # stores references to the same object, all at the last seek position,
-        # causing every frame thumbnail to look identical.  We must copy each
-        # frame *while* the iterator is still positioned on that frame.
-        try:
-            frames = [f.copy() for f in ImageSequence.Iterator(gif)]
+            # Build properly composited RGBA frames.
+            #
+            # Simply copying while iterating (f.copy()) leaves each copy
+            # lazily bound to the same underlying file handle.  After the
+            # file is closed the deferred .convert("RGBA") call decodes
+            # from whatever seek position the handle is at — almost always
+            # the final frame, making every thumbnail look identical.
+            #
+            # The correct approach is to composite each frame onto an
+            # accumulating RGBA canvas and capture the result immediately,
+            # honouring GIF disposal methods so delta-encoded frames
+            # (where only changed pixels are stored) display correctly.
+            canvas = Image.new("RGBA", gif_size, (0, 0, 0, 0))
+            for frame_no in range(n_frames):
+                gif.seek(frame_no)
+                curr = gif.convert("RGBA")   # force-decode at this position
+                composite = canvas.copy()
+                composite.paste(curr, (0, 0), curr)
+                curr.close()
+                frames.append(composite.copy())
+
+                disposal = gif.info.get('disposal', 0)
+                canvas.close()
+                if disposal == 2:
+                    # Restore-to-background: next frame starts on a blank canvas.
+                    canvas = Image.new("RGBA", gif_size, (0, 0, 0, 0))
+                    composite.close()
+                else:
+                    # disposal 0, 1, 3 – keep current composite as the base
+                    # for the next frame (disposal=3 "restore-to-previous" is
+                    # approximated as "keep" which is correct for the vast
+                    # majority of animated GIFs in the wild).
+                    canvas = composite
+            canvas.close()
             self._frame_count = len(frames)
         except Exception as exc:
             self._info_lbl.setText(f"Error reading frames: {exc}")
-            gif.close()
+            for f in frames:
+                try:
+                    f.close()
+                except Exception:
+                    pass
             return
         finally:
-            gif.close()
+            if gif is not None:
+                gif.close()
 
         self._info_lbl.setText(
             f"{Path(self._path).name}  —  {self._frame_count} frame"
@@ -155,11 +188,10 @@ class GifFramePickerDialog(QDialog):
         )
 
         for idx, frame in enumerate(frames):
-            thumb = frame.convert("RGBA")
+            # frame is already RGBA; thumbnail in-place then build pixmap.
+            frame.thumbnail((_THUMB_W, _THUMB_H), Image.LANCZOS)
+            pixmap = _pil_to_qpixmap(frame)
             frame.close()
-            thumb.thumbnail((_THUMB_W, _THUMB_H), Image.LANCZOS)
-            pixmap = _pil_to_qpixmap(thumb)
-            thumb.close()
 
             cell = QWidget()
             cell_layout = QVBoxLayout(cell)

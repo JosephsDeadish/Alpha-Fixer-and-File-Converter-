@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
     QProgressBar, QGroupBox, QGridLayout, QScrollArea,
     QLineEdit, QSplitter, QMessageBox, QTextEdit,
-    QAbstractSpinBox,
+    QAbstractSpinBox, QSlider,
 )
 
 from ..core.alpha_processor import collect_files
@@ -78,6 +78,9 @@ class ConverterTab(QWidget):
         # animated GIF via QMovie.  When set, _on_preview_ready skips
         # set_before() so the animation isn't replaced by a static first-frame.
         self._before_is_animated: bool = False
+        # Track the effective output directory used for the last run so the
+        # completion message can tell the user where files were saved.
+        self._last_run_out_dir: str | None = None
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -263,6 +266,36 @@ class ConverterTab(QWidget):
         preview_row.addWidget(self._output_info_lbl, 0)
         pa_layout.addLayout(preview_row, 1)
 
+        # GIF speed slider – only visible when the selected source is an
+        # animated GIF; hidden for all other file types.
+        self._gif_speed_widget = QWidget()
+        self._gif_speed_widget.setVisible(False)
+        speed_layout = QHBoxLayout(self._gif_speed_widget)
+        speed_layout.setContentsMargins(4, 2, 4, 2)
+        speed_layout.setSpacing(8)
+
+        speed_lbl = QLabel("GIF Speed:")
+        speed_layout.addWidget(speed_lbl)
+
+        self._gif_speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self._gif_speed_slider.setRange(10, 500)
+        self._gif_speed_slider.setValue(100)
+        self._gif_speed_slider.setTickInterval(50)
+        self._gif_speed_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._gif_speed_slider.setToolTip(
+            "Adjust GIF playback speed in the preview.\n"
+            "100 % = normal speed.  Drag right to speed up, left to slow down."
+        )
+        speed_layout.addWidget(self._gif_speed_slider, 1)
+
+        self._gif_speed_value_lbl = QLabel("100 %")
+        self._gif_speed_value_lbl.setMinimumWidth(48)
+        self._gif_speed_value_lbl.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        speed_layout.addWidget(self._gif_speed_value_lbl)
+        pa_layout.addWidget(self._gif_speed_widget)
+
         # Left column: vertical splitter – controls/file-list on top
         # (scrollable), preview on the bottom (always fully visible).
         # This matches the layout structure used by the Alpha & RGBA Adjuster tab.
@@ -447,6 +480,8 @@ class ConverterTab(QWidget):
         self._suffix_edit.textChanged.connect(
             lambda t: self._settings.set("output_suffix", t)
         )
+        # GIF speed slider
+        self._gif_speed_slider.valueChanged.connect(self._on_gif_speed_changed)
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Initialise quality spinbox enabled state for the default format
@@ -643,6 +678,7 @@ class ConverterTab(QWidget):
             self._compare.clear()
             self._source_info_lbl.setText("")
             self._output_info_lbl.setText("")
+            self._gif_speed_widget.setVisible(False)
             return
 
         # Disconnect any stale previous loader to prevent it from overwriting
@@ -672,6 +708,12 @@ class ConverterTab(QWidget):
             self._compare.animate_before(path)
             # Set the after side to "loading" while we convert the first frame.
             self._compare.set_loading()
+            # Show GIF speed slider and reset to normal speed.
+            self._gif_speed_slider.blockSignals(True)
+            self._gif_speed_slider.setValue(100)
+            self._gif_speed_slider.blockSignals(False)
+            self._gif_speed_value_lbl.setText("100 %")
+            self._gif_speed_widget.setVisible(True)
             # Populate source info panel directly (frame count etc.) since the
             # background loader only gets the first PIL frame.
             try:
@@ -695,6 +737,8 @@ class ConverterTab(QWidget):
         else:
             self._before_is_animated = False
             self._compare.set_loading()
+            # Hide GIF speed slider for non-animated sources.
+            self._gif_speed_widget.setVisible(False)
 
         self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality)
         self._preview_loader.ready.connect(self._on_preview_ready)
@@ -830,6 +874,8 @@ class ConverterTab(QWidget):
         # Remember for history
         self._last_run_files = expanded
         self._last_run_format = target_format
+        # Remember where output files will go for the completion message.
+        self._last_run_out_dir = effective_out_dir
 
         self._log.clear()
         self._progress.setValue(0)
@@ -923,24 +969,46 @@ class ConverterTab(QWidget):
                 continue
 
             # Extract chosen frames as temporary PNG files.
-            # IMPORTANT: We seek to each frame individually rather than using
-            # ImageSequence.Iterator + list(), because the iterator yields the
-            # *same* PIL Image object seeked to each position.  Materialising
-            # the iterator into a list gives a list where every element is the
-            # same object at the final seek position, so every frame extracted
-            # later would be identical.  Seeking explicitly ensures each frame
-            # is read while the image is positioned at that index.
+            #
+            # For correct output each frame must be built by compositing onto an
+            # accumulating RGBA canvas from frame 0 (GIF delta encoding stores
+            # only the changed pixels; drawing them straight from seek() produces
+            # frames that look identical or show only a small patch).
             stem = Path(src).stem
             try:
                 gif = Image.open(src)
                 try:
-                    for idx in chosen:
-                        gif.seek(idx)
-                        frame = gif.convert("RGBA")
-                        frame_path = str(tmp_root / f"{stem}_frame{idx + 1:04d}.png")
-                        frame.save(frame_path, format="PNG")
-                        frame.close()
-                        result.append(frame_path)
+                    canvas_size = gif.size
+                    n_frames = getattr(gif, 'n_frames', 1)
+                    canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+                    chosen_set = set(chosen)
+                    max_idx = max(chosen_set, default=-1)
+
+                    for frame_no in range(min(max_idx + 1, n_frames)):
+                        gif.seek(frame_no)
+                        curr = gif.convert("RGBA")
+                        composite = canvas.copy()
+                        composite.paste(curr, (0, 0), curr)
+                        curr.close()
+
+                        if frame_no in chosen_set:
+                            frame_path = str(
+                                tmp_root / f"{stem}_frame{frame_no + 1:04d}.png"
+                            )
+                            composite.save(frame_path, format="PNG")
+                            result.append(frame_path)
+
+                        disposal = gif.info.get('disposal', 0)
+                        canvas.close()
+                        if disposal == 2:
+                            # Restore-to-background: next frame starts fresh.
+                            canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+                            composite.close()
+                        else:
+                            # disposal 0, 1, 3 – carry the composite forward.
+                            canvas = composite
+
+                    canvas.close()
                 finally:
                     gif.close()
             except Exception as exc:
@@ -972,11 +1040,22 @@ class ConverterTab(QWidget):
             f"Converting {current + 1}/{total}: {Path(path).name}{eta_str}"
         )
 
+    @pyqtSlot(int)
+    def _on_gif_speed_changed(self, value: int) -> None:
+        """Update GIF speed label and apply the new speed to the preview animation."""
+        self._gif_speed_value_lbl.setText(f"{value} %")
+        self._compare.set_animation_speed(value)
+
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):
-        icon = "✔" if ok else "✘"
         name = Path(src).name
-        self._log_msg(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
+        if ok:
+            # msg contains the destination path on success; show both names so
+            # the user always knows where the converted file landed.
+            dest_name = Path(msg).name if msg else "?"
+            self._log_msg(f"✔ {name}  →  {dest_name}")
+        else:
+            self._log_msg(f"✘ {name}  →  {msg.splitlines()[-1] if msg else ''}")
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
@@ -985,6 +1064,12 @@ class ConverterTab(QWidget):
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        # Tell the user where converted files were saved so they don't have to
+        # hunt for them (especially when no output folder was explicitly set).
+        if self._last_run_out_dir:
+            self._log_msg(f"Output folder: {self._last_run_out_dir}")
+        else:
+            self._log_msg("Output: saved next to each source file")
 
         # Refresh preview for the currently selected file so the pane stays
         # in sync after conversion (e.g. if the file was converted in-place).
