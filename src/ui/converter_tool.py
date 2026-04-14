@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
+from .alpha_tool import _FileCollectThread
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -52,6 +53,8 @@ class ConverterTab(QWidget):
         super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
+        # Background file-collection thread (avoids UI freeze on large folders)
+        self._collect_thread: _FileCollectThread | None = None
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
@@ -563,34 +566,56 @@ class ConverterTab(QWidget):
     def _add_to_list(self, paths: list[str]):
         """Expand directories, filter to supported formats, then add to list.
 
-        Any path that is a directory is walked (honouring the recursive
-        checkbox) and only files whose extension is in SUPPORTED_READ are
-        enqueued.  Non-image individual files are silently discarded and a
-        warning is appended to the log so the user knows why the count may
-        be lower than expected.
+        Individual file paths are added synchronously (fast path).
+        Directory paths are expanded in a background ``_FileCollectThread``
+        so the Qt event loop stays responsive even when scanning very large
+        folders (100 000+ files).
         """
-        # Count individual (non-directory) paths so we can report how many
-        # were skipped due to unsupported extensions.
         individual = [p for p in paths if os.path.isfile(p)]
+        dirs = [p for p in paths if os.path.isdir(p)]
+
         unsupported_count = sum(
             1 for p in individual
             if Path(p).suffix.lower() not in SUPPORTED_READ
         )
-
-        recursive = self._recursive_check.isChecked()
-        expanded = collect_files(paths, recursive=recursive)
+        valid_files = [p for p in individual if Path(p).suffix.lower() in SUPPORTED_READ]
 
         was_empty = self._file_list.count() == 0
-        self._file_list.add_paths_batch(expanded)
-        if was_empty and self._file_list.count() > 0:
-            self._file_list.setCurrentRow(0)
-        if expanded:
+        if valid_files:
+            self._file_list.add_paths_batch(valid_files)
+            if was_empty and self._file_list.count() > 0:
+                self._file_list.setCurrentRow(0)
             self.files_added.emit()
         if unsupported_count:
             self._log_msg(
                 f"⚠ {unsupported_count} file(s) skipped — format not supported "
                 f"(supported: {', '.join(sorted(SUPPORTED_READ))})"
             )
+
+        if dirs:
+            # Stop any previous collection thread before starting a new one
+            if self._collect_thread is not None and self._collect_thread.isRunning():
+                self._collect_thread.stop()
+                self._collect_thread.wait(200)
+
+            recursive = self._recursive_check.isChecked()
+            thread = _FileCollectThread(dirs, SUPPORTED_READ, recursive)
+
+            def _on_files_found(batch: list[str]) -> None:
+                pre = self._file_list.count() == 0
+                self._file_list.add_paths_batch(batch)
+                if pre and self._file_list.count() > 0:
+                    self._file_list.setCurrentRow(0)
+                self.files_added.emit()
+
+            def _on_scan_done(total: int) -> None:
+                if total:
+                    self._log_msg(f"📁 Folder scan complete — {total} image(s) found.")
+
+            thread.files_found.connect(_on_files_found)
+            thread.scan_done.connect(_on_scan_done)
+            self._collect_thread = thread
+            thread.start()
 
     @pyqtSlot(int)
     def _update_count(self, n: int):

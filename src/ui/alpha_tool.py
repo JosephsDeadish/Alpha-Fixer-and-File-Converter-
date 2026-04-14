@@ -140,6 +140,95 @@ class _AlphaPreviewLoader(QThread):
                 pass  # receiver destroyed; nothing to do
 
 
+
+# ---------------------------------------------------------------------------
+# Background worker: expand directories to file lists without blocking the UI
+# ---------------------------------------------------------------------------
+
+class _FileCollectThread(QThread):
+    """Walk directories in a background thread, emitting batches of found paths.
+
+    Use this whenever the incoming paths might include large directories that
+    would block the Qt event loop if scanned synchronously.  The caller should
+    connect ``files_found`` to process batches of paths as they arrive, and
+    ``finished`` (inherited from QThread) to perform final clean-up.
+    """
+
+    #: Emitted with a list of newly discovered file paths every CHUNK files.
+    files_found = pyqtSignal(list)
+    #: Total number of files found (emitted once on completion).
+    scan_done = pyqtSignal(int)
+
+    _CHUNK = 500  # emit a signal every N files so the UI can add them progressively
+
+    def __init__(self, paths: list[str], extensions: set, recursive: bool):
+        super().__init__()
+        self._paths = paths
+        self._extensions = extensions
+        self._recursive = recursive
+        self._stop = False
+
+    def stop(self) -> None:
+        """Request early termination (e.g. when the user adds another batch)."""
+        self._stop = True
+
+    def run(self) -> None:
+        buffer: list[str] = []
+        total = 0
+        for p in self._paths:
+            if self._stop:
+                break
+            p = os.path.normpath(p)
+            if os.path.isfile(p):
+                if Path(p).suffix.lower() in self._extensions:
+                    buffer.append(p)
+                    total += 1
+                    if len(buffer) >= self._CHUNK:
+                        try:
+                            self.files_found.emit(list(buffer))
+                        except RuntimeError:
+                            return
+                        buffer.clear()
+            elif os.path.isdir(p):
+                if self._recursive:
+                    for root, _, files in os.walk(p):
+                        if self._stop:
+                            break
+                        for f in files:
+                            if Path(f).suffix.lower() in self._extensions:
+                                buffer.append(os.path.join(root, f))
+                                total += 1
+                                if len(buffer) >= self._CHUNK:
+                                    try:
+                                        self.files_found.emit(list(buffer))
+                                    except RuntimeError:
+                                        return
+                                    buffer.clear()
+                else:
+                    for f in os.listdir(p):
+                        if self._stop:
+                            break
+                        fp = os.path.join(p, f)
+                        if os.path.isfile(fp) and Path(f).suffix.lower() in self._extensions:
+                            buffer.append(fp)
+                            total += 1
+                            if len(buffer) >= self._CHUNK:
+                                try:
+                                    self.files_found.emit(list(buffer))
+                                except RuntimeError:
+                                    return
+                                buffer.clear()
+        if buffer:
+            try:
+                self.files_found.emit(buffer)
+            except RuntimeError:
+                return
+        try:
+            self.scan_done.emit(total)
+        except RuntimeError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Main tab widget
 # ---------------------------------------------------------------------------
@@ -181,6 +270,8 @@ class AlphaFixerTab(QWidget):
         self._presets = preset_manager
         self._settings = settings_manager
         self._worker = None
+        # Background file-collection thread (avoids UI freeze on large folders)
+        self._collect_thread: _FileCollectThread | None = None
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
@@ -741,36 +832,58 @@ class AlphaFixerTab(QWidget):
     def _add_to_list(self, paths: list[str]):
         """Expand directories, filter to supported formats, then add to list.
 
-        Any path that is a directory is walked (honouring the recursive
-        checkbox) and only files whose extension is in SUPPORTED_READ are
-        enqueued.  Non-image individual files are silently discarded and a
-        warning is appended to the log so the user knows why the count may
-        be lower than expected.
+        Individual file paths are added synchronously (fast path).
+        Directory paths are expanded in a background ``_FileCollectThread``
+        so the Qt event loop stays responsive even when scanning very large
+        folders (100 000+ files).
         """
-        # Count individual (non-directory) paths so we can report how many
-        # were skipped due to unsupported extensions.
+        # Fast path: individual files only → expand synchronously (no thread overhead)
         individual = [p for p in paths if os.path.isfile(p)]
+        dirs = [p for p in paths if os.path.isdir(p)]
+
         unsupported_count = sum(
             1 for p in individual
             if Path(p).suffix.lower() not in SUPPORTED_READ
         )
-
-        recursive = self._recursive_check.isChecked()
-        expanded = collect_files(paths, recursive=recursive)
+        valid_files = [p for p in individual if Path(p).suffix.lower() in SUPPORTED_READ]
 
         was_empty = self._file_list.count() == 0
-        self._file_list.add_paths_batch(expanded)
-        # Auto-select the first item so the preview pane shows immediately
-        if was_empty and self._file_list.count() > 0:
-            self._file_list.setCurrentRow(0)
-        # Notify main window so it can play the file-add sound
-        if expanded:
+        if valid_files:
+            self._file_list.add_paths_batch(valid_files)
+            if was_empty and self._file_list.count() > 0:
+                self._file_list.setCurrentRow(0)
             self.files_added.emit()
         if unsupported_count:
             self._log_msg(
                 f"⚠ {unsupported_count} file(s) skipped — format not supported "
                 f"(supported: {', '.join(sorted(SUPPORTED_READ))})"
             )
+
+        if dirs:
+            # Stop any previous collection thread before starting a new one
+            if self._collect_thread is not None and self._collect_thread.isRunning():
+                self._collect_thread.stop()
+                self._collect_thread.wait(200)
+
+            recursive = self._recursive_check.isChecked()
+            thread = _FileCollectThread(dirs, SUPPORTED_READ, recursive)
+
+            def _on_files_found(batch: list[str]) -> None:
+                pre = self._file_list.count() == 0
+                self._file_list.add_paths_batch(batch)
+                if pre and self._file_list.count() > 0:
+                    self._file_list.setCurrentRow(0)
+                self.files_added.emit()
+
+            def _on_scan_done(total: int) -> None:
+                if total:
+                    self._log_msg(f"📁 Folder scan complete — {total} image(s) found.")
+
+            thread.files_found.connect(_on_files_found)
+            thread.scan_done.connect(_on_scan_done)
+            self._collect_thread = thread
+            thread.start()
+
         # Trigger game/ROM folder detection for the added paths
         self._detect_rom(paths)
 
