@@ -547,8 +547,14 @@ class SettingsDialog(QDialog):
         self._bg_ambient_combo.addItem("🫧 Rising Bubbles", userData="bubbles")
         self._bg_ambient_combo.addItem("🌈 Neon Flicker", userData="neon")
         self._bg_ambient_combo.addItem("👻 Ghost Wisps", userData="ghost")
+        self._bg_ambient_combo.addItem("🎊 Confetti Fall", userData="confetti")
+        self._bg_ambient_combo.addItem("🪲 Fireflies", userData="firefly")
+        self._bg_ambient_combo.addItem("💻 Matrix Rain", userData="matrix")
+        self._bg_ambient_combo.addItem("🍂 Autumn Leaves", userData="leaves")
+        self._bg_ambient_combo.addItem("🌈 Rainbow Sparkle", userData="rainbow")
         self._bg_ambient_combo.setToolTip(
-            "Choose the ambient background animation style."
+            "Choose the ambient background animation style.\n"
+            "Runs independently of the active theme."
         )
         bg_ambient_inner.addWidget(self._bg_ambient_combo, 1)
         bg_drip_layout.addLayout(bg_ambient_inner)

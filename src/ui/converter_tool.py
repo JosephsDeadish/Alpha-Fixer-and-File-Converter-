@@ -22,6 +22,7 @@ from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, get_g
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
 from .gif_frame_picker import GifFramePickerDialog
+from .gif_builder import GifBuilderDialog
 from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader
 
 
@@ -594,6 +595,15 @@ class ConverterTab(QWidget):
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
         self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF"))
+        # When GIF is selected, the Process button opens the GIF Builder instead
+        if fmt == "GIF":
+            self._btn_run.setText("🎞  Open GIF Builder  [F5]")
+            self._btn_run.setToolTip(
+                "Open the GIF Builder to compose an animated GIF from the files in the queue."
+            )
+        else:
+            self._btn_run.setText("▶  Convert  [F5]")
+            self._btn_run.setToolTip("")
         self._preview_debounce.start()
 
     @pyqtSlot(int)
@@ -834,6 +844,15 @@ class ConverterTab(QWidget):
             return
         target_format, target_ext = fmt_data
 
+        # ------------------------------------------------------------------
+        # When the target format is GIF, open the GIF Builder so the user can
+        # compose a proper animated GIF from the selected files.  Pre-populate
+        # it with the files already in the queue.
+        # ------------------------------------------------------------------
+        if target_format == "GIF":
+            self._open_gif_builder(expanded)
+            return
+
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
@@ -1019,6 +1038,13 @@ class ConverterTab(QWidget):
                 return None, fallback_out_dir
 
         return result, fallback_out_dir
+
+    def _open_gif_builder(self, initial_files: list[str]) -> None:
+        """Open the GIF Builder dialog pre-populated with *initial_files*."""
+        dlg = GifBuilderDialog(initial_files=initial_files, parent=self)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _stop(self):
         if self._worker:

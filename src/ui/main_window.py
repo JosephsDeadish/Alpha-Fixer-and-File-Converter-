@@ -2520,9 +2520,35 @@ class MainWindow(QMainWindow):
         pos = btn.mapToGlobal(btn.rect().bottomLeft())
         menu.exec(pos)
 
-
-
-    def resizeEvent(self, event):
+    def contextMenuEvent(self, event) -> None:
+        """Right-click anywhere on the main window to access the tool shortcuts."""
+        from .gif_builder import GifBuilderDialog
+        from .video_tool import VideoToolDialog
+        menu = QMenu(self)
+        act_gif = menu.addAction("🎞  Open GIF Builder")
+        act_gif.setToolTip(
+            "Open the GIF Builder to compose animated GIFs from any images."
+        )
+        act_video = menu.addAction("🎬  Open Video Editor")
+        act_video.setToolTip(
+            "Open the Video Editor to merge, trim and adjust video clips."
+        )
+        menu.addSeparator()
+        act_settings = menu.addAction("⚙  Settings")
+        act_settings.triggered.connect(self._open_settings)
+        chosen = menu.exec(event.globalPos())
+        if chosen is act_gif:
+            if not hasattr(self, "_gif_builder_dlg") or self._gif_builder_dlg is None:
+                self._gif_builder_dlg = GifBuilderDialog(parent=self)
+            self._gif_builder_dlg.show()
+            self._gif_builder_dlg.raise_()
+            self._gif_builder_dlg.activateWindow()
+        elif chosen is act_video:
+            if not hasattr(self, "_video_tool_dlg") or self._video_tool_dlg is None:
+                self._video_tool_dlg = VideoToolDialog(parent=self)
+            self._video_tool_dlg.show()
+            self._video_tool_dlg.raise_()
+            self._video_tool_dlg.activateWindow()
         super().resizeEvent(event)
         # Debounce overlay repositioning: during an interactive window drag,
         # Qt fires resizeEvent on every pixel of movement.  Repositioning

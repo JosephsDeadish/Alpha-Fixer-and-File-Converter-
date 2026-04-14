@@ -1885,6 +1885,299 @@ class _NoodleStrand(QObject):
             self._overlay.show()
 
 
+# ---------------------------------------------------------------------------
+# Confetti Fall (ambient — colourful spinning confetti pieces fall from top)
+# ---------------------------------------------------------------------------
+
+class _ConfettiFall(QObject):
+    """Spawns colourful spinning confetti pieces that fall from the top edge.
+
+    Activated as a standalone ambient effect (``bg_ambient_type == "confetti"``).
+    Each piece has a random hue, spin speed, and drift so the overall effect
+    feels festive without being chaotic.
+    """
+
+    _SPAWN_INTERVAL_MS = 200
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        count = random.randint(3, 7)
+        for _ in range(count):
+            hue = random.randint(0, 359)
+            color = QColor.fromHsv(hue, 200, 230)
+            x = random.uniform(0, w)
+            vx = random.uniform(-0.8, 0.8)
+            vy = random.uniform(1.2, 3.5)
+            size = random.uniform(5, 11)
+            life = (h / max(vy, 0.1)) * 0.05 + random.uniform(0.3, 1.2)
+            spin = str(round(random.uniform(1.5, 4.0), 2))
+            p = _Particle(
+                x, random.uniform(-15, 0),
+                vx, vy, life,
+                "confetti", size, color, spin,
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Firefly Drift (ambient — glowing drifting dots that pulse)
+# ---------------------------------------------------------------------------
+
+class _FireflyDrift(QObject):
+    """Slowly drifting glowing dots that pulse in opacity like fireflies at dusk.
+
+    Activated as a standalone ambient effect (``bg_ambient_type == "firefly"``).
+    Each firefly wanders with gentle curved motion and flickers using a sine-wave
+    alpha modulated by the particle's ``text`` field (phase offset).
+    """
+
+    _SPAWN_INTERVAL_MS = 500
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        warm_colors = [
+            QColor(180, 255, 100), QColor(220, 255, 80), QColor(255, 245, 60),
+            QColor(160, 255, 120), QColor(200, 240, 100),
+        ]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            color = random.choice(warm_colors)
+            x = random.uniform(w * 0.05, w * 0.95)
+            y = random.uniform(h * 0.1, h * 0.9)
+            vx = random.uniform(-0.5, 0.5)
+            vy = random.uniform(-0.4, 0.4)
+            size = random.uniform(3.5, 7.0)
+            life = random.uniform(4.0, 9.0)
+            phase = str(round(random.uniform(0, 6.28), 3))   # phase offset for flicker
+            p = _Particle(
+                x, y, vx, vy, life,
+                "firefly", size, color, phase,
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Matrix Rain (ambient — green digital rain falling from top)
+# ---------------------------------------------------------------------------
+
+class _MatrixRain(QObject):
+    """Spawns small bright-green dots that fall straight down, simulating digital rain.
+
+    Activated as a standalone ambient effect (``bg_ambient_type == "matrix"``).
+    The leading dot is bright; a fading trail of dimmer dots follows each column.
+    """
+
+    _SPAWN_INTERVAL_MS = 120
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        col_spacing = 18
+        n_cols = max(1, w // col_spacing)
+        # Activate a random subset of columns each tick
+        cols = random.sample(range(n_cols), min(random.randint(2, 5), n_cols))
+        for col in cols:
+            x = col * col_spacing + random.uniform(-4, 4)
+            vy = random.uniform(3.0, 7.0)
+            life = (h / max(vy, 0.1)) * 0.05 + 0.5
+            # Leading bright dot
+            p = _Particle(
+                x, random.uniform(-20, 0),
+                0.0, vy, life,
+                "matrix_dot", random.uniform(3.5, 5.5),
+                QColor(0, 255, 70, 255), "1",
+            )
+            self._overlay._particles.append(p)
+            # Two trailing dimmer dots
+            for trail_i in range(1, 3):
+                trail_life = life - trail_i * 0.15
+                if trail_life <= 0:
+                    continue
+                dim = 255 - trail_i * 80
+                tp = _Particle(
+                    x, -trail_i * 10 + random.uniform(-4, 4),
+                    0.0, vy, max(0.1, trail_life),
+                    "matrix_dot", random.uniform(2.5, 4.0),
+                    QColor(0, max(0, dim), 50, max(0, dim)), "0",
+                )
+                self._overlay._particles.append(tp)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Leaf Drift (ambient — autumn leaves drifting down with gentle spin)
+# ---------------------------------------------------------------------------
+
+class _LeafDrift(QObject):
+    """Spawns falling autumn leaf shapes that spiral lazily as they descend.
+
+    Activated as a standalone ambient effect (``bg_ambient_type == "leaves"``).
+    Each leaf uses an earthy autumn palette and gentle swaying horizontal drift.
+    """
+
+    _SPAWN_INTERVAL_MS = 350
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        autumn_colors = [
+            QColor(200, 80, 20),  QColor(220, 120, 30), QColor(180, 60, 10),
+            QColor(230, 160, 40), QColor(190, 100, 15), QColor(210, 140, 50),
+        ]
+        count = random.randint(1, 3)
+        for _ in range(count):
+            color = random.choice(autumn_colors)
+            x = random.uniform(0, w)
+            vx = random.uniform(-1.0, 1.0)
+            vy = random.uniform(0.8, 2.5)
+            size = random.uniform(6, 14)
+            life = (h / max(vy, 0.1)) * 0.05 + random.uniform(0.5, 2.0)
+            spin = str(round(random.uniform(0.5, 1.5), 2))
+            p = _Particle(
+                x, random.uniform(-20, 0),
+                vx, vy, life,
+                "leaf", size, color, spin,
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
+# ---------------------------------------------------------------------------
+# Rainbow Sparkle (ambient — pastel rainbow sparkles float across the window)
+# ---------------------------------------------------------------------------
+
+class _RainbowSparkle(QObject):
+    """Spawns soft pastel sparkle dots that drift slowly upward and fade out.
+
+    Activated as a standalone ambient effect (``bg_ambient_type == "rainbow"``).
+    Dots cycle through all hues and vary in size to create a gentle, shimmering
+    rainbow atmosphere without being as busy as full confetti.
+    """
+
+    _SPAWN_INTERVAL_MS = 220
+
+    def __init__(self, overlay: "ClickEffectsOverlay"):
+        super().__init__(overlay)
+        self._overlay = overlay
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._SPAWN_INTERVAL_MS)
+        self._timer.timeout.connect(self._spawn)
+        self._hue_offset: float = 0.0
+
+    def start(self) -> None:
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def _spawn(self) -> None:
+        w = self._overlay.width()
+        h = self._overlay.height()
+        if w <= 0 or h <= 0:
+            return
+        self._hue_offset = (self._hue_offset + 15) % 360
+        count = random.randint(2, 5)
+        for i in range(count):
+            hue = int(self._hue_offset + i * (360 // max(1, count))) % 360
+            color = QColor.fromHsv(hue, 180, 240)
+            x = random.uniform(0, w)
+            y = random.uniform(h * 0.2, h)
+            vx = random.uniform(-0.6, 0.6)
+            vy = random.uniform(-1.5, -0.3)
+            size = random.uniform(3.0, 8.0)
+            life = random.uniform(2.5, 5.5)
+            p = _Particle(
+                x, y, vx, vy, life,
+                "rainbow_sparkle", size, color, "",
+            )
+            self._overlay._particles.append(p)
+        if not self._overlay._timer.isActive():
+            self._overlay._timer.start()
+        if not self._overlay.isVisible():
+            self._overlay.show()
+
+
 
 class _BannerFlock(QObject):
     """Spawns themed emoji flying across the top band of the window periodically.
@@ -2000,6 +2293,11 @@ class ClickEffectsOverlay(QWidget):
         self._shark_fin: _SharkFin | None = None
         self._slither_wiggler: _SlitherWiggler | None = None
         self._noodle_strand: _NoodleStrand | None = None
+        self._confetti_fall: _ConfettiFall | None = None
+        self._firefly_drift: _FireflyDrift | None = None
+        self._matrix_rain: _MatrixRain | None = None
+        self._leaf_drift: _LeafDrift | None = None
+        self._rainbow_sparkle: _RainbowSparkle | None = None
         # Background drip state (independent of click effects)
         self._bg_drip_enabled: bool = False
         self._bg_drip_type: str = "blood"  # "blood" or "water"
@@ -2074,10 +2372,19 @@ class ClickEffectsOverlay(QWidget):
                 self._neon_flicker.stop()
             if self._ghost_wisp and not (self._bg_ambient_enabled and self._bg_ambient_type == "ghost"):
                 self._ghost_wisp.stop()
-            # Only hide the overlay if the banner flock is also inactive.
-            # When banner flock is running we still need the overlay visible
-            # so flying particles can be rendered even without click effects.
-            if not self._banner_flock_active and not self._bg_drip_enabled and not self._bg_ambient_enabled:
+            if self._confetti_fall and not (self._bg_ambient_enabled and self._bg_ambient_type == "confetti"):
+                self._confetti_fall.stop()
+            if self._firefly_drift and not (self._bg_ambient_enabled and self._bg_ambient_type == "firefly"):
+                self._firefly_drift.stop()
+            if self._matrix_rain and not (self._bg_ambient_enabled and self._bg_ambient_type == "matrix"):
+                self._matrix_rain.stop()
+            if self._leaf_drift and not (self._bg_ambient_enabled and self._bg_ambient_type == "leaves"):
+                self._leaf_drift.stop()
+            if self._rainbow_sparkle and not (self._bg_ambient_enabled and self._bg_ambient_type == "rainbow"):
+                self._rainbow_sparkle.stop()
+            # Only hide the overlay if every background effect is also inactive.
+            if (not self._banner_flock_active and not self._bg_drip_enabled
+                    and not self._bg_ambient_enabled and not self._bg_flock_enabled):
                 self.hide()
             else:
                 # Ensure the banner-flock timer keeps running even though
@@ -2105,10 +2412,14 @@ class ClickEffectsOverlay(QWidget):
                 self._timer.start()
             self._banner_flock.start()
         else:
-            if self._banner_flock is not None:
+            # Only physically stop the flock animation when bg_flock is not
+            # keeping it alive independently (bg_flock delegates here but must
+            # survive banner-animation resets during theme changes).
+            if self._banner_flock is not None and not self._bg_flock_enabled:
                 self._banner_flock.stop()
-            # If click effects and bg drip are also disabled, stop the timer and hide.
-            if not self._enabled and not self._bg_drip_enabled and not self._bg_ambient_enabled:
+            # If nothing else needs the overlay, stop the timer and hide.
+            if (not self._enabled and not self._bg_drip_enabled
+                    and not self._bg_ambient_enabled and not self._bg_flock_enabled):
                 self._timer.stop()
                 self.hide()
 
@@ -2317,14 +2628,26 @@ class ClickEffectsOverlay(QWidget):
     def set_bg_flock(self, enabled: bool, emoji: str = "🐼", color: str = "#e94560") -> None:
         """Enable or disable a background flock independently of the banner animation."""
         self._bg_flock_enabled = enabled
-        # Delegate to banner_flock mechanism (reuses same overlay infrastructure)
-        self.set_banner_flock(enabled, emoji, color)
+        if enabled:
+            # Delegate to banner_flock mechanism (reuses same overlay infrastructure)
+            self.set_banner_flock(True, emoji, color)
+        else:
+            # When disabling bg_flock we must physically stop the flock object
+            # unless the banner animation is also using it.
+            if not self._banner_flock_active and self._banner_flock is not None:
+                self._banner_flock.stop()
+            # Hide/stop the overlay if nothing else is active
+            if (not self._enabled and not self._banner_flock_active
+                    and not self._bg_drip_enabled and not self._bg_ambient_enabled):
+                self._timer.stop()
+                self.hide()
 
     def set_bg_ambient(self, ambient_type: str, enabled: bool) -> None:
         """Enable or disable a manual ambient background effect.
 
         *ambient_type* is one of: ``"snow"``, ``"ember"``, ``"sakura"``,
-        ``"stars"``, ``"bubbles"``, ``"neon"``, ``"ghost"``, ``"none"``.
+        ``"stars"``, ``"bubbles"``, ``"neon"``, ``"ghost"``, ``"confetti"``,
+        ``"firefly"``, ``"matrix"``, ``"leaves"``, ``"rainbow"``, ``"none"``.
         The ambient effect is independent of the click-effects enabled state.
         """
         # Stop old ambient if type changed or disabling
@@ -2335,7 +2658,8 @@ class ClickEffectsOverlay(QWidget):
 
         if not enabled or ambient_type == "none":
             # If nothing else needs overlay, stop timer and hide
-            if not self._enabled and not self._banner_flock_active and not self._bg_drip_enabled:
+            if (not self._enabled and not self._banner_flock_active
+                    and not self._bg_drip_enabled and not self._bg_flock_enabled):
                 self._timer.stop()
                 self.hide()
             return
@@ -2375,6 +2699,26 @@ class ClickEffectsOverlay(QWidget):
             if self._ghost_wisp is None:
                 self._ghost_wisp = _GhostWisp(self)
             self._ghost_wisp.start()
+        elif _AM == "confetti":
+            if self._confetti_fall is None:
+                self._confetti_fall = _ConfettiFall(self)
+            self._confetti_fall.start()
+        elif _AM == "firefly":
+            if self._firefly_drift is None:
+                self._firefly_drift = _FireflyDrift(self)
+            self._firefly_drift.start()
+        elif _AM == "matrix":
+            if self._matrix_rain is None:
+                self._matrix_rain = _MatrixRain(self)
+            self._matrix_rain.start()
+        elif _AM == "leaves":
+            if self._leaf_drift is None:
+                self._leaf_drift = _LeafDrift(self)
+            self._leaf_drift.start()
+        elif _AM == "rainbow":
+            if self._rainbow_sparkle is None:
+                self._rainbow_sparkle = _RainbowSparkle(self)
+            self._rainbow_sparkle.start()
 
     def _stop_bg_ambient(self) -> None:
         """Stop whichever ambient is currently running as the manual bg ambient."""
@@ -2393,6 +2737,16 @@ class ClickEffectsOverlay(QWidget):
             self._neon_flicker.stop()
         elif _AM == "ghost" and self._ghost_wisp:
             self._ghost_wisp.stop()
+        elif _AM == "confetti" and self._confetti_fall:
+            self._confetti_fall.stop()
+        elif _AM == "firefly" and self._firefly_drift:
+            self._firefly_drift.stop()
+        elif _AM == "matrix" and self._matrix_rain:
+            self._matrix_rain.stop()
+        elif _AM == "leaves" and self._leaf_drift:
+            self._leaf_drift.stop()
+        elif _AM == "rainbow" and self._rainbow_sparkle:
+            self._rainbow_sparkle.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
@@ -2448,6 +2802,8 @@ class ClickEffectsOverlay(QWidget):
         "bat_fly", "fairy_fly", "snow", "ember", "bubble",
         "confetti", "star_dust", "bamboo_leaf", "otter_bubble",
         "shark_fin", "wriggle", "noodle_strand",
+        # New ambient kinds
+        "firefly", "matrix_dot", "leaf", "rainbow_sparkle",
     ))
     # Margin in pixels around each particle's bounding box added to the dirty
     # rect to ensure antialiased edges are fully covered.
@@ -2937,6 +3293,63 @@ class ClickEffectsOverlay(QWidget):
                 c.setAlpha(alpha)
                 painter.setBrush(QBrush(c))
                 r = max(2, int(p.size * 0.7))
+                painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
+
+            elif p.kind == "firefly":
+                # Glowing dot whose brightness pulses using the stored phase offset.
+                try:
+                    phase = float(p.text)
+                except (ValueError, AttributeError):
+                    phase = 0.0
+                # Tick decrement is 0.05 per frame; elapsed gives the frame counter.
+                elapsed = (p.max_life - p.life) / 0.05
+                flicker = abs(math.sin(elapsed * 0.15 + phase))
+                c = QColor(p.color)
+                c.setAlpha(max(0, int(alpha * (0.4 + 0.6 * flicker))))
+                painter.setBrush(QBrush(c))
+                r = max(2, int(p.size))
+                painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
+                # Glow halo
+                glow_c = QColor(p.color)
+                glow_c.setAlpha(max(0, int(alpha * flicker * 0.25)))
+                painter.setBrush(QBrush(glow_c))
+                gr = max(3, r * 2)
+                painter.drawEllipse(int(p.x) - gr, int(p.y) - gr, gr * 2, gr * 2)
+
+            elif p.kind == "matrix_dot":
+                # Bright green square dot for digital rain.
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                painter.setBrush(QBrush(c))
+                r = max(1, int(p.size * 0.6))
+                painter.drawRect(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
+
+            elif p.kind == "leaf":
+                # Elongated ellipse that spins as it falls — simulates an autumn leaf.
+                c = QColor(p.color)
+                c.setAlpha(alpha)
+                painter.setBrush(QBrush(c))
+                elapsed_frac = 1.0 - p.alpha_frac
+                try:
+                    spin_turns = float(p.text)
+                except (ValueError, AttributeError):
+                    spin_turns = 1.0
+                angle_deg = spin_turns * elapsed_frac * 360.0
+                w_r = max(2, int(p.size * 0.35))
+                h_r = max(4, int(p.size))
+                painter.save()
+                painter.translate(int(p.x), int(p.y))
+                painter.rotate(angle_deg)
+                painter.drawEllipse(-w_r, -h_r, w_r * 2, h_r * 2)
+                painter.restore()
+
+            elif p.kind == "rainbow_sparkle":
+                # Small pulsing circle with a twinkle effect for rainbow ambience.
+                c = QColor(p.color)
+                twinkle = abs(math.sin(p.alpha_frac * math.pi * 3))
+                c.setAlpha(max(0, int(alpha * twinkle)))
+                painter.setBrush(QBrush(c))
+                r = max(2, int(p.size * (0.5 + 0.5 * twinkle)))
                 painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
             else:
