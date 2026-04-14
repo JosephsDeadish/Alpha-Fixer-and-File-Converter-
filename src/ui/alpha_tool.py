@@ -726,6 +726,7 @@ class AlphaFixerTab(QWidget):
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
             "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg);;All Files (*)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))

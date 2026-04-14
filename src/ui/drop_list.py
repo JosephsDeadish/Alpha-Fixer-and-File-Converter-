@@ -368,17 +368,25 @@ class DropFileList(QListWidget):
         """Add paths in batches, processing events periodically so the UI
         stays responsive when adding tens of thousands of files."""
         existing = {self.item(i).text() for i in range(self.count())}
+        new_paths = [p for p in paths if p not in existing]
+        if not new_paths:
+            return 0
+        # Suspend visual updates and sorting while bulk-inserting to avoid
+        # repeated layout recalculations which cause UI freezes on large imports.
+        self.setUpdatesEnabled(False)
         added = 0
         CHUNK = 500
-        for start in range(0, len(paths), CHUNK):
-            chunk = paths[start:start + CHUNK]
-            for p in chunk:
-                if p not in existing:
+        try:
+            for start in range(0, len(new_paths), CHUNK):
+                chunk = new_paths[start:start + CHUNK]
+                for p in chunk:
                     self.addItem(p)
-                    existing.add(p)
                     added += 1
-            if added and start > 0 and start % 5000 == 0:
+                # Process events every chunk so the UI stays alive and the
+                # Stop button remains responsive on very large imports.
                 QApplication.processEvents()
+        finally:
+            self.setUpdatesEnabled(True)
         if added:
             self.count_changed.emit(self.count())
             if self._thumb_enabled and self.count() <= _THUMB_AUTO_DISABLE:
