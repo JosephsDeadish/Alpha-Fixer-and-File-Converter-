@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox, QSlider,
 )
 
-from ..core.alpha_processor import collect_files
+from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, get_gif_frame_count
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
@@ -548,7 +548,6 @@ class ConverterTab(QWidget):
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
             "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg *.jp2);;All Files (*)",
-            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -559,17 +558,39 @@ class ConverterTab(QWidget):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", last_dir)
         if folder:
             self._settings.set("last_input_dir", folder)
-            files = collect_files([folder], recursive=self._recursive_check.isChecked())
-            self._add_to_list(files)
+            self._add_to_list([folder])
 
     def _add_to_list(self, paths: list[str]):
-        """Add paths using the batch helper to stay responsive for large imports."""
+        """Expand directories, filter to supported formats, then add to list.
+
+        Any path that is a directory is walked (honouring the recursive
+        checkbox) and only files whose extension is in SUPPORTED_READ are
+        enqueued.  Non-image individual files are silently discarded and a
+        warning is appended to the log so the user knows why the count may
+        be lower than expected.
+        """
+        # Count individual (non-directory) paths so we can report how many
+        # were skipped due to unsupported extensions.
+        individual = [p for p in paths if os.path.isfile(p)]
+        unsupported_count = sum(
+            1 for p in individual
+            if Path(p).suffix.lower() not in SUPPORTED_READ
+        )
+
+        recursive = self._recursive_check.isChecked()
+        expanded = collect_files(paths, recursive=recursive)
+
         was_empty = self._file_list.count() == 0
-        self._file_list.add_paths_batch(paths)
+        self._file_list.add_paths_batch(expanded)
         if was_empty and self._file_list.count() > 0:
             self._file_list.setCurrentRow(0)
-        if paths:
+        if expanded:
             self.files_added.emit()
+        if unsupported_count:
+            self._log_msg(
+                f"⚠ {unsupported_count} file(s) skipped — format not supported "
+                f"(supported: {', '.join(sorted(SUPPORTED_READ))})"
+            )
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
