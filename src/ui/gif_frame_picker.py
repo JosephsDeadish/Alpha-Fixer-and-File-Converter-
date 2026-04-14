@@ -73,8 +73,17 @@ class GifFramePickerDialog(QDialog):
         # Toolbar: Select All / Deselect All / invert
         tool_row = QHBoxLayout()
         self._btn_all = QPushButton("Select All")
+        self._btn_all.setToolTip(
+            "Check all frames for export. Every single one. The whole family is coming."
+        )
         self._btn_none = QPushButton("Deselect All")
+        self._btn_none.setToolTip(
+            "Uncheck everything. Fresh slate. No frames selected. Bold strategy, let's see if it pays off."
+        )
         self._btn_invert = QPushButton("Invert")
+        self._btn_invert.setToolTip(
+            "Flip every frame's selection. The ones you wanted are now unwanted. Chaos theory in action."
+        )
         for btn in (self._btn_all, self._btn_none, self._btn_invert):
             btn.setFixedHeight(28)
             tool_row.addWidget(btn)
@@ -103,6 +112,9 @@ class GifFramePickerDialog(QDialog):
         # OK / Cancel
         btn_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.setToolTip(
+            "OK exports the checked frames. Cancel abandons ship entirely. Choose your destiny."
         )
         btn_box.accepted.connect(self.accept)
         btn_box.rejected.connect(self.reject)
