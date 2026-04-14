@@ -292,6 +292,7 @@ class _SpinningEmojiLabel(QWidget):
     _FLIP_STEP          = 0.18  # rad/tick for horizontal squeeze-flip
     _ORBIT_STEP         = 0.08  # rad/tick ≈ full orbit / ~8 s
     _GLITCH_STEP        = 0.45  # rad/tick ≈ glitch strobe speed
+    _DRIP_STEP          = 0.012 # 0–1 progress per tick ≈ 3 s fall cycle
 
     _BOUNCE_AMPLITUDE   = 6     # pixels
     _SHAKE_AMPLITUDE    = 5     # pixels
@@ -300,9 +301,10 @@ class _SpinningEmojiLabel(QWidget):
     _PULSE_MIN_SCALE    = 0.75
     _PULSE_MAX_SCALE    = 1.25
     _ORBIT_RADIUS       = 7     # pixels orbital radius
+    _DRIP_FALL_PX       = 24    # pixels total fall distance for drip mode
 
     _VALID_MODES = frozenset({"spin", "bounce", "shake", "pendulum", "pulse", "float", "flip",
-                               "orbit", "glitch", "static"})
+                               "orbit", "glitch", "drip", "static"})
 
     def __init__(self, emoji: str = "🐼", font_size: int = 20, parent=None):
         super().__init__(parent)
@@ -392,6 +394,9 @@ class _SpinningEmojiLabel(QWidget):
         elif self._mode == "glitch":
             pad = 9  # max jitter (7 px) + 2 px safety margin
             self.setFixedSize(base + pad * 2, base + pad * 2)
+        elif self._mode == "drip":
+            # Extra vertical space for the fall distance + room to shrink
+            self.setFixedSize(base + 8, base + self._DRIP_FALL_PX + 4)
         else:
             self.setFixedSize(base, base)
 
@@ -426,9 +431,15 @@ class _SpinningEmojiLabel(QWidget):
             self._phase = (self._phase + self._ORBIT_STEP) % (2 * math.pi)
             self._offset_x = math.cos(self._phase) * self._ORBIT_RADIUS
             self._offset_y = math.sin(self._phase) * self._ORBIT_RADIUS
-        elif mode == "glitch":
-            # Rapid stuttering: emoji randomly pops to an offset position each frame
-            self._phase = (self._phase + self._GLITCH_STEP) % (2 * math.pi)
+        elif self._mode == "drip":
+            # Slowly fall downward and shrink, then reset to top at full size
+            self._phase = (self._phase + self._DRIP_STEP) % 1.0
+            t = self._phase  # 0..1 progress through the fall
+            # Add a gentle left-right wobble as it falls (like a teardrop)
+            self._offset_x = math.sin(t * math.pi * 4) * 2.0
+            self._offset_y = t * self._DRIP_FALL_PX
+            # Shrink from 1.0 to 0.5 as it falls
+            self._scale = 1.0 - t * 0.5
             # Jitter resets to zero periodically so it "snaps" back to centre
             if int(self._phase * 4) % 3 == 0:
                 self._offset_x = 0.0
@@ -457,6 +468,10 @@ class _SpinningEmojiLabel(QWidget):
         elif self._mode == "flip":
             sx = max(self._flip_sx, 0.01)  # avoid degenerate zero-width transform
             painter.scale(sx, 1.0)
+        # Apply scale-down for drip mode.
+        elif self._mode == "drip" and self._scale != 1.0:
+            s = max(self._scale, 0.01)
+            painter.scale(s, s)
 
         font = QFont()
         font.setFamilies(["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"])

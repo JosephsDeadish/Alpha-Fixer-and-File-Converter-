@@ -981,6 +981,7 @@ class SettingsDialog(QDialog):
             ("flip",     "Flip – horizontal squeeze-and-flip"),
             ("orbit",    "Orbit – emoji circles around the centre point"),
             ("glitch",   "Glitch – jittery digital glitch stutter"),
+            ("drip",     "Drip – slowly falls and shrinks then resets"),
         ]
         _BANNER_ANIM_TIPS = {
             "spin":     "The emoji rotates continuously like a gear (~6 s per full turn).",
@@ -994,6 +995,8 @@ class SettingsDialog(QDialog):
                         "themes like space, alien, or mermaid.",
             "glitch":   "The emoji stutters and jumps to random nearby positions each frame —\n"
                         "great for gore, alien, or cyber/glitch themes.",
+            "drip":     "The emoji slowly falls downward while shrinking and wobbling, then\n"
+                        "resets to the top — perfect for blood/water drip themes like Gore or Ocean.",
         }
         for key, label in _BANNER_ANIM_OPTIONS:
             self._banner_anim_combo.addItem(label, userData=key)
@@ -1468,7 +1471,7 @@ class SettingsDialog(QDialog):
         # Load banner animation style combo
         _BANNER_ANIM_IDX_MAP = {
             "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
-            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8,
+            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
         }
         saved_banner_anim = self._settings.get("banner_anim_style", "spin")
         self._banner_anim_combo.setCurrentIndex(
@@ -2117,6 +2120,26 @@ class SettingsDialog(QDialog):
         self._settings.set("banner_use_theme_anim", use_theme)
         banner_enabled = self._animated_banner_check.isChecked()
         self._banner_anim_combo.setEnabled(banner_enabled and not use_theme)
+        if use_theme:
+            theme = self._settings.get_theme()
+            theme_name = theme.get("name", "")
+            anim_key = theme.get("_banner_anim", "spin")
+            # Select the theme's animation in the combo so the user can see what's active
+            for i in range(self._banner_anim_combo.count()):
+                if self._banner_anim_combo.itemData(i) == anim_key:
+                    self._banner_anim_combo.setCurrentIndex(i)
+                    break
+            anim_label = self._banner_anim_combo.currentText().split("–")[0].strip()
+            self._banner_anim_combo.setToolTip(
+                f"Using theme animation: {anim_label}\n"
+                f"(set by the '{theme_name}' theme)\n"
+                "Uncheck 'Use theme animation' to override manually."
+            )
+        else:
+            self._banner_anim_combo.setToolTip(
+                "Choose the animation style for the banner emoji when animation is enabled.\n"
+                "Greyed out while 'Use theme animation' is checked."
+            )
         self.settings_changed.emit()
 
     def _on_show_splash_changed(self) -> None:
@@ -2142,15 +2165,20 @@ class SettingsDialog(QDialog):
         enabled = self._button_anim_check.isChecked()
         self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         if use_theme:
-            # Show what this theme's animation would be
+            # Select the theme's button animation in the combo so the user can see it
             theme = self._settings.get_theme()
             theme_style = theme.get("_button_anim", "press")
             _STYLE_LABELS = {
                 "press": "Press", "fall": "Fall", "bounce": "Bounce",
-                "shake": "Shake", "shatter": "Shatter", "none": "(none)",
+                "shake": "Shake", "shatter": "Shatter",
             }
             label = _STYLE_LABELS.get(theme_style, theme_style.title())
             theme_name = theme.get("name", "")
+            # Select matching style in the combo
+            for i in range(self._button_anim_style_combo.count()):
+                if self._button_anim_style_combo.itemData(i) == theme_style:
+                    self._button_anim_style_combo.setCurrentIndex(i)
+                    break
             if not theme_style or theme_style == "none":
                 self._button_anim_style_combo.setToolTip(
                     f"No button animation for the '{theme_name}' theme."
@@ -2158,7 +2186,8 @@ class SettingsDialog(QDialog):
             else:
                 self._button_anim_style_combo.setToolTip(
                     f"Using theme animation: {label}\n"
-                    f"(set by the '{theme_name}' theme)"
+                    f"(set by the '{theme_name}' theme)\n"
+                    "Uncheck 'Use theme animation' to override manually."
                 )
         else:
             self._button_anim_style_combo.setToolTip(

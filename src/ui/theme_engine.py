@@ -117,7 +117,7 @@ GORE_THEME = {
     "_effect": "gore",
     "_cursor": "emoji:💀",
     "_trail_color": "#cc0000",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "shatter",
     "_trail": "dots",
 }
@@ -539,7 +539,7 @@ SHARK_BAIT_THEME = {
     "_effect": "shark",
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "bite",
     "_trail": "wave",
 }
@@ -675,7 +675,7 @@ SECRET_BLOOD_MOON_THEME = {
     "_cursor": "emoji:🩸",
     "_trail_color": "#cc1133",
     "_unlock": "blood_moon",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "shatter",
     "_trail": "dots",
 }
@@ -926,7 +926,7 @@ SECRET_ZOMBIE_THEME = {
     "_cursor": "emoji:🧟",
     "_trail_color": "#55cc00",
     "_unlock": "zombie",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "shatter",
     "_trail": "dots",
 }
