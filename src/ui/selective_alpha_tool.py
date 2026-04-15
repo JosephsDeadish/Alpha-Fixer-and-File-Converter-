@@ -112,6 +112,829 @@ def _zone_qcolor(
 _MAX_HISTORY = 50   # maximum number of undo steps kept
 
 
+class SelectiveAlphaCanvas(QWidget):
+    """Interactive drawing canvas for zone-based selective alpha editing.
+
+    Displays a PIL image and lets the user paint up to NUM_ZONES coloured
+    alpha-zone masks using multiple drawing tools.  Each zone can be
+    independently assigned an alpha value; pressing "Apply" replaces the
+    alpha channel of every painted pixel with its zone's alpha value.
+
+    Public attributes accessed by SelectiveAlphaTool
+    ─────────────────────────────────────────────────
+    _tool         – current drawing tool name (str)
+    _active_zone  – currently selected zone index (int)
+    _zone_alphas  – per-zone alpha values (list[int], len=NUM_ZONES)
+    _zone_visible – per-zone visibility flags (list[bool], len=NUM_ZONES)
+    """
+
+    # ── PyQt signals ─────────────────────────────────────────────────────
+    mask_changed        = pyqtSignal(int)   # zone index whose mask was modified
+    undo_available      = pyqtSignal(bool)  # whether Ctrl+Z is available
+    redo_available      = pyqtSignal(bool)  # whether Ctrl+Y is available
+    copy_requested      = pyqtSignal(int)   # context-menu: copy zone mask
+    paste_requested     = pyqtSignal(int)   # context-menu: paste zone mask
+    copy_all_requested  = pyqtSignal()      # context-menu: copy all zones
+    paste_all_requested = pyqtSignal()      # context-menu: paste all zones
+
+    _OVERLAY_ALPHA = 160  # zone colour overlay opacity (0–255)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMinimumSize(200, 200)
+
+        # ── image / masks ─────────────────────────────────────────────
+        self._src_img: Optional[Image.Image] = None
+        self._img_w: int = 0
+        self._img_h: int = 0
+        self._masks: list[np.ndarray] = [
+            np.zeros((1, 1), dtype=np.uint8) for _ in range(NUM_ZONES)
+        ]
+        self._src_qimage: Optional[QImage] = None   # source cached as QImage
+
+        # ── zone display settings ─────────────────────────────────────
+        self._zone_alphas:  list[int]  = [255] * NUM_ZONES
+        self._zone_visible: list[bool] = [True] * NUM_ZONES
+        # Per-zone colour override (r, g, b) – None → use ZONE_COLORS default
+        self._zone_colors: list[Optional[tuple[int, int, int]]] = [None] * NUM_ZONES
+
+        # ── tool state ────────────────────────────────────────────────
+        self._tool:         str  = "freehand"
+        self._active_zone:  int  = 0
+        self._brush_size:   int  = 10
+        self._eraser_size:  int  = 10
+        self._autocorrect:        bool = False
+        self._show_zero_alpha:    bool = False
+        self._show_alpha_labels:  bool = False
+        self._paste_available:    bool = False
+
+        # ── drawing state ─────────────────────────────────────────────
+        self._drawing:        bool = False
+        self._last_img_pt:    Optional[tuple[int, int]] = None
+        self._drag_start_img: Optional[tuple[int, int]] = None
+        self._poly_pts:       list[tuple[int, int]]     = []
+        self._transform_start_mouse: Optional[tuple[float, float]] = None
+        self._transform_orig_mask:   Optional[np.ndarray]          = None
+
+        # ── zoom / pan ────────────────────────────────────────────────
+        self._zoom:  float = 1.0
+        self._pan_x: float = 0.0
+        self._pan_y: float = 0.0
+        self._panning:          bool = False
+        self._pan_start_mouse:  Optional[tuple[float, float]] = None
+        self._pan_start_offset: Optional[tuple[float, float]] = None
+
+        # ── rendering cache ───────────────────────────────────────────
+        self._composite_dirty:  bool = True
+        self._composite_qimage: Optional[QImage] = None
+        self._drag_preview:     Optional[QImage] = None  # line/rect/ellipse preview
+
+        # Label geometry caches (computed in _rebuild_composite)
+        self._zone_centroids:    list[Optional[tuple[int, int]]] = [None] * NUM_ZONES
+        self._zone_label_points: list[list[tuple[int, int]]]     = [[] for _ in range(NUM_ZONES)]
+
+        # ── undo / redo ───────────────────────────────────────────────
+        # Each stack entry is a list[NUM_ZONES] of mask array copies.
+        self._undo_stack: list[list[np.ndarray]] = []
+        self._redo_stack: list[list[np.ndarray]] = []
+
+    # ── public setters ────────────────────────────────────────────────────
+
+    def set_brush_size(self, v: int) -> None:
+        self._brush_size = max(1, int(v))
+
+    def set_eraser_size(self, v: int) -> None:
+        self._eraser_size = max(1, int(v))
+
+    def set_autocorrect(self, v: bool) -> None:
+        self._autocorrect = bool(v)
+
+    def set_show_zero_alpha(self, v: bool) -> None:
+        self._show_zero_alpha = bool(v)
+        self._composite_dirty = True
+        self.update()
+
+    def set_show_alpha_labels(self, v: bool) -> None:
+        self._show_alpha_labels = bool(v)
+        self._composite_dirty = True   # need to recompute label-point geometry
+        self.update()
+
+    def set_paste_available(self, v: bool) -> None:
+        self._paste_available = bool(v)
+
+    def set_tool(self, key: str) -> None:
+        if key != self._tool:
+            if self._tool == "polygon" and self._poly_pts:
+                self._poly_pts.clear()
+                self.update()
+            self._drawing        = False
+            self._drag_start_img = None
+            self._drag_preview   = None
+        self._tool = key
+        if key == "transform":
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+        elif key == "fill":
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+
+    def set_active_zone(self, idx: int) -> None:
+        if 0 <= idx < NUM_ZONES:
+            self._active_zone = idx
+
+    def get_active_zone(self) -> int:
+        return self._active_zone
+
+    def set_zone_alpha_label(self, idx: int, alpha: int) -> None:
+        if 0 <= idx < NUM_ZONES:
+            self._zone_alphas[idx] = max(0, min(255, int(alpha)))
+            self._composite_dirty = True
+            self.update()
+
+    def set_zone_color(self, idx: int, r: int, g: int, b: int) -> None:
+        if 0 <= idx < NUM_ZONES:
+            self._zone_colors[idx] = (int(r), int(g), int(b))
+            self._composite_dirty = True
+            self.update()
+
+    def get_zone_color(self, idx: int) -> tuple[int, int, int, int]:
+        """Return *(r, g, b, 255)* for zone *idx* (override or palette default)."""
+        if 0 <= idx < NUM_ZONES and self._zone_colors[idx] is not None:
+            r, g, b = self._zone_colors[idx]
+        else:
+            zi = max(0, min(len(ZONE_COLORS) - 1, idx))
+            r, g, b, _ = ZONE_COLORS[zi]
+        return (int(r), int(g), int(b), 255)
+
+    def set_zone_visible(self, idx: int, visible: bool) -> None:
+        if 0 <= idx < NUM_ZONES:
+            self._zone_visible[idx] = bool(visible)
+            self._composite_dirty = True
+            self.update()
+
+    # ── image management ──────────────────────────────────────────────────
+
+    def has_image(self) -> bool:
+        return self._src_img is not None
+
+    def load_image(self, path: str) -> bool:
+        """Load an image from *path*.  Returns True on success."""
+        try:
+            img = Image.open(path)
+            img.load()
+        except Exception:
+            return False
+        self.unload_image()
+        self._src_img = img.convert("RGBA") if img.mode != "RGBA" else img
+        self._img_w, self._img_h = self._src_img.size
+        self._masks = [
+            np.zeros((self._img_h, self._img_w), dtype=np.uint8)
+            for _ in range(NUM_ZONES)
+        ]
+        self._src_qimage = _pil_to_qimage(self._src_img)
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._emit_undo_redo_state()
+        self._composite_dirty = True
+        self._poly_pts.clear()
+        self._zoom_fit()
+        self.update()
+        return True
+
+    def unload_image(self) -> None:
+        if self._src_img is not None:
+            self._src_img.close()
+            self._src_img = None
+        self._src_qimage = None
+        self._img_w = self._img_h = 0
+        self._masks = [np.zeros((1, 1), dtype=np.uint8) for _ in range(NUM_ZONES)]
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._composite_dirty = True
+        self._poly_pts.clear()
+        self.update()
+
+    def get_source_image(self) -> Optional[Image.Image]:
+        return self._src_img
+
+    # ── mask access ───────────────────────────────────────────────────────
+
+    def get_mask_as_array(self, zone_idx: int) -> Optional[np.ndarray]:
+        """Return a copy of zone *zone_idx*'s mask, or None if empty."""
+        if not self.has_image() or not self._masks[zone_idx].any():
+            return None
+        return self._masks[zone_idx].copy()
+
+    def set_mask_from_array(self, zone_idx: int, arr: np.ndarray) -> None:
+        if not self.has_image():
+            return
+        self._push_history()
+        h, w = self._img_h, self._img_w
+        if arr.shape == (h, w):
+            self._masks[zone_idx] = arr.astype(np.uint8)
+        else:
+            self._masks[zone_idx] = np.zeros((h, w), dtype=np.uint8)
+        self._composite_dirty = True
+        self.mask_changed.emit(zone_idx)
+        self.update()
+
+    def get_masks_as_bool(self) -> list[np.ndarray]:
+        return [m.astype(bool) for m in self._masks]
+
+    def get_all_masks(self) -> list[np.ndarray]:
+        """Return a snapshot of all masks as a list of array copies."""
+        return [m.copy() for m in self._masks]
+
+    def set_all_masks(self, snapshot: list[np.ndarray]) -> None:
+        """Restore all masks from a *snapshot* produced by get_all_masks()."""
+        if not self.has_image():
+            return
+        self._push_history()
+        for i, m in enumerate(snapshot):
+            if i < NUM_ZONES:
+                self._masks[i] = m.copy()
+        self._composite_dirty = True
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
+        self.update()
+
+    def populate_zones_from_detection(self, zones: list) -> None:
+        """Fill zone masks from *zones* = [(alpha_val, bool_mask), ...]."""
+        if not self.has_image():
+            return
+        self._push_history()
+        h, w = self._img_h, self._img_w
+        for i in range(NUM_ZONES):
+            self._masks[i].fill(0)
+        for i, (_, bool_mask) in enumerate(zones):
+            if i >= NUM_ZONES:
+                break
+            if bool_mask.shape == (h, w):
+                self._masks[i] = bool_mask.astype(np.uint8)
+            self.mask_changed.emit(i)
+        self._composite_dirty = True
+        self.update()
+
+    # ── undo / redo ───────────────────────────────────────────────────────
+
+    def _push_history(self) -> None:
+        """Snapshot current masks onto the undo stack."""
+        self._undo_stack.append([m.copy() for m in self._masks])
+        if len(self._undo_stack) > _MAX_HISTORY:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+        self._emit_undo_redo_state()
+
+    def _emit_undo_redo_state(self) -> None:
+        self.undo_available.emit(bool(self._undo_stack))
+        self.redo_available.emit(bool(self._redo_stack))
+
+    def undo_mask(self) -> None:
+        if not self._undo_stack:
+            return
+        self._redo_stack.append([m.copy() for m in self._masks])
+        snapshot = self._undo_stack.pop()
+        for i, m in enumerate(snapshot):
+            self._masks[i] = m.copy()
+        self._composite_dirty = True
+        self._emit_undo_redo_state()
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
+        self.update()
+
+    def redo_mask(self) -> None:
+        if not self._redo_stack:
+            return
+        self._undo_stack.append([m.copy() for m in self._masks])
+        snapshot = self._redo_stack.pop()
+        for i, m in enumerate(snapshot):
+            self._masks[i] = m.copy()
+        self._composite_dirty = True
+        self._emit_undo_redo_state()
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
+        self.update()
+
+    # ── zone mask operations ──────────────────────────────────────────────
+
+    def clear_mask(self, zone_idx: int) -> None:
+        if not self.has_image():
+            return
+        self._push_history()
+        self._masks[zone_idx].fill(0)
+        self._composite_dirty = True
+        self.mask_changed.emit(zone_idx)
+        self.update()
+
+    def clear_all_masks(self) -> None:
+        if not self.has_image():
+            return
+        self._push_history()
+        for i in range(NUM_ZONES):
+            self._masks[i].fill(0)
+        self._composite_dirty = True
+        for i in range(NUM_ZONES):
+            self.mask_changed.emit(i)
+        self.update()
+
+    # ── zoom / pan ────────────────────────────────────────────────────────
+
+    def _zoom_fit(self) -> None:
+        """Fit and centre the image within the current widget dimensions."""
+        if not self.has_image() or self.width() <= 0 or self.height() <= 0:
+            self._zoom  = 1.0
+            self._pan_x = self._pan_y = 0.0
+            return
+        scale_x = self.width()  / self._img_w
+        scale_y = self.height() / self._img_h
+        self._zoom  = min(scale_x, scale_y) * 0.97
+        self._pan_x = (self.width()  - self._img_w * self._zoom) / 2.0
+        self._pan_y = (self.height() - self._img_h * self._zoom) / 2.0
+
+    def zoom_by(self, factor: float) -> None:
+        cx, cy   = self.width() / 2.0, self.height() / 2.0
+        new_zoom = max(0.05, min(32.0, self._zoom * factor))
+        self._pan_x = cx - (cx - self._pan_x) * (new_zoom / self._zoom)
+        self._pan_y = cy - (cy - self._pan_y) * (new_zoom / self._zoom)
+        self._zoom  = new_zoom
+        self.update()
+
+    def zoom_reset(self) -> None:
+        self._zoom_fit()
+        self.update()
+
+    # ── coordinate helpers ────────────────────────────────────────────────
+
+    def _w2i(self, wx: float, wy: float) -> tuple[float, float]:
+        """Widget coordinates → image coordinates (float)."""
+        return (wx - self._pan_x) / self._zoom, (wy - self._pan_y) / self._zoom
+
+    def _clamp_img(self, ix: float, iy: float) -> tuple[int, int]:
+        """Clamp float image coordinates to valid integer pixel indices."""
+        return (
+            max(0, min(self._img_w - 1, int(round(ix)))),
+            max(0, min(self._img_h - 1, int(round(iy)))),
+        )
+
+    # ── rendering ─────────────────────────────────────────────────────────
+
+    def _rebuild_composite(self) -> QImage:
+        """Compose source image + visible zone overlays into a QImage."""
+        if not self.has_image():
+            qi = QImage(max(1, self.width()), max(1, self.height()),
+                        QImage.Format.Format_RGBA8888)
+            qi.fill(Qt.GlobalColor.black)
+            return qi
+
+        src_arr = np.array(self._src_img, dtype=np.uint8).copy()
+
+        blend = self._OVERLAY_ALPHA / 255.0
+        for i in range(NUM_ZONES):
+            if not self._zone_visible[i]:
+                continue
+            if not self._show_zero_alpha and self._zone_alphas[i] == 0:
+                continue
+            mask = self._masks[i]
+            if not mask.any():
+                continue
+            r, g, b, _ = self.get_zone_color(i)
+            where = mask.astype(bool)
+            src_arr[where, 0] = np.clip(
+                src_arr[where, 0] * (1.0 - blend) + r * blend, 0, 255).astype(np.uint8)
+            src_arr[where, 1] = np.clip(
+                src_arr[where, 1] * (1.0 - blend) + g * blend, 0, 255).astype(np.uint8)
+            src_arr[where, 2] = np.clip(
+                src_arr[where, 2] * (1.0 - blend) + b * blend, 0, 255).astype(np.uint8)
+            src_arr[where, 3] = 255
+
+        # Recompute label-point geometry (used by _draw_alpha_labels)
+        self._zone_centroids    = [None] * NUM_ZONES
+        self._zone_label_points = [[] for _ in range(NUM_ZONES)]
+        if self._show_alpha_labels:
+            for i in range(NUM_ZONES):
+                mask = self._masks[i]
+                if not mask.any():
+                    continue
+                ys, xs = np.where(mask)
+                self._zone_centroids[i] = (int(xs.mean()), int(ys.mean()))
+                # Sparse grid: iterate the full image at a stride that yields ~n_pts hits
+                count = int(mask.sum())
+                n_pts  = max(1, min(16, count // 300))
+                stride = max(1, int(round(
+                    np.sqrt(self._img_w * self._img_h / max(1, n_pts)))))
+                pts: list[tuple[int, int]] = []
+                for sy in range(stride // 2, self._img_h, stride):
+                    for sx in range(stride // 2, self._img_w, stride):
+                        if mask[sy, sx]:
+                            pts.append((sx, sy))
+                self._zone_label_points[i] = pts
+
+        return _np_to_qimage(src_arr)
+
+    def _draw_alpha_labels(self, painter: QPainter) -> None:
+        """Draw alpha-value text over each visible zone (in widget space)."""
+        if not self._show_alpha_labels:
+            return
+        z, px, py = self._zoom, self._pan_x, self._pan_y
+        small_font = QFont("Arial", max(6, int(8 * z)))
+        big_font   = QFont("Arial", max(9, int(12 * z)), QFont.Weight.Bold)
+
+        for i in range(NUM_ZONES):
+            if not self._zone_visible[i]:
+                continue
+            text = str(self._zone_alphas[i])
+            r, g, b, _ = self.get_zone_color(i)
+            brightness = 0.299 * r + 0.587 * g + 0.114 * b
+            fg   = QColor(0, 0, 0)         if brightness > 140 else QColor(255, 255, 255)
+            shad = QColor(255, 255, 255, 160) if brightness <= 140 else QColor(0, 0, 0, 160)
+
+            # Grid-point labels (small)
+            painter.setFont(small_font)
+            for ix, iy in self._zone_label_points[i]:
+                wx, wy = ix * z + px, iy * z + py
+                painter.setPen(shad)
+                painter.drawText(QPointF(wx + 1, wy + 1), text)
+                painter.setPen(fg)
+                painter.drawText(QPointF(wx, wy), text)
+
+            # Centroid label (larger)
+            c = self._zone_centroids[i]
+            if c is not None:
+                wx, wy = c[0] * z + px, c[1] * z + py
+                painter.setFont(big_font)
+                painter.setPen(shad)
+                painter.drawText(QPointF(wx + 1, wy + 1), text)
+                painter.setPen(fg)
+                painter.drawText(QPointF(wx, wy), text)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.fillRect(self.rect(), QColor(40, 40, 40))
+
+        if not self.has_image():
+            painter.setPen(QColor(120, 120, 120))
+            painter.drawText(
+                self.rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                "Drop or open an image to begin",
+            )
+            return
+
+        if self._composite_dirty or self._composite_qimage is None:
+            self._composite_qimage = self._rebuild_composite()
+            self._composite_dirty  = False
+
+        dest = QRectF(
+            self._pan_x, self._pan_y,
+            self._img_w * self._zoom, self._img_h * self._zoom,
+        )
+        painter.drawImage(dest, self._composite_qimage)
+
+        # Drag-tool preview (line / rect / ellipse while mouse held)
+        if self._drag_preview is not None and self._drawing:
+            painter.drawImage(dest, self._drag_preview)
+
+        # In-progress polygon outline
+        if self._tool == "polygon" and self._poly_pts:
+            self._paint_polygon_preview(painter)
+
+        # Alpha-value labels
+        self._draw_alpha_labels(painter)
+
+    def _paint_polygon_preview(self, painter: QPainter) -> None:
+        z, px, py = self._zoom, self._pan_x, self._pan_y
+        pen = QPen(QColor(255, 220, 0, 220), max(1.0, z))
+        painter.setPen(pen)
+        pts_w = [QPointF(ix * z + px, iy * z + py) for ix, iy in self._poly_pts]
+        for j in range(len(pts_w) - 1):
+            painter.drawLine(pts_w[j], pts_w[j + 1])
+        for p in pts_w:
+            painter.drawEllipse(p, 3.0, 3.0)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        # Re-fit on first proper resize (widget area was 0×0 at load_image time).
+        if self.has_image() and self._zoom <= 1.0 and self._pan_x == 0.0:
+            self._zoom_fit()
+        super().resizeEvent(event)
+
+    # ── input events ──────────────────────────────────────────────────────
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta    = event.angleDelta().y()
+            factor   = 1.15 if delta > 0 else (1.0 / 1.15)
+            mx, my   = event.position().x(), event.position().y()
+            new_zoom = max(0.05, min(32.0, self._zoom * factor))
+            self._pan_x = mx - (mx - self._pan_x) * (new_zoom / self._zoom)
+            self._pan_y = my - (my - self._pan_y) * (new_zoom / self._zoom)
+            self._zoom  = new_zoom
+            self.update()
+        else:
+            super().wheelEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        pos  = event.position()
+        wx, wy = pos.x(), pos.y()
+        btn  = event.button()
+        mods = event.modifiers()
+
+        # Middle-mouse or Alt+Left → start pan
+        if btn == Qt.MouseButton.MiddleButton or (
+                btn == Qt.MouseButton.LeftButton
+                and (mods & Qt.KeyboardModifier.AltModifier)):
+            self._panning          = True
+            self._pan_start_mouse  = (wx, wy)
+            self._pan_start_offset = (self._pan_x, self._pan_y)
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+
+        if btn != Qt.MouseButton.LeftButton or not self.has_image():
+            return
+
+        ix, iy       = self._w2i(wx, wy)
+        img_x, img_y = self._clamp_img(ix, iy)
+        mask = self._masks[self._active_zone]
+
+        if self._tool == "polygon":
+            self._poly_pts.append((img_x, img_y))
+            self.update()
+            return
+
+        if self._tool in ("line", "rect", "ellipse"):
+            self._drawing        = True
+            self._drag_start_img = (img_x, img_y)
+            self._drag_preview   = None
+            return
+
+        if self._tool == "transform":
+            self._drawing = True
+            self._push_history()
+            self._transform_start_mouse = (wx, wy)
+            self._transform_orig_mask   = mask.copy()
+            return
+
+        # freehand / eraser / fill
+        self._push_history()
+        self._drawing = True
+        is_erase = self._tool == "eraser"
+
+        if self._tool == "fill":
+            self._do_fill(mask, img_x, img_y)
+            if self._autocorrect:
+                self._do_autocorrect(mask)
+        else:
+            self._paint_circle(
+                mask, img_x, img_y,
+                self._eraser_size if is_erase else self._brush_size,
+                erase=is_erase,
+            )
+            self._last_img_pt = (img_x, img_y)
+
+        self._composite_dirty = True
+        self.mask_changed.emit(self._active_zone)
+        self.update()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        pos  = event.position()
+        wx, wy = pos.x(), pos.y()
+
+        if self._panning and self._pan_start_mouse is not None:
+            dx = wx - self._pan_start_mouse[0]
+            dy = wy - self._pan_start_mouse[1]
+            self._pan_x = self._pan_start_offset[0] + dx
+            self._pan_y = self._pan_start_offset[1] + dy
+            self.update()
+            return
+
+        if not self._drawing or not self.has_image():
+            return
+
+        ix, iy       = self._w2i(wx, wy)
+        img_x, img_y = self._clamp_img(ix, iy)
+        mask = self._masks[self._active_zone]
+
+        if self._tool in ("freehand", "eraser"):
+            is_erase = self._tool == "eraser"
+            sz = self._eraser_size if is_erase else self._brush_size
+            if self._last_img_pt is not None:
+                self._paint_line(
+                    mask,
+                    self._last_img_pt[0], self._last_img_pt[1],
+                    img_x, img_y, sz, erase=is_erase,
+                )
+            self._last_img_pt     = (img_x, img_y)
+            self._composite_dirty = True
+            self.mask_changed.emit(self._active_zone)
+            self.update()
+
+        elif self._tool in ("line", "rect", "ellipse") and self._drag_start_img is not None:
+            self._drag_preview = self._build_drag_preview(
+                self._drag_start_img, (img_x, img_y))
+            self.update()
+
+        elif self._tool == "transform" and self._transform_start_mouse is not None:
+            dx = int((wx - self._transform_start_mouse[0]) / self._zoom)
+            dy = int((wy - self._transform_start_mouse[1]) / self._zoom)
+            if self._transform_orig_mask is not None:
+                self._masks[self._active_zone] = shift_mask(
+                    self._transform_orig_mask, dx, dy)
+                self._composite_dirty = True
+                self.mask_changed.emit(self._active_zone)
+                self.update()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        pos  = event.position()
+        wx, wy = pos.x(), pos.y()
+        btn = event.button()
+
+        if btn == Qt.MouseButton.MiddleButton or self._panning:
+            self._panning          = False
+            self._pan_start_mouse  = None
+            self._pan_start_offset = None
+            self.set_tool(self._tool)   # restore normal cursor
+            return
+
+        if btn != Qt.MouseButton.LeftButton or not self.has_image():
+            return
+        if not self._drawing:
+            return
+
+        ix, iy       = self._w2i(wx, wy)
+        img_x, img_y = self._clamp_img(ix, iy)
+        mask = self._masks[self._active_zone]
+
+        if self._tool in ("line", "rect", "ellipse") and self._drag_start_img is not None:
+            self._push_history()
+            sx, sy = self._drag_start_img
+            if self._tool == "line":
+                self._paint_line(mask, sx, sy, img_x, img_y, self._brush_size)
+                if self._autocorrect:
+                    self._do_autocorrect(mask)
+            elif self._tool == "rect":
+                self._paint_rect(mask, sx, sy, img_x, img_y)
+            elif self._tool == "ellipse":
+                self._paint_ellipse(mask, sx, sy, img_x, img_y)
+            self._drag_start_img  = None
+            self._drag_preview    = None
+            self._composite_dirty = True
+            self.mask_changed.emit(self._active_zone)
+            self.update()
+
+        elif self._tool == "freehand" and self._autocorrect:
+            self._do_autocorrect(mask)
+            self._composite_dirty = True
+            self.mask_changed.emit(self._active_zone)
+            self.update()
+
+        elif self._tool == "transform":
+            self._transform_start_mouse = None
+            self._transform_orig_mask   = None
+
+        self._drawing     = False
+        self._last_img_pt = None
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        if self._tool == "polygon" and event.button() == Qt.MouseButton.LeftButton:
+            self.close_polygon()
+
+    def close_polygon(self) -> None:
+        """Close and fill the in-progress polygon (≥3 points required)."""
+        if len(self._poly_pts) < 3:
+            self._poly_pts.clear()
+            self.update()
+            return
+        self._push_history()
+        mask = self._masks[self._active_zone]
+        self._do_paint_polygon(mask, self._poly_pts)
+        self._poly_pts.clear()
+        self._composite_dirty = True
+        self.mask_changed.emit(self._active_zone)
+        self.update()
+
+    # ── drawing primitives ────────────────────────────────────────────────
+
+    def _paint_circle(self, mask: np.ndarray, cx: int, cy: int,
+                      radius: int, erase: bool = False) -> None:
+        h, w = mask.shape
+        r    = max(0, radius)
+        x0, x1 = max(0, cx - r), min(w, cx + r + 1)
+        y0, y1 = max(0, cy - r), min(h, cy + r + 1)
+        if x0 >= x1 or y0 >= y1:
+            return
+        yy, xx = np.ogrid[y0:y1, x0:x1]
+        circle = (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r
+        mask[y0:y1, x0:x1][circle] = 0 if erase else 1
+
+    def _paint_line(self, mask: np.ndarray,
+                    x0: int, y0: int, x1: int, y1: int,
+                    radius: int, erase: bool = False) -> None:
+        """Bresenham line of brush circles between two image-coord points."""
+        steps = max(abs(x1 - x0), abs(y1 - y0), 1)
+        for i in range(steps + 1):
+            t = i / steps
+            x = int(round(x0 + (x1 - x0) * t))
+            y = int(round(y0 + (y1 - y0) * t))
+            self._paint_circle(mask, x, y, radius, erase=erase)
+
+    def _paint_rect(self, mask: np.ndarray,
+                    x0: int, y0: int, x1: int, y1: int) -> None:
+        h, w = mask.shape
+        lx, rx = sorted((x0, x1))
+        ty, by = sorted((y0, y1))
+        lx = max(0, lx);  rx = min(w - 1, rx)
+        ty = max(0, ty);  by = min(h - 1, by)
+        mask[ty:by + 1, lx:rx + 1] = 1
+
+    def _paint_ellipse(self, mask: np.ndarray,
+                       x0: int, y0: int, x1: int, y1: int) -> None:
+        h, w  = mask.shape
+        lx, rx = sorted((x0, x1))
+        ty, by = sorted((y0, y1))
+        cx_f  = (lx + rx) / 2.0
+        cy_f  = (ty + by) / 2.0
+        rx_f  = max(1.0, (rx - lx) / 2.0)
+        ry_f  = max(1.0, (by - ty) / 2.0)
+        y_min = max(0, ty);   y_max = min(h, by + 1)
+        x_min = max(0, lx);   x_max = min(w, rx + 1)
+        if y_min >= y_max or x_min >= x_max:
+            return
+        yy, xx = np.ogrid[y_min:y_max, x_min:x_max]
+        ell = ((xx - cx_f) / rx_f) ** 2 + ((yy - cy_f) / ry_f) ** 2 <= 1.0
+        mask[y_min:y_max, x_min:x_max][ell] = 1
+
+    def _do_paint_polygon(self, mask: np.ndarray,
+                          pts: list[tuple[int, int]]) -> None:
+        """Fill a polygon using PIL ImageDraw."""
+        img  = Image.fromarray(mask * 255, mode="L")
+        draw = ImageDraw.Draw(img)
+        draw.polygon(pts, fill=255)
+        mask[:] = (np.array(img) > 0).astype(np.uint8)
+
+    def _do_fill(self, mask: np.ndarray, x: int, y: int) -> None:
+        if self._src_img is None:
+            return
+        src_arr = np.array(self._src_img, dtype=np.uint8)
+        edges   = detect_edges(src_arr)
+        result  = edge_flood_fill(mask.astype(bool), edges, x, y)
+        mask[:] = result.astype(np.uint8)
+
+    def _do_autocorrect(self, mask: np.ndarray) -> None:
+        if self._src_img is None:
+            return
+        try:
+            src_arr   = np.array(self._src_img, dtype=np.uint8)
+            edges     = detect_edges(src_arr)
+            corrected = autocorrect_mask(mask.astype(bool), edges)
+            mask[:]   = corrected.astype(np.uint8)
+        except Exception:
+            pass  # autocorrect is best-effort; silently skip on failure
+
+    def _build_drag_preview(self, start: tuple[int, int],
+                             end: tuple[int, int]) -> QImage:
+        """Build a translucent preview QImage for drag-based tools."""
+        preview = np.zeros((self._img_h, self._img_w), dtype=np.uint8)
+        sx, sy  = start
+        ex, ey  = end
+        if self._tool == "line":
+            self._paint_line(preview, sx, sy, ex, ey, self._brush_size)
+        elif self._tool == "rect":
+            self._paint_rect(preview, sx, sy, ex, ey)
+        elif self._tool == "ellipse":
+            self._paint_ellipse(preview, sx, sy, ex, ey)
+        r, g, b, _ = self.get_zone_color(self._active_zone)
+        rgba = np.zeros((self._img_h, self._img_w, 4), dtype=np.uint8)
+        rgba[preview.astype(bool)] = (r, g, b, 100)
+        return _np_to_qimage(rgba)
+
+    # ── context menu ──────────────────────────────────────────────────────
+
+    def _show_context_menu(self, pos) -> None:
+        menu = QMenu(self)
+        act_copy      = menu.addAction("Copy Zone Mask")
+        act_paste     = menu.addAction("Paste Zone Mask")
+        act_paste.setEnabled(self._paste_available)
+        menu.addSeparator()
+        act_copy_all  = menu.addAction("Copy All Zones")
+        act_paste_all = menu.addAction("Paste All Zones")
+        act_paste_all.setEnabled(self._paste_available)
+        chosen = menu.exec(self.mapToGlobal(pos))
+        if chosen is act_copy:
+            self.copy_requested.emit(self._active_zone)
+        elif chosen is act_paste:
+            self.paste_requested.emit(self._active_zone)
+        elif chosen is act_copy_all:
+            self.copy_all_requested.emit()
+        elif chosen is act_paste_all:
+            self.paste_all_requested.emit()
+
+
 class _FloatingZoomOverlay(QFrame):
     """Semi-transparent floating overlay with Zoom In / Fit / Zoom Out buttons.
 
