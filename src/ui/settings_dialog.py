@@ -1473,16 +1473,20 @@ class SettingsDialog(QDialog):
         self._animated_banner_check.setChecked(
             self._settings.get("animated_banner_enabled", False)
         )
-        # Load banner animation style combo
+        # Load banner animation style combo (show theme anim if "use theme" is on)
         _BANNER_ANIM_IDX_MAP = {
             "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
             "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
         }
-        saved_banner_anim = self._settings.get("banner_anim_style", "spin")
-        self._banner_anim_combo.setCurrentIndex(
-            _BANNER_ANIM_IDX_MAP.get(saved_banner_anim, 0)
-        )
         banner_use_theme = self._settings.get("banner_use_theme_anim", True)
+        if banner_use_theme:
+            theme_anim = self._settings.get_theme().get("_banner_anim", "spin")
+            self._banner_anim_combo.setCurrentIndex(_BANNER_ANIM_IDX_MAP.get(theme_anim, 0))
+        else:
+            saved_banner_anim = self._settings.get("banner_anim_style", "spin")
+            self._banner_anim_combo.setCurrentIndex(
+                _BANNER_ANIM_IDX_MAP.get(saved_banner_anim, 0)
+            )
         self._banner_use_theme_anim_check.setChecked(banner_use_theme)
         banner_enabled = self._settings.get("animated_banner_enabled", False)
         self._banner_anim_combo.setEnabled(banner_enabled and not banner_use_theme)
@@ -1499,10 +1503,16 @@ class SettingsDialog(QDialog):
         _BUTTON_ANIM_IDX_MAP = {
             "none": 0, "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
         }
-        saved_btn_anim = self._settings.get("button_anim_style", "press")
-        self._button_anim_style_combo.setCurrentIndex(
-            _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
-        )
+        if use_theme_btn_anim:
+            theme_btn_anim = self._settings.get_theme().get("_button_anim", "press")
+            self._button_anim_style_combo.setCurrentIndex(
+                _BUTTON_ANIM_IDX_MAP.get(theme_btn_anim, 0)
+            )
+        else:
+            saved_btn_anim = self._settings.get("button_anim_style", "press")
+            self._button_anim_style_combo.setCurrentIndex(
+                _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
+            )
         self._button_anim_style_combo.setEnabled(
             btn_anim_enabled and not use_theme_btn_anim
         )
@@ -2174,11 +2184,16 @@ class SettingsDialog(QDialog):
                     self._banner_anim_combo.setCurrentIndex(i)
                     break
             anim_label = self._banner_anim_combo.currentText().split("–")[0].strip()
-            self._banner_anim_combo.setToolTip(
-                f"Using theme animation: {anim_label}\n"
-                f"(set by the '{theme_name}' theme)\n"
-                "Uncheck 'Use theme animation' to override manually."
-            )
+            if not anim_key or anim_key == "none":
+                self._banner_anim_combo.setToolTip(
+                    f"No banner animation defined for the '{theme_name}' theme."
+                )
+            else:
+                self._banner_anim_combo.setToolTip(
+                    f"Using theme animation: {anim_label}\n"
+                    f"(set by the '{theme_name}' theme)\n"
+                    "Uncheck 'Use theme animation' to override manually."
+                )
         else:
             self._banner_anim_combo.setToolTip(
                 "Choose the animation style for the banner emoji when animation is enabled.\n"

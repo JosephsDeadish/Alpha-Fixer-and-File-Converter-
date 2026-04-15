@@ -2241,8 +2241,7 @@ class MainWindow(QMainWindow):
         # visible while the settings window is open (the main overlay is behind
         # the modal and therefore not visible).
         dlg_overlay = None
-        if (self._click_effects is not None
-                and self._settings.get("click_effects_enabled", False)):
+        if self._click_effects is not None:
             from .click_effects import ClickEffectsOverlay
             dlg_overlay = ClickEffectsOverlay(dlg)
             # Mirror the current effect setting but don't count clicks toward
@@ -2253,7 +2252,39 @@ class MainWindow(QMainWindow):
             dlg_overlay.set_effect(effect_key)
             custom_emoji = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
             dlg_overlay.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
-            dlg_overlay.set_enabled(True)
+            if self._settings.get("click_effects_enabled", False):
+                dlg_overlay.set_enabled(True)
+            # Mirror bg drip / flock / ambient so all effects show in the dialog too.
+            if self._settings.get("bg_drip_enabled", False):
+                use_theme_drip = self._settings.get("use_theme_drip", False)
+                if use_theme_drip:
+                    eff = theme.get("_effect", "default")
+                    drip_type = "blood" if eff in ("gore", "shark") else (
+                        "water" if eff in ("ocean", "ripple", "mermaid") else
+                        self._settings.get("bg_drip_type", "blood")
+                    )
+                else:
+                    drip_type = self._settings.get("bg_drip_type", "blood")
+                dlg_overlay.set_bg_drip(drip_type, True)
+            if self._settings.get("bg_flock_enabled", False):
+                use_theme_flock = self._settings.get("use_theme_flock", False)
+                if use_theme_flock:
+                    flock_emoji = theme.get("_icon", "🐼")
+                    flock_color = theme.get("_accent1", "#e94560")
+                else:
+                    flock_style = self._settings.get("bg_flock_style", "bats")
+                    _FLOCK_EMOJI = {
+                        "bats": "🦇", "fairies": "🧚", "fish": "🐟",
+                        "butterflies": "🦋", "birds": "🐦",
+                        "stars": "⭐", "petals": "🌸",
+                    }
+                    flock_emoji = _FLOCK_EMOJI.get(flock_style, "🦇")
+                    flock_color = self._settings.get("trail_color", "#e94560")
+                dlg_overlay.set_bg_flock(True, flock_emoji, flock_color)
+            if self._settings.get("bg_ambient_enabled", False):
+                ambient_type = self._settings.get("bg_ambient_type", "none")
+                if ambient_type and ambient_type != "none":
+                    dlg_overlay.set_bg_ambient(ambient_type, True)
 
         # Attach a mouse-trail overlay to the dialog if trail is enabled.
         dlg_trail = None
@@ -2272,7 +2303,10 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
         if dlg_overlay is not None:
-            dlg_overlay.set_enabled(False)
+            try:
+                dlg_overlay.pause_for_minimize()
+            except Exception:
+                pass
         if dlg_trail is not None:
             try:
                 dlg_trail.set_enabled(False)
