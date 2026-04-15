@@ -169,6 +169,7 @@ class _FloatingZoomOverlay(QFrame):
         self.move(parent_size.width() - self.width() - margin, margin)
 
 
+class SelectiveAlphaCanvas(QWidget):
     """
     Interactive canvas that shows the source image with coloured mask
     overlays and handles all drawing operations.
