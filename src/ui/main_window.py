@@ -1373,8 +1373,22 @@ class MainWindow(QMainWindow):
         if self._click_effects is None:
             return
         enabled = self._settings.get("bg_ambient_enabled", False)
-        ambient_type = self._settings.get("bg_ambient_type", "none")
-        self._click_effects.set_bg_ambient(ambient_type if enabled else "none", enabled)
+        if not enabled:
+            self._click_effects.set_bg_ambient("none", False)
+            return
+        use_theme_ambient = self._settings.get("use_theme_ambient", False)
+        if use_theme_ambient:
+            from .theme_engine import THEME_AMBIENT_MAP
+            theme = self._settings.get_theme()
+            ambient_key = THEME_AMBIENT_MAP.get(theme.get("name", ""))
+            if not ambient_key:
+                # This theme has no defined ambient — respect that and disable.
+                self._click_effects.set_bg_ambient("none", False)
+                return
+            self._click_effects.set_bg_ambient(ambient_key, True)
+        else:
+            ambient_type = self._settings.get("bg_ambient_type", "snow")
+            self._click_effects.set_bg_ambient(ambient_type if ambient_type != "none" else "snow", True)
 
     # ------------------------------------------------------------------
     # Easter-egg discovery system

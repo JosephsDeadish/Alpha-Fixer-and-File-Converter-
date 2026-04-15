@@ -337,6 +337,24 @@ class SelectiveAlphaCanvas(QWidget):
         h, w = self._img_h, self._img_w
         if arr.shape == (h, w):
             self._masks[zone_idx] = arr.astype(np.uint8)
+        elif arr.ndim == 2 and arr.shape[0] > 0 and arr.shape[1] > 0:
+            # Resize the mask to match the current image dimensions.
+            # This handles cases where a mask was copied from an image of a
+            # different size (e.g. import from a different-resolution source).
+            try:
+                from PIL import Image as _PILImage
+                src = _PILImage.fromarray(arr.astype(np.uint8), mode="L")
+                resized = src.resize((w, h), _PILImage.NEAREST)
+                self._masks[zone_idx] = np.array(resized, dtype=np.uint8)
+            except Exception:
+                # Fallback: nearest-neighbour via numpy slicing
+                import numpy as np_fb
+                src_h, src_w = arr.shape
+                row_idx = np_fb.clip(
+                    (np_fb.arange(h) * src_h // h), 0, src_h - 1)
+                col_idx = np_fb.clip(
+                    (np_fb.arange(w) * src_w // w), 0, src_w - 1)
+                self._masks[zone_idx] = arr.astype(np.uint8)[np_fb.ix_(row_idx, col_idx)]
         else:
             self._masks[zone_idx] = np.zeros((h, w), dtype=np.uint8)
         self._composite_dirty = True

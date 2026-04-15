@@ -1800,6 +1800,52 @@ THEME_EFFECTS = {t["name"]: t.get("_effect", "default") for t in {
     **PRESET_THEMES, **HIDDEN_THEMES,
 }.values()}
 
+# Which ambient background style each theme is associated with.
+# Only themes explicitly listed here get an automatic ambient when
+# "Use theme ambient" is checked.  Themes not listed = no themed ambient.
+THEME_AMBIENT_MAP: dict[str, str] = {
+    # Preset themes
+    "Gore":              "ember",
+    "Bat Cave":          "ghost",
+    "Rainbow Chaos":     "rainbow",
+    "Galaxy":            "stars",
+    "Galaxy Otter":      "stars",
+    "Goth":              "ghost",
+    "Volcano":           "ember",
+    "Arctic":            "snow",
+    "Fairy Garden":      "confetti",
+    # Hidden themes
+    "Secret Skeleton":   "ghost",
+    "Secret Sakura":     "sakura",
+    "Deep Ocean":        "bubbles",
+    "Blood Moon":        "ember",
+    "Ice Cave":          "snow",
+    "Cyber Otter":       "matrix",
+    "Toxic Neon":        "neon",
+    "Lava Cave":         "ember",
+    "Sunset Beach":      "confetti",
+    "Midnight Forest":   "firefly",
+    "Candy Land":        "confetti",
+    "Zombie Apocalypse": "matrix",
+    "Dragon Fire":       "ember",
+    "Bubblegum":         "confetti",
+    "Thunder Storm":     "neon",
+    "Rose Gold":         "sakura",
+    "Space Cat":         "stars",
+    "Magic Mushroom":    "firefly",
+    "Abyssal Void":      "ghost",
+    "Spring Bloom":      "sakura",
+    "Gold Rush":         "firefly",
+    "Nebula":            "stars",
+    "Mermaid":           "bubbles",
+    "Shark Bait":        "bubbles",
+    "Alien":             "neon",
+    # Very hidden themes
+    "Crystal Cave":      "stars",
+    "Witch's Brew":      "ghost",
+    "Slime":             "neon",
+}
+
 # Short descriptions for each theme, shown as per-item tooltips in the theme combo.
 THEME_DESCRIPTIONS: dict[str, str] = {
     # ─── Preset themes ─────────────────────────────────────────────────

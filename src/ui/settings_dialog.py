@@ -555,6 +555,15 @@ class SettingsDialog(QDialog):
             "regardless of the active theme. Pairs beautifully with any theme."
         )
         bg_drip_layout.addWidget(self._bg_ambient_check)
+        self._use_theme_ambient_check = QCheckBox(
+            "Use theme ambient  (auto-selects the active theme's ambient style, if any)"
+        )
+        self._use_theme_ambient_check.setToolTip(
+            "When enabled the ambient style is chosen automatically from the active theme.\n"
+            "Themes without a defined ambient (e.g. Panda, Otter) will disable the effect.\n"
+            "Uncheck to manually pick an ambient style from the list below."
+        )
+        bg_drip_layout.addWidget(self._use_theme_ambient_check)
         bg_ambient_inner = QHBoxLayout()
         bg_ambient_inner.addWidget(QLabel("Ambient Style:"))
         self._bg_ambient_combo = QComboBox()
@@ -573,13 +582,20 @@ class SettingsDialog(QDialog):
         self._bg_ambient_combo.addItem("🌈 Rainbow Sparkle", userData="rainbow")
         self._bg_ambient_combo.setToolTip(
             "Choose the ambient background animation style.\n"
-            "Runs independently of the active theme."
+            "Greyed out while 'Use theme ambient' is checked."
         )
         bg_ambient_inner.addWidget(self._bg_ambient_combo, 1)
         bg_drip_layout.addLayout(bg_ambient_inner)
-        self._bg_ambient_check.toggled.connect(
-            lambda checked: self._bg_ambient_combo.setEnabled(checked)
-        )
+
+        def _update_ambient_combo_state():
+            enabled = self._bg_ambient_check.isChecked()
+            use_theme = self._use_theme_ambient_check.isChecked()
+            self._use_theme_ambient_check.setEnabled(enabled)
+            self._bg_ambient_combo.setEnabled(enabled and not use_theme)
+
+        self._bg_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
+        self._use_theme_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
+        self._use_theme_ambient_check.setEnabled(False)  # disabled until ambient is enabled
         self._bg_ambient_combo.setEnabled(False)  # disabled until checked
 
         tv.addWidget(grp_bg_drip)
@@ -1291,6 +1307,7 @@ class SettingsDialog(QDialog):
         self._use_theme_flock_check.toggled.connect(self._on_bg_flock_changed)
         self._bg_flock_combo.currentIndexChanged.connect(self._on_bg_flock_changed)
         self._bg_ambient_check.toggled.connect(self._on_bg_ambient_changed)
+        self._use_theme_ambient_check.toggled.connect(self._on_bg_ambient_changed)
         self._bg_ambient_combo.currentIndexChanged.connect(self._on_bg_ambient_changed)
 
     # ------------------------------------------------------------------
@@ -1386,7 +1403,7 @@ class SettingsDialog(QDialog):
             # emit settings_changed, so they must be blocked during initial load.
             self._bg_drip_check, self._use_theme_drip_check, self._bg_drip_combo,
             self._bg_flock_check, self._use_theme_flock_check, self._bg_flock_combo,
-            self._bg_ambient_check, self._bg_ambient_combo,
+            self._bg_ambient_check, self._use_theme_ambient_check, self._bg_ambient_combo,
             # Sound profile combo also saves settings on currentIndexChanged.
             self._sound_profile_combo,
         ]
@@ -1593,7 +1610,10 @@ class SettingsDialog(QDialog):
             if self._bg_ambient_combo.itemData(i) == bg_ambient_type:
                 self._bg_ambient_combo.setCurrentIndex(i)
                 break
-        self._bg_ambient_combo.setEnabled(bg_ambient_enabled)
+        use_theme_ambient = self._settings.get("use_theme_ambient", False)
+        self._use_theme_ambient_check.setChecked(use_theme_ambient)
+        self._use_theme_ambient_check.setEnabled(bg_ambient_enabled)
+        self._bg_ambient_combo.setEnabled(bg_ambient_enabled and not use_theme_ambient)
 
         for c in controls:
             c.blockSignals(False)
@@ -1616,6 +1636,7 @@ class SettingsDialog(QDialog):
         mgr.register(self._bg_flock_check, "bg_flock_check")
         mgr.register(self._bg_flock_combo, "bg_flock_combo")
         mgr.register(self._bg_ambient_check, "bg_ambient_check")
+        mgr.register(self._use_theme_ambient_check, "use_theme_ambient")
         mgr.register(self._bg_ambient_combo, "bg_ambient_combo")
         mgr.register(self._tooltip_mode_combo, "tooltip_mode_combo")
         mgr.register(self._tooltip_style_combo, "tooltip_style_combo")
@@ -1939,6 +1960,38 @@ class SettingsDialog(QDialog):
                         f"No themed flock for the '{theme_name}' theme.\n"
                         "Flock is disabled while 'Use theme flock' is checked.\n"
                         "Uncheck 'Use theme flock' to enable a manual flock style."
+                    )
+            # Ambient combo — update tooltip to say which ambient (or none) the theme uses
+            if self._use_theme_ambient_check.isChecked():
+                from .theme_engine import THEME_AMBIENT_MAP
+                _AMBIENT_LABELS = {
+                    "snow": "❄️ Snow Drift", "ember": "🔥 Ember Drift",
+                    "sakura": "🌸 Sakura Petals", "stars": "✨ Shooting Stars",
+                    "bubbles": "🫧 Rising Bubbles", "neon": "🌈 Neon Flicker",
+                    "ghost": "👻 Ghost Wisps", "confetti": "🎊 Confetti Fall",
+                    "firefly": "🪲 Fireflies", "matrix": "💻 Matrix Rain",
+                    "leaves": "🍂 Autumn Leaves", "rainbow": "🌈 Rainbow Sparkle",
+                }
+                _AMBIENT_IDX = {
+                    "snow": 0, "ember": 1, "sakura": 2, "stars": 3,
+                    "bubbles": 4, "neon": 5, "ghost": 6, "confetti": 7,
+                    "firefly": 8, "matrix": 9, "leaves": 10, "rainbow": 11,
+                }
+                ambient_key = THEME_AMBIENT_MAP.get(theme_name)
+                if ambient_key:
+                    self._bg_ambient_combo.blockSignals(True)
+                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX.get(ambient_key, 0))
+                    self._bg_ambient_combo.blockSignals(False)
+                    self._bg_ambient_combo.setToolTip(
+                        f"Using theme ambient: {_AMBIENT_LABELS.get(ambient_key, ambient_key)}\n"
+                        f"(set by the '{theme_name}' theme)\n"
+                        "Uncheck 'Use theme ambient' to pick a different style."
+                    )
+                else:
+                    self._bg_ambient_combo.setToolTip(
+                        f"No themed ambient for the '{theme_name}' theme.\n"
+                        "Ambient is disabled while 'Use theme ambient' is checked.\n"
+                        "Uncheck 'Use theme ambient' to enable a manual ambient style."
                     )
         finally:
             for c in _combos:
@@ -2472,8 +2525,45 @@ class SettingsDialog(QDialog):
     def _on_bg_ambient_changed(self) -> None:
         enabled = self._bg_ambient_check.isChecked()
         self._settings.set("bg_ambient_enabled", enabled)
-        ambient_type = (self._bg_ambient_combo.currentData() or "snow") if enabled else "none"
-        self._settings.set("bg_ambient_type", ambient_type)
-        # Keep the style combo enabled only while ambient effects are on.
-        self._bg_ambient_combo.setEnabled(enabled)
+        use_theme = self._use_theme_ambient_check.isChecked()
+        self._settings.set("use_theme_ambient", use_theme)
+        if not enabled:
+            self._settings.set("bg_ambient_type", "none")
+        elif not use_theme:
+            ambient_type = self._bg_ambient_combo.currentData() or "snow"
+            self._settings.set("bg_ambient_type", ambient_type)
+        # Keep sub-controls in sync with enabled/use-theme state.
+        self._use_theme_ambient_check.setEnabled(enabled)
+        self._bg_ambient_combo.setEnabled(enabled and not use_theme)
+        # Update combo tooltip when use-theme is on
+        if use_theme and enabled:
+            from .theme_engine import THEME_AMBIENT_MAP
+            theme = self._settings.get_theme()
+            theme_name = theme.get("name", "")
+            ambient_key = THEME_AMBIENT_MAP.get(theme_name)
+            _AMBIENT_LABELS = {
+                "snow": "❄️ Snow Drift", "ember": "🔥 Ember Drift",
+                "sakura": "🌸 Sakura Petals", "stars": "✨ Shooting Stars",
+                "bubbles": "🫧 Rising Bubbles", "neon": "🌈 Neon Flicker",
+                "ghost": "👻 Ghost Wisps", "confetti": "🎊 Confetti Fall",
+                "firefly": "🪲 Fireflies", "matrix": "💻 Matrix Rain",
+                "leaves": "🍂 Autumn Leaves", "rainbow": "🌈 Rainbow Sparkle",
+            }
+            if ambient_key:
+                self._bg_ambient_combo.setToolTip(
+                    f"Using theme ambient: {_AMBIENT_LABELS.get(ambient_key, ambient_key)}\n"
+                    f"(set by the '{theme_name}' theme)\n"
+                    "Uncheck 'Use theme ambient' to pick a different style."
+                )
+            else:
+                self._bg_ambient_combo.setToolTip(
+                    f"No themed ambient for the '{theme_name}' theme.\n"
+                    "Ambient is disabled while 'Use theme ambient' is checked.\n"
+                    "Uncheck 'Use theme ambient' to enable a manual ambient style."
+                )
+        else:
+            self._bg_ambient_combo.setToolTip(
+                "Choose the ambient background animation style.\n"
+                "Greyed out while 'Use theme ambient' is checked."
+            )
         self.settings_changed.emit()
