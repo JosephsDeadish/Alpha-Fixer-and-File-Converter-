@@ -6538,6 +6538,11 @@ class TooltipManager(QObject):
         self._settings = settings
         # Map widget id → tip key
         self._widget_keys: dict[int, str] = {}
+        # Map widget id → weakref so stale ids from destroyed widgets are
+        # detected before showing a tip (prevents wrong tips after settings
+        # dialog closes and a converter widget reuses the same memory address).
+        import weakref as _weakref
+        self._widget_refs: dict[int, "_weakref.ref"] = {}
         # Per-key: next index to show (advances only on widget change)
         self._cycle: dict[str, int] = {}
         # Per-key: index most recently displayed (used to re-show same tip)
@@ -6578,9 +6583,18 @@ class TooltipManager(QObject):
         Connects to widget.destroyed to remove the stale id() entry when the
         widget is deleted.  Without this cleanup, a new widget allocated later
         could inherit the same CPython id() and receive the wrong tooltip.
+        A weakref is also stored so even if the destroyed signal fires late the
+        staleness check in eventFilter will reject dead entries immediately.
         """
+        import weakref as _weakref
         wid = id(widget)
         self._widget_keys[wid] = tip_key
+        # Store a weak reference for liveness verification in eventFilter.
+        try:
+            self._widget_refs[wid] = _weakref.ref(widget)
+        except TypeError:
+            # Some objects do not support weak references; proceed without.
+            self._widget_refs.pop(wid, None)
         # Ensure native tooltip is cleared so we control it fully
         widget.setToolTip("")
         # Remove the id mapping when the widget is destroyed so that a later
@@ -6588,7 +6602,10 @@ class TooltipManager(QObject):
         # this tip key (e.g., settings-dialog widgets vs main-tool widgets).
         try:
             widget.destroyed.connect(
-                lambda *_args, _wid=wid: self._widget_keys.pop(_wid, None)
+                lambda *_args, _wid=wid: (
+                    self._widget_keys.pop(_wid, None),
+                    self._widget_refs.pop(_wid, None),
+                )
             )
         except Exception:
             pass
@@ -6710,6 +6727,18 @@ class TooltipManager(QObject):
         key = self._widget_keys.get(id(obj))
         if key is None:
             return False
+
+        # Verify the stored weak reference is still alive and refers to the
+        # same object.  If not, the entry is stale (e.g., a settings-dialog
+        # widget was destroyed and a converter widget reused its address).
+        ref = self._widget_refs.get(id(obj))
+        if ref is not None:
+            live = ref()
+            if live is None or live is not obj:
+                # Stale — clean up and do not show the tip.
+                self._widget_keys.pop(id(obj), None)
+                self._widget_refs.pop(id(obj), None)
+                return False
 
         return self._show_tip_for_key(obj, event, key)
 
