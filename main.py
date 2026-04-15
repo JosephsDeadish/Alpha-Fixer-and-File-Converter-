@@ -234,6 +234,7 @@ def _show_crash_dialog(
     traceback_text: str,
     sysinfo: str,
     fatal: bool = False,
+    exc_type=None,
 ) -> None:
     """Show an improved crash dialog with fully selectable, copyable text.
 
@@ -241,6 +242,7 @@ def _show_crash_dialog(
     *traceback_text* – the raw Python traceback string.
     *sysinfo*       – system / library version info.
     *fatal*         – when True the application will exit after the dialog.
+    *exc_type*      – the exception class for displaying the error type header.
     """
     try:
         from PyQt6.QtWidgets import (
@@ -276,6 +278,13 @@ def _show_crash_dialog(
                 font-weight: bold;
                 padding: 4px 0;
             }
+            QLabel#error_type_lbl {
+                color: #fab387;
+                font-size: 12px;
+                font-weight: bold;
+                background: #1e1e2e;
+                padding: 2px 0;
+            }
             QLabel#summary_lbl {
                 color: #cdd6f4;
                 font-size: 12px;
@@ -294,8 +303,8 @@ def _show_crash_dialog(
                 border-radius: 4px;
                 font-family: Consolas, "Courier New", monospace;
                 font-size: 10px;
-                selection-background-color: #585b70;
-                selection-color: #cdd6f4;
+                selection-background-color: #89b4fa;
+                selection-color: #1e1e2e;
             }
             QPushButton {
                 background: #313244;
@@ -327,6 +336,17 @@ def _show_crash_dialog(
         layout.addWidget(title_lbl)
 
         # ── Human-readable summary ───────────────────────────────────────
+        # Show the error type as a distinct highlighted label so it is
+        # immediately obvious even before reading the full traceback.
+        error_type_name = exc_type.__name__ if exc_type else "Error"
+        error_type_lbl = QLabel(f"⚠  Error type:  {error_type_name}")
+        error_type_lbl.setObjectName("error_type_lbl")
+        error_type_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        layout.addWidget(error_type_lbl)
+
         summary_lbl = QLabel(summary)
         summary_lbl.setObjectName("summary_lbl")
         summary_lbl.setWordWrap(True)
@@ -433,7 +453,6 @@ def _excepthook(exc_type, exc_value, exc_tb):
             summary = (
                 "An unexpected error occurred.  "
                 "The application will try to continue running.\n\n"
-                f"Error type:  {exc_type.__name__ if exc_type else 'Unknown'}\n"
                 f"Explanation: {explanation}"
             )
             _show_crash_dialog(
@@ -442,6 +461,7 @@ def _excepthook(exc_type, exc_value, exc_tb):
                 traceback_text=msg,
                 sysinfo=sysinfo,
                 fatal=False,
+                exc_type=exc_type,
             )
     except Exception:
         pass
@@ -659,7 +679,6 @@ def main():
         explanation = _explain_error(type(exc), exc)
         summary = (
             f"A required library is missing and the application cannot start.\n\n"
-            f"Error type:  {type(exc).__name__}\n"
             f"Explanation: {explanation}\n\n"
             "Install all dependencies with:\n"
             "    pip install -r requirements.txt"
@@ -670,6 +689,7 @@ def main():
             traceback_text=tb_str,
             sysinfo=sysinfo,
             fatal=True,
+            exc_type=type(exc),
         )
         sys.exit(1)
 
@@ -702,7 +722,6 @@ def main():
         explanation = _explain_error(type(exc), exc)
         summary = (
             "The main window could not be created and the application cannot start.\n\n"
-            f"Error type:  {type(exc).__name__}\n"
             f"Explanation: {explanation}"
         )
         _show_crash_dialog(
@@ -711,6 +730,7 @@ def main():
             traceback_text=tb_str,
             sysinfo=sysinfo,
             fatal=True,
+            exc_type=type(exc),
         )
         sys.exit(1)
 

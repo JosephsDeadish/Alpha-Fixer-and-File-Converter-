@@ -169,7 +169,68 @@ class _FloatingZoomOverlay(QFrame):
         self.move(parent_size.width() - self.width() - margin, margin)
 
 
-class SelectiveAlphaCanvas(QWidget):
+class _FloatingHistoryOverlay(QFrame):
+    """Semi-transparent floating overlay with Undo / Redo canvas-drawing buttons.
+
+    Positioned at the top-left corner of its parent widget.  Reparent to the
+    canvas widget and call ``reposition()`` from the parent's ``resizeEvent``.
+    """
+
+    def __init__(self, undo_cb, redo_cb, parent=None):
+        super().__init__(parent)
+        self.setObjectName("historyOverlay")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setStyleSheet(
+            "QFrame#historyOverlay {"
+            "  background: rgba(30, 30, 30, 160);"
+            "  border-radius: 6px;"
+            "  border: 1px solid rgba(255,255,255,40);"
+            "}"
+            "QPushButton {"
+            "  background: rgba(60,60,60,200);"
+            "  color: #eee;"
+            "  border: none;"
+            "  border-radius: 4px;"
+            "  font-size: 14px;"
+            "  min-width: 26px;"
+            "  max-width: 26px;"
+            "  min-height: 22px;"
+            "  max-height: 22px;"
+            "  padding: 0;"
+            "}"
+            "QPushButton:hover { background: rgba(100,100,100,220); }"
+            "QPushButton:pressed { background: rgba(40,40,40,255); }"
+            "QPushButton:disabled { color: rgba(150,150,150,120); }"
+        )
+        row = QHBoxLayout(self)
+        row.setContentsMargins(4, 3, 4, 3)
+        row.setSpacing(3)
+        self._btn_undo = QPushButton("↩")
+        self._btn_undo.setToolTip("Undo the last brush/erase action  (Ctrl+Z)")
+        self._btn_undo.setEnabled(False)
+        self._btn_undo.clicked.connect(undo_cb)
+        self._btn_redo = QPushButton("↪")
+        self._btn_redo.setToolTip("Redo the last undone action  (Ctrl+Y)")
+        self._btn_redo.setEnabled(False)
+        self._btn_redo.clicked.connect(redo_cb)
+        row.addWidget(self._btn_undo)
+        row.addWidget(self._btn_redo)
+        self.adjustSize()
+        self.raise_()
+
+    def set_undo_enabled(self, enabled: bool) -> None:
+        self._btn_undo.setEnabled(enabled)
+
+    def set_redo_enabled(self, enabled: bool) -> None:
+        self._btn_redo.setEnabled(enabled)
+
+    def reposition(self, parent_size) -> None:
+        """Pin the overlay to the top-left corner."""
+        margin = 6
+        self.move(margin, margin)
+
+
+
     """
     Interactive canvas that shows the source image with coloured mask
     overlays and handles all drawing operations.
@@ -1018,7 +1079,9 @@ class SelectiveAlphaCanvas(QWidget):
                 Qt.AlignmentFlag.AlignCenter,
                 "📂  Open an image to start painting\n\n"
                 "  Ctrl+O  Open    Ctrl+Z  Undo    Ctrl+Y  Redo\n"
-                "  Ctrl+S  Save    Ctrl+Enter  Apply",
+                "  Ctrl+S  Save    Ctrl+Enter  Apply\n\n"
+                "  🖱  Hold middle-mouse button (scroll wheel) to pan\n"
+                "  Alt+drag also pans  ·  Ctrl+scroll to zoom",
             )
             p.end()
             return
@@ -1818,7 +1881,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Row 1: Open image
         self._btn_open = QPushButton("📂  Open Image…")
-        self._btn_open.setMinimumHeight(30)
+        self._btn_open.setMinimumHeight(26)
         self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
@@ -1827,7 +1890,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_show_highlights = QPushButton("👁  Show Highlights")
         self._btn_show_highlights.setCheckable(True)
         self._btn_show_highlights.setChecked(False)
-        self._btn_show_highlights.setMinimumHeight(28)
+        self._btn_show_highlights.setMinimumHeight(26)
         self._btn_show_highlights.setToolTip(
             "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
             "Off by default — turn on to see the coloured highlights and alpha labels.\n"
@@ -1839,7 +1902,7 @@ class SelectiveAlphaTool(QWidget):
         # Row 2: Apply (primary action – most prominent)
         self._btn_apply = QPushButton("✅  Apply Alpha Zones")
         self._btn_apply.setEnabled(False)
-        self._btn_apply.setMinimumHeight(34)
+        self._btn_apply.setMinimumHeight(30)
         self._btn_apply.setToolTip(
             "Apply the painted zones to the image and make the result ready to save.  (Ctrl+Enter)"
         )
@@ -1852,17 +1915,17 @@ class SelectiveAlphaTool(QWidget):
         # Row 3: Undo Process + Save side-by-side
         row3 = QHBoxLayout()
         row3.setSpacing(4)
-        self._btn_undo_process = QPushButton("↩  Undo Process")
+        self._btn_undo_process = QPushButton("↩ Undo Apply")
         self._btn_undo_process.setEnabled(False)
-        self._btn_undo_process.setMinimumHeight(28)
+        self._btn_undo_process.setMinimumHeight(26)
         self._btn_undo_process.setToolTip(
             "Undo the last Apply operation and restore the previous result."
         )
         self._btn_undo_process.clicked.connect(self._on_undo_process)
         row3.addWidget(self._btn_undo_process)
 
-        self._btn_save = QPushButton("💾  Save Result…")
-        self._btn_save.setMinimumHeight(28)
+        self._btn_save = QPushButton("💾 Save…")
+        self._btn_save.setMinimumHeight(26)
         self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
@@ -1871,29 +1934,15 @@ class SelectiveAlphaTool(QWidget):
 
         # Row 4: Clear All Zones
         self._btn_clear_all = QPushButton("🗑  Clear All Zones")
-        self._btn_clear_all.setMinimumHeight(28)
+        self._btn_clear_all.setMinimumHeight(26)
         self._btn_clear_all.setToolTip("Erase all painted zone masks and start over.")
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         wf_lay.addWidget(self._btn_clear_all)
 
         lv.addWidget(wf_box)
 
-        # ── Drawing History: Undo / Redo (above Drawing Tool) ─────────────
-        hist_row = QHBoxLayout()
-        hist_row.setSpacing(4)
-        self._btn_undo = QPushButton("↩  Undo Drawing")
-        self._btn_undo.setEnabled(False)
-        self._btn_undo.setMinimumHeight(28)
-        self._btn_undo.setToolTip("Undo the last highlight / erase action.  (Ctrl+Z)")
-        self._btn_undo.clicked.connect(self._on_undo_mask)
-        hist_row.addWidget(self._btn_undo)
-        self._btn_redo = QPushButton("↪  Redo Drawing")
-        self._btn_redo.setEnabled(False)
-        self._btn_redo.setMinimumHeight(28)
-        self._btn_redo.setToolTip("Redo the last undone action.  (Ctrl+Y)")
-        self._btn_redo.clicked.connect(self._on_redo_mask)
-        hist_row.addWidget(self._btn_redo)
-        lv.addLayout(hist_row)
+        # Note: Undo / Redo drawing buttons are in a floating canvas overlay
+        # (_FloatingHistoryOverlay, top-left of canvas) — not in the sidebar.
 
         # ── Drawing tools ─────────────────────────────────────────────────
         tools_box = QGroupBox("Drawing Tool")
@@ -1904,12 +1953,12 @@ class SelectiveAlphaTool(QWidget):
         tool_defs = [
             ("freehand",   "✏  Freehand",   0, 0),
             ("line",       "╱  Line",       0, 1),
-            ("rect",       "▭  Rectangle",  1, 0),
+            ("rect",       "▬  Rectangle",  1, 0),
             ("ellipse",    "◯  Ellipse",    1, 1),
             ("fill",       "🪣  Fill",       2, 0),
             ("polygon",    "⬠  Polygon",    2, 1),
             ("eraser",     "⌫  Eraser",     3, 0),
-            ("transform",  "✥  Transform",  3, 1),
+            ("transform",  "↔  Transform",  3, 1),
         ]
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
@@ -2407,8 +2456,8 @@ class SelectiveAlphaTool(QWidget):
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas = SelectiveAlphaCanvas()
         self._canvas.mask_changed.connect(self._on_mask_changed)
-        self._canvas.undo_available.connect(self._btn_undo.setEnabled)
-        self._canvas.redo_available.connect(self._btn_redo.setEnabled)
+        # undo_available / redo_available are connected to the history overlay
+        # below, after the overlay itself is instantiated.
         # Wire canvas context-menu copy/paste signals.
         self._canvas.copy_requested.connect(self._on_copy_mask)
         self._canvas.paste_requested.connect(self._on_paste_mask)
@@ -2447,7 +2496,17 @@ class SelectiveAlphaTool(QWidget):
             self._zoom_in, self._zoom_out, self._zoom_reset, self._canvas
         )
         self._zoom_overlay.adjustSize()
-        # Install an event filter on the canvas so the overlay stays pinned
+
+        # ── Floating undo/redo overlay pinned to the top-left of the canvas ─
+        self._history_overlay = _FloatingHistoryOverlay(
+            self._on_undo_mask, self._on_redo_mask, self._canvas
+        )
+        self._history_overlay.adjustSize()
+        # Connect canvas undo/redo availability signals to the floating overlay.
+        self._canvas.undo_available.connect(self._history_overlay.set_undo_enabled)
+        self._canvas.redo_available.connect(self._history_overlay.set_redo_enabled)
+
+        # Install an event filter on the canvas so the overlays stay pinned
         # whenever the canvas is resized.
         self._canvas.installEventFilter(self)
 
@@ -2576,8 +2635,7 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._ze_clear_btn,  "sa_zone_clear")
         mgr.register(self._ze_copy_btn,   "sa_zone_copy_mask")
         mgr.register(self._ze_paste_btn,  "sa_zone_paste_mask")
-        mgr.register(self._btn_undo,         "sa_undo")
-        mgr.register(self._btn_redo,         "sa_redo")
+        mgr.register(self._history_overlay,  "sa_history_overlay")
         mgr.register(self._btn_apply,        "sa_apply")
         mgr.register(self._btn_undo_process, "sa_undo_process")
         mgr.register(self._btn_clear_all,    "sa_clear_all")
@@ -3540,9 +3598,11 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.zoom_reset()
 
     def eventFilter(self, obj, event) -> bool:
-        """Reposition the floating zoom overlay when the canvas is resized."""
+        """Reposition the floating overlays when the canvas is resized."""
         if obj is self._canvas and event.type() == QEvent.Type.Resize:
             self._zoom_overlay.reposition(event.size())
             self._zoom_overlay.raise_()
+            self._history_overlay.reposition(event.size())
+            self._history_overlay.raise_()
         return False
 
