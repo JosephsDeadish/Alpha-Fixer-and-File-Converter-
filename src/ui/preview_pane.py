@@ -343,6 +343,8 @@ class BeforeAfterWidget(QWidget):
     # painted inside the widget itself instead of relying on the external side
     # panel QLabels in alpha_tool.py (those labels always occupy 84 px each).
     _COMPACT_OVERLAY_WIDTH_THRESHOLD = 500
+    # Default divider / handle accent color (matches the default "Panda Dark" theme).
+    _DEFAULT_DIVIDER_COLOR = "#e94560"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -368,6 +370,8 @@ class BeforeAfterWidget(QWidget):
         self._pan_y: float = 0.0
         self._panning: bool = False
         self._pan_start_pos: "QPoint | None" = None
+        # Theme-tinted divider colour (updated by set_divider_color).
+        self._divider_color: str = self._DEFAULT_DIVIDER_COLOR
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -385,6 +389,15 @@ class BeforeAfterWidget(QWidget):
             self.zoom_in, self.zoom_out, self.zoom_reset, self
         )
         self._zoom_bar.reposition(self.size())
+
+    # ------------------------------------------------------------------
+    # Theme tinting
+    # ------------------------------------------------------------------
+
+    def set_divider_color(self, color: str) -> None:
+        """Update the divider / handle accent color to match the active theme."""
+        self._divider_color = color or self._DEFAULT_DIVIDER_COLOR
+        self.update()
 
     # ------------------------------------------------------------------
     # Zoom API
@@ -556,7 +569,7 @@ class BeforeAfterWidget(QWidget):
             painter.setClipRect(QRect(split_x, 0, w - split_x, h))
             painter.fillRect(split_x, 0, w - split_x, h, QColor(0, 0, 0, 110))
             painter.setClipping(False)
-            painter.setPen(QColor("#e94560"))
+            painter.setPen(QColor(self._divider_color))
             painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
             painter.drawText(
                 QRect(split_x, 0, w - split_x, h),
@@ -593,7 +606,7 @@ class BeforeAfterWidget(QWidget):
                 aw2 = fm.horizontalAdvance(atext) + 8
                 ax = w - aw2 - 4
                 painter.fillRect(ax, 4, aw2, lh, QColor(0, 0, 0, 150))
-                painter.setPen(QColor("#e94560"))
+                painter.setPen(QColor(self._divider_color))
                 painter.drawText(ax + 4, 4 + fm.ascent() + 2, atext)
 
         # ── Alpha stats overlay (compact, below divider handle) ──────────
@@ -624,26 +637,26 @@ class BeforeAfterWidget(QWidget):
                 sa_x = w - sa_w - margin
                 sa_y = h - slh - margin
                 painter.fillRect(sa_x, sa_y, sa_w, slh, QColor(0, 0, 0, 150))
-                painter.setPen(QColor("#e94560"))
+                painter.setPen(QColor(self._divider_color))
                 painter.setClipRect(QRect(sa_x, sa_y, sa_w, slh))
                 painter.drawText(sa_x + 4, sa_y + sfm.ascent() + 2,
                                  self._stats_after)
                 painter.setClipping(False)
 
         # ── Divider line ──────────────────────────────────────────────
-        painter.setPen(QPen(QColor("#e94560"), self._DIVIDER_W))
+        painter.setPen(QPen(QColor(self._divider_color), self._DIVIDER_W))
         painter.drawLine(split_x, 0, split_x, h)
 
         # ── Handle circle ─────────────────────────────────────────────
         hr = self._HANDLE_R
         hy = h // 2
-        painter.setPen(QPen(QColor("#e94560"), 2))
+        painter.setPen(QPen(QColor(self._divider_color), 2))
         painter.setBrush(QBrush(QColor("#1a1a2e")))
         painter.drawEllipse(split_x - hr, hy - hr, hr * 2, hr * 2)
 
         # Chevron arrows inside the handle
         aw_v, ah_v = self._ARROW_W, self._ARROW_H
-        painter.setPen(QPen(QColor("#e94560"), 2))
+        painter.setPen(QPen(QColor(self._divider_color), 2))
         painter.setBrush(QBrush())
         # Left-pointing arrow
         painter.drawLine(split_x - 2, hy, split_x - aw_v, hy)

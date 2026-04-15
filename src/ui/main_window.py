@@ -1079,6 +1079,8 @@ class MainWindow(QMainWindow):
         # Prevent tabs from stretching to fill available space; scroll buttons
         # will appear automatically when the window is narrower than all tabs.
         self._tabs.tabBar().setExpanding(False)
+        # Allow the user to drag tabs to reorder them.
+        self._tabs.tabBar().setMovable(True)
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
@@ -1121,7 +1123,8 @@ class MainWindow(QMainWindow):
 
         # ⚙ Settings button
         btn_settings = QPushButton("⚙  Settings")
-        btn_settings.setMinimumWidth(90)
+        btn_settings.setMinimumWidth(96)
+        btn_settings.setMinimumHeight(28)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
         corner_layout.addWidget(btn_settings)
@@ -1129,7 +1132,8 @@ class MainWindow(QMainWindow):
 
         # ❓ Help button – opens a dropdown with shortcuts/about/export/import
         btn_help = QPushButton("❓  Help")
-        btn_help.setMinimumWidth(72)
+        btn_help.setMinimumWidth(76)
+        btn_help.setMinimumHeight(28)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
         corner_layout.addWidget(btn_help)
@@ -1137,7 +1141,8 @@ class MainWindow(QMainWindow):
 
         # ❤ Patreon button
         btn_patreon = QPushButton("❤  Patreon")
-        btn_patreon.setMinimumWidth(90)
+        btn_patreon.setMinimumWidth(96)
+        btn_patreon.setMinimumHeight(28)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
             "patreon.com/c/DeadOnTheInside"
@@ -2091,6 +2096,16 @@ class MainWindow(QMainWindow):
             _apply_dwm_title_bar_color(hwnd, title_color)
         except Exception:
             pass
+        # Update the before/after comparison divider colour to match the theme.
+        accent = theme.get("accent") or "#e94560"
+        try:
+            self._alpha_tab._compare.set_divider_color(accent)
+        except AttributeError:
+            pass
+        try:
+            self._converter_tab._compare.set_divider_color(accent)
+        except AttributeError:
+            pass
 
     def _update_tab_labels(self):
         """Write the theme-specific label to every tab (no animation prefix)."""
@@ -2586,52 +2601,53 @@ class MainWindow(QMainWindow):
         content_lbl = QLabel(
             "<h3>Global Shortcuts</h3>"
             "<table cellpadding='4'>"
-            "<tr><td><b>F1</b></td><td>Show this keyboard shortcuts help</td></tr>"
-            "<tr><td><b>Ctrl+,</b></td><td>Open Settings</td></tr>"
+            "<tr><td><b>F1</b></td><td>Open this Keyboard Shortcuts help window</td></tr>"
+            "<tr><td><b>Ctrl+,</b></td><td>Open Settings (themes, effects, UI scale, history)</td></tr>"
             "<tr><td><b>Ctrl+Q</b></td><td>Quit the application</td></tr>"
-            "<tr><td><b>Ctrl+1</b></td><td>Switch to Alpha &amp; RGBA Adjuster tab</td></tr>"
-            "<tr><td><b>Ctrl+2</b></td><td>Switch to Converter tab</td></tr>"
-            "<tr><td><b>Ctrl+3</b></td><td>Switch to History tab</td></tr>"
-            "<tr><td><b>Ctrl+4</b></td><td>Switch to Selective Alpha tab</td></tr>"
+            "<tr><td><b>Ctrl+1</b></td><td>Switch to the Alpha &amp; RGBA Adjuster tab</td></tr>"
+            "<tr><td><b>Ctrl+2</b></td><td>Switch to the File Converter tab</td></tr>"
+            "<tr><td><b>Ctrl+3</b></td><td>Switch to the Processing History tab</td></tr>"
+            "<tr><td><b>Ctrl+4</b></td><td>Switch to the Selective Alpha Tool tab</td></tr>"
             "</table>"
 
-            "<h3>Alpha &amp; RGBA Adjuster / Converter</h3>"
+            "<h3>Alpha &amp; RGBA Adjuster &amp; File Converter</h3>"
             "<table cellpadding='4'>"
-            "<tr><td><b>F5</b></td><td>Run / Process / Convert</td></tr>"
-            "<tr><td><b>Esc</b></td><td>Stop current processing operation</td></tr>"
-            "<tr><td><b>Ctrl+O</b></td><td>Add files to the queue</td></tr>"
-            "<tr><td><b>Ctrl+Shift+O</b></td><td>Add entire folder to the queue</td></tr>"
-            "<tr><td><b>Delete</b></td><td>Remove selected files from the queue</td></tr>"
+            "<tr><td><b>F5</b></td><td>Start processing / conversion batch</td></tr>"
+            "<tr><td><b>Esc</b></td><td>Stop the current processing operation</td></tr>"
+            "<tr><td><b>Ctrl+O</b></td><td>Add image files to the queue</td></tr>"
+            "<tr><td><b>Ctrl+Shift+O</b></td><td>Add an entire folder (all supported images) to the queue</td></tr>"
+            "<tr><td><b>Delete</b></td><td>Remove the selected file(s) from the queue</td></tr>"
             "<tr><td><b>Ctrl+A</b></td><td>Select all files in the queue</td></tr>"
             "</table>"
 
-            "<h3>Selective Alpha Tool</h3>"
+            "<h3>Selective Alpha Tool  (Canvas)</h3>"
             "<table cellpadding='4'>"
-            "<tr><td><b>Ctrl+Z</b></td><td>Undo last paint operation</td></tr>"
-            "<tr><td><b>Ctrl+Shift+Z</b></td><td>Redo</td></tr>"
-            "<tr><td><b>Ctrl+S</b></td><td>Save current mask to file</td></tr>"
-            "<tr><td><b>B</b></td><td>Switch to Brush tool</td></tr>"
-            "<tr><td><b>E</b></td><td>Switch to Eraser tool</td></tr>"
-            "<tr><td><b>F</b></td><td>Switch to Flood Fill tool</td></tr>"
-            "<tr><td><b>M</b></td><td>Switch to Magic Select tool</td></tr>"
-            "<tr><td><b>T</b></td><td>Switch to Transform tool</td></tr>"
-            "<tr><td><b>[ / ]</b></td><td>Decrease / Increase brush size</td></tr>"
-            "<tr><td><b>Ctrl+Wheel</b></td><td>Zoom in / out on canvas</td></tr>"
-            "<tr><td><b>Middle-drag</b></td><td>Pan the canvas</td></tr>"
-            "<tr><td><b>Space+drag</b></td><td>Pan the canvas (hold Space)</td></tr>"
+            "<tr><td><b>Ctrl+O</b></td><td>Open an image to edit</td></tr>"
+            "<tr><td><b>Ctrl+Z</b></td><td>Undo the last paint / erase stroke</td></tr>"
+            "<tr><td><b>Ctrl+Y</b> or <b>Ctrl+Shift+Z</b></td><td>Redo the last undone stroke</td></tr>"
+            "<tr><td><b>Ctrl+Enter</b></td><td>Apply alpha zones to the image (generate result)</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Save the processed result to disk</td></tr>"
+            "<tr><td><b>Ctrl+Wheel</b></td><td>Zoom in / out on the canvas</td></tr>"
+            "<tr><td><b>Middle-mouse drag</b></td><td>Pan around the canvas (hold scroll wheel and drag)</td></tr>"
+            "<tr><td><b>Alt + Left-drag</b></td><td>Pan the canvas (alternative to middle-mouse)</td></tr>"
             "</table>"
 
             "<h3>GIF Builder</h3>"
             "<table cellpadding='4'>"
-            "<tr><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
-            "<tr><td><b>Ctrl+S</b></td><td>Export GIF</td></tr>"
+            "<tr><td><b>Space</b></td><td>Play / Pause the GIF preview</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Export the composed GIF to a file</td></tr>"
             "</table>"
 
             "<h3>Video Editor</h3>"
             "<table cellpadding='4'>"
-            "<tr><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
-            "<tr><td><b>Ctrl+S</b></td><td>Export Video</td></tr>"
-            "<tr><td><b>Delete</b></td><td>Remove selected clip from list</td></tr>"
+            "<tr><td><b>Space</b></td><td>Play / Pause the video preview</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Export the video to a file</td></tr>"
+            "<tr><td><b>Delete</b></td><td>Remove the selected clip from the clip list</td></tr>"
+            "</table>"
+
+            "<h3>Quick Access (Right-Click)</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Right-click window</b></td><td>Open GIF Builder, Video Editor, or Settings directly</td></tr>"
             "</table>"
         )
         content_lbl.setWordWrap(True)

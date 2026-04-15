@@ -1407,6 +1407,13 @@ class AlphaFixerTab(QWidget):
             if not self._settings.get("alpha_fix_done_once", False):
                 self._settings.set("alpha_fix_done_once", True)
                 self.first_alpha_fix.emit()
+            # Offer to delete the original source files when output is separate.
+            suffix = self._suffix_edit.text().strip()
+            out_dir = self._out_dir_edit.text().strip()
+            if suffix or out_dir:
+                self._offer_delete_originals(
+                    getattr(self, "_last_run_files", []), success
+                )
         if errors > 0:
             self.processing_error.emit(errors)
 
@@ -1414,3 +1421,43 @@ class AlphaFixerTab(QWidget):
         self._log.append(msg)
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _offer_delete_originals(self, source_files: list, success_count: int) -> None:
+        """Ask the user whether to delete the original source files.
+
+        Only called after a batch that produced separate output files (i.e. a
+        filename suffix or a different output directory was configured).
+        """
+        n = len(source_files)
+        if n == 0:
+            return
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete Original Files?")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText(
+            f"Processing finished with {success_count} file(s) completed successfully.\n\n"
+            "Would you like to delete the original source file(s)?\n\n"
+            "⚠  This cannot be undone."
+        )
+        detail_lines = [Path(p).name for p in source_files[:20]]
+        if n > 20:
+            detail_lines.append(f"… and {n - 20} more")
+        msg.setDetailedText("Files that will be deleted:\n" + "\n".join(detail_lines))
+        btn_delete = msg.addButton("🗑  Delete Originals", QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_delete)
+        msg.exec()
+        if msg.clickedButton() is btn_delete:
+            deleted = 0
+            failed = 0
+            for path in source_files:
+                try:
+                    os.remove(path)
+                    deleted += 1
+                except OSError:
+                    failed += 1
+            self._log_msg(
+                f"─── Deleted {deleted} original file(s)"
+                + (f", {failed} could not be deleted" if failed else "")
+                + " ───"
+            )
