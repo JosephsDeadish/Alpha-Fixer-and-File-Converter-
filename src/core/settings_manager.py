@@ -141,7 +141,7 @@ class SettingsManager:
         "conversion_done_once": False,
         "theme_changed_once": False,   # set True the first time the user picks a different theme
         # Click effects
-        "click_effects_enabled": True,
+        "click_effects_enabled": False,
         "use_theme_effect": False,
         # Custom emoji particles
         "custom_emoji": DEFAULT_CUSTOM_EMOJI,

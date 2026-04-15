@@ -407,13 +407,7 @@ class HistoryTab(QWidget):
 
         try:
             if ext == "csv":
-                with io.StringIO(newline="") as buf:
-                    writer = csv.writer(buf)
-                    writer.writerow(headers)
-                    writer.writerows(rows)
-                    content = buf.getvalue()
-                with open(path, "w", newline="", encoding="utf-8") as f:
-                    f.write(content)
+                self._export_csv(path, headers, rows)
 
             elif ext == "json":
                 data = [dict(zip(headers, row)) for row in rows]
@@ -456,3 +450,17 @@ class HistoryTab(QWidget):
             )
         except OSError as exc:
             QMessageBox.warning(self, "Export Failed", f"Could not write file:\n{exc}")
+
+    def _export_csv(self, path: str, headers: list, rows: list) -> None:
+        """Write *rows* with *headers* to *path* as a CSV file.
+
+        Uses ``io.StringIO`` as a context manager to guarantee the in-memory
+        buffer is released even if the csv.writer raises.
+        """
+        with io.StringIO(newline="") as buf:
+            writer = csv.writer(buf)
+            writer.writerow(headers)
+            writer.writerows(rows)
+            content = buf.getvalue()
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            f.write(content)
