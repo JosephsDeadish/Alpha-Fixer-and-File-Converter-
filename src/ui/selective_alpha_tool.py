@@ -332,6 +332,10 @@ class _FloatingHistoryOverlay(QFrame):
         self._zone_alphas: list[int] = [255] * NUM_ZONES
         # Cached image-pixel centroids per zone; recomputed in _rebuild_composite.
         self._zone_centroids: list[tuple[float, float] | None] = [None] * NUM_ZONES
+        # Cached sparse grid label points per zone (list of (x, y) image coords).
+        # Recomputed alongside centroids so _draw_alpha_labels can show values
+        # at multiple locations within each zone instead of only the centroid.
+        self._zone_label_points: list[list[tuple[float, float]]] = [[] for _ in range(NUM_ZONES)]
 
         # ---- Paste-available flag (for context menu) ----------------------
         self._paste_available: bool = False
@@ -1057,6 +1061,7 @@ class _FloatingHistoryOverlay(QFrame):
             for i, mask in enumerate(self._masks):
                 if mask is None:
                     self._zone_centroids[i] = None
+                    self._zone_label_points[i] = []
                 else:
                     arr = np.frombuffer(mask.tobytes(), dtype=np.uint8).reshape(
                         mask.size[1], mask.size[0]
@@ -1064,8 +1069,21 @@ class _FloatingHistoryOverlay(QFrame):
                     ys, xs = np.where(arr > 127)
                     if len(xs):
                         self._zone_centroids[i] = (float(xs.mean()), float(ys.mean()))
+                        # Build a sparse grid of label positions within the zone.
+                        # Aim for a label roughly every 64 px of image space with a
+                        # minimum step of 20 px so labels don't overlap.
+                        h_img, w_img = arr.shape
+                        step = max(20, min(w_img, h_img) // 8)
+                        half = step // 2
+                        pts: list[tuple[float, float]] = []
+                        for gy in range(half, h_img, step):
+                            for gx in range(half, w_img, step):
+                                if arr[gy, gx] > 127:
+                                    pts.append((float(gx), float(gy)))
+                        self._zone_label_points[i] = pts
                     else:
                         self._zone_centroids[i] = None
+                        self._zone_label_points[i] = []
 
     def paintEvent(self, event) -> None:   # noqa: N802
         if self._src_img is None:
@@ -1120,31 +1138,53 @@ class _FloatingHistoryOverlay(QFrame):
         p.end()
 
     def _draw_alpha_labels(self, painter: QPainter) -> None:
-        """Draw each visible zone's alpha value as text at its centroid."""
+        """Draw each visible zone's alpha value at multiple positions within the zone.
+
+        Labels are rendered at every grid point that falls inside the zone's
+        painted mask (computed in ``_rebuild_composite``), giving a dense view
+        similar to the heat-map labels in the Alpha & RGBA Adjuster tool.  The
+        centroid gets a slightly larger, bolder label so the zone's value is
+        still easy to read at a glance.
+        """
         s, ox, oy = self._transform()
-        font = QFont("Arial", 10)
-        font.setBold(True)
-        painter.setFont(font)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         for i in range(NUM_ZONES):
             if not self._zone_visible[i]:
                 continue
             centroid = self._zone_centroids[i]
             if centroid is None:
                 continue
-            cx_img, cy_img = centroid
-            cx_w = cx_img * s + ox
-            cy_w = cy_img * s + oy
             text = str(self._zone_alphas[i])
             zc = _zone_qcolor(i, 255, color_override=self._zone_colors[i])
-            fm = painter.fontMetrics()
-            tw = fm.horizontalAdvance(text)
-            th = fm.height()
-            # Shadow for readability
-            painter.setPen(QColor(0, 0, 0, 200))
-            painter.drawText(QPointF(cx_w - tw / 2.0 + 1.0, cy_w + th / 4.0 + 1.0), text)
-            # Foreground
-            painter.setPen(zc)
-            painter.drawText(QPointF(cx_w - tw / 2.0, cy_w + th / 4.0), text)
+
+            def _draw_label(cx_img: float, cy_img: float, font_px: int) -> None:
+                font = QFont("Arial")
+                font.setPixelSize(font_px)
+                font.setBold(True)
+                painter.setFont(font)
+                fm = painter.fontMetrics()
+                tw = fm.horizontalAdvance(text)
+                th = fm.ascent()
+                cx_w = cx_img * s + ox
+                cy_w = cy_img * s + oy
+                tx = cx_w - tw / 2.0
+                ty = cy_w + th / 2.0
+                # Black outline for contrast
+                painter.setPen(QColor(0, 0, 0, 200))
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    painter.drawText(QPointF(tx + dx, ty + dy), text)
+                # Zone-coloured foreground
+                painter.setPen(zc)
+                painter.drawText(QPointF(tx, ty), text)
+
+            # Draw a smaller label at every grid point inside the zone.
+            grid_font_px = max(7, int(12 * s))   # scale with zoom, min 7 px
+            for pt in self._zone_label_points[i]:
+                _draw_label(pt[0], pt[1], grid_font_px)
+
+            # Draw a larger centroid label on top so the zone value stands out.
+            centroid_font_px = max(9, int(16 * s))
+            _draw_label(centroid[0], centroid[1], centroid_font_px)
 
     def contextMenuEvent(self, event) -> None:   # noqa: N802
         """Right-click context menu for copy/paste of the active zone mask."""
@@ -2455,6 +2495,13 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas = SelectiveAlphaCanvas()
+        self._canvas.setToolTip(
+            "Paint alpha zones on the image.\n\n"
+            "🖱  Hold middle-mouse (scroll wheel button) to pan\n"
+            "Alt+drag also pans\n"
+            "Ctrl+scroll to zoom in/out\n"
+            "Right-click for copy/paste menu"
+        )
         self._canvas.mask_changed.connect(self._on_mask_changed)
         # undo_available / redo_available are connected to the history overlay
         # below, after the overlay itself is instantiated.

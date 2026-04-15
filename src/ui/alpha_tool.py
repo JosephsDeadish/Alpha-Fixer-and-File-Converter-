@@ -745,6 +745,9 @@ class AlphaFixerTab(QWidget):
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
         # Alpha visualization toggle → re-apply overlay without re-processing
         self._alpha_vis_check.toggled.connect(self._on_alpha_vis_toggled)
+        # Pop-out button: include the Highlight Alpha Values checkbox in the
+        # floating window so users can toggle the overlay there too.
+        self._compare.popout_requested.connect(self._on_compare_popout)
         # Persist batch options so they survive app restarts
         self._recursive_check.toggled.connect(
             lambda v: self._settings.set("batch_recursive", v)
@@ -1129,6 +1132,51 @@ class AlphaFixerTab(QWidget):
         """Re-apply (or remove) the alpha visualization when the toggle changes."""
         if self._compare.has_images():
             self._apply_alpha_vis_to_compare()
+
+    def _on_compare_popout(self) -> None:
+        """Called when the ⤢ pop-out button is clicked on the compare widget.
+
+        Adds a 'Highlight Alpha Values' checkbox to the floating dialog that
+        is already open so the user can control the heat-map overlay there.
+        """
+        dlg = self._compare._popout_dialog
+        if dlg is None:
+            return
+        from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QWidget as _QW
+        row_w = _QW(dlg)
+        row = QHBoxLayout(row_w)
+        row.setContentsMargins(0, 0, 0, 0)
+        chk = QCheckBox("🎨  Highlight Alpha Values", row_w)
+        chk.setChecked(self._alpha_vis_check.isChecked())
+        chk.setToolTip(self._alpha_vis_check.toolTip())
+        row.addWidget(chk)
+        row.addStretch(1)
+        # The dialog layout is a QVBoxLayout; insert the checkbox row before
+        # the compare widget (index 0) so it appears at the top.
+        dlg.layout().insertWidget(0, row_w)
+
+        # The pop-out compare widget and the main compare widget share the
+        # same raw images; toggling the checkbox updates the pop-out widget.
+        pop_compare = None
+        for child in dlg.findChildren(type(self._compare)):
+            pop_compare = child
+            break
+
+        def _toggle(checked: bool) -> None:
+            # Keep the main checkbox in sync.
+            self._alpha_vis_check.setChecked(checked)
+            if pop_compare is None or not pop_compare.has_images():
+                return
+            if checked:
+                pop_compare.set_before(self._alpha_vis_overlay(pop_compare.before_image()))
+                pop_compare.set_after(self._alpha_vis_overlay(pop_compare.after_image()))
+            else:
+                pop_compare.set_before(pop_compare.before_image())
+                pop_compare.set_after(pop_compare.after_image())
+
+        chk.toggled.connect(_toggle)
+        # Also keep pop-out in sync when main checkbox changes.
+        self._alpha_vis_check.toggled.connect(lambda v: chk.setChecked(v))
 
     def _apply_alpha_vis_to_compare(self) -> None:
         """Apply the alpha heat-map overlay to the current compare images if enabled."""

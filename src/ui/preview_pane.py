@@ -17,7 +17,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame,
-    QPushButton, QHBoxLayout,
+    QPushButton, QHBoxLayout, QDialog,
 )
 
 
@@ -333,7 +333,15 @@ class BeforeAfterWidget(QWidget):
     set_after(QImage)   – update the right (processed) side
     set_loading()       – show a "Processing…" indicator on the right side
     clear()             – reset to empty placeholder
+
+    Signals
+    -------
+    popout_requested()  – emitted when the ⤢ pop-out button is clicked.
+                          The parent tool should open a floating dialog.
     """
+
+    #: Emitted when the user clicks the ⤢ pop-out button.
+    popout_requested = pyqtSignal()
 
     _HANDLE_R = 14    # handle circle radius (px)
     _DIVIDER_W = 2    # divider line width (px)
@@ -372,6 +380,8 @@ class BeforeAfterWidget(QWidget):
         self._pan_start_pos: "QPoint | None" = None
         # Theme-tinted divider colour (updated by set_divider_color).
         self._divider_color: str = self._DEFAULT_DIVIDER_COLOR
+        # Floating pop-out dialog (kept alive while open so images persist).
+        self._popout_dialog: "QDialog | None" = None
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -381,7 +391,8 @@ class BeforeAfterWidget(QWidget):
         self.setMouseTracking(True)
         self.setToolTip(
             "Drag the ◀▶ handle to compare original and processed image.\n"
-            "Ctrl+Scroll to zoom; middle-drag to pan when zoomed."
+            "Ctrl+Scroll to zoom; middle-drag to pan when zoomed.\n"
+            "Click ⤢ (top-left) to pop out a resizable floating window."
         )
 
         # Floating zoom overlay (top-right corner)
@@ -389,6 +400,74 @@ class BeforeAfterWidget(QWidget):
             self.zoom_in, self.zoom_out, self.zoom_reset, self
         )
         self._zoom_bar.reposition(self.size())
+
+        # Floating pop-out button (top-left corner)
+        self._popout_btn = self._make_popout_button()
+        self._reposition_popout_btn()
+
+    # ------------------------------------------------------------------
+    # Pop-out overlay button
+    # ------------------------------------------------------------------
+
+    def _make_popout_button(self) -> "QPushButton":
+        btn = QPushButton("⤢", self)
+        btn.setObjectName("popoutBtn")
+        btn.setToolTip("Pop out preview into a resizable floating window")
+        btn.setFixedSize(26, 22)
+        btn.setStyleSheet(
+            "QPushButton#popoutBtn {"
+            "  background: rgba(20,20,20,155);"
+            "  color: #eee;"
+            "  border: 1px solid rgba(255,255,255,35);"
+            "  border-radius: 5px;"
+            "  font-size: 13px;"
+            "  padding: 0;"
+            "}"
+            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
+            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
+        )
+        btn.clicked.connect(self._on_popout_clicked)
+        btn.raise_()
+        return btn
+
+    def _reposition_popout_btn(self) -> None:
+        margin = 6
+        self._popout_btn.move(margin, margin)
+
+    def _on_popout_clicked(self) -> None:
+        """Open (or bring to front) a floating comparison window."""
+        if self._popout_dialog is not None and not self._popout_dialog.isHidden():
+            self._popout_dialog.raise_()
+            self._popout_dialog.activateWindow()
+            return
+
+        dlg = QDialog(self.window())
+        dlg.setWindowTitle("Preview — Pop-out Comparison")
+        dlg.resize(900, 600)
+        dlg.setMinimumSize(400, 300)
+        dlg_layout = QVBoxLayout(dlg)
+        dlg_layout.setContentsMargins(6, 6, 6, 6)
+        dlg_layout.setSpacing(4)
+
+        # Stand-alone BeforeAfterWidget with the same images
+        compare = BeforeAfterWidget(dlg)
+        if self._pix_before is not None:
+            compare._pix_before = self._pix_before
+        if self._pix_after is not None:
+            compare._pix_after = self._pix_after
+        if self._raw_before is not None:
+            compare._raw_before = self._raw_before
+        if self._raw_after is not None:
+            compare._raw_after = self._raw_after
+        compare._divider_color = self._divider_color
+        compare._stats_before = self._stats_before
+        compare._stats_after = self._stats_after
+        dlg_layout.addWidget(compare, 1)
+
+        self._popout_dialog = dlg
+        # Emit signal so the parent tool can attach extra widgets (e.g. checkboxes)
+        self.popout_requested.emit()
+        dlg.show()
 
     # ------------------------------------------------------------------
     # Theme tinting
@@ -506,6 +585,8 @@ class BeforeAfterWidget(QWidget):
         self._clamp_pan()
         self._zoom_bar.reposition(event.size())
         self._zoom_bar.raise_()
+        self._reposition_popout_btn()
+        self._popout_btn.raise_()
 
     def wheelEvent(self, event):  # noqa: N802
         """Ctrl+scroll zooms in/out; plain scroll is passed to the parent."""
