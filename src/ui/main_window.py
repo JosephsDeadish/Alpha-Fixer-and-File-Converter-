@@ -1888,8 +1888,18 @@ class MainWindow(QMainWindow):
         if app is None:
             return
         font = QFont(app.font())
+        if font.pointSize() == size:
+            return  # No change — skip the re-polish cost.
         font.setPointSize(size)
         app.setFont(font)
+        # Force all open windows to immediately re-polish their appearance so
+        # the font-size change is visible without requiring a restart.  Calling
+        # app.setStyle(app.style()) emits a StyleChange event which causes
+        # every widget to re-measure text and repaint itself.
+        try:
+            app.setStyle(app.style())
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Geometry / state

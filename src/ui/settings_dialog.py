@@ -599,20 +599,20 @@ class SettingsDialog(QDialog):
         trail_gl.addWidget(QLabel("Trail Style:"), 2, 0)
         self._trail_style_combo = QComboBox()
         _TRAIL_STYLE_OPTIONS = [
-            ("Dots (default)",    "Dots  – Small colored dots fade out behind the cursor."),
+            ("Dots ·",             "Dots  – Small colored dots fade out behind the cursor."),
             ("Ribbon 🎀",          "Ribbon  – Smooth connected line trails the cursor like a ribbon."),
-            ("Noodle 🍜",         "Noodle  – Physics-simulated dangling chain that wobbles and swings as you move the mouse."),
-            ("Comet tail",        "Comet tail  – Tapered bright streak that fades to nothing behind the cursor."),
-            ("Fairy dust ✨",     "Fairy dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
-            ("Wave / Ocean 🌊",   "Wave / Ocean  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
-            ("Sparkle / Ice ❄",  "Sparkle / Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
-            ("Rainbow 🌈",        "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
-            ("Distortion Wave 〜", "Distortion Wave  – A wavy sinusoidal ribbon that writhes and ripples as you move the cursor."),
-            ("Fire 🔥",           "Fire  – Glowing embers drift upward behind the cursor, hot yellow to deep red."),
-            ("Lightning ⚡",      "Lightning  – Brief bright bolt-flashes crackle along the trail and vanish instantly."),
-            ("Plasma 🔵",         "Plasma  – Electric arc sparks crackle in purple and cyan, fading fast like a static discharge."),
-            ("Sakura 🌸",         "Sakura  – Soft pink petals drift and spin behind the cursor, fading gently as they fall."),
-            ("Smoke 💨",          "Smoke  – Soft gray puffs expand and rise behind the cursor, dissipating into nothing."),
+            ("Noodle 🍜",          "Noodle  – Physics-simulated dangling chain that wobbles and swings as you move the mouse."),
+            ("Comet Tail ☄",       "Comet Tail  – Tapered bright streak that fades to nothing behind the cursor."),
+            ("Fairy Dust ✨",       "Fairy Dust  – ✨💫⭐ emoji sparkles float and fade as you move."),
+            ("Ocean Wave 🌊",      "Ocean Wave  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
+            ("Sparkle Ice ❄",      "Sparkle Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
+            ("Rainbow 🌈",         "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
+            ("Distortion Wave 〰",  "Distortion Wave  – A wavy sinusoidal ribbon that writhes and ripples as you move the cursor."),
+            ("Fire 🔥",            "Fire  – Glowing embers drift upward behind the cursor, hot yellow to deep red."),
+            ("Lightning ⚡",       "Lightning  – Brief bright bolt-flashes crackle along the trail and vanish instantly."),
+            ("Plasma ⚡🔵",        "Plasma  – Electric arc sparks crackle in purple and cyan, fading fast like a static discharge."),
+            ("Sakura 🌸",          "Sakura  – Soft pink petals drift and spin behind the cursor, fading gently as they fall."),
+            ("Smoke 💨",           "Smoke  – Soft gray puffs expand and rise behind the cursor, dissipating into nothing."),
         ]
         for label, tip in _TRAIL_STYLE_OPTIONS:
             self._trail_style_combo.addItem(label)
@@ -620,12 +620,11 @@ class SettingsDialog(QDialog):
             self._trail_style_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._trail_style_combo.setToolTip(
             "Choose the visual style of the mouse trail.\n"
-            "Ribbon draws a connected smooth line, Noodle adds physics-based swing,\n"
-            "Comet draws a tapered tail, Fairy/Wave/Sparkle use themed emoji,\n"
-            "Distortion Wave writhes sinusoidally, Fire🔥 glows and drifts upward,\n"
-            "Lightning⚡ flashes bright bolt segments that vanish instantly,\n"
-            "Plasma🔵 crackles with electric arcs, Sakura🌸 drifts pink petals,\n"
-            "Smoke💨 puffs expand and rise as they fade."
+            "Ribbon – smooth line, Noodle – physics chain, Comet Tail – tapered streak,\n"
+            "Fairy Dust / Ocean Wave / Sparkle Ice – themed emoji trails,\n"
+            "Distortion Wave – sinusoidal ribbon, Fire – rising embers,\n"
+            "Lightning – crackle bolts, Plasma – electric arc sparks,\n"
+            "Sakura – drifting petals, Smoke – rising gray puffs."
         )
         trail_gl.addWidget(self._trail_style_combo, 2, 1)
         self._use_theme_trail_check = QCheckBox(
@@ -2195,6 +2194,9 @@ class SettingsDialog(QDialog):
                 f = app.font()
                 f.setPointSize(scaled_pt)
                 app.setFont(f)
+                # Force all open windows to re-polish so the font change is
+                # visible without a restart.
+                app.setStyle(app.style())
         except Exception:
             pass
         self.settings_changed.emit()
