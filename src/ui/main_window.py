@@ -2657,16 +2657,24 @@ class MainWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("About 🐼 Alpha & RGBA Adjuster  |  File Converter")
-        dlg.setMinimumSize(520, 420)
         dlg.setSizeGripEnabled(True)
         # Open at a comfortable initial size, centered on the parent window
         screen = self.screen()
         if screen is not None:
             avail = screen.availableGeometry()
-            init_w = max(640, min(800, int(avail.width() * 0.5)))
-            init_h = max(520, min(700, int(avail.height() * 0.6)))
+            init_w = max(520, min(800, int(avail.width() * 0.5)))
+            init_h = max(420, min(700, int(avail.height() * 0.55)))
         else:
-            init_w, init_h = 640, 520
+            init_w, init_h = 580, 460
+        # Minimum size: 40% of screen to avoid dialog being inaccessibly small,
+        # but cap below the initial size so the grip actually allows shrinking.
+        if screen is not None:
+            avail = screen.availableGeometry()
+            min_w = max(360, min(init_w, int(avail.width() * 0.35)))
+            min_h = max(280, min(init_h, int(avail.height() * 0.35)))
+        else:
+            min_w, min_h = 360, 280
+        dlg.setMinimumSize(min_w, min_h)
         dlg.resize(init_w, init_h)
         dlg.move(
             self.x() + (self.width() - init_w) // 2,
