@@ -1094,35 +1094,79 @@ class AlphaFixerTab(QWidget):
         out = _QI(arr.tobytes(), w, h, w * 4, _QI.Format.Format_ARGB32)
         out = out.copy()  # detach from numpy buffer
 
-        # --- Draw tiny alpha-value text labels on a sparse grid -------------
+        # --- Draw alpha-value text labels at region centroids ----------------
         # Only add labels when the image is large enough to be legible.
         _MIN_LABEL_DIM = 32
         if w >= _MIN_LABEL_DIM and h >= _MIN_LABEL_DIM:
-            # Grid spacing: aim for roughly 8 × 8 labels maximum, adaptive to
-            # image size.  Minimum step of 20 px to avoid label clutter.
-            step = max(20, min(w, h) // 8)
+            # Find each distinct alpha value and compute centroid(s) so labels
+            # are placed accurately *inside* each region rather than on a
+            # fixed grid that may sample the wrong value.
+            total_px = w * h
+            min_fraction = 0.001  # skip values covering < 0.1% of pixels
+
+            # Pre-filter to only significant values to avoid O(256 * H*W) work
+            # on gradient images.  Count pixels per value in one pass.
+            val_counts = {int(v): int(c)
+                         for v, c in zip(*np.unique(alpha_raw, return_counts=True))
+                         if c >= max(1, int(total_px * min_fraction))}
+            # Cap at 40 most-dominant values to keep paint performance fast.
+            top_vals = sorted(val_counts, key=lambda v: -val_counts[v])[:40]
+
+            # Font size: scale with image size up to a legible cap
+            px_size = max(8, min(18, min(w, h) // 12))
             font = QFont()
-            font.setPixelSize(max(7, step // 4))
+            font.setPixelSize(px_size)
             font.setBold(True)
             painter = QPainter(out)
             painter.setFont(font)
             fm = painter.fontMetrics()
-            half_step = step // 2
-            for gy in range(half_step, h, step):
-                for gx in range(half_step, w, step):
-                    a_val = int(alpha_raw[gy, gx])
-                    text = str(a_val)
-                    tw = fm.horizontalAdvance(text)
-                    th = fm.ascent()
-                    tx = gx - tw // 2
-                    ty = gy + th // 2
-                    # Black shadow/outline for contrast
-                    painter.setPen(QPen(QColor(0, 0, 0, 200)))
-                    for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                        painter.drawText(tx + ox, ty + oy, text)
-                    # White foreground text
-                    painter.setPen(QPen(QColor(255, 255, 255, 230)))
-                    painter.drawText(tx, ty, text)
+
+            for a_val in top_vals:
+                mask = alpha_raw == a_val
+                px_count = val_counts[a_val]
+                text = str(int(a_val))
+                tw = fm.horizontalAdvance(text)
+                th = fm.ascent()
+
+                ys, xs = np.where(mask)
+                # Centroid label (one per unique value, centred on the region)
+                cx, cy = int(xs.mean()), int(ys.mean())
+                tx = cx - tw // 2
+                ty = cy + th // 2
+
+                # Black outline for contrast
+                painter.setPen(QPen(QColor(0, 0, 0, 200)))
+                for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    painter.drawText(tx + ox, ty + oy, text)
+                # White foreground text
+                painter.setPen(QPen(QColor(255, 255, 255, 230)))
+                painter.drawText(tx, ty, text)
+
+                # For large regions add a few extra sparse labels so the value
+                # is readable without needing to find the centroid.
+                if px_count > total_px * 0.05:
+                    step = max(24, min(w, h) // 6)
+                    half = step // 2
+                    shown = 0
+                    for gy in range(half, h, step):
+                        for gx in range(half, w, step):
+                            if not mask[gy, gx]:
+                                continue
+                            if shown >= 12:
+                                break
+                            stx = gx - tw // 2
+                            sty = gy + th // 2
+                            small_font = QFont()
+                            small_font.setPixelSize(max(6, px_size - 2))
+                            small_font.setBold(True)
+                            painter.setFont(small_font)
+                            painter.setPen(QPen(QColor(0, 0, 0, 160)))
+                            for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                                painter.drawText(stx + ox, sty + oy, text)
+                            painter.setPen(QPen(QColor(255, 255, 255, 180)))
+                            painter.drawText(stx, sty, text)
+                            painter.setFont(font)
+                            shown += 1
             painter.end()
 
         return out

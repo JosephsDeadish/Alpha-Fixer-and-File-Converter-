@@ -1287,7 +1287,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Left panel (controls) ─────────────────────────────────────────
         left_panel = QWidget()
-        left_panel.setFixedWidth(330)
+        left_panel.setFixedWidth(340)
         lv = QVBoxLayout(left_panel)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
@@ -1338,6 +1338,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_undo_process = QPushButton("↩ Undo Apply")
         self._btn_undo_process.setEnabled(False)
         self._btn_undo_process.setMinimumHeight(26)
+        self._btn_undo_process.setMinimumWidth(110)
         self._btn_undo_process.setToolTip(
             "Undo the last Apply operation and restore the previous result."
         )
@@ -1346,6 +1347,7 @@ class SelectiveAlphaTool(QWidget):
 
         self._btn_save = QPushButton("💾 Save…")
         self._btn_save.setMinimumHeight(26)
+        self._btn_save.setMinimumWidth(90)
         self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
@@ -1387,7 +1389,7 @@ class SelectiveAlphaTool(QWidget):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setMinimumHeight(28)
-            btn.setMinimumWidth(100)
+            btn.setMinimumWidth(120)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)
@@ -1870,7 +1872,7 @@ class SelectiveAlphaTool(QWidget):
         left_scroll.setWidget(left_panel)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        left_scroll.setFixedWidth(350)  # panel 330 + scroll bar ~20
+        left_scroll.setFixedWidth(360)  # panel 340 + scroll bar ~20
         root.addWidget(left_scroll)
 
         # ── Canvas ───────────────────────────────────────────────────────
