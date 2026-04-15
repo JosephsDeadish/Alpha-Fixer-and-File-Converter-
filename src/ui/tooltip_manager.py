@@ -6661,14 +6661,16 @@ class TooltipManager(QObject):
         tab_bar.setToolTip("")
         # When the QTabBar is destroyed, remove its refs so the O(N) scan
         # in eventFilter does not accumulate stale entries over time.
-        # Use a default-argument to capture bar_id by value; a bare `lambda`
-        # would capture it by reference which can give the wrong id if the
-        # variable is ever reassigned.
-        # The destroyed signal passes the dying QObject as a positional argument;
-        # we accept it with a leading dummy parameter so it does not accidentally
-        # override the `bid` default and call cleanup with the wrong value.
+        # Use functools.partial + a named inner function instead of a lambda
+        # with a keyword-only default arg; PyQt6 6.11+ introspects slot
+        # signatures and raises TypeError for keyword-only parameters.
+        import functools as _functools
+
+        def _tab_bar_cleanup(captured_bid, *_args):
+            self._cleanup_tab_bar(captured_bid)
+
         try:
-            tab_bar.destroyed.connect(lambda *_args, bid=bar_id: self._cleanup_tab_bar(bid))
+            tab_bar.destroyed.connect(_functools.partial(_tab_bar_cleanup, bar_id))
         except Exception:
             pass
         # Also clear per-tab native tooltips
