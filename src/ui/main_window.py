@@ -909,7 +909,7 @@ class MainWindow(QMainWindow):
         # trigger dozens of expensive setStyleSheet() calls per second.
         self._settings_apply_timer = QTimer(self)
         self._settings_apply_timer.setSingleShot(True)
-        self._settings_apply_timer.setInterval(250)
+        self._settings_apply_timer.setInterval(300)
         self._settings_apply_timer.timeout.connect(self._apply_settings_now)
         # Cache last applied stylesheet to avoid redundant setStyleSheet calls
         self._last_stylesheet: str = ""
