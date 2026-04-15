@@ -2803,7 +2803,7 @@ class MainWindow(QMainWindow):
             self._video_tool_dlg.show()
             self._video_tool_dlg.raise_()
             self._video_tool_dlg.activateWindow()
-        super().contextMenuEvent(event)
+        event.accept()
 
     def changeEvent(self, event: "QEvent") -> None:
         """Handle runtime display/DPI changes and minimize/restore events.

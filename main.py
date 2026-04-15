@@ -197,6 +197,199 @@ os.environ.setdefault("QT_OPENGL", "software")
 _excepthook_active = False
 
 
+# ---------------------------------------------------------------------------
+# Crash dialog – human-readable, fully selectable, copyable
+# ---------------------------------------------------------------------------
+
+def _explain_error(exc_type, exc_value) -> str:
+    """Return a plain-English one-liner for common exception types."""
+    name = exc_type.__name__ if exc_type else "Error"
+    msg  = str(exc_value) if exc_value else ""
+    if name == "NameError":
+        return f"A name was used before it was defined: {msg}"
+    if name == "AttributeError":
+        return f"An object did not have the expected attribute: {msg}"
+    if name == "ImportError" or name == "ModuleNotFoundError":
+        return f"A required module could not be imported: {msg}"
+    if name == "TypeError":
+        return f"A function was called with the wrong argument type: {msg}"
+    if name == "ValueError":
+        return f"A function received an invalid value: {msg}"
+    if name == "FileNotFoundError":
+        return f"A required file was not found: {msg}"
+    if name == "PermissionError":
+        return f"Permission denied when accessing a file or resource: {msg}"
+    if name == "MemoryError":
+        return "The application ran out of memory."
+    if name == "RecursionError":
+        return "Maximum recursion depth exceeded (likely an infinite loop in code)."
+    if name == "KeyboardInterrupt":
+        return "The application was interrupted by the user."
+    return f"{name}: {msg}"
+
+
+def _show_crash_dialog(
+    title: str,
+    summary: str,
+    traceback_text: str,
+    sysinfo: str,
+    fatal: bool = False,
+) -> None:
+    """Show an improved crash dialog with fully selectable, copyable text.
+
+    *summary*       – a short, human-readable description of what went wrong.
+    *traceback_text* – the raw Python traceback string.
+    *sysinfo*       – system / library version info.
+    *fatal*         – when True the application will exit after the dialog.
+    """
+    try:
+        from PyQt6.QtWidgets import (
+            QApplication, QDialog, QVBoxLayout, QHBoxLayout,
+            QLabel, QPlainTextEdit, QPushButton, QFrame,
+        )
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QFont, QClipboard
+
+        app = QApplication.instance()
+        if app is None:
+            return
+
+        dlg = QDialog()
+        dlg.setWindowTitle(title)
+        dlg.setMinimumSize(600, 480)
+        dlg.resize(760, 560)
+        dlg.setWindowFlags(
+            dlg.windowFlags()
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+        )
+
+        # Dark-ish stylesheet that stays readable regardless of system theme.
+        dlg.setStyleSheet("""
+            QDialog {
+                background: #1e1e2e;
+                color: #cdd6f4;
+            }
+            QLabel#title_lbl {
+                color: #f38ba8;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 4px 0;
+            }
+            QLabel#summary_lbl {
+                color: #cdd6f4;
+                font-size: 12px;
+                background: #313244;
+                border-radius: 4px;
+                padding: 8px 10px;
+            }
+            QLabel#log_lbl {
+                color: #a6adc8;
+                font-size: 10px;
+            }
+            QPlainTextEdit {
+                background: #11111b;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                font-family: Consolas, "Courier New", monospace;
+                font-size: 10px;
+                selection-background-color: #585b70;
+                selection-color: #cdd6f4;
+            }
+            QPushButton {
+                background: #313244;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                padding: 5px 14px;
+                font-size: 11px;
+                min-height: 26px;
+            }
+            QPushButton:hover { background: #45475a; }
+            QPushButton:pressed { background: #585b70; }
+            QPushButton#btn_close {
+                background: #f38ba8;
+                color: #1e1e2e;
+                border: none;
+                font-weight: bold;
+            }
+            QPushButton#btn_close:hover { background: #eba0ac; }
+        """)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 14, 16, 12)
+        layout.setSpacing(10)
+
+        # ── Title ────────────────────────────────────────────────────────
+        title_lbl = QLabel("💥  " + title)
+        title_lbl.setObjectName("title_lbl")
+        layout.addWidget(title_lbl)
+
+        # ── Human-readable summary ───────────────────────────────────────
+        summary_lbl = QLabel(summary)
+        summary_lbl.setObjectName("summary_lbl")
+        summary_lbl.setWordWrap(True)
+        summary_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        layout.addWidget(summary_lbl)
+
+        # ── Divider ──────────────────────────────────────────────────────
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("color: #45475a;")
+        layout.addWidget(line)
+
+        # ── Full details (traceback + sysinfo) – fully selectable ────────
+        details_label = QLabel("Full details  (select all with Ctrl+A, copy with Ctrl+C):")
+        details_label.setObjectName("log_lbl")
+        layout.addWidget(details_label)
+
+        full_text = traceback_text.rstrip()
+        if sysinfo:
+            full_text += f"\n\n─── System Info ───\n{sysinfo}"
+        if log_file:
+            full_text += f"\n\n─── Log file ───\n{log_file}"
+
+        details_edit = QPlainTextEdit(full_text)
+        details_edit.setReadOnly(True)
+        details_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        layout.addWidget(details_edit, 1)
+
+        # ── Button row ───────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        btn_copy = QPushButton("📋  Copy All")
+        btn_copy.setObjectName("btn_copy")
+        btn_copy.setToolTip("Copy the full crash details to the clipboard")
+
+        def _copy_all():
+            cb = QApplication.clipboard()
+            cb.setText(full_text)
+            btn_copy.setText("✅  Copied!")
+
+        btn_copy.clicked.connect(_copy_all)
+        btn_row.addWidget(btn_copy)
+        btn_row.addStretch()
+
+        label_action = "Exit Application" if fatal else "Close (app will try to continue)"
+        btn_close = QPushButton(("🚪  " if fatal else "✖  ") + label_action)
+        btn_close.setObjectName("btn_close")
+        btn_close.clicked.connect(dlg.accept)
+        btn_row.addWidget(btn_close)
+
+        layout.addLayout(btn_row)
+
+        dlg.exec()
+    except Exception:
+        # If the crash dialog itself fails, fall back silently – the error
+        # was already written to the log file.
+        pass
+
+
 def _collect_sysinfo() -> str:
     """Return a compact diagnostic string with Python and key-library versions."""
     lines = [
@@ -233,18 +426,23 @@ def _excepthook(exc_type, exc_value, exc_tb):
 
     _excepthook_active = True
     try:
-        from PyQt6.QtWidgets import QApplication, QMessageBox
+        from PyQt6.QtWidgets import QApplication
         app = QApplication.instance()
         if app:
-            box = QMessageBox()
-            box.setWindowTitle("Unexpected Error 🐼")
-            box.setText(
-                "An unexpected error occurred. The application will try to continue.\n\n"
-                f"Details logged to:\n{log_file}"
+            explanation = _explain_error(exc_type, exc_value)
+            summary = (
+                "An unexpected error occurred.  "
+                "The application will try to continue running.\n\n"
+                f"Error type:  {exc_type.__name__ if exc_type else 'Unknown'}\n"
+                f"Explanation: {explanation}"
             )
-            box.setDetailedText(f"{msg}\n\nSystem info:\n{sysinfo}")
-            box.setIcon(QMessageBox.Icon.Critical)
-            box.exec()
+            _show_crash_dialog(
+                title="Unexpected Error 🐼",
+                summary=summary,
+                traceback_text=msg,
+                sysinfo=sysinfo,
+                fatal=False,
+            )
     except Exception:
         pass
     finally:
@@ -457,19 +655,22 @@ def main():
             "System info:\n%s",
             exc, sysinfo,
         )
-        from PyQt6.QtWidgets import QMessageBox
-        box = QMessageBox()
-        box.setWindowTitle("Startup Error — Missing Library 🐼")
-        box.setText(
+        tb_str = traceback.format_exc()
+        explanation = _explain_error(type(exc), exc)
+        summary = (
             f"A required library is missing and the application cannot start.\n\n"
-            f"Missing: {exc}\n\n"
+            f"Error type:  {type(exc).__name__}\n"
+            f"Explanation: {explanation}\n\n"
             "Install all dependencies with:\n"
-            "    pip install -r requirements.txt\n\n"
-            f"Details logged to:\n{log_file}"
+            "    pip install -r requirements.txt"
         )
-        box.setDetailedText(f"System info:\n{sysinfo}")
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.exec()
+        _show_crash_dialog(
+            title="Startup Error — Missing Library 🐼",
+            summary=summary,
+            traceback_text=tb_str,
+            sysinfo=sysinfo,
+            fatal=True,
+        )
         sys.exit(1)
 
     settings = SettingsManager()
@@ -498,17 +699,19 @@ def main():
             "Failed to create main window:\n%s\nSystem info:\n%s",
             tb_str, sysinfo,
         )
-        from PyQt6.QtWidgets import QMessageBox
-        box = QMessageBox()
-        box.setWindowTitle("Startup Error 🐼")
-        box.setText(
+        explanation = _explain_error(type(exc), exc)
+        summary = (
             "The main window could not be created and the application cannot start.\n\n"
-            f"Error: {exc}\n\n"
-            f"Details logged to:\n{log_file}"
+            f"Error type:  {type(exc).__name__}\n"
+            f"Explanation: {explanation}"
         )
-        box.setDetailedText(f"{tb_str}\n\nSystem info:\n{sysinfo}")
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.exec()
+        _show_crash_dialog(
+            title="Startup Error 🐼",
+            summary=summary,
+            traceback_text=tb_str,
+            sysinfo=sysinfo,
+            fatal=True,
+        )
         sys.exit(1)
 
     # Close splash and reveal main window after the splash duration
