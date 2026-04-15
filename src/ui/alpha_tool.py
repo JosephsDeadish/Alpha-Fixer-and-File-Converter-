@@ -264,6 +264,9 @@ class AlphaFixerTab(QWidget):
     # share detected zone masks with the Selective Alpha tool.
     # Carries a list of (alpha_value: int, bool_mask: np.ndarray) tuples.
     zone_masks_shared = pyqtSignal(list)
+    # Emitted when the output directory is changed (browse or typed).
+    # Carries the new path string (empty string = same as source).
+    output_dir_changed = pyqtSignal(str)
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -1256,6 +1259,13 @@ class AlphaFixerTab(QWidget):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")
         if folder:
             self._out_dir_edit.setText(folder)
+            self.output_dir_changed.emit(folder)
+
+    def set_output_dir(self, path: str) -> None:
+        """Set the output directory from an external source without emitting output_dir_changed."""
+        self._out_dir_edit.blockSignals(True)
+        self._out_dir_edit.setText(path)
+        self._out_dir_edit.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Processing

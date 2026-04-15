@@ -197,12 +197,34 @@ os.environ.setdefault("QT_OPENGL", "software")
 _excepthook_active = False
 
 
+def _collect_sysinfo() -> str:
+    """Return a compact diagnostic string with Python and key-library versions."""
+    lines = [
+        f"Python: {sys.version}",
+        f"Platform: {sys.platform}",
+    ]
+    for mod_name, attr in (
+        ("PyQt6.QtCore", "PYQT_VERSION_STR"),
+        ("PyQt6.QtCore", "QT_VERSION_STR"),
+        ("PIL", "__version__"),
+        ("numpy", "__version__"),
+    ):
+        try:
+            import importlib
+            mod = importlib.import_module(mod_name)
+            lines.append(f"{mod_name}.{attr}: {getattr(mod, attr, '?')}")
+        except Exception as exc:
+            lines.append(f"{mod_name}: MISSING ({exc})")
+    return "\n".join(lines)
+
+
 def _excepthook(exc_type, exc_value, exc_tb):
     """Log uncaught exceptions and show a friendly dialog instead of crashing silently."""
     global _excepthook_active
 
     msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-    logger.critical("Uncaught exception:\n%s", msg)
+    sysinfo = _collect_sysinfo()
+    logger.critical("Uncaught exception:\n%s\nSystem info:\n%s", msg, sysinfo)
 
     # If we're already inside _excepthook (i.e. an error occurred while the
     # previous error dialog was open), only log – do not open another dialog.
@@ -220,7 +242,7 @@ def _excepthook(exc_type, exc_value, exc_tb):
                 "An unexpected error occurred. The application will try to continue.\n\n"
                 f"Details logged to:\n{log_file}"
             )
-            box.setDetailedText(msg)
+            box.setDetailedText(f"{msg}\n\nSystem info:\n{sysinfo}")
             box.setIcon(QMessageBox.Icon.Critical)
             box.exec()
     except Exception:
@@ -422,9 +444,33 @@ def main():
 
     logger.info("Starting Alpha Fixer & File Converter")
 
-    from src.core.settings_manager import SettingsManager
-    from src.ui.main_window import MainWindow
-    from src.ui.splash_screen import ThemeSplashScreen
+    # Import application modules.  Any ImportError here typically means a
+    # required library (numpy, Pillow, etc.) is not installed.  Log clearly.
+    try:
+        from src.core.settings_manager import SettingsManager
+        from src.ui.main_window import MainWindow
+        from src.ui.splash_screen import ThemeSplashScreen
+    except ImportError as exc:
+        sysinfo = _collect_sysinfo()
+        logger.critical(
+            "Failed to import application modules (missing library?):\n%s\n"
+            "System info:\n%s",
+            exc, sysinfo,
+        )
+        from PyQt6.QtWidgets import QMessageBox
+        box = QMessageBox()
+        box.setWindowTitle("Startup Error — Missing Library 🐼")
+        box.setText(
+            f"A required library is missing and the application cannot start.\n\n"
+            f"Missing: {exc}\n\n"
+            "Install all dependencies with:\n"
+            "    pip install -r requirements.txt\n\n"
+            f"Details logged to:\n{log_file}"
+        )
+        box.setDetailedText(f"System info:\n{sysinfo}")
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.exec()
+        sys.exit(1)
 
     settings = SettingsManager()
 
@@ -443,7 +489,27 @@ def main():
         splash.show()
         app.processEvents()
 
-    window = MainWindow(settings)
+    try:
+        window = MainWindow(settings)
+    except Exception as exc:
+        tb_str = traceback.format_exc()
+        sysinfo = _collect_sysinfo()
+        logger.critical(
+            "Failed to create main window:\n%s\nSystem info:\n%s",
+            tb_str, sysinfo,
+        )
+        from PyQt6.QtWidgets import QMessageBox
+        box = QMessageBox()
+        box.setWindowTitle("Startup Error 🐼")
+        box.setText(
+            "The main window could not be created and the application cannot start.\n\n"
+            f"Error: {exc}\n\n"
+            f"Details logged to:\n{log_file}"
+        )
+        box.setDetailedText(f"{tb_str}\n\nSystem info:\n{sysinfo}")
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.exec()
+        sys.exit(1)
 
     # Close splash and reveal main window after the splash duration
     from PyQt6.QtCore import QTimer

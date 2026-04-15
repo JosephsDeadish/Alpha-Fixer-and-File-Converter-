@@ -1220,6 +1220,15 @@ class MainWindow(QMainWindow):
         self._alpha_tab.zone_masks_shared.connect(
             self._selective_alpha_tab.receive_shared_zones
         )
+        # Cross-tool output directory sync (item #3): when one tool's output
+        # dir changes via Browse, mirror it to the other tool so users only
+        # have to set it once.
+        self._alpha_tab.output_dir_changed.connect(
+            self._converter_tab.set_output_dir
+        )
+        self._converter_tab.output_dir_changed.connect(
+            self._alpha_tab.set_output_dir
+        )
 
         # Cursor
         self._apply_cursor()

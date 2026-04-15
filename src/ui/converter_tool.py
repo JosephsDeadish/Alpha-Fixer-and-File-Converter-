@@ -48,6 +48,9 @@ class ConverterTab(QWidget):
     list_cleared = pyqtSignal()
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
+    # Emitted when the output directory is changed (browse or typed).
+    # Carries the new path string (empty string = same as source).
+    output_dir_changed = pyqtSignal(str)
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -807,6 +810,14 @@ class ConverterTab(QWidget):
         if folder:
             self._out_dir_edit.setText(folder)
             self._settings.set("converter_output_dir", folder)
+            self.output_dir_changed.emit(folder)
+
+    def set_output_dir(self, path: str) -> None:
+        """Set the output directory from an external source without emitting output_dir_changed."""
+        self._out_dir_edit.blockSignals(True)
+        self._out_dir_edit.setText(path)
+        self._out_dir_edit.blockSignals(False)
+        self._settings.set("converter_output_dir", path)
 
     @pyqtSlot(QImage, QImage, str, str)
     def _on_preview_ready(self, src_qi: QImage, out_qi: QImage, src_meta: str, out_meta: str):

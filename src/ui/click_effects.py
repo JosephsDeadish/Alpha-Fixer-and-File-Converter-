@@ -2418,6 +2418,9 @@ class ClickEffectsOverlay(QWidget):
             self._star_shoot, self._bubble_rise, self._neon_flicker,
             self._ghost_wisp, self._confetti_fall, self._firefly_drift,
             self._matrix_rain, self._leaf_drift, self._rainbow_sparkle,
+            self._rainbow_confetti, self._star_dust, self._bamboo_leaf,
+            self._otter_bubble, self._shark_fin, self._slither_wiggler,
+            self._noodle_strand,
             self._banner_flock,
         ):
             if obj is not None:
@@ -2794,8 +2797,6 @@ class ClickEffectsOverlay(QWidget):
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""
         set_custom_emoji(emoji_list)
-        self._click_count += 1
-        return self._click_count
 
     def _add_particle(self, p: _Particle) -> None:
         self._particles.append(p)
