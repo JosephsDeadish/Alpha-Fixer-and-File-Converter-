@@ -605,9 +605,11 @@ class BeforeAfterWidget(QWidget):
                 atext = "AFTER"
                 aw2 = fm.horizontalAdvance(atext) + 8
                 ax = w - aw2 - 4
-                painter.fillRect(ax, 4, aw2, lh, QColor(0, 0, 0, 150))
+                # Offset AFTER downward to clear the zoom overlay bar in the top-right corner.
+                ay = 32
+                painter.fillRect(ax, ay, aw2, lh, QColor(0, 0, 0, 150))
                 painter.setPen(QColor(self._divider_color))
-                painter.drawText(ax + 4, 4 + fm.ascent() + 2, atext)
+                painter.drawText(ax + 4, ay + fm.ascent() + 2, atext)
 
         # ── Alpha stats overlay (compact, below divider handle) ──────────
         # The primary stats display is now in the side panels in alpha_tool.py;
