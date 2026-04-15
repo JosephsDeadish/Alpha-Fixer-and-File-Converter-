@@ -2392,6 +2392,44 @@ class ClickEffectsOverlay(QWidget):
                 if not self._timer.isActive():
                     self._timer.start()
 
+    def pause_for_minimize(self) -> None:
+        """Stop ALL animation timers and clear particles when the window is minimised.
+
+        Unlike ``set_enabled(False)``, this method also stops background-ambient
+        and background-flock sub-timers which normally continue independently of
+        the click-effects enabled state.  After calling this, calling
+        ``set_enabled(True)`` (or letting ``_apply_settings_now`` do so) will
+        properly restart every effect from a clean state, preventing the
+        particle-buildup crash that used to occur on restore.
+        """
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                app.removeEventFilter(self)
+            except Exception:
+                pass
+        # Stop ALL timers unconditionally.
+        self._timer.stop()
+        self._particles.clear()
+        for obj in (
+            self._bat_flock, self._fairy_flock, self._fish_flock,
+            self._alien_beam, self._slime_drip,
+            self._snow_drift, self._ember_drift, self._sakura_petal,
+            self._star_shoot, self._bubble_rise, self._neon_flicker,
+            self._ghost_wisp, self._confetti_fall, self._firefly_drift,
+            self._matrix_rain, self._leaf_drift, self._rainbow_sparkle,
+            self._banner_flock,
+        ):
+            if obj is not None:
+                try:
+                    obj.stop()
+                except Exception:
+                    pass
+        self.hide()
+        # Reset _enabled so set_enabled(True) fires a real state transition on
+        # resume, which reinstalls the event filter and restarts the main timer.
+        self._enabled = False
+
     def set_banner_flock(self, enabled: bool,
                          emoji: str = "🐼", color: str = "#e94560") -> None:
         """Activate or deactivate the banner flock animation.

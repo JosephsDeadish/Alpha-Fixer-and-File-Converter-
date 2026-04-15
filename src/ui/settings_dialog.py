@@ -1417,15 +1417,19 @@ class SettingsDialog(QDialog):
         self._use_theme_trail_check.setEnabled(trail_enabled)
         self._trail_color_btn.setEnabled(trail_enabled and not use_theme_trail)
         self._trail_style_combo.setEnabled(trail_enabled and not use_theme_trail)
-        # Load persisted trail style into combo
+        # Load persisted trail style into combo (or theme trail if use-theme is on)
         _TRAIL_STYLE_MAP = {
             "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
             "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
             "distortion": 8, "fire": 9, "lightning": 10,
             "plasma": 11, "sakura": 12, "smoke": 13,
         }
-        saved_style = self._settings.get("trail_style", "dots")
-        self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
+        if use_theme_trail:
+            theme_trail = self._settings.get_theme().get("_trail", "dots")
+            self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(theme_trail, 0))
+        else:
+            saved_style = self._settings.get("trail_style", "dots")
+            self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
         # Load trail sliders and apply enabled state
         saved_length = int(self._settings.get("trail_length", _TRAIL_LENGTH_DEFAULT))
         self._trail_length_slider.setValue(max(_TRAIL_LENGTH_MIN, min(_TRAIL_LENGTH_MAX, saved_length)))
@@ -1438,6 +1442,7 @@ class SettingsDialog(QDialog):
         self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
         self._trail_length_slider.setEnabled(trail_enabled)
         self._trail_fade_slider.setEnabled(trail_enabled)
+        self._trail_intensity_slider.setEnabled(trail_enabled)
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -1951,6 +1956,7 @@ class SettingsDialog(QDialog):
         self._trail_style_combo.setEnabled(enabled and not use_theme)
         self._trail_length_slider.setEnabled(enabled)
         self._trail_fade_slider.setEnabled(enabled)
+        self._trail_intensity_slider.setEnabled(enabled)
         if enabled and not self._settings.get("trail_enabled_once", False):
             self._settings.set("trail_enabled_once", True)
             self.settings_changed.emit()
@@ -1971,6 +1977,44 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_trail", use_theme)
         self._trail_color_btn.setEnabled(enabled and not use_theme)
         self._trail_style_combo.setEnabled(enabled and not use_theme)
+        self._trail_length_slider.setEnabled(enabled)
+        self._trail_fade_slider.setEnabled(enabled)
+        self._trail_intensity_slider.setEnabled(enabled)
+        if use_theme:
+            # Select the theme's trail style in the combo so the user can see
+            # what is active, and update the tooltip to confirm.
+            theme = self._settings.get_theme()
+            theme_name = theme.get("name", "")
+            theme_trail = theme.get("_trail", "dots")
+            _TRAIL_STYLE_MAP = {
+                "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
+                "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
+                "distortion": 8, "fire": 9, "lightning": 10,
+                "plasma": 11, "sakura": 12, "smoke": 13,
+            }
+            idx = _TRAIL_STYLE_MAP.get(theme_trail, 0)
+            self._trail_style_combo.setCurrentIndex(idx)
+            style_label = self._trail_style_combo.currentText().split("(")[0].strip()
+            if not theme_trail or theme_trail == "none":
+                self._trail_style_combo.setToolTip(
+                    f"No trail style defined for the '{theme_name}' theme."
+                )
+            else:
+                self._trail_style_combo.setToolTip(
+                    f"Using theme trail: {style_label}\n"
+                    f"(set by the '{theme_name}' theme)\n"
+                    "Uncheck 'Use theme trail' to override manually."
+                )
+        else:
+            self._trail_style_combo.setToolTip(
+                "Choose the visual style of the mouse trail.\n"
+                "Ribbon draws a connected smooth line, Noodle adds physics-based swing,\n"
+                "Comet draws a tapered tail, Fairy/Wave/Sparkle use themed emoji,\n"
+                "Distortion Wave writhes sinusoidally, Fire🔥 glows and drifts upward,\n"
+                "Lightning⚡ flashes bright bolt segments that vanish instantly,\n"
+                "Plasma🔵 crackles with electric arcs, Sakura🌸 drifts pink petals,\n"
+                "Smoke💨 puffs expand and rise as they fade."
+            )
         self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
@@ -2241,8 +2285,9 @@ class SettingsDialog(QDialog):
         if use_theme_flock:
             theme = self._settings.get_theme()
             theme_name = theme.get("name", "")
+            theme_icon = theme.get("_icon", "🐼")
             self._bg_flock_combo.setToolTip(
-                f"Using theme flock emoji for '{theme_name}' theme.\n"
+                f"Using theme flock emoji: {theme_icon} (from '{theme_name}' theme)\n"
                 "Uncheck 'Use theme flock' to override manually."
             )
         else:

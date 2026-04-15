@@ -2798,12 +2798,15 @@ class MainWindow(QMainWindow):
         """Stop all background visual effect timers while the window is minimised."""
         if self._click_effects is not None:
             try:
-                self._click_effects._timer.stop()
-                self._click_effects.hide()
+                self._click_effects.pause_for_minimize()
             except Exception:
                 pass
         if self._trail_overlay is not None:
             try:
+                # Clear the trail buffer so it doesn't replay stale points.
+                self._trail_overlay._trail.clear()
+                self._trail_overlay._timer.stop()
+                self._trail_overlay._enabled = False
                 self._trail_overlay.hide()
             except Exception:
                 pass
@@ -2814,20 +2817,13 @@ class MainWindow(QMainWindow):
         Re-applying from settings is safer than resuming timers directly because
         it guarantees only the currently-enabled effects are started and prevents
         timers from accumulating from multiple pause/resume cycles.
+        Since _pause_visual_effects sets _enabled=False on both overlays, the
+        set_enabled(True) calls inside _apply_settings_now will trigger a real
+        state transition that restarts timers, event filters, and sub-timers.
         """
         if self.isMinimized():
             return  # another minimise happened before the timer fired
-        # Show overlays then apply all effect settings in a single deferred call.
-        if self._click_effects is not None:
-            try:
-                self._click_effects.show()
-            except Exception:
-                pass
-        if self._trail_overlay is not None and self._settings.get("trail_enabled", False):
-            try:
-                self._trail_overlay.show()
-            except Exception:
-                pass
+        # _apply_settings_now re-enables everything that was active before the pause.
         QTimer.singleShot(0, self._apply_settings_now)
 
     def _reposition_overlays(self) -> None:
