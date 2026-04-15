@@ -1523,9 +1523,16 @@ class SettingsDialog(QDialog):
         self._bg_drip_check.setChecked(bg_drip_enabled)
         use_theme_drip = self._settings.get("use_theme_drip", False)
         self._use_theme_drip_check.setChecked(use_theme_drip)
-        bg_drip_type = self._settings.get("bg_drip_type", "blood")
+        # When use-theme drip is on, show the theme's drip type in the combo
+        if use_theme_drip:
+            eff = self._settings.get_theme().get("_effect", "default")
+            theme_drip = ("blood" if eff in ("gore", "shark") else
+                          "water" if eff in ("ocean", "ripple", "mermaid") else
+                          self._settings.get("bg_drip_type", "blood"))
+        else:
+            theme_drip = self._settings.get("bg_drip_type", "blood")
         for i in range(self._bg_drip_combo.count()):
-            if self._bg_drip_combo.itemData(i) == bg_drip_type:
+            if self._bg_drip_combo.itemData(i) == theme_drip:
                 self._bg_drip_combo.setCurrentIndex(i)
                 break
         self._use_theme_drip_check.setEnabled(bg_drip_enabled)
@@ -1693,6 +1700,8 @@ class SettingsDialog(QDialog):
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
         self._set_effect_combo(self._theme.get("_effect", "default"))
+        # Update "use theme" combos so they preview the new theme's values immediately.
+        self._sync_use_theme_combos()
         # Persist and broadcast immediately
         self._settings.set_theme(self._theme)
         # Emit first-change signal before theme_changed so unlock fires once.
@@ -1789,6 +1798,7 @@ class SettingsDialog(QDialog):
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
         self._set_effect_combo(self._theme.get("_effect", "default"))
+        self._sync_use_theme_combos()
         self._settings.set_theme(self._theme)
         self.theme_changed.emit(self._theme)
         self.settings_changed.emit()
@@ -1805,6 +1815,59 @@ class SettingsDialog(QDialog):
                 self._effect_combo.setCurrentIndex(i)
                 return
         self._effect_combo.setCurrentIndex(0)
+
+    def _sync_use_theme_combos(self) -> None:
+        """Refresh all 'use theme' combo selections to reflect the current theme.
+
+        Called whenever the active theme changes (preset selection, import,
+        custom-colour save) so that every 'Use theme X' combo immediately shows
+        what value the NEW theme will provide, rather than the previous one.
+        Only combos whose matching 'use theme' checkbox is currently checked
+        are updated — unchcked combos retain the user's manual selection.
+        """
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        _TRAIL_STYLE_MAP = {
+            "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
+            "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
+            "distortion": 8, "fire": 9, "lightning": 10,
+            "plasma": 11, "sakura": 12, "smoke": 13,
+        }
+        _BANNER_ANIM_IDX_MAP = {
+            "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
+            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
+        }
+        _BUTTON_ANIM_IDX_MAP = {
+            "none": 0, "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
+        }
+        # Trail combo
+        if self._use_theme_trail_check.isChecked():
+            trail_key = theme.get("_trail", "dots")
+            self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(trail_key, 0))
+        # Banner animation combo
+        if self._banner_use_theme_anim_check.isChecked():
+            anim_key = theme.get("_banner_anim", "spin")
+            self._banner_anim_combo.setCurrentIndex(_BANNER_ANIM_IDX_MAP.get(anim_key, 0))
+        # Button animation combo
+        if self._use_theme_button_anim_check.isChecked():
+            btn_key = theme.get("_button_anim", "press")
+            self._button_anim_style_combo.setCurrentIndex(
+                _BUTTON_ANIM_IDX_MAP.get(btn_key, 0)
+            )
+        # Click effect combo (via existing helper)
+        if self._use_theme_effect_check.isChecked():
+            from .theme_engine import THEME_EFFECTS
+            effect_key = THEME_EFFECTS.get(theme_name, theme.get("_effect", "default"))
+            self._set_effect_combo(effect_key)
+        # Bg drip combo
+        if self._use_theme_drip_check.isChecked():
+            eff = theme.get("_effect", "default")
+            drip_key = ("blood" if eff in ("gore", "shark") else
+                        "water" if eff in ("ocean", "ripple", "mermaid") else "blood")
+            for i in range(self._bg_drip_combo.count()):
+                if self._bg_drip_combo.itemData(i) == drip_key:
+                    self._bg_drip_combo.setCurrentIndex(i)
+                    break
 
     def _on_effect_changed_live(self) -> None:
         """Sync the effect key into the theme dict and persist immediately."""
