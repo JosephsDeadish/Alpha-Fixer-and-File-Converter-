@@ -266,6 +266,11 @@ class SettingsDialog(QDialog):
         # On/off + use-theme row (mirrors the Mouse Trail group layout)
         self._click_effects_theme_check = QCheckBox("Enable click effects")
         effect_layout.addWidget(self._click_effects_theme_check)
+        # Sub-container: hidden until click effects are enabled
+        self._click_effect_sub = QWidget()
+        _ce_sub_vl = QVBoxLayout(self._click_effect_sub)
+        _ce_sub_vl.setContentsMargins(16, 0, 0, 0)
+        _ce_sub_vl.setSpacing(4)
         self._use_theme_effect_check = QCheckBox(
             "Use theme effect  (auto-selects the matching effect for the active theme)"
         )
@@ -273,8 +278,7 @@ class SettingsDialog(QDialog):
             "When enabled the click effect is chosen automatically to match\n"
             "the active theme — e.g. Gore gets blood splatter, Bat Cave gets bats."
         )
-        effect_layout.addWidget(self._use_theme_effect_check)
-        self._use_theme_effect_check.setEnabled(False)  # disabled until click effects enabled
+        _ce_sub_vl.addWidget(self._use_theme_effect_check)
         effect_inner = QHBoxLayout()
         effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
@@ -313,7 +317,17 @@ class SettingsDialog(QDialog):
             "Select 'Custom' to use your own emoji as particles."
         )
         effect_inner.addWidget(self._effect_combo, 1)
-        effect_layout.addLayout(effect_inner)
+        _ce_sub_vl.addLayout(effect_inner)
+        effect_layout.addWidget(self._click_effect_sub)
+        # Show/hide sub-container and combo enable state
+        def _update_effect_sub():
+            enabled = self._click_effects_theme_check.isChecked()
+            use_theme = self._use_theme_effect_check.isChecked()
+            self._click_effect_sub.setVisible(enabled)
+            self._effect_combo.setEnabled(enabled and not use_theme)
+        self._click_effects_theme_check.toggled.connect(lambda _: _update_effect_sub())
+        self._use_theme_effect_check.toggled.connect(lambda _: _update_effect_sub())
+        self._click_effect_sub.setVisible(False)
         effect_emoji_row.addWidget(grp_effect, 3)
 
         # Curated emoji palette for the custom click-effect picker.
@@ -1542,8 +1556,9 @@ class SettingsDialog(QDialog):
         self._click_effects_theme_check.setChecked(click_effects_enabled)
         use_theme_effect = self._settings.get("use_theme_effect", False)
         self._use_theme_effect_check.setChecked(use_theme_effect)
-        self._use_theme_effect_check.setEnabled(click_effects_enabled)
-        self._effect_combo.setEnabled(click_effects_enabled and not use_theme_effect)
+        self._click_effect_sub.setVisible(click_effects_enabled)
+        if click_effects_enabled:
+            self._effect_combo.setEnabled(not use_theme_effect)
         mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
@@ -2336,7 +2351,7 @@ class SettingsDialog(QDialog):
         enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("click_effects_enabled", enabled)
         use_theme = self._use_theme_effect_check.isChecked()
-        self._use_theme_effect_check.setEnabled(enabled)
+        self._click_effect_sub.setVisible(enabled)
         self._effect_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 

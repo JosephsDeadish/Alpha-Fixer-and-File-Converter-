@@ -1935,6 +1935,15 @@ class SelectiveAlphaTool(QWidget):
         self._status_lbl.setStyleSheet(
             "color: #999; font-size: 10px; padding: 2px 4px;"
         )
+        self._status_lbl.setToolTip(
+            "Shows the active tool, zone, and brush size.\n\n"
+            "Navigation tips:\n"
+            "🖱 Hold middle-mouse button (scroll wheel) and drag to pan the canvas\n"
+            "Alt + drag: alternative pan (no scroll wheel needed)\n"
+            "Ctrl + scroll wheel: zoom in / out\n"
+            "Keyboard shortcuts: B Brush · E Eraser · L Line · R Rect · X Ellipse · F Fill · P Polygon · T Transform\n"
+            "[ / ] keys: decrease / increase brush size"
+        )
         rv.addWidget(self._status_lbl)
         root.addWidget(right_widget, 1)
 
