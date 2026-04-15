@@ -1974,7 +1974,17 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_sound_changed(self) -> None:
-        self._settings.set("sound_enabled", self._sound_check.isChecked())
+        enabled = self._sound_check.isChecked()
+        self._settings.set("sound_enabled", enabled)
+        # Keep sub-controls in sync with the enabled state.
+        use_theme = self._use_theme_sound_check.isChecked()
+        self._use_theme_sound_check.setEnabled(enabled)
+        self._sound_theme_combo.setEnabled(enabled and use_theme)
+        self._sound_profile_combo.setEnabled(enabled and not use_theme)
+        self._sound_volume_slider.setEnabled(enabled)
+        self._sound_theme_change_chk.setEnabled(enabled)
+        self._sound_tab_switch_chk.setEnabled(enabled)
+        self._sound_drag_enter_chk.setEnabled(enabled)
         self.settings_changed.emit()
 
     def _on_use_theme_sound_changed(self) -> None:
@@ -2320,11 +2330,15 @@ class SettingsDialog(QDialog):
 
 
     def _on_bg_drip_changed(self) -> None:
-        self._settings.set("bg_drip_enabled", self._bg_drip_check.isChecked())
+        enabled = self._bg_drip_check.isChecked()
+        self._settings.set("bg_drip_enabled", enabled)
         use_theme_drip = self._use_theme_drip_check.isChecked()
         self._settings.set("use_theme_drip", use_theme_drip)
         drip_type = self._bg_drip_combo.currentData() or "blood"
         self._settings.set("bg_drip_type", drip_type)
+        # Keep sub-controls in sync with the enabled/use-theme state.
+        self._use_theme_drip_check.setEnabled(enabled)
+        self._bg_drip_combo.setEnabled(enabled and not use_theme_drip)
         # Update combo tooltip and selection to reflect theme drip when "use theme" is on
         if use_theme_drip:
             theme = self._settings.get_theme()
@@ -2355,11 +2369,15 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_bg_flock_changed(self) -> None:
-        self._settings.set("bg_flock_enabled", self._bg_flock_check.isChecked())
+        enabled = self._bg_flock_check.isChecked()
+        self._settings.set("bg_flock_enabled", enabled)
         use_theme_flock = self._use_theme_flock_check.isChecked()
         self._settings.set("use_theme_flock", use_theme_flock)
         flock_style = self._bg_flock_combo.currentData() or "bats"
         self._settings.set("bg_flock_style", flock_style)
+        # Keep sub-controls in sync with the enabled/use-theme state.
+        self._use_theme_flock_check.setEnabled(enabled)
+        self._bg_flock_combo.setEnabled(enabled and not use_theme_flock)
         if use_theme_flock:
             theme = self._settings.get_theme()
             theme_name = theme.get("name", "")
@@ -2380,4 +2398,6 @@ class SettingsDialog(QDialog):
         self._settings.set("bg_ambient_enabled", enabled)
         ambient_type = (self._bg_ambient_combo.currentData() or "snow") if enabled else "none"
         self._settings.set("bg_ambient_type", ambient_type)
+        # Keep the style combo enabled only while ambient effects are on.
+        self._bg_ambient_combo.setEnabled(enabled)
         self.settings_changed.emit()
