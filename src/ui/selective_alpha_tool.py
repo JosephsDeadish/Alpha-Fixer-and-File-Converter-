@@ -534,61 +534,66 @@ class SelectiveAlphaCanvas(QWidget):
         self._zone_centroids    = [None] * NUM_ZONES
         self._zone_label_points = [[] for _ in range(NUM_ZONES)]
         if self._show_alpha_labels:
+            total_px = self._img_w * self._img_h
+            # Use a consistent stride so all zones get similar label density
+            label_stride = max(16, min(self._img_w, self._img_h) // 8)
+            half = label_stride // 2
             for i in range(NUM_ZONES):
                 mask = self._masks[i]
                 if not mask.any():
                     continue
                 ys, xs = np.where(mask)
                 self._zone_centroids[i] = (int(xs.mean()), int(ys.mean()))
-                # Sparse grid: iterate the full image at a stride that yields ~n_pts hits
-                count = int(mask.sum())
-                n_pts  = max(1, min(16, count // 300))
-                stride = max(1, int(round(
-                    np.sqrt(self._img_w * self._img_h / max(1, n_pts)))))
+                # Sparse grid at uniform stride; cap at 40 to stay fast
                 pts: list[tuple[int, int]] = []
-                for sy in range(stride // 2, self._img_h, stride):
-                    for sx in range(stride // 2, self._img_w, stride):
+                for sy in range(half, self._img_h, label_stride):
+                    for sx in range(half, self._img_w, label_stride):
                         if mask[sy, sx]:
                             pts.append((sx, sy))
-                self._zone_label_points[i] = pts
+                self._zone_label_points[i] = pts[:40]
 
         return _np_to_qimage(src_arr)
 
     def _draw_alpha_labels(self, painter: QPainter) -> None:
-        """Draw alpha-value text over each visible zone (in widget space)."""
+        """Draw alpha-value text over each visible zone (in widget space).
+        
+        Labels are drawn with a black outline and white text (matching the
+        style of the Alpha & RGBA Adjuster tool's highlight overlay).
+        """
         if not self._show_alpha_labels:
             return
         z, px, py = self._zoom, self._pan_x, self._pan_y
-        small_font = QFont("Arial", max(6, int(8 * z)))
-        big_font   = QFont("Arial", max(9, int(12 * z)), QFont.Weight.Bold)
+        # Font scales with zoom; keep legible range
+        px_size = max(8, min(16, int(10 * max(z, 0.5))))
+        font = QFont("Arial", px_size, QFont.Weight.Bold)
+        big_font = QFont("Arial", max(10, int(14 * max(z, 0.5))), QFont.Weight.Bold)
+        outline_color = QColor(0, 0, 0, 200)
+        text_color = QColor(255, 255, 255, 230)
+        _offsets = ((-1, 0), (1, 0), (0, -1), (0, 1))
+
+        def _draw_labeled(f, wx, wy, text):
+            painter.setFont(f)
+            painter.setPen(outline_color)
+            for ox, oy in _offsets:
+                painter.drawText(QPointF(wx + ox, wy + oy), text)
+            painter.setPen(text_color)
+            painter.drawText(QPointF(wx, wy), text)
 
         for i in range(NUM_ZONES):
             if not self._zone_visible[i]:
                 continue
             text = str(self._zone_alphas[i])
-            r, g, b, _ = self.get_zone_color(i)
-            brightness = 0.299 * r + 0.587 * g + 0.114 * b
-            fg   = QColor(0, 0, 0)         if brightness > 140 else QColor(255, 255, 255)
-            shad = QColor(255, 255, 255, 160) if brightness <= 140 else QColor(0, 0, 0, 160)
 
-            # Grid-point labels (small)
-            painter.setFont(small_font)
+            # Grid-point labels (small) at pre-computed sparse positions
             for ix, iy in self._zone_label_points[i]:
                 wx, wy = ix * z + px, iy * z + py
-                painter.setPen(shad)
-                painter.drawText(QPointF(wx + 1, wy + 1), text)
-                painter.setPen(fg)
-                painter.drawText(QPointF(wx, wy), text)
+                _draw_labeled(font, wx, wy, text)
 
-            # Centroid label (larger)
+            # Centroid label (larger, one per zone)
             c = self._zone_centroids[i]
             if c is not None:
                 wx, wy = c[0] * z + px, c[1] * z + py
-                painter.setFont(big_font)
-                painter.setPen(shad)
-                painter.drawText(QPointF(wx + 1, wy + 1), text)
-                painter.setPen(fg)
-                painter.drawText(QPointF(wx, wy), text)
+                _draw_labeled(big_font, wx, wy, text)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
