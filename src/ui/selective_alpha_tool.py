@@ -1984,6 +1984,28 @@ class SelectiveAlphaTool(QWidget):
         QShortcut(QKeySequence("Ctrl+O"),       self).activated.connect(self._on_open)
         QShortcut(QKeySequence("Ctrl+S"),       self).activated.connect(self._on_save)
         QShortcut(QKeySequence("Ctrl+Return"),  self).activated.connect(self._on_apply)
+        # Drawing tool shortcuts: single-key mnemonics for each tool
+        _TOOL_KEYS = {
+            "B": "freehand",
+            "E": "eraser",
+            "L": "line",
+            "R": "rect",
+            "X": "ellipse",
+            "F": "fill",
+            "P": "polygon",
+            "T": "transform",
+        }
+        for key, tool in _TOOL_KEYS.items():
+            QShortcut(QKeySequence(key), self).activated.connect(
+                lambda _=None, t=tool: self._select_tool_by_key(t)
+            )
+        # Brush size adjust with [ and ]
+        QShortcut(QKeySequence("["), self).activated.connect(
+            lambda: self._adjust_brush_size(-2)
+        )
+        QShortcut(QKeySequence("]"), self).activated.connect(
+            lambda: self._adjust_brush_size(2)
+        )
 
     def _restore_settings(self) -> None:
         """Restore previously saved Selective Alpha Tool settings."""
@@ -2110,18 +2132,18 @@ class SelectiveAlphaTool(QWidget):
     @staticmethod
     def _tool_tooltip(key: str) -> str:
         tips = {
-            "freehand":  "Paint freehand.  Hold & drag to brush over the image.",
-            "line":      "Draw a straight filled line.  Drag from start to end.",
-            "rect":      "Fill a rectangle.  Drag from one corner to the opposite.",
-            "ellipse":   "Fill an ellipse.  Drag bounding box corner-to-corner.",
-            "fill":      "Click to flood-fill a region.  Stops at image edges.",
+            "freehand":  "Paint freehand.  Hold & drag to brush over the image.  [B]",
+            "line":      "Draw a straight filled line.  Drag from start to end.  [L]",
+            "rect":      "Fill a rectangle.  Drag from one corner to the opposite.  [R]",
+            "ellipse":   "Fill an ellipse.  Drag bounding box corner-to-corner.  [X]",
+            "fill":      "Click to flood-fill a region.  Stops at image edges.  [F]",
             "polygon":   "Click to add vertices; double-click to close & fill.\n"
-                         "Press Esc to cancel.",
+                         "Press Esc to cancel.  [P]",
             "eraser":    "Erase painted highlights from all zones.\n"
-                         "Hold & drag to remove previously painted areas.",
+                         "Hold & drag to remove previously painted areas.  [E]",
             "transform": "Drag to move the zone mask under the cursor.\n"
                          "Shift+drag to rotate.  Ctrl+drag to scale.\n"
-                         "One undo entry is created per drag gesture.",
+                         "One undo entry is created per drag gesture.  [T]",
         }
         return tips.get(key, "")
 
@@ -3027,6 +3049,23 @@ class SelectiveAlphaTool(QWidget):
         self._btn_close_poly.setVisible(key == "polygon")
         self._update_status()
         self._save_settings()
+
+    def _select_tool_by_key(self, tool: str) -> None:
+        """Select a drawing tool by key name and update the UI button state."""
+        if tool not in self._tool_btns:
+            return
+        self._tool_btns[tool].setChecked(True)
+        self._on_tool_selected(tool)
+
+    def _adjust_brush_size(self, delta: int) -> None:
+        """Adjust the active brush size spinbox by *delta* pixels (clamped)."""
+        current_tool = getattr(self._canvas, "_tool", "freehand")
+        if current_tool == "eraser":
+            new_val = max(1, min(200, self._eraser_spin.value() + delta))
+            self._eraser_spin.setValue(new_val)
+        else:
+            new_val = max(1, min(200, self._brush_spin.value() + delta))
+            self._brush_spin.setValue(new_val)
 
     def _on_close_polygon(self) -> None:
         """Programmatically close the in-progress polygon."""
