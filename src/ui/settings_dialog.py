@@ -772,6 +772,19 @@ class SettingsDialog(QDialog):
             "Off by default. Individual events can still be muted below."
         )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
+
+        # Sub-controls container — shown only when sounds are enabled (item 68).
+        self._sound_sub_widget = QWidget()
+        sub_sound_gl = QGridLayout(self._sound_sub_widget)
+        sub_sound_gl.setColumnStretch(1, 1)
+        sub_sound_gl.setHorizontalSpacing(10)
+        sub_sound_gl.setVerticalSpacing(6)
+        sub_sound_gl.setContentsMargins(0, 0, 0, 0)
+        self._sound_sub_widget.setVisible(False)  # hidden until sounds enabled
+        sound_gl.addWidget(self._sound_sub_widget, 1, 0, 1, 2)
+
+        # Redirect further adds to sub_sound_gl so they appear inside the container.
+        _s = sub_sound_gl
         self._use_theme_sound_check = QCheckBox("Use theme sound")
         self._use_theme_sound_check.setToolTip(
             "When enabled the click sound uses the selected Sound Theme below.\n"
@@ -779,10 +792,10 @@ class SettingsDialog(QDialog):
             "Panda = soft chime, Alien = bright ping).\n"
             "When disabled, the Sound profile dropdown below is used instead."
         )
-        sound_gl.addWidget(self._use_theme_sound_check, 1, 0, 1, 2)
+        _s.addWidget(self._use_theme_sound_check, 0, 0, 1, 2)
 
         # Sound theme dropdown (active when "Use theme sound" is ON)
-        sound_gl.addWidget(QLabel("Sound theme:"), 2, 0)
+        _s.addWidget(QLabel("Sound theme:"), 1, 0)
         self._sound_theme_combo = QComboBox()
         self._sound_theme_combo.addItem("Auto (follow active visual theme)", userData="")
         _all_themes = sorted(PRESET_THEMES.keys()) + sorted(HIDDEN_THEMES.keys())
@@ -793,10 +806,10 @@ class SettingsDialog(QDialog):
             "'Auto' means the click sound follows whichever visual theme is currently active.\n"
             "Choosing a specific theme lets you use, say, Shark Bait sounds with any visual theme."
         )
-        sound_gl.addWidget(self._sound_theme_combo, 2, 1)
+        _s.addWidget(self._sound_theme_combo, 1, 1)
 
         # Sound profile dropdown (used when "Use theme sound" is OFF)
-        sound_gl.addWidget(QLabel("Sound profile:"), 3, 0)
+        _s.addWidget(QLabel("Sound profile:"), 2, 0)
         self._sound_profile_combo = QComboBox()
         _SOUND_PROFILE_OPTIONS = [
             ("soft",    "Soft — gentle chime 🎵"),
@@ -827,10 +840,10 @@ class SettingsDialog(QDialog):
             "Each profile has a distinct tone that matches different moods.\n"
             "Ignored when 'Use theme sound' is enabled."
         )
-        sound_gl.addWidget(self._sound_profile_combo, 3, 1)
+        _s.addWidget(self._sound_profile_combo, 2, 1)
 
         # Volume slider
-        sound_gl.addWidget(QLabel("Volume:"), 4, 0)
+        _s.addWidget(QLabel("Volume:"), 3, 0)
         vol_row = QHBoxLayout()
         self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._sound_volume_slider.setRange(0, 100)
@@ -846,7 +859,7 @@ class SettingsDialog(QDialog):
         )
         vol_row.addWidget(self._sound_volume_slider, 1)
         vol_row.addWidget(self._sound_volume_lbl)
-        sound_gl.addLayout(vol_row, 4, 1)
+        _s.addLayout(vol_row, 3, 1)
 
         # Sound event toggles (off by default; each controls a specific app event)
         events_lbl = QLabel("Event sounds:")
@@ -854,7 +867,7 @@ class SettingsDialog(QDialog):
             "Enable or disable individual application sound events.\n"
             "All are off by default to keep the app unobtrusive."
         )
-        sound_gl.addWidget(events_lbl, 5, 0)
+        _s.addWidget(events_lbl, 4, 0)
         self._btn_mute_all_events = QPushButton("Mute all events")
         self._btn_mute_all_events.setMinimumWidth(140)
         self._btn_mute_all_events.setToolTip(
@@ -862,27 +875,27 @@ class SettingsDialog(QDialog):
             "Does not affect the master Enable sounds toggle."
         )
         self._btn_mute_all_events.clicked.connect(self._on_mute_all_events)
-        sound_gl.addWidget(self._btn_mute_all_events, 8, 0, 1, 2)
+        _s.addWidget(self._btn_mute_all_events, 7, 0, 1, 2)
         self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
         self._sound_theme_change_chk.setToolTip(
             "Play a short whoosh sound whenever the active theme is switched.\n"
             "Off by default."
         )
-        sound_gl.addWidget(self._sound_theme_change_chk, 5, 1)
+        _s.addWidget(self._sound_theme_change_chk, 4, 1)
 
         self._sound_tab_switch_chk = QCheckBox("Play sound when switching tabs")
         self._sound_tab_switch_chk.setToolTip(
             "Play a soft tick when you click between the main tabs.\n"
             "Off by default."
         )
-        sound_gl.addWidget(self._sound_tab_switch_chk, 6, 1)
+        _s.addWidget(self._sound_tab_switch_chk, 5, 1)
 
         self._sound_drag_enter_chk = QCheckBox("Play sound when files are dragged in")
         self._sound_drag_enter_chk.setToolTip(
             "Play a ping when files are dragged into the file list.\n"
             "Off by default."
         )
-        sound_gl.addWidget(self._sound_drag_enter_chk, 7, 1)
+        _s.addWidget(self._sound_drag_enter_chk, 6, 1)
 
         # grp_sound is added to the dedicated Sound tab below; keep the reference.
         self._grp_sound = grp_sound
@@ -1129,14 +1142,14 @@ class SettingsDialog(QDialog):
             self._ui_scale_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._ui_scale_combo.setToolTip(
             "Scale the application's base font size for all UI elements.\n"
-            "Takes effect after a restart or when re-opening the settings dialog."
+            "Changes apply immediately — no restart needed."
         )
         self._ui_scale_combo.setMaximumWidth(220)
         scale_gl.addWidget(self._ui_scale_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         scale_note = QLabel(
-            "ℹ  Full rescaling requires an app restart.  "
-            "Font size (Appearance & Effects) updates live."
+            "ℹ  Changes apply immediately.  "
+            "Use the Font Size control in Appearance & Effects to fine-tune."
         )
         scale_note.setWordWrap(True)
         scale_note.setStyleSheet("color: #888; font-size: 10px;")
@@ -1398,6 +1411,9 @@ class SettingsDialog(QDialog):
         self._sound_check.setChecked(self._settings.get("sound_enabled", False))
         use_theme_sound = self._settings.get("use_theme_sound", False)
         self._use_theme_sound_check.setChecked(use_theme_sound)
+        sound_enabled = self._settings.get("sound_enabled", False)
+        # Show/hide sub-controls based on enable state (item 68)
+        self._sound_sub_widget.setVisible(sound_enabled)
         vol = int(self._settings.get("sound_volume", 50))
         self._sound_volume_slider.setValue(max(0, min(100, vol)))
         self._sound_volume_lbl.setText(f"{self._sound_volume_slider.value()}%")
@@ -1993,15 +2009,13 @@ class SettingsDialog(QDialog):
     def _on_sound_changed(self) -> None:
         enabled = self._sound_check.isChecked()
         self._settings.set("sound_enabled", enabled)
-        # Keep sub-controls in sync with the enabled state.
-        use_theme = self._use_theme_sound_check.isChecked()
-        self._use_theme_sound_check.setEnabled(enabled)
-        self._sound_theme_combo.setEnabled(enabled and use_theme)
-        self._sound_profile_combo.setEnabled(enabled and not use_theme)
-        self._sound_volume_slider.setEnabled(enabled)
-        self._sound_theme_change_chk.setEnabled(enabled)
-        self._sound_tab_switch_chk.setEnabled(enabled)
-        self._sound_drag_enter_chk.setEnabled(enabled)
+        # Show/hide all sub-controls depending on the enabled state (item 68).
+        self._sound_sub_widget.setVisible(enabled)
+        # Also keep the combo enable states in sync for when they become visible.
+        if enabled:
+            use_theme = self._use_theme_sound_check.isChecked()
+            self._sound_theme_combo.setEnabled(use_theme)
+            self._sound_profile_combo.setEnabled(not use_theme)
         self.settings_changed.emit()
 
     def _on_use_theme_sound_changed(self) -> None:
