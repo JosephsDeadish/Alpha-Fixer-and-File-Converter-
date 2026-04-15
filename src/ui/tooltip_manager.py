@@ -760,17 +760,28 @@ _NORMAL: dict[str, list[str]] = {
         "Locked themes show a lock icon. Keep using the app and they unlock. Patience rewarded.",
     ],
     "settings_general_tab": [
-        "The General tab: configure click effects, trails, cursor, sounds, font, and tooltip style.",
+        "The General tab: configure click effects, trails, cursor, font, and tooltip style.",
         "All settings apply immediately — no need to click Save or Apply.",
         "Trail and cursor options include theme-matched styles that change automatically with the theme.",
         "Tooltip Mode changes how tips are written — Normal, Dumbed Down, or No Filter.",
-        "Font size, sound effects, and reset options are also here.",
+        "Font size and reset options are also here.",
         "All changes are previewed live — no need to restart or click Save for most settings.",
         "Apply & Close commits all changes; Close without Apply discards unsaved changes.",
         "The Reset All Settings button here returns everything to factory defaults — use with caution.",
-        "Sounds, effects, trails, fonts, resets — it's all here in one glorious tab.",
+        "Effects, trails, fonts, resets — it's all here in one glorious tab.",
         "Congratulations on finding General Settings. You'll probably spend a while in here.",
         "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
+    ],
+    "settings_sound_tab": [
+        "The Sound tab: enable sounds, pick a sound theme or profile, and set volume.",
+        "All sound settings apply immediately — no restart needed.",
+        "Use theme sound: let the active visual theme pick the click-sound profile automatically.",
+        "Sound profile: choose a specific tone for all click sounds when Use theme sound is off.",
+        "Volume slider controls the master volume for all application sounds.",
+        "Event sounds: individually toggle sounds for theme changes, tab switches, and file drag-in.",
+        "All sounds are off by default to keep the app unobtrusive.",
+        "Congratulations on finding the Sound tab. Your ears will thank you.",
+        "Enable sounds and pick a profile that matches your mood. Rock? Soft? Bark? All valid.",
     ],
     "alpha_file_count_lbl": [
         "Shows how many files are in the list and the keyboard shortcuts to run or stop.",
@@ -3051,14 +3062,24 @@ _DUMBED: dict[str, list[str]] = {
         "Locked themes show a lock icon. Keep using the app and they unlock. Patience rewarded.",
     ],
     "settings_general_tab": [
-        "General tab. Effects, sounds, trails, cursor, fonts. All the fun stuff.",
+        "General tab. Effects, trails, cursor, fonts. All the fun stuff.",
         "Everything applies immediately. No save button needed. Just change it and it happens.",
         "Trail, effect, and cursor combos have theme-matched options that auto-update.",
         "Tooltip Mode is here. Dumbed Down is honestly the funniest one.",
-        "Font size, reset button, sound file — all buried in here. Explore.",
-        "Sounds, effects, trails, fonts, resets - it's all here in one glorious tab.",
+        "Font size, reset button — all buried in here. Explore.",
+        "Effects, trails, fonts, resets - it's all here in one glorious tab.",
         "Congratulations on finding General Settings. You'll probably spend a while in here.",
         "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
+    ],
+    "settings_sound_tab": [
+        "Sound tab. Enable sounds. Pick a profile. Set the volume. It's not that deep.",
+        "All sound settings apply immediately. No restart needed. Just toggle and hear.",
+        "Use theme sound: active theme picks the click sound. Panda = soft chime. Gore = thud.",
+        "Sound profile: manual selection. 20 profiles. Rock, Bark, Meow, Purr. Your call.",
+        "Volume slider. Move it. Hear the difference. Basic concept.",
+        "Event sounds for theme changes, tab switches, and file drops. All off by default.",
+        "Congratulations on finding the Sound tab. Your ears will thank you.",
+        "Enable sounds and pick a profile that matches your mood. Bark? Valid life choice.",
     ],
     "alpha_file_count_lbl": [
         "File count. How many files are in the list. Not rocket science.",
@@ -5621,15 +5642,26 @@ _VULGAR: dict[str, list[str]] = {
         "15 color roles. All editable. Change all of them. Make it yours. Make it hideous. Make it beautiful.",
     ],
     "settings_general_tab": [
-        "General tab. Effects, sounds, trails, cursors, fonts, tooltip mode. The good stuff.",
+        "General tab. Effects, trails, cursors, fonts, tooltip mode. The good stuff.",
         "Everything in here applies instantly. No Apply button. No Save. Just pure real-time chaos.",
         "Use-theme checkboxes auto-pick the right trail/effect/cursor for whatever theme is active.",
         "Tooltip Mode: Normal = helpful. Dumbed Down = snarky. No Filter = this mode. Very meta.",
-        "Font size, reset button, sound path — all lurking in this tab. Check every corner.",
+        "Font size, reset button — all lurking in this tab. Check every corner.",
         "This is where you transform this boring utility into a glowing, clicking, trail-leaving circus. Enable everything.",
         "Tooltip mode selector lives here. Change it to No Filter if you haven't yet. Do it now. DO IT.",
         "All changes apply immediately. Most have no undo. Live recklessly. This is just app cosmetics.",
-        "Mouse trail? Enable. Click effects? Enable. Sound? Enable. Font size 24? Bold choice but enable.",
+        "Mouse trail? Enable. Click effects? Enable. Font size 24? Bold choice but enable.",
+    ],
+    "settings_sound_tab": [
+        "Sound tab. Enable sounds. Pick a profile. Set the volume. Your audio journey starts here.",
+        "Everything applies instantly. Toggle sounds on, spin the volume knob, listen to regrets. Or joy.",
+        "Use theme sound = active theme decides what you hear. Gore = thud. Panda = gentle chime.",
+        "20 sound profiles. Bark, Meow, Roar, Rock, Purr. The whole spectrum of chaos.",
+        "Volume slider controls everything. Zero = silent. 100 = full. The exact number is negotiable.",
+        "Event sounds for theme changes, tab switches, file drops. All off by default. Enable them. Go feral.",
+        "Sound tab. Where your ears finally get a vote in the app's personality.",
+        "Enable sounds and then argue with yourself about whether Bark or Meow fits your workflow better.",
+        "The sound tab. Finally an app that lets you make it bark. This is peak software design.",
     ],
     "alpha_file_count_lbl": [
         "File count. Currently how many files are in the list. That's it.",
@@ -6600,13 +6632,17 @@ class TooltipManager(QObject):
         # Remove the id mapping when the widget is destroyed so that a later
         # widget allocated at the same address does not accidentally pick up
         # this tip key (e.g., settings-dialog widgets vs main-tool widgets).
+        # Use a named inner function rather than a lambda with keyword-only
+        # default args to avoid a TypeError in PyQt6 6.11+ where the signal
+        # dispatcher introspects the slot signature differently.
+        import functools as _functools
+
+        def _widget_cleanup(captured_wid, *_args):
+            self._widget_keys.pop(captured_wid, None)
+            self._widget_refs.pop(captured_wid, None)
+
         try:
-            widget.destroyed.connect(
-                lambda *_args, _wid=wid: (
-                    self._widget_keys.pop(_wid, None),
-                    self._widget_refs.pop(_wid, None),
-                )
-            )
+            widget.destroyed.connect(_functools.partial(_widget_cleanup, wid))
         except Exception:
             pass
 

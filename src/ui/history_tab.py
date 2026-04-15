@@ -66,10 +66,8 @@ class HistoryTab(QWidget):
         layout.addWidget(hdr)
 
         btn_row = QHBoxLayout()
-        self._btn_refresh = QPushButton("🔄  Refresh")
         self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
-        btn_row.addWidget(self._btn_refresh)
         btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)
@@ -85,14 +83,14 @@ class HistoryTab(QWidget):
         self._conv_search = self._make_search_field("converter")
         conv_layout.addWidget(self._conv_search)
         self._conv_tree = _make_tree(
-            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the conversion batch was started.",
                 "Output format chosen for this batch (e.g. PNG, WEBP, DDS).",
                 "Total number of files submitted to the converter.",
                 "Files that converted successfully.",
                 "Files that failed — check the format/path if this is non-zero.",
-                "First 10 input filenames in this batch.",
+                "Input filenames in this batch.",
             ],
         )
         conv_layout.addWidget(self._conv_tree)
@@ -108,14 +106,14 @@ class HistoryTab(QWidget):
         self._alpha_search = self._make_search_field("alpha")
         alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
-            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the alpha-fix batch was started.",
                 "Preset or manual mode used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors — may be unsupported format or locked file.",
-                "First 10 input filenames in this batch.",
+                "Input filenames in this batch.",
             ],
         )
         alpha_layout.addWidget(self._alpha_tree)
@@ -131,14 +129,14 @@ class HistoryTab(QWidget):
         self._sel_search = self._make_search_field("selective")
         sel_layout.addWidget(self._sel_search)
         self._sel_tree = _make_tree(
-            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the selective-alpha batch was started.",
                 "Zone / mode used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors.",
-                "First 10 input filenames in this batch.",
+                "Input filenames in this batch.",
             ],
         )
         sel_layout.addWidget(self._sel_tree)
@@ -150,7 +148,6 @@ class HistoryTab(QWidget):
         layout.addWidget(self._sub_tabs, 1)
 
         # Connections
-        self._btn_refresh.clicked.connect(self.refresh)
         self._btn_export.clicked.connect(self._export_history)
         self._btn_clear.clicked.connect(self._clear_history)
 
@@ -198,7 +195,6 @@ class HistoryTab(QWidget):
 
     def register_tooltips(self, mgr) -> None:
         """Register History tab widgets with the TooltipManager."""
-        mgr.register(self._btn_refresh, "history_refresh_btn")
         mgr.register(self._btn_clear, "history_clear_btn")
         mgr.register(self._btn_export, "history_export_btn")
         mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
@@ -264,7 +260,7 @@ class HistoryTab(QWidget):
                 tooltip = (
                     f"Batch: {ts}\nFormat: {fmt}\n"
                     f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
-                    "Files processed (first 10):\n  " + "\n  ".join(file_list)
+                    "Files processed:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
                     item.setToolTip(col, tooltip)
@@ -295,7 +291,7 @@ class HistoryTab(QWidget):
                 tooltip = (
                     f"Batch: {ts}\nPreset / Mode: {preset}\n"
                     f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
-                    "Files processed (first 10):\n  " + "\n  ".join(file_list)
+                    "Files processed:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
                     item.setToolTip(col, tooltip)
@@ -326,7 +322,7 @@ class HistoryTab(QWidget):
                 tooltip = (
                     f"Batch: {ts}\nMode: {mode}\n"
                     f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
-                    "Files processed (first 10):\n  " + "\n  ".join(file_list)
+                    "Files processed:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
                     item.setToolTip(col, tooltip)
@@ -373,15 +369,15 @@ class HistoryTab(QWidget):
         if tab_idx == 0:
             tree = self._conv_tree
             tab_name = "converter"
-            headers = ["Time", "Format", "Files", "OK", "Errors", "File names (first 10)"]
+            headers = ["Time", "Format", "Files", "OK", "Errors", "File names"]
         elif tab_idx == 1:
             tree = self._alpha_tree
             tab_name = "alpha_fixer"
-            headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names (first 10)"]
+            headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names"]
         else:
             tree = self._sel_tree
             tab_name = "selective_alpha"
-            headers = ["Time", "Mode", "Files", "OK", "Errors", "File names (first 10)"]
+            headers = ["Time", "Mode", "Files", "OK", "Errors", "File names"]
 
         path, selected_filter = QFileDialog.getSaveFileName(
             self,

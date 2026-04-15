@@ -1918,6 +1918,7 @@ class SelectiveAlphaTool(QWidget):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setMinimumHeight(28)
+            btn.setMinimumWidth(100)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)

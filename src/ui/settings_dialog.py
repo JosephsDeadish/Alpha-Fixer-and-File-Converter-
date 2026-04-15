@@ -884,7 +884,8 @@ class SettingsDialog(QDialog):
         )
         sound_gl.addWidget(self._sound_drag_enter_chk, 7, 1)
 
-        tv.addWidget(grp_sound)
+        # grp_sound is added to the dedicated Sound tab below; keep the reference.
+        self._grp_sound = grp_sound
 
         # ---- Button Press Animation GroupBox ----
         grp_btn_anim = QGroupBox("Button Press Animation")
@@ -1183,6 +1184,22 @@ class SettingsDialog(QDialog):
         gen_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         gen_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         tabs.addTab(gen_scroll, "⚙ General")
+
+        # ================================================================
+        # ---- Sound tab ----
+        # ================================================================
+        sound_tab = QWidget()
+        sv = QVBoxLayout(sound_tab)
+        sv.setContentsMargins(8, 8, 8, 8)
+        sv.setSpacing(8)
+        sv.addWidget(self._grp_sound)
+        sv.addStretch(1)
+        sound_scroll = QScrollArea()
+        sound_scroll.setWidget(sound_tab)
+        sound_scroll.setWidgetResizable(True)
+        sound_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        sound_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tabs.addTab(sound_scroll, "🔊 Sound")
 
         layout.addWidget(tabs, 1)
 
@@ -1623,10 +1640,10 @@ class SettingsDialog(QDialog):
         mgr.register(self._btn_import_theme, "import_custom_theme")
         mgr.register(self._btn_reset, "reset_all_settings")
         mgr.register(self._btn_reset_unlocks, "reset_unlocks_btn")
-        # Settings dialog own tab bar (Theme / General tabs)
+        # Settings dialog own tab bar (Theme / General / Sound tabs)
         mgr.register_tab_bar(
             self._settings_tabs.tabBar(),
-            ["settings_theme_tab", "settings_general_tab"],
+            ["settings_theme_tab", "settings_general_tab", "settings_sound_tab"],
         )
         # Register all color swatch buttons with the same generic key
         for btn in self._color_buttons.values():
