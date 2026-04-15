@@ -286,6 +286,12 @@ class AlphaFixerTab(QWidget):
         self._preview_debounce.setSingleShot(True)
         self._preview_debounce.setInterval(150)  # ms -- wait for user to settle
         self._preview_debounce.timeout.connect(self._update_compare)
+        # Spinner timer: animates the run button text while processing
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(150)
+        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_idx = 0
+        self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -1410,6 +1416,8 @@ class AlphaFixerTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Processing…")
+        self._spinner_idx = 0
+        self._spinner_timer.start()
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
         # Notify main window so it can play the process-start sound
@@ -1473,6 +1481,8 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
+        self._spinner_timer.stop()
+        self._btn_run.setText("▶  Process  [F5]")
         self._progress.setValue(100)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
@@ -1513,6 +1523,12 @@ class AlphaFixerTab(QWidget):
         self._log.append(msg)
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _tick_spinner(self) -> None:
+        """Advance the spinner animation on the run button by one frame."""
+        frame = self._spinner_frames[self._spinner_idx % len(self._spinner_frames)]
+        self._btn_run.setText(f"{frame}  Processing…")
+        self._spinner_idx += 1
 
     def _offer_delete_originals(self, source_files: list, success_count: int) -> None:
         """Ask the user whether to delete the original source files.

@@ -88,6 +88,12 @@ class ConverterTab(QWidget):
         # Track the effective output directory used for the last run so the
         # completion message can tell the user where files were saved.
         self._last_run_out_dir: str | None = None
+        # Spinner timer: animates the run button text while converting
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(150)
+        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_idx = 0
+        self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -959,6 +965,8 @@ class ConverterTab(QWidget):
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Converting…")
+        self._spinner_idx = 0
+        self._spinner_timer.start()
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
         # Notify main window so it can play the process-start sound
@@ -1143,6 +1151,8 @@ class ConverterTab(QWidget):
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
+        self._spinner_timer.stop()
+        self._btn_run.setText("▶  Convert  [F5]")
         self._progress.setValue(100)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
@@ -1249,5 +1259,11 @@ class ConverterTab(QWidget):
             cursor.removeSelectedText()
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _tick_spinner(self) -> None:
+        """Advance the spinner animation on the run button by one frame."""
+        frame = self._spinner_frames[self._spinner_idx % len(self._spinner_frames)]
+        self._btn_run.setText(f"{frame}  Converting…")
+        self._spinner_idx += 1
 
 
