@@ -1301,12 +1301,12 @@ class MainWindow(QMainWindow):
         """Enable or disable button press animations to match the active settings."""
         if self._button_anim is None:
             return
-        enabled = self._settings.get("button_anim_enabled", False)
+        enabled = self._settings.get("button_anim_enabled")  # default True from DEFAULTS
         if not enabled:
             self._button_anim.set_enabled(False)
             return
         theme = self._settings.get_theme()
-        if self._settings.get("use_theme_button_anim", True):
+        if self._settings.get("use_theme_button_anim"):
             mode = theme.get("_button_anim", "press")
         else:
             mode = self._settings.get("button_anim_style", "press")

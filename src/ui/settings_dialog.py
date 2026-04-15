@@ -457,6 +457,11 @@ class SettingsDialog(QDialog):
             "water drip for ocean/aquatic themes."
         )
         bg_drip_layout.addWidget(self._bg_drip_check)
+        # Container widget for "Use theme" checkbox + style combo – shown/hidden as a unit
+        self._bg_drip_sub = QWidget()
+        bg_drip_sub_layout = QVBoxLayout(self._bg_drip_sub)
+        bg_drip_sub_layout.setContentsMargins(16, 0, 0, 0)
+        bg_drip_sub_layout.setSpacing(4)
         self._use_theme_drip_check = QCheckBox(
             "Use theme drip  (auto-selects Blood or Water based on the active theme)"
         )
@@ -466,7 +471,7 @@ class SettingsDialog(QDialog):
             "Ocean / Ripple / Mermaid themes → Water Drip\n"
             "All other themes → use the manual selection below."
         )
-        bg_drip_layout.addWidget(self._use_theme_drip_check)
+        bg_drip_sub_layout.addWidget(self._use_theme_drip_check)
         bg_drip_inner = QHBoxLayout()
         bg_drip_inner.addWidget(QLabel("Drip Style:"))
         self._bg_drip_combo = QComboBox()
@@ -479,17 +484,17 @@ class SettingsDialog(QDialog):
             "Water Drip: translucent cyan drops fall from the top."
         )
         bg_drip_inner.addWidget(self._bg_drip_combo, 1)
-        bg_drip_layout.addLayout(bg_drip_inner)
-        # Enable/disable sub-controls based on both enable and use-theme checkboxes
+        bg_drip_sub_layout.addLayout(bg_drip_inner)
+        bg_drip_layout.addWidget(self._bg_drip_sub)
+        # Hide/show sub-container based on enable checkbox; enable/disable combo on use-theme
         def _update_drip_combo_state():
             enabled = self._bg_drip_check.isChecked()
             use_theme = self._use_theme_drip_check.isChecked()
-            self._use_theme_drip_check.setEnabled(enabled)
+            self._bg_drip_sub.setVisible(enabled)
             self._bg_drip_combo.setEnabled(enabled and not use_theme)
         self._bg_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
         self._use_theme_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
-        self._use_theme_drip_check.setEnabled(False)  # disabled until drip is enabled
-        self._bg_drip_combo.setEnabled(False)         # disabled until drip is enabled
+        self._bg_drip_sub.setVisible(False)  # hidden until drip is enabled
 
         # Separator between drip and flock sections
         sep1 = QFrame()
@@ -504,6 +509,10 @@ class SettingsDialog(QDialog):
             "as a background animation, independent of click effects."
         )
         bg_drip_layout.addWidget(self._bg_flock_check)
+        self._bg_flock_sub = QWidget()
+        _bf_sub_vl = QVBoxLayout(self._bg_flock_sub)
+        _bf_sub_vl.setContentsMargins(16, 0, 0, 0)
+        _bf_sub_vl.setSpacing(4)
         self._use_theme_flock_check = QCheckBox(
             "Use theme flock  (auto-selects the active theme's flock style, if any)"
         )
@@ -513,7 +522,7 @@ class SettingsDialog(QDialog):
             "entirely — no random bats will appear on themes that don't call for them.\n"
             "Uncheck to manually pick an emoji style from the list below."
         )
-        bg_drip_layout.addWidget(self._use_theme_flock_check)
+        _bf_sub_vl.addWidget(self._use_theme_flock_check)
         bg_flock_inner = QHBoxLayout()
         bg_flock_inner.addWidget(QLabel("Flock Style:"))
         self._bg_flock_combo = QComboBox()
@@ -530,17 +539,17 @@ class SettingsDialog(QDialog):
             "Greyed out while 'Use theme flock' is checked."
         )
         bg_flock_inner.addWidget(self._bg_flock_combo, 1)
-        bg_drip_layout.addLayout(bg_flock_inner)
-        # Enable/disable combo based on both the flock enable checkbox and the use-theme checkbox
+        _bf_sub_vl.addLayout(bg_flock_inner)
+        bg_drip_layout.addWidget(self._bg_flock_sub)
+        # Hide/show sub-container; enable/disable combo on use-theme toggle
         def _update_flock_combo_state():
             enabled = self._bg_flock_check.isChecked()
             use_theme = self._use_theme_flock_check.isChecked()
-            self._use_theme_flock_check.setEnabled(enabled)
+            self._bg_flock_sub.setVisible(enabled)
             self._bg_flock_combo.setEnabled(enabled and not use_theme)
         self._bg_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
         self._use_theme_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
-        self._use_theme_flock_check.setEnabled(False)  # disabled until flock is enabled
-        self._bg_flock_combo.setEnabled(False)  # disabled until checked
+        self._bg_flock_sub.setVisible(False)  # hidden until flock is enabled
 
         # Separator
         sep2 = QFrame()
@@ -555,6 +564,10 @@ class SettingsDialog(QDialog):
             "regardless of the active theme. Pairs beautifully with any theme."
         )
         bg_drip_layout.addWidget(self._bg_ambient_check)
+        self._bg_ambient_sub = QWidget()
+        _ba_sub_vl = QVBoxLayout(self._bg_ambient_sub)
+        _ba_sub_vl.setContentsMargins(16, 0, 0, 0)
+        _ba_sub_vl.setSpacing(4)
         self._use_theme_ambient_check = QCheckBox(
             "Use theme ambient  (auto-selects the active theme's ambient style, if any)"
         )
@@ -563,7 +576,7 @@ class SettingsDialog(QDialog):
             "Themes without a defined ambient (e.g. Panda, Otter) will disable the effect.\n"
             "Uncheck to manually pick an ambient style from the list below."
         )
-        bg_drip_layout.addWidget(self._use_theme_ambient_check)
+        _ba_sub_vl.addWidget(self._use_theme_ambient_check)
         bg_ambient_inner = QHBoxLayout()
         bg_ambient_inner.addWidget(QLabel("Ambient Style:"))
         self._bg_ambient_combo = QComboBox()
@@ -585,18 +598,18 @@ class SettingsDialog(QDialog):
             "Greyed out while 'Use theme ambient' is checked."
         )
         bg_ambient_inner.addWidget(self._bg_ambient_combo, 1)
-        bg_drip_layout.addLayout(bg_ambient_inner)
+        _ba_sub_vl.addLayout(bg_ambient_inner)
+        bg_drip_layout.addWidget(self._bg_ambient_sub)
 
         def _update_ambient_combo_state():
             enabled = self._bg_ambient_check.isChecked()
             use_theme = self._use_theme_ambient_check.isChecked()
-            self._use_theme_ambient_check.setEnabled(enabled)
+            self._bg_ambient_sub.setVisible(enabled)
             self._bg_ambient_combo.setEnabled(enabled and not use_theme)
 
         self._bg_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
         self._use_theme_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
-        self._use_theme_ambient_check.setEnabled(False)  # disabled until ambient is enabled
-        self._bg_ambient_combo.setEnabled(False)  # disabled until checked
+        self._bg_ambient_sub.setVisible(False)  # hidden until ambient is enabled
 
         tv.addWidget(grp_bg_drip)
 
@@ -932,7 +945,11 @@ class SettingsDialog(QDialog):
             "Off by default for maximum performance."
         )
         btn_anim_gl.addWidget(self._button_anim_check, 0, 0, 1, 2)
-
+        # Container for sub-options — hidden until button animation is enabled
+        self._btn_anim_sub = QWidget()
+        _ba_vl = QVBoxLayout(self._btn_anim_sub)
+        _ba_vl.setContentsMargins(16, 0, 0, 0)
+        _ba_vl.setSpacing(4)
         self._use_theme_button_anim_check = QCheckBox(
             "Use theme animation (each theme picks its own style)"
         )
@@ -942,9 +959,9 @@ class SettingsDialog(QDialog):
             "gets 'Shake', Fairy/Sakura gets 'Bounce'.\n"
             "Uncheck to force a fixed style from the dropdown below."
         )
-        btn_anim_gl.addWidget(self._use_theme_button_anim_check, 1, 0, 1, 2)
-
-        btn_anim_gl.addWidget(QLabel("Animation style:"), 2, 0)
+        _ba_vl.addWidget(self._use_theme_button_anim_check)
+        _ba_style_row = QHBoxLayout()
+        _ba_style_row.addWidget(QLabel("Animation style:"))
         self._button_anim_style_combo = QComboBox()
         _BUTTON_ANIM_OPTIONS = [
             ("press",   "Press — subtle 2 px downward nudge"),
@@ -979,7 +996,19 @@ class SettingsDialog(QDialog):
             "Greyed out while 'Use theme animation' is checked."
         )
         self._button_anim_style_combo.setMinimumWidth(220)
-        btn_anim_gl.addWidget(self._button_anim_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        _ba_style_row.addWidget(self._button_anim_style_combo, 1)
+        _ba_vl.addLayout(_ba_style_row)
+        btn_anim_gl.addWidget(self._btn_anim_sub, 1, 0, 1, 2)
+        # Show/hide sub-container when enable checkbox changes
+        def _update_btn_anim_sub():
+            enabled = self._button_anim_check.isChecked()
+            self._btn_anim_sub.setVisible(enabled)
+            self._button_anim_style_combo.setEnabled(
+                enabled and not self._use_theme_button_anim_check.isChecked()
+            )
+        self._button_anim_check.toggled.connect(lambda _: _update_btn_anim_sub())
+        self._use_theme_button_anim_check.toggled.connect(lambda _: _update_btn_anim_sub())
+        self._btn_anim_sub.setVisible(False)  # hidden by default (anim is enabled=True by default, but hidden until we load)
 
         tv.addWidget(grp_btn_anim)
 
@@ -1567,7 +1596,7 @@ class SettingsDialog(QDialog):
         self._button_anim_style_combo.setEnabled(
             btn_anim_enabled and not use_theme_btn_anim
         )
-        self._use_theme_button_anim_check.setEnabled(btn_anim_enabled)
+        self._btn_anim_sub.setVisible(btn_anim_enabled)
 
         # Load background drip settings
         bg_drip_enabled = self._settings.get("bg_drip_enabled", False)
@@ -1586,8 +1615,9 @@ class SettingsDialog(QDialog):
             if self._bg_drip_combo.itemData(i) == theme_drip:
                 self._bg_drip_combo.setCurrentIndex(i)
                 break
-        self._use_theme_drip_check.setEnabled(bg_drip_enabled)
-        self._bg_drip_combo.setEnabled(bg_drip_enabled and not use_theme_drip)
+        self._bg_drip_sub.setVisible(bg_drip_enabled)
+        if bg_drip_enabled:
+            self._bg_drip_combo.setEnabled(not use_theme_drip)
 
         # Load background flock settings
         bg_flock_enabled = self._settings.get("bg_flock_enabled", False)
@@ -1599,8 +1629,9 @@ class SettingsDialog(QDialog):
             if self._bg_flock_combo.itemData(i) == bg_flock_style:
                 self._bg_flock_combo.setCurrentIndex(i)
                 break
-        self._use_theme_flock_check.setEnabled(bg_flock_enabled)
-        self._bg_flock_combo.setEnabled(bg_flock_enabled and not use_theme_flock)
+        self._bg_flock_sub.setVisible(bg_flock_enabled)
+        if bg_flock_enabled:
+            self._bg_flock_combo.setEnabled(not use_theme_flock)
 
         # Load background ambient settings
         bg_ambient_enabled = self._settings.get("bg_ambient_enabled", False)
@@ -1612,8 +1643,9 @@ class SettingsDialog(QDialog):
                 break
         use_theme_ambient = self._settings.get("use_theme_ambient", False)
         self._use_theme_ambient_check.setChecked(use_theme_ambient)
-        self._use_theme_ambient_check.setEnabled(bg_ambient_enabled)
-        self._bg_ambient_combo.setEnabled(bg_ambient_enabled and not use_theme_ambient)
+        self._bg_ambient_sub.setVisible(bg_ambient_enabled)
+        if bg_ambient_enabled:
+            self._bg_ambient_combo.setEnabled(not use_theme_ambient)
 
         for c in controls:
             c.blockSignals(False)
