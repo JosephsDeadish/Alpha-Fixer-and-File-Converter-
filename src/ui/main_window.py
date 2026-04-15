@@ -1342,24 +1342,30 @@ class MainWindow(QMainWindow):
         if not enabled:
             self._click_effects.set_bg_flock(False)
             return
+        _FLOCK_EMOJI = {
+            "bats":        "🦇",
+            "fairies":     "🧚",
+            "fish":        "🐟",
+            "butterflies": "🦋",
+            "birds":       "🐦",
+            "stars":       "⭐",
+            "petals":      "🌸",
+        }
         theme = self._settings.get_theme()
-        icon = theme.get("_icon", "🐼")
         trail_color = theme.get("_trail_color", "#e94560")
         use_theme_flock = self._settings.get("use_theme_flock", False)
         if use_theme_flock:
-            emoji = icon
+            # Only show a flock if the theme explicitly defines one via "_flock".
+            # Themes without "_flock" mean "no themed flock" — don't show bats
+            # on a Goth or Panda theme just because it's the default.
+            theme_flock = theme.get("_flock")
+            if not theme_flock:
+                self._click_effects.set_bg_flock(False)
+                return
+            emoji = _FLOCK_EMOJI.get(theme_flock, theme.get("_icon", "🐼"))
         else:
             flock_style = self._settings.get("bg_flock_style", "bats")
-            _FLOCK_EMOJI = {
-                "bats":        "🦇",
-                "fairies":     "🧚",
-                "fish":        "🐟",
-                "butterflies": "🦋",
-                "birds":       "🐦",
-                "stars":       "⭐",
-                "petals":      "🌸",
-            }
-            emoji = _FLOCK_EMOJI.get(flock_style, icon)
+            emoji = _FLOCK_EMOJI.get(flock_style, theme.get("_icon", "🐼"))
         self._click_effects.set_bg_flock(True, emoji, trail_color)
 
     def _apply_bg_ambient(self) -> None:

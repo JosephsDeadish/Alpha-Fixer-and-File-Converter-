@@ -505,10 +505,12 @@ class SettingsDialog(QDialog):
         )
         bg_drip_layout.addWidget(self._bg_flock_check)
         self._use_theme_flock_check = QCheckBox(
-            "Use theme flock  (auto-selects the active theme's emoji)"
+            "Use theme flock  (auto-selects the active theme's flock style, if any)"
         )
         self._use_theme_flock_check.setToolTip(
-            "When enabled the flock emoji is chosen automatically from the active theme.\n"
+            "When enabled the flock style is chosen automatically from the active theme.\n"
+            "Themes without a defined flock (e.g. Panda, Goth) will disable the flock\n"
+            "entirely — no random bats will appear on themes that don't call for them.\n"
             "Uncheck to manually pick an emoji style from the list below."
         )
         bg_drip_layout.addWidget(self._use_theme_flock_check)
@@ -1911,6 +1913,33 @@ class SettingsDialog(QDialog):
                     if self._bg_drip_combo.itemData(i) == drip_key:
                         self._bg_drip_combo.setCurrentIndex(i)
                         break
+            # Flock combo — update tooltip to say which flock (or none) the theme uses
+            if self._use_theme_flock_check.isChecked():
+                _FLOCK_LABELS = {
+                    "bats": "🦇 Bats", "fairies": "🧚 Fairies", "fish": "🐟 Fish",
+                    "butterflies": "🦋 Butterflies", "birds": "🐦 Birds",
+                    "stars": "⭐ Stars", "petals": "🌸 Petals",
+                }
+                _FLOCK_IDX = {
+                    "bats": 0, "fairies": 1, "fish": 2, "butterflies": 3,
+                    "birds": 4, "stars": 5, "petals": 6,
+                }
+                theme_flock = theme.get("_flock")
+                if theme_flock:
+                    self._bg_flock_combo.blockSignals(True)
+                    self._bg_flock_combo.setCurrentIndex(_FLOCK_IDX.get(theme_flock, 0))
+                    self._bg_flock_combo.blockSignals(False)
+                    self._bg_flock_combo.setToolTip(
+                        f"Using theme flock: {_FLOCK_LABELS.get(theme_flock, theme_flock)}\n"
+                        f"(set by the '{theme_name}' theme)\n"
+                        "Uncheck 'Use theme flock' to pick a different style."
+                    )
+                else:
+                    self._bg_flock_combo.setToolTip(
+                        f"No themed flock for the '{theme_name}' theme.\n"
+                        "Flock is disabled while 'Use theme flock' is checked.\n"
+                        "Uncheck 'Use theme flock' to enable a manual flock style."
+                    )
         finally:
             for c in _combos:
                 c.blockSignals(False)

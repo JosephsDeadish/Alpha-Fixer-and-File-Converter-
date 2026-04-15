@@ -149,6 +149,7 @@ BAT_THEME = {
     "_banner_anim": "flock",
     "_button_anim": "fall",
     "_trail": "comet",
+    "_flock": "bats",
 }
 
 RAINBOW_THEME = {
@@ -232,6 +233,7 @@ GALAXY_THEME = {
     "_banner_anim": "flock",
     "_button_anim": "fall",
     "_trail": "comet",
+    "_flock": "stars",
 }
 
 GALAXY_OTTER_THEME = {
@@ -257,6 +259,7 @@ GALAXY_OTTER_THEME = {
     "scrollbar_handle": "#a06aff",
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🦦",
+    "_flock": "stars",
 }
 
 GOTH_THEME = {
@@ -405,6 +408,7 @@ SECRET_SAKURA_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
     "_trail": "sakura",
+    "_flock": "petals",
 }
 
 FAIRY_THEME = {
@@ -434,6 +438,7 @@ FAIRY_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
     "_trail": "fairy",
+    "_flock": "fairies",
 }
 
 SECRET_DEEP_OCEAN_THEME = {
@@ -464,6 +469,7 @@ SECRET_DEEP_OCEAN_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "fall",
     "_trail": "wave",
+    "_flock": "fish",
 }
 
 PRESET_THEMES = {
@@ -513,6 +519,7 @@ MERMAID_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "fall",
     "_trail": "wave",
+    "_flock": "fish",
 }
 
 SHARK_BAIT_THEME = {
