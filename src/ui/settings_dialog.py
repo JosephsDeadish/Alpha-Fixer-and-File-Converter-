@@ -1154,8 +1154,8 @@ class SettingsDialog(QDialog):
         gv.setContentsMargins(8, 8, 8, 8)
         gv.setSpacing(8)
 
-        # ---- Appearance & FX GroupBox ----
-        grp_misc = QGroupBox("Appearance && Effects")
+        # ---- Tooltip Appearance GroupBox ----
+        grp_misc = QGroupBox("Tooltip Appearance")
         misc_gl = QGridLayout(grp_misc)
         misc_gl.setColumnStretch(1, 1)
         misc_gl.setHorizontalSpacing(10)
@@ -1239,8 +1239,7 @@ class SettingsDialog(QDialog):
         scale_gl.addWidget(self._ui_scale_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         scale_note = QLabel(
-            "ℹ  Changes apply immediately.  "
-            "Use the Font Size control in Appearance & Effects to fine-tune."
+            "ℹ  Changes apply immediately to all text and controls in the application."
         )
         scale_note.setWordWrap(True)
         scale_note.setStyleSheet("color: #888; font-size: 10px;")

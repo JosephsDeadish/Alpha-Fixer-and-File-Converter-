@@ -434,6 +434,7 @@ class AlphaFixerTab(QWidget):
 
         # ---- Before/after compare panel (outside scroll area, always visible) ----
         compare_area = QWidget()
+        self._compare_area = compare_area   # kept for show/hide when popping out
         ca_layout = QVBoxLayout(compare_area)
         ca_layout.setContentsMargins(0, 0, 0, 0)
         ca_layout.setSpacing(2)
@@ -489,6 +490,17 @@ class AlphaFixerTab(QWidget):
         compare_row.addWidget(self._compare, 1)
         compare_row.addWidget(self._after_stats_lbl, 0)
         ca_layout.addLayout(compare_row, 1)
+
+        # "Dock back" button shown when the compare panel is popped out
+        self._btn_dock_back = QPushButton("⇙  Dock Preview Back")
+        self._btn_dock_back.setMinimumHeight(30)
+        self._btn_dock_back.setToolTip(
+            "The preview is currently in a floating window.\n"
+            "Click to close the floating window and dock the preview back here."
+        )
+        self._btn_dock_back.setVisible(False)
+        self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
+        ca_layout.addWidget(self._btn_dock_back)
 
         # Left column: vertical splitter – controls/file-list panel on top
         # (scrollable), compare panel on the bottom (always fully visible).
@@ -1186,12 +1198,25 @@ class AlphaFixerTab(QWidget):
     def _on_compare_popout(self) -> None:
         """Called when the ⤢ pop-out button is clicked on the compare widget.
 
-        Adds a 'Highlight Alpha Values' checkbox to the floating dialog that
-        is already open so the user can control the heat-map overlay there.
+        Hides the embedded compare area to free up space, adds a 'Highlight
+        Alpha Values' checkbox to the floating dialog, and restores everything
+        when the floating dialog is closed.
         """
         dlg = self._compare._popout_dialog
         if dlg is None:
             return
+
+        # Hide the embedded compare area to give room to the rest of the UI.
+        self._compare.setVisible(False)
+        self._compare_lbl.setVisible(False)
+        self._alpha_vis_check.setVisible(False)
+        self._before_stats_lbl.setVisible(False)
+        self._after_stats_lbl.setVisible(False)
+        self._btn_dock_back.setVisible(True)
+
+        # Restore everything when the floating dialog is closed.
+        dlg.finished.connect(self._on_compare_docked_back)
+
         from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QWidget as _QW
         row_w = _QW(dlg)
         row = QHBoxLayout(row_w)
@@ -1227,6 +1252,24 @@ class AlphaFixerTab(QWidget):
         chk.toggled.connect(_toggle)
         # Also keep pop-out in sync when main checkbox changes.
         self._alpha_vis_check.toggled.connect(lambda v: chk.setChecked(v))
+
+    def _on_compare_docked_back(self) -> None:
+        """Restore the embedded compare area after the floating dialog is closed."""
+        self._compare.setVisible(True)
+        self._compare_lbl.setVisible(True)
+        self._alpha_vis_check.setVisible(True)
+        self._before_stats_lbl.setVisible(True)
+        self._after_stats_lbl.setVisible(True)
+        self._btn_dock_back.setVisible(False)
+
+    def _on_dock_back_clicked(self) -> None:
+        """Close the floating pop-out dialog and dock the preview back."""
+        dlg = self._compare._popout_dialog
+        if dlg is not None:
+            dlg.close()
+        else:
+            # Dialog already gone; just restore the UI
+            self._on_compare_docked_back()
 
     def _apply_alpha_vis_to_compare(self) -> None:
         """Apply the alpha heat-map overlay to the current compare images if enabled."""

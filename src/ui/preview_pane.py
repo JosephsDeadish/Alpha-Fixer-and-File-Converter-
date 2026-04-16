@@ -410,10 +410,14 @@ class BeforeAfterWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _make_popout_button(self) -> "QPushButton":
-        btn = QPushButton("⤢", self)
+        btn = QPushButton("⇗ Pop Out", self)
         btn.setObjectName("popoutBtn")
-        btn.setToolTip("Pop out preview into a resizable floating window")
-        btn.setFixedSize(26, 22)
+        btn.setToolTip(
+            "Pop out the preview into a separate floating window.\n"
+            "The preview panel here will hide to make room for other controls.\n"
+            "Close the floating window (or click 'Dock Preview Back') to restore it."
+        )
+        btn.setFixedSize(72, 22)
         btn.setStyleSheet(
             "QPushButton#popoutBtn {"
             "  background: rgba(20,20,20,155);"
