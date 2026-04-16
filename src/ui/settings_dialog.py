@@ -976,12 +976,12 @@ class SettingsDialog(QDialog):
         btn_anim_gl.setHorizontalSpacing(10)
         btn_anim_gl.setVerticalSpacing(6)
         self._button_anim_check = QCheckBox(
-            "Enable button press animations (off by default)"
+            "Enable button press animations"
         )
         self._button_anim_check.setToolTip(
             "When enabled every QPushButton in the app plays a short animation\n"
             "when clicked — a subtle slide, bounce, shake, or particle burst.\n"
-            "Off by default for maximum performance."
+            "Enabled by default. Disable to improve performance on slow systems."
         )
         btn_anim_gl.addWidget(self._button_anim_check, 0, 0, 1, 2)
         # Container for sub-options — hidden until button animation is enabled
@@ -1647,7 +1647,7 @@ class SettingsDialog(QDialog):
             self._settings.get("show_splash_screen", False)
         )
         # Load button animation settings
-        btn_anim_enabled = self._settings.get("button_anim_enabled", False)
+        btn_anim_enabled = self._settings.get("button_anim_enabled")
         self._button_anim_check.setChecked(btn_anim_enabled)
         use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
         self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
