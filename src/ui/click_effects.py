@@ -25,8 +25,12 @@ from PyQt6.QtWidgets import QApplication, QWidget
 
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI as _DEFAULT_EMOJI_STR
 
-# Cross-platform emoji font stack (matches mouse_trail.py)
+# Cross-platform emoji font stack (matches mouse_trail.py).
+# Split into a list and applied via setFamilies() so Qt6 properly uses font
+# substitution — passing a comma-separated string as a single family name
+# does NOT work as a fallback chain in Qt6.
 _EMOJI_FONT_FAMILIES = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji"
+_EMOJI_FONT_LIST = ["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Arial"]
 
 
 # ---------------------------------------------------------------------------
@@ -2306,7 +2310,12 @@ class ClickEffectsOverlay(QWidget):
         # Background ambient state (independent of click effects / theme)
         self._bg_ambient_enabled: bool = False
         self._bg_ambient_type: str = "none"
-        self._font = QFont(_EMOJI_FONT_FAMILIES, 14)
+        self._font = QFont()
+        self._font.setPointSize(14)
+        try:
+            self._font.setFamilies(_EMOJI_FONT_LIST)
+        except AttributeError:
+            self._font.setFamily(_EMOJI_FONT_FAMILIES)
         # Cache QFont objects per integer point-size to avoid repeated
         # mutations and implicit font-metric recalculations each frame.
         self._font_cache: dict[int, QFont] = {}
@@ -2975,7 +2984,15 @@ class ClickEffectsOverlay(QWidget):
             if len(self._font_cache) >= self._FONT_CACHE_MAX:
                 # Evict the least-recently-inserted entry to keep the cache bounded.
                 self._font_cache.pop(next(iter(self._font_cache)))
-            f = QFont(_EMOJI_FONT_FAMILIES, size)
+            f = QFont()
+            f.setPointSize(size)
+            # Use setFamilies() for proper Qt6 font fallback chain — passing a
+            # comma-separated string to QFont() is NOT parsed as a family list.
+            try:
+                f.setFamilies(_EMOJI_FONT_LIST)
+            except AttributeError:
+                # Qt5 fallback
+                f.setFamily(_EMOJI_FONT_FAMILIES)
             self._font_cache[size] = f
         return self._font_cache[size]
 

@@ -36,6 +36,7 @@ _FAIRY_DUST   = ["✨", "⭐", "💫", "🌟", "💜", "💛", "🌸"]
 _WAVE_DUST    = ["🫧", "💧", "🌊", "🐠", "🐚", "🌀", "🫧"]
 _SPARKLE_DUST = ["✦", "❄", "✧", "💎", "❆", "✸", "❅"]
 _EMOJI_FONT_FAMILIES = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji"
+_EMOJI_FONT_LIST = ["Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Arial"]
 
 _EMOJI_STYLES = {"fairy", "wave", "sparkle"}
 _EMOJI_LISTS  = {
@@ -402,7 +403,12 @@ class MouseTrailOverlay(QWidget):
 
     def _paint_emoji(self, painter: QPainter) -> None:
         """Paint emoji-style trail particles (fairy, wave, sparkle)."""
-        font = QFont(_EMOJI_FONT_FAMILIES, 14)
+        font = QFont()
+        font.setPointSize(14)
+        try:
+            font.setFamilies(_EMOJI_FONT_LIST)
+        except AttributeError:
+            font.setFamily(_EMOJI_FONT_FAMILIES)
         painter.setFont(font)
         # Limit the number of emoji drawText calls per frame to prevent
         # font-rendering storms when moving the mouse quickly over a long trail.
