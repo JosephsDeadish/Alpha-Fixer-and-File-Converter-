@@ -1506,9 +1506,16 @@ class AlphaFixerTab(QWidget):
         self._progress.setValue(pct)
         elapsed = time.monotonic() - self._batch_start_time
         eta_str = format_eta(current, total, elapsed)
+        file_name = Path(path).name
         self._status_lbl.setText(
-            f"Processing {current + 1}/{total}: {Path(path).name}{eta_str}"
+            f"Processing {current + 1}/{total}: {file_name}{eta_str}"
         )
+        # Update window title so the progress is visible in the taskbar
+        win = self.window()
+        if win is not None:
+            win.setWindowTitle(
+                f"[{pct}%] Processing {current + 1}/{total}: {file_name}"
+            )
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):
@@ -1530,6 +1537,14 @@ class AlphaFixerTab(QWidget):
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
+        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        # Restore the window title after processing
+        from . import __version__
+        win = self.window()
+        if win is not None:
+            win.setWindowTitle(
+                f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}"
+            )
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
         # Refresh compare for currently selected file to show the processed result
         if self._preview_path and success > 0:

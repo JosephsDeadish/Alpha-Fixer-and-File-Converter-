@@ -1128,9 +1128,16 @@ class ConverterTab(QWidget):
         self._progress.setValue(pct)
         elapsed = time.monotonic() - self._batch_start_time
         eta_str = format_eta(current, total, elapsed)
+        file_name = Path(path).name
         self._status_lbl.setText(
-            f"Converting {current + 1}/{total}: {Path(path).name}{eta_str}"
+            f"Converting {current + 1}/{total}: {file_name}{eta_str}"
         )
+        # Update window title so the progress is visible in the taskbar
+        win = self.window()
+        if win is not None:
+            win.setWindowTitle(
+                f"[{pct}%] Converting {current + 1}/{total}: {file_name}"
+            )
 
     @pyqtSlot(int)
     def _on_gif_speed_changed(self, value: int) -> None:
@@ -1158,6 +1165,13 @@ class ConverterTab(QWidget):
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        # Restore the window title after processing
+        from . import __version__
+        win = self.window()
+        if win is not None:
+            win.setWindowTitle(
+                f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}"
+            )
         # Tell the user where converted files were saved so they don't have to
         # hunt for them (especially when no output folder was explicitly set).
         if self._last_run_out_dir:

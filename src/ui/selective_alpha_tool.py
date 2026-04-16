@@ -132,6 +132,8 @@ class SelectiveAlphaCanvas(QWidget):
     mask_changed        = pyqtSignal(int)   # zone index whose mask was modified
     undo_available      = pyqtSignal(bool)  # whether Ctrl+Z is available
     redo_available      = pyqtSignal(bool)  # whether Ctrl+Y is available
+    undo_count_changed  = pyqtSignal(int)   # number of steps on undo stack
+    redo_count_changed  = pyqtSignal(int)   # number of steps on redo stack
     copy_requested      = pyqtSignal(int)   # context-menu: copy zone mask
     paste_requested     = pyqtSignal(int)   # context-menu: paste zone mask
     copy_all_requested  = pyqtSignal()      # context-menu: copy all zones
@@ -416,6 +418,8 @@ class SelectiveAlphaCanvas(QWidget):
     def _emit_undo_redo_state(self) -> None:
         self.undo_available.emit(bool(self._undo_stack))
         self.redo_available.emit(bool(self._redo_stack))
+        self.undo_count_changed.emit(len(self._undo_stack))
+        self.redo_count_changed.emit(len(self._redo_stack))
 
     def undo_mask(self) -> None:
         if not self._undo_stack:
@@ -1078,12 +1082,10 @@ class _FloatingHistoryOverlay(QFrame):
             "  color: #eee;"
             "  border: none;"
             "  border-radius: 4px;"
-            "  font-size: 14px;"
-            "  min-width: 26px;"
-            "  max-width: 26px;"
+            "  font-size: 12px;"
             "  min-height: 22px;"
             "  max-height: 22px;"
-            "  padding: 0;"
+            "  padding: 0 4px;"
             "}"
             "QPushButton:hover { background: rgba(100,100,100,220); }"
             "QPushButton:pressed { background: rgba(40,40,40,255); }"
@@ -1110,6 +1112,32 @@ class _FloatingHistoryOverlay(QFrame):
 
     def set_redo_enabled(self, enabled: bool) -> None:
         self._btn_redo.setEnabled(enabled)
+
+    def set_undo_count(self, count: int) -> None:
+        """Update undo button to reflect the number of available undo steps."""
+        self._btn_undo.setEnabled(count > 0)
+        self._btn_undo.setToolTip(
+            f"Undo the last brush/erase action  (Ctrl+Z)\n"
+            f"{count} step{'s' if count != 1 else ''} available"
+            if count > 0 else "Nothing to undo  (Ctrl+Z)"
+        )
+        label = f"↩ {count}" if count > 0 else "↩"
+        self._btn_undo.setText(label)
+        self._btn_undo.setMaximumWidth(26 + (len(str(count)) * 8 if count > 0 else 0))
+        self.adjustSize()
+
+    def set_redo_count(self, count: int) -> None:
+        """Update redo button to reflect the number of available redo steps."""
+        self._btn_redo.setEnabled(count > 0)
+        self._btn_redo.setToolTip(
+            f"Redo the last undone action  (Ctrl+Y)\n"
+            f"{count} step{'s' if count != 1 else ''} available"
+            if count > 0 else "Nothing to redo  (Ctrl+Y)"
+        )
+        label = f"↪ {count}" if count > 0 else "↪"
+        self._btn_redo.setText(label)
+        self._btn_redo.setMaximumWidth(26 + (len(str(count)) * 8 if count > 0 else 0))
+        self.adjustSize()
 
     def reposition(self, parent_size) -> None:
         """Pin the overlay to the top-left corner."""
@@ -2012,6 +2040,9 @@ class SelectiveAlphaTool(QWidget):
         # Connect canvas undo/redo availability signals to the floating overlay.
         self._canvas.undo_available.connect(self._history_overlay.set_undo_enabled)
         self._canvas.redo_available.connect(self._history_overlay.set_redo_enabled)
+        # Connect count signals so the overlay shows how many steps are available.
+        self._canvas.undo_count_changed.connect(self._history_overlay.set_undo_count)
+        self._canvas.redo_count_changed.connect(self._history_overlay.set_redo_count)
 
         # Install an event filter on the canvas so the overlays stay pinned
         # whenever the canvas is resized.
