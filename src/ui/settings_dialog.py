@@ -204,14 +204,20 @@ class SettingsDialog(QDialog):
         psl.addWidget(self._theme_preset_combo, 1)
         self._btn_save_theme = QPushButton("Save as…")
         self._btn_delete_theme = QPushButton("Delete")
-        self._btn_export_theme = QPushButton("Export…")
-        self._btn_import_theme = QPushButton("Import…")
+        self._btn_export_theme = QPushButton("Export Theme…")
+        self._btn_import_theme = QPushButton("Import Theme…")
         self._btn_save_theme.setMinimumWidth(75)
         self._btn_delete_theme.setMinimumWidth(62)
-        self._btn_export_theme.setMinimumWidth(70)
-        self._btn_import_theme.setMinimumWidth(70)
-        self._btn_export_theme.setToolTip("Export the current theme settings to a JSON file.")
-        self._btn_import_theme.setToolTip("Import a theme from a JSON file.")
+        self._btn_export_theme.setMinimumWidth(110)
+        self._btn_import_theme.setMinimumWidth(110)
+        self._btn_export_theme.setToolTip(
+            "Export the current custom theme settings to a JSON file.\n"
+            "The file can be shared or imported on another installation."
+        )
+        self._btn_import_theme.setToolTip(
+            "Import a theme from a previously exported JSON file.\n"
+            "This will overwrite the current custom theme colors and settings."
+        )
         psl.addWidget(self._btn_save_theme)
         psl.addWidget(self._btn_delete_theme)
         psl.addWidget(self._btn_export_theme)
@@ -1308,10 +1314,20 @@ class SettingsDialog(QDialog):
 
         # ---- Dialog button: just "Close" (settings already saved live) ----
         btn_row = QHBoxLayout()
-        self._btn_reset = QPushButton("Reset All Settings…")
+        self._btn_reset = QPushButton("⚠  Reset All Settings…")
+        self._btn_reset.setObjectName("resetBtn")
         self._btn_reset.setToolTip(
-            "Reset ALL settings, unlock flags, and history to factory defaults.\n"
-            "Useful for testing easter eggs and unlock events."
+            "⚠ DESTRUCTIVE: Reset ALL settings, unlock flags, and history to factory defaults.\n"
+            "This cannot be undone. Useful for testing easter eggs and unlock events."
+        )
+        self._btn_reset.setStyleSheet(
+            "QPushButton#resetBtn {"
+            "  color: #ff8a80;"
+            "  border: 1px solid #c62828;"
+            "  border-radius: 4px;"
+            "  padding: 4px 8px;"
+            "}"
+            "QPushButton#resetBtn:hover { background: rgba(198,40,40,60); }"
         )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
@@ -1431,7 +1447,7 @@ class SettingsDialog(QDialog):
             for name in filtered_saved:
                 self._theme_preset_combo.addItem(f"★ {name}")
         if not needle:
-            self._theme_preset_combo.addItem("— Custom —")
+            self._theme_preset_combo.addItem("— Custom (unsaved) —")
         if select:
             idx = self._theme_preset_combo.findText(select)
             if idx >= 0:
@@ -1824,7 +1840,7 @@ class SettingsDialog(QDialog):
             if name in saved:
                 self._theme = dict(saved[name])
             else:
-                return  # "— Custom —" or separator line
+                return  # "— Custom (unsaved) —" or separator line
         # Update color swatches to reflect the new preset
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
