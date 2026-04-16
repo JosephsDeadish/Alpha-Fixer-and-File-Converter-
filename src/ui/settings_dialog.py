@@ -638,10 +638,17 @@ class SettingsDialog(QDialog):
         trail_gl.setVerticalSpacing(6)
         self._trail_check = QCheckBox("Enable mouse trail")
         trail_gl.addWidget(self._trail_check, 0, 0, 1, 2)
-        trail_gl.addWidget(QLabel("Trail Color:"), 1, 0)
+        # Sub-container: hidden until trail is enabled (item 68/78)
+        self._trail_sub = QWidget()
+        _trail_sub_gl = QGridLayout(self._trail_sub)
+        _trail_sub_gl.setContentsMargins(0, 0, 0, 0)
+        _trail_sub_gl.setColumnStretch(1, 1)
+        _trail_sub_gl.setHorizontalSpacing(10)
+        _trail_sub_gl.setVerticalSpacing(6)
+        _trail_sub_gl.addWidget(QLabel("Trail Color:"), 0, 0)
         self._trail_color_btn = ColorButton("#e94560")
-        trail_gl.addWidget(self._trail_color_btn, 1, 1, Qt.AlignmentFlag.AlignLeft)
-        trail_gl.addWidget(QLabel("Trail Style:"), 2, 0)
+        _trail_sub_gl.addWidget(self._trail_color_btn, 0, 1, Qt.AlignmentFlag.AlignLeft)
+        _trail_sub_gl.addWidget(QLabel("Trail Style:"), 1, 0)
         self._trail_style_combo = QComboBox()
         _TRAIL_STYLE_OPTIONS = [
             ("Dots ·",             "Dots  – Small colored dots fade out behind the cursor."),
@@ -671,7 +678,7 @@ class SettingsDialog(QDialog):
             "Lightning – crackle bolts, Plasma – electric arc sparks,\n"
             "Sakura – drifting petals, Smoke – rising gray puffs."
         )
-        trail_gl.addWidget(self._trail_style_combo, 2, 1)
+        _trail_sub_gl.addWidget(self._trail_style_combo, 1, 1)
         self._use_theme_trail_check = QCheckBox(
             "Use theme trail  (auto-color + special style per effect)"
         )
@@ -680,16 +687,15 @@ class SettingsDialog(QDialog):
             "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
             "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
         )
-        trail_gl.addWidget(self._use_theme_trail_check, 3, 0, 1, 2)
-        self._use_theme_trail_check.toggled.connect(
-            lambda checked: self._trail_color_btn.setEnabled(not checked)
-        )
-        self._use_theme_trail_check.toggled.connect(
-            lambda checked: self._trail_style_combo.setEnabled(not checked)
-        )
+        _trail_sub_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
+        def _update_trail_sub():
+            use_theme = self._use_theme_trail_check.isChecked()
+            self._trail_color_btn.setEnabled(not use_theme)
+            self._trail_style_combo.setEnabled(not use_theme)
+        self._use_theme_trail_check.toggled.connect(lambda _: _update_trail_sub())
 
         # Trail Length slider (10–200 points)
-        trail_gl.addWidget(QLabel("Trail Length:"), 4, 0)
+        _trail_sub_gl.addWidget(QLabel("Trail Length:"), 3, 0)
         self._trail_length_slider = QSlider(Qt.Orientation.Horizontal)
         self._trail_length_slider.setRange(_TRAIL_LENGTH_MIN, _TRAIL_LENGTH_MAX)
         self._trail_length_slider.setValue(_TRAIL_LENGTH_DEFAULT)
@@ -702,14 +708,14 @@ class SettingsDialog(QDialog):
         length_row = QHBoxLayout()
         length_row.addWidget(self._trail_length_slider)
         length_row.addWidget(self._trail_length_val_lbl)
-        trail_gl.addLayout(length_row, 4, 1)
+        _trail_sub_gl.addLayout(length_row, 3, 1)
         self._trail_length_slider.valueChanged.connect(
             lambda v: self._trail_length_val_lbl.setText(str(v))
         )
         self._trail_length_slider.valueChanged.connect(self._on_trail_length_changed)
 
         # Trail Fade Speed slider (1 slow … 10 fast)
-        trail_gl.addWidget(QLabel("Fade Speed:"), 5, 0)
+        _trail_sub_gl.addWidget(QLabel("Fade Speed:"), 4, 0)
         self._trail_fade_slider = QSlider(Qt.Orientation.Horizontal)
         self._trail_fade_slider.setRange(_TRAIL_FADE_MIN, _TRAIL_FADE_MAX)
         self._trail_fade_slider.setValue(_TRAIL_FADE_DEFAULT)
@@ -722,14 +728,14 @@ class SettingsDialog(QDialog):
         fade_row = QHBoxLayout()
         fade_row.addWidget(self._trail_fade_slider)
         fade_row.addWidget(self._trail_fade_val_lbl)
-        trail_gl.addLayout(fade_row, 5, 1)
+        _trail_sub_gl.addLayout(fade_row, 4, 1)
         self._trail_fade_slider.valueChanged.connect(
             lambda v: self._trail_fade_val_lbl.setText(str(v))
         )
         self._trail_fade_slider.valueChanged.connect(self._on_trail_fade_changed)
 
         # Trail Intensity slider (10–100 %)
-        trail_gl.addWidget(QLabel("Intensity:"), 6, 0)
+        _trail_sub_gl.addWidget(QLabel("Intensity:"), 5, 0)
         self._trail_intensity_slider = QSlider(Qt.Orientation.Horizontal)
         self._trail_intensity_slider.setRange(_TRAIL_INTENSITY_MIN, _TRAIL_INTENSITY_MAX)
         self._trail_intensity_slider.setValue(_TRAIL_INTENSITY_DEFAULT)
@@ -741,11 +747,15 @@ class SettingsDialog(QDialog):
         intensity_row = QHBoxLayout()
         intensity_row.addWidget(self._trail_intensity_slider)
         intensity_row.addWidget(self._trail_intensity_val_lbl)
-        trail_gl.addLayout(intensity_row, 6, 1)
+        _trail_sub_gl.addLayout(intensity_row, 5, 1)
         self._trail_intensity_slider.valueChanged.connect(
             lambda v: self._trail_intensity_val_lbl.setText(f"{v}%")
         )
         self._trail_intensity_slider.valueChanged.connect(self._on_trail_intensity_changed)
+        # Add sub-container to trail_gl and connect visibility to enable checkbox
+        trail_gl.addWidget(self._trail_sub, 1, 0, 1, 2)
+        self._trail_check.toggled.connect(lambda checked: self._trail_sub.setVisible(checked))
+        self._trail_sub.setVisible(False)  # hidden until trail is enabled
 
         mouse_row.addWidget(grp_trail, 1)
 
@@ -1043,7 +1053,14 @@ class SettingsDialog(QDialog):
         )
         banner_gl.addWidget(self._animated_banner_check, 0, 0, 1, 2)
 
-        banner_gl.addWidget(QLabel("Banner animation:"), 1, 0)
+        # Sub-container: hidden until banner animation is enabled (item 68)
+        self._banner_anim_sub = QWidget()
+        _ban_sub_gl = QGridLayout(self._banner_anim_sub)
+        _ban_sub_gl.setContentsMargins(16, 0, 0, 0)
+        _ban_sub_gl.setColumnStretch(1, 1)
+        _ban_sub_gl.setHorizontalSpacing(10)
+        _ban_sub_gl.setVerticalSpacing(6)
+        _ban_sub_gl.addWidget(QLabel("Banner animation:"), 0, 0)
         self._banner_anim_combo = QComboBox()
         _BANNER_ANIM_OPTIONS = [
             ("spin",     "Spin – continuous 360° rotation"),
@@ -1083,7 +1100,7 @@ class SettingsDialog(QDialog):
             "Greyed out while 'Use theme animation' is checked."
         )
         self._banner_anim_combo.setMinimumWidth(220)
-        banner_gl.addWidget(self._banner_anim_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
+        _ban_sub_gl.addWidget(self._banner_anim_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         self._banner_use_theme_anim_check = QCheckBox(
             "Use theme animation (each theme has its own style)"
@@ -1093,7 +1110,13 @@ class SettingsDialog(QDialog):
             "theme (e.g. Bat Cave uses bounce, Alien uses orbit, Goth uses pendulum).\n"
             "Uncheck to override with your own style from the dropdown above."
         )
-        banner_gl.addWidget(self._banner_use_theme_anim_check, 2, 0, 1, 2)
+        _ban_sub_gl.addWidget(self._banner_use_theme_anim_check, 1, 0, 1, 2)
+        # Add sub-container to banner_gl and wire visibility to enable checkbox
+        banner_gl.addWidget(self._banner_anim_sub, 1, 0, 1, 2)
+        self._animated_banner_check.toggled.connect(
+            lambda checked: self._banner_anim_sub.setVisible(checked)
+        )
+        self._banner_anim_sub.setVisible(False)  # hidden until banner is enabled
 
         self._show_splash_check = QCheckBox(
             "Show themed splash screen on startup (off by default)"
@@ -1102,7 +1125,7 @@ class SettingsDialog(QDialog):
             "When enabled: an animated themed splash screen is shown while the\n"
             "app loads on startup.  Disable to skip straight to the main window."
         )
-        banner_gl.addWidget(self._show_splash_check, 3, 0, 1, 2)
+        banner_gl.addWidget(self._show_splash_check, 2, 0, 1, 2)
 
         tv.addWidget(grp_banner)
 
@@ -1508,9 +1531,9 @@ class SettingsDialog(QDialog):
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
-        self._use_theme_trail_check.setEnabled(trail_enabled)
-        self._trail_color_btn.setEnabled(trail_enabled and not use_theme_trail)
-        self._trail_style_combo.setEnabled(trail_enabled and not use_theme_trail)
+        self._trail_sub.setVisible(trail_enabled)
+        self._trail_color_btn.setEnabled(not use_theme_trail)
+        self._trail_style_combo.setEnabled(not use_theme_trail)
         # Load persisted trail style into combo (or theme trail if use-theme is on)
         _TRAIL_STYLE_MAP = {
             "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
@@ -1524,7 +1547,7 @@ class SettingsDialog(QDialog):
         else:
             saved_style = self._settings.get("trail_style", "dots")
             self._trail_style_combo.setCurrentIndex(_TRAIL_STYLE_MAP.get(saved_style, 0))
-        # Load trail sliders and apply enabled state
+        # Load trail sliders
         saved_length = int(self._settings.get("trail_length", _TRAIL_LENGTH_DEFAULT))
         self._trail_length_slider.setValue(max(_TRAIL_LENGTH_MIN, min(_TRAIL_LENGTH_MAX, saved_length)))
         self._trail_length_val_lbl.setText(str(self._trail_length_slider.value()))
@@ -1534,9 +1557,6 @@ class SettingsDialog(QDialog):
         saved_intensity = int(self._settings.get("trail_intensity", _TRAIL_INTENSITY_DEFAULT))
         self._trail_intensity_slider.setValue(max(_TRAIL_INTENSITY_MIN, min(_TRAIL_INTENSITY_MAX, saved_intensity)))
         self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
-        self._trail_length_slider.setEnabled(trail_enabled)
-        self._trail_fade_slider.setEnabled(trail_enabled)
-        self._trail_intensity_slider.setEnabled(trail_enabled)
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
@@ -1565,9 +1585,8 @@ class SettingsDialog(QDialog):
         style_val = self._settings.get("tooltip_style", "Auto (follow theme)")
         idx_s = self._tooltip_style_combo.findText(style_val)
         self._tooltip_style_combo.setCurrentIndex(max(idx_s, 0))
-        self._animated_banner_check.setChecked(
-            self._settings.get("animated_banner_enabled", False)
-        )
+        banner_enabled = self._settings.get("animated_banner_enabled", False)
+        self._animated_banner_check.setChecked(banner_enabled)
         # Load banner animation style combo (show theme anim if "use theme" is on)
         _BANNER_ANIM_IDX_MAP = {
             "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
@@ -1583,9 +1602,8 @@ class SettingsDialog(QDialog):
                 _BANNER_ANIM_IDX_MAP.get(saved_banner_anim, 0)
             )
         self._banner_use_theme_anim_check.setChecked(banner_use_theme)
-        banner_enabled = self._settings.get("animated_banner_enabled", False)
-        self._banner_anim_combo.setEnabled(banner_enabled and not banner_use_theme)
-        self._banner_use_theme_anim_check.setEnabled(banner_enabled)
+        self._banner_anim_sub.setVisible(banner_enabled)
+        self._banner_anim_combo.setEnabled(not banner_use_theme)
         self._show_splash_check.setChecked(
             self._settings.get("show_splash_screen", False)
         )
@@ -2207,12 +2225,9 @@ class SettingsDialog(QDialog):
         use_theme = self._use_theme_trail_check.isChecked()
         self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", use_theme)
-        self._use_theme_trail_check.setEnabled(enabled)
-        self._trail_color_btn.setEnabled(enabled and not use_theme)
-        self._trail_style_combo.setEnabled(enabled and not use_theme)
-        self._trail_length_slider.setEnabled(enabled)
-        self._trail_fade_slider.setEnabled(enabled)
-        self._trail_intensity_slider.setEnabled(enabled)
+        self._trail_sub.setVisible(enabled)
+        self._trail_color_btn.setEnabled(not use_theme)
+        self._trail_style_combo.setEnabled(not use_theme)
         if enabled and not self._settings.get("trail_enabled_once", False):
             self._settings.set("trail_enabled_once", True)
             self.settings_changed.emit()
@@ -2231,11 +2246,8 @@ class SettingsDialog(QDialog):
         use_theme = self._use_theme_trail_check.isChecked()
         self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", use_theme)
-        self._trail_color_btn.setEnabled(enabled and not use_theme)
-        self._trail_style_combo.setEnabled(enabled and not use_theme)
-        self._trail_length_slider.setEnabled(enabled)
-        self._trail_fade_slider.setEnabled(enabled)
-        self._trail_intensity_slider.setEnabled(enabled)
+        self._trail_color_btn.setEnabled(not use_theme)
+        self._trail_style_combo.setEnabled(not use_theme)
         if use_theme:
             # Select the theme's trail style in the combo so the user can see
             # what is active, and update the tooltip to confirm.
@@ -2407,10 +2419,9 @@ class SettingsDialog(QDialog):
     def _on_animated_banner_changed(self) -> None:
         enabled = self._animated_banner_check.isChecked()
         self._settings.set("animated_banner_enabled", enabled)
-        # Enable/disable the subordinate controls based on the new state.
         use_theme = self._banner_use_theme_anim_check.isChecked()
-        self._banner_anim_combo.setEnabled(enabled and not use_theme)
-        self._banner_use_theme_anim_check.setEnabled(enabled)
+        self._banner_anim_sub.setVisible(enabled)
+        self._banner_anim_combo.setEnabled(not use_theme)
         self.settings_changed.emit()
 
     def _on_banner_anim_style_changed(self) -> None:
@@ -2421,8 +2432,7 @@ class SettingsDialog(QDialog):
     def _on_banner_use_theme_anim_changed(self) -> None:
         use_theme = self._banner_use_theme_anim_check.isChecked()
         self._settings.set("banner_use_theme_anim", use_theme)
-        banner_enabled = self._animated_banner_check.isChecked()
-        self._banner_anim_combo.setEnabled(banner_enabled and not use_theme)
+        self._banner_anim_combo.setEnabled(not use_theme)
         if use_theme:
             theme = self._settings.get_theme()
             theme_name = theme.get("name", "")
