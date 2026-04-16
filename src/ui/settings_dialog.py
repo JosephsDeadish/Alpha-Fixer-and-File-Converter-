@@ -769,8 +769,11 @@ class SettingsDialog(QDialog):
         self._trail_intensity_slider.valueChanged.connect(self._on_trail_intensity_changed)
         # Add sub-container to trail_gl and connect visibility to enable checkbox
         trail_gl.addWidget(self._trail_sub, 1, 0, 1, 2)
-        self._trail_check.toggled.connect(lambda checked: self._trail_sub.setVisible(checked))
-        self._trail_sub.setVisible(False)  # hidden until trail is enabled
+        # Always show the sub-container so users can preview options before enabling.
+        # Gray it out when trail is disabled (item 78).
+        self._trail_check.toggled.connect(lambda checked: self._trail_sub.setEnabled(checked))
+        self._trail_sub.setVisible(True)
+        self._trail_sub.setEnabled(False)  # enabled only when trail is on
 
         mouse_row.addWidget(grp_trail, 1)
 
@@ -1578,7 +1581,8 @@ class SettingsDialog(QDialog):
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
-        self._trail_sub.setVisible(trail_enabled)
+        self._trail_sub.setVisible(True)
+        self._trail_sub.setEnabled(trail_enabled)
         self._trail_color_btn.setEnabled(not use_theme_trail)
         self._trail_style_combo.setEnabled(not use_theme_trail)
         # Load persisted trail style into combo (or theme trail if use-theme is on)

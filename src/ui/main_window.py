@@ -1079,8 +1079,9 @@ class MainWindow(QMainWindow):
         # Prevent tabs from stretching to fill available space; scroll buttons
         # will appear automatically when the window is narrower than all tabs.
         self._tabs.tabBar().setExpanding(False)
-        # Allow the user to drag tabs to reorder them.
-        self._tabs.tabBar().setMovable(True)
+        # Keep tabs in fixed order — movable tabs caused accidental reordering
+        # and tabs hiding behind the scrollbar (item 58).
+        self._tabs.tabBar().setMovable(False)
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
@@ -1123,8 +1124,8 @@ class MainWindow(QMainWindow):
 
         # ⚙ Settings button
         btn_settings = QPushButton("⚙  Settings")
-        btn_settings.setMinimumWidth(120)
-        btn_settings.setMinimumHeight(32)
+        btn_settings.setMinimumWidth(90)
+        btn_settings.setMinimumHeight(26)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
         corner_layout.addWidget(btn_settings)
@@ -1132,8 +1133,8 @@ class MainWindow(QMainWindow):
 
         # ❓ Help button – opens a dropdown with shortcuts/about/export/import
         btn_help = QPushButton("❓  Help")
-        btn_help.setMinimumWidth(100)
-        btn_help.setMinimumHeight(32)
+        btn_help.setMinimumWidth(76)
+        btn_help.setMinimumHeight(26)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
         corner_layout.addWidget(btn_help)
@@ -1141,8 +1142,8 @@ class MainWindow(QMainWindow):
 
         # ❤ Patreon button
         btn_patreon = QPushButton("❤  Patreon")
-        btn_patreon.setMinimumWidth(120)
-        btn_patreon.setMinimumHeight(32)
+        btn_patreon.setMinimumWidth(90)
+        btn_patreon.setMinimumHeight(26)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
             "patreon.com/c/DeadOnTheInside"
