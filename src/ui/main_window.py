@@ -1123,8 +1123,8 @@ class MainWindow(QMainWindow):
 
         # ⚙ Settings button
         btn_settings = QPushButton("⚙  Settings")
-        btn_settings.setMinimumWidth(110)
-        btn_settings.setMinimumHeight(28)
+        btn_settings.setMinimumWidth(120)
+        btn_settings.setMinimumHeight(32)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
         corner_layout.addWidget(btn_settings)
@@ -1132,8 +1132,8 @@ class MainWindow(QMainWindow):
 
         # ❓ Help button – opens a dropdown with shortcuts/about/export/import
         btn_help = QPushButton("❓  Help")
-        btn_help.setMinimumWidth(90)
-        btn_help.setMinimumHeight(28)
+        btn_help.setMinimumWidth(100)
+        btn_help.setMinimumHeight(32)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
         corner_layout.addWidget(btn_help)
@@ -1141,8 +1141,8 @@ class MainWindow(QMainWindow):
 
         # ❤ Patreon button
         btn_patreon = QPushButton("❤  Patreon")
-        btn_patreon.setMinimumWidth(110)
-        btn_patreon.setMinimumHeight(28)
+        btn_patreon.setMinimumWidth(120)
+        btn_patreon.setMinimumHeight(32)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
             "patreon.com/c/DeadOnTheInside"

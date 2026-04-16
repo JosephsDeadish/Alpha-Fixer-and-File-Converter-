@@ -541,6 +541,7 @@ class SettingsDialog(QDialog):
         bg_flock_inner.addWidget(QLabel("Flock Style:"))
         self._bg_flock_combo = QComboBox()
         self._bg_flock_combo.setMinimumWidth(180)
+        self._bg_flock_combo.addItem("🚫 None (theme has no flock)", userData="none")
         self._bg_flock_combo.addItem("🦇 Bats", userData="bats")
         self._bg_flock_combo.addItem("🧚 Fairies", userData="fairies")
         self._bg_flock_combo.addItem("🐟 Fish", userData="fish")
@@ -2007,8 +2008,8 @@ class SettingsDialog(QDialog):
                     "stars": "⭐ Stars", "petals": "🌸 Petals",
                 }
                 _FLOCK_IDX = {
-                    "bats": 0, "fairies": 1, "fish": 2, "butterflies": 3,
-                    "birds": 4, "stars": 5, "petals": 6,
+                    "none": 0, "bats": 1, "fairies": 2, "fish": 3, "butterflies": 4,
+                    "birds": 5, "stars": 6, "petals": 7,
                 }
                 theme_flock = theme.get("_flock")
                 if theme_flock:
@@ -2021,6 +2022,13 @@ class SettingsDialog(QDialog):
                         "Uncheck 'Use theme flock' to pick a different style."
                     )
                 else:
+                    # Theme has no flock — show the "None" item
+                    self._bg_flock_combo.blockSignals(True)
+                    for _i in range(self._bg_flock_combo.count()):
+                        if self._bg_flock_combo.itemData(_i) == "none":
+                            self._bg_flock_combo.setCurrentIndex(_i)
+                            break
+                    self._bg_flock_combo.blockSignals(False)
                     self._bg_flock_combo.setToolTip(
                         f"No themed flock for the '{theme_name}' theme.\n"
                         "Flock is disabled while 'Use theme flock' is checked.\n"

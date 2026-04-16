@@ -1360,7 +1360,7 @@ class SelectiveAlphaTool(QWidget):
         row3.setSpacing(4)
         self._btn_undo_process = QPushButton("↩ Undo Apply")
         self._btn_undo_process.setEnabled(False)
-        self._btn_undo_process.setMinimumHeight(26)
+        self._btn_undo_process.setMinimumHeight(30)
         self._btn_undo_process.setMinimumWidth(110)
         self._btn_undo_process.setToolTip(
             "Undo the last Apply operation and restore the previous result."
@@ -1369,7 +1369,7 @@ class SelectiveAlphaTool(QWidget):
         row3.addWidget(self._btn_undo_process)
 
         self._btn_save = QPushButton("💾 Save…")
-        self._btn_save.setMinimumHeight(26)
+        self._btn_save.setMinimumHeight(30)
         self._btn_save.setMinimumWidth(90)
         self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
@@ -1379,7 +1379,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Row 4: Clear All Zones
         self._btn_clear_all = QPushButton("🗑  Clear All Zones")
-        self._btn_clear_all.setMinimumHeight(26)
+        self._btn_clear_all.setMinimumHeight(30)
         self._btn_clear_all.setToolTip("Erase all painted zone masks and start over.")
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         wf_lay.addWidget(self._btn_clear_all)
@@ -1411,7 +1411,7 @@ class SelectiveAlphaTool(QWidget):
         for key, label, row, col in tool_defs:
             btn = QPushButton(label)
             btn.setCheckable(True)
-            btn.setMinimumHeight(28)
+            btn.setMinimumHeight(32)
             btn.setMinimumWidth(120)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
