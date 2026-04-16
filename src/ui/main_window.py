@@ -1224,10 +1224,14 @@ class MainWindow(QMainWindow):
         # Preview-refresh sounds
         self._alpha_tab.preview_refreshed.connect(self._on_preview_refreshed)
         # Cross-tool zone sharing: zones copied from the Alpha tool preview flow
-        # directly into the Selective Alpha tool's import buffer.
-        self._alpha_tab.zone_masks_shared.connect(
-            self._selective_alpha_tab.receive_shared_zones
-        )
+        # directly into the Selective Alpha tool's import buffer, then the app
+        # automatically switches to the Selective Alpha tab so the user can
+        # see the import controls without hunting for them.
+        def _on_zones_shared(zones: list) -> None:
+            self._selective_alpha_tab.receive_shared_zones(zones)
+            # Switch to the Selective Alpha tab so the import buttons are visible.
+            self._tabs.setCurrentWidget(self._selective_alpha_tab)
+        self._alpha_tab.zone_masks_shared.connect(_on_zones_shared)
         # Cross-tool output directory sync (item #3): when one tool's output
         # dir changes via Browse, mirror it to the other tool so users only
         # have to set it once.
@@ -1323,13 +1327,15 @@ class MainWindow(QMainWindow):
         if self._settings.get("use_theme_drip", False):
             theme = self._settings.get_theme()
             effect_key = theme.get("_effect", "default")
-            # Map theme effects to drip types
+            # Map theme effects to drip types; themes without a drip type get none.
             if effect_key in ("gore", "shark"):
                 drip_type = "blood"
             elif effect_key in ("ocean", "ripple", "mermaid"):
                 drip_type = "water"
             else:
-                drip_type = self._settings.get("bg_drip_type", "blood")
+                # Theme has no defined drip — respect that and disable drip.
+                self._click_effects.set_bg_drip("blood", False)
+                return
         else:
             drip_type = self._settings.get("bg_drip_type", "blood")
         self._click_effects.set_bg_drip(drip_type, True)

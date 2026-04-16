@@ -1458,12 +1458,12 @@ class SelectiveAlphaTool(QWidget):
         tool_defs = [
             ("freehand",   "✏  Freehand",   0, 0),
             ("line",       "╱  Line",       0, 1),
-            ("rect",       "▬  Rectangle",  1, 0),
+            ("rect",       "▭  Rectangle",  1, 0),
             ("ellipse",    "◯  Ellipse",    1, 1),
             ("fill",       "🪣  Fill",       2, 0),
             ("polygon",    "⬠  Polygon",    2, 1),
             ("eraser",     "⌫  Eraser",     3, 0),
-            ("transform",  "↔  Transform",  3, 1),
+            ("transform",  "⇄  Transform",  3, 1),
         ]
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
@@ -1942,7 +1942,8 @@ class SelectiveAlphaTool(QWidget):
             "Copy one imported zone into the Single Zone Mask Clipboard.\n"
             "If more than one zone was imported, a picker will appear\n"
             "so you can choose which zone to copy.\n"
-            "The copied mask can then be pasted via '💾  Save' → '📌  Paste'."
+            "The copied mask can then be pasted via the '📌  Paste Mask' button\n"
+            "in the Zone Editor section below."
         )
         self._btn_import_zone_to_clipboard.clicked.connect(self._on_import_zone_to_clipboard)
         iv.addWidget(self._btn_import_zone_to_clipboard)

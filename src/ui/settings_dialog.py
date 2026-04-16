@@ -1030,10 +1030,18 @@ class SettingsDialog(QDialog):
         }
         # Insert a read-only sentinel at index 0 for "no animation" state when
         # 'Use theme animation' is on and the theme has no button animation.
+        # This item is intentionally non-selectable and non-interactive.
         self._button_anim_style_combo.addItem("No button press animation", userData="__none__")
         self._button_anim_style_combo.setItemData(
             0, False, Qt.ItemDataRole.UserRole + 1  # marker: not user-selectable
         )
+        # Make the "__none__" sentinel non-selectable so the user cannot pick it manually.
+        _none_item = self._button_anim_style_combo.model().item(0)
+        if _none_item is not None:
+            from PyQt6.QtCore import Qt as _Qt
+            _none_item.setFlags(_none_item.flags()
+                                & ~_Qt.ItemFlag.ItemIsEnabled
+                                & ~_Qt.ItemFlag.ItemIsSelectable)
         for key, label in _BUTTON_ANIM_OPTIONS:
             self._button_anim_style_combo.addItem(label, userData=key)
             idx = self._button_anim_style_combo.count() - 1
