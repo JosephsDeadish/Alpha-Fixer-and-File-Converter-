@@ -1398,70 +1398,47 @@ class SelectiveAlphaTool(QWidget):
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
 
-        # ── Workflow group: Open → Paint → Apply → Save ───────────────────
+        # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow  ①Open  ②Paint  ③Apply  ④Save")
+        wf_box = QGroupBox("Workflow  \u2460Open  \u2461Paint  \u2462Save")
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setSpacing(4)
 
         # Row 1: Open image
-        self._btn_open = QPushButton("📂  Open Image…")
+        self._btn_open = QPushButton("\U0001f4c2  Open Image\u2026")
         self._btn_open.setMinimumHeight(26)
         self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
 
         # Row 1b: Show Highlights toggle — prominent master visibility control
-        self._btn_show_highlights = QPushButton("👁  Show Highlights")
+        self._btn_show_highlights = QPushButton("\U0001f441  Show Highlights")
         self._btn_show_highlights.setCheckable(True)
-        self._btn_show_highlights.setChecked(False)
+        self._btn_show_highlights.setChecked(True)
         self._btn_show_highlights.setMinimumHeight(26)
         self._btn_show_highlights.setToolTip(
             "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
-            "Off by default — turn on to see the coloured highlights and alpha labels.\n"
+            "Turn off to see the image without coloured highlights and alpha labels.\n"
             "Automatically turns on when multiple alpha zones are detected in an image."
         )
         self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
         wf_lay.addWidget(self._btn_show_highlights)
 
-        # Row 2: Apply (primary action – most prominent)
-        self._btn_apply = QPushButton("✅  Apply Alpha Zones")
-        self._btn_apply.setEnabled(False)
-        self._btn_apply.setMinimumHeight(30)
-        self._btn_apply.setToolTip(
-            "Apply the painted zones to the image and make the result ready to save.  (Ctrl+Enter)"
-        )
-        self._btn_apply.clicked.connect(self._on_apply)
-        self._btn_apply.setStyleSheet(
-            "QPushButton:enabled { font-weight: bold; }"
-        )
-        wf_lay.addWidget(self._btn_apply)
-
-        # Row 3: Undo Process + Save side-by-side
-        row3 = QHBoxLayout()
-        row3.setSpacing(4)
-        self._btn_undo_process = QPushButton("↩ Undo Apply")
-        self._btn_undo_process.setEnabled(False)
-        self._btn_undo_process.setMinimumHeight(30)
-        self._btn_undo_process.setMinimumWidth(110)
-        self._btn_undo_process.setToolTip(
-            "Undo the last Apply operation and restore the previous result."
-        )
-        self._btn_undo_process.clicked.connect(self._on_undo_process)
-        row3.addWidget(self._btn_undo_process)
-
-        self._btn_save = QPushButton("💾 Save…")
+        # Row 2: Save — alpha zones are applied automatically on save
+        self._btn_save = QPushButton("\U0001f4be Save\u2026")
         self._btn_save.setMinimumHeight(30)
-        self._btn_save.setMinimumWidth(90)
-        self._btn_save.setToolTip("Save the processed result to disk  (Ctrl+S)")
+        self._btn_save.setToolTip(
+            "Apply the painted zones and save the result to disk  (Ctrl+S)\n"
+            "Alpha zones are applied automatically — no separate Apply step needed."
+        )
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
-        row3.addWidget(self._btn_save)
-        wf_lay.addLayout(row3)
+        self._btn_save.setStyleSheet("QPushButton:enabled { font-weight: bold; }")
+        wf_lay.addWidget(self._btn_save)
 
-        # Row 4: Clear All Zones
-        self._btn_clear_all = QPushButton("🗑  Clear All Zones")
+        # Row 3: Clear All Zones
+        self._btn_clear_all = QPushButton("\U0001f5d1  Clear All Zones")
         self._btn_clear_all.setMinimumHeight(30)
         self._btn_clear_all.setToolTip("Erase all painted zone masks and start over.")
         self._btn_clear_all.clicked.connect(self._on_clear_all)
@@ -2212,8 +2189,6 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._ze_copy_btn,   "sa_zone_copy_mask")
         mgr.register(self._ze_paste_btn,  "sa_zone_paste_mask")
         mgr.register(self._history_overlay,  "sa_history_overlay")
-        mgr.register(self._btn_apply,        "sa_apply")
-        mgr.register(self._btn_undo_process, "sa_undo_process")
         mgr.register(self._btn_clear_all,    "sa_clear_all")
         mgr.register(self._btn_copy_all_zones,  "sa_copy_all_zones")
         mgr.register(self._btn_paste_all_zones, "sa_paste_all_zones")
@@ -2782,8 +2757,7 @@ class SelectiveAlphaTool(QWidget):
             QMessageBox.warning(self, "Load Error", f"Could not load:\n{path}")
             return
         self._src_path = path
-        self._btn_apply.setEnabled(True)
-        self._btn_save.setEnabled(False)
+        self._btn_save.setEnabled(True)
         # Clear result history
         if self._result_img is not None:
             self._result_img.close()
@@ -2791,11 +2765,10 @@ class SelectiveAlphaTool(QWidget):
         for img in self._result_history:
             img.close()
         self._result_history.clear()
-        self._btn_undo_process.setEnabled(False)
         # Reset the Show Highlights toggle so a freshly-loaded image starts
-        # with highlights hidden; _auto_populate_zones_from_image will turn it
-        # back on if multiple distinct alpha zones are detected.
-        self._btn_show_highlights.setChecked(False)
+        # with highlights shown; _auto_populate_zones_from_image will keep it
+        # on if multiple distinct alpha zones are detected.
+        self._btn_show_highlights.setChecked(True)
         self._on_hide_all_zones()
         # Auto-populate zone masks if the image has multiple distinct alphas.
         self._auto_populate_zones_from_image()
@@ -2869,12 +2842,55 @@ class SelectiveAlphaTool(QWidget):
         self._btn_show_highlights.setChecked(True)
 
     def _on_save(self) -> None:
-        if self._result_img is None:
+        if not self._canvas.has_image():
+            return
+        # Auto-apply the zones before saving so the user doesn't need a
+        # separate Apply step (items 84/85).
+        bool_masks = self._canvas.get_masks_as_bool()
+        zone_alphas = list(self._canvas._zone_alphas)
+
+        # Warn if no zones are painted.
+        if all(m is None or not m.any() for m in bool_masks):
             QMessageBox.information(
-                self, "Nothing to save",
-                "Press 'Apply Alpha Zones' first to generate the result."
+                self, "No zones painted",
+                "Paint at least one zone before saving."
             )
             return
+
+        # Log the action for crash reporting
+        try:
+            from main import log_action
+            zones_used = sum(1 for m in bool_masks if m is not None and m.any())
+            log_action(f"Selective alpha: applied {zones_used} zone(s) to '{self._src_path}'")
+        except Exception:
+            pass
+
+        try:
+            src_img = self._canvas.get_source_image()
+            result = None
+            result = apply_selective_alpha(src_img, bool_masks, zone_alphas)
+            # Push previous result onto the undo-process history stack (capped).
+            if self._result_img is not None:
+                self._result_history.append(self._result_img)
+                if len(self._result_history) > _MAX_HISTORY:
+                    self._result_history.pop(0).close()
+            self._result_img = result
+            result = None
+        except MemoryError:
+            if result is not None:
+                result.close()
+            QMessageBox.critical(
+                self, "Apply Error",
+                "Not enough memory to apply alpha zones to this image.\n"
+                "Try reducing the image size or closing other applications."
+            )
+            return
+        except Exception as exc:
+            if result is not None:
+                result.close()
+            QMessageBox.critical(self, "Apply Error", str(exc))
+            return
+
         # Always default to a .png path – PNG is the only widely-supported
         # format that preserves a full per-pixel alpha channel.
         base = os.path.splitext(self._src_path)[0] if self._src_path else ""
@@ -2920,64 +2936,8 @@ class SelectiveAlphaTool(QWidget):
             QMessageBox.critical(self, "Save Error", str(exc))
 
     def _on_apply(self) -> None:
-        if not self._canvas.has_image():
-            return
-        bool_masks = self._canvas.get_masks_as_bool()
-        zone_alphas = list(self._canvas._zone_alphas)
-
-        # Warn if no zones are painted.
-        if all(m is None or not m.any() for m in bool_masks):
-            QMessageBox.information(
-                self, "No zones painted",
-                "Paint at least one zone before applying."
-            )
-            return
-
-        # Log the action for crash reporting
-        try:
-            from main import log_action
-            zones_used = sum(1 for m in bool_masks if m is not None and m.any())
-            log_action(f"Selective alpha: applied {zones_used} zone(s) to '{self._src_path}'")
-        except Exception:
-            pass
-
-        try:
-            src_img = self._canvas.get_source_image()
-            # Initialise to None so the except handlers can safely close it
-            # if apply_selective_alpha raises after allocating an intermediate image.
-            result = None
-            result = apply_selective_alpha(
-                src_img, bool_masks, zone_alphas
-            )
-            # Push previous result onto the undo-process history stack (capped).
-            if self._result_img is not None:
-                self._result_history.append(self._result_img)
-                # Cap the process-undo stack to the same depth as drawing history.
-                if len(self._result_history) > _MAX_HISTORY:
-                    self._result_history.pop(0).close()
-                self._btn_undo_process.setEnabled(True)
-            self._result_img = result
-            # Null out the local so the except handlers below do not
-            # accidentally close the image that is now owned by _result_img.
-            result = None
-            self._btn_save.setEnabled(True)
-            QMessageBox.information(
-                self, "Done",
-                "Alpha zones applied successfully.\n"
-                "Click 'Save Result…' to export the image."
-            )
-        except MemoryError:
-            if result is not None:
-                result.close()
-            QMessageBox.critical(
-                self, "Apply Error",
-                "Not enough memory to apply alpha zones to this image.\n"
-                "Try reducing the image size or closing other applications."
-            )
-        except Exception as exc:
-            if result is not None:
-                result.close()
-            QMessageBox.critical(self, "Apply Error", str(exc))
+        """Apply alpha zones — kept for Ctrl+Enter shortcut compatibility."""
+        self._on_save()
 
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
@@ -2996,16 +2956,13 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.redo_mask()
 
     def _on_undo_process(self) -> None:
-        """Undo the last Apply operation."""
+        """Undo the last Apply operation (kept for backward compatibility)."""
         if not self._result_history:
-            self._btn_undo_process.setEnabled(False)
             return
         # Close the current result without pushing it forward (discard).
         if self._result_img is not None:
             self._result_img.close()
         self._result_img = self._result_history.pop()
-        self._btn_save.setEnabled(True)
-        self._btn_undo_process.setEnabled(bool(self._result_history))
 
     @staticmethod
     def _make_zone_color_icon(r: int, g: int, b: int) -> QIcon:

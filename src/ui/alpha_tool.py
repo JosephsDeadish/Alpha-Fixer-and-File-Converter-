@@ -1546,7 +1546,7 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
         # Restore the window title after processing
-        from . import __version__
+        from ..version import __version__
         win = self.window()
         if win is not None:
             win.setWindowTitle(
