@@ -194,6 +194,11 @@ class SelectiveAlphaCanvas(QWidget):
         self._composite_qimage: Optional[QImage] = None
         self._drag_preview:     Optional[QImage] = None  # line/rect/ellipse preview
 
+        # ── cursor circle for brush size indicator ─────────────────────
+        self._cursor_wx: float = -1.0
+        self._cursor_wy: float = -1.0
+        self._cursor_on_canvas: bool = False
+
         # Label geometry caches (computed in _rebuild_composite)
         self._zone_centroids:    list[Optional[tuple[int, int]]] = [None] * NUM_ZONES
         self._zone_label_points: list[list[tuple[int, int]]]     = [[] for _ in range(NUM_ZONES)]
@@ -630,6 +635,31 @@ class SelectiveAlphaCanvas(QWidget):
         # Alpha-value labels
         self._draw_alpha_labels(painter)
 
+        # Brush/eraser size cursor ring
+        self._draw_cursor_ring(painter)
+
+    def _draw_cursor_ring(self, painter: QPainter) -> None:
+        """Draw a circle at the cursor position showing the current brush radius."""
+        if not self._cursor_on_canvas or not self.has_image():
+            return
+        if self._tool not in ("freehand", "eraser"):
+            return
+        is_erase = self._tool == "eraser"
+        radius_px = (self._eraser_size if is_erase else self._brush_size) * self._zoom
+        cx, cy = self._cursor_wx, self._cursor_wy
+        # Outer ring: contrasting outline so it's visible on any background
+        pen_out = QPen(QColor(0, 0, 0, 140), 2.0)
+        pen_in  = QPen(QColor(255, 255, 255, 200), 1.0)
+        pen_out.setStyle(Qt.PenStyle.SolidLine)
+        pen_in.setStyle(Qt.PenStyle.SolidLine)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        # Draw dark outer ring then white inner ring for contrast
+        painter.setPen(pen_out)
+        painter.drawEllipse(QPointF(cx, cy), radius_px + 1, radius_px + 1)
+        painter.setPen(pen_in)
+        painter.drawEllipse(QPointF(cx, cy), radius_px, radius_px)
+
     def _paint_polygon_preview(self, painter: QPainter) -> None:
         z, px, py = self._zoom, self._pan_x, self._pan_y
         pen = QPen(QColor(255, 220, 0, 220), max(1.0, z))
@@ -728,6 +758,11 @@ class SelectiveAlphaCanvas(QWidget):
         pos  = event.position()
         wx, wy = pos.x(), pos.y()
 
+        # Always track cursor position for the brush-size indicator circle
+        self._cursor_wx = wx
+        self._cursor_wy = wy
+        self._cursor_on_canvas = True
+
         if self._panning and self._pan_start_mouse is not None:
             dx = wx - self._pan_start_mouse[0]
             dy = wy - self._pan_start_mouse[1]
@@ -737,6 +772,7 @@ class SelectiveAlphaCanvas(QWidget):
             return
 
         if not self._drawing or not self.has_image():
+            self.update()  # redraw cursor ring even when not drawing
             return
 
         ix, iy       = self._w2i(wx, wy)
@@ -839,6 +875,11 @@ class SelectiveAlphaCanvas(QWidget):
         self._poly_pts.clear()
         self._composite_dirty = True
         self.mask_changed.emit(self._active_zone)
+        self.update()
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        """Hide the brush circle when the cursor leaves the canvas."""
+        self._cursor_on_canvas = False
         self.update()
 
     # ── drawing primitives ────────────────────────────────────────────────
@@ -3091,7 +3132,17 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.close_polygon()
 
     def _on_clear_all(self) -> None:
-        self._canvas.clear_all_masks()
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Clear All Zones?",
+            "This will erase all painted zone masks.\n\n"
+            "Are you sure you want to start over?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._canvas.clear_all_masks()
 
     def _zoom_in(self) -> None:
         self._canvas.zoom_by(1.25)
