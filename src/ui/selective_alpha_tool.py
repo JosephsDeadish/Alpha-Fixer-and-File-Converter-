@@ -134,6 +134,7 @@ class SelectiveAlphaCanvas(QWidget):
     redo_available      = pyqtSignal(bool)  # whether Ctrl+Y is available
     undo_count_changed  = pyqtSignal(int)   # number of steps on undo stack
     redo_count_changed  = pyqtSignal(int)   # number of steps on redo stack
+    zoom_changed        = pyqtSignal(float) # emitted whenever the canvas zoom changes
     copy_requested      = pyqtSignal(int)   # context-menu: copy zone mask
     paste_requested     = pyqtSignal(int)   # context-menu: paste zone mask
     copy_all_requested  = pyqtSignal()      # context-menu: copy all zones
@@ -489,10 +490,12 @@ class SelectiveAlphaCanvas(QWidget):
         self._pan_x = cx - (cx - self._pan_x) * (new_zoom / self._zoom)
         self._pan_y = cy - (cy - self._pan_y) * (new_zoom / self._zoom)
         self._zoom  = new_zoom
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     def zoom_reset(self) -> None:
         self._zoom_fit()
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     # ── coordinate helpers ────────────────────────────────────────────────
@@ -691,6 +694,7 @@ class SelectiveAlphaCanvas(QWidget):
             self._pan_x = mx - (mx - self._pan_x) * (new_zoom / self._zoom)
             self._pan_y = my - (my - self._pan_y) * (new_zoom / self._zoom)
             self._zoom  = new_zoom
+            self.zoom_changed.emit(self._zoom)
             self.update()
         else:
             super().wheelEvent(event)
@@ -1051,8 +1055,16 @@ class _FloatingZoomOverlay(QFrame):
         row.addWidget(btn_out)
         row.addWidget(btn_fit)
         row.addWidget(btn_in)
+        self._zoom_lbl = QLabel("100%")
+        self._zoom_lbl.setStyleSheet("color: #ccc; font-size: 10px; min-width: 34px;")
+        self._zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._zoom_lbl)
         self.adjustSize()
         self.raise_()
+
+    def set_zoom(self, zoom: float) -> None:
+        """Update the zoom percentage label."""
+        self._zoom_lbl.setText(f"{int(round(zoom * 100))}%")
 
     def reposition(self, parent_size) -> None:
         """Pin the overlay to the top-right corner of *parent_size*."""
@@ -1354,6 +1366,8 @@ class SelectiveAlphaTool(QWidget):
         self._result_history: list[Image.Image] = []
         # Flag set during settings restoration to suppress spurious auto-saves.
         self._restoring: bool = False
+        # Remember the last non-eraser tool so pressing E twice toggles back.
+        self._prev_non_eraser_tool: str = "freehand"
         # Zone-mask clipboard: stores a single uint8 ndarray (the most recent
         # Copy Mask action).  Copying again silently replaces the previous entry.
         self._mask_clipboard: Optional[np.ndarray] = None
@@ -2031,6 +2045,8 @@ class SelectiveAlphaTool(QWidget):
             self._zoom_in, self._zoom_out, self._zoom_reset, self._canvas
         )
         self._zoom_overlay.adjustSize()
+        # Keep the zoom percentage label in the overlay in sync with the canvas.
+        self._canvas.zoom_changed.connect(self._zoom_overlay.set_zoom)
 
         # ── Floating undo/redo overlay pinned to the top-left of the canvas ─
         self._history_overlay = _FloatingHistoryOverlay(
@@ -3136,15 +3152,27 @@ class SelectiveAlphaTool(QWidget):
         self._save_settings()
 
     def _on_tool_selected(self, key: str) -> None:
+        # Track the previous tool so E can toggle back to it
+        current = getattr(self._canvas, "_tool", "freehand")
+        if key != current and current != "eraser":
+            self._prev_non_eraser_tool = current
         self._canvas.set_tool(key)
         self._btn_close_poly.setVisible(key == "polygon")
         self._update_status()
         self._save_settings()
 
     def _select_tool_by_key(self, tool: str) -> None:
-        """Select a drawing tool by key name and update the UI button state."""
+        """Select a drawing tool by key name and update the UI button state.
+
+        Special case: pressing E while the eraser is already active toggles
+        back to the previously used non-eraser tool (usually freehand/brush).
+        """
         if tool not in self._tool_btns:
             return
+        current_tool = getattr(self._canvas, "_tool", "freehand")
+        if tool == "eraser" and current_tool == "eraser":
+            # Toggle back to the previous non-eraser tool
+            tool = getattr(self, "_prev_non_eraser_tool", "freehand")
         self._tool_btns[tool].setChecked(True)
         self._on_tool_selected(tool)
 
