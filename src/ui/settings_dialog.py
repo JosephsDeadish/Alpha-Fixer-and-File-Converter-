@@ -505,10 +505,12 @@ class SettingsDialog(QDialog):
         self._bg_drip_combo.setMinimumWidth(180)
         self._bg_drip_combo.addItem("🩸 Blood Drip", userData="blood")
         self._bg_drip_combo.addItem("💧 Water Drip", userData="water")
+        self._bg_drip_combo.addItem("🚫 None (theme has no drip)", userData="none")
         self._bg_drip_combo.setToolTip(
             "Choose the drip style when 'Use theme drip' is off.\n"
             "Blood Drip: crimson tear-shaped drops fall from the top.\n"
-            "Water Drip: translucent cyan drops fall from the top."
+            "Water Drip: translucent cyan drops fall from the top.\n"
+            "None: shown automatically when the active theme has no drip defined."
         )
         bg_drip_inner.addWidget(self._bg_drip_combo, 1)
         bg_drip_sub_layout.addLayout(bg_drip_inner)
@@ -1693,9 +1695,13 @@ class SettingsDialog(QDialog):
         # When use-theme drip is on, show the theme's drip type in the combo
         if use_theme_drip:
             eff = self._settings.get_theme().get("_effect", "default")
-            theme_drip = ("blood" if eff in ("gore", "shark") else
-                          "water" if eff in ("ocean", "ripple", "mermaid") else
-                          self._settings.get("bg_drip_type", "blood"))
+            if eff in ("gore", "shark"):
+                theme_drip = "blood"
+            elif eff in ("ocean", "ripple", "mermaid"):
+                theme_drip = "water"
+            else:
+                # Theme has no drip — reflect that with "none" (item 65)
+                theme_drip = "none"
         else:
             theme_drip = self._settings.get("bg_drip_type", "blood")
         for i in range(self._bg_drip_combo.count()):
@@ -2048,8 +2054,14 @@ class SettingsDialog(QDialog):
             # Bg drip combo
             if self._use_theme_drip_check.isChecked():
                 eff = theme.get("_effect", "default")
-                drip_key = ("blood" if eff in ("gore", "shark") else
-                            "water" if eff in ("ocean", "ripple", "mermaid") else "blood")
+                if eff in ("gore", "shark"):
+                    drip_key = "blood"
+                elif eff in ("ocean", "ripple", "mermaid"):
+                    drip_key = "water"
+                else:
+                    # This theme has no defined drip — show "none" so the user
+                    # knows the drip is inactive for this theme (item 65).
+                    drip_key = "none"
                 for i in range(self._bg_drip_combo.count()):
                     if self._bg_drip_combo.itemData(i) == drip_key:
                         self._bg_drip_combo.setCurrentIndex(i)
@@ -2607,7 +2619,8 @@ class SettingsDialog(QDialog):
             elif effect_key in ("ocean", "ripple", "mermaid"):
                 theme_drip = "water"
             else:
-                theme_drip = drip_type
+                # Theme has no drip — show "none" so user knows it's inactive (item 65)
+                theme_drip = "none"
             # Select the matching drip in the combo so user sees what's active
             for i in range(self._bg_drip_combo.count()):
                 if self._bg_drip_combo.itemData(i) == theme_drip:

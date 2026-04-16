@@ -1339,6 +1339,9 @@ class MainWindow(QMainWindow):
                 return
         else:
             drip_type = self._settings.get("bg_drip_type", "blood")
+        if not drip_type or drip_type == "none":
+            self._click_effects.set_bg_drip("blood", False)
+            return
         self._click_effects.set_bg_drip(drip_type, True)
 
     def _apply_bg_flock(self) -> None:
