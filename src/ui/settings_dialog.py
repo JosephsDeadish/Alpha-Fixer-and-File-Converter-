@@ -132,6 +132,13 @@ class SettingsDialog(QDialog):
         self._settings = settings_manager
         self._theme = settings_manager.get_theme()
         self._color_buttons: dict[str, ColorButton] = {}
+        # Debounce timer for theme preset combo: delay live theme apply by
+        # 120 ms to prevent lag when the user scrolls quickly through themes.
+        from PyQt6.QtCore import QTimer
+        self._theme_debounce = QTimer(self)
+        self._theme_debounce.setSingleShot(True)
+        self._theme_debounce.setInterval(120)
+        self._theme_debounce.timeout.connect(self._on_preset_selected_live)
         self.setWindowTitle("Settings & Customization 🐼")
         # Adaptive minimum size: shrink proportionally on small or low-resolution
         # screens so the dialog is never forced off the visible area.  We keep the
@@ -1345,8 +1352,11 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_row)
 
         # Connections
-        # Preset combo: selecting a theme immediately applies it (no Apply button needed)
-        self._theme_preset_combo.currentTextChanged.connect(self._on_preset_selected_live)
+        # Preset combo: debounced live apply (120 ms) so quickly scrolling
+        # through themes doesn't apply every intermediate theme and lag the UI
+        self._theme_preset_combo.currentTextChanged.connect(
+            lambda _: self._theme_debounce.start()
+        )
         self._theme_search.textChanged.connect(self._on_theme_search_changed)
         self._btn_save_theme.clicked.connect(self._save_custom_theme)
         self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
