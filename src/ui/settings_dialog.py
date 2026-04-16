@@ -1003,16 +1003,18 @@ class SettingsDialog(QDialog):
         _ba_style_row.addWidget(QLabel("Animation style:"))
         self._button_anim_style_combo = QComboBox()
         _BUTTON_ANIM_OPTIONS = [
-            ("press",   "Press — subtle 2 px downward nudge"),
-            ("fall",    "Fall — 8 px drop and spring back"),
+            ("press",   "Press — 4 px downward nudge"),
+            ("fall",    "Fall — 12 px drop and spring back"),
             ("bounce",  "Bounce — button leaps up and bounces back"),
             ("shake",   "Shake — rapid left/right vibration"),
             ("shatter", "Shatter — particle burst from button centre"),
+            ("vanish",  "Vanish — shrinks to nothing then snaps back"),
+            ("explode", "Explode — expands outward then collapses"),
         ]
         _BUTTON_ANIM_TIPS = {
-            "press":   "The button shifts 2 pixels down on press then springs back.\n"
+            "press":   "The button shifts 4 pixels down on press then springs back.\n"
                        "Subtle and satisfying — closest to a real physical button.",
-            "fall":    "The button slides 8 pixels down over ~220 ms then springs back.\n"
+            "fall":    "The button slides 12 pixels down over ~260 ms then springs back.\n"
                        "Heavier feel, great for ocean/cave/goth themes.",
             "bounce":  "The button shoots up 6 pixels then bounces back down.\n"
                        "Playful and energetic — great for fairy/candy/sakura themes.",
@@ -1021,6 +1023,10 @@ class SettingsDialog(QDialog):
             "shatter": "Spawns themed click-effect particles from the button centre.\n"
                        "Requires click effects to be enabled for best results.\n"
                        "Dramatic — great for gore/volcano/dragon themes.",
+            "vanish":  "The button shrinks toward its centre then elastically snaps back.\n"
+                       "Fun and punchy — great for fairy/candy/panda themes.",
+            "explode": "The button rapidly expands outward then bounces back to size.\n"
+                       "Big impact energy — great for volcano/storm/neon themes.",
         }
         # Insert a read-only sentinel at index 0 for "no animation" state when
         # 'Use theme animation' is on and the theme has no button animation.
@@ -1649,6 +1655,7 @@ class SettingsDialog(QDialog):
         _BUTTON_ANIM_IDX_MAP = {
             "none": 0, "__none__": 0,
             "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
+            "vanish": 6, "explode": 7,
         }
         if use_theme_btn_anim:
             theme_btn_anim = self._settings.get_theme().get("_button_anim", "press")
@@ -1995,8 +2002,8 @@ class SettingsDialog(QDialog):
         _BUTTON_ANIM_IDX_MAP = {
             "none": 0, "__none__": 0,
             "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
+            "vanish": 6, "explode": 7,
         }
-        # Block signals on all affected combos during the batch update to avoid
         # cascading settings_changed emissions for each individual combo change.
         _combos = [
             self._trail_style_combo,
@@ -2535,7 +2542,7 @@ class SettingsDialog(QDialog):
             theme = self._settings.get_theme()
             theme_style = theme.get("_button_anim", "press")
             theme_name = theme.get("name", "")
-            _KNOWN_STYLES = {"press", "fall", "bounce", "shake", "shatter"}
+            _KNOWN_STYLES = {"press", "fall", "bounce", "shake", "shatter", "vanish", "explode"}
             if not theme_style or theme_style not in _KNOWN_STYLES:
                 # Theme has no standard button animation → show the sentinel item
                 self._button_anim_style_combo.setCurrentIndex(0)
@@ -2547,6 +2554,7 @@ class SettingsDialog(QDialog):
                 _STYLE_LABELS = {
                     "press": "Press", "fall": "Fall", "bounce": "Bounce",
                     "shake": "Shake", "shatter": "Shatter",
+                    "vanish": "Vanish", "explode": "Explode",
                 }
                 label = _STYLE_LABELS.get(theme_style, theme_style.title())
                 # Select matching style in the combo (index 0 is sentinel; styles start at 1)

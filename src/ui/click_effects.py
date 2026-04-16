@@ -3517,9 +3517,9 @@ class ButtonPressAnimator(QObject):
         if mode == "none":
             return
         elif mode == "press":
-            self._do_slide(btn, dy=2, duration=100)
+            self._do_slide(btn, dy=4, duration=120)
         elif mode == "fall":
-            self._do_slide(btn, dy=8, duration=220)
+            self._do_slide(btn, dy=12, duration=260)
         elif mode == "bounce":
             self._do_bounce(btn)
         elif mode == "shake":
@@ -3530,6 +3530,10 @@ class ButtonPressAnimator(QObject):
             self._do_abduct(btn)
         elif mode == "bite":
             self._do_bite(btn)
+        elif mode == "vanish":
+            self._do_vanish(btn)
+        elif mode == "explode":
+            self._do_explode(btn)
 
     # ------------------------------------------------------------------
     # Individual animation implementations
@@ -3779,6 +3783,70 @@ class ButtonPressAnimator(QObject):
                 old.deleteLater()
             self._bite_timers[bid] = timer
             timer.start()
+
+    # ------------------------------------------------------------------
+
+    def _do_vanish(self, btn: QWidget) -> None:
+        """Shrink the button to nothing then instantly restore it — a 'pop' effect."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect,
+        )
+        orig = QRect(btn.geometry())
+        cx = orig.center().x()
+        cy = orig.center().y()
+        half_w = orig.width() // 2
+        half_h = orig.height() // 2
+
+        # Shrink toward the centre
+        tiny = QRect(cx - 1, cy - 1, 2, 2)
+
+        shrink = QPropertyAnimation(btn, b"geometry", self)
+        shrink.setDuration(120)
+        shrink.setStartValue(orig)
+        shrink.setEndValue(tiny)
+        shrink.setEasingCurve(QEasingCurve.Type.InQuad)
+
+        restore = QPropertyAnimation(btn, b"geometry", self)
+        restore.setDuration(80)
+        restore.setStartValue(tiny)
+        restore.setEndValue(orig)
+        restore.setEasingCurve(QEasingCurve.Type.OutElastic)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(shrink)
+        group.addAnimation(restore)
+        self._start(group)
+
+    def _do_explode(self, btn: QWidget) -> None:
+        """Expand the button rapidly outward then collapse back — an 'explode' effect."""
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QEasingCurve, QRect,
+        )
+        orig = QRect(btn.geometry())
+        cx = orig.center().x()
+        cy = orig.center().y()
+        expand_w = int(orig.width() * 1.35)
+        expand_h = int(orig.height() * 1.35)
+        big = QRect(cx - expand_w // 2, cy - expand_h // 2, expand_w, expand_h)
+
+        grow = QPropertyAnimation(btn, b"geometry", self)
+        grow.setDuration(100)
+        grow.setStartValue(orig)
+        grow.setEndValue(big)
+        grow.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        collapse = QPropertyAnimation(btn, b"geometry", self)
+        collapse.setDuration(140)
+        collapse.setStartValue(big)
+        collapse.setEndValue(orig)
+        collapse.setEasingCurve(QEasingCurve.Type.InBounce)
+
+        group = QSequentialAnimationGroup(self)
+        group.addAnimation(grow)
+        group.addAnimation(collapse)
+        self._start(group)
 
     # ------------------------------------------------------------------
 
