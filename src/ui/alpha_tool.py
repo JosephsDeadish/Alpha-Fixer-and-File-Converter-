@@ -510,6 +510,8 @@ class AlphaFixerTab(QWidget):
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(compare_area)
         left_vsplit.setSizes([420, 380])
+        self._left_vsplit = left_vsplit          # saved so pop-out can resize it
+        self._left_vsplit_normal_sizes: list[int] = [420, 380]
         outer_splitter.addWidget(left_vsplit)
 
         # ==============================================================
@@ -1214,6 +1216,17 @@ class AlphaFixerTab(QWidget):
         self._after_stats_lbl.setVisible(False)
         self._btn_dock_back.setVisible(True)
 
+        # Collapse the compare panel in the splitter so the controls panel
+        # expands to fill the reclaimed space (item 27).
+        if hasattr(self, "_left_vsplit"):
+            current = self._left_vsplit.sizes()
+            if current and len(current) == 2:
+                self._left_vsplit_normal_sizes = current[:]
+                total = current[0] + current[1]
+                # Give controls panel all space except enough for the dock button
+                dock_h = max(self._btn_dock_back.minimumSizeHint().height(), 38)
+                self._left_vsplit.setSizes([total - dock_h, dock_h])
+
         # Restore everything when the floating dialog is closed.
         dlg.finished.connect(self._on_compare_docked_back)
 
@@ -1272,6 +1285,9 @@ class AlphaFixerTab(QWidget):
         self._before_stats_lbl.setVisible(True)
         self._after_stats_lbl.setVisible(True)
         self._btn_dock_back.setVisible(False)
+        # Restore the splitter sizes so the compare panel is fully visible again.
+        if hasattr(self, "_left_vsplit") and hasattr(self, "_left_vsplit_normal_sizes"):
+            self._left_vsplit.setSizes(self._left_vsplit_normal_sizes)
 
     def _on_dock_back_clicked(self) -> None:
         """Close the floating pop-out dialog and dock the preview back."""
@@ -1557,11 +1573,15 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
         # Restore the window title after processing
-        from ..version import __version__
+        try:
+            from ..version import __version__
+        except ImportError:
+            __version__ = ""
         win = self.window()
         if win is not None:
+            ver_str = f"  v{__version__}" if __version__ else ""
             win.setWindowTitle(
-                f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}"
+                f"🐼 Alpha & RGBA Adjuster  |  File Converter{ver_str}"
             )
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
         # Refresh compare for currently selected file to show the processed result

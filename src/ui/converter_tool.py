@@ -1166,11 +1166,15 @@ class ConverterTab(QWidget):
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
         # Restore the window title after processing
-        from ..version import __version__
+        try:
+            from ..version import __version__
+        except ImportError:
+            __version__ = ""
         win = self.window()
         if win is not None:
+            ver_str = f"  v{__version__}" if __version__ else ""
             win.setWindowTitle(
-                f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}"
+                f"🐼 Alpha & RGBA Adjuster  |  File Converter{ver_str}"
             )
         # Tell the user where converted files were saved so they don't have to
         # hunt for them (especially when no output folder was explicitly set).

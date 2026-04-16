@@ -2002,7 +2002,7 @@ class SelectiveAlphaTool(QWidget):
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(2)
         rv.addWidget(self._canvas, 1)
-        self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px")
+        self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px  |  🖱 Hold scroll-button to pan  |  Ctrl+scroll to zoom")
         self._status_lbl.setStyleSheet(
             "color: #999; font-size: 10px; padding: 2px 4px;"
         )
@@ -2253,6 +2253,7 @@ class SelectiveAlphaTool(QWidget):
             size_txt = f"Brush: {self._brush_spin.value()} px"
         self._status_lbl.setText(
             f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}"
+            "  |  🖱 Hold scroll-button to pan  |  Ctrl+scroll to zoom"
         )
 
     def _set_btn_save_enabled(self, v: bool) -> None:
