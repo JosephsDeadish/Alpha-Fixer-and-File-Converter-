@@ -2587,17 +2587,11 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._star_dust:
                 self._star_dust.stop()
-        # Manage bamboo leaf drift (panda theme) – only when no explicit ambient overrides it.
-        # If the user has enabled background ambient effects, the ambient system takes over;
-        # bamboo leaves should not play on top of a different chosen ambient.
-        if effect_key == "panda" and not self._bg_ambient_enabled:
-            if self._bamboo_leaf is None:
-                self._bamboo_leaf = _BambooLeaf(self)
-            self._bamboo_leaf.start()
-        else:
-            if self._bamboo_leaf:
-                self._bamboo_leaf.stop()
-        # Manage otter bubble clusters (otter theme) – background animation
+        # Bamboo leaf drift is now fully managed by the ambient system.
+        # Panda / Panda Dark themes have "bamboo" in THEME_AMBIENT_MAP so
+        # they activate via set_bg_ambient() when "use theme ambient" is on.
+        # Switching away from a panda theme stops leaves via set_bg_ambient().
+        # Otter bubble clusters (otter theme) – background animation
         if effect_key == "otter":
             if self._otter_bubble is None:
                 self._otter_bubble = _OtterBubble(self)
@@ -2695,7 +2689,8 @@ class ClickEffectsOverlay(QWidget):
 
         *ambient_type* is one of: ``"snow"``, ``"ember"``, ``"sakura"``,
         ``"stars"``, ``"bubbles"``, ``"neon"``, ``"ghost"``, ``"confetti"``,
-        ``"firefly"``, ``"matrix"``, ``"leaves"``, ``"rainbow"``, ``"none"``.
+        ``"firefly"``, ``"matrix"``, ``"leaves"``, ``"rainbow"``, ``"bamboo"``,
+        ``"none"``.
         The ambient effect is independent of the click-effects enabled state.
         """
         # Stop old ambient if type changed or disabling
@@ -2704,18 +2699,15 @@ class ClickEffectsOverlay(QWidget):
         self._bg_ambient_enabled = enabled
         self._bg_ambient_type = ambient_type if enabled else "none"
 
-        # Bamboo leaf drift (panda theme) is suppressed while any ambient is active.
-        # Re-evaluate now that _bg_ambient_enabled has changed.
-        if enabled:
-            # Ambient just turned on → stop bamboo leaves if they were playing
+        # Bamboo leaf drift: suppressed while any non-bamboo ambient is active.
+        # If the ambient IS "bamboo", the leaf effect is managed below in the
+        # start-effect block. If ambient is off, restart leaves for panda theme.
+        if enabled and ambient_type != "bamboo":
+            # A different ambient just turned on → stop bamboo leaves
             if self._bamboo_leaf:
                 self._bamboo_leaf.stop()
-        else:
-            # Ambient just turned off → restart bamboo leaves if panda theme is active
-            if self._effect_key == "panda":
-                if self._bamboo_leaf is None:
-                    self._bamboo_leaf = _BambooLeaf(self)
-                self._bamboo_leaf.start()
+        # Bamboo leaves are now fully managed by the ambient system, so no
+        # special panda-theme restart logic is needed when ambient turns off.
 
         if not enabled or ambient_type == "none":
             # If nothing else needs overlay, stop timer and hide
@@ -2780,6 +2772,10 @@ class ClickEffectsOverlay(QWidget):
             if self._rainbow_sparkle is None:
                 self._rainbow_sparkle = _RainbowSparkle(self)
             self._rainbow_sparkle.start()
+        elif _AM == "bamboo":
+            if self._bamboo_leaf is None:
+                self._bamboo_leaf = _BambooLeaf(self)
+            self._bamboo_leaf.start()
 
     def _stop_bg_ambient(self) -> None:
         """Stop whichever ambient is currently running as the manual bg ambient."""
@@ -2808,6 +2804,8 @@ class ClickEffectsOverlay(QWidget):
             self._leaf_drift.stop()
         elif _AM == "rainbow" and self._rainbow_sparkle:
             self._rainbow_sparkle.stop()
+        elif _AM == "bamboo" and self._bamboo_leaf:
+            self._bamboo_leaf.stop()
 
     def set_custom_emoji(self, emoji_list: list[str]) -> None:
         """Update the emoji list used by the 'custom' effect spawner."""

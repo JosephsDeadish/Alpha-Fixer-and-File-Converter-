@@ -1009,6 +1009,12 @@ class SettingsDialog(QDialog):
                        "Requires click effects to be enabled for best results.\n"
                        "Dramatic — great for gore/volcano/dragon themes.",
         }
+        # Insert a read-only sentinel at index 0 for "no animation" state when
+        # 'Use theme animation' is on and the theme has no button animation.
+        self._button_anim_style_combo.addItem("No button press animation", userData="__none__")
+        self._button_anim_style_combo.setItemData(
+            0, False, Qt.ItemDataRole.UserRole + 1  # marker: not user-selectable
+        )
         for key, label in _BUTTON_ANIM_OPTIONS:
             self._button_anim_style_combo.addItem(label, userData=key)
             idx = self._button_anim_style_combo.count() - 1
@@ -1614,9 +1620,10 @@ class SettingsDialog(QDialog):
         self._button_anim_check.setChecked(btn_anim_enabled)
         use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
         self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
-        # "none" was removed from the dropdown (index 0 is now "press").
+        # Index 0 is the "__none__" sentinel; real styles start at 1.
         _BUTTON_ANIM_IDX_MAP = {
-            "none": 0, "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
+            "none": 0, "__none__": 0,
+            "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
         }
         if use_theme_btn_anim:
             theme_btn_anim = self._settings.get_theme().get("_button_anim", "press")
@@ -1625,8 +1632,9 @@ class SettingsDialog(QDialog):
             )
         else:
             saved_btn_anim = self._settings.get("button_anim_style", "press")
+            # Skip the sentinel – default to "press" if saved value is unknown
             self._button_anim_style_combo.setCurrentIndex(
-                _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
+                _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 1)
             )
         self._button_anim_style_combo.setEnabled(
             btn_anim_enabled and not use_theme_btn_anim
@@ -1960,7 +1968,8 @@ class SettingsDialog(QDialog):
             "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
         }
         _BUTTON_ANIM_IDX_MAP = {
-            "none": 0, "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
+            "none": 0, "__none__": 0,
+            "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
         }
         # Block signals on all affected combos during the batch update to avoid
         # cascading settings_changed emissions for each individual combo change.
@@ -2485,6 +2494,9 @@ class SettingsDialog(QDialog):
 
     def _on_button_anim_style_changed(self) -> None:
         key = self._button_anim_style_combo.currentData() or "press"
+        # Don't save the sentinel value to settings
+        if key == "__none__":
+            return
         self._settings.set("button_anim_style", key)
         self.settings_changed.emit()
 
@@ -2494,25 +2506,29 @@ class SettingsDialog(QDialog):
         enabled = self._button_anim_check.isChecked()
         self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         if use_theme:
-            # Select the theme's button animation in the combo so the user can see it
+            # Reflect the theme's button animation in the combo so the user can see it.
             theme = self._settings.get_theme()
             theme_style = theme.get("_button_anim", "press")
-            _STYLE_LABELS = {
-                "press": "Press", "fall": "Fall", "bounce": "Bounce",
-                "shake": "Shake", "shatter": "Shatter",
-            }
-            label = _STYLE_LABELS.get(theme_style, theme_style.title())
             theme_name = theme.get("name", "")
-            # Select matching style in the combo
-            for i in range(self._button_anim_style_combo.count()):
-                if self._button_anim_style_combo.itemData(i) == theme_style:
-                    self._button_anim_style_combo.setCurrentIndex(i)
-                    break
-            if not theme_style or theme_style == "none":
+            _KNOWN_STYLES = {"press", "fall", "bounce", "shake", "shatter"}
+            if not theme_style or theme_style not in _KNOWN_STYLES:
+                # Theme has no standard button animation → show the sentinel item
+                self._button_anim_style_combo.setCurrentIndex(0)
                 self._button_anim_style_combo.setToolTip(
-                    f"No button animation for the '{theme_name}' theme."
+                    f"No button press animation for the '{theme_name}' theme.\n"
+                    "Uncheck 'Use theme animation' to pick one manually."
                 )
             else:
+                _STYLE_LABELS = {
+                    "press": "Press", "fall": "Fall", "bounce": "Bounce",
+                    "shake": "Shake", "shatter": "Shatter",
+                }
+                label = _STYLE_LABELS.get(theme_style, theme_style.title())
+                # Select matching style in the combo (index 0 is sentinel; styles start at 1)
+                for i in range(1, self._button_anim_style_combo.count()):
+                    if self._button_anim_style_combo.itemData(i) == theme_style:
+                        self._button_anim_style_combo.setCurrentIndex(i)
+                        break
                 self._button_anim_style_combo.setToolTip(
                     f"Using theme animation: {label}\n"
                     f"(set by the '{theme_name}' theme)\n"

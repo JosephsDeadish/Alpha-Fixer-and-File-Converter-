@@ -1844,6 +1844,9 @@ THEME_AMBIENT_MAP: dict[str, str] = {
     "Crystal Cave":      "stars",
     "Witch's Brew":      "ghost",
     "Slime":             "neon",
+    # Panda themes use bamboo leaf drift as their ambient
+    "Panda":             "bamboo",
+    "Panda Dark":        "bamboo",
 }
 
 # Short descriptions for each theme, shown as per-item tooltips in the theme combo.

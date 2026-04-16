@@ -1620,14 +1620,14 @@ class SelectiveAlphaTool(QWidget):
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_INIT
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
-        slots_box = QGroupBox("Saved Masks")
+        slots_box = QGroupBox("Single Zone Mask Clipboard")
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
 
         slots_note = QLabel(
-            "Save a zone's mask to a slot and load it onto any zone later,\n"
-            "even after switching to a different image."
+            "Save one zone's painted mask to a slot and paste it onto\n"
+            "any zone later — works across different images."
         )
         slots_note.setWordWrap(True)
         slots_note.setStyleSheet("color: #999; font-size: 10px;")
@@ -1725,14 +1725,14 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(slots_box)
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
-        all_zones_box = QGroupBox("All-Zones Clipboard")
+        all_zones_box = QGroupBox("All Zones Mask Clipboard")
         azv = QVBoxLayout(all_zones_box)
         azv.setSpacing(4)
         azv.setContentsMargins(4, 4, 4, 4)
 
         az_note = QLabel(
-            "Save all painted zone masks to a slot and restore them later,\n"
-            "even after switching to a different image."
+            "Save ALL painted zone masks together to a slot and\n"
+            "restore them later — works across different images."
         )
         az_note.setWordWrap(True)
         az_note.setStyleSheet("color: #999; font-size: 10px;")
@@ -1784,21 +1784,23 @@ class SelectiveAlphaTool(QWidget):
         # Row 1: Copy All | Paste All
         az_act_row = QHBoxLayout()
         az_act_row.setSpacing(4)
-        self._btn_copy_all_zones = QPushButton("Copy All")
+        self._btn_copy_all_zones = QPushButton("Copy All Zones")
         self._btn_copy_all_zones.setMinimumHeight(26)
         self._btn_copy_all_zones.setToolTip(
-            "Copy every painted zone mask into the selected slot.\n"
-            "Masks are preserved even if you open a different image."
+            "Copy ALL painted zone masks into the selected slot.\n"
+            "Snapshots every zone at once so you can restore the\n"
+            "full painting later (even on a different image)."
         )
         self._btn_copy_all_zones.clicked.connect(self._on_copy_all_zones)
         az_act_row.addWidget(self._btn_copy_all_zones)
 
-        self._btn_paste_all_zones = QPushButton("Paste All")
+        self._btn_paste_all_zones = QPushButton("Paste All Zones")
         self._btn_paste_all_zones.setMinimumHeight(26)
         self._btn_paste_all_zones.setEnabled(False)
         self._btn_paste_all_zones.setToolTip(
-            "Paste all zone masks from the selected slot onto the\n"
-            "current image. Masks are resized automatically if needed."
+            "Paste all zone masks from the selected slot back onto\n"
+            "the current image. Masks are scaled automatically if\n"
+            "the image dimensions differ from when they were saved."
         )
         self._btn_paste_all_zones.clicked.connect(self._on_paste_all_zones)
         az_act_row.addWidget(self._btn_paste_all_zones)
@@ -1861,23 +1863,26 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_shared)
 
         # Item 22: save ALL shared zones into the current all-zones slot
-        self._btn_import_to_az_slot = QPushButton("💾 Save All Zones → Current AZ Slot")
+        self._btn_import_to_az_slot = QPushButton("💾 Save All Zones → AZ Slot")
+        self._btn_import_to_az_slot.setMinimumHeight(26)
         self._btn_import_to_az_slot.setEnabled(False)
         self._btn_import_to_az_slot.setToolTip(
-            "Save ALL imported zones from the Alpha tool directly into the\n"
-            "currently selected All-Zones Slot so they can be pasted onto\n"
-            "any image later without re-importing."
+            "Save ALL imported zones from the Alpha & RGBA Adjuster directly\n"
+            "into the currently selected All-Zones Clipboard slot so they can\n"
+            "be pasted onto any image later without re-importing."
         )
         self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
         iv.addWidget(self._btn_import_to_az_slot)
 
         # Item 23: copy one shared zone to the single-zone clipboard
-        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Zone → Clipboard")
+        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Single Zone → Clipboard")
+        self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(
-            "Copy a single imported zone to the zone clipboard.\n"
-            "If more than one zone was imported, a picker will appear.\n"
-            "The copied mask can then be pasted via 'Paste Mask'."
+            "Copy one imported zone into the Single Zone Mask Clipboard.\n"
+            "If more than one zone was imported, a picker will appear\n"
+            "so you can choose which zone to copy.\n"
+            "The copied mask can then be pasted via '💾  Save' → '📌  Paste'."
         )
         self._btn_import_zone_to_clipboard.clicked.connect(self._on_import_zone_to_clipboard)
         iv.addWidget(self._btn_import_zone_to_clipboard)
