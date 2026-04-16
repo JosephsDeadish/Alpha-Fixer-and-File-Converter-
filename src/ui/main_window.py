@@ -1388,7 +1388,10 @@ class MainWindow(QMainWindow):
             self._click_effects.set_bg_ambient(ambient_key, True)
         else:
             ambient_type = self._settings.get("bg_ambient_type", "snow")
-            self._click_effects.set_bg_ambient(ambient_type if ambient_type != "none" else "snow", True)
+            if not ambient_type or ambient_type == "none":
+                self._click_effects.set_bg_ambient("none", False)
+            else:
+                self._click_effects.set_bg_ambient(ambient_type, True)
 
     # ------------------------------------------------------------------
     # Easter-egg discovery system

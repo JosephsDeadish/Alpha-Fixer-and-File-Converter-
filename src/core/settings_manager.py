@@ -233,6 +233,7 @@ class SettingsManager:
         # Background ambient effect (independent ambient overlay)
         "bg_ambient_enabled": False,
         "bg_ambient_type": "none",   # snow/ember/sakura/stars/bubbles/neon/ghost/none
+        "use_theme_ambient": False,  # True → auto-select ambient from active theme
         # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------

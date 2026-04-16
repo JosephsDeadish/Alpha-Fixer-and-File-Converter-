@@ -474,6 +474,14 @@ class BeforeAfterWidget(QWidget):
         dlg.show()
 
     # ------------------------------------------------------------------
+    # Pop-out button visibility
+    # ------------------------------------------------------------------
+
+    def hide_popout_button(self) -> None:
+        """Hide the pop-out overlay button (e.g. when widget is already inside a pop-out dialog)."""
+        self._popout_btn.hide()
+
+    # ------------------------------------------------------------------
     # Theme tinting
     # ------------------------------------------------------------------
 
@@ -682,9 +690,11 @@ class BeforeAfterWidget(QWidget):
             if split_x > 55:
                 btext = "BEFORE"
                 bw = fm.horizontalAdvance(btext) + 8
-                painter.fillRect(4, 4, bw, lh, QColor(0, 0, 0, 150))
+                # Offset BEFORE downward to clear the pop-out button in the top-left corner.
+                by = 32
+                painter.fillRect(4, by, bw, lh, QColor(0, 0, 0, 150))
                 painter.setPen(QColor("#dddddd"))
-                painter.drawText(8, 4 + fm.ascent() + 2, btext)
+                painter.drawText(8, by + fm.ascent() + 2, btext)
 
             if w - split_x > 55:
                 atext = "AFTER"

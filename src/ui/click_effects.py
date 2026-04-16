@@ -2382,6 +2382,8 @@ class ClickEffectsOverlay(QWidget):
                 self._leaf_drift.stop()
             if self._rainbow_sparkle and not (self._bg_ambient_enabled and self._bg_ambient_type == "rainbow"):
                 self._rainbow_sparkle.stop()
+            if self._bamboo_leaf and not (self._bg_ambient_enabled and self._bg_ambient_type == "bamboo"):
+                self._bamboo_leaf.stop()
             # Only hide the overlay if every background effect is also inactive.
             if (not self._banner_flock_active and not self._bg_drip_enabled
                     and not self._bg_ambient_enabled and not self._bg_flock_enabled):

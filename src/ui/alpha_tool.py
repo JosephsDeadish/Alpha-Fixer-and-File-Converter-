@@ -1217,7 +1217,8 @@ class AlphaFixerTab(QWidget):
         # Restore everything when the floating dialog is closed.
         dlg.finished.connect(self._on_compare_docked_back)
 
-        from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QWidget as _QW
+        from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QPushButton as _QPB, QWidget as _QW
+        # Top row: Highlight checkbox + Dock Back button
         row_w = _QW(dlg)
         row = QHBoxLayout(row_w)
         row.setContentsMargins(0, 0, 0, 0)
@@ -1226,16 +1227,26 @@ class AlphaFixerTab(QWidget):
         chk.setToolTip(self._alpha_vis_check.toolTip())
         row.addWidget(chk)
         row.addStretch(1)
-        # The dialog layout is a QVBoxLayout; insert the checkbox row before
+        # Dock Back button inside the dialog so users can re-dock from within it
+        btn_dock = _QPB("⇙  Dock Back", row_w)
+        btn_dock.setToolTip(
+            "Close this floating window and dock the preview back into the main panel."
+        )
+        btn_dock.setFixedHeight(24)
+        btn_dock.clicked.connect(self._on_dock_back_clicked)
+        row.addWidget(btn_dock)
+        # The dialog layout is a QVBoxLayout; insert the top row before
         # the compare widget (index 0) so it appears at the top.
         dlg.layout().insertWidget(0, row_w)
 
-        # The pop-out compare widget and the main compare widget share the
-        # same raw images; toggling the checkbox updates the pop-out widget.
+        # Hide the pop-out button inside the dialog's compare widget to prevent
+        # infinite pop-outs (clicking it would create another dialog).
         pop_compare = None
         for child in dlg.findChildren(type(self._compare)):
             pop_compare = child
             break
+        if pop_compare is not None:
+            pop_compare.hide_popout_button()
 
         def _toggle(checked: bool) -> None:
             # Keep the main checkbox in sync.
