@@ -1471,8 +1471,8 @@ class SelectiveAlphaTool(QWidget):
         for key, label, row, col in tool_defs:
             btn = QPushButton(label)
             btn.setCheckable(True)
-            btn.setMinimumHeight(32)
-            btn.setMinimumWidth(120)
+            btn.setMinimumHeight(28)
+            btn.setMinimumWidth(110)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)
@@ -1685,14 +1685,6 @@ class SelectiveAlphaTool(QWidget):
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
 
-        slots_note = QLabel(
-            "Save one zone's painted mask to a slot and paste it onto\n"
-            "any zone later — works across different images."
-        )
-        slots_note.setWordWrap(True)
-        slots_note.setStyleSheet("color: #999; font-size: 10px;")
-        sv.addWidget(slots_note)
-
         # Slot selector row (combo on its own row so the name shows in full)
         sel_row = QHBoxLayout()
         sel_row.setSpacing(4)
@@ -1789,14 +1781,6 @@ class SelectiveAlphaTool(QWidget):
         azv = QVBoxLayout(all_zones_box)
         azv.setSpacing(4)
         azv.setContentsMargins(4, 4, 4, 4)
-
-        az_note = QLabel(
-            "Save ALL painted zone masks together to a slot and\n"
-            "restore them later — works across different images."
-        )
-        az_note.setWordWrap(True)
-        az_note.setStyleSheet("color: #999; font-size: 10px;")
-        azv.addWidget(az_note)
 
         # Slot selector row (combo on its own row so the name shows in full)
         az_sel_row2 = QHBoxLayout()
