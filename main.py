@@ -198,6 +198,28 @@ _excepthook_active = False
 
 
 # ---------------------------------------------------------------------------
+# Recent action history – circular buffer used by the crash dialog (item 41)
+# ---------------------------------------------------------------------------
+
+import collections as _collections
+
+# Ring buffer of the most recent user-visible actions (button clicks, tool
+# changes, file operations, etc.).  Kept to 30 entries; each entry is a str.
+_ACTION_HISTORY: "_collections.deque[str]" = _collections.deque(maxlen=30)
+
+
+def log_action(description: str) -> None:
+    """Record a user action in the recent-actions ring buffer.
+
+    Called from throughout the application (alpha_tool, converter_tool, etc.)
+    so that the crash dialog can show what the user was doing before the crash.
+    """
+    import datetime as _dt
+    ts = _dt.datetime.now().strftime("%H:%M:%S")
+    _ACTION_HISTORY.append(f"[{ts}] {description}")
+
+
+# ---------------------------------------------------------------------------
 # Crash dialog – human-readable, fully selectable, copyable
 # ---------------------------------------------------------------------------
 
@@ -370,6 +392,10 @@ def _show_crash_dialog(
         full_text = traceback_text.rstrip()
         if sysinfo:
             full_text += f"\n\n─── System Info ───\n{sysinfo}"
+        # Include the recent action history so the reporter can see what led to the crash
+        if _ACTION_HISTORY:
+            full_text += "\n\n─── Recent Actions (most recent last) ───\n"
+            full_text += "\n".join(_ACTION_HISTORY)
         if log_file:
             full_text += f"\n\n─── Log file ───\n{log_file}"
 

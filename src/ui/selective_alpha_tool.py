@@ -2933,6 +2933,14 @@ class SelectiveAlphaTool(QWidget):
             )
             return
 
+        # Log the action for crash reporting
+        try:
+            from main import log_action
+            zones_used = sum(1 for m in bool_masks if m is not None and m.any())
+            log_action(f"Selective alpha: applied {zones_used} zone(s) to '{self._src_path}'")
+        except Exception:
+            pass
+
         try:
             src_img = self._canvas.get_source_image()
             # Initialise to None so the except handlers can safely close it

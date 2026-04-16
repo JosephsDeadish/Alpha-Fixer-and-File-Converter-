@@ -1426,6 +1426,13 @@ class AlphaFixerTab(QWidget):
             QMessageBox.information(self, "No Files", "No supported image files found.")
             return
 
+        # Log the action for crash reporting
+        try:
+            from main import log_action
+            log_action(f"Alpha tool: started processing {len(expanded)} file(s)")
+        except Exception:
+            pass
+
         manual = self._build_manual_params()
         if self._apply_rgb_check.isChecked():
             manual["rgb"] = {
