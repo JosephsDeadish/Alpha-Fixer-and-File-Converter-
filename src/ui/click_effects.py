@@ -2587,8 +2587,10 @@ class ClickEffectsOverlay(QWidget):
         else:
             if self._star_dust:
                 self._star_dust.stop()
-        # Manage bamboo leaf drift (panda theme) – background animation, independent of click effects
-        if effect_key == "panda":
+        # Manage bamboo leaf drift (panda theme) – only when no explicit ambient overrides it.
+        # If the user has enabled background ambient effects, the ambient system takes over;
+        # bamboo leaves should not play on top of a different chosen ambient.
+        if effect_key == "panda" and not self._bg_ambient_enabled:
             if self._bamboo_leaf is None:
                 self._bamboo_leaf = _BambooLeaf(self)
             self._bamboo_leaf.start()
@@ -2701,6 +2703,19 @@ class ClickEffectsOverlay(QWidget):
             self._stop_bg_ambient()
         self._bg_ambient_enabled = enabled
         self._bg_ambient_type = ambient_type if enabled else "none"
+
+        # Bamboo leaf drift (panda theme) is suppressed while any ambient is active.
+        # Re-evaluate now that _bg_ambient_enabled has changed.
+        if enabled:
+            # Ambient just turned on → stop bamboo leaves if they were playing
+            if self._bamboo_leaf:
+                self._bamboo_leaf.stop()
+        else:
+            # Ambient just turned off → restart bamboo leaves if panda theme is active
+            if self._effect_key == "panda":
+                if self._bamboo_leaf is None:
+                    self._bamboo_leaf = _BambooLeaf(self)
+                self._bamboo_leaf.start()
 
         if not enabled or ambient_type == "none":
             # If nothing else needs overlay, stop timer and hide

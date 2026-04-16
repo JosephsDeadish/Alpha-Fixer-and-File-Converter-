@@ -608,6 +608,7 @@ class SettingsDialog(QDialog):
         self._bg_ambient_combo.addItem("💻 Matrix Rain", userData="matrix")
         self._bg_ambient_combo.addItem("🍂 Autumn Leaves", userData="leaves")
         self._bg_ambient_combo.addItem("🌈 Rainbow Sparkle", userData="rainbow")
+        self._bg_ambient_combo.addItem("🎋 Bamboo Leaves", userData="bamboo")
         self._bg_ambient_combo.setToolTip(
             "Choose the ambient background animation style.\n"
             "Greyed out while 'Use theme ambient' is checked."
@@ -2044,11 +2045,13 @@ class SettingsDialog(QDialog):
                     "ghost": "👻 Ghost Wisps", "confetti": "🎊 Confetti Fall",
                     "firefly": "🪲 Fireflies", "matrix": "💻 Matrix Rain",
                     "leaves": "🍂 Autumn Leaves", "rainbow": "🌈 Rainbow Sparkle",
+                    "bamboo": "🎋 Bamboo Leaves",
                 }
                 _AMBIENT_IDX = {
                     "snow": 0, "ember": 1, "sakura": 2, "stars": 3,
                     "bubbles": 4, "neon": 5, "ghost": 6, "confetti": 7,
                     "firefly": 8, "matrix": 9, "leaves": 10, "rainbow": 11,
+                    "bamboo": 12,
                 }
                 ambient_key = THEME_AMBIENT_MAP.get(theme_name)
                 if ambient_key:
