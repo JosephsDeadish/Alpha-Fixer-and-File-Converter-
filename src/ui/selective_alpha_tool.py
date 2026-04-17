@@ -3107,11 +3107,28 @@ class SelectiveAlphaTool(QWidget):
                 self._sound.play_zone_paint()
 
     def _on_undo_mask(self) -> None:
-        """Undo the last drawing / erase action on the canvas."""
+        """Undo the last drawing / erase action on the canvas.
+
+        Does nothing (lets Qt handle the event natively) if the current focus
+        widget is a text-editing control such as QLineEdit or QSpinBox, so that
+        Ctrl+Z undoes typed text rather than canvas strokes (item 29).
+        """
+        from PyQt6.QtWidgets import QLineEdit as _LE, QSpinBox as _SB, QAbstractSpinBox as _ASB
+        fw = self.focusWidget()
+        if isinstance(fw, (_LE, _SB, _ASB)):
+            # Native undo (text widget) — do nothing here; Qt handles it.
+            return
         self._canvas.undo_mask()
 
     def _on_redo_mask(self) -> None:
-        """Redo the last undone drawing / erase action."""
+        """Redo the last undone drawing / erase action.
+
+        Same focus-aware guard as _on_undo_mask (item 29).
+        """
+        from PyQt6.QtWidgets import QLineEdit as _LE, QSpinBox as _SB, QAbstractSpinBox as _ASB
+        fw = self.focusWidget()
+        if isinstance(fw, (_LE, _SB, _ASB)):
+            return
         self._canvas.redo_mask()
 
     def _on_undo_process(self) -> None:
