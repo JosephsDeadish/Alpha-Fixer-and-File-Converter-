@@ -1357,21 +1357,22 @@ class AlphaFixerTab(QWidget):
             )
             copy_all.setToolTip(
                 "Sends all detected alpha-value zones to the Selective Alpha tool.\n"
-                "Switch to the Selective Alpha tab and click 'Import from Alpha Tool'\n"
-                "to load the zones into the painting canvas."
+                "The app switches to the Selective Alpha tab automatically.\n"
+                "Use 'Import Zones to Canvas' or 'Save All Zones → AZ Slot' there."
             )
             copy_all.triggered.connect(lambda: self.zone_masks_shared.emit(zones))
 
             menu.addSeparator()
-            menu.addAction("Copy individual zone to Selective Alpha:").setEnabled(False)
+            menu.addAction("Copy single zone → Selective Alpha clipboard:").setEnabled(False)
             for idx, (alpha_val, bool_mask) in enumerate(zones):
                 pct = round(bool_mask.sum() / max(total_px, 1) * 100, 1)
                 act = menu.addAction(
                     f"   📋 Zone {idx + 1}:  α = {alpha_val}  ({pct}% of pixels)"
                 )
                 act.setToolTip(
-                    f"Send only Zone {idx + 1} (α={alpha_val}) to the Selective Alpha tool.\n"
-                    "Switch to the Selective Alpha tab and click 'Import from Alpha Tool' to load it."
+                    f"Send Zone {idx + 1} (α={alpha_val}) directly to the Selective Alpha\n"
+                    "single-zone clipboard. The app switches there automatically.\n"
+                    "Use 'Paste Mask' on any zone to apply it immediately."
                 )
                 # Capture loop variables explicitly to avoid late-binding closure issues.
                 def _make_single_zone_handler(av, bm):

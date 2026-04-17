@@ -1427,7 +1427,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Row 2: Save — alpha zones are applied automatically on save
         self._btn_save = QPushButton("\U0001f4be Save\u2026")
-        self._btn_save.setMinimumHeight(30)
+        self._btn_save.setMinimumHeight(26)
         self._btn_save.setToolTip(
             "Apply the painted zones and save the result to disk  (Ctrl+S)\n"
             "Alpha zones are applied automatically — no separate Apply step needed."
@@ -1439,7 +1439,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Row 3: Clear All Zones
         self._btn_clear_all = QPushButton("\U0001f5d1  Clear All Zones")
-        self._btn_clear_all.setMinimumHeight(30)
+        self._btn_clear_all.setMinimumHeight(26)
         self._btn_clear_all.setToolTip("Erase all painted zone masks and start over.")
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         wf_lay.addWidget(self._btn_clear_all)
@@ -1458,12 +1458,12 @@ class SelectiveAlphaTool(QWidget):
         tool_defs = [
             ("freehand",   "✏  Freehand",   0, 0),
             ("line",       "╱  Line",       0, 1),
-            ("rect",       "▭  Rectangle",  1, 0),
+            ("rect",       "□  Rectangle",  1, 0),
             ("ellipse",    "◯  Ellipse",    1, 1),
             ("fill",       "🪣  Fill",       2, 0),
             ("polygon",    "⬠  Polygon",    2, 1),
             ("eraser",     "⌫  Eraser",     3, 0),
-            ("transform",  "⇄  Transform",  3, 1),
+            ("transform",  "↔  Transform",  3, 1),
         ]
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
@@ -1471,8 +1471,8 @@ class SelectiveAlphaTool(QWidget):
         for key, label, row, col in tool_defs:
             btn = QPushButton(label)
             btn.setCheckable(True)
-            btn.setMinimumHeight(28)
-            btn.setMinimumWidth(110)
+            btn.setMinimumHeight(24)
+            btn.setMinimumWidth(100)
             btn.setToolTip(self._tool_tooltip(key))
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)
@@ -2573,6 +2573,10 @@ class SelectiveAlphaTool(QWidget):
         tool".  The zones are held in memory until the user explicitly clicks
         the Import button.
 
+        When exactly one zone is received it is also automatically copied to
+        the single-zone clipboard so the user can paste it directly without
+        any extra clicks (item 23).
+
         Parameters
         ----------
         zones : list of ``(alpha_value, bool_mask)`` tuples as produced by
@@ -2580,14 +2584,28 @@ class SelectiveAlphaTool(QWidget):
         """
         if not zones:
             return
+        import numpy as np_imp
         self._shared_zones = list(zones)
         count = len(zones)
         _display_max = 7
         displayed = zones[:_display_max]
         suffix = "…" if count > _display_max else ""
+
+        # Auto-copy to single-zone clipboard when exactly one zone is sent (item 23).
+        if count == 1:
+            alpha_val, bool_mask = zones[0]
+            self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
+            self._ze_paste_btn.setEnabled(True)
+            clipboard_note = (
+                f"\n📋 α={alpha_val} pre-loaded in clipboard — 'Paste Mask' to apply."
+            )
+        else:
+            clipboard_note = ""
+
         self._import_shared_status.setText(
-            f"✅ {count} zone(s) ready to import "
-            f"(α values: {', '.join(str(v) for v, _ in displayed)}{suffix})"
+            f"✅ {count} zone(s) ready"
+            f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"
+            f"{clipboard_note}"
         )
         self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
         self._btn_import_shared.setEnabled(True)

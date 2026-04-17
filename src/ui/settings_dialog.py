@@ -770,13 +770,10 @@ class SettingsDialog(QDialog):
             lambda v: self._trail_intensity_val_lbl.setText(f"{v}%")
         )
         self._trail_intensity_slider.valueChanged.connect(self._on_trail_intensity_changed)
-        # Add sub-container to trail_gl and connect visibility to enable checkbox
+        # Add sub-container to trail_gl and connect visibility to enable checkbox.
+        # Visibility is managed by _on_trail_changed (connected later at line ~1385).
         trail_gl.addWidget(self._trail_sub, 1, 0, 1, 2)
-        # Always show the sub-container so users can preview options before enabling.
-        # Gray it out when trail is disabled (item 78).
-        self._trail_check.toggled.connect(lambda checked: self._trail_sub.setEnabled(checked))
-        self._trail_sub.setVisible(True)
-        self._trail_sub.setEnabled(False)  # enabled only when trail is on
+        self._trail_sub.setVisible(False)
 
         mouse_row.addWidget(grp_trail, 1)
 
@@ -1034,20 +1031,6 @@ class SettingsDialog(QDialog):
             "explode": "The button rapidly expands outward then bounces back to size.\n"
                        "Big impact energy — great for volcano/storm/neon themes.",
         }
-        # Insert a read-only sentinel at index 0 for "no animation" state when
-        # 'Use theme animation' is on and the theme has no button animation.
-        # This item is intentionally non-selectable and non-interactive.
-        self._button_anim_style_combo.addItem("No button press animation", userData="__none__")
-        self._button_anim_style_combo.setItemData(
-            0, False, Qt.ItemDataRole.UserRole + 1  # marker: not user-selectable
-        )
-        # Make the "__none__" sentinel non-selectable so the user cannot pick it manually.
-        _none_item = self._button_anim_style_combo.model().item(0)
-        if _none_item is not None:
-            from PyQt6.QtCore import Qt as _Qt
-            _none_item.setFlags(_none_item.flags()
-                                & ~_Qt.ItemFlag.ItemIsEnabled
-                                & ~_Qt.ItemFlag.ItemIsSelectable)
         for key, label in _BUTTON_ANIM_OPTIONS:
             self._button_anim_style_combo.addItem(label, userData=key)
             idx = self._button_anim_style_combo.count() - 1
@@ -1584,8 +1567,7 @@ class SettingsDialog(QDialog):
         self._trail_color_btn.set_color(self._settings.get("trail_color", "#e94560"))
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
-        self._trail_sub.setVisible(True)
-        self._trail_sub.setEnabled(trail_enabled)
+        self._trail_sub.setVisible(trail_enabled)
         self._trail_color_btn.setEnabled(not use_theme_trail)
         self._trail_style_combo.setEnabled(not use_theme_trail)
         # Load persisted trail style into combo (or theme trail if use-theme is on)
@@ -1666,11 +1648,11 @@ class SettingsDialog(QDialog):
         self._button_anim_check.setChecked(btn_anim_enabled)
         use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
         self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
-        # Index 0 is the "__none__" sentinel; real styles start at 1.
+        # Styles start at index 0 (sentinel "__none__" removed — the enable checkbox
+        # already acts as the on/off toggle).
         _BUTTON_ANIM_IDX_MAP = {
-            "none": 0, "__none__": 0,
-            "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
-            "vanish": 6, "explode": 7,
+            "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
+            "vanish": 5, "explode": 6,
         }
         if use_theme_btn_anim:
             theme_btn_anim = self._settings.get_theme().get("_button_anim", "press")
@@ -1679,9 +1661,8 @@ class SettingsDialog(QDialog):
             )
         else:
             saved_btn_anim = self._settings.get("button_anim_style", "press")
-            # Skip the sentinel – default to "press" if saved value is unknown
             self._button_anim_style_combo.setCurrentIndex(
-                _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 1)
+                _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
             )
         self._button_anim_style_combo.setEnabled(
             btn_anim_enabled and not use_theme_btn_anim
@@ -2019,9 +2000,8 @@ class SettingsDialog(QDialog):
             "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
         }
         _BUTTON_ANIM_IDX_MAP = {
-            "none": 0, "__none__": 0,
-            "press": 1, "fall": 2, "bounce": 3, "shake": 4, "shatter": 5,
-            "vanish": 6, "explode": 7,
+            "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
+            "vanish": 5, "explode": 6,
         }
         # cascading settings_changed emissions for each individual combo change.
         _combos = [
@@ -2551,9 +2531,6 @@ class SettingsDialog(QDialog):
 
     def _on_button_anim_style_changed(self) -> None:
         key = self._button_anim_style_combo.currentData() or "press"
-        # Don't save the sentinel value to settings
-        if key == "__none__":
-            return
         self._settings.set("button_anim_style", key)
         self.settings_changed.emit()
 
@@ -2569,8 +2546,8 @@ class SettingsDialog(QDialog):
             theme_name = theme.get("name", "")
             _KNOWN_STYLES = {"press", "fall", "bounce", "shake", "shatter", "vanish", "explode"}
             if not theme_style or theme_style not in _KNOWN_STYLES:
-                # Theme has no standard button animation → show the sentinel item
-                self._button_anim_style_combo.setCurrentIndex(0)
+                # Theme has no standard button animation — update tooltip only;
+                # the combo stays on current selection (it's disabled anyway)
                 self._button_anim_style_combo.setToolTip(
                     f"No button press animation for the '{theme_name}' theme.\n"
                     "Uncheck 'Use theme animation' to pick one manually."
@@ -2582,8 +2559,8 @@ class SettingsDialog(QDialog):
                     "vanish": "Vanish", "explode": "Explode",
                 }
                 label = _STYLE_LABELS.get(theme_style, theme_style.title())
-                # Select matching style in the combo (index 0 is sentinel; styles start at 1)
-                for i in range(1, self._button_anim_style_combo.count()):
+                # Select matching style in the combo (styles start at index 0 now)
+                for i in range(self._button_anim_style_combo.count()):
                     if self._button_anim_style_combo.itemData(i) == theme_style:
                         self._button_anim_style_combo.setCurrentIndex(i)
                         break
