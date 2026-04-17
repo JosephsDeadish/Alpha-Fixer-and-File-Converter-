@@ -1579,10 +1579,10 @@ class AlphaFixerTab(QWidget):
         # Restore the window title after processing
         try:
             from ..version import __version__
-        except ImportError:
+        except Exception:
             try:
                 from src.version import __version__  # type: ignore[no-redef]
-            except ImportError:
+            except Exception:
                 __version__ = ""
         win = self.window()
         if win is not None:

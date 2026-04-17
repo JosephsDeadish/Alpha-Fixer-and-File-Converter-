@@ -3459,7 +3459,7 @@ class ButtonPressAnimator(QObject):
     ``"press"``    – button shifts 2 px down on press, springs back.
     ``"fall"``     – button slides 8 px down then springs back.
     ``"shake"``    – button vibrates left/right rapidly.
-    ``"shatter"``  – triggers click-effect particles from the button centre.
+    ``"shatter"``  – button breaks into 9 pixmap fragments that fly apart then reassemble.
     ``"bounce"``   – button bounces up then falls back.
 
     Usage
@@ -3653,6 +3653,119 @@ class ButtonPressAnimator(QObject):
         self._start(group)
 
     def _do_shatter(self, btn: QWidget) -> None:
+        """Break the button into pieces that fly apart then reassemble (item 3).
+
+        The button is divided into a 3×3 grid of pixmap fragments.  Each
+        fragment slides outward from the button centre with a slight vertical
+        drop, fades out, then flies back to reassemble before the button is
+        restored to full visibility.
+        """
+        from PyQt6.QtCore import (
+            QPropertyAnimation, QSequentialAnimationGroup,
+            QParallelAnimationGroup, QPauseAnimation,
+            QEasingCurve, QPoint,
+        )
+        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtGui import QPixmap
+
+        # Grab the button appearance.
+        try:
+            px = btn.grab()
+        except Exception:
+            # Fall back to particle effect if grab fails.
+            self._do_shatter_particles(btn)
+            return
+
+        w, h = px.width(), px.height()
+        if w < 6 or h < 6:
+            self._do_shatter_particles(btn)
+            return
+
+        COLS, ROWS = 3, 3
+        cw, ch = max(1, w // COLS), max(1, h // ROWS)
+
+        # Parent window for the free-floating shard labels.
+        window = btn.window()
+        btn_top_left = btn.mapTo(window, QPoint(0, 0))
+
+        # Hide the button while the shatter plays.
+        btn.hide()
+
+        shards: list[QLabel] = []
+        for row in range(ROWS):
+            for col in range(COLS):
+                sx = col * cw
+                sy = row * ch
+                sw = cw if col < COLS - 1 else w - sx
+                sh = ch if row < ROWS - 1 else h - sy
+                frag = px.copy(sx, sy, sw, sh)
+                lbl = QLabel(window)
+                lbl.setPixmap(frag)
+                lbl.resize(sw, sh)
+                # Position the shard at its original button location.
+                orig_pos = btn_top_left + QPoint(sx, sy)
+                lbl.move(orig_pos)
+                lbl.show()
+                shards.append(lbl)
+
+        # Direction vectors: each cell flies away from the button centre.
+        # Centre cell flies downward; corners fly diagonally.
+        _dirs = [
+            (-28, -28), (0, -32), (28, -28),
+            (-32,  -6), (0,  30), (32,  -6),
+            (-28,  28), (0,  34), (28,  28),
+        ]
+
+        # ── Phase 1: Explode outward ──────────────────────────────────
+        explode = QParallelAnimationGroup(self)
+        for shard, (dx, dy) in zip(shards, _dirs):
+            a = QPropertyAnimation(shard, b"pos", self)
+            a.setDuration(240)
+            a.setStartValue(shard.pos())
+            a.setEndValue(shard.pos() + QPoint(dx, dy))
+            a.setEasingCurve(QEasingCurve.Type.OutQuad)
+            explode.addAnimation(a)
+
+        pause = QPauseAnimation(60, self)
+
+        # ── Phase 2: Reassemble (reverse fly-in) ─────────────────────
+        reassemble = QParallelAnimationGroup(self)
+        for idx, (shard, (dx, dy)) in enumerate(zip(shards, _dirs)):
+            col = idx % COLS
+            row = idx // COLS
+            sx = col * cw
+            sy = row * ch
+            real_orig = btn_top_left + QPoint(sx, sy)
+            dispersed  = real_orig + QPoint(dx, dy)
+            a = QPropertyAnimation(shard, b"pos", self)
+            a.setDuration(280)
+            a.setStartValue(dispersed)
+            a.setEndValue(real_orig)
+            a.setEasingCurve(QEasingCurve.Type.InBack)
+            reassemble.addAnimation(a)
+
+        def _cleanup():
+            for s in shards:
+                try:
+                    s.hide()
+                    s.deleteLater()
+                except Exception:
+                    pass
+            try:
+                btn.show()
+            except Exception:
+                pass
+
+        master = QSequentialAnimationGroup(self)
+        master.addAnimation(explode)
+        master.addAnimation(pause)
+        master.addAnimation(reassemble)
+        master.finished.connect(_cleanup)
+        self._start(master)
+        # Also spawn click-effect particles for extra visual flair.
+        self._do_shatter_particles(btn)
+
+    def _do_shatter_particles(self, btn: QWidget) -> None:
         """Spawn click-effect particles emanating from the button centre."""
         if self._click_effects is None:
             return

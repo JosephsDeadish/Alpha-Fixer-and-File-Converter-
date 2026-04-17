@@ -27,7 +27,13 @@ from .theme_engine import (
     get_theme_svg_path, get_theme_status,
     get_theme_tab_labels, get_theme_icon,
 )
-from ..version import __version__
+try:
+    from ..version import __version__
+except Exception:
+    try:
+        from src.version import __version__  # type: ignore[no-redef]
+    except Exception:
+        __version__ = ""
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
@@ -2061,6 +2067,14 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             new_ss = build_stylesheet(theme, tooltip_style)
+            # Append tooltip font-size override: UI scale should not resize
+            # tooltips (item 53). Tooltips use the raw base size, not the
+            # scaled app-font size.
+            try:
+                _tip_base = max(8, min(24, int(self._settings.get("font_size", 10))))
+                new_ss += f"\nQToolTip {{ font-size: {_tip_base}pt; }}"
+            except Exception:
+                pass
             if new_ss != self._last_stylesheet:
                 app.setStyleSheet(new_ss)
                 self._last_stylesheet = new_ss
