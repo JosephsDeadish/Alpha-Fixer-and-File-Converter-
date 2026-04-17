@@ -1710,10 +1710,19 @@ class SelectiveAlphaTool(QWidget):
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_INIT
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
-        slots_box = QGroupBox("Single Zone Mask Clipboard")
+        slots_box = QGroupBox("📋 Single-Zone Mask Clipboard")
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
+
+        # Short description so users know what this section is for
+        _sz_hint = QLabel(
+            "Save/paste the painted mask for one zone at a time.\n"
+            "Use slots to hold multiple saved masks."
+        )
+        _sz_hint.setStyleSheet("color: #888; font-size: 9px;")
+        _sz_hint.setWordWrap(True)
+        sv.addWidget(_sz_hint)
 
         # Slot selector row (combo on its own row so the name shows in full)
         sel_row = QHBoxLayout()
@@ -1807,10 +1816,19 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(slots_box)
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
-        all_zones_box = QGroupBox("All Zones Mask Clipboard")
+        all_zones_box = QGroupBox("📋 All-Zones Mask Clipboard")
         azv = QVBoxLayout(all_zones_box)
         azv.setSpacing(4)
         azv.setContentsMargins(4, 4, 4, 4)
+
+        # Short description so users know what this section is for
+        _az_hint = QLabel(
+            "Copy/paste all zones at once (full multi-zone snapshot).\n"
+            "Slots hold complete zone sets across images."
+        )
+        _az_hint.setStyleSheet("color: #888; font-size: 9px;")
+        _az_hint.setWordWrap(True)
+        azv.addWidget(_az_hint)
 
         # Slot selector row (combo on its own row so the name shows in full)
         az_sel_row2 = QHBoxLayout()

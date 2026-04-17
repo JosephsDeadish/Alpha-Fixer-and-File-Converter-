@@ -678,10 +678,10 @@ class SettingsDialog(QDialog):
             ("Ocean Wave 🌊",      "Ocean Wave  – 🫧💧🌊🐠 emoji drift and ripple behind the cursor."),
             ("Sparkle Ice ❄",      "Sparkle Ice  – ✦❄✧💎 glittering ice crystals trail behind the cursor."),
             ("Rainbow 🌈",         "Rainbow  – Full spectrum hue cycle: trail sweeps through the entire colour wheel."),
-            ("Distortion Wave 〰",  "Distortion Wave  – A wavy sinusoidal ribbon that writhes and ripples as you move the cursor."),
+            ("Wavy Ribbon 〰",      "Wavy Ribbon  – A sinusoidal ribbon that writhes and ripples as you move the cursor."),
             ("Fire 🔥",            "Fire  – Glowing embers drift upward behind the cursor, hot yellow to deep red."),
             ("Lightning ⚡",       "Lightning  – Brief bright bolt-flashes crackle along the trail and vanish instantly."),
-            ("Plasma ⚡🔵",        "Plasma  – Electric arc sparks crackle in purple and cyan, fading fast like a static discharge."),
+            ("Plasma Arc 🔵",      "Plasma Arc  – Electric arc sparks crackle in purple and cyan, fading fast like a static discharge."),
             ("Sakura 🌸",          "Sakura  – Soft pink petals drift and spin behind the cursor, fading gently as they fall."),
             ("Smoke 💨",           "Smoke  – Soft gray puffs expand and rise behind the cursor, dissipating into nothing."),
         ]
@@ -693,8 +693,8 @@ class SettingsDialog(QDialog):
             "Choose the visual style of the mouse trail.\n"
             "Ribbon – smooth line, Noodle – physics chain, Comet Tail – tapered streak,\n"
             "Fairy Dust / Ocean Wave / Sparkle Ice – themed emoji trails,\n"
-            "Distortion Wave – sinusoidal ribbon, Fire – rising embers,\n"
-            "Lightning – crackle bolts, Plasma – electric arc sparks,\n"
+            "Wavy Ribbon – sinusoidal ribbon, Fire – rising embers,\n"
+            "Lightning – crackle bolts, Plasma Arc – electric arc sparks,\n"
             "Sakura – drifting petals, Smoke – rising gray puffs."
         )
         _trail_sub_gl.addWidget(self._trail_style_combo, 1, 1)

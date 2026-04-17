@@ -6858,6 +6858,14 @@ class TooltipManager(QObject):
         import functools as _functools
 
         def _widget_cleanup(captured_wid, *_args):
+            # Guard against the race where Python reuses the same memory
+            # address for a new widget before the destroyed signal fires for
+            # the old one.  If the weakref at this address still resolves to a
+            # live object, a new widget was re-registered at that address after
+            # the old widget was destroyed — do not remove its entry.
+            _ref = self._widget_refs.get(captured_wid)
+            if _ref is not None and _ref() is not None:
+                return
             self._widget_keys.pop(captured_wid, None)
             self._widget_refs.pop(captured_wid, None)
 
