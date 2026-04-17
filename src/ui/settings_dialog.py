@@ -496,21 +496,25 @@ class SettingsDialog(QDialog):
             "When enabled the drip type is chosen automatically:\n"
             "Gore / Shark themes → Blood Drip\n"
             "Ocean / Ripple / Mermaid themes → Water Drip\n"
-            "All other themes → use the manual selection below."
+            "All other themes → no drip (this theme has no drip effect)."
         )
         bg_drip_sub_layout.addWidget(self._use_theme_drip_check)
+        # Info label shown when use-theme is on (replaces the manual drip combo)
+        self._bg_drip_theme_lbl = QLabel("Theme drip: —")
+        self._bg_drip_theme_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._bg_drip_theme_lbl.setVisible(False)
+        bg_drip_sub_layout.addWidget(self._bg_drip_theme_lbl)
         bg_drip_inner = QHBoxLayout()
         bg_drip_inner.addWidget(QLabel("Drip Style:"))
         self._bg_drip_combo = QComboBox()
         self._bg_drip_combo.setMinimumWidth(180)
         self._bg_drip_combo.addItem("🩸 Blood Drip", userData="blood")
         self._bg_drip_combo.addItem("💧 Water Drip", userData="water")
-        self._bg_drip_combo.addItem("🚫 None (theme has no drip)", userData="none")
         self._bg_drip_combo.setToolTip(
             "Choose the drip style when 'Use theme drip' is off.\n"
             "Blood Drip: crimson tear-shaped drops fall from the top.\n"
             "Water Drip: translucent cyan drops fall from the top.\n"
-            "None: shown automatically when the active theme has no drip defined."
+            "To disable drip, uncheck 'Enable background drip' above."
         )
         bg_drip_inner.addWidget(self._bg_drip_combo, 1)
         bg_drip_sub_layout.addLayout(bg_drip_inner)
@@ -520,6 +524,8 @@ class SettingsDialog(QDialog):
             enabled = self._bg_drip_check.isChecked()
             use_theme = self._use_theme_drip_check.isChecked()
             self._bg_drip_sub.setVisible(enabled)
+            self._bg_drip_combo.setVisible(not use_theme)
+            self._bg_drip_theme_lbl.setVisible(use_theme)
             self._bg_drip_combo.setEnabled(enabled and not use_theme)
         self._bg_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
         self._use_theme_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
@@ -1543,13 +1549,15 @@ class SettingsDialog(QDialog):
         _profile_idx = self._sound_profile_combo.findData(saved_profile)
         if _profile_idx >= 0:
             self._sound_profile_combo.setCurrentIndex(_profile_idx)
-        # When "use theme sound" is ON: show info label, hide profile combo label; else opposite
+        # When "use theme sound" is ON: show info label, hide profile combo; else opposite (item 1/4)
         if use_theme_sound:
             self._update_sound_theme_info()
             self._sound_theme_info_lbl.setVisible(True)
+            self._sound_profile_combo.setVisible(False)
             self._sound_profile_combo.setEnabled(False)
         else:
             self._sound_theme_info_lbl.setVisible(False)
+            self._sound_profile_combo.setVisible(True)
             self._sound_profile_combo.setEnabled(True)
         # Load sound event toggles
         self._sound_theme_change_chk.setChecked(
@@ -1673,22 +1681,35 @@ class SettingsDialog(QDialog):
         self._bg_drip_check.setChecked(bg_drip_enabled)
         use_theme_drip = self._settings.get("use_theme_drip", False)
         self._use_theme_drip_check.setChecked(use_theme_drip)
-        # When use-theme drip is on, show the theme's drip type in the combo
+        # When use-theme drip is on, show the theme's drip via info label instead of combo
         if use_theme_drip:
             eff = self._settings.get_theme().get("_effect", "default")
             if eff in ("gore", "shark"):
                 theme_drip = "blood"
+                drip_label = "🩸 Blood Drip  (set by theme)"
             elif eff in ("ocean", "ripple", "mermaid"):
                 theme_drip = "water"
+                drip_label = "💧 Water Drip  (set by theme)"
             else:
-                # Theme has no drip — reflect that with "none" (item 65)
-                theme_drip = "none"
+                theme_drip = None
+                drip_label = "🚫  This theme has no drip effect."
+            self._bg_drip_theme_lbl.setText(drip_label)
+            self._bg_drip_theme_lbl.setVisible(True)
+            self._bg_drip_combo.setVisible(False)
+            # Still sync combo to the theme drip value if there is one
+            if theme_drip:
+                for i in range(self._bg_drip_combo.count()):
+                    if self._bg_drip_combo.itemData(i) == theme_drip:
+                        self._bg_drip_combo.setCurrentIndex(i)
+                        break
         else:
-            theme_drip = self._settings.get("bg_drip_type", "blood")
-        for i in range(self._bg_drip_combo.count()):
-            if self._bg_drip_combo.itemData(i) == theme_drip:
-                self._bg_drip_combo.setCurrentIndex(i)
-                break
+            manual_drip = self._settings.get("bg_drip_type", "blood")
+            self._bg_drip_theme_lbl.setVisible(False)
+            self._bg_drip_combo.setVisible(True)
+            for i in range(self._bg_drip_combo.count()):
+                if self._bg_drip_combo.itemData(i) == manual_drip:
+                    self._bg_drip_combo.setCurrentIndex(i)
+                    break
         self._bg_drip_sub.setVisible(bg_drip_enabled)
         if bg_drip_enabled:
             self._bg_drip_combo.setEnabled(not use_theme_drip)
@@ -2030,21 +2051,28 @@ class SettingsDialog(QDialog):
                 from .theme_engine import THEME_EFFECTS
                 effect_key = THEME_EFFECTS.get(theme_name, theme.get("_effect", "default"))
                 self._set_effect_combo(effect_key)
-            # Bg drip combo
+            # Bg drip combo / info label
             if self._use_theme_drip_check.isChecked():
                 eff = theme.get("_effect", "default")
                 if eff in ("gore", "shark"):
                     drip_key = "blood"
+                    drip_label = "🩸 Blood Drip  (set by theme)"
                 elif eff in ("ocean", "ripple", "mermaid"):
                     drip_key = "water"
+                    drip_label = "💧 Water Drip  (set by theme)"
                 else:
-                    # This theme has no defined drip — show "none" so the user
-                    # knows the drip is inactive for this theme (item 65).
-                    drip_key = "none"
-                for i in range(self._bg_drip_combo.count()):
-                    if self._bg_drip_combo.itemData(i) == drip_key:
-                        self._bg_drip_combo.setCurrentIndex(i)
-                        break
+                    # This theme has no defined drip — show info message (item 4).
+                    drip_key = None
+                    drip_label = f"🚫  This theme has no drip effect."
+                # Update info label that replaces the combo when use-theme is on.
+                if hasattr(self, "_bg_drip_theme_lbl"):
+                    self._bg_drip_theme_lbl.setText(drip_label)
+                # Select the matching combo item (used as fallback if label hidden)
+                if drip_key:
+                    for i in range(self._bg_drip_combo.count()):
+                        if self._bg_drip_combo.itemData(i) == drip_key:
+                            self._bg_drip_combo.setCurrentIndex(i)
+                            break
             # Flock combo — update tooltip to say which flock (or none) the theme uses
             if self._use_theme_flock_check.isChecked():
                 _FLOCK_LABELS = {
@@ -2238,6 +2266,7 @@ class SettingsDialog(QDialog):
         if enabled:
             use_theme = self._use_theme_sound_check.isChecked()
             self._sound_theme_info_lbl.setVisible(use_theme)
+            self._sound_profile_combo.setVisible(not use_theme)
             self._sound_profile_combo.setEnabled(not use_theme)
         self.settings_changed.emit()
 
@@ -2262,6 +2291,8 @@ class SettingsDialog(QDialog):
         if checked:
             self._update_sound_theme_info()
         self._sound_theme_info_lbl.setVisible(checked)
+        # Hide the combo when "use theme" is on; show the info label instead (item 1/4)
+        self._sound_profile_combo.setVisible(not checked)
         self._sound_profile_combo.setEnabled(not checked)
 
     def _on_sound_profile_changed(self) -> None:
@@ -2602,34 +2633,31 @@ class SettingsDialog(QDialog):
         # Keep sub-controls in sync with the enabled/use-theme state.
         self._use_theme_drip_check.setEnabled(enabled)
         self._bg_drip_combo.setEnabled(enabled and not use_theme_drip)
-        # Update combo tooltip and selection to reflect theme drip when "use theme" is on
+        # Toggle combo vs info label visibility based on use-theme state (item 4)
+        self._bg_drip_combo.setVisible(not use_theme_drip)
+        self._bg_drip_theme_lbl.setVisible(use_theme_drip)
+        # Update info label and combo to reflect theme drip when "use theme" is on
         if use_theme_drip:
             theme = self._settings.get_theme()
             effect_key = theme.get("_effect", "default")
             theme_name = theme.get("name", "")
             if effect_key in ("gore", "shark"):
                 theme_drip = "blood"
+                drip_label = "🩸 Blood Drip  (set by theme)"
             elif effect_key in ("ocean", "ripple", "mermaid"):
                 theme_drip = "water"
+                drip_label = "💧 Water Drip  (set by theme)"
             else:
-                # Theme has no drip — show "none" so user knows it's inactive (item 65)
-                theme_drip = "none"
-            # Select the matching drip in the combo so user sees what's active
-            for i in range(self._bg_drip_combo.count()):
-                if self._bg_drip_combo.itemData(i) == theme_drip:
-                    self._bg_drip_combo.setCurrentIndex(i)
-                    break
-            drip_label = self._bg_drip_combo.currentText().split("—")[0].strip()
-            self._bg_drip_combo.setToolTip(
-                f"Using theme drip: {drip_label}\n"
-                f"(auto-selected for '{theme_name}' theme)\n"
-                "Uncheck 'Use theme drip' to override manually."
-            )
-        else:
-            self._bg_drip_combo.setToolTip(
-                "Choose the background drip effect style.\n"
-                "Greyed out while 'Use theme drip' is checked."
-            )
+                # Theme has no drip — show info message (item 4)
+                theme_drip = None
+                drip_label = "🚫  This theme has no drip effect."
+            self._bg_drip_theme_lbl.setText(drip_label)
+            # Sync combo to theme drip value if there is one
+            if theme_drip:
+                for i in range(self._bg_drip_combo.count()):
+                    if self._bg_drip_combo.itemData(i) == theme_drip:
+                        self._bg_drip_combo.setCurrentIndex(i)
+                        break
         self.settings_changed.emit()
 
     def _on_bg_flock_changed(self) -> None:
