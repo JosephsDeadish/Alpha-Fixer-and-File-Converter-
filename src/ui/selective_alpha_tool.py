@@ -1691,8 +1691,8 @@ class SelectiveAlphaTool(QWidget):
         # Row 3: Copy + Paste buttons
         ze_row3 = QHBoxLayout()
         ze_row3.setSpacing(4)
-        self._ze_copy_btn = QPushButton("📋  Copy Mask")
-        self._ze_paste_btn = QPushButton("📌  Paste Mask")
+        self._ze_copy_btn = QPushButton("📋  Copy Zone to Clipboard")
+        self._ze_paste_btn = QPushButton("📌  Paste Zone from Clipboard")
         self._ze_paste_btn.setEnabled(False)
         ze_row3.addWidget(self._ze_copy_btn)
         ze_row3.addWidget(self._ze_paste_btn)
@@ -1710,7 +1710,7 @@ class SelectiveAlphaTool(QWidget):
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_INIT
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
-        slots_box = QGroupBox("📋 Single-Zone Mask Clipboard")
+        slots_box = QGroupBox("📋 Single-Zone Clipboard  (one zone mask per slot)")
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
@@ -1816,7 +1816,7 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(slots_box)
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
-        all_zones_box = QGroupBox("📋 All-Zones Mask Clipboard")
+        all_zones_box = QGroupBox("📋 All-Zones Clipboard  (all zones at once per slot)")
         azv = QVBoxLayout(all_zones_box)
         azv.setSpacing(4)
         azv.setContentsMargins(4, 4, 4, 4)
@@ -1955,7 +1955,7 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_shared)
 
         # Item 22: save ALL shared zones into the current all-zones slot
-        self._btn_import_to_az_slot = QPushButton("💾 Save All Zones → AZ Slot")
+        self._btn_import_to_az_slot = QPushButton("💾 Save All → All-Zones Clipboard Slot")
         self._btn_import_to_az_slot.setMinimumHeight(26)
         self._btn_import_to_az_slot.setEnabled(False)
         self._btn_import_to_az_slot.setToolTip(
@@ -1967,7 +1967,7 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_to_az_slot)
 
         # Item 23: copy one shared zone to the single-zone clipboard
-        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Single Zone → Clipboard")
+        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Single Zone → Single-Zone Clipboard")
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(

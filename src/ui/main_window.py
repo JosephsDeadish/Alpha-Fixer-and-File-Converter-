@@ -1074,14 +1074,13 @@ class MainWindow(QMainWindow):
         self._banner_lbl = banner_text  # kept for theme update compatibility
 
         self._tabs = QTabWidget()
-        self._tabs.setUsesScrollButtons(True)
-        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
-        # Prevent tabs from stretching to fill available space; scroll buttons
-        # will appear automatically when the window is narrower than all tabs.
-        self._tabs.tabBar().setExpanding(False)
-        # Keep tabs in fixed order — movable tabs caused accidental reordering
-        # and tabs hiding behind the scrollbar (item 58).
-        self._tabs.tabBar().setMovable(False)
+        self._tabs.setUsesScrollButtons(False)
+        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        # Let tabs expand to fill the available space so they always fit without
+        # scroll buttons, scaling gracefully as the window resizes (item 43).
+        self._tabs.tabBar().setExpanding(True)
+        # Allow drag-to-reorder tabs (item 56).
+        self._tabs.tabBar().setMovable(True)
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
@@ -2329,6 +2328,8 @@ class MainWindow(QMainWindow):
             try:
                 from .click_effects import ClickEffectsOverlay
                 dlg_overlay = ClickEffectsOverlay(dlg)
+                dlg_overlay.setGeometry(dlg.rect())
+                dlg_overlay.raise_()
                 # Mirror the current effect setting but don't count clicks toward
                 # secret-theme unlocks (leave click_registered unconnected).
                 theme = self._settings.get_theme()
@@ -2475,6 +2476,27 @@ class MainWindow(QMainWindow):
 
         dlg.settings_changed.connect(_resync_dlg_overlay)
         dlg.settings_changed.connect(_resync_dlg_trail)
+
+        # Install an event filter so the overlays stay full-size when the
+        # settings dialog is resized (item 2 – effects must cover the whole dialog).
+        from PyQt6.QtCore import QEvent as _QEvent, QObject as _QObject
+
+        class _DlgResizeFilter(_QObject):
+            def eventFilter(self_f, obj, event):  # noqa: N805
+                if event.type() == _QEvent.Type.Resize:
+                    try:
+                        if dlg_overlay is not None:
+                            dlg_overlay.setGeometry(obj.rect())
+                            dlg_overlay.raise_()
+                        if dlg_trail is not None:
+                            dlg_trail.setGeometry(obj.rect())
+                            dlg_trail.raise_()
+                    except Exception:
+                        pass
+                return False
+
+        _resize_filter = _DlgResizeFilter(dlg)
+        dlg.installEventFilter(_resize_filter)
 
         try:
             dlg.exec()
@@ -2954,6 +2976,7 @@ class MainWindow(QMainWindow):
     def _show_help_menu(self):
         """Show a popup menu from the Help button with shortcuts, about, and I/O options."""
         menu = QMenu(self)
+        menu.setToolTipsVisible(True)
         act_shortcuts = menu.addAction("⌨  Keyboard Shortcuts  (F1)")
         act_shortcuts.setToolTip("View all keyboard shortcuts for every tool (also F1).")
         act_shortcuts.setStatusTip("View keyboard shortcuts for all tools.")
