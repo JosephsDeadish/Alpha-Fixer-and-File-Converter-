@@ -2849,6 +2849,13 @@ class SelectiveAlphaTool(QWidget):
                 "Try a smaller file or close other applications."
             )
             return
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Load Error",
+                f"An unexpected error occurred while loading the image:\n{exc}\n\n"
+                "Please try a different file."
+            )
+            return
         if not loaded:
             QMessageBox.warning(self, "Load Error", f"Could not load:\n{path}")
             return
@@ -2867,7 +2874,10 @@ class SelectiveAlphaTool(QWidget):
         self._btn_show_highlights.setChecked(True)
         self._on_hide_all_zones()
         # Auto-populate zone masks if the image has multiple distinct alphas.
-        self._auto_populate_zones_from_image()
+        try:
+            self._auto_populate_zones_from_image()
+        except Exception:
+            pass  # Non-fatal: image is loaded; auto-detection just skipped
 
     def _auto_populate_zones_from_image(self) -> None:
         """Auto-detect distinct alpha zones in the loaded image and populate them.

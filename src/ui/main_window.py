@@ -1123,9 +1123,9 @@ class MainWindow(QMainWindow):
             corner_layout.addWidget(self._svg_badge)
 
         # ⚙ Settings button  (item 60: compact size, no emoji clipping)
-        btn_settings = QPushButton("Settings")
-        btn_settings.setMinimumWidth(64)
-        btn_settings.setMaximumWidth(90)
+        btn_settings = QPushButton("⚙  Settings")
+        btn_settings.setMinimumWidth(78)
+        btn_settings.setMaximumWidth(106)
         btn_settings.setFixedHeight(22)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
@@ -1133,9 +1133,9 @@ class MainWindow(QMainWindow):
         self._btn_settings = btn_settings
 
         # Help button – opens a dropdown with shortcuts/about/export/import
-        btn_help = QPushButton("Help")
-        btn_help.setMinimumWidth(46)
-        btn_help.setMaximumWidth(66)
+        btn_help = QPushButton("❓  Help")
+        btn_help.setMinimumWidth(56)
+        btn_help.setMaximumWidth(78)
         btn_help.setFixedHeight(22)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
@@ -1143,9 +1143,9 @@ class MainWindow(QMainWindow):
         self._btn_help = btn_help
 
         # Patreon button
-        btn_patreon = QPushButton("\u2665 Patreon")
-        btn_patreon.setMinimumWidth(64)
-        btn_patreon.setMaximumWidth(90)
+        btn_patreon = QPushButton("❤  Patreon")
+        btn_patreon.setMinimumWidth(74)
+        btn_patreon.setMaximumWidth(100)
         btn_patreon.setFixedHeight(22)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
@@ -2476,7 +2476,11 @@ class MainWindow(QMainWindow):
         dlg.settings_changed.connect(_resync_dlg_overlay)
         dlg.settings_changed.connect(_resync_dlg_trail)
 
-        dlg.exec()
+        try:
+            dlg.exec()
+        except Exception as _dlg_exc:
+            import traceback as _tb
+            _tb.print_exc()
 
         if dlg_overlay is not None:
             try:
