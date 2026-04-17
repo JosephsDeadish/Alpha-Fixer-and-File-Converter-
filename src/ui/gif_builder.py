@@ -401,9 +401,9 @@ class GifBuilderDialog(QDialog):
 
         # Transport controls
         pv_ctrl = QHBoxLayout()
-        self._btn_rewind = QPushButton("⏮")
-        self._btn_rewind.setFixedWidth(42)
-        self._btn_rewind.setToolTip("Rewind to first frame")
+        self._btn_rewind = QPushButton("⏮  Rewind")
+        self._btn_rewind.setMinimumWidth(80)
+        self._btn_rewind.setToolTip("Rewind to first frame (jump to frame 1)")
         self._btn_rewind.clicked.connect(self._rewind)
         pv_ctrl.addWidget(self._btn_rewind)
 

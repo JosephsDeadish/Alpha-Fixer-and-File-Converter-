@@ -1074,10 +1074,11 @@ class MainWindow(QMainWindow):
         self._banner_lbl = banner_text  # kept for theme update compatibility
 
         self._tabs = QTabWidget()
-        self._tabs.setUsesScrollButtons(False)
+        self._tabs.setUsesScrollButtons(True)
         self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
         # Let tabs expand to fill the available space so they always fit without
-        # scroll buttons, scaling gracefully as the window resizes (item 43).
+        # needing scroll buttons at normal window sizes, but scroll buttons are
+        # enabled as a fallback when the window is too narrow (item 43).
         self._tabs.tabBar().setExpanding(True)
         # Allow drag-to-reorder tabs (item 56).
         self._tabs.tabBar().setMovable(True)
@@ -1121,10 +1122,10 @@ class MainWindow(QMainWindow):
         if self._svg_badge is not None:
             corner_layout.addWidget(self._svg_badge)
 
-        # ⚙ Settings button  (item 60: compact size, no emoji clipping)
+        # ⚙ Settings button  (item 44: allow enough width for emoji + text at any font size)
         btn_settings = QPushButton("⚙  Settings")
-        btn_settings.setMinimumWidth(78)
-        btn_settings.setMaximumWidth(106)
+        btn_settings.setMinimumWidth(82)
+        btn_settings.setMaximumWidth(140)
         btn_settings.setFixedHeight(22)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
@@ -1133,8 +1134,8 @@ class MainWindow(QMainWindow):
 
         # Help button – opens a dropdown with shortcuts/about/export/import
         btn_help = QPushButton("❓  Help")
-        btn_help.setMinimumWidth(56)
-        btn_help.setMaximumWidth(78)
+        btn_help.setMinimumWidth(64)
+        btn_help.setMaximumWidth(100)
         btn_help.setFixedHeight(22)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
@@ -1143,8 +1144,8 @@ class MainWindow(QMainWindow):
 
         # Patreon button
         btn_patreon = QPushButton("❤  Patreon")
-        btn_patreon.setMinimumWidth(74)
-        btn_patreon.setMaximumWidth(100)
+        btn_patreon.setMinimumWidth(80)
+        btn_patreon.setMaximumWidth(130)
         btn_patreon.setFixedHeight(22)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
@@ -2345,13 +2346,18 @@ class MainWindow(QMainWindow):
                     use_theme_drip = self._settings.get("use_theme_drip", False)
                     if use_theme_drip:
                         eff = theme.get("_effect", "default")
-                        drip_type = "blood" if eff in ("gore", "shark") else (
-                            "water" if eff in ("ocean", "ripple", "mermaid") else
-                            self._settings.get("bg_drip_type", "blood")
-                        )
+                        if eff in ("gore", "shark"):
+                            drip_type = "blood"
+                        elif eff in ("ocean", "ripple", "mermaid"):
+                            drip_type = "water"
+                        else:
+                            # Theme has no drip — disable it on the dialog overlay too.
+                            dlg_overlay.set_bg_drip("blood", False)
+                            drip_type = None
                     else:
                         drip_type = self._settings.get("bg_drip_type", "blood")
-                    dlg_overlay.set_bg_drip(drip_type, True)
+                    if drip_type:
+                        dlg_overlay.set_bg_drip(drip_type, True)
                 if self._settings.get("bg_flock_enabled", False):
                     use_theme_flock = self._settings.get("use_theme_flock", False)
                     _FLOCK_EMOJI_DLG = {
@@ -2418,13 +2424,18 @@ class MainWindow(QMainWindow):
                     _use_drip = self._settings.get("use_theme_drip", False)
                     if _use_drip:
                         _eff = _theme.get("_effect", "default")
-                        _drip = "blood" if _eff in ("gore", "shark") else (
-                            "water" if _eff in ("ocean", "ripple", "mermaid") else
-                            self._settings.get("bg_drip_type", "blood")
-                        )
+                        if _eff in ("gore", "shark"):
+                            _drip = "blood"
+                        elif _eff in ("ocean", "ripple", "mermaid"):
+                            _drip = "water"
+                        else:
+                            # Theme has no drip — disable it to match main window.
+                            _ov.set_bg_drip("blood", False)
+                            _drip = None
                     else:
                         _drip = self._settings.get("bg_drip_type", "blood")
-                    _ov.set_bg_drip(_drip, True)
+                    if _drip:
+                        _ov.set_bg_drip(_drip, True)
                 else:
                     _ov.set_bg_drip("blood", False)
                 # Flock
@@ -2476,6 +2487,10 @@ class MainWindow(QMainWindow):
 
         dlg.settings_changed.connect(_resync_dlg_overlay)
         dlg.settings_changed.connect(_resync_dlg_trail)
+        # Also re-sync overlays when the theme preset changes, since theme_changed
+        # fires without a settings_changed (item 2: effects must match on theme switch).
+        dlg.theme_changed.connect(lambda _t: _resync_dlg_overlay())
+        dlg.theme_changed.connect(lambda _t: _resync_dlg_trail())
 
         # Install an event filter so the overlays stay full-size when the
         # settings dialog is resized (item 2 – effects must cover the whole dialog).

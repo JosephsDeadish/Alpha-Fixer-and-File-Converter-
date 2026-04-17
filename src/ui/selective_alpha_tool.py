@@ -1447,20 +1447,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
 
-        # Row 1b: Show Highlights toggle — prominent master visibility control
-        self._btn_show_highlights = QPushButton("\U0001f441  Show Highlights")
-        self._btn_show_highlights.setCheckable(True)
-        self._btn_show_highlights.setChecked(True)
-        self._btn_show_highlights.setMinimumHeight(26)
-        self._btn_show_highlights.setToolTip(
-            "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
-            "Turn off to see the image without coloured highlights and alpha labels.\n"
-            "Automatically turns on when multiple alpha zones are detected in an image."
-        )
-        self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
-        wf_lay.addWidget(self._btn_show_highlights)
-
-        # Overlay opacity slider (item 16)
+        # Row 1b: Overlay opacity slider (item 16)
         _ov_row = QHBoxLayout()
         _ov_row.setSpacing(4)
         _ov_lbl = QLabel("Overlay opacity:")
@@ -1634,6 +1621,18 @@ class SelectiveAlphaTool(QWidget):
             "centre of its painted area on the canvas.  Off by default."
         )
         zv.addWidget(self._show_alpha_labels_chk)
+
+        # "Show Highlights" checkbox — master visibility for all zone overlays (item 61)
+        self._btn_show_highlights = QCheckBox("\U0001f441  Show Highlights")
+        self._btn_show_highlights.setChecked(True)
+        self._btn_show_highlights.setToolTip(
+            "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
+            "Turn off to see the image without coloured highlights and alpha labels.\n"
+            "Automatically turns on when multiple alpha zones are detected in an image.\n"
+            "Keyboard shortcut: H"
+        )
+        self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
+        zv.addWidget(self._btn_show_highlights)
 
         # Thin separator
         sep0 = QFrame()
