@@ -1122,31 +1122,31 @@ class MainWindow(QMainWindow):
         if self._svg_badge is not None:
             corner_layout.addWidget(self._svg_badge)
 
-        # ⚙ Settings button
-        btn_settings = QPushButton("⚙ Settings")
-        btn_settings.setMinimumWidth(80)
-        btn_settings.setMinimumHeight(24)
-        btn_settings.setMaximumHeight(28)
+        # ⚙ Settings button  (item 60: compact size, no emoji clipping)
+        btn_settings = QPushButton("Settings")
+        btn_settings.setMinimumWidth(64)
+        btn_settings.setMaximumWidth(90)
+        btn_settings.setFixedHeight(22)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
         corner_layout.addWidget(btn_settings)
         self._btn_settings = btn_settings
 
-        # ❓ Help button – opens a dropdown with shortcuts/about/export/import
-        btn_help = QPushButton("? Help")
-        btn_help.setMinimumWidth(60)
-        btn_help.setMinimumHeight(24)
-        btn_help.setMaximumHeight(28)
+        # Help button – opens a dropdown with shortcuts/about/export/import
+        btn_help = QPushButton("Help")
+        btn_help.setMinimumWidth(46)
+        btn_help.setMaximumWidth(66)
+        btn_help.setFixedHeight(22)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
         corner_layout.addWidget(btn_help)
         self._btn_help = btn_help
 
-        # ❤ Patreon button
-        btn_patreon = QPushButton("❤ Patreon")
-        btn_patreon.setMinimumWidth(80)
-        btn_patreon.setMinimumHeight(24)
-        btn_patreon.setMaximumHeight(28)
+        # Patreon button
+        btn_patreon = QPushButton("\u2665 Patreon")
+        btn_patreon.setMinimumWidth(64)
+        btn_patreon.setMaximumWidth(90)
+        btn_patreon.setFixedHeight(22)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
             "patreon.com/c/DeadOnTheInside"
@@ -2298,7 +2298,17 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _open_settings(self):
-        dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
+        try:
+            dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
+        except Exception as _exc:  # noqa: BLE001
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Settings Error",
+                f"Could not open Settings:\n{_exc}\n\n"
+                "Please try again.  If the problem persists, check the crash log.",
+            )
+            return
         dlg.theme_changed.connect(lambda t: self._on_settings_changed())
         dlg.theme_changed.connect(lambda t: self._on_theme_changed_sound())
         dlg.settings_changed.connect(self._on_settings_changed)

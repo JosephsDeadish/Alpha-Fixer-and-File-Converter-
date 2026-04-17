@@ -1479,14 +1479,14 @@ class SelectiveAlphaTool(QWidget):
 
         self._tool_btns: dict[str, QPushButton] = {}
         tool_defs = [
-            ("freehand",   "✏  Freehand",   0, 0),
-            ("line",       "╱  Line",       0, 1),
-            ("rect",       "□  Rectangle",  1, 0),
-            ("ellipse",    "◯  Ellipse",    1, 1),
-            ("fill",       "🪣  Fill",       2, 0),
-            ("polygon",    "⬠  Polygon",    2, 1),
-            ("eraser",     "⌫  Eraser",     3, 0),
-            ("transform",  "↔  Transform",  3, 1),
+            ("freehand",   "✏  Freehand",  0, 0),
+            ("line",       "╱  Line",      0, 1),
+            ("rect",       "▭  Rect",      1, 0),
+            ("ellipse",    "◯  Ellipse",   1, 1),
+            ("fill",       "🪣  Fill",      2, 0),
+            ("polygon",    "⬠  Polygon",   2, 1),
+            ("eraser",     "⌫  Eraser",    3, 0),
+            ("transform",  "✥  Move",      3, 1),
         ]
         self._tool_group = QButtonGroup(self)
         self._tool_group.setExclusive(True)
@@ -2297,7 +2297,7 @@ class SelectiveAlphaTool(QWidget):
             "fill":      "Fill",
             "polygon":   "Polygon",
             "eraser":    "Eraser",
-            "transform": "Transform",
+            "transform": "Move",
         }
         tool_key  = self._canvas._tool
         tool_name = tool_names.get(tool_key, tool_key.title())

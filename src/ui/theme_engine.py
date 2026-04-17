@@ -557,7 +557,9 @@ SHARK_BAIT_THEME = {
     "_banner_anim": "drip",
     "_button_anim": "bite",
     "_trail": "wave",
-    "_flock": "sharks",
+    # No _flock: the "shark" effect already spawns its own shark-fin background
+    # animation (_SharkFin).  Having both _flock:"sharks" and _SharkFin active
+    # simultaneously produced two overlapping shark effects (item 32).
 }
 
 ALIEN_THEME = {
