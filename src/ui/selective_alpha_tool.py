@@ -139,6 +139,7 @@ class SelectiveAlphaCanvas(QWidget):
     paste_requested     = pyqtSignal(int)   # context-menu: paste zone mask
     copy_all_requested  = pyqtSignal()      # context-menu: copy all zones
     paste_all_requested = pyqtSignal()      # context-menu: paste all zones
+    cursor_moved        = pyqtSignal(int, int)  # image (x, y) when mouse moves over canvas (item 50)
 
     _OVERLAY_ALPHA = 160  # zone colour overlay opacity (0–255)
 
@@ -498,6 +499,21 @@ class SelectiveAlphaCanvas(QWidget):
         self.zoom_changed.emit(self._zoom)
         self.update()
 
+    def center_on_zone(self, zone_idx: int) -> None:
+        """Pan the canvas to center on zone *zone_idx*'s centroid (item 49).
+
+        Does nothing if the zone has no painted pixels (centroid is None).
+        """
+        c = self._zone_centroids[zone_idx]
+        if c is None:
+            return
+        ix, iy = c
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        self._pan_x = cx - ix * self._zoom
+        self._pan_y = cy - iy * self._zoom
+        self.update()
+
     # ── coordinate helpers ────────────────────────────────────────────────
 
     def _w2i(self, wx: float, wy: float) -> tuple[float, float]:
@@ -770,6 +786,13 @@ class SelectiveAlphaCanvas(QWidget):
         self._cursor_wx = wx
         self._cursor_wy = wy
         self._cursor_on_canvas = True
+
+        # Emit image-space coordinates for the info panel (item 50)
+        if self.has_image():
+            ix, iy = self._widget_to_image(wx, wy)
+            ix = max(0, min(int(ix), self._img_w - 1))
+            iy = max(0, min(int(iy), self._img_h - 1))
+            self.cursor_moved.emit(ix, iy)
 
         if self._panning and self._pan_start_mouse is not None:
             dx = wx - self._pan_start_mouse[0]
@@ -1646,6 +1669,13 @@ class SelectiveAlphaTool(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         ze_row1.addWidget(self._ze_name_lbl)
+        self._ze_jump_btn = QPushButton("⊕")
+        self._ze_jump_btn.setFixedSize(22, 22)
+        self._ze_jump_btn.setToolTip(
+            "Center canvas on this zone's painted area.  [item 49]\n"
+            "Does nothing if the zone has no painted pixels."
+        )
+        ze_row1.addWidget(self._ze_jump_btn)
         ze_row1.addWidget(QLabel("α:"))
         self._ze_alpha_spin = QSpinBox()
         self._ze_alpha_spin.setRange(0, 255)
@@ -1955,6 +1985,8 @@ class SelectiveAlphaTool(QWidget):
             "🖱  Hold middle-mouse (scroll wheel button) to pan\n"
             "Alt+drag also pans\n"
             "Ctrl+scroll to zoom in/out\n"
+            "[ / ] keys: decrease / increase brush size\n"
+            "H: toggle zone highlights  ·  N / Shift+N: cycle zones\n"
             "Right-click for copy/paste menu"
         )
         self._canvas.mask_changed.connect(self._on_mask_changed)
@@ -1974,6 +2006,10 @@ class SelectiveAlphaTool(QWidget):
         self._ze_copy_btn.clicked.connect(self._on_ze_copy_mask)
         self._ze_paste_btn.clicked.connect(self._on_ze_paste_mask)
         self._ze_alpha_spin.valueChanged.connect(self._on_ze_alpha_changed)
+        # Jump to zone (item 49) — center canvas on zone centroid
+        self._ze_jump_btn.clicked.connect(
+            lambda: self._canvas.center_on_zone(self._ze_cur_idx)
+        )
 
         # Wire show-zero-alpha checkbox.
         self._show_zero_alpha_chk.toggled.connect(self._canvas.set_show_zero_alpha)
@@ -1991,15 +2027,33 @@ class SelectiveAlphaTool(QWidget):
             "color: #999; font-size: 10px; padding: 2px 4px;"
         )
         self._status_lbl.setToolTip(
-            "Shows the active tool, zone, and brush size.\n\n"
+            "Shows the active tool, zone, brush size, and cursor position.\n\n"
             "Navigation tips:\n"
             "🖱 Hold middle-mouse button (scroll wheel) and drag to pan the canvas\n"
             "Alt + drag: alternative pan (no scroll wheel needed)\n"
             "Ctrl + scroll wheel: zoom in / out\n"
             "Keyboard shortcuts: B Brush · E Eraser · L Line · R Rect · X Ellipse · F Fill · P Polygon · T Transform\n"
-            "[ / ] keys: decrease / increase brush size"
+            "[ / ] keys: decrease / increase brush size\n"
+            "H: toggle zone highlights  ·  N / Shift+N: cycle zones"
         )
-        rv.addWidget(self._status_lbl)
+        # Coordinate label next to status bar (item 50)
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.setSpacing(4)
+        status_row.addWidget(self._status_lbl, 1)
+        self._coord_lbl = QLabel("—")
+        self._coord_lbl.setStyleSheet(
+            "color: #888; font-size: 10px; padding: 2px 6px;"
+        )
+        self._coord_lbl.setToolTip("Cursor position in image pixel coordinates (x, y).")
+        self._coord_lbl.setMinimumWidth(80)
+        self._coord_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        status_row.addWidget(self._coord_lbl)
+        rv.addLayout(status_row)
+        # Wire cursor position signal to coordinate label (item 50)
+        self._canvas.cursor_moved.connect(
+            lambda x, y: self._coord_lbl.setText(f"x:{x}  y:{y}")
+        )
         root.addWidget(right_widget, 1)
 
         # ── Floating zoom overlay pinned to the top-right of the canvas ───
@@ -2075,6 +2129,23 @@ class SelectiveAlphaTool(QWidget):
         QShortcut(QKeySequence("]"), self).activated.connect(
             lambda: self._adjust_brush_size(2)
         )
+        # H: toggle Show Highlights (item 54)
+        QShortcut(QKeySequence("H"), self).activated.connect(
+            lambda: self._btn_show_highlights.click()
+        )
+        # N / Shift+N: cycle to next / previous zone (item 52)
+        QShortcut(QKeySequence("N"), self).activated.connect(
+            lambda: self._cycle_zone(+1)
+        )
+        QShortcut(QKeySequence("Shift+N"), self).activated.connect(
+            lambda: self._cycle_zone(-1)
+        )
+
+    def _cycle_zone(self, direction: int) -> None:
+        """Cycle the active zone editor to the next (+1) or previous (-1) zone."""
+        new_idx = (self._ze_cur_idx + direction) % NUM_ZONES
+        self._active_zone_combo.setCurrentIndex(new_idx)
+        self._refresh_zone_editor(new_idx)
 
     def _restore_settings(self) -> None:
         """Restore previously saved Selective Alpha Tool settings."""

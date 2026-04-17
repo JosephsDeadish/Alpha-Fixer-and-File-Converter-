@@ -2692,6 +2692,9 @@ class MainWindow(QMainWindow):
             "<tr><td><b>P</b></td><td>Polygon tool — draw a closed polygon</td></tr>"
             "<tr><td><b>T</b></td><td>Transform tool — move and scale painted zones</td></tr>"
             "<tr><td><b>[</b> / <b>]</b></td><td>Decrease / increase brush size</td></tr>"
+            "<tr><td><b>H</b></td><td>Toggle zone highlights on / off</td></tr>"
+            "<tr><td><b>N</b></td><td>Cycle to the next zone in the Zone Editor</td></tr>"
+            "<tr><td><b>Shift+N</b></td><td>Cycle to the previous zone in the Zone Editor</td></tr>"
             "</table>"
 
             "<h3>GIF Builder</h3>"
