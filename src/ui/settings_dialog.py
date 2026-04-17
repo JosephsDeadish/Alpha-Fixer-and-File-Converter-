@@ -137,7 +137,7 @@ class SettingsDialog(QDialog):
         from PyQt6.QtCore import QTimer
         self._theme_debounce = QTimer(self)
         self._theme_debounce.setSingleShot(True)
-        self._theme_debounce.setInterval(120)
+        self._theme_debounce.setInterval(200)  # Increased from 120 ms: less lag when scrolling through themes (item 72)
         self._theme_debounce.timeout.connect(self._on_preset_selected_live)
         self.setWindowTitle("Settings & Customization 🐼")
         # Adaptive minimum size: shrink proportionally on small or low-resolution

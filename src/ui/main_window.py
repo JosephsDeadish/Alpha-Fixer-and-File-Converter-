@@ -2375,19 +2375,96 @@ class MainWindow(QMainWindow):
             except Exception:
                 dlg_overlay = None
 
-        # Attach a mouse-trail overlay to the dialog if trail is enabled.
+        # Attach a mouse-trail overlay to the dialog so that enabling the trail
+        # from within settings immediately shows it (item 69/70).
         dlg_trail = None
-        if (self._trail_overlay is not None
-                and self._settings.get("trail_enabled", False)):
+        if self._trail_overlay is not None:
             try:
                 from .mouse_trail import MouseTrailOverlay
                 dlg_trail = MouseTrailOverlay(dlg)
                 dlg_trail.setGeometry(dlg.rect())
                 dlg_trail.raise_()
                 self._apply_trail_to(dlg_trail)
-                dlg_trail.set_enabled(True)
+                dlg_trail.set_enabled(self._settings.get("trail_enabled", False))
             except Exception:
                 dlg_trail = None
+
+        def _resync_dlg_overlay() -> None:
+            """Re-apply all effect settings to the dialog overlay when settings change (item 70)."""
+            _ov = dlg_overlay
+            if _ov is None:
+                return
+            try:
+                _theme = self._settings.get_theme()
+                _effect_key = (_theme.get("_effect")
+                               or THEME_EFFECTS.get(_theme.get("name", ""), "default"))
+                _ov.set_effect(_effect_key)
+                _custom = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
+                _ov.set_custom_emoji(_custom.split() if _custom.strip() else [])
+                _ov.set_enabled(self._settings.get("click_effects_enabled", False))
+                # Drip
+                if self._settings.get("bg_drip_enabled", False):
+                    _use_drip = self._settings.get("use_theme_drip", False)
+                    if _use_drip:
+                        _eff = _theme.get("_effect", "default")
+                        _drip = "blood" if _eff in ("gore", "shark") else (
+                            "water" if _eff in ("ocean", "ripple", "mermaid") else
+                            self._settings.get("bg_drip_type", "blood")
+                        )
+                    else:
+                        _drip = self._settings.get("bg_drip_type", "blood")
+                    _ov.set_bg_drip(_drip, True)
+                else:
+                    _ov.set_bg_drip("blood", False)
+                # Flock
+                _FLOCK_EM = {
+                    "bats": "🦇", "fairies": "🧚", "fish": "🐟",
+                    "butterflies": "🦋", "birds": "🐦",
+                    "stars": "⭐", "petals": "🌸", "sharks": "🦈",
+                }
+                if self._settings.get("bg_flock_enabled", False):
+                    _use_tf = self._settings.get("use_theme_flock", False)
+                    if _use_tf:
+                        _tf = _theme.get("_flock")
+                        if _tf:
+                            _ov.set_bg_flock(True, _FLOCK_EM.get(_tf, _theme.get("_icon", "🐼")),
+                                             _theme.get("_trail_color", "#e94560"))
+                        else:
+                            _ov.set_bg_flock(False)
+                    else:
+                        _fs = self._settings.get("bg_flock_style", "bats")
+                        _ov.set_bg_flock(True, _FLOCK_EM.get(_fs, "🦇"),
+                                         self._settings.get("trail_color", "#e94560"))
+                else:
+                    _ov.set_bg_flock(False)
+                # Ambient
+                if self._settings.get("bg_ambient_enabled", False):
+                    _use_ta = self._settings.get("use_theme_ambient", False)
+                    if _use_ta:
+                        from .theme_engine import THEME_AMBIENT_MAP as _TAM
+                        _ak = _TAM.get(_theme.get("name", ""))
+                        _ov.set_bg_ambient(_ak or "none", bool(_ak))
+                    else:
+                        _at = self._settings.get("bg_ambient_type", "none")
+                        _ov.set_bg_ambient(_at, bool(_at and _at != "none"))
+                else:
+                    _ov.set_bg_ambient("none", False)
+            except Exception:
+                pass
+
+        def _resync_dlg_trail() -> None:
+            """Re-apply trail settings to dialog trail overlay when settings change (item 70)."""
+            _tr = dlg_trail
+            if _tr is None:
+                return
+            try:
+                self._apply_trail_to(_tr)
+                _tr.set_enabled(self._settings.get("trail_enabled", False))
+            except Exception:
+                pass
+
+        dlg.settings_changed.connect(_resync_dlg_overlay)
+        dlg.settings_changed.connect(_resync_dlg_trail)
 
         dlg.exec()
 

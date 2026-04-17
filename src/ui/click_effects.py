@@ -3519,14 +3519,17 @@ class ButtonPressAnimator(QObject):
     # ------------------------------------------------------------------
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
-        from PyQt6.QtWidgets import QPushButton
+        from PyQt6.QtWidgets import QPushButton, QTabBar
         if (self._enabled
-                and isinstance(obj, QPushButton)
                 and event.type() == QEvent.Type.MouseButtonPress
                 and hasattr(event, "button")
                 and event.button() == Qt.MouseButton.LeftButton
                 and len(self._active) < self._MAX_ACTIVE):
-            self._animate(obj)
+            if isinstance(obj, QPushButton):
+                self._animate(obj)
+            elif isinstance(obj, QTabBar):
+                # Animate tab bar clicks with a lightweight press slide (item 75)
+                self._do_slide(obj, dy=3, duration=100)
         return False  # always pass the event through
 
     # ------------------------------------------------------------------

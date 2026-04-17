@@ -204,6 +204,10 @@ OTTER_THEME = {
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
     "_cursor": "emoji:🦦",
+    "_trail": "noodle",
+    "_trail_color": "#e8a040",
+    "_banner_anim": "bounce",
+    "_button_anim": "press",
 }
 
 GALAXY_THEME = {
@@ -260,6 +264,10 @@ GALAXY_OTTER_THEME = {
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🦦",
     "_flock": "stars",
+    "_trail": "comet",
+    "_trail_color": "#a06aff",
+    "_banner_anim": "orbit",
+    "_button_anim": "bounce",
 }
 
 GOTH_THEME = {
@@ -714,6 +722,7 @@ SECRET_ICE_CAVE_THEME = {
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
     "_trail": "sparkle",
+    "_trail_color": "#88ddff",
 }
 
 SECRET_CYBER_OTTER_THEME = {
@@ -802,6 +811,7 @@ SECRET_LAVA_CAVE_THEME = {
     "_banner_anim": "shake",
     "_button_anim": "shatter",
     "_trail": "comet",
+    "_trail_color": "#ff6600",
 }
 
 SECRET_SUNSET_BEACH_THEME = {
@@ -830,6 +840,7 @@ SECRET_SUNSET_BEACH_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
     "_trail": "wave",
+    "_trail_color": "#ff9944",
 }
 
 SECRET_MIDNIGHT_FOREST_THEME = {
@@ -1374,6 +1385,7 @@ SECRET_PIRATE_THEME = {
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
     "_trail": "wave",
+    "_trail_color": "#ddaa22",
 }
 
 SECRET_DEEP_SPACE_THEME = {
@@ -1402,6 +1414,7 @@ SECRET_DEEP_SPACE_THEME = {
     "_banner_anim": "flock",
     "_button_anim": "fall",
     "_trail": "comet",
+    "_trail_color": "#4466ff",
 }
 
 SECRET_WITCHS_BREW_THEME = {
@@ -1430,6 +1443,7 @@ SECRET_WITCHS_BREW_THEME = {
     "_banner_anim": "pendulum",
     "_button_anim": "bounce",
     "_trail": "smoke",
+    "_trail_color": "#44ff88",
 }
 
 SECRET_LAVA_LAMP_THEME = {
