@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
-    QAbstractSpinBox, QInputDialog,
+    QAbstractSpinBox, QInputDialog, QSlider,
 )
 
 from ..core.selective_alpha_processor import (
@@ -141,7 +141,7 @@ class SelectiveAlphaCanvas(QWidget):
     paste_all_requested = pyqtSignal()      # context-menu: paste all zones
     cursor_moved        = pyqtSignal(int, int)  # image (x, y) when mouse moves over canvas (item 50)
 
-    _OVERLAY_ALPHA = 160  # zone colour overlay opacity (0–255)
+    _OVERLAY_ALPHA = 160  # zone colour overlay opacity (0–255) — class default
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -166,6 +166,8 @@ class SelectiveAlphaCanvas(QWidget):
         self._zone_visible: list[bool] = [True] * NUM_ZONES
         # Per-zone colour override (r, g, b) – None → use ZONE_COLORS default
         self._zone_colors: list[Optional[tuple[int, int, int]]] = [None] * NUM_ZONES
+        # Overlay opacity (0–255); instance variable so it can be changed at runtime
+        self._overlay_alpha: int = self._OVERLAY_ALPHA
 
         # ── tool state ────────────────────────────────────────────────
         self._tool:         str  = "freehand"
@@ -283,6 +285,14 @@ class SelectiveAlphaCanvas(QWidget):
     def set_zone_visible(self, idx: int, visible: bool) -> None:
         if 0 <= idx < NUM_ZONES:
             self._zone_visible[idx] = bool(visible)
+            self._composite_dirty = True
+            self.update()
+
+    def set_overlay_alpha(self, value: int) -> None:
+        """Set the zone colour overlay opacity (0 = invisible, 255 = fully opaque)."""
+        v = max(0, min(255, int(value)))
+        if v != self._overlay_alpha:
+            self._overlay_alpha = v
             self._composite_dirty = True
             self.update()
 
@@ -539,7 +549,7 @@ class SelectiveAlphaCanvas(QWidget):
 
         src_arr = np.array(self._src_img, dtype=np.uint8).copy()
 
-        blend = self._OVERLAY_ALPHA / 255.0
+        blend = self._overlay_alpha / 255.0
         for i in range(NUM_ZONES):
             if not self._zone_visible[i]:
                 continue
@@ -1448,6 +1458,27 @@ class SelectiveAlphaTool(QWidget):
         self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
         wf_lay.addWidget(self._btn_show_highlights)
 
+        # Overlay opacity slider (item 16)
+        _ov_row = QHBoxLayout()
+        _ov_row.setSpacing(4)
+        _ov_lbl = QLabel("Overlay opacity:")
+        _ov_lbl.setToolTip(
+            "Controls how strongly the zone colours are blended over the image.\n"
+            "0 = invisible zones (no tint), 255 = fully opaque colour overlay.\n"
+            "The default (160) gives a clear tint while the image is still visible."
+        )
+        _ov_row.addWidget(_ov_lbl)
+        self._overlay_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._overlay_opacity_slider.setRange(0, 255)
+        self._overlay_opacity_slider.setValue(160)
+        self._overlay_opacity_slider.setToolTip(_ov_lbl.toolTip())
+        self._overlay_opacity_slider.setFixedHeight(20)
+        _ov_row.addWidget(self._overlay_opacity_slider, 1)
+        self._overlay_opacity_lbl = QLabel("160")
+        self._overlay_opacity_lbl.setMinimumWidth(26)
+        _ov_row.addWidget(self._overlay_opacity_lbl)
+        wf_lay.addLayout(_ov_row)
+
         # Row 2: Save — alpha zones are applied automatically on save
         self._btn_save = QPushButton("\U0001f4be Save\u2026")
         self._btn_save.setMinimumHeight(26)
@@ -2016,6 +2047,12 @@ class SelectiveAlphaTool(QWidget):
         # Wire canvas context-menu copy/paste all-zones signals.
         self._canvas.copy_all_requested.connect(self._on_copy_all_zones)
         self._canvas.paste_all_requested.connect(self._on_paste_all_zones)
+
+        # Wire overlay opacity slider (item 16)
+        def _on_overlay_opacity(val: int) -> None:
+            self._overlay_opacity_lbl.setText(str(val))
+            self._canvas.set_overlay_alpha(val)
+        self._overlay_opacity_slider.valueChanged.connect(_on_overlay_opacity)
 
         # Wire single zone editor controls
         self._ze_vis_btn.clicked.connect(self._on_ze_vis_toggled)
