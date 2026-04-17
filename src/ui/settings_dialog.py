@@ -612,6 +612,7 @@ class SettingsDialog(QDialog):
         bg_ambient_inner.addWidget(QLabel("Ambient Style:"))
         self._bg_ambient_combo = QComboBox()
         self._bg_ambient_combo.setMinimumWidth(180)
+        self._bg_ambient_combo.addItem("🚫 No ambient (theme has none)", userData="none")
         self._bg_ambient_combo.addItem("❄️ Snow Drift", userData="snow")
         self._bg_ambient_combo.addItem("🔥 Ember Drift", userData="ember")
         self._bg_ambient_combo.addItem("🌸 Sakura Petals", userData="sakura")
@@ -2052,11 +2053,11 @@ class SettingsDialog(QDialog):
                 _FLOCK_LABELS = {
                     "bats": "🦇 Bats", "fairies": "🧚 Fairies", "fish": "🐟 Fish",
                     "butterflies": "🦋 Butterflies", "birds": "🐦 Birds",
-                    "stars": "⭐ Stars", "petals": "🌸 Petals",
+                    "stars": "⭐ Stars", "petals": "🌸 Petals", "sharks": "🦈 Sharks",
                 }
                 _FLOCK_IDX = {
                     "none": 0, "bats": 1, "fairies": 2, "fish": 3, "butterflies": 4,
-                    "birds": 5, "stars": 6, "petals": 7,
+                    "birds": 5, "stars": 6, "petals": 7, "sharks": 8,
                 }
                 theme_flock = theme.get("_flock")
                 if theme_flock:
@@ -2094,15 +2095,16 @@ class SettingsDialog(QDialog):
                     "bamboo": "🎋 Bamboo Leaves",
                 }
                 _AMBIENT_IDX = {
-                    "snow": 0, "ember": 1, "sakura": 2, "stars": 3,
-                    "bubbles": 4, "neon": 5, "ghost": 6, "confetti": 7,
-                    "firefly": 8, "matrix": 9, "leaves": 10, "rainbow": 11,
-                    "bamboo": 12,
+                    "none": 0,
+                    "snow": 1, "ember": 2, "sakura": 3, "stars": 4,
+                    "bubbles": 5, "neon": 6, "ghost": 7, "confetti": 8,
+                    "firefly": 9, "matrix": 10, "leaves": 11, "rainbow": 12,
+                    "bamboo": 13,
                 }
                 ambient_key = THEME_AMBIENT_MAP.get(theme_name)
                 if ambient_key:
                     self._bg_ambient_combo.blockSignals(True)
-                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX.get(ambient_key, 0))
+                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX.get(ambient_key, 1))
                     self._bg_ambient_combo.blockSignals(False)
                     self._bg_ambient_combo.setToolTip(
                         f"Using theme ambient: {_AMBIENT_LABELS.get(ambient_key, ambient_key)}\n"
@@ -2110,6 +2112,10 @@ class SettingsDialog(QDialog):
                         "Uncheck 'Use theme ambient' to pick a different style."
                     )
                 else:
+                    # Theme has no ambient — reflect "None" in the combo (item 64)
+                    self._bg_ambient_combo.blockSignals(True)
+                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX["none"])
+                    self._bg_ambient_combo.blockSignals(False)
                     self._bg_ambient_combo.setToolTip(
                         f"No themed ambient for the '{theme_name}' theme.\n"
                         "Ambient is disabled while 'Use theme ambient' is checked.\n"
@@ -2650,7 +2656,7 @@ class SettingsDialog(QDialog):
         if not enabled:
             self._settings.set("bg_ambient_type", "none")
         elif not use_theme:
-            ambient_type = self._bg_ambient_combo.currentData() or "snow"
+            ambient_type = self._bg_ambient_combo.currentData() or "none"
             self._settings.set("bg_ambient_type", ambient_type)
         # Keep sub-controls in sync with enabled/use-theme state.
         self._use_theme_ambient_check.setEnabled(enabled)

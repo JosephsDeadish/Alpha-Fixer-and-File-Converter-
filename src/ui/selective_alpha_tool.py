@@ -2087,6 +2087,8 @@ class SelectiveAlphaTool(QWidget):
         # Connect spinboxes to status updates (after _status_lbl is created).
         self._brush_spin.valueChanged.connect(lambda _: self._update_status())
         self._eraser_spin.valueChanged.connect(lambda _: self._update_status())
+        # Connect zoom changes so the status bar always shows the current zoom level (item 47).
+        self._canvas.zoom_changed.connect(lambda _z: self._update_status())
 
         # Auto-save settings when the user adjusts tool options.
         self._brush_spin.valueChanged.connect(lambda _: self._save_settings())
@@ -2286,7 +2288,7 @@ class SelectiveAlphaTool(QWidget):
         return tips.get(key, "")
 
     def _update_status(self) -> None:
-        """Refresh the status label with current tool / zone / size info."""
+        """Refresh the status label with current tool / zone / size / zoom info."""
         tool_names = {
             "freehand":  "Freehand",
             "line":      "Line",
@@ -2306,8 +2308,9 @@ class SelectiveAlphaTool(QWidget):
             size_txt = f"Eraser: {self._eraser_spin.value()} px"
         else:
             size_txt = f"Brush: {self._brush_spin.value()} px"
+        zoom_pct = int(round(self._canvas._zoom * 100))
         self._status_lbl.setText(
-            f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}"
+            f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}  |  Zoom: {zoom_pct}%"
             "  |  🖱 Hold scroll-button to pan  |  Ctrl+scroll to zoom"
         )
 
@@ -2921,8 +2924,13 @@ class SelectiveAlphaTool(QWidget):
             return
         # Auto-apply the zones before saving so the user doesn't need a
         # separate Apply step (items 84/85).
-        bool_masks = self._canvas.get_masks_as_bool()
-        zone_alphas = list(self._canvas._zone_alphas)
+        try:
+            bool_masks = self._canvas.get_masks_as_bool()
+            zone_alphas = list(self._canvas._zone_alphas)
+        except Exception as exc:
+            QMessageBox.critical(self, "Save Error",
+                                 f"Could not read zone data:\n{exc}")
+            return
 
         # Warn if no zones are painted.
         if all(m is None or not m.any() for m in bool_masks):

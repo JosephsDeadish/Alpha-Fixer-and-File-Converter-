@@ -1580,7 +1580,10 @@ class AlphaFixerTab(QWidget):
         try:
             from ..version import __version__
         except ImportError:
-            __version__ = ""
+            try:
+                from src.version import __version__  # type: ignore[no-redef]
+            except ImportError:
+                __version__ = ""
         win = self.window()
         if win is not None:
             ver_str = f"  v{__version__}" if __version__ else ""

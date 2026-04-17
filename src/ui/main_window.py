@@ -2343,23 +2343,35 @@ class MainWindow(QMainWindow):
                     dlg_overlay.set_bg_drip(drip_type, True)
                 if self._settings.get("bg_flock_enabled", False):
                     use_theme_flock = self._settings.get("use_theme_flock", False)
+                    _FLOCK_EMOJI_DLG = {
+                        "bats": "🦇", "fairies": "🧚", "fish": "🐟",
+                        "butterflies": "🦋", "birds": "🐦",
+                        "stars": "⭐", "petals": "🌸", "sharks": "🦈",
+                    }
                     if use_theme_flock:
-                        flock_emoji = theme.get("_icon", "🐼")
-                        flock_color = theme.get("_accent1", "#e94560")
+                        # Use the theme's specific _flock emoji key (same as _apply_bg_flock)
+                        theme_flock = theme.get("_flock")
+                        if theme_flock:
+                            flock_emoji = _FLOCK_EMOJI_DLG.get(theme_flock, theme.get("_icon", "🐼"))
+                            flock_color = theme.get("_trail_color", "#e94560")
+                            dlg_overlay.set_bg_flock(True, flock_emoji, flock_color)
+                        # If theme has no flock, don't show flock in dialog either
                     else:
                         flock_style = self._settings.get("bg_flock_style", "bats")
-                        _FLOCK_EMOJI = {
-                            "bats": "🦇", "fairies": "🧚", "fish": "🐟",
-                            "butterflies": "🦋", "birds": "🐦",
-                            "stars": "⭐", "petals": "🌸",
-                        }
-                        flock_emoji = _FLOCK_EMOJI.get(flock_style, "🦇")
+                        flock_emoji = _FLOCK_EMOJI_DLG.get(flock_style, "🦇")
                         flock_color = self._settings.get("trail_color", "#e94560")
-                    dlg_overlay.set_bg_flock(True, flock_emoji, flock_color)
+                        dlg_overlay.set_bg_flock(True, flock_emoji, flock_color)
                 if self._settings.get("bg_ambient_enabled", False):
-                    ambient_type = self._settings.get("bg_ambient_type", "none")
-                    if ambient_type and ambient_type != "none":
-                        dlg_overlay.set_bg_ambient(ambient_type, True)
+                    use_theme_ambient = self._settings.get("use_theme_ambient", False)
+                    if use_theme_ambient:
+                        from .theme_engine import THEME_AMBIENT_MAP
+                        ambient_key = THEME_AMBIENT_MAP.get(theme.get("name", ""))
+                        if ambient_key:
+                            dlg_overlay.set_bg_ambient(ambient_key, True)
+                    else:
+                        ambient_type = self._settings.get("bg_ambient_type", "none")
+                        if ambient_type and ambient_type != "none":
+                            dlg_overlay.set_bg_ambient(ambient_type, True)
             except Exception:
                 dlg_overlay = None
 
@@ -2423,20 +2435,35 @@ class MainWindow(QMainWindow):
         self._settings_apply_timer.start()
 
     def _apply_settings_now(self):
-        """Re-apply all effect-related settings (called via debounce timer)."""
-        self._apply_theme()
-        self._apply_cursor()
-        self._apply_font_size()
-        self._apply_theme_effect()
-        self._apply_trail()
-        self._apply_button_anim()
-        self._apply_bg_drip()
-        self._apply_bg_flock()
-        self._apply_bg_ambient()
+        """Re-apply all effect-related settings (called via debounce timer).
+
+        Each sub-call is wrapped in its own try/except so a crash in one
+        effect (e.g. a theme-change CTD, item 86) does not take down the
+        entire application.
+        """
+        import traceback as _tb
+        for _fn in (
+            self._apply_theme,
+            self._apply_cursor,
+            self._apply_font_size,
+            self._apply_theme_effect,
+            self._apply_trail,
+            self._apply_button_anim,
+            self._apply_bg_drip,
+            self._apply_bg_flock,
+            self._apply_bg_ambient,
+        ):
+            try:
+                _fn()
+            except Exception:
+                _tb.print_exc()
         if self._click_effects is not None:
-            self._click_effects.set_enabled(
-                self._settings.get("click_effects_enabled", False)
-            )
+            try:
+                self._click_effects.set_enabled(
+                    self._settings.get("click_effects_enabled", False)
+                )
+            except Exception:
+                pass
 
     def _on_first_tooltip_mode_change(self) -> None:
         """Unlock Secret Skeleton the first time the user changes the tooltip mode."""

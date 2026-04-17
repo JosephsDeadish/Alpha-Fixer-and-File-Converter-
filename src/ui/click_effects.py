@@ -1580,9 +1580,11 @@ class _StarDust(QObject):
 class _BambooLeaf(QObject):
     """Spawns rotating bamboo leaves that drift down from the top edge.
 
-    Activated for the ``"panda"`` effect key.  Each leaf is an elongated
-    ellipse in various greens that drifts diagonally downward with gentle
-    rotation — evoking the tranquil atmosphere of a bamboo grove.
+    Activated as a background ambient effect when ``bg_ambient_type == "bamboo"``
+    (i.e. the user enables ambient effects and selects "Bamboo" or enables
+    "Use theme ambient" with the Panda / Panda Dark theme).  Each leaf is an
+    elongated ellipse in various greens that drifts diagonally downward with
+    gentle rotation — evoking the tranquil atmosphere of a bamboo grove.
     """
 
     _SPAWN_INTERVAL_MS = 550
