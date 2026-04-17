@@ -1604,7 +1604,8 @@ class AlphaFixerTab(QWidget):
             "errors": errors,
             "files": [Path(f).name for f in getattr(self, "_last_run_files", [])[:10]],
         }
-        self._settings.add_alpha_history(entry)
+        if self._settings.get("history_track_alpha", True):
+            self._settings.add_alpha_history(entry)
         # Notify main window so processing-based theme unlocks can fire
         if success > 0:
             self.processing_done.emit(success)

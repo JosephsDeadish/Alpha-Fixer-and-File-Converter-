@@ -3073,7 +3073,8 @@ class SelectiveAlphaTool(QWidget):
                     "output": path,
                     "zone_alphas": list(self._canvas._zone_alphas),
                 }
-                self._settings.add_selective_alpha_history(entry)
+                if self._settings.get("history_track_selective_alpha", True):
+                    self._settings.add_selective_alpha_history(entry)
         except MemoryError:
             QMessageBox.critical(
                 self, "Save Error",

@@ -9,7 +9,8 @@ from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget, QFileDialog, QLineEdit,
+    QTabWidget, QFileDialog, QLineEdit, QGroupBox, QCheckBox,
+    QSpinBox,
 )
 
 
@@ -72,6 +73,77 @@ class HistoryTab(QWidget):
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
+
+        # ── History settings section (items 8 & 9) ────────────────────────
+        settings_box = QGroupBox("⚙  History Settings")
+        settings_box.setCheckable(True)
+        settings_box.setChecked(False)  # Collapsed by default
+        settings_box.setToolTip(
+            "Configure what is recorded in history and how many entries are kept."
+        )
+        sbox_layout = QVBoxLayout(settings_box)
+        sbox_layout.setContentsMargins(8, 6, 8, 6)
+        sbox_layout.setSpacing(6)
+
+        # Max entries
+        max_row = QHBoxLayout()
+        max_row.addWidget(QLabel("Max entries per category:"))
+        self._history_max_spin = QSpinBox()
+        self._history_max_spin.setRange(10, 5000)
+        self._history_max_spin.setValue(int(self._settings.get("history_max_entries", 100)))
+        self._history_max_spin.setSuffix("  entries")
+        self._history_max_spin.setToolTip(
+            "Maximum number of history entries kept per category.\n"
+            "Older entries are pruned automatically when this limit is reached.\n"
+            "Also adjustable in Settings → General."
+        )
+        max_row.addWidget(self._history_max_spin)
+        max_row.addStretch(1)
+        sbox_layout.addLayout(max_row)
+
+        # Per-category tracking checkboxes (item 9)
+        track_row = QHBoxLayout()
+        track_row.addWidget(QLabel("Track history for:"))
+        self._chk_track_converter = QCheckBox("Converter")
+        self._chk_track_converter.setChecked(
+            bool(self._settings.get("history_track_converter", True))
+        )
+        self._chk_track_converter.setToolTip(
+            "When checked, File Converter batches are recorded in history."
+        )
+        track_row.addWidget(self._chk_track_converter)
+        self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
+        self._chk_track_alpha.setChecked(
+            bool(self._settings.get("history_track_alpha", True))
+        )
+        self._chk_track_alpha.setToolTip(
+            "When checked, Alpha & RGBA Adjuster batches are recorded in history."
+        )
+        track_row.addWidget(self._chk_track_alpha)
+        self._chk_track_sel_alpha = QCheckBox("Selective Alpha")
+        self._chk_track_sel_alpha.setChecked(
+            bool(self._settings.get("history_track_selective_alpha", True))
+        )
+        self._chk_track_sel_alpha.setToolTip(
+            "When checked, Selective Alpha Tool saves are recorded in history."
+        )
+        track_row.addWidget(self._chk_track_sel_alpha)
+        track_row.addStretch(1)
+        sbox_layout.addLayout(track_row)
+
+        layout.addWidget(settings_box)
+
+        # Connect settings widgets
+        self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
+        self._chk_track_converter.toggled.connect(
+            lambda v: self._settings.set("history_track_converter", v)
+        )
+        self._chk_track_alpha.toggled.connect(
+            lambda v: self._settings.set("history_track_alpha", v)
+        )
+        self._chk_track_sel_alpha.toggled.connect(
+            lambda v: self._settings.set("history_track_selective_alpha", v)
+        )
 
         # Sub-tabs: Converter | Alpha & RGBA Adjuster
         self._sub_tabs = QTabWidget()
@@ -340,6 +412,10 @@ class HistoryTab(QWidget):
     # ------------------------------------------------------------------
     # Clear
     # ------------------------------------------------------------------
+
+    def _on_history_max_changed(self, value: int) -> None:
+        """Persist the max entries setting when the spinbox changes."""
+        self._settings.set("history_max_entries", value)
 
     def _clear_history(self):
         reply = QMessageBox.question(

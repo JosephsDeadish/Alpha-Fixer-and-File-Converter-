@@ -112,6 +112,9 @@ class SettingsManager:
         "ui_scale": "Normal",          # Compact / Normal / Large / Extra Large
         # History settings
         "history_max_entries": 100,     # Max history entries saved per tool
+        "history_track_converter": True,          # Record Converter history
+        "history_track_alpha": True,              # Record Alpha & RGBA Adjuster history
+        "history_track_selective_alpha": True,    # Record Selective Alpha Tool history
         # Last-used state
         "last_input_dir": "",
         "last_output_dir": "",

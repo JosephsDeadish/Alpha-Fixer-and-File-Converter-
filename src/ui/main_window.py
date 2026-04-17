@@ -2770,6 +2770,10 @@ class MainWindow(QMainWindow):
         dlg.setWindowTitle("⌨  Keyboard Shortcuts")
         dlg.setMinimumSize(540, 460)
         dlg.setSizeGripEnabled(True)
+        # Set the app icon (item 36 – all dialogs should use the app icon)
+        app_icon = self.windowIcon()
+        if not app_icon.isNull():
+            dlg.setWindowIcon(app_icon)
         # Open at a comfortable initial size, centered on the parent window
         screen = self.screen()
         if screen is not None:
@@ -2815,7 +2819,7 @@ class MainWindow(QMainWindow):
             "<tr><td><b>Ctrl+O</b></td><td>Open an image to edit</td></tr>"
             "<tr><td><b>Ctrl+Z</b></td><td>Undo the last paint / erase stroke</td></tr>"
             "<tr><td><b>Ctrl+Y</b> or <b>Ctrl+Shift+Z</b></td><td>Redo the last undone stroke</td></tr>"
-            "<tr><td><b>Ctrl+Enter</b></td><td>Apply alpha zones to the image (generate result)</td></tr>"
+            "<tr><td><b>Ctrl+Enter</b></td><td>Save / apply alpha zones to disk (same as Ctrl+S)</td></tr>"
             "<tr><td><b>Ctrl+S</b></td><td>Save the processed result to disk</td></tr>"
             "<tr><td><b>Ctrl+Wheel</b></td><td>Zoom in / out on the canvas</td></tr>"
             "<tr><td><b>Middle-mouse drag</b></td><td>Pan around the canvas (hold scroll wheel and drag)</td></tr>"
@@ -2882,6 +2886,10 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle("About 🐼 Alpha & RGBA Adjuster  |  File Converter")
         dlg.setSizeGripEnabled(True)
+        # Set the app icon on the dialog (item 36)
+        app_icon = self.windowIcon()
+        if not app_icon.isNull():
+            dlg.setWindowIcon(app_icon)
         # Open at a comfortable initial size, centered on the parent window
         screen = self.screen()
         if screen is not None:
