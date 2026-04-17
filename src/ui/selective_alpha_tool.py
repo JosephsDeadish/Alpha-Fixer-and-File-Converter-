@@ -789,7 +789,7 @@ class SelectiveAlphaCanvas(QWidget):
 
         # Emit image-space coordinates for the info panel (item 50)
         if self.has_image():
-            ix, iy = self._widget_to_image(wx, wy)
+            ix, iy = self._w2i(wx, wy)
             ix = max(0, min(int(ix), self._img_w - 1))
             iy = max(0, min(int(iy), self._img_h - 1))
             self.cursor_moved.emit(ix, iy)
@@ -1595,7 +1595,7 @@ class SelectiveAlphaTool(QWidget):
 
         # "Show α values" checkbox
         self._show_alpha_labels_chk = QCheckBox("Show α values on canvas")
-        self._show_alpha_labels_chk.setChecked(False)
+        self._show_alpha_labels_chk.setChecked(True)
         self._show_alpha_labels_chk.setToolTip(
             "When checked, each zone's alpha value is drawn as text at the\n"
             "centre of its painted area on the canvas.  Off by default."
@@ -2196,7 +2196,7 @@ class SelectiveAlphaTool(QWidget):
             )
             # Restore show-alpha-labels toggle
             self._show_alpha_labels_chk.setChecked(
-                bool(self._settings.get("sa_show_alpha_labels", False))
+                bool(self._settings.get("sa_show_alpha_labels", True))
             )
             # Restore last-used drawing tool
             last_tool = str(self._settings.get("sa_last_tool", "freehand"))
