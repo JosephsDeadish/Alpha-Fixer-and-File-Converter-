@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
-    QAbstractSpinBox, QInputDialog, QSlider,
+    QAbstractSpinBox, QInputDialog, QSlider, QLineEdit,
 )
 
 from ..core.selective_alpha_processor import (
@@ -1414,6 +1414,8 @@ class SelectiveAlphaTool(QWidget):
         # whenever the user picks a new colour so the active-zone combo always
         # shows the correct colour label.
         self._zone_display_names: list[str] = list(ZONE_NAMES)
+        # Per-zone custom names set by the user (None = auto-derived from colour).
+        self._zone_custom_names: list[Optional[str]] = [None] * NUM_ZONES
         self._setup_ui()
         self._restore_settings()
 
@@ -1695,11 +1697,17 @@ class SelectiveAlphaTool(QWidget):
         )
         self._ze_swatch_btn.setToolTip("Click to choose a colour for this zone")
         ze_row1.addWidget(self._ze_swatch_btn)
-        self._ze_name_lbl = QLabel(ZONE_NAMES[0])
-        self._ze_name_lbl.setSizePolicy(
+        self._ze_name_edit = QLineEdit(ZONE_NAMES[0])
+        self._ze_name_edit.setPlaceholderText("Zone name…")
+        self._ze_name_edit.setToolTip(
+            "Custom name for this zone.\n"
+            "Leave blank to use the auto-derived colour name.\n"
+            "Press Enter or Tab to confirm."
+        )
+        self._ze_name_edit.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
-        ze_row1.addWidget(self._ze_name_lbl)
+        ze_row1.addWidget(self._ze_name_edit)
         self._ze_jump_btn = QPushButton("⊕")
         self._ze_jump_btn.setFixedSize(22, 22)
         self._ze_jump_btn.setToolTip(
@@ -2061,6 +2069,8 @@ class SelectiveAlphaTool(QWidget):
         self._ze_copy_btn.clicked.connect(self._on_ze_copy_mask)
         self._ze_paste_btn.clicked.connect(self._on_ze_paste_mask)
         self._ze_alpha_spin.valueChanged.connect(self._on_ze_alpha_changed)
+        # Zone name editor (item 33) – save custom name when text changes
+        self._ze_name_edit.textEdited.connect(self._on_ze_name_edited)
         # Jump to zone (item 49) — center canvas on zone centroid
         self._ze_jump_btn.clicked.connect(
             lambda: self._canvas.center_on_zone(self._ze_cur_idx)
@@ -3177,11 +3187,14 @@ class SelectiveAlphaTool(QWidget):
 
     def _refresh_zone_display_names(self) -> None:
         """Derive zone display names from current canvas colours and update the
-        active-zone combo so names always reflect the real colour of each zone."""
+        active-zone combo so names always reflect the real colour of each zone.
+        Custom names (set via the Zone Editor name field) take precedence (item 33)."""
         for i in range(NUM_ZONES):
             r, g, b, _ = self._canvas.get_zone_color(i)
             color_name = self._color_name_for(r, g, b)
-            label = f"Zone {i + 1} – {color_name}"
+            auto_label = f"Zone {i + 1} – {color_name}"
+            custom = self._zone_custom_names[i] if i < len(self._zone_custom_names) else None
+            label = custom if custom else auto_label
             self._zone_display_names[i] = label
             self._active_zone_combo.setItemText(i, label)
 
@@ -3209,10 +3222,18 @@ class SelectiveAlphaTool(QWidget):
     def _refresh_zone_editor(self, idx: int) -> None:
         """Update the single zone editor panel to reflect zone *idx*."""
         self._ze_cur_idx = idx
-        self._ze_name_lbl.setText(self._zone_display_names[idx])
-        r, g, b, _ = self._canvas.get_zone_color(idx)
+        # Populate the editable name field with the custom name (if set)
+        # and the placeholder with the auto-derived colour name (item 33).
+        r_c, g_c, b_c, _ = self._canvas.get_zone_color(idx)
+        color_name = self._color_name_for(r_c, g_c, b_c)
+        auto_label = f"Zone {idx + 1} – {color_name}"
+        custom = self._zone_custom_names[idx] if 0 <= idx < len(self._zone_custom_names) else None
+        self._ze_name_edit.blockSignals(True)
+        self._ze_name_edit.setText(custom or "")
+        self._ze_name_edit.setPlaceholderText(auto_label)
+        self._ze_name_edit.blockSignals(False)
         self._ze_swatch_btn.setStyleSheet(
-            f"background:{QColor(r, g, b).name()};"
+            f"background:{QColor(r_c, g_c, b_c).name()};"
             "border:1px solid #666;border-radius:3px;padding:0;"
         )
         visible = self._canvas._zone_visible[idx]
@@ -3244,12 +3265,14 @@ class SelectiveAlphaTool(QWidget):
                 self._ze_cur_idx,
                 self._make_zone_color_icon(chosen.red(), chosen.green(), chosen.blue())
             )
-            # Update the display name to reflect the new colour
+            # Update the display name to reflect the new colour (if no custom name)
             color_name = self._color_name_for(chosen.red(), chosen.green(), chosen.blue())
-            new_label = f"Zone {self._ze_cur_idx + 1} – {color_name}"
-            self._zone_display_names[self._ze_cur_idx] = new_label
-            self._active_zone_combo.setItemText(self._ze_cur_idx, new_label)
-            self._ze_name_lbl.setText(new_label)
+            auto_label = f"Zone {self._ze_cur_idx + 1} – {color_name}"
+            custom = self._zone_custom_names[self._ze_cur_idx]
+            display = custom if custom else auto_label
+            self._zone_display_names[self._ze_cur_idx] = display
+            self._active_zone_combo.setItemText(self._ze_cur_idx, display)
+            self._ze_name_edit.setPlaceholderText(auto_label)
             self._save_settings()
 
     def _on_ze_clear(self) -> None:
@@ -3264,6 +3287,20 @@ class SelectiveAlphaTool(QWidget):
     def _on_ze_alpha_changed(self, value: int) -> None:
         self._canvas.set_zone_alpha_label(self._ze_cur_idx, value)
         self._save_settings()
+
+    def _on_ze_name_edited(self, text: str) -> None:
+        """Store the custom zone name and refresh the combo/display (item 33)."""
+        idx = self._ze_cur_idx
+        if 0 <= idx < NUM_ZONES:
+            custom = text.strip() or None
+            self._zone_custom_names[idx] = custom
+            # Recompute the display label for this zone
+            r, g, b, _ = self._canvas.get_zone_color(idx)
+            color_name = self._color_name_for(r, g, b)
+            auto_label = f"Zone {idx + 1} – {color_name}"
+            display = custom if custom else auto_label
+            self._zone_display_names[idx] = display
+            self._active_zone_combo.setItemText(idx, display)
 
     def _on_tool_selected(self, key: str) -> None:
         # Track the previous tool so E can toggle back to it

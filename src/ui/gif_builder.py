@@ -531,6 +531,11 @@ class GifBuilderDialog(QDialog):
             self._pf_check.blockSignals(False)
             self._pf_slider.setEnabled(False)
             return
+        # Show the selected frame in the preview when playback is not running (item 39)
+        if not self._preview_timer.isActive():
+            self._preview_idx = row
+            self._update_scrubber()
+            self._update_preview_frame()
         delay = self._frames[row].delay_ms
         self._pf_check.blockSignals(True)
         self._pf_slider.blockSignals(True)
