@@ -457,6 +457,12 @@ class BeforeAfterWidget(QWidget):
         dlg.setWindowTitle("Preview — Pop-out Comparison")
         dlg.resize(900, 600)
         dlg.setMinimumSize(400, 300)
+        # Add minimize button hint so the floating window can be minimized (item 17)
+        dlg.setWindowFlags(
+            dlg.windowFlags()
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+        )
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setContentsMargins(6, 6, 6, 6)
         dlg_layout.setSpacing(4)

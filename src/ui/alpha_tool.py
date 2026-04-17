@@ -1237,18 +1237,31 @@ class AlphaFixerTab(QWidget):
         # Top row: Highlight checkbox + Dock Back button
         row_w = _QW(dlg)
         row = QHBoxLayout(row_w)
-        row.setContentsMargins(0, 0, 0, 0)
+        row.setContentsMargins(4, 4, 4, 4)
         chk = QCheckBox("🎨  Highlight Alpha Values", row_w)
         chk.setChecked(self._alpha_vis_check.isChecked())
         chk.setToolTip(self._alpha_vis_check.toolTip())
         row.addWidget(chk)
         row.addStretch(1)
-        # Dock Back button inside the dialog so users can re-dock from within it
+        # Dock Back button inside the dialog so users can re-dock from within it.
+        # Styled as a transparent overlay to match the pop-out button (item 16).
         btn_dock = _QPB("⇙  Dock Back", row_w)
+        btn_dock.setObjectName("popoutBtn")
+        btn_dock.setStyleSheet(
+            "QPushButton#popoutBtn {"
+            "  background: rgba(30,30,30,160);"
+            "  color: white;"
+            "  border: 1px solid rgba(255,255,255,60);"
+            "  border-radius: 4px;"
+            "  padding: 3px 8px;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
+            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
+        )
         btn_dock.setToolTip(
             "Close this floating window and dock the preview back into the main panel."
         )
-        btn_dock.setFixedHeight(24)
         btn_dock.clicked.connect(self._on_dock_back_clicked)
         row.addWidget(btn_dock)
         # The dialog layout is a QVBoxLayout; insert the top row before

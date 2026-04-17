@@ -281,6 +281,17 @@ class ConverterTab(QWidget):
         preview_row.addWidget(self._output_info_lbl, 0)
         pa_layout.addLayout(preview_row, 1)
 
+        # Dock-back button: shown when compare is popped out (item 15)
+        self._btn_dock_back = QPushButton("⇙  Dock Preview Back")
+        self._btn_dock_back.setMinimumHeight(30)
+        self._btn_dock_back.setToolTip(
+            "The preview is currently in a floating window.\n"
+            "Click to close the floating window and dock the preview back here."
+        )
+        self._btn_dock_back.setVisible(False)
+        self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
+        pa_layout.addWidget(self._btn_dock_back)
+
         # GIF speed slider – only visible when the selected source is an
         # animated GIF; hidden for all other file types.
         self._gif_speed_widget = QWidget()
@@ -320,6 +331,8 @@ class ConverterTab(QWidget):
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(preview_area)
         left_vsplit.setSizes([420, 280])
+        self._left_vsplit = left_vsplit
+        self._preview_area = preview_area
         splitter.addWidget(left_vsplit)
 
         # ---- Right: options ----
@@ -503,6 +516,8 @@ class ConverterTab(QWidget):
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Initialise quality spinbox enabled state for the default format
         self._on_format_changed(self._fmt_combo.currentIndex())
+        # Pop-out/dock-back for compare widget (item 15)
+        self._compare.popout_requested.connect(self._on_compare_popout)
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -1302,4 +1317,63 @@ class ConverterTab(QWidget):
         self._btn_run.setText(f"{frame}  Converting…")
         self._spinner_idx += 1
 
+    # ------------------------------------------------------------------
+    # Pop-out / dock-back helpers (item 15)
+    # ------------------------------------------------------------------
+
+    def _on_compare_popout(self) -> None:
+        """Called when the ⤢ pop-out button is clicked on the compare widget.
+
+        Hides the embedded compare widget and surrounding info labels to free
+        up space, shows a Dock Back button, and restores everything when the
+        floating dialog is closed.
+        """
+        dlg = self._compare._popout_dialog
+        if dlg is None:
+            return
+
+        # Hide just the compare widget and its companion labels; keep
+        # preview_area (and the dock-back button inside it) visible.
+        self._compare.setVisible(False)
+        self._preview_lbl.setVisible(False)
+        self._source_info_lbl.setVisible(False)
+        self._output_info_lbl.setVisible(False)
+        self._gif_speed_widget.setVisible(False)
+        self._btn_dock_back.setVisible(True)
+
+        # Collapse the preview section in the splitter to reclaim space.
+        current = self._left_vsplit.sizes()
+        if current and len(current) == 2:
+            self._left_vsplit_normal_sizes = current[:]
+            total = current[0] + current[1]
+            dock_h = max(self._btn_dock_back.minimumSizeHint().height(), 38)
+            self._left_vsplit.setSizes([total - dock_h, dock_h])
+
+        dlg.finished.connect(self._on_compare_docked_back)
+
+        # Hide the pop-out button inside the dialog's compare widget to
+        # prevent infinite pop-outs.
+        for child in dlg.findChildren(type(self._compare)):
+            child.hide_popout_button()
+            break
+
+    def _on_compare_docked_back(self) -> None:
+        """Restore the embedded preview area after the floating dialog closes."""
+        self._compare.setVisible(True)
+        self._preview_lbl.setVisible(True)
+        self._source_info_lbl.setVisible(True)
+        self._output_info_lbl.setVisible(True)
+        # gif_speed_widget only shows for animated GIFs; restore its previous
+        # visibility by letting _on_selection_changed re-evaluate it.
+        self._btn_dock_back.setVisible(False)
+        if hasattr(self, "_left_vsplit_normal_sizes"):
+            self._left_vsplit.setSizes(self._left_vsplit_normal_sizes)
+
+    def _on_dock_back_clicked(self) -> None:
+        """Close the floating pop-out dialog and dock the preview back."""
+        dlg = self._compare._popout_dialog
+        if dlg is not None:
+            dlg.close()
+        else:
+            self._on_compare_docked_back()
 
