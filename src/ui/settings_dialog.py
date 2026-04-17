@@ -564,6 +564,7 @@ class SettingsDialog(QDialog):
         self._bg_flock_combo.addItem("🐦 Birds", userData="birds")
         self._bg_flock_combo.addItem("⭐ Stars", userData="stars")
         self._bg_flock_combo.addItem("🌸 Petals", userData="petals")
+        self._bg_flock_combo.addItem("🦈 Sharks", userData="sharks")
         self._bg_flock_combo.setToolTip(
             "Choose the emoji used for the background flock.\n"
             "Greyed out while 'Use theme flock' is checked."

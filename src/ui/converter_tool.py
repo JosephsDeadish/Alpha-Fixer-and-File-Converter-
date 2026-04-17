@@ -166,6 +166,7 @@ class ConverterTab(QWidget):
         lbl_out = QLabel("Output folder:")
         lbl_out.setMinimumWidth(100)
         lbl_out.setMinimumHeight(24)
+        self._lbl_out = lbl_out
         go_layout.addWidget(lbl_out, 0, 0)
         out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
@@ -183,6 +184,7 @@ class ConverterTab(QWidget):
 
         lbl_suffix = QLabel("Filename suffix:")
         lbl_suffix.setMinimumHeight(24)
+        self._lbl_suffix = lbl_suffix
         go_layout.addWidget(lbl_suffix, 1, 0)
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
@@ -360,6 +362,7 @@ class ConverterTab(QWidget):
 
         lbl_fmt = QLabel("Convert to:")
         lbl_fmt.setMinimumHeight(24)
+        self._lbl_fmt = lbl_fmt
         gf_layout.addWidget(lbl_fmt, 0, 0)
         self._fmt_combo = QComboBox()
         self._fmt_combo.setMinimumWidth(140)
@@ -379,6 +382,7 @@ class ConverterTab(QWidget):
 
         lbl_quality = QLabel("JPEG/WEBP quality:")
         lbl_quality.setMinimumHeight(24)
+        self._lbl_quality = lbl_quality
         gf_layout.addWidget(lbl_quality, 1, 0)
         self._quality_spin = QSpinBox()
         self._quality_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
@@ -533,6 +537,16 @@ class ConverterTab(QWidget):
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "conv_status_lbl")
         mgr.register(self._lock_aspect_check, "lock_aspect_check")
+        # Group boxes and section labels (prevent tooltip propagation to wrong parents)
+        mgr.register(self._grp_fmt, "conv_output_format_group")
+        mgr.register(self._grp_out, "conv_output_group")
+        mgr.register(self._grp_resize, "conv_resize_group")
+        mgr.register(self._lbl_files, "conv_files_lbl")
+        mgr.register(self._lbl_out, "conv_out_dir_lbl")
+        mgr.register(self._lbl_suffix, "conv_suffix_lbl")
+        mgr.register(self._lbl_fmt, "conv_format_lbl")
+        mgr.register(self._lbl_quality, "conv_quality_lbl")
+        mgr.register(self._preview_lbl, "conv_preview_lbl")
 
     def update_theme(self, theme_name: str) -> None:
         """Update inner header, section labels and group-box titles to match the active theme."""

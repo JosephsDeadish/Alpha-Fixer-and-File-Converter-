@@ -820,6 +820,9 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "alpha_status_lbl")
         mgr.register(self._alpha_vis_check, "alpha_vis_check")
+        # Group boxes (prevent stale-id tooltip bleed from settings dialog widgets)
+        mgr.register(self._grp_out, "alpha_output_group")
+        mgr.register(self._grp_tune, "alpha_tune_group")
 
     def update_theme(self, theme_name: str) -> None:
         """Update inner header, section labels and group-box titles to match the active theme."""

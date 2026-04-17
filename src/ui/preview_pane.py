@@ -415,9 +415,9 @@ class BeforeAfterWidget(QWidget):
         btn.setToolTip(
             "Pop out the preview into a separate floating window.\n"
             "The preview panel here will hide to make room for other controls.\n"
-            "Close the floating window (or click 'Dock Preview Back') to restore it."
+            "Close the floating window (or click this button again) to dock back."
         )
-        btn.setFixedSize(72, 22)
+        btn.setFixedSize(90, 22)
         btn.setStyleSheet(
             "QPushButton#popoutBtn {"
             "  background: rgba(20,20,20,155);"
@@ -439,10 +439,18 @@ class BeforeAfterWidget(QWidget):
         self._popout_btn.move(margin, margin)
 
     def _on_popout_clicked(self) -> None:
-        """Open (or bring to front) a floating comparison window."""
+        """Pop out or dock back the floating comparison window.
+
+        Clicking once pops out.  Clicking again (when the dialog is open)
+        docks the preview back — the button text changes to "⇙ Dock Back"
+        as a visual cue.  This also fixes the infinite-popout bug where
+        closing the dialog via its ✕ button would leave _popout_dialog
+        pointing to a hidden dialog, allowing a new one to be opened on the
+        next click instead of re-using the existing reference.
+        """
+        # If a pop-out dialog is already visible, dock it back.
         if self._popout_dialog is not None and not self._popout_dialog.isHidden():
-            self._popout_dialog.raise_()
-            self._popout_dialog.activateWindow()
+            self._popout_dialog.close()
             return
 
         dlg = QDialog(self.window())
@@ -469,6 +477,27 @@ class BeforeAfterWidget(QWidget):
         dlg_layout.addWidget(compare, 1)
 
         self._popout_dialog = dlg
+
+        # Update button to reflect the "docked-out" state so the user knows
+        # clicking it again will dock the preview back.
+        self._popout_btn.setText("⇙ Dock Back")
+        self._popout_btn.setToolTip(
+            "Dock the preview back into the main panel.\n"
+            "Closes the floating window and restores the embedded preview."
+        )
+
+        def _on_dialog_finished(_result=None) -> None:
+            """Reset button and stored reference when dialog closes for any reason."""
+            self._popout_dialog = None
+            self._popout_btn.setText("⇗ Pop Out")
+            self._popout_btn.setToolTip(
+                "Pop out the preview into a separate floating window.\n"
+                "The preview panel here will hide to make room for other controls.\n"
+                "Close the floating window (or click this button again) to dock back."
+            )
+
+        dlg.finished.connect(_on_dialog_finished)
+
         # Emit signal so the parent tool can attach extra widgets (e.g. checkboxes)
         self.popout_requested.emit()
         dlg.show()

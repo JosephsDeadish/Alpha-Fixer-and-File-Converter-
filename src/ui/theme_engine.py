@@ -549,6 +549,7 @@ SHARK_BAIT_THEME = {
     "_banner_anim": "drip",
     "_button_anim": "bite",
     "_trail": "wave",
+    "_flock": "sharks",
 }
 
 ALIEN_THEME = {

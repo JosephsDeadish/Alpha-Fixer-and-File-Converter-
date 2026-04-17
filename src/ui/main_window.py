@@ -1360,6 +1360,7 @@ class MainWindow(QMainWindow):
             "birds":       "🐦",
             "stars":       "⭐",
             "petals":      "🌸",
+            "sharks":      "🦈",
         }
         theme = self._settings.get_theme()
         trail_color = theme.get("_trail_color", "#e94560")
