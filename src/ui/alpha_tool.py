@@ -1152,8 +1152,14 @@ class AlphaFixerTab(QWidget):
                 th = fm.ascent()
 
                 ys, xs = np.where(mask)
-                # Centroid label (one per unique value, centred on the region)
+                # Centroid label — verify the centroid pixel is actually inside
+                # the region (concave shapes can have centroids outside).  If
+                # not, find the region pixel nearest to the centroid (item 12).
                 cx, cy = int(xs.mean()), int(ys.mean())
+                if not mask[cy, cx]:
+                    dists = (xs - cx) ** 2 + (ys - cy) ** 2
+                    nearest = int(dists.argmin())
+                    cx, cy = int(xs[nearest]), int(ys[nearest])
                 tx = cx - tw // 2
                 ty = cy + th // 2
 
