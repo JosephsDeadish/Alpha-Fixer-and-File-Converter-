@@ -3457,6 +3457,10 @@ class MainWindow(QMainWindow):
         """Show a popup menu from the Help button with shortcuts, about, and I/O options."""
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
+        act_tutorial = menu.addAction("📚  Tutorial  (how to use this app)")
+        act_tutorial.setToolTip("Open the interactive step-by-step tutorial.")
+        act_tutorial.triggered.connect(self._show_tutorial)
+        menu.addSeparator()
         act_shortcuts = menu.addAction("⌨  Keyboard Shortcuts  (F1)")
         act_shortcuts.setToolTip("View all keyboard shortcuts for every tool (also F1).")
         act_shortcuts.setStatusTip("View keyboard shortcuts for all tools.")
@@ -3487,6 +3491,18 @@ class MainWindow(QMainWindow):
         btn = self._btn_help
         pos = btn.mapToGlobal(btn.rect().bottomLeft())
         menu.exec(pos)
+
+    def _show_tutorial(self) -> None:
+        """Open the interactive tutorial dialog (item 35)."""
+        try:
+            from .tutorial_dialog import TutorialDialog
+            theme = self._settings.get_theme()
+            dlg = TutorialDialog(self, theme_name=theme.get("name", ""))
+            dlg.exec()
+        except Exception as exc:  # noqa: BLE001
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Tutorial Error",
+                                f"Could not open tutorial:\n{exc}")
 
     def contextMenuEvent(self, event) -> None:
         """Right-click anywhere on the main window to access the tool shortcuts."""
