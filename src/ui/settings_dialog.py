@@ -1230,8 +1230,40 @@ class SettingsDialog(QDialog):
         )
         _s.addWidget(self._sound_profile_combo, 2, 1)
 
+        # Custom click sound file (item 3/52 — user-supplied WAV overrides profile)
+        _s.addWidget(QLabel("Custom click WAV:"), 3, 0)
+        _cw_row = QHBoxLayout()
+        self._click_sound_path_edit = QLineEdit()
+        self._click_sound_path_edit.setPlaceholderText("Optional: path to a .wav file…")
+        self._click_sound_path_edit.setToolTip(
+            "Optional: path to a WAV file to use instead of the profile's synthesised sound.\n"
+            "Leave blank to keep using the built-in synthesised sound for the selected profile.\n"
+            "The file must be a valid WAV or OGG audio file."
+        )
+        _cw_row.addWidget(self._click_sound_path_edit, 1)
+        _cw_browse = QPushButton("…")
+        _cw_browse.setFixedWidth(30)
+        _cw_browse.setToolTip("Browse for a WAV or OGG sound file.")
+        _cw_row.addWidget(_cw_browse)
+        _cw_clear = QPushButton("✕")
+        _cw_clear.setFixedWidth(26)
+        _cw_clear.setToolTip("Clear the custom sound path and revert to the built-in synthesised sound.")
+        _cw_clear.clicked.connect(lambda: self._click_sound_path_edit.clear())
+        _cw_row.addWidget(_cw_clear)
+        _s.addLayout(_cw_row, 3, 1)
+
+        def _browse_click_sound():
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Select Click Sound File", "",
+                "Audio Files (*.wav *.ogg *.mp3 *.flac);;All Files (*)"
+            )
+            if path:
+                self._click_sound_path_edit.setText(path)
+        _cw_browse.clicked.connect(_browse_click_sound)
+        self._click_sound_path_edit.textChanged.connect(self._on_sound_changed)
+
         # Volume slider
-        _s.addWidget(QLabel("Volume:"), 3, 0)
+        _s.addWidget(QLabel("Volume:"), 4, 0)
         vol_row = QHBoxLayout()
         self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._sound_volume_slider.setRange(0, 100)
@@ -1247,7 +1279,7 @@ class SettingsDialog(QDialog):
         )
         vol_row.addWidget(self._sound_volume_slider, 1)
         vol_row.addWidget(self._sound_volume_lbl)
-        _s.addLayout(vol_row, 3, 1)
+        _s.addLayout(vol_row, 4, 1)
 
         # Sound event toggles (off by default; each controls a specific app event)
         events_lbl = QLabel("Event sounds:")
@@ -1255,7 +1287,7 @@ class SettingsDialog(QDialog):
             "Enable or disable individual application sound events.\n"
             "All are off by default to keep the app unobtrusive."
         )
-        _s.addWidget(events_lbl, 4, 0)
+        _s.addWidget(events_lbl, 5, 0)
         self._btn_mute_all_events = QPushButton("Mute all events")
         self._btn_mute_all_events.setMinimumWidth(140)
         self._btn_mute_all_events.setToolTip(
@@ -1263,27 +1295,27 @@ class SettingsDialog(QDialog):
             "Does not affect the master Enable sounds toggle."
         )
         self._btn_mute_all_events.clicked.connect(self._on_mute_all_events)
-        _s.addWidget(self._btn_mute_all_events, 7, 0, 1, 2)
+        _s.addWidget(self._btn_mute_all_events, 8, 0, 1, 2)
         self._sound_theme_change_chk = QCheckBox("Play sound when theme changes")
         self._sound_theme_change_chk.setToolTip(
             "Play a short whoosh sound whenever the active theme is switched.\n"
             "Off by default."
         )
-        _s.addWidget(self._sound_theme_change_chk, 4, 1)
+        _s.addWidget(self._sound_theme_change_chk, 5, 1)
 
         self._sound_tab_switch_chk = QCheckBox("Play sound when switching tabs")
         self._sound_tab_switch_chk.setToolTip(
             "Play a soft tick when you click between the main tabs.\n"
             "Off by default."
         )
-        _s.addWidget(self._sound_tab_switch_chk, 5, 1)
+        _s.addWidget(self._sound_tab_switch_chk, 6, 1)
 
         self._sound_drag_enter_chk = QCheckBox("Play sound when files are dragged in")
         self._sound_drag_enter_chk.setToolTip(
             "Play a ping when files are dragged into the file list.\n"
             "Off by default."
         )
-        _s.addWidget(self._sound_drag_enter_chk, 6, 1)
+        _s.addWidget(self._sound_drag_enter_chk, 7, 1)
 
         # grp_sound is added to the dedicated Sound tab below; keep the reference.
         self._grp_sound = grp_sound
@@ -2085,6 +2117,10 @@ class SettingsDialog(QDialog):
         else:
             self._sound_theme_info_lbl.setVisible(False)
             self._sound_profile_combo.setEnabled(True)
+        # Load custom click sound path (item 3/52)
+        self._click_sound_path_edit.setText(
+            str(self._settings.get("click_sound_path", ""))
+        )
         # Load sound event toggles
         self._sound_theme_change_chk.setChecked(
             bool(self._settings.get("sound_theme_change", False))
@@ -2934,6 +2970,12 @@ class SettingsDialog(QDialog):
             self._sound_profile_combo.setVisible(True)
             self._sound_profile_combo.setEnabled(not use_theme)
             self._sound_profile_lbl.setVisible(True)
+        # Save custom click sound path if edited (item 3/52)
+        try:
+            path = self._click_sound_path_edit.text().strip()
+            self._settings.set("click_sound_path", path)
+        except AttributeError:
+            pass
         self.settings_changed.emit()
 
     def _update_sound_theme_info(self) -> None:
