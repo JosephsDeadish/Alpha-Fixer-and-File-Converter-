@@ -184,6 +184,52 @@ class HistoryTab(QWidget):
         sel_layout.addWidget(self._sel_summary)
         self._sub_tabs.addTab(sel_widget, "🎭  Selective Alpha")
 
+        # --- GIF Builder sub-tab (item 74) ---
+        gif_widget = QWidget()
+        gif_layout = QVBoxLayout(gif_widget)
+        gif_layout.setContentsMargins(0, 6, 0, 0)
+        self._gif_search = self._make_search_field("gif")
+        gif_layout.addWidget(self._gif_search)
+        self._gif_tree = _make_tree(
+            ["Time", "Output", "Frames", "✔ OK", "✘ Err", "File names"],
+            col_tips=[
+                "When the GIF was built.",
+                "Output file path.",
+                "Total number of frames included.",
+                "Frames processed successfully.",
+                "Frames that had errors.",
+                "Input filenames used in this build.",
+            ],
+        )
+        gif_layout.addWidget(self._gif_tree)
+        self._gif_summary = QLabel("")
+        self._gif_summary.setObjectName("subheader")
+        gif_layout.addWidget(self._gif_summary)
+        self._sub_tabs.addTab(gif_widget, "🎞  GIF Builder")
+
+        # --- Video Builder sub-tab (item 74) ---
+        vid_widget = QWidget()
+        vid_layout = QVBoxLayout(vid_widget)
+        vid_layout.setContentsMargins(0, 6, 0, 0)
+        self._vid_search = self._make_search_field("video")
+        vid_layout.addWidget(self._vid_search)
+        self._vid_tree = _make_tree(
+            ["Time", "Output", "Clips", "✔ OK", "✘ Err", "File names"],
+            col_tips=[
+                "When the video was built.",
+                "Output file path.",
+                "Total number of clips included.",
+                "Clips processed successfully.",
+                "Clips that had errors.",
+                "Input filenames used in this build.",
+            ],
+        )
+        vid_layout.addWidget(self._vid_tree)
+        self._vid_summary = QLabel("")
+        self._vid_summary.setObjectName("subheader")
+        vid_layout.addWidget(self._vid_summary)
+        self._sub_tabs.addTab(vid_widget, "🎬  Video Builder")
+
         layout.addWidget(self._sub_tabs, 1)
 
         # Connections
@@ -198,6 +244,12 @@ class HistoryTab(QWidget):
         )
         self._sel_search.textChanged.connect(
             lambda text: self._apply_filter(self._sel_tree, text)
+        )
+        self._gif_search.textChanged.connect(
+            lambda text: self._apply_filter(self._gif_tree, text)
+        )
+        self._vid_search.textChanged.connect(
+            lambda text: self._apply_filter(self._vid_tree, text)
         )
 
     # ------------------------------------------------------------------
@@ -242,12 +294,18 @@ class HistoryTab(QWidget):
         mgr.register(self._conv_tree, "history_conv_tree")
         mgr.register(self._alpha_tree, "history_alpha_tree")
         mgr.register(self._sel_tree, "history_sel_tree")
+        mgr.register(self._gif_tree, "history_gif_tree")
+        mgr.register(self._vid_tree, "history_vid_tree")
         mgr.register(self._conv_summary, "history_conv_summary")
         mgr.register(self._alpha_summary, "history_alpha_summary")
         mgr.register(self._sel_summary, "history_sel_summary")
+        mgr.register(self._gif_summary, "history_gif_summary")
+        mgr.register(self._vid_summary, "history_vid_summary")
         mgr.register(self._conv_search, "history_search")
         mgr.register(self._alpha_search, "history_search")
         mgr.register(self._sel_search, "history_search")
+        mgr.register(self._gif_search, "history_search")
+        mgr.register(self._vid_search, "history_search")
 
     # ------------------------------------------------------------------
     # Theme
@@ -262,11 +320,13 @@ class HistoryTab(QWidget):
         history_label = labels[2]
         prefix = history_label.split("  ", 1)[0] if "  " in history_label else "📋"
         self._hdr.setText(f"{prefix}  Processing History")
-        # Decorate the converter/alpha-fixer sub-tab labels with the theme icon.
+        # Decorate the sub-tab labels with the theme icon.
         icon = get_theme_icon(theme_name)
         self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
         self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha & RGBA Adjuster")
         self._sub_tabs.setTabText(2, f"{icon}🎭  Selective Alpha")
+        self._sub_tabs.setTabText(3, f"{icon}🎞  GIF Builder")
+        self._sub_tabs.setTabText(4, f"{icon}🎬  Video Builder")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -274,14 +334,18 @@ class HistoryTab(QWidget):
 
     @pyqtSlot()
     def refresh(self):
-        """Reload all three history lists from settings and reapply any active filters."""
+        """Reload all history lists from settings and reapply any active filters."""
         self._refresh_converter()
         self._refresh_alpha()
         self._refresh_selective_alpha()
+        self._refresh_gif_builder()
+        self._refresh_video_builder()
         # Re-apply search filters so existing text still works after refresh.
         self._apply_filter(self._conv_tree, self._conv_search.text())
         self._apply_filter(self._alpha_tree, self._alpha_search.text())
         self._apply_filter(self._sel_tree, self._sel_search.text())
+        self._apply_filter(self._gif_tree, self._gif_search.text())
+        self._apply_filter(self._vid_tree, self._vid_search.text())
 
     def _refresh_converter(self):
         history = self._settings.get_converter_history()
@@ -392,6 +456,76 @@ class HistoryTab(QWidget):
                " — run the Selective Alpha tool to see history here.")
         )
 
+    def _refresh_gif_builder(self):
+        """Populate the GIF Builder history tree (item 74)."""
+        history = self._settings.get_gif_builder_history()
+        self._gif_tree.clear()
+        for entry in history:
+            ts = _fmt_ts(entry.get("timestamp", ""))
+            output = os.path.basename(entry.get("output", "?"))
+            n_frames = str(entry.get("frame_count", "?"))
+            n_ok = str(entry.get("success", "?"))
+            n_err = str(entry.get("errors", "?"))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
+            item = QTreeWidgetItem([ts, output, n_frames, n_ok, n_err, files])
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Built: {ts}\nOutput: {output}\n"
+                    f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Input files:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
+            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
+                for col in range(6):
+                    item.setForeground(col, Qt.GlobalColor.yellow)
+            self._gif_tree.addTopLevelItem(item)
+        total = len(history)
+        self._gif_summary.setText(
+            f"{total} build{'s' if total != 1 else ''} recorded"
+            + ("  (most recent first)" if total > 0 else
+               " — use the GIF Builder to see history here.")
+        )
+
+    def _refresh_video_builder(self):
+        """Populate the Video Builder history tree (item 74)."""
+        history = self._settings.get_video_builder_history()
+        self._vid_tree.clear()
+        for entry in history:
+            ts = _fmt_ts(entry.get("timestamp", ""))
+            output = os.path.basename(entry.get("output", "?"))
+            n_clips = str(entry.get("clip_count", "?"))
+            n_ok = str(entry.get("success", "?"))
+            n_err = str(entry.get("errors", "?"))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
+            item = QTreeWidgetItem([ts, output, n_clips, n_ok, n_err, files])
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Built: {ts}\nOutput: {output}\n"
+                    f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Input files:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
+            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
+                for col in range(6):
+                    item.setForeground(col, Qt.GlobalColor.yellow)
+            self._vid_tree.addTopLevelItem(item)
+        total = len(history)
+        self._vid_summary.setText(
+            f"{total} build{'s' if total != 1 else ''} recorded"
+            + ("  (most recent first)" if total > 0 else
+               " — use the Video Builder to see history here.")
+        )
+
     # ------------------------------------------------------------------
     # Clear
     # ------------------------------------------------------------------
@@ -399,13 +533,16 @@ class HistoryTab(QWidget):
     def _clear_history(self):
         reply = QMessageBox.question(
             self, "Clear History",
-            "Delete all conversion and alpha-fixer history?",
+            "Delete all history for all tools?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.clear_converter_history()
             self._settings.clear_alpha_history()
             self._settings.clear_selective_alpha_history()
+            self._settings.clear_gif_builder_history()
+            self._settings.clear_video_builder_history()
+            self.refresh()
             self.refresh()
 
     # ------------------------------------------------------------------

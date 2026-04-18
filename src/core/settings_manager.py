@@ -457,6 +457,54 @@ class SettingsManager:
         self._qs.sync()
 
     # ------------------------------------------------------------------
+    # GIF Builder history (item 74)
+    # ------------------------------------------------------------------
+
+    def get_gif_builder_history(self) -> list:
+        raw = self._qs.value("gif_builder_history", "[]")
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def add_gif_builder_history(self, entry: dict, max_entries: int = 100):
+        history = self.get_gif_builder_history()
+        history.insert(0, entry)
+        limit = int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
+        self._qs.setValue("gif_builder_history", json.dumps(history))
+        self._qs.sync()
+
+    def clear_gif_builder_history(self) -> None:
+        self._qs.setValue("gif_builder_history", "[]")
+        self._qs.sync()
+
+    # ------------------------------------------------------------------
+    # Video Builder history (item 74)
+    # ------------------------------------------------------------------
+
+    def get_video_builder_history(self) -> list:
+        raw = self._qs.value("video_builder_history", "[]")
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def add_video_builder_history(self, entry: dict, max_entries: int = 100):
+        history = self.get_video_builder_history()
+        history.insert(0, entry)
+        limit = int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
+        self._qs.setValue("video_builder_history", json.dumps(history))
+        self._qs.sync()
+
+    def clear_video_builder_history(self) -> None:
+        self._qs.setValue("video_builder_history", "[]")
+        self._qs.sync()
+
+    # ------------------------------------------------------------------
     # Selective Alpha Tool settings
     # ------------------------------------------------------------------
 
