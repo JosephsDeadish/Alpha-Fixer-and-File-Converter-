@@ -572,6 +572,55 @@ class SettingsDialog(QDialog):
 
         tv.addLayout(effect_emoji_row)
 
+        # ---- Hold-Click Effects GroupBox (item 48/49) ----
+        grp_hold = QGroupBox("Hold-Click Effects")
+        hold_layout = QVBoxLayout(grp_hold)
+        hold_layout.setSpacing(4)
+        hold_layout.setContentsMargins(6, 4, 6, 4)
+        self._hold_effects_check = QCheckBox("Enable hold-click effects")
+        self._hold_effects_check.setToolTip(
+            "When enabled, holding the mouse button triggers a special effect:\n"
+            "Bubble: a circle grows at your click point and pops when released.\n"
+            "Blood: blood drips from the cursor while held.\n"
+            "Shake: the window shakes with increasing intensity while held."
+        )
+        hold_layout.addWidget(self._hold_effects_check)
+        self._hold_effect_sub = QWidget()
+        _hold_sub_vl = QVBoxLayout(self._hold_effect_sub)
+        _hold_sub_vl.setContentsMargins(16, 0, 0, 0)
+        _hold_sub_vl.setSpacing(4)
+        self._use_theme_hold_check = QCheckBox(
+            "Use theme hold effect  (auto-selects hold effect to match the active theme)"
+        )
+        _hold_sub_vl.addWidget(self._use_theme_hold_check)
+        self._hold_inner_widget = QWidget()
+        hold_inner = QHBoxLayout(self._hold_inner_widget)
+        hold_inner.setContentsMargins(0, 0, 0, 0)
+        hold_inner.addWidget(QLabel("Hold effect:"))
+        self._hold_key_combo = QComboBox()
+        self._hold_key_combo.addItem("🫧  Bubble (grows and pops)", userData="bubble")
+        self._hold_key_combo.addItem("🩸  Blood Drip (cursor drip while held)", userData="blood")
+        self._hold_key_combo.addItem("📳  Screen Shake (intensifies while held)", userData="shake")
+        self._hold_key_combo.setToolTip(
+            "Choose the hold-click effect:\n"
+            "  Bubble — a translucent circle grows while held; releases with a pop burst\n"
+            "  Blood Drip — blood drops fall from your cursor while the button is held\n"
+            "  Screen Shake — the whole window shakes, getting more violent over time"
+        )
+        hold_inner.addWidget(self._hold_key_combo, 1)
+        _hold_sub_vl.addWidget(self._hold_inner_widget)
+        hold_layout.addWidget(self._hold_effect_sub)
+
+        def _update_hold_sub():
+            enabled = self._hold_effects_check.isChecked()
+            use_theme = self._use_theme_hold_check.isChecked()
+            self._hold_effect_sub.setVisible(enabled)
+            self._hold_inner_widget.setVisible(not use_theme)
+        self._hold_effects_check.toggled.connect(lambda _: _update_hold_sub())
+        self._use_theme_hold_check.toggled.connect(lambda _: _update_hold_sub())
+        self._hold_effect_sub.setVisible(False)
+        tv.addWidget(grp_hold)
+
         # ---- Background Effects GroupBox ----
         grp_bg_drip = QGroupBox("Background Effects")
         bg_drip_layout = QVBoxLayout(grp_bg_drip)
@@ -1812,6 +1861,10 @@ class SettingsDialog(QDialog):
         )
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
+        # Hold effects (item 48/49)
+        self._hold_effects_check.toggled.connect(self._on_hold_effects_changed)
+        self._use_theme_hold_check.toggled.connect(self._on_hold_effects_changed)
+        self._hold_key_combo.currentIndexChanged.connect(self._on_hold_effects_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
         self._tooltip_style_combo.currentTextChanged.connect(self._on_tooltip_style_changed)
         self._animated_banner_check.toggled.connect(self._on_animated_banner_changed)
@@ -2078,6 +2131,17 @@ class SettingsDialog(QDialog):
             self._effect_theme_info_lbl.setVisible(use_theme_effect)
             if use_theme_effect:
                 self._update_effect_theme_info()
+        # Hold effects (item 48/49)
+        hold_enabled = self._settings.get("hold_effects_enabled", False)
+        self._hold_effects_check.setChecked(hold_enabled)
+        use_theme_hold = self._settings.get("use_theme_hold_effects", False)
+        self._use_theme_hold_check.setChecked(use_theme_hold)
+        self._hold_effect_sub.setVisible(hold_enabled)
+        if hold_enabled:
+            self._hold_inner_widget.setVisible(not use_theme_hold)
+        hold_key_val = self._settings.get("hold_effects_key", "bubble")
+        hold_key_idx = self._hold_key_combo.findData(hold_key_val)
+        self._hold_key_combo.setCurrentIndex(max(hold_key_idx, 0))
         mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
@@ -3053,6 +3117,19 @@ class SettingsDialog(QDialog):
         self._effect_theme_info_lbl.setVisible(use_theme)
         if use_theme and enabled:
             self._update_effect_theme_info()
+        self.settings_changed.emit()
+
+    def _on_hold_effects_changed(self) -> None:
+        """Save hold-click effect settings and notify main window (item 48/49)."""
+        enabled = self._hold_effects_check.isChecked()
+        use_theme = self._use_theme_hold_check.isChecked()
+        self._settings.set("hold_effects_enabled", enabled)
+        self._settings.set("use_theme_hold_effects", use_theme)
+        key = self._hold_key_combo.currentData()
+        if key:
+            self._settings.set("hold_effects_key", key)
+        self._hold_effect_sub.setVisible(enabled)
+        self._hold_inner_widget.setVisible(not use_theme)
         self.settings_changed.emit()
 
     def _on_use_theme_effect_changed(self) -> None:

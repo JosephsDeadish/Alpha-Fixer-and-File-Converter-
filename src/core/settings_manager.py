@@ -259,6 +259,10 @@ class SettingsManager:
         "sa_last_tool": "freehand",
         # Customizable keyboard shortcuts (item 20): JSON dict of {shortcut_id: key_sequence_str}
         "custom_shortcuts": "{}",
+        # Hold-click effects (item 48)
+        "hold_effects_enabled": False,
+        "hold_effects_key": "bubble",    # "bubble" | "blood" | "shake"
+        "use_theme_hold_effects": False,
     }
 
     def __init__(self):

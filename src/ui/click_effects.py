@@ -2312,6 +2312,20 @@ class ClickEffectsOverlay(QWidget):
         # Background ambient state (independent of click effects / theme)
         self._bg_ambient_enabled: bool = False
         self._bg_ambient_type: str = "none"
+        # Hold-click effects state (item 48)
+        self._hold_effects_enabled: bool = False
+        self._hold_effect_key: str = "bubble"   # "bubble" | "blood" | "shake"
+        self._hold_active: bool = False          # True while mouse button is held
+        self._hold_x: float = 0.0
+        self._hold_y: float = 0.0
+        self._hold_bubble_radius: float = 0.0   # grows while holding (bubble mode)
+        self._hold_bubble_max: float = 80.0     # max radius before auto-pop
+        self._hold_bubble_color: str = "#00aaff"
+        self._hold_drip_tick: int = 0           # counter for blood-drip throttle
+        self._hold_shake_offset_x: float = 0.0 # current shake displacement
+        self._hold_shake_offset_y: float = 0.0
+        self._hold_shake_intensity: float = 0.0  # grows with hold duration
+        self._hold_shake_tick: int = 0
         self._font = QFont()
         self._font.setPointSize(14)
         try:
@@ -2861,6 +2875,21 @@ class ClickEffectsOverlay(QWidget):
         if len(self._particles) > 40:
             self._particles = self._particles[-25:]
 
+    def set_hold_effects(self, enabled: bool, effect_key: str = "bubble") -> None:
+        """Enable or disable hold-click effects (item 48).
+
+        *effect_key* controls the hold behaviour:
+        - ``"bubble"``  – a translucent circle grows at the click point while
+          the button is held; releasing it "pops" with an outward burst of
+          sparkle particles.
+        - ``"blood"``   – blood drips continuously from the cursor while held.
+        - ``"shake"``   – the window shakes with increasing intensity while held.
+        """
+        self._hold_effects_enabled = enabled
+        self._hold_effect_key = effect_key if effect_key in ("bubble", "blood", "shake") else "bubble"
+        if not enabled and self._hold_active:
+            self._end_hold(False)  # cancel silently without pop
+
     # ------------------------------------------------------------------
     # Event filter
     # ------------------------------------------------------------------
@@ -2880,12 +2909,99 @@ class ClickEffectsOverlay(QWidget):
                     self._add_particle(p)
                 self._click_count += 1
                 self.click_registered.emit(self._click_count)
+                # Start hold effect (item 48)
+                if self._hold_effects_enabled:
+                    self._start_hold(lp.x(), lp.y())
+            except AttributeError:
+                pass
+        elif (
+            event.type() == QEvent.Type.MouseButtonRelease
+            and event.button() == Qt.MouseButton.LeftButton
+            and self._hold_active
+        ):
+            self._end_hold(pop=True)
+        elif event.type() == QEvent.Type.MouseMove and self._hold_active:
+            # Track cursor movement for hold effects (blood drip position)
+            try:
+                gp = event.globalPosition().toPoint()
+                lp = self._main_window.mapFromGlobal(gp)
+                self._hold_x = float(lp.x())
+                self._hold_y = float(lp.y())
             except AttributeError:
                 pass
         elif event.type() == QEvent.Type.Resize and obj is self._main_window:
             self.setGeometry(self._main_window.rect())
             self.raise_()
         return False
+
+    def _start_hold(self, x: float, y: float) -> None:
+        """Begin a hold-click effect (item 48)."""
+        import random as _r
+        self._hold_active = True
+        self._hold_x = x
+        self._hold_y = y
+        self._hold_bubble_radius = 4.0
+        self._hold_bubble_max = float(_r.randint(55, 85))
+        self._hold_shake_intensity = 0.0
+        self._hold_shake_tick = 0
+        self._hold_drip_tick = 0
+        # Assign bubble color based on current click-effect theme
+        _BUBBLE_COLORS = {
+            "default":  "#e94560", "gore":   "#cc0000", "bat":    "#7b2dff",
+            "rainbow":  "#ff88ff", "otter":  "#ff8800", "galaxy": "#00aaff",
+            "goth":     "#660099", "neon":   "#00ffcc", "fire":   "#ff4400",
+            "ice":      "#88ddff", "panda":  "#ff99bb", "sakura": "#ffaacc",
+            "fairy":    "#dd44ff", "custom": "#ffcc00", "ocean":  "#0088ff",
+            "sparkle":  "#ffdd00", "ripple": "#44aaff", "mermaid":"#00ccaa",
+            "alien":    "#33ff44", "slime":  "#55cc00", "shark":  "#0055aa",
+        }
+        self._hold_bubble_color = _BUBBLE_COLORS.get(self._effect_key, "#00aaff")
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def _end_hold(self, pop: bool = True) -> None:
+        """End a hold-click effect, optionally spawning a pop burst."""
+        import random as _r, math as _m
+        if not self._hold_active:
+            return
+        self._hold_active = False
+        hk = self._hold_effect_key
+        if pop and hk == "bubble":
+            # Pop burst: emit ring of particles radiating outward
+            r = max(10.0, self._hold_bubble_radius)
+            n_pops = max(6, min(20, int(r * 0.3)))
+            c = QColor(self._hold_bubble_color)
+            for i in range(n_pops):
+                angle = (2 * _m.pi * i) / n_pops
+                speed = _r.uniform(1.5, 3.5)
+                vx = _m.cos(angle) * speed
+                vy = _m.sin(angle) * speed
+                kind = "star"  # re-use star particle shape
+                life = _r.uniform(0.5, 1.2)
+                size = _r.uniform(4, 9)
+                pop_p = _Particle(
+                    self._hold_x + _m.cos(angle) * r * 0.8,
+                    self._hold_y + _m.sin(angle) * r * 0.8,
+                    vx, vy, life, kind, size, c,
+                )
+                pop_p.max_life = life
+                self._particles.append(pop_p)
+        elif pop and hk == "shake" and self._hold_shake_intensity > 0:
+            # Restore window position after shake (snap back)
+            self._hold_shake_intensity = 0.0
+            self._hold_shake_offset_x = 0.0
+            self._hold_shake_offset_y = 0.0
+            try:
+                self._main_window.move(
+                    self._main_window.x() - int(self._hold_shake_offset_x),
+                    self._main_window.y() - int(self._hold_shake_offset_y),
+                )
+            except Exception:
+                pass
+        self._hold_bubble_radius = 0.0
+        self._hold_shake_intensity = 0.0
+        self._hold_shake_offset_x = 0.0
+        self._hold_shake_offset_y = 0.0
 
     # ------------------------------------------------------------------
     # Animation tick
@@ -2923,8 +3039,60 @@ class ClickEffectsOverlay(QWidget):
         r = max(6, int(p.size + self._DIRTY_MARGIN))
         return QRect(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
+    def _tick_hold(self) -> None:
+        """Advance hold-click effects each animation frame (item 48)."""
+        import random as _r
+        hk = self._hold_effect_key
+        if hk == "bubble":
+            # Grow the bubble toward its max radius
+            growth = 0.9 if self._hold_bubble_radius < self._hold_bubble_max * 0.7 else 0.35
+            self._hold_bubble_radius = min(
+                self._hold_bubble_max, self._hold_bubble_radius + growth
+            )
+            # Auto-pop when bubble reaches its max size
+            if self._hold_bubble_radius >= self._hold_bubble_max:
+                self._end_hold(pop=True)
+        elif hk == "blood":
+            # Drip blood from cursor while holding (every 3 ticks ≈ 10 fps)
+            self._hold_drip_tick += 1
+            if self._hold_drip_tick >= 3:
+                self._hold_drip_tick = 0
+                blood_p = _Particle(
+                    self._hold_x + _r.uniform(-4, 4),
+                    self._hold_y,
+                    _r.uniform(-0.5, 0.5),
+                    _r.uniform(0.5, 2.0),
+                    _r.uniform(0.8, 1.4),
+                    "gore",
+                    _r.uniform(5, 10),
+                    QColor("#cc0000"),
+                )
+                blood_p.max_life = blood_p.life
+                self._particles.append(blood_p)
+        elif hk == "shake":
+            # Increase shake intensity and apply random window displacement
+            self._hold_shake_tick += 1
+            self._hold_shake_intensity = min(12.0, self._hold_shake_intensity + 0.15)
+            si = self._hold_shake_intensity
+            dx = _r.uniform(-si, si)
+            dy = _r.uniform(-si, si)
+            try:
+                mw = self._main_window
+                mw.move(
+                    mw.x() + int(dx - self._hold_shake_offset_x),
+                    mw.y() + int(dy - self._hold_shake_offset_y),
+                )
+                self._hold_shake_offset_x = dx
+                self._hold_shake_offset_y = dy
+            except Exception:
+                pass
+
     def _tick(self) -> None:
-        if not self._particles:
+        # Process hold effects even when no particles exist (item 48)
+        if self._hold_active:
+            self._tick_hold()
+
+        if not self._particles and not self._hold_active:
             return
 
         # Skip animation while the window is minimised — no visible pixels
@@ -2938,6 +3106,16 @@ class ClickEffectsOverlay(QWidget):
         dirty = QRect()
         for p in self._particles:
             dirty = dirty.united(self._particle_rect(p))
+        # Include the hold-bubble area in the dirty rect
+        if self._hold_active and self._hold_effect_key == "bubble" and self._hold_bubble_radius > 0:
+            r = int(self._hold_bubble_radius) + self._DIRTY_MARGIN + 4
+            dirty = dirty.united(
+                QRect(int(self._hold_x) - r, int(self._hold_y) - r, r * 2, r * 2)
+            )
+        # Ensure dirty covers at least the hold area when no particles
+        if not self._particles and self._hold_active:
+            if dirty.isNull():
+                dirty = self.rect()
 
         ow = self.width()
         oh = self.height()
@@ -2969,8 +3147,8 @@ class ClickEffectsOverlay(QWidget):
 
         self._particles = surviving
 
-        if surviving:
-            # Only repaint the region particles actually occupy
+        if surviving or self._hold_active:
+            # Only repaint the region particles/hold-bubble actually occupy
             self.update(dirty)
         else:
             self._timer.stop()
@@ -3064,7 +3242,8 @@ class ClickEffectsOverlay(QWidget):
         # calling this paintEvent (standard non-opaque child widget behaviour),
         # so stale particle pixels from previous frames are automatically
         # cleared.  We simply draw the current particles on top.
-        if not self._particles:
+        # Allow paint to proceed when hold-bubble is active (item 48).
+        if not self._particles and not (self._hold_active and self._hold_effect_key == "bubble"):
             painter.end()
             return
 
@@ -3462,6 +3641,37 @@ class ClickEffectsOverlay(QWidget):
                 r = max(2, int(p.size * p.alpha_frac * 0.5 + p.size * 0.5))
                 painter.drawEllipse(int(p.x) - r, int(p.y) - r, r * 2, r * 2)
 
+        # Draw hold-bubble overlay (item 48) — a growing translucent circle
+        # that tracks the initial click point while the mouse button is held.
+        if (self._hold_active and self._hold_effect_key == "bubble"
+                and self._hold_bubble_radius > 1):
+            br = int(self._hold_bubble_radius)
+            bc = QColor(self._hold_bubble_color)
+            # Progress fraction: 0.0 (just started) → 1.0 (about to auto-pop)
+            frac = min(1.0, self._hold_bubble_radius / max(1.0, self._hold_bubble_max))
+            # Fill becomes more opaque as bubble grows (0.08 → 0.28)
+            fill_alpha = int(20 + frac * 51)
+            bc.setAlpha(fill_alpha)
+            painter.setBrush(QBrush(bc))
+            # Outline: solid with opacity fading from strong (0.75) to thin (0.35)
+            bc2 = QColor(self._hold_bubble_color)
+            bc2.setAlpha(int(190 - frac * 100))
+            painter.setPen(QPen(bc2, 2.0))
+            bx = int(self._hold_x) - br
+            by = int(self._hold_y) - br
+            painter.drawEllipse(bx, by, br * 2, br * 2)
+            # Inner highlight ring (a smaller, brighter circle)
+            inner_r = max(1, int(br * 0.55))
+            bc3 = QColor(255, 255, 255)
+            bc3.setAlpha(int(40 + frac * 30))
+            painter.setPen(QPen(bc3, 1.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(
+                int(self._hold_x) - inner_r,
+                int(self._hold_y) - inner_r,
+                inner_r * 2, inner_r * 2,
+            )
+            painter.setPen(Qt.PenStyle.NoPen)
 
         painter.end()
 
