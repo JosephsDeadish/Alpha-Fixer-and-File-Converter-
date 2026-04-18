@@ -903,7 +903,8 @@ class SettingsDialog(QDialog):
         self._sound_theme_info_lbl.setVisible(False)
 
         # Sound profile dropdown (used when "Use theme sound" is OFF)
-        _s.addWidget(QLabel("Sound profile:"), 2, 0)
+        self._sound_profile_lbl = QLabel("Sound profile:")
+        _s.addWidget(self._sound_profile_lbl, 2, 0)
         self._sound_profile_combo = QComboBox()
         _SOUND_PROFILE_OPTIONS = [
             ("soft",    "Soft — gentle chime 🎵"),
@@ -1569,10 +1570,12 @@ class SettingsDialog(QDialog):
             self._sound_theme_info_lbl.setVisible(True)
             self._sound_profile_combo.setVisible(False)
             self._sound_profile_combo.setEnabled(False)
+            self._sound_profile_lbl.setVisible(False)
         else:
             self._sound_theme_info_lbl.setVisible(False)
             self._sound_profile_combo.setVisible(True)
             self._sound_profile_combo.setEnabled(True)
+            self._sound_profile_lbl.setVisible(True)
         # Load sound event toggles
         self._sound_theme_change_chk.setChecked(
             bool(self._settings.get("sound_theme_change", False))
@@ -2312,6 +2315,7 @@ class SettingsDialog(QDialog):
             self._sound_theme_info_lbl.setVisible(use_theme)
             self._sound_profile_combo.setVisible(not use_theme)
             self._sound_profile_combo.setEnabled(not use_theme)
+            self._sound_profile_lbl.setVisible(not use_theme)
         self.settings_changed.emit()
 
     def _update_sound_theme_info(self) -> None:
@@ -2335,9 +2339,10 @@ class SettingsDialog(QDialog):
         if checked:
             self._update_sound_theme_info()
         self._sound_theme_info_lbl.setVisible(checked)
-        # Hide the combo when "use theme" is on; show the info label instead (item 1/4)
+        # Hide the combo and its label when "use theme" is on; show info label instead (item 1/4)
         self._sound_profile_combo.setVisible(not checked)
         self._sound_profile_combo.setEnabled(not checked)
+        self._sound_profile_lbl.setVisible(not checked)
 
     def _on_sound_profile_changed(self) -> None:
         """Save the manually selected sound profile."""

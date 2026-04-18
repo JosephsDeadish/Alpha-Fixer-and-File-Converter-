@@ -402,7 +402,7 @@ class GifBuilderDialog(QDialog):
         # Transport controls
         pv_ctrl = QHBoxLayout()
         self._btn_rewind = QPushButton("⏮  Rewind")
-        self._btn_rewind.setMinimumWidth(80)
+        self._btn_rewind.setMinimumWidth(96)
         self._btn_rewind.setMinimumHeight(26)
         self._btn_rewind.setToolTip("Rewind to first frame (jump to frame 1)")
         self._btn_rewind.clicked.connect(self._rewind)
@@ -664,6 +664,9 @@ class GifBuilderDialog(QDialog):
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
 
+        import time as _time
+        _build_start = _time.monotonic()
+
         pil_frames: list[Image.Image] = []
         durations: list[int] = []
         try:
@@ -673,6 +676,19 @@ class GifBuilderDialog(QDialog):
                     for f in pil_frames:
                         f.close()
                     return
+                # Update progress label with time estimate (item 40)
+                if idx > 0:
+                    elapsed = _time.monotonic() - _build_start
+                    rate = idx / elapsed
+                    remaining = (len(self._frames) - idx) / rate if rate > 0 else 0
+                    if remaining > 60:
+                        eta_str = f"{int(remaining // 60)}m {int(remaining % 60)}s"
+                    else:
+                        eta_str = f"{int(remaining)}s"
+                    progress.setLabelText(
+                        f"Building GIF…  frame {idx + 1} / {len(self._frames)}"
+                        f"  (≈ {eta_str} remaining)"
+                    )
                 frame = entry._pil.copy()
                 if max_w > 0 or max_h > 0:
                     target_w = max_w if max_w > 0 else 99999

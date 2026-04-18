@@ -1625,7 +1625,7 @@ class SelectiveAlphaTool(QWidget):
         self._show_alpha_labels_chk.setChecked(True)
         self._show_alpha_labels_chk.setToolTip(
             "When checked, each zone's alpha value is drawn as text at the\n"
-            "centre of its painted area on the canvas.  Off by default."
+            "centre of its painted area on the canvas.  On by default."
         )
         zv.addWidget(self._show_alpha_labels_chk)
 

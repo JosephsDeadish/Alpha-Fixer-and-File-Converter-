@@ -1122,8 +1122,8 @@ class MainWindow(QMainWindow):
 
         # ⚙ Settings button  (item 44: allow enough width for emoji + text at any font size)
         btn_settings = QPushButton("⚙  Settings")
-        btn_settings.setMinimumWidth(82)
-        btn_settings.setMaximumWidth(140)
+        btn_settings.setMinimumWidth(90)
+        btn_settings.setMaximumWidth(180)
         btn_settings.setMinimumHeight(26)
         btn_settings.setToolTip("Open Settings (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
@@ -1132,8 +1132,8 @@ class MainWindow(QMainWindow):
 
         # Help button – opens a dropdown with shortcuts/about/export/import
         btn_help = QPushButton("❓  Help")
-        btn_help.setMinimumWidth(64)
-        btn_help.setMaximumWidth(100)
+        btn_help.setMinimumWidth(72)
+        btn_help.setMaximumWidth(130)
         btn_help.setMinimumHeight(26)
         btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
         btn_help.clicked.connect(self._show_help_menu)
@@ -1142,8 +1142,8 @@ class MainWindow(QMainWindow):
 
         # Patreon button
         btn_patreon = QPushButton("❤  Patreon")
-        btn_patreon.setMinimumWidth(80)
-        btn_patreon.setMaximumWidth(130)
+        btn_patreon.setMinimumWidth(88)
+        btn_patreon.setMaximumWidth(160)
         btn_patreon.setMinimumHeight(26)
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
