@@ -265,16 +265,24 @@ class ConverterWorker(QThread):
         errors = 0
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
-        for idx, src in enumerate(self._files):
-            if self._abort:
-                break
-            now = time.monotonic()
-            if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
-                try:
-                    self.progress.emit(idx, total, src)
-                except RuntimeError:
-                    return  # receiver destroyed; abort processing
-                last_progress_time = now
+
+        # For large batches use a thread pool so multiple files are processed
+        # concurrently (I/O-bound — benefits from parallelism even on the GIL).
+        # Item 26: parallel conversion significantly reduces wall-clock time.
+        import concurrent.futures
+        import threading
+
+        # Number of parallel workers: CPU count, capped at 8 to avoid too many
+        # simultaneous open files (each PIL operation holds file handles briefly).
+        import os as _os
+        n_workers = min(8, max(1, (_os.cpu_count() or 1)))
+
+        # Thread-safe counter helpers.
+        _lock = threading.Lock()
+        _counters = {"success": 0, "errors": 0, "done": 0}
+
+        def _convert_one(src: str) -> tuple[str, bool, str]:
+            """Convert one file and return (src, ok, dest_or_error)."""
             try:
                 dest = build_output_path(
                     src,
@@ -291,28 +299,49 @@ class ConverterWorker(QThread):
                     resize=self._resize,
                     keep_metadata=self._keep_metadata,
                 )
-                success += 1
-                if not large_batch:
-                    try:
-                        self.file_done.emit(src, True, dest)
-                    except RuntimeError:
-                        return  # receiver destroyed; abort
+                return src, True, dest
             except MemoryError as exc:
-                errors += 1
-                msg = f"Out of memory — {exc}"
-                logger.error("Converter worker MemoryError on %s: %s", src, msg)
-                try:
-                    self.file_done.emit(src, False, msg)
-                except RuntimeError:
-                    return
+                return src, False, f"Out of memory — {exc}"
             except Exception:
-                errors += 1
-                msg = traceback.format_exc()
-                logger.error("Converter worker error on %s:\n%s", src, msg)
-                try:
-                    self.file_done.emit(src, False, msg)
-                except RuntimeError:
-                    return
+                return src, False, traceback.format_exc()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as pool:
+            fut_map: "dict[concurrent.futures.Future, str]" = {}
+            for src in self._files:
+                if self._abort:
+                    break
+                fut_map[pool.submit(_convert_one, src)] = src
+
+            completed = 0
+            for fut in concurrent.futures.as_completed(fut_map):
+                if self._abort:
+                    break
+                src_path, ok, dest_or_err = fut.result()
+                completed += 1
+                now = time.monotonic()
+                if (not large_batch
+                        or completed == total
+                        or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
+                    try:
+                        self.progress.emit(completed, total, src_path)
+                    except RuntimeError:
+                        return
+                    last_progress_time = now
+                if ok:
+                    success += 1
+                    if not large_batch:
+                        try:
+                            self.file_done.emit(src_path, True, dest_or_err)
+                        except RuntimeError:
+                            return
+                else:
+                    errors += 1
+                    logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
+                    try:
+                        self.file_done.emit(src_path, False, dest_or_err)
+                    except RuntimeError:
+                        return
+
         try:
             self.finished.emit(success, errors)
         except RuntimeError:
