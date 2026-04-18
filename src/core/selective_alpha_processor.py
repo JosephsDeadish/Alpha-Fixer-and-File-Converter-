@@ -27,46 +27,46 @@ NUM_ZONES = 40
 # The palette cycles through a range of well-separated hues so that even images
 # with many distinct alpha levels get clearly distinguishable highlight colours.
 ZONE_COLORS: list[tuple[int, int, int, int]] = [
-    (255,  60,  60, 130),   # zone 0  – Red
-    ( 60, 200,  60, 130),   # zone 1  – Green
-    ( 60, 120, 255, 130),   # zone 2  – Blue
-    (255, 210,  50, 130),   # zone 3  – Yellow
-    (200,  60, 255, 130),   # zone 4  – Purple
-    ( 50, 220, 220, 130),   # zone 5  – Cyan
-    (255, 140,  50, 130),   # zone 6  – Orange
-    (255, 100, 180, 130),   # zone 7  – Pink
-    (100, 255, 180, 130),   # zone 8  – Mint
-    (180, 120,  60, 130),   # zone 9  – Brown
-    (255, 255,  80, 130),   # zone 10 – Lime Yellow
-    ( 80, 255, 255, 130),   # zone 11 – Sky Cyan
-    (255,  80, 255, 130),   # zone 12 – Magenta
-    (160, 255,  80, 130),   # zone 13 – Yellow-Green
-    ( 80, 160, 255, 130),   # zone 14 – Cornflower
-    (255, 160,  80, 130),   # zone 15 – Peach
-    (160,  80, 255, 130),   # zone 16 – Violet
-    ( 80, 255, 160, 130),   # zone 17 – Sea Green
-    (255,  80, 160, 130),   # zone 18 – Rose
-    (160, 200, 255, 130),   # zone 19 – Periwinkle
-    (220,  80,  80, 130),   # zone 20 – Crimson
-    ( 80, 220, 120, 130),   # zone 21 – Jade
-    (100, 100, 240, 130),   # zone 22 – Indigo
-    (240, 200,  80, 130),   # zone 23 – Gold
-    (180, 100, 220, 130),   # zone 24 – Lavender
-    ( 80, 200, 200, 130),   # zone 25 – Teal
-    (230, 120,  60, 130),   # zone 26 – Tangerine
-    (220, 140, 180, 130),   # zone 27 – Blush
-    (140, 230, 200, 130),   # zone 28 – Seafoam
-    (160, 100,  60, 130),   # zone 29 – Copper
-    (200, 220,  60, 130),   # zone 30 – Chartreuse
-    ( 60, 220, 240, 130),   # zone 31 – Aqua
-    (240,  60, 220, 130),   # zone 32 – Fuchsia
-    (120, 220,  60, 130),   # zone 33 – Grass
-    ( 60, 140, 220, 130),   # zone 34 – Denim
-    (220, 140,  60, 130),   # zone 35 – Amber
-    (140,  60, 220, 130),   # zone 36 – Plum
-    ( 60, 220, 140, 130),   # zone 37 – Emerald
-    (220,  60, 140, 130),   # zone 38 – Berry
-    (140, 180, 220, 130),   # zone 39 – Steel Blue
+    (255,  50,  50, 170),   # zone 0  – Red
+    ( 50, 210,  50, 170),   # zone 1  – Green
+    ( 50, 120, 255, 170),   # zone 2  – Blue
+    (255, 220,  30, 170),   # zone 3  – Yellow
+    (210,  50, 255, 170),   # zone 4  – Purple
+    ( 30, 230, 230, 170),   # zone 5  – Cyan
+    (255, 130,  30, 170),   # zone 6  – Orange
+    (255,  80, 190, 170),   # zone 7  – Pink
+    ( 80, 255, 170, 170),   # zone 8  – Mint
+    (180, 110,  40, 170),   # zone 9  – Brown
+    (255, 255,  50, 170),   # zone 10 – Lime Yellow
+    ( 50, 255, 255, 170),   # zone 11 – Sky Cyan
+    (255,  50, 255, 170),   # zone 12 – Magenta
+    (155, 255,  50, 170),   # zone 13 – Yellow-Green
+    ( 50, 155, 255, 170),   # zone 14 – Cornflower
+    (255, 155,  50, 170),   # zone 15 – Peach
+    (155,  50, 255, 170),   # zone 16 – Violet
+    ( 50, 255, 155, 170),   # zone 17 – Sea Green
+    (255,  50, 155, 170),   # zone 18 – Rose
+    (155, 200, 255, 170),   # zone 19 – Periwinkle
+    (230,  50,  50, 170),   # zone 20 – Crimson
+    ( 50, 230, 110, 170),   # zone 21 – Jade
+    ( 80,  80, 255, 170),   # zone 22 – Indigo
+    (255, 210,  50, 170),   # zone 23 – Gold
+    (190,  80, 240, 170),   # zone 24 – Lavender
+    ( 50, 210, 210, 170),   # zone 25 – Teal
+    (240, 110,  40, 170),   # zone 26 – Tangerine
+    (240, 130, 180, 170),   # zone 27 – Blush
+    (120, 240, 200, 170),   # zone 28 – Seafoam
+    (175,  90,  40, 170),   # zone 29 – Copper
+    (210, 240,  40, 170),   # zone 30 – Chartreuse
+    ( 40, 230, 255, 170),   # zone 31 – Aqua
+    (255,  40, 230, 170),   # zone 32 – Fuchsia
+    (100, 240,  40, 170),   # zone 33 – Grass
+    ( 40, 130, 240, 170),   # zone 34 – Denim
+    (240, 150,  40, 170),   # zone 35 – Amber
+    (150,  40, 240, 170),   # zone 36 – Plum
+    ( 40, 240, 130, 170),   # zone 37 – Emerald
+    (240,  40, 130, 170),   # zone 38 – Berry
+    (120, 180, 240, 170),   # zone 39 – Steel Blue
 ]
 
 # Human-readable zone names shown in the UI.

@@ -898,6 +898,8 @@ class MainWindow(QMainWindow):
         self._cursor_anim_frames: list[str] = []  # current animation sequence (text cycling)
         self._cursor_spin_cursors: list = []       # pre-rendered QCursor frames (spin or wobble)
         self._cursor_spin_emoji: str = ""          # which emoji is currently spin/wobble-animated
+        # Track dialogs that already have overlays so we don't double-attach (item 2).
+        self._overlay_attached_windows: "set[int]" = set()
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -1195,6 +1197,10 @@ class MainWindow(QMainWindow):
         self._apply_bg_drip()
         self._apply_bg_flock()
         self._apply_bg_ambient()
+
+        # Install an app-level event filter to auto-attach trail/click overlays
+        # to any floating dialog that appears while effects are enabled (item 2).
+        QApplication.instance().installEventFilter(self)
 
         # Connect processing-done signals so file processing can unlock themes
         self._alpha_tab.processing_done.connect(self._on_processing_done)
@@ -3124,6 +3130,78 @@ class MainWindow(QMainWindow):
             self._video_tool_dlg.raise_()
             self._video_tool_dlg.activateWindow()
         event.accept()
+
+    def eventFilter(self, obj: "QObject", event: "QEvent") -> bool:
+        """App-level event filter: auto-attach trail/click effects overlays to
+        any new top-level QDialog that appears while effects are enabled (item 2).
+        """
+        if event.type() == QEvent.Type.Show:
+            try:
+                from PyQt6.QtWidgets import QDialog as _QDialog
+                if (isinstance(obj, _QDialog) and obj is not self
+                        and obj.window() is obj):  # top-level dialog
+                    win_id = id(obj)
+                    if win_id not in self._overlay_attached_windows:
+                        self._overlay_attached_windows.add(win_id)
+                        # Clean up tracking when the dialog is destroyed.
+                        obj.destroyed.connect(
+                            lambda _o=None, _id=win_id:
+                            self._overlay_attached_windows.discard(_id)
+                        )
+                        self._auto_attach_effects_to_dialog(obj)
+            except Exception:
+                pass
+        return False  # never consume events
+
+    def _auto_attach_effects_to_dialog(self, dlg: "QWidget") -> None:
+        """Attach trail and click-effects overlays to *dlg* if effects are on (item 2)."""
+        try:
+            trail_enabled = self._settings.get("trail_enabled", False)
+            effects_enabled = self._settings.get("click_effects_enabled", False)
+            if not (trail_enabled or effects_enabled):
+                return
+
+            # --- trail overlay ---
+            if trail_enabled and self._trail_overlay is not None:
+                from .mouse_trail import MouseTrailOverlay
+                _trail = MouseTrailOverlay(dlg)
+                _trail.setGeometry(dlg.rect())
+                _trail.raise_()
+                self._apply_trail_to(_trail)
+                _trail.set_enabled(True)
+
+            # --- click effects overlay ---
+            if effects_enabled and self._click_effects is not None:
+                from .click_effects import ClickEffectsOverlay
+                from .theme_engine import THEME_EFFECTS
+                _ov = ClickEffectsOverlay(dlg)
+                _ov.setGeometry(dlg.rect())
+                _ov.raise_()
+                theme = self._settings.get_theme()
+                effect_key = (theme.get("_effect")
+                              or THEME_EFFECTS.get(theme.get("name", ""), "default"))
+                _ov.set_effect(effect_key)
+                custom_emoji = self._settings.get("custom_emoji", "")
+                _ov.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
+                _ov.set_enabled(True)
+
+            # Keep overlays covering the dialog when it resizes.
+            def _on_dlg_resize():
+                for child in dlg.children():
+                    from .mouse_trail import MouseTrailOverlay as _MTO
+                    from .click_effects import ClickEffectsOverlay as _CEO
+                    if isinstance(child, (_MTO, _CEO)):
+                        try:
+                            child.setGeometry(dlg.rect())
+                            child.raise_()
+                        except Exception:
+                            pass
+
+            dlg.resizeEvent = lambda ev, _orig=dlg.resizeEvent: (
+                _orig(ev), _on_dlg_resize()
+            )[-1]
+        except Exception:
+            pass
 
     def changeEvent(self, event: "QEvent") -> None:
         """Handle runtime display/DPI changes and minimize/restore events.

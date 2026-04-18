@@ -137,8 +137,10 @@ class SelectiveAlphaCanvas(QWidget):
     zoom_changed        = pyqtSignal(float) # emitted whenever the canvas zoom changes
     copy_requested      = pyqtSignal(int)   # context-menu: copy zone mask
     paste_requested     = pyqtSignal(int)   # context-menu: paste zone mask
-    copy_all_requested  = pyqtSignal()      # context-menu: copy all zones
-    paste_all_requested = pyqtSignal()      # context-menu: paste all zones
+    copy_all_requested          = pyqtSignal()      # context-menu: copy all zones
+    paste_all_requested         = pyqtSignal()      # context-menu: paste all zones
+    paste_from_alpha_requested  = pyqtSignal()      # context-menu: paste single zone from Alpha/RGBA tool
+    paste_all_from_alpha_requested = pyqtSignal()   # context-menu: paste all zones from Alpha/RGBA tool
     cursor_moved        = pyqtSignal(int, int)  # image (x, y) when mouse moves over canvas (item 50)
 
     _OVERLAY_ALPHA = 160  # zone colour overlay opacity (0–255) — class default
@@ -178,6 +180,7 @@ class SelectiveAlphaCanvas(QWidget):
         self._show_zero_alpha:    bool = False
         self._show_alpha_labels:  bool = False
         self._paste_available:    bool = False
+        self._alpha_paste_available: bool = False
 
         # ── drawing state ─────────────────────────────────────────────
         self._drawing:        bool = False
@@ -237,6 +240,10 @@ class SelectiveAlphaCanvas(QWidget):
 
     def set_paste_available(self, v: bool) -> None:
         self._paste_available = bool(v)
+
+    def set_alpha_paste_available(self, v: bool) -> None:
+        """Signal whether zones from the Alpha/RGBA Adjuster tool are ready to paste."""
+        self._alpha_paste_available = bool(v)
 
     def set_tool(self, key: str) -> None:
         if key != self._tool:
@@ -1036,6 +1043,19 @@ class SelectiveAlphaCanvas(QWidget):
         act_copy_all  = menu.addAction("Copy All Zones")
         act_paste_all = menu.addAction("Paste All Zones")
         act_paste_all.setEnabled(self._paste_available)
+        menu.addSeparator()
+        act_paste_alpha = menu.addAction("📋  Paste Zone from Alpha/RGBA Tool")
+        act_paste_alpha.setEnabled(self._alpha_paste_available)
+        act_paste_alpha.setToolTip(
+            "Paste the alpha zone received from the Alpha & RGBA Adjuster\n"
+            "into the currently active zone on this canvas."
+        )
+        act_paste_all_alpha = menu.addAction("📋  Paste All Zones from Alpha/RGBA Tool")
+        act_paste_all_alpha.setEnabled(self._alpha_paste_available)
+        act_paste_all_alpha.setToolTip(
+            "Paste all alpha zones received from the Alpha & RGBA Adjuster\n"
+            "into the corresponding zones on this canvas."
+        )
         chosen = menu.exec(self.mapToGlobal(pos))
         if chosen is act_copy:
             self.copy_requested.emit(self._active_zone)
@@ -1045,6 +1065,10 @@ class SelectiveAlphaCanvas(QWidget):
             self.copy_all_requested.emit()
         elif chosen is act_paste_all:
             self.paste_all_requested.emit()
+        elif chosen is act_paste_alpha:
+            self.paste_from_alpha_requested.emit()
+        elif chosen is act_paste_all_alpha:
+            self.paste_all_from_alpha_requested.emit()
 
 
 class _FloatingZoomOverlay(QFrame):
@@ -1114,14 +1138,15 @@ class _FloatingZoomOverlay(QFrame):
 
 class _FloatingHistoryOverlay(QFrame):
     """Semi-transparent floating overlay with Undo / Redo canvas-drawing buttons
-    and visibility toggles (Highlight transparent pixels, Show α values).
+    and visibility toggles (Highlight transparent pixels, Show α values, Hide/Show all zones).
 
     Positioned at the top-left corner of its parent widget.  Reparent to the
     canvas widget and call ``reposition()`` from the parent's ``resizeEvent``.
     """
 
-    highlight_toggled = pyqtSignal(bool)
-    labels_toggled    = pyqtSignal(bool)
+    highlight_toggled    = pyqtSignal(bool)
+    labels_toggled       = pyqtSignal(bool)
+    all_zones_toggled    = pyqtSignal(bool)   # True = show all, False = hide all
 
     def __init__(self, undo_cb, redo_cb, parent=None):
         super().__init__(parent)
@@ -1190,8 +1215,35 @@ class _FloatingHistoryOverlay(QFrame):
         self._chk_labels.toggled.connect(self.labels_toggled)
         vlay.addWidget(self._chk_labels)
 
+        # Row 4: Hide / Show all zone highlights toggle button (item 83)
+        self._btn_all_vis = QPushButton("👁  Hide All Zones")
+        self._btn_all_vis.setCheckable(True)
+        self._btn_all_vis.setChecked(False)
+        self._btn_all_vis.setToolTip(
+            "Hide or show all zone colour overlays on the canvas at once.\n"
+            "Hidden zones keep their painted masks — only the display is toggled."
+        )
+        self._btn_all_vis.clicked.connect(self._on_all_vis_clicked)
+        vlay.addWidget(self._btn_all_vis)
+
         self.adjustSize()
         self.raise_()
+
+    def _on_all_vis_clicked(self, checked: bool) -> None:
+        """Hide all zones when checked, show all when unchecked."""
+        if checked:
+            self._btn_all_vis.setText("👁  Show All Zones")
+        else:
+            self._btn_all_vis.setText("👁  Hide All Zones")
+        # Emit True = show all (not checked = visible), False = hide all (checked = hidden)
+        self.all_zones_toggled.emit(not checked)
+
+    def set_all_zones_visible(self, visible: bool) -> None:
+        """Sync the button text to reflect current all-zones visibility state."""
+        self._btn_all_vis.blockSignals(True)
+        self._btn_all_vis.setChecked(not visible)
+        self._btn_all_vis.setText("👁  Show All Zones" if not visible else "👁  Hide All Zones")
+        self._btn_all_vis.blockSignals(False)
 
     def set_undo_enabled(self, enabled: bool) -> None:
         self._btn_undo.setEnabled(enabled)
@@ -1698,14 +1750,9 @@ class SelectiveAlphaTool(QWidget):
         ze_vlay.setSpacing(4)
         ze_vlay.setContentsMargins(4, 4, 4, 4)
 
-        # Row 1: vis toggle + color swatch + name label + alpha spinbox
+        # Row 1: color swatch + name label + alpha spinbox
         ze_row1 = QHBoxLayout()
         ze_row1.setSpacing(4)
-        self._ze_vis_btn = QPushButton("👁")
-        self._ze_vis_btn.setCheckable(True)
-        self._ze_vis_btn.setChecked(True)
-        self._ze_vis_btn.setFixedSize(28, 24)
-        ze_row1.addWidget(self._ze_vis_btn)
         self._ze_swatch_btn = QPushButton()
         self._ze_swatch_btn.setFlat(True)
         self._ze_swatch_btn.setFixedSize(18, 18)
@@ -2065,6 +2112,9 @@ class SelectiveAlphaTool(QWidget):
         # Wire canvas context-menu copy/paste all-zones signals.
         self._canvas.copy_all_requested.connect(self._on_copy_all_zones)
         self._canvas.paste_all_requested.connect(self._on_paste_all_zones)
+        # Wire canvas cross-tool paste signals (item 67).
+        self._canvas.paste_from_alpha_requested.connect(self._on_paste_zone_from_alpha)
+        self._canvas.paste_all_from_alpha_requested.connect(self._on_paste_all_zones_from_alpha)
 
         # Wire overlay opacity slider (item 16)
         def _on_overlay_opacity(val: int) -> None:
@@ -2073,7 +2123,6 @@ class SelectiveAlphaTool(QWidget):
         self._overlay_opacity_slider.valueChanged.connect(_on_overlay_opacity)
 
         # Wire single zone editor controls
-        self._ze_vis_btn.clicked.connect(self._on_ze_vis_toggled)
         self._ze_swatch_btn.clicked.connect(self._on_ze_pick_color)
         self._ze_clear_btn.clicked.connect(self._on_ze_clear)
         self._ze_copy_btn.clicked.connect(self._on_ze_copy_mask)
@@ -2147,6 +2196,8 @@ class SelectiveAlphaTool(QWidget):
         # Connect overlay checkbox signals to canvas (item 69 — moved from sidebar).
         self._history_overlay.highlight_toggled.connect(self._canvas.set_show_zero_alpha)
         self._history_overlay.labels_toggled.connect(self._canvas.set_show_alpha_labels)
+        # Connect all-zones visibility toggle (item 83).
+        self._history_overlay.all_zones_toggled.connect(self._on_all_zones_from_overlay)
 
         # Install an event filter on the canvas so the overlays stay pinned
         # whenever the canvas is resized.
@@ -2313,7 +2364,6 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._autocorrect_chk,  "sa_autocorrect")
         # Zoom buttons are in the floating overlay; register the overlay frame itself
         mgr.register(self._zoom_overlay, "sa_zoom_overlay")
-        mgr.register(self._ze_vis_btn,    "sa_zone_visibility")
         mgr.register(self._ze_alpha_spin, "sa_zone_alpha_spin")
         mgr.register(self._ze_clear_btn,  "sa_zone_clear")
         mgr.register(self._ze_copy_btn,   "sa_zone_copy_mask")
@@ -2397,6 +2447,9 @@ class SelectiveAlphaTool(QWidget):
             self._on_show_all_zones()
         else:
             self._on_hide_all_zones()
+        # Keep the floating overlay Hide/Show button in sync.
+        if hasattr(self, "_history_overlay"):
+            self._history_overlay.set_all_zones_visible(checked)
 
     def _on_show_all_zones(self) -> None:
         """Make all zone overlays visible and sync the zone editor."""
@@ -2409,6 +2462,18 @@ class SelectiveAlphaTool(QWidget):
         for idx in range(NUM_ZONES):
             self._canvas.set_zone_visible(idx, False)
         self._refresh_zone_editor(self._ze_cur_idx)
+
+    def _on_all_zones_from_overlay(self, show: bool) -> None:
+        """Called by the Hide/Show All Zones button in the floating overlay (item 83)."""
+        if show:
+            self._on_show_all_zones()
+        else:
+            self._on_hide_all_zones()
+        # Keep the sidebar Show Highlights checkbox in sync if present.
+        if hasattr(self, "_btn_show_highlights"):
+            self._btn_show_highlights.blockSignals(True)
+            self._btn_show_highlights.setChecked(show)
+            self._btn_show_highlights.blockSignals(False)
 
     def _on_zone_color_changed(self, zone_idx: int, rgb: tuple) -> None:
         """Propagate a user-chosen zone colour to the canvas and save settings."""
@@ -2619,6 +2684,73 @@ class SelectiveAlphaTool(QWidget):
         if self._sound is not None:
             self._sound.play_mask_paste()
 
+    def _on_paste_zone_from_alpha(self) -> None:
+        """Paste the first shared zone from the Alpha/RGBA tool into the active zone (item 67)."""
+        if not self._shared_zones:
+            QMessageBox.information(
+                self, "No zone from Alpha/RGBA Tool",
+                "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
+                "In the Alpha & RGBA Adjuster tab, right-click the preview and\n"
+                "choose 'Copy zones → Selective Alpha tool'."
+            )
+            return
+        if not self._canvas.has_image():
+            QMessageBox.information(self, "No image loaded",
+                                    "Please open an image before pasting a zone.")
+            return
+        import numpy as np_imp
+        # Use the first zone for single-zone paste; scale mask to current image size.
+        _alpha_val, bool_mask = self._shared_zones[0]
+        h, w = self._canvas._img_h, self._canvas._img_w
+        if bool_mask.shape != (h, w):
+            from PIL import Image as _PILImage
+            pil_m = _PILImage.fromarray((bool_mask.astype(np_imp.uint8) * 255), mode="L")
+            pil_m = pil_m.resize((w, h), _PILImage.NEAREST)
+            bool_mask = np_imp.array(pil_m, dtype=np_imp.uint8)
+        else:
+            bool_mask = bool_mask.astype(np_imp.uint8)
+        self._canvas._push_history()
+        self._canvas._masks[self._canvas._active_zone] = bool_mask
+        self._canvas._composite_dirty = True
+        self._canvas.mask_changed.emit(self._canvas._active_zone)
+        self._canvas.update()
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
+    def _on_paste_all_zones_from_alpha(self) -> None:
+        """Paste all shared zones from the Alpha/RGBA tool into corresponding canvas zones (item 67)."""
+        if not self._shared_zones:
+            QMessageBox.information(
+                self, "No zones from Alpha/RGBA Tool",
+                "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
+                "In the Alpha & RGBA Adjuster tab, right-click the preview and\n"
+                "choose 'Copy zones → Selective Alpha tool'."
+            )
+            return
+        if not self._canvas.has_image():
+            QMessageBox.information(self, "No image loaded",
+                                    "Please open an image before pasting zones.")
+            return
+        import numpy as np_imp
+        from PIL import Image as _PILImage
+        h, w = self._canvas._img_h, self._canvas._img_w
+        self._canvas._push_history()
+        for i, (_alpha_val, bool_mask) in enumerate(self._shared_zones):
+            if i >= NUM_ZONES:
+                break
+            if bool_mask.shape != (h, w):
+                pil_m = _PILImage.fromarray((bool_mask.astype(np_imp.uint8) * 255), mode="L")
+                pil_m = pil_m.resize((w, h), _PILImage.NEAREST)
+                scaled = np_imp.array(pil_m, dtype=np_imp.uint8)
+            else:
+                scaled = bool_mask.astype(np_imp.uint8)
+            self._canvas._masks[i] = scaled
+            self._canvas._composite_dirty = True
+            self._canvas.mask_changed.emit(i)
+        self._canvas.update()
+        if self._sound is not None:
+            self._sound.play_mask_paste()
+
     # ---- all-zones slot helpers ----------------------------------------
 
     def _update_az_slot_combo_item(self, idx: int) -> None:
@@ -2732,6 +2864,8 @@ class SelectiveAlphaTool(QWidget):
             return
         import numpy as np_imp
         self._shared_zones = list(zones)
+        # Mark the canvas alpha-paste menu items as available (item 67).
+        self._canvas.set_alpha_paste_available(True)
         count = len(zones)
         _display_max = 7
         displayed = zones[:_display_max]
@@ -3275,16 +3409,9 @@ class SelectiveAlphaTool(QWidget):
             f"background:{QColor(r_c, g_c, b_c).name()};"
             "border:1px solid #666;border-radius:3px;padding:0;"
         )
-        visible = self._canvas._zone_visible[idx]
-        self._ze_vis_btn.setChecked(visible)
-        self._ze_vis_btn.setText("👁" if visible else "🚫")
         self._ze_alpha_spin.blockSignals(True)
         self._ze_alpha_spin.setValue(self._canvas._zone_alphas[idx])
         self._ze_alpha_spin.blockSignals(False)
-
-    def _on_ze_vis_toggled(self, checked: bool) -> None:
-        self._ze_vis_btn.setText("👁" if checked else "🚫")
-        self._canvas.set_zone_visible(self._ze_cur_idx, checked)
 
     def _on_ze_pick_color(self) -> None:
         r, g, b, _ = self._canvas.get_zone_color(self._ze_cur_idx)
