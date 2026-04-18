@@ -1205,6 +1205,11 @@ class SettingsDialog(QDialog):
         self._font_size_spin.setRange(8, 24)
         self._font_size_spin.setValue(10)
         self._font_size_spin.setMaximumWidth(80)
+        self._font_size_spin.setToolTip(
+            "Sets the tooltip font size in points.\n"
+            "The UI Scale setting (General → UI Scaling) does NOT change tooltips;\n"
+            "tooltips always use this exact size regardless of UI Scale."
+        )
         misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
         misc_gl.addWidget(QLabel("Tooltip Mode:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
@@ -1278,11 +1283,49 @@ class SettingsDialog(QDialog):
         scale_gl.addWidget(self._ui_scale_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         scale_note = QLabel(
-            "ℹ  Changes apply immediately to all text and controls in the application."
+            "ℹ  Scales all text and controls. Tooltip size is controlled separately in Tooltip Appearance above."
         )
         scale_note.setWordWrap(True)
         scale_note.setStyleSheet("color: #888; font-size: 10px;")
         scale_gl.addWidget(scale_note, 1, 0, 1, 2)
+
+        # Button / Control Height (items 6/7)
+        scale_gl.addWidget(QLabel("Button Height:"), 2, 0)
+        self._btn_height_combo = QComboBox()
+        _BTN_HEIGHT_OPTIONS = [
+            ("Compact  (22 px min)",   "Compact",     "Shorter buttons and controls — fits more on screen."),
+            ("Normal   (26 px min)",   "Normal",      "Default button height. Comfortable for most displays."),
+            ("Comfortable  (32 px min)", "Comfortable", "Taller buttons — easier to click, especially on touch screens."),
+        ]
+        for label, _key, tip in _BTN_HEIGHT_OPTIONS:
+            self._btn_height_combo.addItem(label)
+            idx = self._btn_height_combo.count() - 1
+            self._btn_height_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._btn_height_combo.setToolTip(
+            "Set the minimum height for buttons and combo boxes.\n"
+            "Compact fits more controls on screen; Comfortable is easier to click."
+        )
+        self._btn_height_combo.setMaximumWidth(220)
+        scale_gl.addWidget(self._btn_height_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Widget Spacing (items 6/7)
+        scale_gl.addWidget(QLabel("Widget Spacing:"), 3, 0)
+        self._widget_spacing_combo = QComboBox()
+        _SPACING_OPTIONS = [
+            ("Tight  (2 px)",   "Tight",   "Minimal spacing between widgets — maximise screen use."),
+            ("Normal  (4 px)",  "Normal",  "Default spacing. Balanced and readable."),
+            ("Relaxed  (8 px)", "Relaxed", "More breathing room between controls — easier to read."),
+        ]
+        for label, _key, tip in _SPACING_OPTIONS:
+            self._widget_spacing_combo.addItem(label)
+            idx = self._widget_spacing_combo.count() - 1
+            self._widget_spacing_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._widget_spacing_combo.setToolTip(
+            "Set the spacing between widgets in tool panels.\n"
+            "Tight fits more controls; Relaxed is easier to read."
+        )
+        self._widget_spacing_combo.setMaximumWidth(220)
+        scale_gl.addWidget(self._widget_spacing_combo, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
         gv.addWidget(grp_scale)
 
@@ -1412,6 +1455,8 @@ class SettingsDialog(QDialog):
         self._cursor_anim_check.toggled.connect(self._on_cursor_anim_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
         self._ui_scale_combo.currentTextChanged.connect(self._on_ui_scale_changed)
+        self._btn_height_combo.currentTextChanged.connect(self._on_btn_height_changed)
+        self._widget_spacing_combo.currentTextChanged.connect(self._on_widget_spacing_changed)
         self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
@@ -1530,6 +1575,8 @@ class SettingsDialog(QDialog):
             self._bg_ambient_check, self._use_theme_ambient_check, self._bg_ambient_combo,
             # Sound profile combo also saves settings on currentIndexChanged.
             self._sound_profile_combo,
+            # UI density combos
+            self._btn_height_combo, self._widget_spacing_combo,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -1629,6 +1676,14 @@ class SettingsDialog(QDialog):
         scale_val = self._settings.get("ui_scale", "Normal")
         _scale_map = {"Compact": 0, "Normal": 1, "Large": 2, "Extra Large": 3}
         self._ui_scale_combo.setCurrentIndex(_scale_map.get(scale_val, 1))
+        # Button height
+        btn_h_val = self._settings.get("btn_height", "Normal")
+        _btn_h_map = {"Compact": 0, "Normal": 1, "Comfortable": 2}
+        self._btn_height_combo.setCurrentIndex(_btn_h_map.get(btn_h_val, 1))
+        # Widget spacing
+        ws_val = self._settings.get("widget_spacing", "Normal")
+        _ws_map = {"Tight": 0, "Normal": 1, "Relaxed": 2}
+        self._widget_spacing_combo.setCurrentIndex(_ws_map.get(ws_val, 1))
         # History max entries
         self._history_max_spin.setValue(self._settings.get("history_max_entries", 100))
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
@@ -2506,6 +2561,20 @@ class SettingsDialog(QDialog):
                 app.setStyle(app.style())
         except Exception:
             pass
+        self.settings_changed.emit()
+
+    def _on_btn_height_changed(self) -> None:
+        _keys = ["Compact", "Normal", "Comfortable"]
+        idx = self._btn_height_combo.currentIndex()
+        key = _keys[idx] if 0 <= idx < len(_keys) else "Normal"
+        self._settings.set("btn_height", key)
+        self.settings_changed.emit()
+
+    def _on_widget_spacing_changed(self) -> None:
+        _keys = ["Tight", "Normal", "Relaxed"]
+        idx = self._widget_spacing_combo.currentIndex()
+        key = _keys[idx] if 0 <= idx < len(_keys) else "Normal"
+        self._settings.set("widget_spacing", key)
         self.settings_changed.emit()
 
     def _on_history_max_changed(self, value: int) -> None:

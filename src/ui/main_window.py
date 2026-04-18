@@ -2067,6 +2067,21 @@ class MainWindow(QMainWindow):
                 new_ss += f"\nQToolTip {{ font-size: {_tip_base}pt; }}"
             except Exception:
                 pass
+            # Append button-height and widget-spacing overrides (items 6/7).
+            try:
+                _btn_h_map = {"Compact": 22, "Normal": 26, "Comfortable": 32}
+                _btn_h = _btn_h_map.get(
+                    self._settings.get("btn_height", "Normal"), 26)
+                new_ss += (
+                    f"\nQPushButton, QComboBox, QSpinBox, QDoubleSpinBox"
+                    f" {{ min-height: {_btn_h}px; }}"
+                )
+                _sp_map = {"Tight": 2, "Normal": 4, "Relaxed": 8}
+                _sp = _sp_map.get(
+                    self._settings.get("widget_spacing", "Normal"), 4)
+                new_ss += f"\nQGroupBox {{ spacing: {_sp}px; }}"
+            except Exception:
+                pass
             if new_ss != self._last_stylesheet:
                 app.setStyleSheet(new_ss)
                 self._last_stylesheet = new_ss
