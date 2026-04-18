@@ -628,18 +628,17 @@ class SettingsDialog(QDialog):
             self._bg_drip_combo.setEnabled(enabled and not use_theme)
             self._bg_drip_theme_lbl.setVisible(use_theme)
             if use_theme and enabled:
-                # Update the theme label; also select the theme's drip in the combo
+                # Derive drip type from the current theme's effect key
                 try:
-                    from .theme_engine import THEME_EFFECTS
-                    theme_name = self._settings.get_theme().get("name", "")
-                    effect = THEME_EFFECTS.get(theme_name, {})
-                    drip = effect.get("drip", None)
-                    if drip == "blood":
+                    theme = self._settings.get_theme()
+                    theme_name = theme.get("name", "")
+                    eff = theme.get("_effect", "default")
+                    if eff in ("gore", "shark"):
                         idx = self._bg_drip_combo.findData("blood")
                         self._bg_drip_theme_lbl.setText(
                             f"🩸 Auto-set by '{theme_name}' theme  →  Blood Drip"
                         )
-                    elif drip == "water":
+                    elif eff in ("ocean", "ripple", "mermaid"):
                         idx = self._bg_drip_combo.findData("water")
                         self._bg_drip_theme_lbl.setText(
                             f"💧 Auto-set by '{theme_name}' theme  →  Water Drip"
@@ -650,7 +649,9 @@ class SettingsDialog(QDialog):
                             f"🚫 '{theme_name}' theme has no drip effect"
                         )
                     if idx >= 0:
+                        self._bg_drip_combo.blockSignals(True)
                         self._bg_drip_combo.setCurrentIndex(idx)
+                        self._bg_drip_combo.blockSignals(False)
                 except Exception:
                     pass
         self._bg_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
