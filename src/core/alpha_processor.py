@@ -169,6 +169,83 @@ def _save_dds_raw(img: Image.Image, path: str):
 
 
 # ---------------------------------------------------------------------------
+# Atlas detection (item 11)
+# ---------------------------------------------------------------------------
+
+def detect_atlas_cells(
+    alpha: "np.ndarray",
+    min_size: int = 4,
+) -> list[tuple[int, int, int, int]]:
+    """Detect sprite atlas cells from an alpha channel array.
+
+    Scans for horizontal and vertical "seam" lines (rows/columns that are
+    entirely transparent) and returns the bounding boxes of the non-empty
+    cells between those seams.
+
+    Parameters
+    ----------
+    alpha:
+        2-D uint8 numpy array (shape ``(height, width)``).
+    min_size:
+        Minimum width and height in pixels for a cell to be included.
+        Tiny cells (e.g. single-pixel gaps) are filtered out.
+
+    Returns
+    -------
+    List of ``(x, y, w, h)`` tuples in image-pixel coordinates.
+    Returns an empty list if no seams are found or the image has no alpha.
+    """
+    h, w = alpha.shape
+    if h == 0 or w == 0:
+        return []
+
+    # Row seams: rows where all pixels are fully transparent
+    row_empty = np.all(alpha == 0, axis=1)   # shape (h,)
+    col_empty = np.all(alpha == 0, axis=0)   # shape (w,)
+
+    def _spans(empty_mask: "np.ndarray") -> list[tuple[int, int]]:
+        """Return list of (start, end) index pairs for contiguous non-empty runs."""
+        spans: list[tuple[int, int]] = []
+        n = len(empty_mask)
+        in_span = False
+        start = 0
+        for i in range(n):
+            if not empty_mask[i]:
+                if not in_span:
+                    in_span = True
+                    start = i
+            else:
+                if in_span:
+                    in_span = False
+                    spans.append((start, i))
+        if in_span:
+            spans.append((start, n))
+        return spans
+
+    row_spans = _spans(row_empty)
+    col_spans = _spans(col_empty)
+
+    # If there are no seams at all, the image is not an atlas — return nothing.
+    if len(row_spans) <= 1 and len(col_spans) <= 1:
+        return []
+
+    cells: list[tuple[int, int, int, int]] = []
+    for r_start, r_end in row_spans:
+        rh = r_end - r_start
+        if rh < min_size:
+            continue
+        for c_start, c_end in col_spans:
+            cw = c_end - c_start
+            if cw < min_size:
+                continue
+            cell = alpha[r_start:r_end, c_start:c_end]
+            if np.any(cell > 0):
+                cells.append((c_start, r_start, cw, rh))
+
+    return cells
+
+
+# ---------------------------------------------------------------------------
 # Core alpha processing
 # ---------------------------------------------------------------------------
 

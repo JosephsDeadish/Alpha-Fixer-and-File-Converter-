@@ -457,6 +457,19 @@ class AlphaFixerTab(QWidget):
             "This is purely a visual aid — it does NOT change how files are processed."
         )
         ca_layout.addWidget(self._alpha_vis_check)
+        # Atlas detection toggle (item 11)
+        self._atlas_detect_check = QCheckBox("🗺  Detect Atlas")
+        self._atlas_detect_check.setChecked(False)
+        self._atlas_detect_check.setToolTip(
+            "Detect sprite atlas cells in the preview image.\n"
+            "Draws colored bounding boxes around each detected sprite region.\n"
+            "Works by finding rows/columns of fully transparent pixels that\n"
+            "separate individual sprites in a texture atlas/sprite sheet.\n"
+            "Works with or independently of 'Highlight Alpha Values'."
+        )
+        ca_layout.addWidget(self._atlas_detect_check)
+        # Atlas region list for overlay drawing (updated when atlas detect is on)
+        self._atlas_cells: list[tuple[int, int, int, int]] = []
 
         # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
         compare_row = QHBoxLayout()
@@ -787,6 +800,8 @@ class AlphaFixerTab(QWidget):
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
         # Alpha visualization toggle → re-apply overlay without re-processing
         self._alpha_vis_check.toggled.connect(self._on_alpha_vis_toggled)
+        # Atlas detection toggle → re-detect atlas and update overlay (item 11)
+        self._atlas_detect_check.toggled.connect(self._on_atlas_detect_toggled)
         # Pop-out button: include the Highlight Alpha Values checkbox in the
         # floating window so users can toggle the overlay there too.
         self._compare.popout_requested.connect(self._on_compare_popout)
@@ -842,6 +857,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "alpha_status_lbl")
         mgr.register(self._alpha_vis_check, "alpha_vis_check")
+        mgr.register(self._atlas_detect_check, "alpha_atlas_detect_check")
         # Group boxes (prevent stale-id tooltip bleed from settings dialog widgets)
         mgr.register(self._grp_out, "alpha_output_group")
         mgr.register(self._grp_tune, "alpha_tune_group")
@@ -1243,6 +1259,7 @@ class AlphaFixerTab(QWidget):
         self._compare.setVisible(False)
         self._compare_lbl.setVisible(False)
         self._alpha_vis_check.setVisible(False)
+        self._atlas_detect_check.setVisible(False)
         self._before_stats_lbl.setVisible(False)
         self._after_stats_lbl.setVisible(False)
         self._btn_dock_back.setVisible(True)
@@ -1326,6 +1343,7 @@ class AlphaFixerTab(QWidget):
         self._compare.setVisible(True)
         self._compare_lbl.setVisible(True)
         self._alpha_vis_check.setVisible(True)
+        self._atlas_detect_check.setVisible(True)
         self._before_stats_lbl.setVisible(True)
         self._after_stats_lbl.setVisible(True)
         self._btn_dock_back.setVisible(False)
@@ -1343,17 +1361,76 @@ class AlphaFixerTab(QWidget):
             self._on_compare_docked_back()
 
     def _apply_alpha_vis_to_compare(self) -> None:
-        """Apply the alpha heat-map overlay to the current compare images if enabled."""
+        """Apply the alpha heat-map overlay and/or atlas overlay to the current compare images."""
         before_raw = self._compare.before_image()
         after_raw = self._compare.after_image()
         if before_raw is None or after_raw is None:
             return
         if self._alpha_vis_check.isChecked():
-            self._compare.set_before(self._alpha_vis_overlay(before_raw))
-            self._compare.set_after(self._alpha_vis_overlay(after_raw))
+            before_img = self._alpha_vis_overlay(before_raw)
+            after_img = self._alpha_vis_overlay(after_raw)
         else:
-            self._compare.set_before(before_raw)
-            self._compare.set_after(after_raw)
+            before_img = before_raw
+            after_img = after_raw
+        # Apply atlas overlay on top if detect atlas is checked (item 11)
+        if self._atlas_detect_check.isChecked() and self._atlas_cells:
+            before_img = self._draw_atlas_overlay(before_img)
+            after_img = self._draw_atlas_overlay(after_img)
+        self._compare.set_before(before_img)
+        self._compare.set_after(after_img)
+
+    def _draw_atlas_overlay(self, img: "QImage") -> "QImage":
+        """Draw colored bounding boxes for detected atlas cells onto *img* (item 11)."""
+        from PyQt6.QtGui import QPainter, QPen, QColor
+        result = img.copy()
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        # Cyan/teal boxes with a drop shadow for visibility
+        shadow_pen = QPen(QColor(0, 0, 0, 100), 3)
+        box_pen = QPen(QColor(0, 220, 255, 230), 2)
+        for (bx, by, bw, bh) in self._atlas_cells:
+            painter.setPen(shadow_pen)
+            painter.drawRect(bx + 1, by + 1, bw, bh)
+            painter.setPen(box_pen)
+            painter.drawRect(bx, by, bw, bh)
+        painter.end()
+        return result
+
+    @pyqtSlot(bool)
+    def _on_atlas_detect_toggled(self, checked: bool) -> None:
+        """Detect atlas cells and update the preview overlay (item 11)."""
+        if not checked:
+            self._atlas_cells = []
+            self._apply_alpha_vis_to_compare()
+            return
+        raw = self._compare.before_image()
+        if raw is None:
+            return
+        try:
+            import numpy as np
+            from ..core.alpha_processor import detect_atlas_cells
+            src = raw.convertToFormat(QImage.Format.Format_ARGB32)
+            w, h = src.width(), src.height()
+            if w == 0 or h == 0:
+                return
+            ptr = src.bits()
+            ptr.setsize(h * w * 4)
+            bgra = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4))
+            alpha = bgra[:, :, 3].copy()
+            self._atlas_cells = detect_atlas_cells(alpha)
+        except Exception:
+            self._atlas_cells = []
+        if not self._atlas_cells:
+            # Re-uncheck if nothing detected — show brief status message
+            self._status_lbl.setText(
+                "🗺 No atlas cells detected. "
+                "Atlas detection requires transparent seam-lines between sprites."
+            )
+            self._atlas_detect_check.setChecked(False)
+            return
+        n = len(self._atlas_cells)
+        self._status_lbl.setText(f"🗺 Atlas detected: {n} sprite cell{'s' if n != 1 else ''} found.")
+        self._apply_alpha_vis_to_compare()
 
     def _on_compare_context_menu(self, pos) -> None:
         """Right-click on the compare preview: offer to copy detected alpha zones
@@ -1429,12 +1506,12 @@ class AlphaFixerTab(QWidget):
         # Store the raw (unmodified) images so the vis toggle can toggle on/off
         # without needing to re-run the background worker.
         self._compare.store_raw_images(before_qi, after_qi)
-        if self._alpha_vis_check.isChecked():
-            self._compare.set_before(self._alpha_vis_overlay(before_qi))
-            self._compare.set_after(self._alpha_vis_overlay(after_qi))
-        else:
-            self._compare.set_before(before_qi)
-            self._compare.set_after(after_qi)
+        # Clear stale atlas cells — new image may have different structure (item 11)
+        self._atlas_cells = []
+        # Re-detect atlas if the checkbox is still checked from previous run
+        if self._atlas_detect_check.isChecked():
+            self._on_atlas_detect_toggled(True)
+        self._apply_alpha_vis_to_compare()
         # Notify main window so it can play the preview sound (opt-in, off by default)
         self.preview_refreshed.emit()
 
