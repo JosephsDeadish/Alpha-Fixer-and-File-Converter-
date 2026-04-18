@@ -530,13 +530,39 @@ class SettingsDialog(QDialog):
         bg_drip_sub_layout.addLayout(bg_drip_inner)
         bg_drip_layout.addWidget(self._bg_drip_sub)
         # Hide/show sub-container based on enable checkbox; enable/disable combo on use-theme
+        # (item 1/4): drip combo stays visible — disabled + shows themed value when use-theme is on
         def _update_drip_combo_state():
             enabled = self._bg_drip_check.isChecked()
             use_theme = self._use_theme_drip_check.isChecked()
             self._bg_drip_sub.setVisible(enabled)
-            self._bg_drip_combo.setVisible(not use_theme)
-            self._bg_drip_theme_lbl.setVisible(use_theme)
             self._bg_drip_combo.setEnabled(enabled and not use_theme)
+            self._bg_drip_theme_lbl.setVisible(use_theme)
+            if use_theme and enabled:
+                # Update the theme label; also select the theme's drip in the combo
+                try:
+                    from .theme_engine import THEME_EFFECTS
+                    theme_name = self._settings.get_theme().get("name", "")
+                    effect = THEME_EFFECTS.get(theme_name, {})
+                    drip = effect.get("drip", None)
+                    if drip == "blood":
+                        idx = self._bg_drip_combo.findData("blood")
+                        self._bg_drip_theme_lbl.setText(
+                            f"🩸 Auto-set by '{theme_name}' theme  →  Blood Drip"
+                        )
+                    elif drip == "water":
+                        idx = self._bg_drip_combo.findData("water")
+                        self._bg_drip_theme_lbl.setText(
+                            f"💧 Auto-set by '{theme_name}' theme  →  Water Drip"
+                        )
+                    else:
+                        idx = -1
+                        self._bg_drip_theme_lbl.setText(
+                            f"🚫 '{theme_name}' theme has no drip effect"
+                        )
+                    if idx >= 0:
+                        self._bg_drip_combo.setCurrentIndex(idx)
+                except Exception:
+                    pass
         self._bg_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
         self._use_theme_drip_check.toggled.connect(lambda _: _update_drip_combo_state())
         self._bg_drip_sub.setVisible(False)  # hidden until drip is enabled
@@ -600,7 +626,9 @@ class SettingsDialog(QDialog):
             use_theme = self._use_theme_flock_check.isChecked()
             self._bg_flock_sub.setVisible(enabled)
             self._bg_flock_theme_lbl.setVisible(use_theme)
-            self._bg_flock_inner_widget.setVisible(not use_theme)
+            # item 1/4: inner widget stays visible — just disable combo when use-theme is on
+            self._bg_flock_inner_widget.setVisible(True)
+            self._bg_flock_combo.setEnabled(enabled and not use_theme)
         self._bg_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
         self._use_theme_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
         self._bg_flock_sub.setVisible(False)  # hidden until flock is enabled
@@ -668,7 +696,9 @@ class SettingsDialog(QDialog):
             use_theme = self._use_theme_ambient_check.isChecked()
             self._bg_ambient_sub.setVisible(enabled)
             self._bg_ambient_theme_lbl.setVisible(use_theme)
-            self._bg_ambient_inner_widget.setVisible(not use_theme)
+            # item 1/4: inner widget stays visible — just disable combo when use-theme is on
+            self._bg_ambient_inner_widget.setVisible(True)
+            self._bg_ambient_combo.setEnabled(enabled and not use_theme)
 
         self._bg_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
         self._use_theme_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
@@ -999,21 +1029,19 @@ class SettingsDialog(QDialog):
         )
         _s.addWidget(self._use_theme_sound_check, 0, 0, 1, 2)
 
-        # Informational label shown when "Use theme sound" is ON — tells the
-        # user which sound profile the active theme will provide.
-        self._sound_theme_info_lbl = QLabel("Using current theme sound profile")
+        # Informational tooltip still exists on the combo itself.
+        # The separate info label is only shown as a fallback when theme
+        # detection fails (item 1 — combo stays visible, not replaced by label).
+        self._sound_theme_info_lbl = QLabel("")
         self._sound_theme_info_lbl.setWordWrap(True)
-        self._sound_theme_info_lbl.setToolTip(
-            "When 'Use theme sound' is enabled the click sound automatically uses\n"
-            "the profile associated with the currently active visual theme.\n"
-            "Each theme has its own characteristic sound (e.g. Gore = growl,\n"
-            "Panda = soft, Alien = bright).  Disable 'Use theme sound' to choose\n"
-            "a profile manually."
-        )
+        self._sound_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
         _s.addWidget(self._sound_theme_info_lbl, 1, 0, 1, 2)
         self._sound_theme_info_lbl.setVisible(False)
 
-        # Sound profile dropdown (used when "Use theme sound" is OFF)
+        # Sound profile dropdown — stays visible in both manual and use-theme
+        # modes (item 1).  When "Use theme sound" is ON the combo is disabled
+        # and shows the theme's auto-selected profile; when OFF it is enabled
+        # and lets the user pick manually.
         self._sound_profile_lbl = QLabel("Sound profile:")
         _s.addWidget(self._sound_profile_lbl, 2, 0)
         self._sound_profile_combo = QComboBox()
@@ -1842,18 +1870,13 @@ class SettingsDialog(QDialog):
         _profile_idx = self._sound_profile_combo.findData(saved_profile)
         if _profile_idx >= 0:
             self._sound_profile_combo.setCurrentIndex(_profile_idx)
-        # When "use theme sound" is ON: show info label, hide profile combo; else opposite (item 1/4)
+        # Item 1: combo stays visible in both modes; just toggle enabled state.
         if use_theme_sound:
             self._update_sound_theme_info()
-            self._sound_theme_info_lbl.setVisible(True)
-            self._sound_profile_combo.setVisible(False)
             self._sound_profile_combo.setEnabled(False)
-            self._sound_profile_lbl.setVisible(False)
         else:
             self._sound_theme_info_lbl.setVisible(False)
-            self._sound_profile_combo.setVisible(True)
             self._sound_profile_combo.setEnabled(True)
-            self._sound_profile_lbl.setVisible(True)
         # Load sound event toggles
         self._sound_theme_change_chk.setChecked(
             bool(self._settings.get("sound_theme_change", False))
@@ -2015,22 +2038,21 @@ class SettingsDialog(QDialog):
         self._bg_drip_check.setChecked(bg_drip_enabled)
         use_theme_drip = self._settings.get("use_theme_drip", False)
         self._use_theme_drip_check.setChecked(use_theme_drip)
-        # When use-theme drip is on, show the theme's drip via info label instead of combo
+        # item 1/4: combo stays visible — disabled + shows themed value when use-theme is on
         if use_theme_drip:
             eff = self._settings.get_theme().get("_effect", "default")
+            theme_name = self._settings.get_theme().get("name", "")
             if eff in ("gore", "shark"):
                 theme_drip = "blood"
-                drip_label = "🩸 Blood Drip  (set by theme)"
+                drip_label = f"🩸 Auto-set by '{theme_name}' theme  →  Blood Drip"
             elif eff in ("ocean", "ripple", "mermaid"):
                 theme_drip = "water"
-                drip_label = "💧 Water Drip  (set by theme)"
+                drip_label = f"💧 Auto-set by '{theme_name}' theme  →  Water Drip"
             else:
                 theme_drip = None
-                drip_label = "🚫  This theme has no drip effect."
+                drip_label = f"🚫 '{theme_name}' theme has no drip effect"
             self._bg_drip_theme_lbl.setText(drip_label)
             self._bg_drip_theme_lbl.setVisible(True)
-            self._bg_drip_combo.setVisible(False)
-            # Still sync combo to the theme drip value if there is one
             if theme_drip:
                 for i in range(self._bg_drip_combo.count()):
                     if self._bg_drip_combo.itemData(i) == theme_drip:
@@ -2039,14 +2061,12 @@ class SettingsDialog(QDialog):
         else:
             manual_drip = self._settings.get("bg_drip_type", "blood")
             self._bg_drip_theme_lbl.setVisible(False)
-            self._bg_drip_combo.setVisible(True)
             for i in range(self._bg_drip_combo.count()):
                 if self._bg_drip_combo.itemData(i) == manual_drip:
                     self._bg_drip_combo.setCurrentIndex(i)
                     break
         self._bg_drip_sub.setVisible(bg_drip_enabled)
-        if bg_drip_enabled:
-            self._bg_drip_combo.setEnabled(not use_theme_drip)
+        self._bg_drip_combo.setEnabled(bg_drip_enabled and not use_theme_drip)
 
         # Load background flock settings
         bg_flock_enabled = self._settings.get("bg_flock_enabled", False)
@@ -2059,9 +2079,10 @@ class SettingsDialog(QDialog):
                 self._bg_flock_combo.setCurrentIndex(i)
                 break
         self._bg_flock_sub.setVisible(bg_flock_enabled)
-        # Show info label when "use theme flock" is on; show combo row otherwise (item 4)
+        # item 1/4: inner widget stays visible — disable combo when use-theme is on
         self._bg_flock_theme_lbl.setVisible(use_theme_flock)
-        self._bg_flock_inner_widget.setVisible(not use_theme_flock)
+        self._bg_flock_inner_widget.setVisible(True)
+        self._bg_flock_combo.setEnabled(bg_flock_enabled and not use_theme_flock)
         if use_theme_flock:
             # Initialise info label text from the current theme
             _FLOCK_LABELS = {
@@ -2092,9 +2113,10 @@ class SettingsDialog(QDialog):
         use_theme_ambient = self._settings.get("use_theme_ambient", False)
         self._use_theme_ambient_check.setChecked(use_theme_ambient)
         self._bg_ambient_sub.setVisible(bg_ambient_enabled)
-        # Show info label when "use theme ambient" is on; show combo row otherwise (item 4)
+        # item 1/4: inner widget stays visible — disable combo when use-theme is on
         self._bg_ambient_theme_lbl.setVisible(use_theme_ambient)
-        self._bg_ambient_inner_widget.setVisible(not use_theme_ambient)
+        self._bg_ambient_inner_widget.setVisible(True)
+        self._bg_ambient_combo.setEnabled(bg_ambient_enabled and not use_theme_ambient)
         if use_theme_ambient:
             # Initialise info label text from the current theme
             _AMBIENT_LABELS = {
@@ -2652,30 +2674,50 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _update_sound_theme_info(self) -> None:
-        """Refresh the informational label that shows the current theme's sound profile."""
+        """Update the sound profile combo to show the current theme's profile (item 1).
+
+        When 'Use theme sound' is on the combo is disabled and set to the
+        profile the active theme would auto-select so the user can see at a
+        glance which profile is in use without any separate label.
+        """
         try:
             from .sound_engine import _THEME_SOUND_PROFILES
             theme_name = self._settings.get_theme().get("name", "")
             profile = _THEME_SOUND_PROFILES.get(theme_name, "soft")
+            idx = self._sound_profile_combo.findData(profile)
+            if idx >= 0:
+                self._sound_profile_combo.setCurrentIndex(idx)
+            # Show a small hint below so the user knows this is auto-set.
             self._sound_theme_info_lbl.setText(
-                f"Using current theme sound:  '{theme_name}'  →  profile: {profile}"
+                f"🎵 Auto-set by '{theme_name}' theme  →  {profile}"
             )
+            self._sound_theme_info_lbl.setVisible(True)
         except Exception:
-            self._sound_theme_info_lbl.setText("Using current theme's sound profile")
+            self._sound_theme_info_lbl.setVisible(False)
 
     def _on_use_theme_sound_changed(self) -> None:
         self._settings.set("use_theme_sound", self._use_theme_sound_check.isChecked())
         self.settings_changed.emit()
 
     def _on_use_theme_sound_toggled(self, checked: bool) -> None:
-        """Show info label (theme sound mode) or profile combo (manual mode)."""
+        """When 'Use theme sound' is toggled: disable/enable the combo (item 1).
+
+        The sound profile combo stays visible regardless of this toggle.  When
+        use-theme is ON the combo is disabled and updated to show the theme's
+        auto-selected profile.  When OFF the combo is re-enabled so the user
+        can pick manually.
+        """
         if checked:
             self._update_sound_theme_info()
-        self._sound_theme_info_lbl.setVisible(checked)
-        # Hide the combo and its label when "use theme" is on; show info label instead (item 1/4)
-        self._sound_profile_combo.setVisible(not checked)
+        else:
+            # Restore the manually-saved profile in the combo.
+            saved = str(self._settings.get("sound_manual_profile", "soft"))
+            idx = self._sound_profile_combo.findData(saved)
+            if idx >= 0:
+                self._sound_profile_combo.setCurrentIndex(idx)
+        # Always keep combo and its label visible; just toggle enabled state.
         self._sound_profile_combo.setEnabled(not checked)
-        self._sound_profile_lbl.setVisible(not checked)
+        self._sound_theme_info_lbl.setVisible(False)
 
     def _on_sound_profile_changed(self) -> None:
         """Save the manually selected sound profile."""
@@ -2992,9 +3034,8 @@ class SettingsDialog(QDialog):
         self._settings.set("bg_drip_type", drip_type)
         # Keep sub-controls in sync with the enabled/use-theme state.
         self._use_theme_drip_check.setEnabled(enabled)
+        # item 1/4: combo stays visible — disabled + shows themed value when use-theme is on
         self._bg_drip_combo.setEnabled(enabled and not use_theme_drip)
-        # Toggle combo vs info label visibility based on use-theme state (item 4)
-        self._bg_drip_combo.setVisible(not use_theme_drip)
         self._bg_drip_theme_lbl.setVisible(use_theme_drip)
         # Update info label and combo to reflect theme drip when "use theme" is on
         if use_theme_drip:
@@ -3003,14 +3044,14 @@ class SettingsDialog(QDialog):
             theme_name = theme.get("name", "")
             if effect_key in ("gore", "shark"):
                 theme_drip = "blood"
-                drip_label = "🩸 Blood Drip  (set by theme)"
+                drip_label = f"🩸 Auto-set by '{theme_name}' theme  →  Blood Drip"
             elif effect_key in ("ocean", "ripple", "mermaid"):
                 theme_drip = "water"
-                drip_label = "💧 Water Drip  (set by theme)"
+                drip_label = f"💧 Auto-set by '{theme_name}' theme  →  Water Drip"
             else:
                 # Theme has no drip — show info message (item 4)
                 theme_drip = None
-                drip_label = "🚫  This theme has no drip effect."
+                drip_label = f"🚫 '{theme_name}' theme has no drip effect"
             self._bg_drip_theme_lbl.setText(drip_label)
             # Sync combo to theme drip value if there is one
             if theme_drip:
@@ -3027,10 +3068,11 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_flock", use_theme_flock)
         flock_style = self._bg_flock_combo.currentData() or "bats"
         self._settings.set("bg_flock_style", flock_style)
-        # Show info label vs manual combo row based on use-theme state (item 4)
+        # item 1/4: inner widget stays visible — disable combo when use-theme is on
         self._use_theme_flock_check.setEnabled(enabled)
         self._bg_flock_theme_lbl.setVisible(use_theme_flock)
-        self._bg_flock_inner_widget.setVisible(not use_theme_flock)
+        self._bg_flock_inner_widget.setVisible(True)
+        self._bg_flock_combo.setEnabled(enabled and not use_theme_flock)
         self.settings_changed.emit()
 
     def _on_bg_ambient_changed(self) -> None:
@@ -3043,10 +3085,11 @@ class SettingsDialog(QDialog):
         elif not use_theme:
             ambient_type = self._bg_ambient_combo.currentData() or "snow"
             self._settings.set("bg_ambient_type", ambient_type)
-        # Show info label vs manual combo row based on use-theme state (item 4)
+        # item 1/4: inner widget stays visible — disable combo when use-theme is on
         self._use_theme_ambient_check.setEnabled(enabled)
         self._bg_ambient_theme_lbl.setVisible(use_theme)
-        self._bg_ambient_inner_widget.setVisible(not use_theme)
+        self._bg_ambient_inner_widget.setVisible(True)
+        self._bg_ambient_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 
     def _on_notif_overlay_changed(self) -> None:
