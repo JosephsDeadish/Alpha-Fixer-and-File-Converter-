@@ -1742,6 +1742,24 @@ class SettingsDialog(QDialog):
         # Show info label when "use theme flock" is on; show combo row otherwise (item 4)
         self._bg_flock_theme_lbl.setVisible(use_theme_flock)
         self._bg_flock_inner_widget.setVisible(not use_theme_flock)
+        if use_theme_flock:
+            # Initialise info label text from the current theme
+            _FLOCK_LABELS = {
+                "bats": "🦇 Bats", "fairies": "🧚 Fairies", "fish": "🐟 Fish",
+                "butterflies": "🦋 Butterflies", "birds": "🐦 Birds",
+                "stars": "⭐ Stars", "petals": "🌸 Petals", "sharks": "🦈 Sharks",
+            }
+            _th = self._settings.get_theme()
+            _tf = _th.get("_flock")
+            if _tf:
+                self._bg_flock_theme_lbl.setText(
+                    f"Using theme flock: {_FLOCK_LABELS.get(_tf, _tf)}  "
+                    f"(set by '{_th.get('name', '')}' theme)"
+                )
+            else:
+                self._bg_flock_theme_lbl.setText(
+                    f"🚫  '{_th.get('name', '')}' theme has no flock"
+                )
 
         # Load background ambient settings
         bg_ambient_enabled = self._settings.get("bg_ambient_enabled", False)
@@ -1757,6 +1775,32 @@ class SettingsDialog(QDialog):
         # Show info label when "use theme ambient" is on; show combo row otherwise (item 4)
         self._bg_ambient_theme_lbl.setVisible(use_theme_ambient)
         self._bg_ambient_inner_widget.setVisible(not use_theme_ambient)
+        if use_theme_ambient:
+            # Initialise info label text from the current theme
+            _AMBIENT_LABELS = {
+                "snow": "❄️ Snow Drift", "ember": "🔥 Ember Drift",
+                "sakura": "🌸 Sakura Petals", "stars": "✨ Shooting Stars",
+                "bubbles": "🫧 Rising Bubbles", "neon": "🌈 Neon Flicker",
+                "ghost": "👻 Ghost Wisps", "confetti": "🎊 Confetti Fall",
+                "firefly": "🪲 Fireflies", "matrix": "💻 Matrix Rain",
+                "leaves": "🍂 Autumn Leaves", "rainbow": "🌈 Rainbow Sparkle",
+                "bamboo": "🎋 Bamboo Leaves",
+            }
+            try:
+                from .theme_engine import THEME_AMBIENT_MAP
+                _th = self._settings.get_theme()
+                _ak = THEME_AMBIENT_MAP.get(_th.get("name", ""))
+                if _ak:
+                    self._bg_ambient_theme_lbl.setText(
+                        f"Using theme ambient: {_AMBIENT_LABELS.get(_ak, _ak)}  "
+                        f"(set by '{_th.get('name', '')}' theme)"
+                    )
+                else:
+                    self._bg_ambient_theme_lbl.setText(
+                        f"🚫  '{_th.get('name', '')}' theme has no ambient"
+                    )
+            except Exception:
+                pass
 
         for c in controls:
             c.blockSignals(False)

@@ -643,7 +643,14 @@ class SelectiveAlphaCanvas(QWidget):
             painter.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
-                "Drop or open an image to begin",
+                "Drop or open an image to begin\n\n"
+                "Ctrl+O  ·  open image\n"
+                "Ctrl+Z / Ctrl+Y  ·  undo / redo\n"
+                "B Brush  ·  E Eraser  ·  L Line  ·  R Rect  ·  X Ellipse  ·  F Fill  ·  P Polygon  ·  T Transform\n"
+                "[ / ]  ·  decrease / increase brush size\n"
+                "🖱 Hold scroll-wheel button and drag to pan  ·  Ctrl+scroll to zoom\n"
+                "H  ·  toggle highlights  ·  N / Shift+N  ·  cycle zones\n"
+                "Ctrl+Enter / Ctrl+S  ·  save result",
             )
             return
 

@@ -3,7 +3,6 @@ Main application window.
 """
 import collections
 import math
-import random
 import sys
 import webbrowser
 
@@ -438,22 +437,15 @@ class _SpinningEmojiLabel(QWidget):
             self._offset_x = math.cos(self._phase) * self._ORBIT_RADIUS
             self._offset_y = math.sin(self._phase) * self._ORBIT_RADIUS
         elif self._mode == "drip":
-            # Slowly fall downward and shrink, then reset to top at full size
+            # Blood drip: slowly fall downward while shrinking to simulate a
+            # drop falling and shrinking, then reset to the top at full size.
             self._phase = (self._phase + self._DRIP_STEP) % 1.0
             t = self._phase  # 0..1 progress through the fall
-            # Add a gentle left-right wobble as it falls (like a teardrop)
-            self._offset_x = math.sin(t * math.pi * 4) * 2.0
+            # Smooth sinusoidal left-right wobble as it falls (teardrop drift)
+            self._offset_x = math.sin(t * math.pi * 3) * 3.0
             self._offset_y = t * self._DRIP_FALL_PX
-            # Shrink from 1.0 to 0.5 as it falls
-            self._scale = 1.0 - t * 0.5
-            # Jitter resets to zero periodically so it "snaps" back to centre
-            if int(self._phase * 4) % 3 == 0:
-                self._offset_x = 0.0
-                self._offset_y = 0.0
-            else:
-                amp = 4 + 3 * abs(math.sin(self._phase * 3))
-                self._offset_x = random.uniform(-amp, amp)
-                self._offset_y = random.uniform(-amp, amp)
+            # Shrink from 1.0 down to 0.2 as it reaches the bottom
+            self._scale = 1.0 - t * 0.8
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
