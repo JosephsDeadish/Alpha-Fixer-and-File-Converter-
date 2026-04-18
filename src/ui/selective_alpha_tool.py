@@ -445,13 +445,28 @@ class SelectiveAlphaCanvas(QWidget):
         return [m.copy() for m in self._masks]
 
     def set_all_masks(self, snapshot: list[np.ndarray]) -> None:
-        """Restore all masks from a *snapshot* produced by get_all_masks()."""
+        """Restore all masks from a *snapshot* produced by get_all_masks().
+
+        If a mask has different dimensions than the current image, it is
+        automatically scaled to fit using PIL nearest-neighbour resize (item 39).
+        """
         if not self.has_image():
             return
         self._push_history()
+        h, w = self._img_h, self._img_w
         for i, m in enumerate(snapshot):
             if i < NUM_ZONES and m is not None:
-                self._masks[i] = m.copy()
+                if m.shape == (h, w):
+                    self._masks[i] = m.copy()
+                else:
+                    # Auto-scale to fit current image dimensions (item 39)
+                    try:
+                        from PIL import Image as _PIL
+                        pil_m = _PIL.fromarray(m.astype(np.uint8), mode="L")
+                        pil_m = pil_m.resize((w, h), _PIL.NEAREST)
+                        self._masks[i] = np.array(pil_m, dtype=np.uint8)
+                    except Exception:
+                        self._masks[i] = m.copy()
         self._composite_dirty = True
         for i in range(NUM_ZONES):
             self.mask_changed.emit(i)
@@ -470,6 +485,15 @@ class SelectiveAlphaCanvas(QWidget):
                 break
             if bool_mask.shape == (h, w):
                 self._masks[i] = bool_mask.astype(np.uint8)
+            else:
+                # Auto-scale if dimensions don't match (item 39)
+                try:
+                    from PIL import Image as _PIL
+                    pil_m = _PIL.fromarray((bool_mask.astype(np.uint8) * 255), mode="L")
+                    pil_m = pil_m.resize((w, h), _PIL.NEAREST)
+                    self._masks[i] = (np.array(pil_m, dtype=np.uint8) > 127).astype(np.uint8)
+                except Exception:
+                    self._masks[i] = bool_mask.astype(np.uint8)
             self.mask_changed.emit(i)
         self._composite_dirty = True
         self.update()
