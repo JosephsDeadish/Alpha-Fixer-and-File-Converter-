@@ -676,7 +676,56 @@ class SettingsDialog(QDialog):
 
         tv.addWidget(grp_bg_drip)
 
-        # ---- Mouse Trail and Cursor GroupBoxes (belong with theme settings) ----
+        # ---- Notifications & Pop-ups Overlay GroupBox (item 66) ----
+        grp_notif = QGroupBox("Achievement Notifications && Pop-ups Overlay")
+        notif_layout = QVBoxLayout(grp_notif)
+        notif_layout.setSpacing(6)
+        self._notif_overlay_check = QCheckBox(
+            "Enable achievement notifications overlay (on by default)"
+        )
+        self._notif_overlay_check.setToolTip(
+            "When enabled, unlock and achievement notifications appear as a\n"
+            "transparent overlay banner.  Uncheck to disable all pop-up banners."
+        )
+        self._notif_overlay_check.setChecked(True)
+        notif_layout.addWidget(self._notif_overlay_check)
+        # Sub-container: hidden when notifications are disabled
+        self._notif_overlay_sub = QWidget()
+        _notif_sub_vl = QVBoxLayout(self._notif_overlay_sub)
+        _notif_sub_vl.setContentsMargins(16, 0, 0, 0)
+        _notif_sub_vl.setSpacing(4)
+        self._use_theme_notif_check = QCheckBox(
+            "Use theme notification style  (auto-style per active theme)"
+        )
+        self._use_theme_notif_check.setToolTip(
+            "When enabled the notification banner style (colors, emoji) is chosen\n"
+            "automatically to match the active theme.\n"
+            "Uncheck to use the default notification style regardless of theme."
+        )
+        self._use_theme_notif_check.setChecked(True)
+        _notif_sub_vl.addWidget(self._use_theme_notif_check)
+        # Info label shown when "Use theme" is ON
+        self._notif_theme_info_lbl = QLabel("Using theme notification style")
+        self._notif_theme_info_lbl.setStyleSheet(
+            "color: #aaa; font-size: 10px; margin-left: 4px;"
+        )
+        self._notif_theme_info_lbl.setVisible(True)
+        _notif_sub_vl.addWidget(self._notif_theme_info_lbl)
+        notif_layout.addWidget(self._notif_overlay_sub)
+
+        def _update_notif_state():
+            enabled = self._notif_overlay_check.isChecked()
+            use_theme = self._use_theme_notif_check.isChecked()
+            self._notif_overlay_sub.setVisible(enabled)
+            self._notif_theme_info_lbl.setVisible(use_theme)
+
+        self._notif_overlay_check.toggled.connect(lambda _: _update_notif_state())
+        self._use_theme_notif_check.toggled.connect(lambda _: _update_notif_state())
+        # Default: sub visible (enabled=True), theme info visible (use_theme=True)
+        self._notif_overlay_sub.setVisible(True)
+        tv.addWidget(grp_notif)
+
+
         mouse_row = QHBoxLayout()
         mouse_row.setSpacing(8)
 
@@ -1657,6 +1706,8 @@ class SettingsDialog(QDialog):
         self._bg_ambient_check.toggled.connect(self._on_bg_ambient_changed)
         self._use_theme_ambient_check.toggled.connect(self._on_bg_ambient_changed)
         self._bg_ambient_combo.currentIndexChanged.connect(self._on_bg_ambient_changed)
+        self._notif_overlay_check.toggled.connect(self._on_notif_overlay_changed)
+        self._use_theme_notif_check.toggled.connect(self._on_notif_overlay_changed)
 
     # ------------------------------------------------------------------
     # Theme combo helpers
@@ -2074,6 +2125,14 @@ class SettingsDialog(QDialog):
         for c in controls:
             c.blockSignals(False)
 
+        # Load notification overlay settings (item 66)
+        notif_enabled = bool(self._settings.get("notif_overlay_enabled", True))
+        self._notif_overlay_check.setChecked(notif_enabled)
+        use_theme_notif = bool(self._settings.get("use_theme_notif", True))
+        self._use_theme_notif_check.setChecked(use_theme_notif)
+        self._notif_overlay_sub.setVisible(notif_enabled)
+        self._notif_theme_info_lbl.setVisible(use_theme_notif)
+
     # ------------------------------------------------------------------
     # Tooltip registration
     # ------------------------------------------------------------------
@@ -2114,6 +2173,8 @@ class SettingsDialog(QDialog):
         mgr.register(self._cursor_combo, "cursor_combo")
         mgr.register(self._use_theme_cursor_check, "use_theme_cursor")
         mgr.register(self._cursor_anim_check, "cursor_anim")
+        mgr.register(self._notif_overlay_check, "notif_overlay_check")
+        mgr.register(self._use_theme_notif_check, "use_theme_notif_check")
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._ui_scale_combo, "ui_scale_combo")
         mgr.register(self._history_max_spin, "history_max_spin")
@@ -2986,4 +3047,15 @@ class SettingsDialog(QDialog):
         self._use_theme_ambient_check.setEnabled(enabled)
         self._bg_ambient_theme_lbl.setVisible(use_theme)
         self._bg_ambient_inner_widget.setVisible(not use_theme)
+        self.settings_changed.emit()
+
+    def _on_notif_overlay_changed(self) -> None:
+        """Persist notification overlay settings when toggles change (item 66)."""
+        enabled = self._notif_overlay_check.isChecked()
+        use_theme = self._use_theme_notif_check.isChecked()
+        self._settings.set("notif_overlay_enabled", enabled)
+        self._settings.set("use_theme_notif", use_theme)
+        # Show/hide sub-settings
+        self._notif_overlay_sub.setVisible(enabled)
+        self._notif_theme_info_lbl.setVisible(use_theme)
         self.settings_changed.emit()

@@ -1626,7 +1626,9 @@ class MainWindow(QMainWindow):
             if not self._settings.get(key, False):
                 # Threshold reached and not yet unlocked.
                 self._settings.set(key, True)
-                self._unlock_lbl.setText(message)
+                # Only show the notification banner if the setting is enabled (item 66)
+                if self._settings.get("notif_overlay_enabled", True):
+                    self._unlock_lbl.setText(message)
                 # Play unlock fanfare via SoundEngine (falls back to beep)
                 try:
                     self._sound.play_unlock()
