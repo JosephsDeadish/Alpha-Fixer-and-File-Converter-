@@ -2354,6 +2354,31 @@ class ClickEffectsOverlay(QWidget):
             self._timer.start()
             self.raise_()
             self.show()
+            # Restart click-effect-linked background sub-animations that were
+            # stopped when set_enabled(False) was called (item 82 / 76 fix).
+            # This restores bat/fairy/fish flocks and alien/slime effects after
+            # the settings dialog closes or effects are re-enabled.
+            ek = self._effect_key
+            if ek == "bat":
+                if self._bat_flock is None:
+                    self._bat_flock = _BatFlock(self)
+                self._bat_flock.start()
+            elif ek == "fairy":
+                if self._fairy_flock is None:
+                    self._fairy_flock = _FairyFlock(self)
+                self._fairy_flock.start()
+            elif ek == "mermaid":
+                if self._fish_flock is None:
+                    self._fish_flock = _FishFlock(self)
+                self._fish_flock.start()
+            elif ek == "alien":
+                if self._alien_beam is None:
+                    self._alien_beam = _AlienBeam(self)
+                self._alien_beam.start()
+            elif ek == "slime":
+                if self._slime_drip is None:
+                    self._slime_drip = _SlimeDrip(self)
+                self._slime_drip.start()
         else:
             if app is not None:
                 app.removeEventFilter(self)

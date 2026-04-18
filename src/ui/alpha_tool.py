@@ -817,7 +817,6 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._btn_clear, "clear_list")
         mgr.register(self._btn_run, "process_btn")
         mgr.register(self._btn_stop, "stop_btn")
-        mgr.register(self._btn_undo_batch, "alpha_undo_batch_btn")
         mgr.register(self._threshold_spin, "threshold_spin")
         mgr.register(self._finetune_params_lbl, "finetune_params_lbl")
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
