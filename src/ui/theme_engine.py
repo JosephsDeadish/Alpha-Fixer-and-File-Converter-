@@ -3639,10 +3639,28 @@ QTabBar::scroller {{
     border: none;
     width: 20px;
 }}
+/* Styled arrow buttons for tab bar overflow (item 43) */
 QTabBar QToolButton {{
-    background: {t['background']};
+    background: {t['surface']};
     border: 1px solid {t['border']};
     border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px;
+    min-width: 18px;
+    min-height: 18px;
+}}
+QTabBar QToolButton:hover {{
+    background: {t['button_hover']};
+    border-color: {t['accent']};
+    color: {t['text']};
+}}
+QTabBar QToolButton:pressed {{
+    background: {t['accent']};
+}}
+QTabBar QToolButton:disabled {{
+    background: {t['background']};
+    border-color: {t['border']};
+    opacity: 0.4;
 }}
 
 /* ===== Buttons ===== */
