@@ -4,14 +4,18 @@ History tab – shows recent converter and alpha-fixer runs with timestamps.
 import csv
 import datetime
 import io
+import os
 
 from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
     QTabWidget, QFileDialog, QLineEdit, QGroupBox, QCheckBox,
     QSpinBox,
 )
+
+_THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 
 def _fmt_ts(ts: str) -> str:
@@ -23,12 +27,41 @@ def _fmt_ts(ts: str) -> str:
         return ts
 
 
+def _load_thumb(path: str) -> QIcon:
+    """Return a small QIcon thumbnail for *path*, or an empty QIcon on failure (item 9)."""
+    try:
+        if not path or not os.path.isfile(path):
+            return QIcon()
+        px = QPixmap(path)
+        if px.isNull():
+            # Try Pillow for formats Qt cannot decode directly (e.g. DDS, TGA).
+            try:
+                from PIL import Image as _PILImage
+                from PIL.ImageQt import ImageQt
+                img = _PILImage.open(path).convert("RGBA")
+                img.thumbnail((_THUMB_SIZE * 2, _THUMB_SIZE * 2))
+                px = QPixmap.fromImage(ImageQt(img))
+            except Exception:
+                return QIcon()
+        if px.isNull():
+            return QIcon()
+        scaled = px.scaled(
+            _THUMB_SIZE, _THUMB_SIZE,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        return QIcon(scaled)
+    except Exception:
+        return QIcon()
+
+
 def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWidget:
     """Build a standard history QTreeWidget with the given column headers.
 
     If *col_tips* is provided it must have the same length as *columns*; each
     non-empty string is set as the tooltip for that column header section.
     """
+    from PyQt6.QtCore import QSize
     tree = QTreeWidget()
     tree.setHeaderLabels(columns)
     for i in range(len(columns) - 1):
@@ -44,6 +77,8 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
     tree.setSortingEnabled(True)
     tree.header().setSectionsClickable(True)
     tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+    # Allow thumbnail icons to show at full size (item 9)
+    tree.setIconSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
     return tree
 
 
@@ -85,21 +120,74 @@ class HistoryTab(QWidget):
         sbox_layout.setContentsMargins(8, 6, 8, 6)
         sbox_layout.setSpacing(6)
 
-        # Max entries
+        # Global default max entries
         max_row = QHBoxLayout()
-        max_row.addWidget(QLabel("Max entries per category:"))
+        max_row.addWidget(QLabel("Default max entries:"))
         self._history_max_spin = QSpinBox()
         self._history_max_spin.setRange(10, 5000)
         self._history_max_spin.setValue(int(self._settings.get("history_max_entries", 100)))
         self._history_max_spin.setSuffix("  entries")
         self._history_max_spin.setToolTip(
-            "Maximum number of history entries kept per category.\n"
-            "Older entries are pruned automatically when this limit is reached.\n"
+            "Default maximum number of history entries kept per tool.\n"
+            "Overridden by per-tool limits below when those are set.\n"
+            "Older entries are pruned automatically when the limit is reached.\n"
             "Also adjustable in Settings → General."
         )
         max_row.addWidget(self._history_max_spin)
         max_row.addStretch(1)
         sbox_layout.addLayout(max_row)
+
+        # Per-tool max entries (item 8) ─────────────────────────────────
+        per_tool_lbl = QLabel("Per-tool limits (0 = use default above):")
+        per_tool_lbl.setToolTip(
+            "Set a different history size for each tool.\n"
+            "Leave at 0 to use the default limit above."
+        )
+        sbox_layout.addWidget(per_tool_lbl)
+
+        per_tool_row = QHBoxLayout()
+        per_tool_row.setSpacing(12)
+
+        per_tool_row.addWidget(QLabel("Converter:"))
+        self._history_max_conv_spin = QSpinBox()
+        self._history_max_conv_spin.setRange(0, 5000)
+        self._history_max_conv_spin.setSpecialValueText("default")
+        self._history_max_conv_spin.setValue(
+            int(self._settings.get("history_max_entries_converter", 0))
+        )
+        self._history_max_conv_spin.setSuffix("  entries")
+        self._history_max_conv_spin.setToolTip(
+            "Max history entries for the File Converter (0 = use default above)."
+        )
+        per_tool_row.addWidget(self._history_max_conv_spin)
+
+        per_tool_row.addWidget(QLabel("Alpha Adjuster:"))
+        self._history_max_alpha_spin = QSpinBox()
+        self._history_max_alpha_spin.setRange(0, 5000)
+        self._history_max_alpha_spin.setSpecialValueText("default")
+        self._history_max_alpha_spin.setValue(
+            int(self._settings.get("history_max_entries_alpha", 0))
+        )
+        self._history_max_alpha_spin.setSuffix("  entries")
+        self._history_max_alpha_spin.setToolTip(
+            "Max history entries for the Alpha & RGBA Adjuster (0 = use default above)."
+        )
+        per_tool_row.addWidget(self._history_max_alpha_spin)
+
+        per_tool_row.addWidget(QLabel("Selective Alpha:"))
+        self._history_max_sel_spin = QSpinBox()
+        self._history_max_sel_spin.setRange(0, 5000)
+        self._history_max_sel_spin.setSpecialValueText("default")
+        self._history_max_sel_spin.setValue(
+            int(self._settings.get("history_max_entries_selective_alpha", 0))
+        )
+        self._history_max_sel_spin.setSuffix("  entries")
+        self._history_max_sel_spin.setToolTip(
+            "Max history entries for the Selective Alpha Tool (0 = use default above)."
+        )
+        per_tool_row.addWidget(self._history_max_sel_spin)
+        per_tool_row.addStretch(1)
+        sbox_layout.addLayout(per_tool_row)
 
         # Per-category tracking checkboxes (item 9)
         track_row = QHBoxLayout()
@@ -135,6 +223,21 @@ class HistoryTab(QWidget):
 
         # Connect settings widgets
         self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
+        self._history_max_conv_spin.valueChanged.connect(
+            lambda v: self._settings.set(
+                "history_max_entries_converter", v if v > 0 else 0
+            )
+        )
+        self._history_max_alpha_spin.valueChanged.connect(
+            lambda v: self._settings.set(
+                "history_max_entries_alpha", v if v > 0 else 0
+            )
+        )
+        self._history_max_sel_spin.valueChanged.connect(
+            lambda v: self._settings.set(
+                "history_max_entries_selective_alpha", v if v > 0 else 0
+            )
+        )
         self._chk_track_converter.toggled.connect(
             lambda v: self._settings.set("history_track_converter", v)
         )
@@ -328,6 +431,10 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, fmt, n_files, n_ok, n_err, files])
+            # Thumbnail icon from first processed file (item 9)
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\nFormat: {fmt}\n"
@@ -359,6 +466,10 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, preset, n_files, n_ok, n_err, files])
+            # Thumbnail icon from first processed file (item 9)
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\nPreset / Mode: {preset}\n"
@@ -388,8 +499,17 @@ class HistoryTab(QWidget):
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
+            # Older entries stored source/output but not files list — derive it
+            if not file_list and entry.get("output"):
+                import os as _os
+                file_list = [_os.path.basename(entry["output"])]
             files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
+            # Thumbnail icon from source image (item 9)
+            thumb_path = entry.get("first_file", entry.get("source", ""))
+            thumb = _load_thumb(thumb_path)
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\nMode: {mode}\n"

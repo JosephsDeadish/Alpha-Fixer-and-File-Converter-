@@ -3708,41 +3708,57 @@ class ButtonPressAnimator(QObject):
                 lbl.show()
                 shards.append(lbl)
 
-        # Direction vectors: each cell flies away from the button centre.
-        # Centre cell flies downward; corners fly diagonally.
+        # Direction vectors (item 3): all shards fall DOWNWARD with varying
+        # lateral spread, simulating gravity-driven shattering.
+        # Layout: col 0     col 1    col 2
+        # row 0 (top):   left     straight  right  — shorter fall, wider spread
+        # row 1 (mid):   left     straight  right  — medium fall
+        # row 2 (bot):   left     straight  right  — longest fall
         _dirs = [
-            (-28, -28), (0, -32), (28, -28),
-            (-32,  -6), (0,  30), (32,  -6),
-            (-28,  28), (0,  34), (28,  28),
+            (-22, 32), ( 0, 36), (22, 32),   # top row
+            (-28, 50), ( 0, 55), (28, 50),   # middle row
+            (-18, 68), ( 0, 74), (18, 68),   # bottom row
         ]
 
-        # ── Phase 1: Explode outward ──────────────────────────────────
+        # ── Phase 1: Explode outward (all shards fall simultaneously) ─
         explode = QParallelAnimationGroup(self)
         for shard, (dx, dy) in zip(shards, _dirs):
             a = QPropertyAnimation(shard, b"pos", self)
-            a.setDuration(240)
+            a.setDuration(260)
             a.setStartValue(shard.pos())
             a.setEndValue(shard.pos() + QPoint(dx, dy))
-            a.setEasingCurve(QEasingCurve.Type.OutQuad)
+            a.setEasingCurve(QEasingCurve.Type.InQuad)  # accelerate like gravity
             explode.addAnimation(a)
 
-        pause = QPauseAnimation(60, self)
+        pause = QPauseAnimation(120, self)
 
-        # ── Phase 2: Reassemble (reverse fly-in) ─────────────────────
+        # ── Phase 2: Reassemble ONE BY ONE (item 3) ──────────────────
+        # Each shard pops back after a short stagger delay so they snap
+        # back to place sequentially rather than all at once.
+        STAGGER_MS = 55
+        import random as _shatter_rng
+        order = list(range(len(shards)))
+        _shatter_rng.shuffle(order)
+
         reassemble = QParallelAnimationGroup(self)
-        for idx, (shard, (dx, dy)) in enumerate(zip(shards, _dirs)):
+        for step, idx in enumerate(order):
+            shard = shards[idx]
             col = idx % COLS
             row = idx // COLS
             sx = col * cw
             sy = row * ch
             real_orig = btn_top_left + QPoint(sx, sy)
-            dispersed  = real_orig + QPoint(dx, dy)
+            dispersed  = real_orig + QPoint(_dirs[idx][0], _dirs[idx][1])
+            # Each shard: wait step * STAGGER_MS, then fly back
+            seq = QSequentialAnimationGroup(self)
+            seq.addAnimation(QPauseAnimation(step * STAGGER_MS, self))
             a = QPropertyAnimation(shard, b"pos", self)
-            a.setDuration(280)
+            a.setDuration(220)
             a.setStartValue(dispersed)
             a.setEndValue(real_orig)
-            a.setEasingCurve(QEasingCurve.Type.InBack)
-            reassemble.addAnimation(a)
+            a.setEasingCurve(QEasingCurve.Type.OutBack)
+            seq.addAnimation(a)
+            reassemble.addAnimation(seq)
 
         def _cleanup():
             for s in shards:

@@ -3080,8 +3080,19 @@ class SelectiveAlphaTool(QWidget):
             # Record in history
             if self._settings is not None:
                 from datetime import datetime as _dt
+                import os as _os
+                n_zones = sum(
+                    1 for a in self._canvas._zone_alphas if a != 255
+                )
                 entry = {
                     "timestamp": _dt.now().isoformat(timespec="seconds"),
+                    "mode": f"{n_zones} zone{'s' if n_zones != 1 else ''} painted",
+                    "file_count": 1,
+                    "success": 1,
+                    "errors": 0,
+                    "files": [_os.path.basename(path)],
+                    # Store source path for thumbnail display (item 9)
+                    "first_file": str(self._src_path) if self._src_path else str(path),
                     "source": self._src_path,
                     "output": path,
                     "zone_alphas": list(self._canvas._zone_alphas),

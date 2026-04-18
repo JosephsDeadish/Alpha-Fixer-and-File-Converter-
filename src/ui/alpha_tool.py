@@ -1609,13 +1609,16 @@ class AlphaFixerTab(QWidget):
             self._update_compare()
 
         # Record in history
+        _last_files = getattr(self, "_last_run_files", [])
         entry = {
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             "preset": getattr(self, "_last_run_preset", "manual"),
-            "file_count": len(getattr(self, "_last_run_files", [])),
+            "file_count": len(_last_files),
             "success": success,
             "errors": errors,
-            "files": [Path(f).name for f in getattr(self, "_last_run_files", [])[:10]],
+            "files": [Path(f).name for f in _last_files[:10]],
+            # Store first file path for thumbnail display (item 9)
+            "first_file": str(_last_files[0]) if _last_files else "",
         }
         if self._settings.get("history_track_alpha", True):
             self._settings.add_alpha_history(entry)

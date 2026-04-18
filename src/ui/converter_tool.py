@@ -1230,6 +1230,8 @@ class ConverterTab(QWidget):
             "success": success,
             "errors": errors,
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
+            # Store first file path for thumbnail display (item 9)
+            "first_file": str(self._last_run_files[0]) if self._last_run_files else "",
         }
         if self._settings.get("history_track_converter", True):
             self._settings.add_converter_history(entry)

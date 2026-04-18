@@ -389,7 +389,9 @@ class SettingsManager:
     def add_converter_history(self, entry: dict, max_entries: int = 100):
         history = self.get_converter_history()
         history.insert(0, entry)
-        limit = self.get("history_max_entries", max_entries)
+        # Per-tool limit takes priority over global limit when > 0 (item 8)
+        per_tool = int(self.get("history_max_entries_converter", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
         history = history[:limit]
         self._qs.setValue("converter_history", json.dumps(history))
         self._qs.sync()
@@ -409,7 +411,9 @@ class SettingsManager:
     def add_alpha_history(self, entry: dict, max_entries: int = 100):
         history = self.get_alpha_history()
         history.insert(0, entry)
-        limit = self.get("history_max_entries", max_entries)
+        # Per-tool limit takes priority over global limit when > 0 (item 8)
+        per_tool = int(self.get("history_max_entries_alpha", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
         history = history[:limit]
         self._qs.setValue("alpha_history", json.dumps(history))
         self._qs.sync()
@@ -439,7 +443,9 @@ class SettingsManager:
     def add_selective_alpha_history(self, entry: dict, max_entries: int = 100):
         history = self.get_selective_alpha_history()
         history.insert(0, entry)
-        limit = self.get("history_max_entries", max_entries)
+        # Per-tool limit takes priority over global limit when > 0 (item 8)
+        per_tool = int(self.get("history_max_entries_selective_alpha", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
         history = history[:limit]
         self._qs.setValue("selective_alpha_history", json.dumps(history))
         self._qs.sync()
