@@ -1070,7 +1070,9 @@ class SettingsDialog(QDialog):
             cursor_en = self._cursor_enable_check.isChecked()
             use_theme = self._use_theme_cursor_check.isChecked()
             self._cursor_sub.setVisible(cursor_en)
-            self._cursor_manual_widget.setVisible(not use_theme)
+            # item 1/4: keep combo visible (disabled) when use-theme is on
+            self._cursor_manual_widget.setVisible(True)
+            self._cursor_combo.setEnabled(cursor_en and not use_theme)
             self._cursor_theme_info_lbl.setVisible(use_theme)
             if use_theme:
                 self._update_cursor_theme_info()
@@ -2017,7 +2019,9 @@ class SettingsDialog(QDialog):
         self._cursor_combo.setCurrentIndex(max(idx, 0))
         use_theme_cur = self._settings.get("use_theme_cursor", False)
         self._use_theme_cursor_check.setChecked(use_theme_cur)
-        self._cursor_manual_widget.setVisible(not use_theme_cur)
+        # item 1/4: keep manual widget visible — just disable combo when use-theme is on
+        self._cursor_manual_widget.setVisible(True)
+        self._cursor_combo.setEnabled(cursor_enabled and not use_theme_cur)
         self._cursor_theme_info_lbl.setVisible(use_theme_cur)
         if use_theme_cur:
             self._update_cursor_theme_info()
