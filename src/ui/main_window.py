@@ -1769,11 +1769,14 @@ class MainWindow(QMainWindow):
             self._unlock_lbl.setText("")
 
     def _apply_cursor(self):
+        app = QApplication.instance()
         cursor_enabled = self._settings.get("cursor_enabled", False)
         if not cursor_enabled:
-            # Custom cursor disabled — restore system default cursor.
+            # Custom cursor disabled — restore system default cursor on all windows.
             self._stop_cursor_anim()
-            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            # Remove any application-level override so all windows revert to default.
+            while app is not None and app.overrideCursor() is not None:
+                app.restoreOverrideCursor()
             return
         use_theme = self._settings.get("use_theme_cursor", False)
         anim_enabled = self._settings.get("cursor_anim_enabled", True)
@@ -1785,24 +1788,24 @@ class MainWindow(QMainWindow):
                 emoji = cursor_spec[len("emoji:"):]
                 self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
                 if not anim_enabled:
-                    self.setCursor(_make_emoji_cursor(emoji))
+                    self._set_override_cursor(_make_emoji_cursor(emoji))
                 return
             # Otherwise treat it as a named cursor key
             self._stop_cursor_anim()
             shape = _CURSOR_MAP.get(cursor_spec, Qt.CursorShape.ArrowCursor)
-            self.setCursor(QCursor(shape))
+            self._set_override_cursor(QCursor(shape))
         else:
             cursor_name = self._settings.get("cursor", "Default")
             # Check if it's a system cursor name
             if cursor_name in _CURSOR_MAP:
                 self._stop_cursor_anim()
-                self.setCursor(QCursor(_CURSOR_MAP[cursor_name]))
+                self._set_override_cursor(QCursor(_CURSOR_MAP[cursor_name]))
             elif cursor_name.startswith("emoji:"):
                 # Stored as "emoji:<char>" from theme profiles
                 emoji = cursor_name[len("emoji:"):]
                 self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
                 if not anim_enabled:
-                    self.setCursor(_make_emoji_cursor(emoji))
+                    self._set_override_cursor(_make_emoji_cursor(emoji))
             else:
                 # Combo items like "🐼 Panda" – extract the emoji (first char/cluster)
                 # by taking everything before the first space
@@ -1811,10 +1814,22 @@ class MainWindow(QMainWindow):
                     emoji = parts[0]
                     self._start_cursor_anim(emoji) if anim_enabled else self._stop_cursor_anim()
                     if not anim_enabled:
-                        self.setCursor(_make_emoji_cursor(emoji))
+                        self._set_override_cursor(_make_emoji_cursor(emoji))
                 else:
                     self._stop_cursor_anim()
-                    self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+                    while app is not None and app.overrideCursor() is not None:
+                        app.restoreOverrideCursor()
+
+    def _set_override_cursor(self, cursor: "QCursor") -> None:
+        """Set cursor application-wide via override stack (item 2: affects all windows)."""
+        app = QApplication.instance()
+        if app is None:
+            self.setCursor(cursor)
+            return
+        # Collapse any previously installed override(s) so we don't stack
+        while app.overrideCursor() is not None:
+            app.restoreOverrideCursor()
+        app.setOverrideCursor(cursor)
 
     def _start_cursor_anim(self, emoji: str) -> None:
         """Start cursor animation for *emoji*.
@@ -1841,7 +1856,7 @@ class MainWindow(QMainWindow):
                 self._cursor_spin_emoji = emoji
                 self._cursor_anim_idx = 0
                 # Show the first frame immediately so there is no blank gap.
-                self.setCursor(spin_cursors[0])
+                self._set_override_cursor(spin_cursors[0])
                 if self._cursor_anim_timer is None:
                     self._cursor_anim_timer = QTimer(self)
                     self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
@@ -1863,7 +1878,7 @@ class MainWindow(QMainWindow):
                 self._cursor_spin_cursors = wobble_cursors
                 self._cursor_spin_emoji = emoji
                 self._cursor_anim_idx = 0
-                self.setCursor(wobble_cursors[0])
+                self._set_override_cursor(wobble_cursors[0])
                 if self._cursor_anim_timer is None:
                     self._cursor_anim_timer = QTimer(self)
                     self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
@@ -1879,7 +1894,7 @@ class MainWindow(QMainWindow):
         if not frames:
             # No animation frames defined for this emoji – render it static.
             self._stop_cursor_anim()
-            self.setCursor(_make_emoji_cursor(emoji))
+            self._set_override_cursor(_make_emoji_cursor(emoji))
             return
         # If the same sequence is already running, don't restart it
         # (avoids the cursor jumping back to frame 0 on minor settings refreshes).
@@ -1888,7 +1903,7 @@ class MainWindow(QMainWindow):
         self._cursor_anim_frames = frames
         self._cursor_anim_idx = 0
         # Show the first frame immediately so there's no blank-cursor gap.
-        self.setCursor(_make_emoji_cursor(frames[0]))
+        self._set_override_cursor(_make_emoji_cursor(frames[0]))
         if self._cursor_anim_timer is None:
             self._cursor_anim_timer = QTimer(self)
             self._cursor_anim_timer.timeout.connect(self._tick_cursor_anim)
@@ -1903,14 +1918,25 @@ class MainWindow(QMainWindow):
         self._cursor_spin_cursors = []
         self._cursor_spin_emoji = ""
         self._cursor_anim_idx = 0
+        # Restore the application-level cursor so the last animated frame
+        # doesn't stay frozen (item 2).
+        app = QApplication.instance()
+        if app is not None:
+            while app.overrideCursor() is not None:
+                app.restoreOverrideCursor()
 
     def _tick_cursor_anim(self) -> None:
         """Advance to the next cursor animation frame."""
+        app = QApplication.instance()
         # ── Physical spin frames (list[QCursor]) ─────────────────────────
         if self._cursor_spin_cursors:
             self._cursor_anim_idx = (self._cursor_anim_idx + 1) % len(self._cursor_spin_cursors)
             try:
-                self.setCursor(self._cursor_spin_cursors[self._cursor_anim_idx])
+                cur = self._cursor_spin_cursors[self._cursor_anim_idx]
+                if app is not None and app.overrideCursor() is not None:
+                    app.changeOverrideCursor(cur)
+                else:
+                    self.setCursor(cur)
             except RuntimeError:
                 if self._cursor_anim_timer is not None:
                     self._cursor_anim_timer.stop()
@@ -1922,7 +1948,11 @@ class MainWindow(QMainWindow):
             return
         self._cursor_anim_idx = (self._cursor_anim_idx + 1) % len(self._cursor_anim_frames)
         try:
-            self.setCursor(_make_emoji_cursor(self._cursor_anim_frames[self._cursor_anim_idx]))
+            cur = _make_emoji_cursor(self._cursor_anim_frames[self._cursor_anim_idx])
+            if app is not None and app.overrideCursor() is not None:
+                app.changeOverrideCursor(cur)
+            else:
+                self.setCursor(cur)
         except RuntimeError:
             # Widget destroyed during teardown – stop the timer gracefully.
             if self._cursor_anim_timer is not None:
