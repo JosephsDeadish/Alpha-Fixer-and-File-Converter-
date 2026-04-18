@@ -433,7 +433,10 @@ class SettingsDialog(QDialog):
             enabled = self._click_effects_theme_check.isChecked()
             use_theme = self._use_theme_effect_check.isChecked()
             self._click_effect_sub.setVisible(enabled)
-            self._effect_inner_widget.setVisible(not use_theme)
+            # Item 1: keep the combo visible but disabled when "Use theme" is on,
+            # so the dropdown always reflects what is active (never turns into a label).
+            self._effect_inner_widget.setVisible(True)
+            self._effect_combo.setEnabled(enabled and not use_theme)
             self._effect_theme_info_lbl.setVisible(use_theme)
             if use_theme:
                 self._update_effect_theme_info()
@@ -615,7 +618,9 @@ class SettingsDialog(QDialog):
             enabled = self._hold_effects_check.isChecked()
             use_theme = self._use_theme_hold_check.isChecked()
             self._hold_effect_sub.setVisible(enabled)
-            self._hold_inner_widget.setVisible(not use_theme)
+            # Item 1: keep the hold-key combo visible but disabled when "Use theme" is on.
+            self._hold_inner_widget.setVisible(True)
+            self._hold_key_combo.setEnabled(enabled and not use_theme)
         self._hold_effects_check.toggled.connect(lambda _: _update_hold_sub())
         self._use_theme_hold_check.toggled.connect(lambda _: _update_hold_sub())
         self._hold_effect_sub.setVisible(False)
@@ -970,8 +975,12 @@ class SettingsDialog(QDialog):
         _tmw_gl.addWidget(self._trail_style_combo, 1, 1)
         _trail_sub_vl.addWidget(self._trail_manual_widget)
         def _update_trail_sub():
+            enabled = self._trail_check.isChecked()
             use_theme = self._use_theme_trail_check.isChecked()
-            self._trail_manual_widget.setVisible(not use_theme)
+            # Item 1: keep trail controls visible but disabled when "Use theme" is on.
+            self._trail_manual_widget.setVisible(True)
+            self._trail_style_combo.setEnabled(enabled and not use_theme)
+            self._trail_color_btn.setEnabled(enabled and not use_theme)
             self._trail_theme_info_lbl.setVisible(use_theme)
             if use_theme:
                 self._update_trail_theme_info()
@@ -1368,7 +1377,9 @@ class SettingsDialog(QDialog):
             enabled = self._button_anim_check.isChecked()
             use_theme = self._use_theme_button_anim_check.isChecked()
             self._btn_anim_sub.setVisible(enabled)
-            self._btn_anim_style_widget.setVisible(not use_theme)
+            # Item 1: keep combo visible but disabled when "Use theme" is on.
+            self._btn_anim_style_widget.setVisible(True)
+            self._button_anim_style_combo.setEnabled(enabled and not use_theme)
             self._btn_anim_theme_info_lbl.setVisible(use_theme)
             if use_theme and enabled:
                 self._update_btn_anim_theme_info()
@@ -1470,7 +1481,9 @@ class SettingsDialog(QDialog):
             enabled = self._animated_banner_check.isChecked()
             use_theme = self._banner_use_theme_anim_check.isChecked()
             self._banner_anim_sub.setVisible(enabled)
-            self._banner_manual_widget.setVisible(not use_theme)
+            # Item 1: keep combo visible but disabled when "Use theme" is on.
+            self._banner_manual_widget.setVisible(True)
+            self._banner_anim_combo.setEnabled(enabled and not use_theme)
             self._banner_theme_info_lbl.setVisible(use_theme)
             if use_theme and enabled:
                 self._update_banner_theme_info()
@@ -2045,7 +2058,10 @@ class SettingsDialog(QDialog):
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
         self._trail_sub.setVisible(trail_enabled)
-        self._trail_manual_widget.setVisible(not use_theme_trail)
+        # Item 1: keep trail controls visible but disabled when "Use theme" is on.
+        self._trail_manual_widget.setVisible(True)
+        self._trail_style_combo.setEnabled(trail_enabled and not use_theme_trail)
+        self._trail_color_btn.setEnabled(trail_enabled and not use_theme_trail)
         self._trail_theme_info_lbl.setVisible(use_theme_trail)
         if use_theme_trail:
             self._update_trail_theme_info()
@@ -2126,19 +2142,21 @@ class SettingsDialog(QDialog):
         use_theme_effect = self._settings.get("use_theme_effect", False)
         self._use_theme_effect_check.setChecked(use_theme_effect)
         self._click_effect_sub.setVisible(click_effects_enabled)
-        if click_effects_enabled:
-            self._effect_inner_widget.setVisible(not use_theme_effect)
-            self._effect_theme_info_lbl.setVisible(use_theme_effect)
-            if use_theme_effect:
-                self._update_effect_theme_info()
+        # Item 1: keep the combo visible but disabled when "Use theme" is on.
+        self._effect_inner_widget.setVisible(True)
+        self._effect_combo.setEnabled(click_effects_enabled and not use_theme_effect)
+        self._effect_theme_info_lbl.setVisible(use_theme_effect)
+        if use_theme_effect:
+            self._update_effect_theme_info()
         # Hold effects (item 48/49)
         hold_enabled = self._settings.get("hold_effects_enabled", False)
         self._hold_effects_check.setChecked(hold_enabled)
         use_theme_hold = self._settings.get("use_theme_hold_effects", False)
         self._use_theme_hold_check.setChecked(use_theme_hold)
         self._hold_effect_sub.setVisible(hold_enabled)
-        if hold_enabled:
-            self._hold_inner_widget.setVisible(not use_theme_hold)
+        # Item 1: keep hold-key combo visible but disabled when "Use theme" is on.
+        self._hold_inner_widget.setVisible(True)
+        self._hold_key_combo.setEnabled(hold_enabled and not use_theme_hold)
         hold_key_val = self._settings.get("hold_effects_key", "bubble")
         hold_key_idx = self._hold_key_combo.findData(hold_key_val)
         self._hold_key_combo.setCurrentIndex(max(hold_key_idx, 0))
@@ -2166,7 +2184,9 @@ class SettingsDialog(QDialog):
             )
         self._banner_use_theme_anim_check.setChecked(banner_use_theme)
         self._banner_anim_sub.setVisible(banner_enabled)
-        self._banner_manual_widget.setVisible(not banner_use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._banner_manual_widget.setVisible(True)
+        self._banner_anim_combo.setEnabled(banner_enabled and not banner_use_theme)
         self._banner_theme_info_lbl.setVisible(banner_use_theme)
         if banner_use_theme and banner_enabled:
             self._update_banner_theme_info()
@@ -2193,7 +2213,9 @@ class SettingsDialog(QDialog):
                 _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
             )
         self._btn_anim_sub.setVisible(btn_anim_enabled)
-        self._btn_anim_style_widget.setVisible(not use_theme_btn_anim)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._btn_anim_style_widget.setVisible(True)
+        self._button_anim_style_combo.setEnabled(btn_anim_enabled and not use_theme_btn_anim)
         self._btn_anim_theme_info_lbl.setVisible(use_theme_btn_anim)
         if use_theme_btn_anim and btn_anim_enabled:
             self._update_btn_anim_theme_info()
@@ -2730,6 +2752,20 @@ class SettingsDialog(QDialog):
         # Update the sound theme info label if "Use theme sound" is currently checked
         if self._use_theme_sound_check.isChecked():
             self._update_sound_theme_info()
+        # Update cursor combo if "Use theme cursor" is on (item 1)
+        if self._use_theme_cursor_check.isChecked():
+            self._update_cursor_theme_info()
+            cursor_spec = theme.get("_cursor", "Default")
+            if cursor_spec.startswith("emoji:"):
+                cursor_label = cursor_spec[len("emoji:"):]
+            else:
+                cursor_label = cursor_spec
+            # Select the matching item in the combo so the UI reflects the theme cursor
+            idx = self._cursor_combo.findText(cursor_label)
+            if idx >= 0:
+                self._cursor_combo.blockSignals(True)
+                self._cursor_combo.setCurrentIndex(idx)
+                self._cursor_combo.blockSignals(False)
 
     def _on_effect_changed_live(self) -> None:
         """Sync the effect key into the theme dict and persist immediately."""
@@ -2840,13 +2876,13 @@ class SettingsDialog(QDialog):
         self._settings.set("sound_enabled", enabled)
         # Show/hide all sub-controls depending on the enabled state (item 68).
         self._sound_sub_widget.setVisible(enabled)
-        # Also keep the combo enable states in sync for when they become visible.
+        # Item 1: keep the profile combo and label visible; just disable combo when use-theme is on.
         if enabled:
             use_theme = self._use_theme_sound_check.isChecked()
             self._sound_theme_info_lbl.setVisible(use_theme)
-            self._sound_profile_combo.setVisible(not use_theme)
+            self._sound_profile_combo.setVisible(True)
             self._sound_profile_combo.setEnabled(not use_theme)
-            self._sound_profile_lbl.setVisible(not use_theme)
+            self._sound_profile_lbl.setVisible(True)
         self.settings_changed.emit()
 
     def _update_sound_theme_info(self) -> None:
@@ -2893,7 +2929,9 @@ class SettingsDialog(QDialog):
                 self._sound_profile_combo.setCurrentIndex(idx)
         # Always keep combo and its label visible; just toggle enabled state.
         self._sound_profile_combo.setEnabled(not checked)
-        self._sound_theme_info_lbl.setVisible(False)
+        self._sound_profile_lbl.setVisible(True)
+        # Show theme info label when use-theme is on.
+        self._sound_theme_info_lbl.setVisible(checked)
 
     def _on_sound_profile_changed(self) -> None:
         """Save the manually selected sound profile."""
@@ -2996,7 +3034,10 @@ class SettingsDialog(QDialog):
         self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", use_theme)
         self._trail_sub.setVisible(enabled)
-        self._trail_manual_widget.setVisible(not use_theme)
+        # Item 1: keep trail controls visible but disabled when "Use theme" is on.
+        self._trail_manual_widget.setVisible(True)
+        self._trail_style_combo.setEnabled(enabled and not use_theme)
+        self._trail_color_btn.setEnabled(enabled and not use_theme)
         self._trail_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_trail_theme_info()
@@ -3013,7 +3054,10 @@ class SettingsDialog(QDialog):
         use_theme = self._use_theme_trail_check.isChecked()
         self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", use_theme)
-        self._trail_manual_widget.setVisible(not use_theme)
+        # Item 1: keep trail controls visible but disabled when "Use theme" is on.
+        self._trail_manual_widget.setVisible(True)
+        self._trail_style_combo.setEnabled(enabled and not use_theme)
+        self._trail_color_btn.setEnabled(enabled and not use_theme)
         self._trail_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_trail_theme_info()
@@ -3113,7 +3157,9 @@ class SettingsDialog(QDialog):
         self._settings.set("click_effects_enabled", enabled)
         use_theme = self._use_theme_effect_check.isChecked()
         self._click_effect_sub.setVisible(enabled)
-        self._effect_inner_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._effect_inner_widget.setVisible(True)
+        self._effect_combo.setEnabled(enabled and not use_theme)
         self._effect_theme_info_lbl.setVisible(use_theme)
         if use_theme and enabled:
             self._update_effect_theme_info()
@@ -3129,14 +3175,18 @@ class SettingsDialog(QDialog):
         if key:
             self._settings.set("hold_effects_key", key)
         self._hold_effect_sub.setVisible(enabled)
-        self._hold_inner_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._hold_inner_widget.setVisible(True)
+        self._hold_key_combo.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()
 
     def _on_use_theme_effect_changed(self) -> None:
         use_theme = self._use_theme_effect_check.isChecked()
         enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("use_theme_effect", use_theme)
-        self._effect_inner_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._effect_inner_widget.setVisible(True)
+        self._effect_combo.setEnabled(enabled and not use_theme)
         self._effect_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_effect_theme_info()
@@ -3172,7 +3222,9 @@ class SettingsDialog(QDialog):
         self._settings.set("animated_banner_enabled", enabled)
         use_theme = self._banner_use_theme_anim_check.isChecked()
         self._banner_anim_sub.setVisible(enabled)
-        self._banner_manual_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._banner_manual_widget.setVisible(True)
+        self._banner_anim_combo.setEnabled(enabled and not use_theme)
         self._banner_theme_info_lbl.setVisible(use_theme)
         if use_theme and enabled:
             self._update_banner_theme_info()
@@ -3185,8 +3237,11 @@ class SettingsDialog(QDialog):
 
     def _on_banner_use_theme_anim_changed(self) -> None:
         use_theme = self._banner_use_theme_anim_check.isChecked()
+        enabled = self._animated_banner_check.isChecked()
         self._settings.set("banner_use_theme_anim", use_theme)
-        self._banner_manual_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._banner_manual_widget.setVisible(True)
+        self._banner_anim_combo.setEnabled(enabled and not use_theme)
         self._banner_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_banner_theme_info()
@@ -3201,7 +3256,9 @@ class SettingsDialog(QDialog):
         self._settings.set("button_anim_enabled", enabled)
         use_theme = self._use_theme_button_anim_check.isChecked()
         self._btn_anim_sub.setVisible(enabled)
-        self._btn_anim_style_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._btn_anim_style_widget.setVisible(True)
+        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         self._btn_anim_theme_info_lbl.setVisible(use_theme)
         if use_theme and enabled:
             self._update_btn_anim_theme_info()
@@ -3216,7 +3273,9 @@ class SettingsDialog(QDialog):
         use_theme = self._use_theme_button_anim_check.isChecked()
         self._settings.set("use_theme_button_anim", use_theme)
         enabled = self._button_anim_check.isChecked()
-        self._btn_anim_style_widget.setVisible(not use_theme)
+        # Item 1: keep combo visible but disabled when "Use theme" is on.
+        self._btn_anim_style_widget.setVisible(True)
+        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         self._btn_anim_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_btn_anim_theme_info()
