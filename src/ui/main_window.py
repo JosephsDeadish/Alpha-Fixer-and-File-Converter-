@@ -642,6 +642,112 @@ class _KeySecretFilter(QObject):
         return False  # never consume the event
 
 
+
+class _ToastNotification(QWidget):
+    """Floating, auto-dismissing notification overlay (item 56/66).
+
+    Creates a small semi-transparent popup in the bottom-right corner of its
+    parent widget.  The toast fades out automatically after ``timeout_ms``
+    milliseconds and is removed from the layout when it disappears.
+
+    Call the class method :meth:`show_in` to create and display a toast.
+    """
+
+    _FADE_STEPS = 20
+    _FADE_INTERVAL_MS = 40  # total fade ≈ 800 ms
+
+    def __init__(self, message: str, icon: str = "✅",
+                 accent: str = "#ffcc00",
+                 timeout_ms: int = 5000,
+                 parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint |
+                            Qt.WindowType.ToolTip |
+                            Qt.WindowType.WindowStaysOnTopHint)
+        self.setStyleSheet(
+            "background: rgba(28,28,40,210);"
+            f" border: 1px solid {accent};"
+            " border-radius: 8px;"
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 7, 12, 7)
+        layout.setSpacing(8)
+
+        lbl_icon = QLabel(icon)
+        _icon_font = QFont()
+        _icon_font.setFamilies(["Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", "sans-serif"])
+        _icon_font.setPointSize(18)
+        lbl_icon.setFont(_icon_font)
+        lbl_icon.setStyleSheet(f"color: {accent}; background: transparent; border: none;")
+        layout.addWidget(lbl_icon)
+
+        lbl_msg = QLabel(message)
+        lbl_msg.setWordWrap(True)
+        lbl_msg.setMaximumWidth(320)
+        lbl_msg.setStyleSheet(
+            f"color: #dde; font-size: 12px; background: transparent; border: none;"
+        )
+        layout.addWidget(lbl_msg, 1)
+
+        # Close button
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(18, 18)
+        btn_close.setStyleSheet(
+            "QPushButton { background: transparent; border: none;"
+            " color: #aaa; font-size: 10px; }"
+            "QPushButton:hover { color: #fff; }"
+        )
+        btn_close.clicked.connect(self._start_fade)
+        layout.addWidget(btn_close)
+
+        self.adjustSize()
+        self._opacity = 1.0
+        self._fade_timer = QTimer(self)
+        self._fade_timer.setInterval(self._FADE_INTERVAL_MS)
+        self._fade_timer.timeout.connect(self._fade_step)
+
+        self._show_timer = QTimer(self)
+        self._show_timer.setSingleShot(True)
+        self._show_timer.setInterval(timeout_ms)
+        self._show_timer.timeout.connect(self._start_fade)
+
+    @classmethod
+    def show_in(cls, parent: "QWidget", message: str, icon: str = "✅",
+                accent: str = "#ffcc00", timeout_ms: int = 5000) -> "_ToastNotification":
+        """Create a toast, position it in the bottom-right of *parent*, and show it."""
+        toast = cls(message, icon=icon, accent=accent,
+                    timeout_ms=timeout_ms, parent=parent)
+        toast._reposition(parent)
+        toast.show()
+        toast.raise_()
+        toast._show_timer.start()
+        return toast
+
+    def _reposition(self, parent: "QWidget") -> None:
+        margin = 14
+        pr = parent.rect()
+        tw, th = self.width(), self.height()
+        x = pr.right() - tw - margin
+        y = pr.bottom() - th - margin
+        self.move(parent.mapToGlobal(QPoint(x, y)))
+
+    def _start_fade(self) -> None:
+        self._show_timer.stop()
+        self._fade_timer.start()
+
+    def _fade_step(self) -> None:
+        self._opacity -= 1.0 / self._FADE_STEPS
+        if self._opacity <= 0:
+            self._fade_timer.stop()
+            self.close()
+            self.deleteLater()
+        else:
+            self.setWindowOpacity(self._opacity)
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -1531,8 +1637,7 @@ class MainWindow(QMainWindow):
         try:
             if not self._settings.get(unlock_key, False):
                 self._settings.set(unlock_key, True)
-                self._unlock_lbl.setText(banner_msg)
-                self._schedule_unlock_clear()
+                self._show_notification(banner_msg, icon="🔓")
                 try:
                     self._sound.play_unlock()
                 except Exception:
@@ -1542,8 +1647,7 @@ class MainWindow(QMainWindow):
                         pass
             else:
                 # Theme was already unlocked — still celebrate with a message
-                self._unlock_lbl.setText(f"✅ Already unlocked!  {banner_msg}")
-                self._schedule_unlock_clear()
+                self._show_notification(f"Already unlocked!  {banner_msg}", icon="✅")
         except Exception:
             pass
 
@@ -1648,9 +1752,8 @@ class MainWindow(QMainWindow):
             if not self._settings.get(key, False):
                 # Threshold reached and not yet unlocked.
                 self._settings.set(key, True)
-                # Only show the notification banner if the setting is enabled (item 66)
-                if self._settings.get("notif_overlay_enabled", True):
-                    self._unlock_lbl.setText(message)
+                # Show the themed toast notification (item 56/66)
+                self._show_notification(message, icon="🔓")
                 # Play unlock fanfare via SoundEngine (falls back to beep)
                 try:
                     self._sound.play_unlock()
@@ -1789,6 +1892,33 @@ class MainWindow(QMainWindow):
         None (destroyed) if the timer fires during window teardown."""
         if self._unlock_lbl is not None:
             self._unlock_lbl.setText("")
+
+    def _show_notification(self, message: str, icon: str = "🔓",
+                           timeout_ms: int = 5000) -> None:
+        """Show a themed floating toast notification (item 56/66).
+
+        Also updates the legacy header unlock label for backward compatibility.
+        The toast is only shown when the notification overlay is enabled in settings.
+        """
+        # Update the legacy unlock label (header bar)
+        if self._unlock_lbl is not None:
+            try:
+                self._unlock_lbl.setText(f"{icon}  {message}")
+                self._schedule_unlock_clear()
+            except Exception:
+                pass
+        # Show the floating toast overlay if enabled (item 66)
+        if not self._settings.get("notif_overlay_enabled", True):
+            return
+        try:
+            theme = self._settings.get_theme()
+            accent = theme.get("accent", "#ffcc00")
+            _ToastNotification.show_in(
+                self, f"{message}", icon=icon,
+                accent=accent, timeout_ms=timeout_ms
+            )
+        except Exception:
+            pass
 
     def _apply_cursor(self):
         app = QApplication.instance()
