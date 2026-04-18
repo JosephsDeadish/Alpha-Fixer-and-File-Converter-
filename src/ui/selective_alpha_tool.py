@@ -2922,8 +2922,12 @@ class SelectiveAlphaTool(QWidget):
         # Auto-populate zone masks if the image has multiple distinct alphas.
         try:
             self._auto_populate_zones_from_image()
-        except Exception:
-            pass  # Non-fatal: image is loaded; auto-detection just skipped
+        except Exception as _exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "Auto-populate zones skipped after load error: %s", _exc
+            )
+            # Non-fatal: image is loaded; auto-detection just skipped
 
     def _auto_populate_zones_from_image(self) -> None:
         """Auto-detect distinct alpha zones in the loaded image and populate them.

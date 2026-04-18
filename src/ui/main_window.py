@@ -2339,6 +2339,7 @@ class MainWindow(QMainWindow):
         # visible while the settings window is open (the main overlay is behind
         # the modal and therefore not visible).
         dlg_overlay = None
+        _main_effects_were_enabled = False  # remember so we can restore on close
         if self._click_effects is not None:
             try:
                 from .click_effects import ClickEffectsOverlay
@@ -2355,6 +2356,15 @@ class MainWindow(QMainWindow):
                 dlg_overlay.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
                 if self._settings.get("click_effects_enabled", False):
                     dlg_overlay.set_enabled(True)
+                    # Pause the main-window overlay so only the dialog overlay
+                    # responds to clicks while the modal is open.  Without this,
+                    # both event filters are active and click effects appear on
+                    # both windows simultaneously (item 2).
+                    try:
+                        _main_effects_were_enabled = True
+                        self._click_effects.set_enabled(False)
+                    except Exception:
+                        _main_effects_were_enabled = False
                 # Mirror bg drip / flock / ambient so all effects show in the dialog too.
                 if self._settings.get("bg_drip_enabled", False):
                     use_theme_drip = self._settings.get("use_theme_drip", False)
@@ -2409,6 +2419,7 @@ class MainWindow(QMainWindow):
         # Attach a mouse-trail overlay to the dialog so that enabling the trail
         # from within settings immediately shows it (item 69/70).
         dlg_trail = None
+        _main_trail_was_enabled = False  # remember so we can restore on close
         if self._trail_overlay is not None:
             try:
                 from .mouse_trail import MouseTrailOverlay
@@ -2416,7 +2427,19 @@ class MainWindow(QMainWindow):
                 dlg_trail.setGeometry(dlg.rect())
                 dlg_trail.raise_()
                 self._apply_trail_to(dlg_trail)
-                dlg_trail.set_enabled(self._settings.get("trail_enabled", False))
+                if self._settings.get("trail_enabled", False):
+                    dlg_trail.set_enabled(True)
+                    # Pause the main-window trail so both overlays don't compete
+                    # for mouse-move events and draw trails on the wrong window
+                    # (item 2 — trail appears on main window while cursor is in
+                    # the settings dialog).
+                    try:
+                        _main_trail_was_enabled = True
+                        self._trail_overlay.set_enabled(False)
+                    except Exception:
+                        _main_trail_was_enabled = False
+                else:
+                    dlg_trail.set_enabled(False)
             except Exception:
                 dlg_trail = None
 
@@ -2541,6 +2564,24 @@ class MainWindow(QMainWindow):
         if dlg_trail is not None:
             try:
                 dlg_trail.set_enabled(False)
+            except Exception:
+                pass
+        # Restore the main-window click-effects overlay that was paused while
+        # the modal settings dialog was open (item 2).
+        if _main_effects_were_enabled and self._click_effects is not None:
+            try:
+                self._click_effects.set_enabled(
+                    self._settings.get("click_effects_enabled", False)
+                )
+            except Exception:
+                pass
+        # Restore the main-window trail overlay that was paused while the
+        # modal settings dialog was open (item 2).
+        if _main_trail_was_enabled and self._trail_overlay is not None:
+            try:
+                self._trail_overlay.set_enabled(
+                    self._settings.get("trail_enabled", False)
+                )
             except Exception:
                 pass
 

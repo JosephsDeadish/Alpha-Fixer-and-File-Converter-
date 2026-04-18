@@ -499,6 +499,63 @@ sys.excepthook = _excepthook
 
 
 # ---------------------------------------------------------------------------
+# Native-signal crash handler (items 18/32/58/63/64)
+# ---------------------------------------------------------------------------
+# Qt can abort the process via SIGABRT (failed assertions, double-free, etc.)
+# or SIGFPE (FP exceptions) in ways that bypass Python's sys.excepthook,
+# producing a completely silent crash ("no log or crash window").
+# Installing a signal handler lets us at least write the crash to the log
+# file before the process dies so the user has something to attach to a
+# bug report.  We deliberately keep the handler minimal and
+# signal-handler-safe: just write to the log, then re-raise the default
+# handler so the OS can generate a core-dump / WER report as usual.
+
+def _install_native_signal_handlers() -> None:
+    """Install POSIX signal handlers for SIGABRT and SIGFPE.
+
+    Only attempted on platforms where these signals are available
+    (all POSIX systems and Windows via the C runtime).  Any
+    AttributeError or ValueError is silently ignored so that
+    missing signal numbers don't prevent the app from starting.
+    """
+    import signal as _signal
+
+    def _make_handler(sig_name: str):
+        def _handler(signum, frame):
+            try:
+                import traceback as _tb
+                lines = [
+                    f"\n{'=' * 60}",
+                    f"  NATIVE CRASH — signal {sig_name} ({signum}) received",
+                    f"  This is a hard crash (Qt assertion / memory fault).",
+                    f"  Python stack trace at the time of the signal:",
+                    "=" * 60,
+                ]
+                if frame is not None:
+                    lines += _tb.format_stack(frame)
+                logger.critical("\n".join(lines))
+            except Exception:
+                pass  # logging itself must not raise
+            # Re-raise the default signal so the OS can produce a core dump.
+            _signal.signal(signum, _signal.SIG_DFL)
+            _signal.raise_signal(signum)
+        return _handler
+
+    for _sig_attr, _name in (
+        ("SIGABRT", "SIGABRT"),
+        ("SIGFPE",  "SIGFPE"),
+    ):
+        try:
+            _sig = getattr(_signal, _sig_attr)
+            _signal.signal(_sig, _make_handler(_name))
+        except (AttributeError, ValueError, OSError):
+            pass  # Signal not available on this platform
+
+
+_install_native_signal_handlers()
+
+
+# ---------------------------------------------------------------------------
 # Single-instance guard
 # ---------------------------------------------------------------------------
 
