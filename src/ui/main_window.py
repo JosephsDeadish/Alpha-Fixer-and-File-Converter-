@@ -2542,7 +2542,8 @@ class MainWindow(QMainWindow):
 
         class _DlgResizeFilter(_QObject):
             def eventFilter(self_f, obj, event):  # noqa: N805
-                if event.type() == _QEvent.Type.Resize:
+                if event.type() in (_QEvent.Type.Resize, _QEvent.Type.ChildAdded,
+                                    _QEvent.Type.LayoutRequest):
                     try:
                         if dlg_overlay is not None:
                             dlg_overlay.setGeometry(obj.rect())
