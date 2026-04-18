@@ -558,11 +558,13 @@ class SettingsDialog(QDialog):
             "Uncheck to manually pick an emoji style from the list below."
         )
         _bf_sub_vl.addWidget(self._use_theme_flock_check)
-        bg_flock_inner = QHBoxLayout()
-        bg_flock_inner.addWidget(QLabel("Flock Style:"))
+        # Info label shown when "Use theme flock" is ON (replaces the manual combo, item 4)
+        self._bg_flock_theme_lbl = QLabel("Theme flock: —")
+        self._bg_flock_theme_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._bg_flock_theme_lbl.setVisible(False)
+        _bf_sub_vl.addWidget(self._bg_flock_theme_lbl)
         self._bg_flock_combo = QComboBox()
         self._bg_flock_combo.setMinimumWidth(180)
-        self._bg_flock_combo.addItem("🚫 None (theme has no flock)", userData="none")
         self._bg_flock_combo.addItem("🦇 Bats", userData="bats")
         self._bg_flock_combo.addItem("🧚 Fairies", userData="fairies")
         self._bg_flock_combo.addItem("🐟 Fish", userData="fish")
@@ -573,17 +575,22 @@ class SettingsDialog(QDialog):
         self._bg_flock_combo.addItem("🦈 Sharks", userData="sharks")
         self._bg_flock_combo.setToolTip(
             "Choose the emoji used for the background flock.\n"
-            "Greyed out while 'Use theme flock' is checked."
+            "Hidden while 'Use theme flock' is checked — the theme controls the style."
         )
-        bg_flock_inner.addWidget(self._bg_flock_combo, 1)
-        _bf_sub_vl.addLayout(bg_flock_inner)
+        self._bg_flock_inner_widget = QWidget()
+        _bfi_row = QHBoxLayout(self._bg_flock_inner_widget)
+        _bfi_row.setContentsMargins(0, 0, 0, 0)
+        _bfi_row.addWidget(QLabel("Flock Style:"))
+        _bfi_row.addWidget(self._bg_flock_combo, 1)
+        _bf_sub_vl.addWidget(self._bg_flock_inner_widget)
         bg_drip_layout.addWidget(self._bg_flock_sub)
-        # Hide/show sub-container; enable/disable combo on use-theme toggle
+        # Hide/show sub-container; show info label vs combo row based on use-theme toggle
         def _update_flock_combo_state():
             enabled = self._bg_flock_check.isChecked()
             use_theme = self._use_theme_flock_check.isChecked()
             self._bg_flock_sub.setVisible(enabled)
-            self._bg_flock_combo.setEnabled(enabled and not use_theme)
+            self._bg_flock_theme_lbl.setVisible(use_theme)
+            self._bg_flock_inner_widget.setVisible(not use_theme)
         self._bg_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
         self._use_theme_flock_check.toggled.connect(lambda _: _update_flock_combo_state())
         self._bg_flock_sub.setVisible(False)  # hidden until flock is enabled
@@ -614,11 +621,13 @@ class SettingsDialog(QDialog):
             "Uncheck to manually pick an ambient style from the list below."
         )
         _ba_sub_vl.addWidget(self._use_theme_ambient_check)
-        bg_ambient_inner = QHBoxLayout()
-        bg_ambient_inner.addWidget(QLabel("Ambient Style:"))
+        # Info label shown when "Use theme ambient" is ON (replaces the manual combo, item 4)
+        self._bg_ambient_theme_lbl = QLabel("Theme ambient: —")
+        self._bg_ambient_theme_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._bg_ambient_theme_lbl.setVisible(False)
+        _ba_sub_vl.addWidget(self._bg_ambient_theme_lbl)
         self._bg_ambient_combo = QComboBox()
         self._bg_ambient_combo.setMinimumWidth(180)
-        self._bg_ambient_combo.addItem("🚫 No ambient (theme has none)", userData="none")
         self._bg_ambient_combo.addItem("❄️ Snow Drift", userData="snow")
         self._bg_ambient_combo.addItem("🔥 Ember Drift", userData="ember")
         self._bg_ambient_combo.addItem("🌸 Sakura Petals", userData="sakura")
@@ -634,17 +643,22 @@ class SettingsDialog(QDialog):
         self._bg_ambient_combo.addItem("🎋 Bamboo Leaves", userData="bamboo")
         self._bg_ambient_combo.setToolTip(
             "Choose the ambient background animation style.\n"
-            "Greyed out while 'Use theme ambient' is checked."
+            "Hidden while 'Use theme ambient' is checked — the theme controls the style."
         )
-        bg_ambient_inner.addWidget(self._bg_ambient_combo, 1)
-        _ba_sub_vl.addLayout(bg_ambient_inner)
+        self._bg_ambient_inner_widget = QWidget()
+        _bai_row = QHBoxLayout(self._bg_ambient_inner_widget)
+        _bai_row.setContentsMargins(0, 0, 0, 0)
+        _bai_row.addWidget(QLabel("Ambient Style:"))
+        _bai_row.addWidget(self._bg_ambient_combo, 1)
+        _ba_sub_vl.addWidget(self._bg_ambient_inner_widget)
         bg_drip_layout.addWidget(self._bg_ambient_sub)
 
         def _update_ambient_combo_state():
             enabled = self._bg_ambient_check.isChecked()
             use_theme = self._use_theme_ambient_check.isChecked()
             self._bg_ambient_sub.setVisible(enabled)
-            self._bg_ambient_combo.setEnabled(enabled and not use_theme)
+            self._bg_ambient_theme_lbl.setVisible(use_theme)
+            self._bg_ambient_inner_widget.setVisible(not use_theme)
 
         self._bg_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
         self._use_theme_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
@@ -1725,8 +1739,9 @@ class SettingsDialog(QDialog):
                 self._bg_flock_combo.setCurrentIndex(i)
                 break
         self._bg_flock_sub.setVisible(bg_flock_enabled)
-        if bg_flock_enabled:
-            self._bg_flock_combo.setEnabled(not use_theme_flock)
+        # Show info label when "use theme flock" is on; show combo row otherwise (item 4)
+        self._bg_flock_theme_lbl.setVisible(use_theme_flock)
+        self._bg_flock_inner_widget.setVisible(not use_theme_flock)
 
         # Load background ambient settings
         bg_ambient_enabled = self._settings.get("bg_ambient_enabled", False)
@@ -1739,8 +1754,9 @@ class SettingsDialog(QDialog):
         use_theme_ambient = self._settings.get("use_theme_ambient", False)
         self._use_theme_ambient_check.setChecked(use_theme_ambient)
         self._bg_ambient_sub.setVisible(bg_ambient_enabled)
-        if bg_ambient_enabled:
-            self._bg_ambient_combo.setEnabled(not use_theme_ambient)
+        # Show info label when "use theme ambient" is on; show combo row otherwise (item 4)
+        self._bg_ambient_theme_lbl.setVisible(use_theme_ambient)
+        self._bg_ambient_inner_widget.setVisible(not use_theme_ambient)
 
         for c in controls:
             c.blockSignals(False)
@@ -2073,7 +2089,7 @@ class SettingsDialog(QDialog):
                         if self._bg_drip_combo.itemData(i) == drip_key:
                             self._bg_drip_combo.setCurrentIndex(i)
                             break
-            # Flock combo — update tooltip to say which flock (or none) the theme uses
+            # Flock info label — update to show which flock (or none) the theme uses (item 4)
             if self._use_theme_flock_check.isChecked():
                 _FLOCK_LABELS = {
                     "bats": "🦇 Bats", "fairies": "🧚 Fairies", "fish": "🐟 Fish",
@@ -2081,33 +2097,24 @@ class SettingsDialog(QDialog):
                     "stars": "⭐ Stars", "petals": "🌸 Petals", "sharks": "🦈 Sharks",
                 }
                 _FLOCK_IDX = {
-                    "none": 0, "bats": 1, "fairies": 2, "fish": 3, "butterflies": 4,
-                    "birds": 5, "stars": 6, "petals": 7, "sharks": 8,
+                    "bats": 0, "fairies": 1, "fish": 2, "butterflies": 3,
+                    "birds": 4, "stars": 5, "petals": 6, "sharks": 7,
                 }
                 theme_flock = theme.get("_flock")
                 if theme_flock:
                     self._bg_flock_combo.blockSignals(True)
                     self._bg_flock_combo.setCurrentIndex(_FLOCK_IDX.get(theme_flock, 0))
                     self._bg_flock_combo.blockSignals(False)
-                    self._bg_flock_combo.setToolTip(
-                        f"Using theme flock: {_FLOCK_LABELS.get(theme_flock, theme_flock)}\n"
-                        f"(set by the '{theme_name}' theme)\n"
-                        "Uncheck 'Use theme flock' to pick a different style."
+                    flock_label = _FLOCK_LABELS.get(theme_flock, theme_flock)
+                    self._bg_flock_theme_lbl.setText(
+                        f"Using theme flock: {flock_label}  (set by '{theme_name}' theme)"
                     )
                 else:
-                    # Theme has no flock — show the "None" item
-                    self._bg_flock_combo.blockSignals(True)
-                    for _i in range(self._bg_flock_combo.count()):
-                        if self._bg_flock_combo.itemData(_i) == "none":
-                            self._bg_flock_combo.setCurrentIndex(_i)
-                            break
-                    self._bg_flock_combo.blockSignals(False)
-                    self._bg_flock_combo.setToolTip(
-                        f"No themed flock for the '{theme_name}' theme.\n"
-                        "Flock is disabled while 'Use theme flock' is checked.\n"
-                        "Uncheck 'Use theme flock' to enable a manual flock style."
+                    # Theme has no flock — show info label (item 4)
+                    self._bg_flock_theme_lbl.setText(
+                        f"🚫  '{theme_name}' theme has no flock"
                     )
-            # Ambient combo — update tooltip to say which ambient (or none) the theme uses
+            # Ambient info label — update to show which ambient (or none) the theme uses (item 4)
             if self._use_theme_ambient_check.isChecked():
                 from .theme_engine import THEME_AMBIENT_MAP
                 _AMBIENT_LABELS = {
@@ -2120,31 +2127,24 @@ class SettingsDialog(QDialog):
                     "bamboo": "🎋 Bamboo Leaves",
                 }
                 _AMBIENT_IDX = {
-                    "none": 0,
-                    "snow": 1, "ember": 2, "sakura": 3, "stars": 4,
-                    "bubbles": 5, "neon": 6, "ghost": 7, "confetti": 8,
-                    "firefly": 9, "matrix": 10, "leaves": 11, "rainbow": 12,
-                    "bamboo": 13,
+                    "snow": 0, "ember": 1, "sakura": 2, "stars": 3,
+                    "bubbles": 4, "neon": 5, "ghost": 6, "confetti": 7,
+                    "firefly": 8, "matrix": 9, "leaves": 10, "rainbow": 11,
+                    "bamboo": 12,
                 }
                 ambient_key = THEME_AMBIENT_MAP.get(theme_name)
                 if ambient_key:
                     self._bg_ambient_combo.blockSignals(True)
-                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX.get(ambient_key, 1))
+                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX.get(ambient_key, 0))
                     self._bg_ambient_combo.blockSignals(False)
-                    self._bg_ambient_combo.setToolTip(
-                        f"Using theme ambient: {_AMBIENT_LABELS.get(ambient_key, ambient_key)}\n"
-                        f"(set by the '{theme_name}' theme)\n"
-                        "Uncheck 'Use theme ambient' to pick a different style."
+                    ambient_label = _AMBIENT_LABELS.get(ambient_key, ambient_key)
+                    self._bg_ambient_theme_lbl.setText(
+                        f"Using theme ambient: {ambient_label}  (set by '{theme_name}' theme)"
                     )
                 else:
-                    # Theme has no ambient — reflect "None" in the combo (item 64)
-                    self._bg_ambient_combo.blockSignals(True)
-                    self._bg_ambient_combo.setCurrentIndex(_AMBIENT_IDX["none"])
-                    self._bg_ambient_combo.blockSignals(False)
-                    self._bg_ambient_combo.setToolTip(
-                        f"No themed ambient for the '{theme_name}' theme.\n"
-                        "Ambient is disabled while 'Use theme ambient' is checked.\n"
-                        "Uncheck 'Use theme ambient' to enable a manual ambient style."
+                    # Theme has no ambient — show info label (item 4)
+                    self._bg_ambient_theme_lbl.setText(
+                        f"🚫  '{theme_name}' theme has no ambient"
                     )
         finally:
             for c in _combos:
@@ -2667,22 +2667,10 @@ class SettingsDialog(QDialog):
         self._settings.set("use_theme_flock", use_theme_flock)
         flock_style = self._bg_flock_combo.currentData() or "bats"
         self._settings.set("bg_flock_style", flock_style)
-        # Keep sub-controls in sync with the enabled/use-theme state.
+        # Show info label vs manual combo row based on use-theme state (item 4)
         self._use_theme_flock_check.setEnabled(enabled)
-        self._bg_flock_combo.setEnabled(enabled and not use_theme_flock)
-        if use_theme_flock:
-            theme = self._settings.get_theme()
-            theme_name = theme.get("name", "")
-            theme_icon = theme.get("_icon", "🐼")
-            self._bg_flock_combo.setToolTip(
-                f"Using theme flock emoji: {theme_icon} (from '{theme_name}' theme)\n"
-                "Uncheck 'Use theme flock' to override manually."
-            )
-        else:
-            self._bg_flock_combo.setToolTip(
-                "Choose the emoji used for the background flock.\n"
-                "Greyed out while 'Use theme flock' is checked."
-            )
+        self._bg_flock_theme_lbl.setVisible(use_theme_flock)
+        self._bg_flock_inner_widget.setVisible(not use_theme_flock)
         self.settings_changed.emit()
 
     def _on_bg_ambient_changed(self) -> None:
@@ -2693,40 +2681,10 @@ class SettingsDialog(QDialog):
         if not enabled:
             self._settings.set("bg_ambient_type", "none")
         elif not use_theme:
-            ambient_type = self._bg_ambient_combo.currentData() or "none"
+            ambient_type = self._bg_ambient_combo.currentData() or "snow"
             self._settings.set("bg_ambient_type", ambient_type)
-        # Keep sub-controls in sync with enabled/use-theme state.
+        # Show info label vs manual combo row based on use-theme state (item 4)
         self._use_theme_ambient_check.setEnabled(enabled)
-        self._bg_ambient_combo.setEnabled(enabled and not use_theme)
-        # Update combo tooltip when use-theme is on
-        if use_theme and enabled:
-            from .theme_engine import THEME_AMBIENT_MAP
-            theme = self._settings.get_theme()
-            theme_name = theme.get("name", "")
-            ambient_key = THEME_AMBIENT_MAP.get(theme_name)
-            _AMBIENT_LABELS = {
-                "snow": "❄️ Snow Drift", "ember": "🔥 Ember Drift",
-                "sakura": "🌸 Sakura Petals", "stars": "✨ Shooting Stars",
-                "bubbles": "🫧 Rising Bubbles", "neon": "🌈 Neon Flicker",
-                "ghost": "👻 Ghost Wisps", "confetti": "🎊 Confetti Fall",
-                "firefly": "🪲 Fireflies", "matrix": "💻 Matrix Rain",
-                "leaves": "🍂 Autumn Leaves", "rainbow": "🌈 Rainbow Sparkle",
-            }
-            if ambient_key:
-                self._bg_ambient_combo.setToolTip(
-                    f"Using theme ambient: {_AMBIENT_LABELS.get(ambient_key, ambient_key)}\n"
-                    f"(set by the '{theme_name}' theme)\n"
-                    "Uncheck 'Use theme ambient' to pick a different style."
-                )
-            else:
-                self._bg_ambient_combo.setToolTip(
-                    f"No themed ambient for the '{theme_name}' theme.\n"
-                    "Ambient is disabled while 'Use theme ambient' is checked.\n"
-                    "Uncheck 'Use theme ambient' to enable a manual ambient style."
-                )
-        else:
-            self._bg_ambient_combo.setToolTip(
-                "Choose the ambient background animation style.\n"
-                "Greyed out while 'Use theme ambient' is checked."
-            )
+        self._bg_ambient_theme_lbl.setVisible(use_theme)
+        self._bg_ambient_inner_widget.setVisible(not use_theme)
         self.settings_changed.emit()
