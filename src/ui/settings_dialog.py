@@ -185,13 +185,14 @@ class SettingsDialog(QDialog):
         # ================================================================
         theme_tab = QWidget()
         tv = QVBoxLayout(theme_tab)
-        tv.setContentsMargins(8, 8, 8, 8)
-        tv.setSpacing(8)
+        tv.setContentsMargins(4, 4, 4, 4)  # item 50: tighter margins for more content on screen
+        tv.setSpacing(4)  # item 50: reduced spacing between GroupBoxes
 
         # ---- Preset GroupBox ----
         grp_preset_select = QGroupBox("Active Theme Preset")
         ps_vl = QVBoxLayout(grp_preset_select)
-        ps_vl.setSpacing(6)
+        ps_vl.setSpacing(4)
+        ps_vl.setContentsMargins(6, 4, 6, 4)
 
         # Search/filter row
         search_row = QHBoxLayout()
@@ -361,6 +362,8 @@ class SettingsDialog(QDialog):
 
         grp_effect = QGroupBox("Click Effect Style")
         effect_layout = QVBoxLayout(grp_effect)
+        effect_layout.setSpacing(4)
+        effect_layout.setContentsMargins(6, 4, 6, 4)
         effect_layout.setSpacing(6)
         # On/off + use-theme row (mirrors the Mouse Trail group layout)
         self._click_effects_theme_check = QCheckBox("Enable click effects")
@@ -572,7 +575,8 @@ class SettingsDialog(QDialog):
         # ---- Background Effects GroupBox ----
         grp_bg_drip = QGroupBox("Background Effects")
         bg_drip_layout = QVBoxLayout(grp_bg_drip)
-        bg_drip_layout.setSpacing(6)
+        bg_drip_layout.setSpacing(4)
+        bg_drip_layout.setContentsMargins(6, 4, 6, 4)
         self._bg_drip_check = QCheckBox("Enable background drip effect (off by default)")
         self._bg_drip_check.setToolTip(
             "When enabled, a continuous drip animation plays in the background\n"
@@ -843,10 +847,12 @@ class SettingsDialog(QDialog):
 
 
         mouse_row = QHBoxLayout()
-        mouse_row.setSpacing(8)
+        mouse_row.setSpacing(4)  # item 50: tighter horizontal spacing
 
         grp_trail = QGroupBox("Mouse Trail")
         trail_gl = QGridLayout(grp_trail)
+        trail_gl.setSpacing(4)
+        trail_gl.setContentsMargins(6, 4, 6, 4)
         trail_gl.setColumnStretch(1, 1)
         trail_gl.setHorizontalSpacing(10)
         trail_gl.setVerticalSpacing(6)
@@ -996,7 +1002,8 @@ class SettingsDialog(QDialog):
 
         grp_cursor = QGroupBox("Cursor")
         cursor_gl = QVBoxLayout(grp_cursor)
-        cursor_gl.setSpacing(6)
+        cursor_gl.setSpacing(4)
+        cursor_gl.setContentsMargins(6, 4, 6, 4)
         self._cursor_enable_check = QCheckBox("Enable custom cursor  (off by default)")
         self._cursor_enable_check.setToolTip(
             "When off the system default cursor is always used.\n"
