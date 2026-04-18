@@ -927,6 +927,9 @@ class MainWindow(QMainWindow):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.setInterval(50)
         self._resize_timer.timeout.connect(self._reposition_overlays)
+        # Customizable keyboard shortcuts (item 20):
+        # {shortcut_id: {"sc": QShortcut, "default": str, "desc": str, "group": str}}
+        self._shortcut_map: dict[str, dict] = {}
         self._setup_window()
         self._setup_ui()
         self._restore_geometry()
@@ -1033,14 +1036,10 @@ class MainWindow(QMainWindow):
                 return
 
     def _setup_ui(self):
-        # Keep keyboard shortcuts that were previously tied to menu actions
-        from PyQt6.QtGui import QShortcut
-        sc_quit = QShortcut(QKeySequence("Ctrl+Q"), self)
-        sc_quit.activated.connect(self.close)
-        sc_settings = QShortcut(QKeySequence("Ctrl+,"), self)
-        sc_settings.activated.connect(self._open_settings)
-        sc_help = QShortcut(QKeySequence("F1"), self)
-        sc_help.activated.connect(self._show_shortcuts)
+        # Keep keyboard shortcuts that were previously tied to menu actions.
+        # These are registered in _shortcut_map so they can be customised via
+        # the keyboard-shortcuts dialog (item 20).
+        self._setup_keyboard_shortcuts()
 
         # Central widget with tabs
         central = QWidget()
@@ -1094,10 +1093,7 @@ class MainWindow(QMainWindow):
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
 
-        # Keyboard shortcuts for tab switching: Ctrl+1/2/3/4
-        for idx, key in enumerate(("Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4")):
-            sc = QShortcut(QKeySequence(key), self)
-            sc.activated.connect(lambda i=idx: self._tabs.setCurrentIndex(i))
+        # Tab-switching shortcuts are set up in _setup_keyboard_shortcuts.
 
         # Corner widget: Settings / Help / Patreon buttons on the right of the tab bar.
         # This puts all tool controls in one row, freeing vertical space for content.
@@ -2888,25 +2884,101 @@ class MainWindow(QMainWindow):
     # Dialogs
     # ------------------------------------------------------------------
 
+    def _setup_keyboard_shortcuts(self) -> None:
+        """Create QShortcut instances for all configurable global shortcuts (item 20).
+
+        Custom key overrides are loaded from settings (key ``"custom_shortcuts"``
+        which stores a JSON dict ``{shortcut_id: key_sequence_string}``).
+        """
+        import json as _json
+        from PyQt6.QtGui import QShortcut
+
+        # Load any user-customised key sequences from settings
+        try:
+            _raw = self._settings.get("custom_shortcuts", "{}")
+            _custom: dict[str, str] = _json.loads(_raw) if _raw else {}
+        except Exception:
+            _custom = {}
+
+        # Table of (shortcut_id, default_key, description, group, slot)
+        _DEFS: list[tuple[str, str, str, str, object]] = [
+            ("quit",    "Ctrl+Q",  "Quit the application",               "Global", self.close),
+            ("settings","Ctrl+,",  "Open Settings",                      "Global", self._open_settings),
+            ("help",    "F1",      "Open Keyboard Shortcuts help window", "Global", self._show_shortcuts),
+            ("tab_1",   "Ctrl+1",  "Switch to Alpha & RGBA Adjuster tab","Global",
+             lambda: self._tabs.setCurrentIndex(0)),
+            ("tab_2",   "Ctrl+2",  "Switch to File Converter tab",       "Global",
+             lambda: self._tabs.setCurrentIndex(1)),
+            ("tab_3",   "Ctrl+3",  "Switch to History tab",              "Global",
+             lambda: self._tabs.setCurrentIndex(2)),
+            ("tab_4",   "Ctrl+4",  "Switch to Selective Alpha Tool tab", "Global",
+             lambda: self._tabs.setCurrentIndex(3)),
+        ]
+
+        for sc_id, default_key, desc, group, slot in _DEFS:
+            key_str = _custom.get(sc_id, default_key)
+            sc = QShortcut(QKeySequence(key_str), self)
+            sc.activated.connect(slot)
+            self._shortcut_map[sc_id] = {
+                "sc":      sc,
+                "default": default_key,
+                "current": key_str,
+                "desc":    desc,
+                "group":   group,
+            }
+
+    def _update_shortcut(self, sc_id: str, new_key: str) -> None:
+        """Apply a new key sequence to a registered shortcut and persist it (item 20)."""
+        import json as _json
+        info = self._shortcut_map.get(sc_id)
+        if info is None:
+            return
+        info["sc"].setKey(QKeySequence(new_key))
+        info["current"] = new_key
+        # Persist to settings
+        try:
+            _raw = self._settings.get("custom_shortcuts", "{}")
+            _custom: dict[str, str] = _json.loads(_raw) if _raw else {}
+        except Exception:
+            _custom = {}
+        if new_key == info["default"]:
+            _custom.pop(sc_id, None)   # remove override if it matches default
+        else:
+            _custom[sc_id] = new_key
+        try:
+            self._settings.set("custom_shortcuts", _json.dumps(_custom))
+        except Exception:
+            pass
+
     def _show_shortcuts(self):
-        from PyQt6.QtWidgets import QDialog, QScrollArea, QDialogButtonBox
+        """Show an interactive keyboard-shortcuts dialog (item 20).
+
+        Each row has the action name, the current key binding, a "Change"
+        button that captures a new key press, and a "Reset" button that
+        restores the default.  Non-global shortcuts (canvas, GIF/video) are
+        shown in a read-only section below.
+        """
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+            QTableWidget, QTableWidgetItem, QHeaderView, QDialogButtonBox,
+            QSizePolicy, QScrollArea,
+        )
+        from PyQt6.QtCore import Qt as _Qt, QTimer as _QTimer
 
         dlg = QDialog(self)
         dlg.setWindowTitle("⌨  Keyboard Shortcuts")
-        dlg.setMinimumSize(540, 460)
+        dlg.setMinimumSize(580, 520)
         dlg.setSizeGripEnabled(True)
-        # Set the app icon (item 36 – all dialogs should use the app icon)
         app_icon = self.windowIcon()
         if not app_icon.isNull():
             dlg.setWindowIcon(app_icon)
-        # Open at a comfortable initial size, centered on the parent window
         screen = self.screen()
         if screen is not None:
             avail = screen.availableGeometry()
-            init_w = max(640, min(800, int(avail.width() * 0.5)))
-            init_h = max(540, min(700, int(avail.height() * 0.65)))
+            init_w = max(640, min(860, int(avail.width() * 0.52)))
+            init_h = max(540, min(720, int(avail.height() * 0.68)))
         else:
-            init_w, init_h = 640, 540
+            init_w, init_h = 700, 580
         dlg.resize(init_w, init_h)
         dlg.move(
             self.x() + (self.width() - init_w) // 2,
@@ -2917,89 +2989,212 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(12, 12, 12, 8)
         outer.setSpacing(8)
 
-        content_lbl = QLabel(
-            "<h3>Global Shortcuts</h3>"
-            "<table cellpadding='4'>"
-            "<tr><td><b>F1</b></td><td>Open this Keyboard Shortcuts help window</td></tr>"
-            "<tr><td><b>Ctrl+,</b></td><td>Open Settings (themes, effects, UI scale, history)</td></tr>"
-            "<tr><td><b>Ctrl+Q</b></td><td>Quit the application</td></tr>"
-            "<tr><td><b>Ctrl+1</b></td><td>Switch to the Alpha &amp; RGBA Adjuster tab</td></tr>"
-            "<tr><td><b>Ctrl+2</b></td><td>Switch to the File Converter tab</td></tr>"
-            "<tr><td><b>Ctrl+3</b></td><td>Switch to the Processing History tab</td></tr>"
-            "<tr><td><b>Ctrl+4</b></td><td>Switch to the Selective Alpha Tool tab</td></tr>"
-            "</table>"
+        outer.addWidget(QLabel(
+            "<b>⌨  Customizable Shortcuts</b>  — click <i>Change</i> to remap any shortcut."
+        ))
 
-            "<h3>Alpha &amp; RGBA Adjuster &amp; File Converter</h3>"
-            "<table cellpadding='4'>"
-            "<tr><td><b>F5</b></td><td>Start processing / conversion batch</td></tr>"
-            "<tr><td><b>Esc</b></td><td>Stop the current processing operation</td></tr>"
-            "<tr><td><b>Ctrl+O</b></td><td>Add image files to the queue</td></tr>"
-            "<tr><td><b>Ctrl+Shift+O</b></td><td>Add an entire folder (all supported images) to the queue</td></tr>"
-            "<tr><td><b>Delete</b></td><td>Remove the selected file(s) from the queue</td></tr>"
-            "<tr><td><b>Ctrl+A</b></td><td>Select all files in the queue</td></tr>"
-            "</table>"
+        # Editable shortcuts table
+        table = QTableWidget(0, 4)
+        table.setHorizontalHeaderLabels(["Group", "Action", "Shortcut", "Controls"])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setAlternatingRowColors(True)
 
-            "<h3>Selective Alpha Tool  (Canvas)</h3>"
-            "<table cellpadding='4'>"
-            "<tr><td><b>Ctrl+O</b></td><td>Open an image to edit</td></tr>"
-            "<tr><td><b>Ctrl+Z</b></td><td>Undo the last paint / erase stroke</td></tr>"
-            "<tr><td><b>Ctrl+Y</b> or <b>Ctrl+Shift+Z</b></td><td>Redo the last undone stroke</td></tr>"
-            "<tr><td><b>Ctrl+Enter</b></td><td>Save / apply alpha zones to disk (same as Ctrl+S)</td></tr>"
-            "<tr><td><b>Ctrl+S</b></td><td>Save the processed result to disk</td></tr>"
-            "<tr><td><b>Ctrl+Wheel</b></td><td>Zoom in / out on the canvas</td></tr>"
-            "<tr><td><b>Middle-mouse drag</b></td><td>Pan around the canvas (hold scroll wheel and drag)</td></tr>"
-            "<tr><td><b>Alt + Left-drag</b></td><td>Pan the canvas (alternative to middle-mouse)</td></tr>"
-            "</table>"
-            "<h3>Selective Alpha Tool  (Drawing Tools)</h3>"
-            "<table cellpadding='4'>"
-            "<tr><td><b>B</b></td><td>Brush tool — freehand paint alpha zones</td></tr>"
-            "<tr><td><b>E</b></td><td>Eraser tool — erase painted zones</td></tr>"
-            "<tr><td><b>L</b></td><td>Line tool — draw straight lines</td></tr>"
-            "<tr><td><b>R</b></td><td>Rectangle tool — fill a rectangular region</td></tr>"
-            "<tr><td><b>X</b></td><td>Ellipse tool — fill an elliptical region</td></tr>"
-            "<tr><td><b>F</b></td><td>Fill tool — flood-fill a connected region</td></tr>"
-            "<tr><td><b>P</b></td><td>Polygon tool — draw a closed polygon</td></tr>"
-            "<tr><td><b>T</b></td><td>Transform tool — move and scale painted zones</td></tr>"
-            "<tr><td><b>[</b> / <b>]</b></td><td>Decrease / increase brush size</td></tr>"
-            "<tr><td><b>H</b></td><td>Toggle zone highlights on / off</td></tr>"
-            "<tr><td><b>N</b></td><td>Cycle to the next zone in the Zone Editor</td></tr>"
-            "<tr><td><b>Shift+N</b></td><td>Cycle to the previous zone in the Zone Editor</td></tr>"
-            "</table>"
+        def _populate_table():
+            table.setRowCount(0)
+            for sc_id, info in self._shortcut_map.items():
+                row = table.rowCount()
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(info["group"]))
+                table.setItem(row, 1, QTableWidgetItem(info["desc"]))
+                key_item = QTableWidgetItem(info["current"])
+                is_custom = (info["current"] != info["default"])
+                if is_custom:
+                    key_item.setForeground(
+                        dlg.palette().color(dlg.palette().ColorRole.Link)
+                    )
+                    key_item.setToolTip(f"Custom (default: {info['default']})")
+                table.setItem(row, 2, key_item)
 
-            "<h3>GIF Builder</h3>"
-            "<table cellpadding='4'>"
-            "<tr><td><b>Space</b></td><td>Play / Pause the GIF preview</td></tr>"
-            "<tr><td><b>Ctrl+S</b></td><td>Export the composed GIF to a file</td></tr>"
-            "</table>"
+                # Change + Reset buttons in a widget
+                ctrl_w = QWidget()
+                ctrl_h = QHBoxLayout(ctrl_w)
+                ctrl_h.setContentsMargins(2, 1, 2, 1)
+                ctrl_h.setSpacing(4)
+                btn_change = QPushButton("Change")
+                btn_change.setFixedHeight(24)
+                btn_change.setToolTip(
+                    "Click then press any key combination to reassign this shortcut."
+                )
+                btn_reset = QPushButton("Reset")
+                btn_reset.setFixedHeight(24)
+                btn_reset.setEnabled(is_custom)
+                btn_reset.setToolTip(f"Restore default ({info['default']})")
+                ctrl_h.addWidget(btn_change)
+                ctrl_h.addWidget(btn_reset)
+                table.setCellWidget(row, 3, ctrl_w)
+                table.setRowHeight(row, 30)
 
-            "<h3>Video Editor</h3>"
-            "<table cellpadding='4'>"
-            "<tr><td><b>Space</b></td><td>Play / Pause the video preview</td></tr>"
-            "<tr><td><b>Ctrl+S</b></td><td>Export the video to a file</td></tr>"
-            "<tr><td><b>Delete</b></td><td>Remove the selected clip from the clip list</td></tr>"
-            "</table>"
+                # Capture shortcut on Change click
+                def _make_change_handler(_sc_id, _btn_c, _key_item, _btn_r, _info):
+                    def _on_change():
+                        _btn_c.setText("Press a key…")
+                        _btn_c.setEnabled(False)
 
-            "<h3>Quick Access (Right-Click)</h3>"
+                        # Create a temporary key-capture dialog
+                        cap_dlg = QDialog(dlg)
+                        cap_dlg.setWindowTitle("Press a Key Combination")
+                        cap_dlg.setWindowFlags(
+                            cap_dlg.windowFlags()
+                            | _Qt.WindowType.WindowStaysOnTopHint
+                        )
+                        cap_dlg.setModal(True)
+                        cap_dlg.setFixedSize(340, 140)
+                        cap_v = QVBoxLayout(cap_dlg)
+                        cap_lbl = QLabel(
+                            "<b>Press the key combination you want to use.</b>\n"
+                            "Press Esc to cancel."
+                        )
+                        cap_lbl.setWordWrap(True)
+                        cap_lbl.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+                        cap_v.addWidget(cap_lbl, 1)
+                        cap_key_lbl = QLabel("Waiting for key…")
+                        cap_key_lbl.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+                        cap_key_lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+                        cap_v.addWidget(cap_key_lbl)
+                        cap_cancel = QPushButton("Cancel")
+                        cap_cancel.clicked.connect(cap_dlg.reject)
+                        cap_v.addWidget(cap_cancel, 0, _Qt.AlignmentFlag.AlignRight)
+
+                        _captured_key = [None]
+
+                        def _key_press(event):
+                            from PyQt6.QtGui import QKeySequence, QKeyEvent
+                            key = event.key()
+                            if key in (_Qt.Key.Key_unknown, _Qt.Key.Key_Control,
+                                       _Qt.Key.Key_Shift, _Qt.Key.Key_Alt,
+                                       _Qt.Key.Key_Meta):
+                                return
+                            if key == _Qt.Key.Key_Escape:
+                                cap_dlg.reject()
+                                return
+                            mods = event.modifiers()
+                            seq = QKeySequence(int(mods) | key)
+                            key_str = seq.toString()
+                            if not key_str:
+                                return
+                            _captured_key[0] = key_str
+                            cap_key_lbl.setText(f"  {key_str}  ")
+                            _QTimer.singleShot(400, cap_dlg.accept)
+
+                        cap_dlg.keyPressEvent = _key_press
+                        result = cap_dlg.exec()
+
+                        _btn_c.setText("Change")
+                        _btn_c.setEnabled(True)
+
+                        if result == QDialog.DialogCode.Accepted and _captured_key[0]:
+                            new_key = _captured_key[0]
+                            self._update_shortcut(_sc_id, new_key)
+                            _key_item.setText(new_key)
+                            is_c = (new_key != _info["default"])
+                            if is_c:
+                                _key_item.setForeground(
+                                    dlg.palette().color(dlg.palette().ColorRole.Link)
+                                )
+                                _key_item.setToolTip(f"Custom (default: {_info['default']})")
+                            else:
+                                _key_item.setForeground(
+                                    dlg.palette().color(dlg.palette().ColorRole.Text)
+                                )
+                                _key_item.setToolTip("")
+                            _btn_r.setEnabled(is_c)
+
+                    return _on_change
+
+                def _make_reset_handler(_sc_id, _btn_c, _key_item, _btn_r, _info):
+                    def _on_reset():
+                        self._update_shortcut(_sc_id, _info["default"])
+                        _key_item.setText(_info["default"])
+                        _key_item.setForeground(
+                            dlg.palette().color(dlg.palette().ColorRole.Text)
+                        )
+                        _key_item.setToolTip("")
+                        _btn_r.setEnabled(False)
+
+                    return _on_reset
+
+                btn_change.clicked.connect(
+                    _make_change_handler(sc_id, btn_change, key_item, btn_reset, info)
+                )
+                btn_reset.clicked.connect(
+                    _make_reset_handler(sc_id, btn_change, key_item, btn_reset, info)
+                )
+
+        _populate_table()
+        outer.addWidget(table)
+
+        # ── Read-only reference section ────────────────────────────────
+        outer.addWidget(QLabel("<b>Fixed Shortcuts</b> (non-configurable):"))
+        ref_lbl = QLabel(
             "<table cellpadding='4'>"
-            "<tr><td><b>Right-click window</b></td><td>Open GIF Builder, Video Editor, or Settings directly</td></tr>"
+            "<tr><th align='left'>Tool / Context</th><th align='left'>Key</th><th align='left'>Action</th></tr>"
+
+            "<tr><td><i>Alpha &amp; RGBA / Converter</i></td><td><b>F5</b></td>"
+            "<td>Start processing / conversion batch</td></tr>"
+            "<tr><td></td><td><b>Esc</b></td><td>Stop the current operation</td></tr>"
+            "<tr><td></td><td><b>Ctrl+O</b></td><td>Add image files to the queue</td></tr>"
+            "<tr><td></td><td><b>Ctrl+Shift+O</b></td><td>Add a whole folder to the queue</td></tr>"
+            "<tr><td></td><td><b>Del</b></td><td>Remove selected file(s) from queue</td></tr>"
+            "<tr><td></td><td><b>Ctrl+A</b></td><td>Select all files in queue</td></tr>"
+
+            "<tr><td><i>Selective Alpha (Canvas)</i></td><td><b>Ctrl+O</b></td><td>Open an image</td></tr>"
+            "<tr><td></td><td><b>Ctrl+Z</b></td><td>Undo last stroke</td></tr>"
+            "<tr><td></td><td><b>Ctrl+Y / Ctrl+Shift+Z</b></td><td>Redo</td></tr>"
+            "<tr><td></td><td><b>Ctrl+S / Ctrl+Enter</b></td><td>Save result</td></tr>"
+            "<tr><td></td><td><b>Ctrl+Wheel</b></td><td>Zoom in / out</td></tr>"
+            "<tr><td></td><td><b>Middle-drag / Alt+drag</b></td><td>Pan canvas</td></tr>"
+
+            "<tr><td><i>Drawing Tools</i></td><td><b>B</b></td><td>Brush</td></tr>"
+            "<tr><td></td><td><b>E</b></td><td>Eraser</td></tr>"
+            "<tr><td></td><td><b>L</b></td><td>Line</td></tr>"
+            "<tr><td></td><td><b>R</b></td><td>Rectangle fill</td></tr>"
+            "<tr><td></td><td><b>X</b></td><td>Ellipse fill</td></tr>"
+            "<tr><td></td><td><b>F</b></td><td>Flood fill</td></tr>"
+            "<tr><td></td><td><b>P</b></td><td>Polygon</td></tr>"
+            "<tr><td></td><td><b>T</b></td><td>Transform</td></tr>"
+            "<tr><td></td><td><b>[ / ]</b></td><td>Decrease / increase brush size</td></tr>"
+            "<tr><td></td><td><b>H</b></td><td>Toggle zone highlights</td></tr>"
+            "<tr><td></td><td><b>N / Shift+N</b></td><td>Next / previous zone</td></tr>"
+
+            "<tr><td><i>GIF Builder</i></td><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
+            "<tr><td></td><td><b>Ctrl+S</b></td><td>Export GIF</td></tr>"
+
+            "<tr><td><i>Video Editor</i></td><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
+            "<tr><td></td><td><b>Ctrl+S</b></td><td>Export video</td></tr>"
+            "<tr><td></td><td><b>Del</b></td><td>Remove selected clip</td></tr>"
+
+            "<tr><td><i>Right-click window</i></td><td><b>Right-click</b></td>"
+            "<td>Open GIF Builder, Video Editor, or Settings</td></tr>"
             "</table>"
         )
-        content_lbl.setWordWrap(True)
-        content_lbl.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-
-        from PyQt6.QtWidgets import QSizePolicy
-        content_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        ref_lbl.setWordWrap(True)
+        ref_lbl.setTextInteractionFlags(_Qt.TextInteractionFlag.TextSelectableByMouse)
+        ref_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
-        scroll.setWidget(content_lbl)
+        scroll.setWidget(ref_lbl)
         outer.addWidget(scroll, 1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        buttons.accepted.connect(dlg.accept)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
         outer.addWidget(buttons)
 
         dlg.exec()

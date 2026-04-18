@@ -4,6 +4,8 @@ Alpha & RGBA Adjuster tab widget.
 import datetime
 import logging
 import os
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -544,6 +546,26 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setObjectName("subheader")
         rv.addWidget(self._status_lbl)
 
+        # Undo Last Batch button — hidden until a successful in-place batch (item 10)
+        self._btn_undo_batch = QPushButton("↩  Undo Last Batch")
+        self._btn_undo_batch.setStyleSheet(
+            "QPushButton { background: #7a4800; color: #ffe0a0; border: 1px solid #ff9800; "
+            "border-radius: 4px; padding: 4px 8px; }"
+            "QPushButton:hover { background: #a05800; }"
+            "QPushButton:pressed { background: #5a3000; }"
+        )
+        self._btn_undo_batch.setMinimumHeight(30)
+        self._btn_undo_batch.setToolTip(
+            "Restore the original files from the last batch that was processed in-place.\n"
+            "The backup is kept until the next batch replaces it."
+        )
+        self._btn_undo_batch.setVisible(False)
+        self._btn_undo_batch.clicked.connect(self._on_undo_batch)
+        rv.addWidget(self._btn_undo_batch)
+        # Track backup manifest: list of (original_path, backup_path) tuples
+        self._last_backup_pairs: list[tuple[str, str]] = []
+        self._last_backup_dir: str = ""
+
         # Alpha channel settings section
         grp_tune = QGroupBox("Alpha Channel Settings")
         self._grp_tune = grp_tune
@@ -795,6 +817,7 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._btn_clear, "clear_list")
         mgr.register(self._btn_run, "process_btn")
         mgr.register(self._btn_stop, "stop_btn")
+        mgr.register(self._btn_undo_batch, "alpha_undo_batch_btn")
         mgr.register(self._threshold_spin, "threshold_spin")
         mgr.register(self._finetune_params_lbl, "finetune_params_lbl")
         mgr.register(self._clamp_min_spin, "clamp_min_spin")
@@ -1515,6 +1538,7 @@ class AlphaFixerTab(QWidget):
         self._progress.setValue(0)
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
+        self._btn_undo_batch.setVisible(False)
         self._status_lbl.setText("Processing…")
         self._spinner_idx = 0
         self._spinner_timer.start()
@@ -1522,6 +1546,24 @@ class AlphaFixerTab(QWidget):
         self._batch_total = len(expanded)
         # Notify main window so it can play the process-start sound
         self.processing_started.emit()
+
+        # Clean up any previous backup dir
+        if self._last_backup_dir and os.path.isdir(self._last_backup_dir):
+            try:
+                shutil.rmtree(self._last_backup_dir, ignore_errors=True)
+            except Exception:
+                pass
+        self._last_backup_pairs = []
+        self._last_backup_dir = ""
+
+        # Create a temporary backup dir for in-place processing (item 10)
+        backup_dir = None
+        if (suffix == "") and (not out_dir):
+            try:
+                backup_dir = tempfile.mkdtemp(prefix="alpha_undo_")
+                self._last_backup_dir = backup_dir
+            except Exception:
+                backup_dir = None
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -1531,6 +1573,7 @@ class AlphaFixerTab(QWidget):
                 self._worker.progress.disconnect()
                 self._worker.file_done.disconnect()
                 self._worker.finished.disconnect()
+                self._worker.backup_manifest.disconnect()
             except RuntimeError:
                 pass  # already disconnected
 
@@ -1541,10 +1584,12 @@ class AlphaFixerTab(QWidget):
             input_root=input_root,
             overwrite=(suffix == ""),
             suffix=suffix,
+            backup_dir=backup_dir,
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
+        self._worker.backup_manifest.connect(self._on_backup_manifest)
         self._worker.start()
 
     def _stop(self):
@@ -1555,6 +1600,53 @@ class AlphaFixerTab(QWidget):
     # ------------------------------------------------------------------
     # Worker slots
     # ------------------------------------------------------------------
+
+    @pyqtSlot(list)
+    def _on_backup_manifest(self, pairs: list) -> None:
+        """Receive the list of (original, backup) pairs from the worker (item 10)."""
+        self._last_backup_pairs = list(pairs)
+
+    def _on_undo_batch(self) -> None:
+        """Restore original files from the last in-place batch backup (item 10)."""
+        if not self._last_backup_pairs:
+            QMessageBox.information(self, "Nothing to Undo",
+                                    "No backup available for the last batch.")
+            return
+        count = len(self._last_backup_pairs)
+        reply = QMessageBox.question(
+            self, "Undo Last Batch",
+            f"Restore {count} file(s) from the last backup?\n"
+            "The processed files will be replaced with their originals.\n"
+            "This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        restored = 0
+        errors = []
+        for orig, bk in self._last_backup_pairs:
+            try:
+                shutil.copy2(bk, orig)
+                restored += 1
+            except Exception as exc:
+                errors.append(f"{Path(orig).name}: {exc}")
+        # Clean up backup dir
+        if self._last_backup_dir and os.path.isdir(self._last_backup_dir):
+            try:
+                shutil.rmtree(self._last_backup_dir, ignore_errors=True)
+            except Exception:
+                pass
+        self._last_backup_pairs = []
+        self._last_backup_dir = ""
+        self._btn_undo_batch.setVisible(False)
+        # Report result
+        msg = f"Restored {restored}/{count} file(s)."
+        if errors:
+            msg += "\n\nErrors:\n" + "\n".join(errors[:10])
+        QMessageBox.information(self, "Undo Complete", msg)
+        # Refresh the compare preview
+        if self._preview_path:
+            self._update_compare()
 
     @pyqtSlot(int, int, str)
     def _on_progress(self, current: int, total: int, path: str):
@@ -1595,6 +1687,12 @@ class AlphaFixerTab(QWidget):
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        # Show "Undo Last Batch" button when a backup was created (item 10)
+        if self._last_backup_pairs and success > 0:
+            self._btn_undo_batch.setVisible(True)
+            self._btn_undo_batch.setText(
+                f"↩  Undo Last Batch  ({len(self._last_backup_pairs)} files)"
+            )
         # Restore the window title after processing
         try:
             from ..version import __version__

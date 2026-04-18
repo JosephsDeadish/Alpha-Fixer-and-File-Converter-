@@ -257,6 +257,8 @@ class SettingsManager:
         "sa_show_alpha_labels": False,
         # Last-used drawing tool key
         "sa_last_tool": "freehand",
+        # Customizable keyboard shortcuts (item 20): JSON dict of {shortcut_id: key_sequence_str}
+        "custom_shortcuts": "{}",
     }
 
     def __init__(self):
