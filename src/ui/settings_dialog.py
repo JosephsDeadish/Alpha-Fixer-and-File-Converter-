@@ -1653,6 +1653,46 @@ class SettingsDialog(QDialog):
         self._widget_spacing_combo.setMaximumWidth(220)
         scale_gl.addWidget(self._widget_spacing_combo, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
+        # Panel / group box border radius (item 7)
+        scale_gl.addWidget(QLabel("Border Radius:"), 4, 0)
+        self._border_radius_combo = QComboBox()
+        _BR_OPTIONS = [
+            ("None  (0 px)",        "None",     "Square corners on all panels and buttons."),
+            ("Subtle  (3 px)",      "Subtle",   "Very slight rounding — barely noticeable."),
+            ("Normal  (6 px)",      "Normal",   "Default rounding. Balanced and modern."),
+            ("Rounded  (10 px)",    "Rounded",  "Noticeably rounded corners — friendly look."),
+            ("Pill  (16 px)",       "Pill",     "Maximum rounding — very soft, bubbly feel."),
+        ]
+        for label, _key, tip in _BR_OPTIONS:
+            self._border_radius_combo.addItem(label)
+            idx = self._border_radius_combo.count() - 1
+            self._border_radius_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._border_radius_combo.setToolTip(
+            "Set the corner rounding radius for buttons, panels, and input fields.\n"
+            "'None' gives a clean square look; 'Pill' gives a very soft rounded look."
+        )
+        self._border_radius_combo.setMaximumWidth(220)
+        scale_gl.addWidget(self._border_radius_combo, 4, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Group box content padding (item 7)
+        scale_gl.addWidget(QLabel("Panel Padding:"), 5, 0)
+        self._panel_padding_combo = QComboBox()
+        _PAD_OPTIONS = [
+            ("Minimal  (2 px)",  "Minimal",  "Very little padding inside panels — fits more content."),
+            ("Normal  (6 px)",   "Normal",   "Default padding. Comfortable and readable."),
+            ("Spacious  (12 px)", "Spacious", "Generous padding — easier to scan at a glance."),
+        ]
+        for label, _key, tip in _PAD_OPTIONS:
+            self._panel_padding_combo.addItem(label)
+            idx = self._panel_padding_combo.count() - 1
+            self._panel_padding_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._panel_padding_combo.setToolTip(
+            "Set the internal padding inside group boxes and panels.\n"
+            "'Minimal' fits more on screen; 'Spacious' is easier to scan."
+        )
+        self._panel_padding_combo.setMaximumWidth(220)
+        scale_gl.addWidget(self._panel_padding_combo, 5, 1, Qt.AlignmentFlag.AlignLeft)
+
         gv.addWidget(grp_scale)
 
         # ---- History GroupBox (items 8/9) ----
@@ -1853,6 +1893,8 @@ class SettingsDialog(QDialog):
         self._ui_scale_combo.currentTextChanged.connect(self._on_ui_scale_changed)
         self._btn_height_combo.currentTextChanged.connect(self._on_btn_height_changed)
         self._widget_spacing_combo.currentTextChanged.connect(self._on_widget_spacing_changed)
+        self._border_radius_combo.currentTextChanged.connect(self._on_border_radius_changed)
+        self._panel_padding_combo.currentTextChanged.connect(self._on_panel_padding_changed)
         self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
         self._history_max_conv_spin.valueChanged.connect(
             lambda v: self._settings.set("history_max_entries_converter", v)
@@ -2001,6 +2043,7 @@ class SettingsDialog(QDialog):
             self._sound_profile_combo,
             # UI density combos
             self._btn_height_combo, self._widget_spacing_combo,
+            self._border_radius_combo, self._panel_padding_combo,
         ]
         for c in controls:
             c.blockSignals(True)
@@ -2116,6 +2159,14 @@ class SettingsDialog(QDialog):
         ws_val = self._settings.get("widget_spacing", "Normal")
         _ws_map = {"Tight": 0, "Normal": 1, "Relaxed": 2}
         self._widget_spacing_combo.setCurrentIndex(_ws_map.get(ws_val, 1))
+        # Border radius (item 7)
+        br_val = self._settings.get("border_radius", "Normal")
+        _br_map = {"None": 0, "Subtle": 1, "Normal": 2, "Rounded": 3, "Pill": 4}
+        self._border_radius_combo.setCurrentIndex(_br_map.get(br_val, 2))
+        # Panel padding (item 7)
+        pp_val = self._settings.get("panel_padding", "Normal")
+        _pp_map = {"Minimal": 0, "Normal": 1, "Spacious": 2}
+        self._panel_padding_combo.setCurrentIndex(_pp_map.get(pp_val, 1))
         # History max entries
         self._history_max_spin.setValue(self._settings.get("history_max_entries", 100))
         self._history_max_conv_spin.setValue(
@@ -3147,6 +3198,20 @@ class SettingsDialog(QDialog):
         idx = self._widget_spacing_combo.currentIndex()
         key = _keys[idx] if 0 <= idx < len(_keys) else "Normal"
         self._settings.set("widget_spacing", key)
+        self.settings_changed.emit()
+
+    def _on_border_radius_changed(self) -> None:
+        _keys = ["None", "Subtle", "Normal", "Rounded", "Pill"]
+        idx = self._border_radius_combo.currentIndex()
+        key = _keys[idx] if 0 <= idx < len(_keys) else "Normal"
+        self._settings.set("border_radius", key)
+        self.settings_changed.emit()
+
+    def _on_panel_padding_changed(self) -> None:
+        _keys = ["Minimal", "Normal", "Spacious"]
+        idx = self._panel_padding_combo.currentIndex()
+        key = _keys[idx] if 0 <= idx < len(_keys) else "Normal"
+        self._settings.set("panel_padding", key)
         self.settings_changed.emit()
 
     def _on_history_max_changed(self, value: int) -> None:

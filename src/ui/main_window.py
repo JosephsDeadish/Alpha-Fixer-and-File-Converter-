@@ -2158,6 +2158,20 @@ class MainWindow(QMainWindow):
                 new_ss += (
                     f"\nQGroupBox > QWidget {{ margin-top: {_sp}px; }}"
                 )
+                # Border radius override (item 7).
+                _br_map = {"None": 0, "Subtle": 3, "Normal": 6, "Rounded": 10, "Pill": 16}
+                _br = _br_map.get(
+                    self._settings.get("border_radius", "Normal"), 6)
+                new_ss += (
+                    f"\nQPushButton, QComboBox, QSpinBox, QDoubleSpinBox,"
+                    f" QLineEdit, QGroupBox, QToolButton"
+                    f" {{ border-radius: {_br}px; }}"
+                )
+                # Panel padding override (item 7).
+                _pp_map = {"Minimal": 2, "Normal": 6, "Spacious": 12}
+                _pp = _pp_map.get(
+                    self._settings.get("panel_padding", "Normal"), 6)
+                new_ss += f"\nQGroupBox {{ padding: {_pp}px; }}"
             except Exception:
                 pass
             if new_ss != self._last_stylesheet:
