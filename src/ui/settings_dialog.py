@@ -235,38 +235,46 @@ class SettingsDialog(QDialog):
         # Color grid
         grp_colors = QGroupBox("Theme Colors")
         color_grid = QGridLayout(grp_colors)
-        color_grid.setHorizontalSpacing(10)
-        color_grid.setVerticalSpacing(6)
+        color_grid.setHorizontalSpacing(6)
+        color_grid.setVerticalSpacing(4)
+        color_grid.setContentsMargins(6, 4, 6, 4)
         color_keys = [
             ("background", "Background"),
             ("surface", "Surface"),
             ("primary", "Primary"),
             ("accent", "Accent"),
             ("text", "Text"),
-            ("text_secondary", "Text Secondary"),
+            ("text_secondary", "Text Sec."),
             ("border", "Border"),
             ("success", "Success"),
             ("warning", "Warning"),
             ("error", "Error"),
             ("button_bg", "Button BG"),
-            ("button_hover", "Button Hover"),
-            ("progress_bar", "Progress Bar"),
+            ("button_hover", "Btn Hover"),
+            ("progress_bar", "Progress"),
             ("input_bg", "Input BG"),
-            ("scrollbar_handle", "Scrollbar Handle"),
+            ("scrollbar_handle", "Scrollbar"),
         ]
+        # 5-column layout for compact appearance (item 70)
+        _COLS = 5
         for i, (key, label) in enumerate(color_keys):
-            row, col = divmod(i, 3)
-            color_grid.addWidget(QLabel(label + ":"), row, col * 3)
+            row, col = divmod(i, _COLS)
+            lbl = QLabel(label + ":")
+            lbl.setToolTip(f"Custom colour for the '{key}' theme slot.")
+            color_grid.addWidget(lbl, row, col * 2)
             btn = ColorButton(self._theme.get(key, "#888888"))
             btn.color_changed.connect(lambda c, k=key: self._on_color_changed(k, c))
             self._color_buttons[key] = btn
-            color_grid.addWidget(btn, row, col * 3 + 1)
-            color_grid.setColumnStretch(col * 3 + 2, 1)
+            color_grid.addWidget(btn, row, col * 2 + 1)
+        # Equal stretch between column pairs
+        for c in range(_COLS):
+            color_grid.setColumnStretch(c * 2 + 1, 1)
 
         scroll = QScrollArea()
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
-        scroll.setMinimumHeight(120)
+        scroll.setMaximumHeight(110)
+        scroll.setMinimumHeight(80)
         tv.addWidget(scroll)
 
         # ---- Effect + Emoji in a single row of GroupBoxes ----
