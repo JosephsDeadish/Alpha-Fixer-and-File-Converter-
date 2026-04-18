@@ -393,7 +393,7 @@ class SelectiveAlphaCanvas(QWidget):
             return
         self._push_history()
         for i, m in enumerate(snapshot):
-            if i < NUM_ZONES:
+            if i < NUM_ZONES and m is not None:
                 self._masks[i] = m.copy()
         self._composite_dirty = True
         for i in range(NUM_ZONES):
@@ -1113,11 +1113,15 @@ class _FloatingZoomOverlay(QFrame):
 
 
 class _FloatingHistoryOverlay(QFrame):
-    """Semi-transparent floating overlay with Undo / Redo canvas-drawing buttons.
+    """Semi-transparent floating overlay with Undo / Redo canvas-drawing buttons
+    and visibility toggles (Highlight transparent pixels, Show α values).
 
     Positioned at the top-left corner of its parent widget.  Reparent to the
     canvas widget and call ``reposition()`` from the parent's ``resizeEvent``.
     """
+
+    highlight_toggled = pyqtSignal(bool)
+    labels_toggled    = pyqtSignal(bool)
 
     def __init__(self, undo_cb, redo_cb, parent=None):
         super().__init__(parent)
@@ -1142,10 +1146,17 @@ class _FloatingHistoryOverlay(QFrame):
             "QPushButton:hover { background: rgba(100,100,100,220); }"
             "QPushButton:pressed { background: rgba(40,40,40,255); }"
             "QPushButton:disabled { color: rgba(150,150,150,120); }"
+            "QCheckBox { color: #ddd; font-size: 11px; }"
+            "QCheckBox::indicator { width: 13px; height: 13px; }"
         )
-        row = QHBoxLayout(self)
-        row.setContentsMargins(4, 3, 4, 3)
+        vlay = QVBoxLayout(self)
+        vlay.setContentsMargins(4, 3, 4, 3)
+        vlay.setSpacing(3)
+
+        # Row 1: Undo / Redo buttons
+        row = QHBoxLayout()
         row.setSpacing(3)
+        row.setContentsMargins(0, 0, 0, 0)
         self._btn_undo = QPushButton("↩")
         self._btn_undo.setToolTip("Undo the last brush/erase action  (Ctrl+Z)")
         self._btn_undo.setEnabled(False)
@@ -1156,6 +1167,29 @@ class _FloatingHistoryOverlay(QFrame):
         self._btn_redo.clicked.connect(redo_cb)
         row.addWidget(self._btn_undo)
         row.addWidget(self._btn_redo)
+        vlay.addLayout(row)
+
+        # Row 2: Highlight transparent pixels checkbox
+        self._chk_highlight = QCheckBox("Highlight transparent")
+        self._chk_highlight.setChecked(False)
+        self._chk_highlight.setToolTip(
+            "When checked, zone highlights are shown even over fully-transparent\n"
+            "(alpha = 0) pixels so you can paint and see selections on\n"
+            "transparent areas of the image."
+        )
+        self._chk_highlight.toggled.connect(self.highlight_toggled)
+        vlay.addWidget(self._chk_highlight)
+
+        # Row 3: Show α values checkbox
+        self._chk_labels = QCheckBox("Show α values")
+        self._chk_labels.setChecked(True)
+        self._chk_labels.setToolTip(
+            "When checked, each zone's alpha value is drawn as text at the\n"
+            "centre of its painted area on the canvas.  On by default."
+        )
+        self._chk_labels.toggled.connect(self.labels_toggled)
+        vlay.addWidget(self._chk_labels)
+
         self.adjustSize()
         self.raise_()
 
@@ -1190,6 +1224,22 @@ class _FloatingHistoryOverlay(QFrame):
         self._btn_redo.setText(label)
         self._btn_redo.setMaximumWidth(26 + (len(str(count)) * 8 if count > 0 else 0))
         self.adjustSize()
+
+    def set_highlight_checked(self, v: bool) -> None:
+        self._chk_highlight.blockSignals(True)
+        self._chk_highlight.setChecked(v)
+        self._chk_highlight.blockSignals(False)
+
+    def set_labels_checked(self, v: bool) -> None:
+        self._chk_labels.blockSignals(True)
+        self._chk_labels.setChecked(v)
+        self._chk_labels.blockSignals(False)
+
+    def highlight_checked(self) -> bool:
+        return self._chk_highlight.isChecked()
+
+    def labels_checked(self) -> bool:
+        return self._chk_labels.isChecked()
 
     def reposition(self, parent_size) -> None:
         """Pin the overlay to the top-left corner."""
@@ -1590,45 +1640,6 @@ class SelectiveAlphaTool(QWidget):
         zv = QVBoxLayout(zones_box)
         zv.setSpacing(2)
 
-        # Master visibility toggle row
-        vis_all_row = QHBoxLayout()
-        vis_all_row.setContentsMargins(0, 0, 0, 2)
-        self._btn_show_all = QPushButton("👁  Show All")
-        self._btn_show_all.setMinimumHeight(24)
-        self._btn_show_all.setToolTip(
-            "Make all zone overlays visible in the canvas at once."
-        )
-        self._btn_show_all.clicked.connect(self._on_show_all_zones)
-        self._btn_hide_all = QPushButton("🙈  Hide All")
-        self._btn_hide_all.setMinimumHeight(24)
-        self._btn_hide_all.setToolTip(
-            "Hide all zone overlays in the canvas so the source image is shown clean.\n"
-            "Painted masks are preserved — click Show All to reveal them again."
-        )
-        self._btn_hide_all.clicked.connect(self._on_hide_all_zones)
-        vis_all_row.addWidget(self._btn_show_all)
-        vis_all_row.addWidget(self._btn_hide_all)
-        zv.addLayout(vis_all_row)
-
-        # "Highlight transparent pixels" checkbox
-        self._show_zero_alpha_chk = QCheckBox("Highlight transparent pixels")
-        self._show_zero_alpha_chk.setChecked(False)
-        self._show_zero_alpha_chk.setToolTip(
-            "When checked, zone highlights are shown even over fully-transparent\n"
-            "(alpha = 0) pixels so you can paint and see selections on\n"
-            "transparent areas of the image."
-        )
-        zv.addWidget(self._show_zero_alpha_chk)
-
-        # "Show α values" checkbox
-        self._show_alpha_labels_chk = QCheckBox("Show α values on canvas")
-        self._show_alpha_labels_chk.setChecked(True)
-        self._show_alpha_labels_chk.setToolTip(
-            "When checked, each zone's alpha value is drawn as text at the\n"
-            "centre of its painted area on the canvas.  On by default."
-        )
-        zv.addWidget(self._show_alpha_labels_chk)
-
         # "Show Highlights" checkbox — master visibility for all zone overlays (item 61)
         self._btn_show_highlights = QCheckBox("\U0001f441  Show Highlights")
         self._btn_show_highlights.setChecked(True)
@@ -1714,13 +1725,6 @@ class SelectiveAlphaTool(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         ze_row1.addWidget(self._ze_name_edit)
-        self._ze_jump_btn = QPushButton("⊕")
-        self._ze_jump_btn.setFixedSize(22, 22)
-        self._ze_jump_btn.setToolTip(
-            "Center canvas on this zone's painted area.  [item 49]\n"
-            "Does nothing if the zone has no painted pixels."
-        )
-        ze_row1.addWidget(self._ze_jump_btn)
         ze_row1.addWidget(QLabel("α:"))
         self._ze_alpha_spin = QSpinBox()
         self._ze_alpha_spin.setRange(0, 255)
@@ -2077,15 +2081,9 @@ class SelectiveAlphaTool(QWidget):
         self._ze_alpha_spin.valueChanged.connect(self._on_ze_alpha_changed)
         # Zone name editor (item 33) – save custom name when text changes
         self._ze_name_edit.textEdited.connect(self._on_ze_name_edited)
-        # Jump to zone (item 49) — center canvas on zone centroid
-        self._ze_jump_btn.clicked.connect(
-            lambda: self._canvas.center_on_zone(self._ze_cur_idx)
-        )
 
-        # Wire show-zero-alpha checkbox.
-        self._show_zero_alpha_chk.toggled.connect(self._canvas.set_show_zero_alpha)
-        # Wire show-alpha-labels checkbox.
-        self._show_alpha_labels_chk.toggled.connect(self._canvas.set_show_alpha_labels)
+        # Wire show-zero-alpha and show-alpha-labels — now in the history overlay.
+        # The overlay is connected after creation below (at the _history_overlay block).
 
         # Wrap canvas + status label in a vertical layout.
         right_widget = QWidget()
@@ -2146,6 +2144,9 @@ class SelectiveAlphaTool(QWidget):
         # Connect count signals so the overlay shows how many steps are available.
         self._canvas.undo_count_changed.connect(self._history_overlay.set_undo_count)
         self._canvas.redo_count_changed.connect(self._history_overlay.set_redo_count)
+        # Connect overlay checkbox signals to canvas (item 69 — moved from sidebar).
+        self._history_overlay.highlight_toggled.connect(self._canvas.set_show_zero_alpha)
+        self._history_overlay.labels_toggled.connect(self._canvas.set_show_alpha_labels)
 
         # Install an event filter on the canvas so the overlays stay pinned
         # whenever the canvas is resized.
@@ -2165,8 +2166,8 @@ class SelectiveAlphaTool(QWidget):
         self._brush_spin.valueChanged.connect(lambda _: self._save_settings())
         self._eraser_spin.valueChanged.connect(lambda _: self._save_settings())
         self._autocorrect_chk.toggled.connect(lambda _: self._save_settings())
-        self._show_zero_alpha_chk.toggled.connect(lambda _: self._save_settings())
-        self._show_alpha_labels_chk.toggled.connect(lambda _: self._save_settings())
+        self._history_overlay.highlight_toggled.connect(lambda _: self._save_settings())
+        self._history_overlay.labels_toggled.connect(lambda _: self._save_settings())
         # _ze_alpha_spin is intentionally absent here: _on_ze_alpha_changed (line 2307) already calls _save_settings().
         self._refresh_zone_editor(0)
         self._refresh_zone_combo_icons()
@@ -2243,14 +2244,16 @@ class SelectiveAlphaTool(QWidget):
             self._eraser_spin.setValue(int(self._settings.get("sa_eraser_size", 10)))
             # Restore autocorrect toggle
             self._autocorrect_chk.setChecked(bool(self._settings.get("sa_autocorrect", False)))
-            # Restore show-zero-alpha toggle
-            self._show_zero_alpha_chk.setChecked(
+            # Restore show-zero-alpha toggle (now in history overlay)
+            self._history_overlay.set_highlight_checked(
                 bool(self._settings.get("sa_show_zero_alpha", False))
             )
-            # Restore show-alpha-labels toggle
-            self._show_alpha_labels_chk.setChecked(
+            self._canvas.set_show_zero_alpha(bool(self._settings.get("sa_show_zero_alpha", False)))
+            # Restore show-alpha-labels toggle (now in history overlay)
+            self._history_overlay.set_labels_checked(
                 bool(self._settings.get("sa_show_alpha_labels", True))
             )
+            self._canvas.set_show_alpha_labels(bool(self._settings.get("sa_show_alpha_labels", True)))
             # Restore last-used drawing tool
             last_tool = str(self._settings.get("sa_last_tool", "freehand"))
             if last_tool in self._tool_btns:
@@ -2273,8 +2276,8 @@ class SelectiveAlphaTool(QWidget):
         self._settings.set("sa_brush_size",  self._brush_spin.value())
         self._settings.set("sa_eraser_size", self._eraser_spin.value())
         self._settings.set("sa_autocorrect", self._autocorrect_chk.isChecked())
-        self._settings.set("sa_show_zero_alpha", self._show_zero_alpha_chk.isChecked())
-        self._settings.set("sa_show_alpha_labels", self._show_alpha_labels_chk.isChecked())
+        self._settings.set("sa_show_zero_alpha", self._history_overlay.highlight_checked())
+        self._settings.set("sa_show_alpha_labels", self._history_overlay.labels_checked())
         self._settings.set("sa_last_tool",   self._canvas._tool)
 
     def closeEvent(self, event) -> None:  # noqa: N802
@@ -2310,8 +2313,6 @@ class SelectiveAlphaTool(QWidget):
         mgr.register(self._autocorrect_chk,  "sa_autocorrect")
         # Zoom buttons are in the floating overlay; register the overlay frame itself
         mgr.register(self._zoom_overlay, "sa_zoom_overlay")
-        mgr.register(self._btn_show_all,     "sa_show_all_zones")
-        mgr.register(self._btn_hide_all,     "sa_hide_all_zones")
         mgr.register(self._ze_vis_btn,    "sa_zone_visibility")
         mgr.register(self._ze_alpha_spin, "sa_zone_alpha_spin")
         mgr.register(self._ze_clear_btn,  "sa_zone_clear")
@@ -2823,7 +2824,7 @@ class SelectiveAlphaTool(QWidget):
             if i >= NUM_ZONES:
                 break
             mask_u8 = (bool_mask.astype(np_imp.uint8) * 255)
-            snapshot[i] = (i, mask_u8)
+            snapshot[i] = mask_u8
         self._az_slots[idx] = snapshot
         self._az_slot_info[idx] = f"{num_z} zone(s) from Alpha tool"
         self._update_az_slot_combo_item(idx)

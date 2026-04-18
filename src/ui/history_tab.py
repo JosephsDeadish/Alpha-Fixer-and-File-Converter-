@@ -281,10 +281,9 @@ class HistoryTab(QWidget):
         self._alpha_search = self._make_search_field("alpha")
         alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
-            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the alpha-fix batch was started.",
-                "Preset or manual mode used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors — may be unsupported format or locked file.",
@@ -459,27 +458,26 @@ class HistoryTab(QWidget):
         self._alpha_tree.clear()
         for entry in history:
             ts = _fmt_ts(entry.get("timestamp", ""))
-            preset = entry.get("preset", "?")
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, preset, n_files, n_ok, n_err, files])
+            item = QTreeWidgetItem([ts, n_files, n_ok, n_err, files])
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             if not thumb.isNull():
                 item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
-                    f"Batch: {ts}\nPreset / Mode: {preset}\n"
+                    f"Batch: {ts}\n"
                     f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
                     "Files processed:\n  " + "\n  ".join(file_list)
                 )
-                for col in range(6):
+                for col in range(5):
                     item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
+                for col in range(5):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._alpha_tree.addTopLevelItem(item)
         total = len(history)
@@ -569,7 +567,7 @@ class HistoryTab(QWidget):
         elif tab_idx == 1:
             tree = self._alpha_tree
             tab_name = "alpha_fixer"
-            headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names"]
+            headers = ["Time", "Files", "OK", "Errors", "File names"]
         else:
             tree = self._sel_tree
             tab_name = "selective_alpha"
