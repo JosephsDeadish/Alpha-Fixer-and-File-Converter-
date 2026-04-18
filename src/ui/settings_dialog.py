@@ -137,8 +137,16 @@ class SettingsDialog(QDialog):
         from PyQt6.QtCore import QTimer
         self._theme_debounce = QTimer(self)
         self._theme_debounce.setSingleShot(True)
-        self._theme_debounce.setInterval(200)  # Increased from 120 ms: less lag when scrolling through themes (item 72)
+        self._theme_debounce.setInterval(350)  # item 54: increased for less scrolling lag; was 200 ms
         self._theme_debounce.timeout.connect(self._on_preset_selected_live)
+        # Debounce timer for small combos (tooltip mode/style, sound profile etc.)
+        # so rapid scroll events don't cause repeated QSettings I/O (item 79).
+        self._misc_combo_debounce = QTimer(self)
+        self._misc_combo_debounce.setSingleShot(True)
+        self._misc_combo_debounce.setInterval(200)
+        self._misc_combo_debounce.timeout.connect(self._flush_misc_combo_changes)
+        # Pending values accumulated until the debounce fires.
+        self._misc_combo_pending: dict[str, str] = {}
         self.setWindowTitle("Settings & Customization 🐼")
         # Adaptive minimum size: shrink proportionally on small or low-resolution
         # screens so the dialog is never forced off the visible area.  We keep the
@@ -2968,13 +2976,22 @@ class SettingsDialog(QDialog):
         should_unlock = not self._settings.get("tooltip_mode_changed_once", False)
         if should_unlock:
             self._settings.set("tooltip_mode_changed_once", True)
-        self._settings.set("tooltip_mode", self._tooltip_mode_combo.currentText())
-        self.settings_changed.emit()
+        # Debounce the actual settings write to avoid per-step I/O lag (item 79)
+        self._misc_combo_pending["tooltip_mode"] = self._tooltip_mode_combo.currentText()
+        self._misc_combo_debounce.start()
         if should_unlock:
             self.first_tooltip_mode_change.emit()
 
     def _on_tooltip_style_changed(self) -> None:
-        self._settings.set("tooltip_style", self._tooltip_style_combo.currentText())
+        # Debounce the settings write to avoid per-step I/O lag (item 79)
+        self._misc_combo_pending["tooltip_style"] = self._tooltip_style_combo.currentText()
+        self._misc_combo_debounce.start()
+
+    def _flush_misc_combo_changes(self) -> None:
+        """Write debounced combo changes to settings and emit settings_changed."""
+        for key, value in self._misc_combo_pending.items():
+            self._settings.set(key, value)
+        self._misc_combo_pending.clear()
         self.settings_changed.emit()
 
     def _on_animated_banner_changed(self) -> None:
