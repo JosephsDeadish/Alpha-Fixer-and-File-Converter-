@@ -95,6 +95,7 @@ class SettingsManager:
         "sound_frog_croak": False,
         "sound_batch_done": False,
         # Cursor & trail
+        "cursor_enabled": False,       # master toggle for custom cursor (off by default)
         "cursor": "Default",
         "use_theme_cursor": False,
         "cursor_anim_enabled": True,   # animate emoji cursors that have frame sequences
@@ -551,7 +552,7 @@ class SettingsManager:
         "sound_zone_paint", "sound_mask_copy", "sound_mask_paste",
         "sound_bat_screech", "sound_cat_meow", "sound_dog_bark",
         "sound_frog_croak", "sound_batch_done",
-        "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
+        "cursor_enabled", "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size", "ui_scale", "history_max_entries",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",

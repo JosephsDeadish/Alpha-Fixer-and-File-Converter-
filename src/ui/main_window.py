@@ -1764,6 +1764,12 @@ class MainWindow(QMainWindow):
             self._unlock_lbl.setText("")
 
     def _apply_cursor(self):
+        cursor_enabled = self._settings.get("cursor_enabled", False)
+        if not cursor_enabled:
+            # Custom cursor disabled — restore system default cursor.
+            self._stop_cursor_anim()
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            return
         use_theme = self._settings.get("use_theme_cursor", False)
         anim_enabled = self._settings.get("cursor_anim_enabled", True)
         if use_theme:

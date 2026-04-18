@@ -255,7 +255,7 @@ class SettingsDialog(QDialog):
             ("scrollbar_handle", "Scrollbar Handle"),
         ]
         for i, (key, label) in enumerate(color_keys):
-            row, col = divmod(i, 2)
+            row, col = divmod(i, 3)
             color_grid.addWidget(QLabel(label + ":"), row, col * 3)
             btn = ColorButton(self._theme.get(key, "#888888"))
             btn.color_changed.connect(lambda c, k=key: self._on_color_changed(k, c))
@@ -266,7 +266,7 @@ class SettingsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidget(grp_colors)
         scroll.setWidgetResizable(True)
-        scroll.setMinimumHeight(160)
+        scroll.setMinimumHeight(120)
         tv.addWidget(scroll)
 
         # ---- Effect + Emoji in a single row of GroupBoxes ----
@@ -292,7 +292,14 @@ class SettingsDialog(QDialog):
             "the active theme — e.g. Gore gets blood splatter, Bat Cave gets bats."
         )
         _ce_sub_vl.addWidget(self._use_theme_effect_check)
-        effect_inner = QHBoxLayout()
+        # Info label shown when "Use theme effect" is ON (replaces manual combo, item 4)
+        self._effect_theme_info_lbl = QLabel("Theme effect: —")
+        self._effect_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._effect_theme_info_lbl.setVisible(False)
+        _ce_sub_vl.addWidget(self._effect_theme_info_lbl)
+        self._effect_inner_widget = QWidget()
+        effect_inner = QHBoxLayout(self._effect_inner_widget)
+        effect_inner.setContentsMargins(0, 0, 0, 0)
         effect_inner.addWidget(QLabel("Effect:"))
         self._effect_combo = QComboBox()
         self._effect_combo.setMinimumWidth(220)
@@ -330,14 +337,17 @@ class SettingsDialog(QDialog):
             "Select 'Custom' to use your own emoji as particles."
         )
         effect_inner.addWidget(self._effect_combo, 1)
-        _ce_sub_vl.addLayout(effect_inner)
+        _ce_sub_vl.addWidget(self._effect_inner_widget)
         effect_layout.addWidget(self._click_effect_sub)
         # Show/hide sub-container and combo enable state
         def _update_effect_sub():
             enabled = self._click_effects_theme_check.isChecked()
             use_theme = self._use_theme_effect_check.isChecked()
             self._click_effect_sub.setVisible(enabled)
-            self._effect_combo.setEnabled(enabled and not use_theme)
+            self._effect_inner_widget.setVisible(not use_theme)
+            self._effect_theme_info_lbl.setVisible(use_theme)
+            if use_theme:
+                self._update_effect_theme_info()
         self._click_effects_theme_check.toggled.connect(lambda _: _update_effect_sub())
         self._use_theme_effect_check.toggled.connect(lambda _: _update_effect_sub())
         self._click_effect_sub.setVisible(False)
@@ -677,17 +687,36 @@ class SettingsDialog(QDialog):
         trail_gl.setVerticalSpacing(6)
         self._trail_check = QCheckBox("Enable mouse trail")
         trail_gl.addWidget(self._trail_check, 0, 0, 1, 2)
-        # Sub-container: hidden until trail is enabled (item 68/78)
+        # Sub-container: hidden until trail is enabled
         self._trail_sub = QWidget()
-        _trail_sub_gl = QGridLayout(self._trail_sub)
-        _trail_sub_gl.setContentsMargins(0, 0, 0, 0)
-        _trail_sub_gl.setColumnStretch(1, 1)
-        _trail_sub_gl.setHorizontalSpacing(10)
-        _trail_sub_gl.setVerticalSpacing(6)
-        _trail_sub_gl.addWidget(QLabel("Trail Color:"), 0, 0)
+        _trail_sub_vl = QVBoxLayout(self._trail_sub)
+        _trail_sub_vl.setContentsMargins(0, 0, 0, 0)
+        _trail_sub_vl.setSpacing(4)
+        self._use_theme_trail_check = QCheckBox(
+            "Use theme trail  (auto-color + special style per effect)"
+        )
+        self._use_theme_trail_check.setToolTip(
+            "When enabled the trail color and style are chosen automatically to match\n"
+            "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
+            "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
+        )
+        _trail_sub_vl.addWidget(self._use_theme_trail_check)
+        # Info label shown when "Use theme trail" is ON (replaces manual color/style, item 4)
+        self._trail_theme_info_lbl = QLabel("Theme trail: —")
+        self._trail_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._trail_theme_info_lbl.setVisible(False)
+        _trail_sub_vl.addWidget(self._trail_theme_info_lbl)
+        # Manual color + style widget (hidden when use_theme is ON)
+        self._trail_manual_widget = QWidget()
+        _tmw_gl = QGridLayout(self._trail_manual_widget)
+        _tmw_gl.setContentsMargins(0, 0, 0, 0)
+        _tmw_gl.setColumnStretch(1, 1)
+        _tmw_gl.setHorizontalSpacing(10)
+        _tmw_gl.setVerticalSpacing(6)
+        _tmw_gl.addWidget(QLabel("Trail Color:"), 0, 0)
         self._trail_color_btn = ColorButton("#e94560")
-        _trail_sub_gl.addWidget(self._trail_color_btn, 0, 1, Qt.AlignmentFlag.AlignLeft)
-        _trail_sub_gl.addWidget(QLabel("Trail Style:"), 1, 0)
+        _tmw_gl.addWidget(self._trail_color_btn, 0, 1, Qt.AlignmentFlag.AlignLeft)
+        _tmw_gl.addWidget(QLabel("Trail Style:"), 1, 0)
         self._trail_style_combo = QComboBox()
         _TRAIL_STYLE_OPTIONS = [
             ("Dots ·",             "Dots  – Small colored dots fade out behind the cursor."),
@@ -717,24 +746,25 @@ class SettingsDialog(QDialog):
             "Lightning – crackle bolts, Plasma Arc – electric arc sparks,\n"
             "Sakura – drifting petals, Smoke – rising gray puffs."
         )
-        _trail_sub_gl.addWidget(self._trail_style_combo, 1, 1)
-        self._use_theme_trail_check = QCheckBox(
-            "Use theme trail  (auto-color + special style per effect)"
-        )
-        self._use_theme_trail_check.setToolTip(
-            "When enabled the trail color and style are chosen automatically to match\n"
-            "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
-            "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
-        )
-        _trail_sub_gl.addWidget(self._use_theme_trail_check, 2, 0, 1, 2)
+        _tmw_gl.addWidget(self._trail_style_combo, 1, 1)
+        _trail_sub_vl.addWidget(self._trail_manual_widget)
         def _update_trail_sub():
             use_theme = self._use_theme_trail_check.isChecked()
-            self._trail_color_btn.setEnabled(not use_theme)
-            self._trail_style_combo.setEnabled(not use_theme)
+            self._trail_manual_widget.setVisible(not use_theme)
+            self._trail_theme_info_lbl.setVisible(use_theme)
+            if use_theme:
+                self._update_trail_theme_info()
         self._use_theme_trail_check.toggled.connect(lambda _: _update_trail_sub())
 
+        # Slider sub-widget for length / fade / intensity
+        _trail_sliders_widget = QWidget()
+        _trail_sliders_gl = QGridLayout(_trail_sliders_widget)
+        _trail_sliders_gl.setContentsMargins(0, 0, 0, 0)
+        _trail_sliders_gl.setColumnStretch(1, 1)
+        _trail_sliders_gl.setHorizontalSpacing(10)
+        _trail_sliders_gl.setVerticalSpacing(6)
         # Trail Length slider (10–200 points)
-        _trail_sub_gl.addWidget(QLabel("Trail Length:"), 3, 0)
+        _trail_sliders_gl.addWidget(QLabel("Trail Length:"), 0, 0)
         self._trail_length_slider = QSlider(Qt.Orientation.Horizontal)
         self._trail_length_slider.setRange(_TRAIL_LENGTH_MIN, _TRAIL_LENGTH_MAX)
         self._trail_length_slider.setValue(_TRAIL_LENGTH_DEFAULT)
@@ -747,14 +777,14 @@ class SettingsDialog(QDialog):
         length_row = QHBoxLayout()
         length_row.addWidget(self._trail_length_slider)
         length_row.addWidget(self._trail_length_val_lbl)
-        _trail_sub_gl.addLayout(length_row, 3, 1)
+        _trail_sliders_gl.addLayout(length_row, 0, 1)
         self._trail_length_slider.valueChanged.connect(
             lambda v: self._trail_length_val_lbl.setText(str(v))
         )
         self._trail_length_slider.valueChanged.connect(self._on_trail_length_changed)
 
         # Trail Fade Speed slider (1 slow … 10 fast)
-        _trail_sub_gl.addWidget(QLabel("Fade Speed:"), 4, 0)
+        _trail_sliders_gl.addWidget(QLabel("Fade Speed:"), 1, 0)
         self._trail_fade_slider = QSlider(Qt.Orientation.Horizontal)
         self._trail_fade_slider.setRange(_TRAIL_FADE_MIN, _TRAIL_FADE_MAX)
         self._trail_fade_slider.setValue(_TRAIL_FADE_DEFAULT)
@@ -767,14 +797,14 @@ class SettingsDialog(QDialog):
         fade_row = QHBoxLayout()
         fade_row.addWidget(self._trail_fade_slider)
         fade_row.addWidget(self._trail_fade_val_lbl)
-        _trail_sub_gl.addLayout(fade_row, 4, 1)
+        _trail_sliders_gl.addLayout(fade_row, 1, 1)
         self._trail_fade_slider.valueChanged.connect(
             lambda v: self._trail_fade_val_lbl.setText(str(v))
         )
         self._trail_fade_slider.valueChanged.connect(self._on_trail_fade_changed)
 
         # Trail Intensity slider (10–100 %)
-        _trail_sub_gl.addWidget(QLabel("Intensity:"), 5, 0)
+        _trail_sliders_gl.addWidget(QLabel("Intensity:"), 2, 0)
         self._trail_intensity_slider = QSlider(Qt.Orientation.Horizontal)
         self._trail_intensity_slider.setRange(_TRAIL_INTENSITY_MIN, _TRAIL_INTENSITY_MAX)
         self._trail_intensity_slider.setValue(_TRAIL_INTENSITY_DEFAULT)
@@ -786,11 +816,12 @@ class SettingsDialog(QDialog):
         intensity_row = QHBoxLayout()
         intensity_row.addWidget(self._trail_intensity_slider)
         intensity_row.addWidget(self._trail_intensity_val_lbl)
-        _trail_sub_gl.addLayout(intensity_row, 5, 1)
+        _trail_sliders_gl.addLayout(intensity_row, 2, 1)
         self._trail_intensity_slider.valueChanged.connect(
             lambda v: self._trail_intensity_val_lbl.setText(f"{v}%")
         )
         self._trail_intensity_slider.valueChanged.connect(self._on_trail_intensity_changed)
+        _trail_sub_vl.addWidget(_trail_sliders_widget)
         # Add sub-container to trail_gl and connect visibility to enable checkbox.
         # Visibility is managed by _on_trail_changed (connected later at line ~1385).
         trail_gl.addWidget(self._trail_sub, 1, 0, 1, 2)
@@ -799,11 +830,39 @@ class SettingsDialog(QDialog):
         mouse_row.addWidget(grp_trail, 1)
 
         grp_cursor = QGroupBox("Cursor")
-        cursor_gl = QGridLayout(grp_cursor)
-        cursor_gl.setColumnStretch(1, 1)
-        cursor_gl.setHorizontalSpacing(10)
-        cursor_gl.setVerticalSpacing(6)
-        cursor_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
+        cursor_gl = QVBoxLayout(grp_cursor)
+        cursor_gl.setSpacing(6)
+        self._cursor_enable_check = QCheckBox("Enable custom cursor  (off by default)")
+        self._cursor_enable_check.setToolTip(
+            "When off the system default cursor is always used.\n"
+            "Turn on to select a custom cursor style or let the active theme choose one."
+        )
+        cursor_gl.addWidget(self._cursor_enable_check)
+        # Sub-container: hidden until custom cursor is enabled (item 71)
+        self._cursor_sub = QWidget()
+        _cursor_sub_vl = QVBoxLayout(self._cursor_sub)
+        _cursor_sub_vl.setContentsMargins(8, 0, 0, 0)
+        _cursor_sub_vl.setSpacing(4)
+        self._use_theme_cursor_check = QCheckBox(
+            "Use theme cursor  (auto-selects cursor for the active theme)"
+        )
+        self._use_theme_cursor_check.setToolTip(
+            "When enabled the cursor shape is chosen automatically to match the\n"
+            "active theme — e.g. Otter Cove gets the 🦦 otter cursor."
+        )
+        _cursor_sub_vl.addWidget(self._use_theme_cursor_check)
+        # Info label shown when "Use theme cursor" is ON (item 4)
+        self._cursor_theme_info_lbl = QLabel("Theme cursor: —")
+        self._cursor_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._cursor_theme_info_lbl.setVisible(False)
+        _cursor_sub_vl.addWidget(self._cursor_theme_info_lbl)
+        # Manual style widget (hidden when use_theme is ON)
+        self._cursor_manual_widget = QWidget()
+        _cmw_gl = QGridLayout(self._cursor_manual_widget)
+        _cmw_gl.setContentsMargins(0, 0, 0, 0)
+        _cmw_gl.setColumnStretch(1, 1)
+        _cmw_gl.setHorizontalSpacing(10)
+        _cmw_gl.addWidget(QLabel("Cursor Style:"), 0, 0)
         self._cursor_combo = QComboBox()
         self._cursor_combo.addItems([
             # Standard system cursors
@@ -823,23 +882,13 @@ class SettingsDialog(QDialog):
             "🐠 Fish", "🍀 Clover", "🌟 Star", "🦴 Bone",
             "🎃 Pumpkin", "🧿 Evil Eye", "⚗ Flask", "🪸 Coral",
         ])
-        cursor_gl.addWidget(self._cursor_combo, 0, 1)
         self._cursor_combo.setToolTip(
             "Choose the mouse cursor shape used throughout the application.\n"
-            "emoji cursors animate when 'Animate cursor' is enabled.\n"
-            "Greyed out when 'Use theme cursor' is checked."
+            "Emoji cursors animate when 'Animate cursor' is enabled.\n"
+            "Hidden when 'Use theme cursor' is checked."
         )
-        self._use_theme_cursor_check = QCheckBox(
-            "Use theme cursor  (overrides the style above)"
-        )
-        self._use_theme_cursor_check.setToolTip(
-            "When enabled the cursor shape is chosen automatically to match the\n"
-            "active theme — e.g. Otter Cove gets the 🤘 rock-on emoji cursor."
-        )
-        cursor_gl.addWidget(self._use_theme_cursor_check, 1, 0, 1, 2)
-        self._use_theme_cursor_check.toggled.connect(
-            lambda checked: self._cursor_combo.setEnabled(not checked)
-        )
+        _cmw_gl.addWidget(self._cursor_combo, 0, 1)
+        _cursor_sub_vl.addWidget(self._cursor_manual_widget)
         self._cursor_anim_check = QCheckBox(
             "Animate cursor  (cycles themed frames for emoji cursors)"
         )
@@ -848,7 +897,20 @@ class SettingsDialog(QDialog):
             "through frames at ~4 fps (e.g. 🦈 snapping, 🔥 flickering, ✨ sparkling).\n"
             "Disable if you prefer a static cursor or need to reduce CPU usage."
         )
-        cursor_gl.addWidget(self._cursor_anim_check, 2, 0, 1, 2)
+        _cursor_sub_vl.addWidget(self._cursor_anim_check)
+        cursor_gl.addWidget(self._cursor_sub)
+        self._cursor_sub.setVisible(False)  # hidden until custom cursor is enabled
+        # Wire enable check → show/hide sub and use_theme check → show/hide manual/info
+        def _update_cursor_sub():
+            cursor_en = self._cursor_enable_check.isChecked()
+            use_theme = self._use_theme_cursor_check.isChecked()
+            self._cursor_sub.setVisible(cursor_en)
+            self._cursor_manual_widget.setVisible(not use_theme)
+            self._cursor_theme_info_lbl.setVisible(use_theme)
+            if use_theme:
+                self._update_cursor_theme_info()
+        self._cursor_enable_check.toggled.connect(lambda _: _update_cursor_sub())
+        self._use_theme_cursor_check.toggled.connect(lambda _: _update_cursor_sub())
         mouse_row.addWidget(grp_cursor, 1)
 
         tv.addLayout(mouse_row)
@@ -1064,22 +1126,33 @@ class SettingsDialog(QDialog):
                 )
         self._button_anim_style_combo.setToolTip(
             "Choose the press-animation style applied to every button.\n"
-            "Greyed out while 'Use theme animation' is checked."
+            "Hidden while 'Use theme animation' is checked."
         )
         self._button_anim_style_combo.setMinimumWidth(220)
         _ba_style_row.addWidget(self._button_anim_style_combo, 1)
-        _ba_vl.addLayout(_ba_style_row)
+        # Wrap style row in a container so we can hide it as a unit (item 4)
+        self._btn_anim_style_widget = QWidget()
+        _bas_vl = QVBoxLayout(self._btn_anim_style_widget)
+        _bas_vl.setContentsMargins(0, 0, 0, 0)
+        _bas_vl.addLayout(_ba_style_row)
+        _ba_vl.addWidget(self._btn_anim_style_widget)
+        self._btn_anim_theme_info_lbl = QLabel("Theme animation: —")
+        self._btn_anim_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._btn_anim_theme_info_lbl.setVisible(False)
+        _ba_vl.addWidget(self._btn_anim_theme_info_lbl)
         btn_anim_gl.addWidget(self._btn_anim_sub, 1, 0, 1, 2)
         # Show/hide sub-container when enable checkbox changes
         def _update_btn_anim_sub():
             enabled = self._button_anim_check.isChecked()
+            use_theme = self._use_theme_button_anim_check.isChecked()
             self._btn_anim_sub.setVisible(enabled)
-            self._button_anim_style_combo.setEnabled(
-                enabled and not self._use_theme_button_anim_check.isChecked()
-            )
+            self._btn_anim_style_widget.setVisible(not use_theme)
+            self._btn_anim_theme_info_lbl.setVisible(use_theme)
+            if use_theme and enabled:
+                self._update_btn_anim_theme_info()
         self._button_anim_check.toggled.connect(lambda _: _update_btn_anim_sub())
         self._use_theme_button_anim_check.toggled.connect(lambda _: _update_btn_anim_sub())
-        self._btn_anim_sub.setVisible(False)  # hidden by default (anim is enabled=True by default, but hidden until we load)
+        self._btn_anim_sub.setVisible(False)  # hidden by default
 
         tv.addWidget(grp_btn_anim)
 
@@ -1107,7 +1180,6 @@ class SettingsDialog(QDialog):
         _ban_sub_gl.setColumnStretch(1, 1)
         _ban_sub_gl.setHorizontalSpacing(10)
         _ban_sub_gl.setVerticalSpacing(6)
-        _ban_sub_gl.addWidget(QLabel("Banner animation:"), 0, 0)
         self._banner_anim_combo = QComboBox()
         _BANNER_ANIM_OPTIONS = [
             ("spin",     "Spin – continuous 360° rotation"),
@@ -1144,10 +1216,17 @@ class SettingsDialog(QDialog):
                 self._banner_anim_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._banner_anim_combo.setToolTip(
             "Choose the animation style for the banner emoji when animation is enabled.\n"
-            "Greyed out while 'Use theme animation' is checked."
+            "Hidden while 'Use theme animation' is checked."
         )
         self._banner_anim_combo.setMinimumWidth(220)
-        _ban_sub_gl.addWidget(self._banner_anim_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Wrap animation label+combo in a container so we can hide it (item 4)
+        self._banner_manual_widget = QWidget()
+        _bman_row = QHBoxLayout(self._banner_manual_widget)
+        _bman_row.setContentsMargins(0, 0, 0, 0)
+        _bman_row.addWidget(QLabel("Banner animation:"))
+        _bman_row.addWidget(self._banner_anim_combo, 1)
+        _ban_sub_gl.addWidget(self._banner_manual_widget, 0, 0, 1, 2)
 
         self._banner_use_theme_anim_check = QCheckBox(
             "Use theme animation (each theme has its own style)"
@@ -1158,11 +1237,23 @@ class SettingsDialog(QDialog):
             "Uncheck to override with your own style from the dropdown above."
         )
         _ban_sub_gl.addWidget(self._banner_use_theme_anim_check, 1, 0, 1, 2)
+        # Info label shown when use-theme is ON (item 4)
+        self._banner_theme_info_lbl = QLabel("Theme animation: —")
+        self._banner_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._banner_theme_info_lbl.setVisible(False)
+        _ban_sub_gl.addWidget(self._banner_theme_info_lbl, 2, 0, 1, 2)
         # Add sub-container to banner_gl and wire visibility to enable checkbox
         banner_gl.addWidget(self._banner_anim_sub, 1, 0, 1, 2)
-        self._animated_banner_check.toggled.connect(
-            lambda checked: self._banner_anim_sub.setVisible(checked)
-        )
+        def _update_banner_anim_sub(checked: bool = None):
+            enabled = self._animated_banner_check.isChecked()
+            use_theme = self._banner_use_theme_anim_check.isChecked()
+            self._banner_anim_sub.setVisible(enabled)
+            self._banner_manual_widget.setVisible(not use_theme)
+            self._banner_theme_info_lbl.setVisible(use_theme)
+            if use_theme and enabled:
+                self._update_banner_theme_info()
+        self._animated_banner_check.toggled.connect(_update_banner_anim_sub)
+        self._banner_use_theme_anim_check.toggled.connect(lambda _: _update_banner_anim_sub())
         self._banner_anim_sub.setVisible(False)  # hidden until banner is enabled
 
         self._show_splash_check = QCheckBox(
@@ -1451,6 +1542,7 @@ class SettingsDialog(QDialog):
         self._use_theme_trail_check.toggled.connect(self._on_use_theme_trail_changed)
         self._trail_style_combo.currentIndexChanged.connect(self._on_trail_style_changed)
         self._cursor_combo.currentTextChanged.connect(self._on_cursor_changed)
+        self._cursor_enable_check.toggled.connect(self._on_cursor_changed)
         self._use_theme_cursor_check.toggled.connect(self._on_cursor_changed)
         self._cursor_anim_check.toggled.connect(self._on_cursor_anim_changed)
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
@@ -1555,7 +1647,8 @@ class SettingsDialog(QDialog):
             self._theme_preset_combo, self._effect_combo, self._sound_check,
             self._use_theme_sound_check, self._trail_check,
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
-            self._cursor_combo, self._use_theme_cursor_check, self._cursor_anim_check, self._font_size_spin,
+            self._cursor_enable_check, self._cursor_combo, self._use_theme_cursor_check,
+            self._cursor_anim_check, self._font_size_spin,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
             self._animated_banner_check, self._banner_anim_combo,
@@ -1639,8 +1732,10 @@ class SettingsDialog(QDialog):
         use_theme_trail = self._settings.get("use_theme_trail", False)
         self._use_theme_trail_check.setChecked(use_theme_trail)
         self._trail_sub.setVisible(trail_enabled)
-        self._trail_color_btn.setEnabled(not use_theme_trail)
-        self._trail_style_combo.setEnabled(not use_theme_trail)
+        self._trail_manual_widget.setVisible(not use_theme_trail)
+        self._trail_theme_info_lbl.setVisible(use_theme_trail)
+        if use_theme_trail:
+            self._update_trail_theme_info()
         # Load persisted trail style into combo (or theme trail if use-theme is on)
         _TRAIL_STYLE_MAP = {
             "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
@@ -1664,12 +1759,18 @@ class SettingsDialog(QDialog):
         saved_intensity = int(self._settings.get("trail_intensity", _TRAIL_INTENSITY_DEFAULT))
         self._trail_intensity_slider.setValue(max(_TRAIL_INTENSITY_MIN, min(_TRAIL_INTENSITY_MAX, saved_intensity)))
         self._trail_intensity_val_lbl.setText(f"{self._trail_intensity_slider.value()}%")
+        cursor_enabled = self._settings.get("cursor_enabled", False)
+        self._cursor_enable_check.setChecked(cursor_enabled)
+        self._cursor_sub.setVisible(cursor_enabled)
         cursor_val = self._settings.get("cursor", "Default")
         idx = self._cursor_combo.findText(cursor_val)
         self._cursor_combo.setCurrentIndex(max(idx, 0))
         use_theme_cur = self._settings.get("use_theme_cursor", False)
         self._use_theme_cursor_check.setChecked(use_theme_cur)
-        self._cursor_combo.setEnabled(not use_theme_cur)
+        self._cursor_manual_widget.setVisible(not use_theme_cur)
+        self._cursor_theme_info_lbl.setVisible(use_theme_cur)
+        if use_theme_cur:
+            self._update_cursor_theme_info()
         self._cursor_anim_check.setChecked(bool(self._settings.get("cursor_anim_enabled", True)))
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         # UI Scale
@@ -1693,7 +1794,10 @@ class SettingsDialog(QDialog):
         self._use_theme_effect_check.setChecked(use_theme_effect)
         self._click_effect_sub.setVisible(click_effects_enabled)
         if click_effects_enabled:
-            self._effect_combo.setEnabled(not use_theme_effect)
+            self._effect_inner_widget.setVisible(not use_theme_effect)
+            self._effect_theme_info_lbl.setVisible(use_theme_effect)
+            if use_theme_effect:
+                self._update_effect_theme_info()
         mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
@@ -1718,7 +1822,10 @@ class SettingsDialog(QDialog):
             )
         self._banner_use_theme_anim_check.setChecked(banner_use_theme)
         self._banner_anim_sub.setVisible(banner_enabled)
-        self._banner_anim_combo.setEnabled(not banner_use_theme)
+        self._banner_manual_widget.setVisible(not banner_use_theme)
+        self._banner_theme_info_lbl.setVisible(banner_use_theme)
+        if banner_use_theme and banner_enabled:
+            self._update_banner_theme_info()
         self._show_splash_check.setChecked(
             self._settings.get("show_splash_screen", False)
         )
@@ -1727,8 +1834,6 @@ class SettingsDialog(QDialog):
         self._button_anim_check.setChecked(btn_anim_enabled)
         use_theme_btn_anim = self._settings.get("use_theme_button_anim", True)
         self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
-        # Styles start at index 0 (sentinel "__none__" removed — the enable checkbox
-        # already acts as the on/off toggle).
         _BUTTON_ANIM_IDX_MAP = {
             "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
             "vanish": 5, "explode": 6,
@@ -1743,10 +1848,11 @@ class SettingsDialog(QDialog):
             self._button_anim_style_combo.setCurrentIndex(
                 _BUTTON_ANIM_IDX_MAP.get(saved_btn_anim, 0)
             )
-        self._button_anim_style_combo.setEnabled(
-            btn_anim_enabled and not use_theme_btn_anim
-        )
         self._btn_anim_sub.setVisible(btn_anim_enabled)
+        self._btn_anim_style_widget.setVisible(not use_theme_btn_anim)
+        self._btn_anim_theme_info_lbl.setVisible(use_theme_btn_anim)
+        if use_theme_btn_anim and btn_anim_enabled:
+            self._update_btn_anim_theme_info()
 
         # Load background drip settings
         bg_drip_enabled = self._settings.get("bg_drip_enabled", False)
@@ -2427,14 +2533,83 @@ class SettingsDialog(QDialog):
         ):
             chk.setChecked(False)
 
+    def _update_trail_theme_info(self) -> None:
+        """Refresh the trail theme info label."""
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        trail_style = theme.get("_trail", "dots")
+        trail_color = theme.get("_trail_color", "#e94560")
+        if trail_style:
+            self._trail_theme_info_lbl.setText(
+                f"Theme trail:  '{theme_name}'  →  style: {trail_style},  color: {trail_color}"
+            )
+        else:
+            self._trail_theme_info_lbl.setText(
+                f"Theme trail:  '{theme_name}'  →  (no trail defined for this theme)"
+            )
+
+    def _update_effect_theme_info(self) -> None:
+        """Refresh the click effect theme info label."""
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        effect_key = theme.get("_effect", "default")
+        # Look up a human-friendly label for the effect key
+        _effect_labels = {k: lbl.split("—")[0].strip() for k, lbl in _EFFECT_OPTIONS}
+        effect_label = _effect_labels.get(effect_key, effect_key)
+        self._effect_theme_info_lbl.setText(
+            f"Theme effect:  '{theme_name}'  →  {effect_label}"
+        )
+
+    def _update_cursor_theme_info(self) -> None:
+        """Refresh the cursor theme info label."""
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        cursor_spec = theme.get("_cursor", "Default")
+        if cursor_spec.startswith("emoji:"):
+            cursor_label = cursor_spec[len("emoji:"):]
+        else:
+            cursor_label = cursor_spec
+        self._cursor_theme_info_lbl.setText(
+            f"Theme cursor:  '{theme_name}'  →  {cursor_label}"
+        )
+
+    def _update_btn_anim_theme_info(self) -> None:
+        """Refresh the button animation theme info label."""
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        anim_key = theme.get("_button_anim", "press")
+        _anim_labels = {
+            "press": "Press", "fall": "Fall", "bounce": "Bounce",
+            "shake": "Shake", "shatter": "Shatter", "vanish": "Vanish", "explode": "Explode",
+        }
+        self._btn_anim_theme_info_lbl.setText(
+            f"Theme animation:  '{theme_name}'  →  {_anim_labels.get(anim_key, anim_key)}"
+        )
+
+    def _update_banner_theme_info(self) -> None:
+        """Refresh the banner animation theme info label."""
+        theme = self._settings.get_theme()
+        theme_name = theme.get("name", "")
+        anim_key = theme.get("_banner_anim", "spin")
+        _anim_labels = {
+            "spin": "Spin", "bounce": "Bounce", "shake": "Shake",
+            "pendulum": "Pendulum", "pulse": "Pulse", "float": "Float",
+            "flip": "Flip", "orbit": "Orbit", "glitch": "Glitch", "drip": "Drip",
+        }
+        self._banner_theme_info_lbl.setText(
+            f"Theme animation:  '{theme_name}'  →  {_anim_labels.get(anim_key, anim_key)}"
+        )
+
     def _on_trail_changed(self) -> None:
         enabled = self._trail_check.isChecked()
         use_theme = self._use_theme_trail_check.isChecked()
         self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", use_theme)
         self._trail_sub.setVisible(enabled)
-        self._trail_color_btn.setEnabled(not use_theme)
-        self._trail_style_combo.setEnabled(not use_theme)
+        self._trail_manual_widget.setVisible(not use_theme)
+        self._trail_theme_info_lbl.setVisible(use_theme)
+        if use_theme:
+            self._update_trail_theme_info()
         if enabled and not self._settings.get("trail_enabled_once", False):
             self._settings.set("trail_enabled_once", True)
             self.settings_changed.emit()
@@ -2443,53 +2618,15 @@ class SettingsDialog(QDialog):
             self.settings_changed.emit()
 
     def _on_use_theme_trail_changed(self) -> None:
-        """Handle the 'use theme trail' checkbox independently.
-
-        Saves use_theme_trail and trail_enabled but never fires
-        first_trail_enabled — that unlock is only triggered when the
-        user explicitly turns on the trail via _on_trail_changed.
-        """
+        """Handle the 'use theme trail' checkbox independently."""
         enabled = self._trail_check.isChecked()
         use_theme = self._use_theme_trail_check.isChecked()
         self._settings.set("trail_enabled", enabled)
         self._settings.set("use_theme_trail", use_theme)
-        self._trail_color_btn.setEnabled(not use_theme)
-        self._trail_style_combo.setEnabled(not use_theme)
+        self._trail_manual_widget.setVisible(not use_theme)
+        self._trail_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            # Select the theme's trail style in the combo so the user can see
-            # what is active, and update the tooltip to confirm.
-            theme = self._settings.get_theme()
-            theme_name = theme.get("name", "")
-            theme_trail = theme.get("_trail", "dots")
-            _TRAIL_STYLE_MAP = {
-                "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
-                "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
-                "distortion": 8, "fire": 9, "lightning": 10,
-                "plasma": 11, "sakura": 12, "smoke": 13,
-            }
-            idx = _TRAIL_STYLE_MAP.get(theme_trail, 0)
-            self._trail_style_combo.setCurrentIndex(idx)
-            style_label = self._trail_style_combo.currentText().split("(")[0].strip()
-            if not theme_trail or theme_trail == "none":
-                self._trail_style_combo.setToolTip(
-                    f"No trail style defined for the '{theme_name}' theme."
-                )
-            else:
-                self._trail_style_combo.setToolTip(
-                    f"Using theme trail: {style_label}\n"
-                    f"(set by the '{theme_name}' theme)\n"
-                    "Uncheck 'Use theme trail' to override manually."
-                )
-        else:
-            self._trail_style_combo.setToolTip(
-                "Choose the visual style of the mouse trail.\n"
-                "Ribbon draws a connected smooth line, Noodle adds physics-based swing,\n"
-                "Comet draws a tapered tail, Fairy/Wave/Sparkle use themed emoji,\n"
-                "Distortion Wave writhes sinusoidally, Fire🔥 glows and drifts upward,\n"
-                "Lightning⚡ flashes bright bolt segments that vanish instantly,\n"
-                "Plasma🔵 crackles with electric arcs, Sakura🌸 drifts pink petals,\n"
-                "Smoke💨 puffs expand and rise as they fade."
-            )
+            self._update_trail_theme_info()
         self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
@@ -2518,6 +2655,7 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_cursor_changed(self) -> None:
+        self._settings.set("cursor_enabled", self._cursor_enable_check.isChecked())
         self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
         self.settings_changed.emit()
@@ -2585,40 +2723,20 @@ class SettingsDialog(QDialog):
         self._settings.set("click_effects_enabled", enabled)
         use_theme = self._use_theme_effect_check.isChecked()
         self._click_effect_sub.setVisible(enabled)
-        self._effect_combo.setEnabled(enabled and not use_theme)
+        self._effect_inner_widget.setVisible(not use_theme)
+        self._effect_theme_info_lbl.setVisible(use_theme)
+        if use_theme and enabled:
+            self._update_effect_theme_info()
         self.settings_changed.emit()
 
     def _on_use_theme_effect_changed(self) -> None:
         use_theme = self._use_theme_effect_check.isChecked()
         enabled = self._click_effects_theme_check.isChecked()
         self._settings.set("use_theme_effect", use_theme)
-        self._effect_combo.setEnabled(enabled and not use_theme)
+        self._effect_inner_widget.setVisible(not use_theme)
+        self._effect_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            # Select the theme's effect in the combo so the user can see what is
-            # being used, and update the tooltip to confirm.
-            theme = self._settings.get_theme()
-            theme_name = theme.get("name", "")
-            effect_key = THEME_EFFECTS.get(theme_name, theme.get("_effect", "default"))
-            for i in range(self._effect_combo.count()):
-                if self._effect_combo.itemData(i) == effect_key:
-                    self._effect_combo.setCurrentIndex(i)
-                    break
-            effect_label = self._effect_combo.currentText().split("—")[0].strip()
-            if not effect_key or effect_key == "none":
-                self._effect_combo.setToolTip(
-                    f"No click effect defined for the '{theme_name}' theme."
-                )
-            else:
-                self._effect_combo.setToolTip(
-                    f"Using theme click effect: {effect_label}\n"
-                    f"(set by the '{theme_name}' theme)\n"
-                    "Uncheck 'Use theme effect' to override manually."
-                )
-        else:
-            self._effect_combo.setToolTip(
-                "Choose the click particle effect for this theme.\n"
-                "Select 'Custom' to use your own emoji as particles."
-            )
+            self._update_effect_theme_info()
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:
@@ -2642,7 +2760,10 @@ class SettingsDialog(QDialog):
         self._settings.set("animated_banner_enabled", enabled)
         use_theme = self._banner_use_theme_anim_check.isChecked()
         self._banner_anim_sub.setVisible(enabled)
-        self._banner_anim_combo.setEnabled(not use_theme)
+        self._banner_manual_widget.setVisible(not use_theme)
+        self._banner_theme_info_lbl.setVisible(use_theme)
+        if use_theme and enabled:
+            self._update_banner_theme_info()
         self.settings_changed.emit()
 
     def _on_banner_anim_style_changed(self) -> None:
@@ -2653,32 +2774,10 @@ class SettingsDialog(QDialog):
     def _on_banner_use_theme_anim_changed(self) -> None:
         use_theme = self._banner_use_theme_anim_check.isChecked()
         self._settings.set("banner_use_theme_anim", use_theme)
-        self._banner_anim_combo.setEnabled(not use_theme)
+        self._banner_manual_widget.setVisible(not use_theme)
+        self._banner_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            theme = self._settings.get_theme()
-            theme_name = theme.get("name", "")
-            anim_key = theme.get("_banner_anim", "spin")
-            # Select the theme's animation in the combo so the user can see what's active
-            for i in range(self._banner_anim_combo.count()):
-                if self._banner_anim_combo.itemData(i) == anim_key:
-                    self._banner_anim_combo.setCurrentIndex(i)
-                    break
-            anim_label = self._banner_anim_combo.currentText().split("–")[0].strip()
-            if not anim_key or anim_key == "none":
-                self._banner_anim_combo.setToolTip(
-                    f"No banner animation defined for the '{theme_name}' theme."
-                )
-            else:
-                self._banner_anim_combo.setToolTip(
-                    f"Using theme animation: {anim_label}\n"
-                    f"(set by the '{theme_name}' theme)\n"
-                    "Uncheck 'Use theme animation' to override manually."
-                )
-        else:
-            self._banner_anim_combo.setToolTip(
-                "Choose the animation style for the banner emoji when animation is enabled.\n"
-                "Greyed out while 'Use theme animation' is checked."
-            )
+            self._update_banner_theme_info()
         self.settings_changed.emit()
 
     def _on_show_splash_changed(self) -> None:
@@ -2689,8 +2788,11 @@ class SettingsDialog(QDialog):
         enabled = self._button_anim_check.isChecked()
         self._settings.set("button_anim_enabled", enabled)
         use_theme = self._use_theme_button_anim_check.isChecked()
-        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
-        self._use_theme_button_anim_check.setEnabled(enabled)
+        self._btn_anim_sub.setVisible(enabled)
+        self._btn_anim_style_widget.setVisible(not use_theme)
+        self._btn_anim_theme_info_lbl.setVisible(use_theme)
+        if use_theme and enabled:
+            self._update_btn_anim_theme_info()
         self.settings_changed.emit()
 
     def _on_button_anim_style_changed(self) -> None:
@@ -2702,42 +2804,10 @@ class SettingsDialog(QDialog):
         use_theme = self._use_theme_button_anim_check.isChecked()
         self._settings.set("use_theme_button_anim", use_theme)
         enabled = self._button_anim_check.isChecked()
-        self._button_anim_style_combo.setEnabled(enabled and not use_theme)
+        self._btn_anim_style_widget.setVisible(not use_theme)
+        self._btn_anim_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            # Reflect the theme's button animation in the combo so the user can see it.
-            theme = self._settings.get_theme()
-            theme_style = theme.get("_button_anim", "press")
-            theme_name = theme.get("name", "")
-            _KNOWN_STYLES = {"press", "fall", "bounce", "shake", "shatter", "vanish", "explode"}
-            if not theme_style or theme_style not in _KNOWN_STYLES:
-                # Theme has no standard button animation — update tooltip only;
-                # the combo stays on current selection (it's disabled anyway)
-                self._button_anim_style_combo.setToolTip(
-                    f"No button press animation for the '{theme_name}' theme.\n"
-                    "Uncheck 'Use theme animation' to pick one manually."
-                )
-            else:
-                _STYLE_LABELS = {
-                    "press": "Press", "fall": "Fall", "bounce": "Bounce",
-                    "shake": "Shake", "shatter": "Shatter",
-                    "vanish": "Vanish", "explode": "Explode",
-                }
-                label = _STYLE_LABELS.get(theme_style, theme_style.title())
-                # Select matching style in the combo (styles start at index 0 now)
-                for i in range(self._button_anim_style_combo.count()):
-                    if self._button_anim_style_combo.itemData(i) == theme_style:
-                        self._button_anim_style_combo.setCurrentIndex(i)
-                        break
-                self._button_anim_style_combo.setToolTip(
-                    f"Using theme animation: {label}\n"
-                    f"(set by the '{theme_name}' theme)\n"
-                    "Uncheck 'Use theme animation' to override manually."
-                )
-        else:
-            self._button_anim_style_combo.setToolTip(
-                "Choose the press-animation style applied to every button.\n"
-                "Greyed out while 'Use theme animation' is checked."
-            )
+            self._update_btn_anim_theme_info()
         self.settings_changed.emit()
 
 
