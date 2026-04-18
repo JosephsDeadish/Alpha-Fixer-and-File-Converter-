@@ -410,12 +410,12 @@ class BeforeAfterWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _make_popout_button(self) -> "QPushButton":
-        btn = QPushButton("⇗ Pop Out", self)
+        btn = QPushButton("⇗ Undock", self)
         btn.setObjectName("popoutBtn")
         btn.setToolTip(
-            "Pop out the preview into a separate floating window.\n"
+            "Undock the preview into a separate floating window.\n"
             "The preview panel here will hide to make room for other controls.\n"
-            "Close the floating window (or click this button again) to dock back."
+            "Click ⇙ Redock (or close the floating window) to redock it."
         )
         btn.setFixedSize(90, 22)
         btn.setStyleSheet(
@@ -439,10 +439,10 @@ class BeforeAfterWidget(QWidget):
         self._popout_btn.move(margin, margin)
 
     def _on_popout_clicked(self) -> None:
-        """Pop out or dock back the floating comparison window.
+        """Undock or redock the floating comparison window.
 
-        Clicking once pops out.  Clicking again (when the dialog is open)
-        docks the preview back — the button text changes to "⇙ Dock Back"
+        Clicking once undocks.  Clicking again (when the dialog is open)
+        redocks the preview — the button text changes to "⇙ Redock"
         as a visual cue.  This also fixes the infinite-popout bug where
         closing the dialog via its ✕ button would leave _popout_dialog
         pointing to a hidden dialog, allowing a new one to be opened on the
@@ -454,7 +454,7 @@ class BeforeAfterWidget(QWidget):
             return
 
         dlg = QDialog(self.window())
-        dlg.setWindowTitle("Preview — Pop-out Comparison")
+        dlg.setWindowTitle("Preview — Undocked Comparison")
         dlg.resize(900, 600)
         dlg.setMinimumSize(400, 300)
         # Add minimize button hint so the floating window can be minimized (item 17)
@@ -484,22 +484,22 @@ class BeforeAfterWidget(QWidget):
 
         self._popout_dialog = dlg
 
-        # Update button to reflect the "docked-out" state so the user knows
-        # clicking it again will dock the preview back.
-        self._popout_btn.setText("⇙ Dock Back")
+        # Update button to reflect the "undocked" state so the user knows
+        # clicking it again will redock the preview.
+        self._popout_btn.setText("⇙ Redock")
         self._popout_btn.setToolTip(
-            "Dock the preview back into the main panel.\n"
+            "Redock the preview back into the main panel.\n"
             "Closes the floating window and restores the embedded preview."
         )
 
         def _on_dialog_finished(_result=None) -> None:
             """Reset button and stored reference when dialog closes for any reason."""
             self._popout_dialog = None
-            self._popout_btn.setText("⇗ Pop Out")
+            self._popout_btn.setText("⇗ Undock")
             self._popout_btn.setToolTip(
-                "Pop out the preview into a separate floating window.\n"
+                "Undock the preview into a separate floating window.\n"
                 "The preview panel here will hide to make room for other controls.\n"
-                "Close the floating window (or click this button again) to dock back."
+                "Click ⇙ Redock (or close the floating window) to redock it."
             )
 
         dlg.finished.connect(_on_dialog_finished)

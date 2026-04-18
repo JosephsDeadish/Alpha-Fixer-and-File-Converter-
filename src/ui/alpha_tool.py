@@ -491,12 +491,12 @@ class AlphaFixerTab(QWidget):
         compare_row.addWidget(self._after_stats_lbl, 0)
         ca_layout.addLayout(compare_row, 1)
 
-        # "Dock back" button shown when the compare panel is popped out
-        self._btn_dock_back = QPushButton("⇙  Dock Preview Back")
+        # "Redock" button shown when the compare panel is popped out
+        self._btn_dock_back = QPushButton("⇙  Redock Preview")
         self._btn_dock_back.setMinimumHeight(30)
         self._btn_dock_back.setToolTip(
             "The preview is currently in a floating window.\n"
-            "Click to close the floating window and dock the preview back here."
+            "Click to close the floating window and redock the preview here."
         )
         self._btn_dock_back.setVisible(False)
         self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
@@ -1249,9 +1249,9 @@ class AlphaFixerTab(QWidget):
         chk.setToolTip(self._alpha_vis_check.toolTip())
         row.addWidget(chk)
         row.addStretch(1)
-        # Dock Back button inside the dialog so users can re-dock from within it.
+        # Redock button inside the dialog so users can re-dock from within it.
         # Styled as a transparent overlay to match the pop-out button (item 16).
-        btn_dock = _QPB("⇙  Dock Back", row_w)
+        btn_dock = _QPB("⇙  Redock", row_w)
         btn_dock.setObjectName("popoutBtn")
         btn_dock.setStyleSheet(
             "QPushButton#popoutBtn {"
@@ -1266,7 +1266,7 @@ class AlphaFixerTab(QWidget):
             "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
         )
         btn_dock.setToolTip(
-            "Close this floating window and dock the preview back into the main panel."
+            "Close this floating window and redock the preview back into the main panel."
         )
         btn_dock.clicked.connect(self._on_dock_back_clicked)
         row.addWidget(btn_dock)

@@ -1142,11 +1142,14 @@ class MainWindow(QMainWindow):
         corner_layout.addWidget(btn_help)
         self._btn_help = btn_help
 
-        # Patreon button
-        btn_patreon = QPushButton("❤  Patreon")
-        btn_patreon.setMinimumWidth(88)
+        # Patreon button (item 44 — colored heart, not cut off)
+        btn_patreon = QPushButton("💖  Patreon")
+        btn_patreon.setMinimumWidth(100)
         btn_patreon.setMaximumWidth(160)
         btn_patreon.setMinimumHeight(26)
+        btn_patreon.setStyleSheet(
+            "QPushButton { padding-left: 4px; padding-right: 6px; }"
+        )
         btn_patreon.setToolTip(
             "Support development on Patreon!\n"
             "patreon.com/c/DeadOnTheInside"

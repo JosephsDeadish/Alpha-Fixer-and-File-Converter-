@@ -281,12 +281,12 @@ class ConverterTab(QWidget):
         preview_row.addWidget(self._output_info_lbl, 0)
         pa_layout.addLayout(preview_row, 1)
 
-        # Dock-back button: shown when compare is popped out (item 15)
-        self._btn_dock_back = QPushButton("⇙  Dock Preview Back")
+        # Redock button: shown when compare is popped out (item 15)
+        self._btn_dock_back = QPushButton("⇙  Redock Preview")
         self._btn_dock_back.setMinimumHeight(30)
         self._btn_dock_back.setToolTip(
             "The preview is currently in a floating window.\n"
-            "Click to close the floating window and dock the preview back here."
+            "Click to close the floating window and redock the preview here."
         )
         self._btn_dock_back.setVisible(False)
         self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
@@ -1324,10 +1324,10 @@ class ConverterTab(QWidget):
     # ------------------------------------------------------------------
 
     def _on_compare_popout(self) -> None:
-        """Called when the ⤢ pop-out button is clicked on the compare widget.
+        """Called when the ⤢ pop-out/undock button is clicked on the compare widget.
 
         Hides the embedded compare widget and surrounding info labels to free
-        up space, shows a Dock Back button, and restores everything when the
+        up space, shows a Redock button, and restores everything when the
         floating dialog is closed.
         """
         dlg = self._compare._popout_dialog
@@ -1335,7 +1335,7 @@ class ConverterTab(QWidget):
             return
 
         # Hide just the compare widget and its companion labels; keep
-        # preview_area (and the dock-back button inside it) visible.
+        # preview_area (and the redock button inside it) visible.
         self._compare.setVisible(False)
         self._preview_lbl.setVisible(False)
         self._source_info_lbl.setVisible(False)
@@ -1352,6 +1352,36 @@ class ConverterTab(QWidget):
             self._left_vsplit.setSizes([total - dock_h, dock_h])
 
         dlg.finished.connect(self._on_compare_docked_back)
+
+        # Add a transparent overlay "⇙  Redock" button inside the floating
+        # dialog so the user can redock from the dialog itself (item 15).
+        row_w = QWidget(dlg)
+        row_w.setObjectName("dlgDockRow")
+        row = QHBoxLayout(row_w)
+        row.setContentsMargins(4, 2, 4, 2)
+        row.addStretch(1)
+        btn_dock = QPushButton("⇙  Redock", row_w)
+        btn_dock.setObjectName("popoutBtn")
+        btn_dock.setStyleSheet(
+            "QPushButton#popoutBtn {"
+            "  background: rgba(30,30,30,160);"
+            "  color: white;"
+            "  border: 1px solid rgba(255,255,255,60);"
+            "  border-radius: 4px;"
+            "  padding: 3px 8px;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
+            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
+        )
+        btn_dock.setToolTip(
+            "Close this floating window and redock the preview back into the main panel."
+        )
+        btn_dock.clicked.connect(self._on_dock_back_clicked)
+        row.addWidget(btn_dock)
+        # Insert the redock row at the top of the dialog layout.
+        if dlg.layout() is not None:
+            dlg.layout().insertWidget(0, row_w)
 
         # Hide the pop-out button inside the dialog's compare widget to
         # prevent infinite pop-outs.
