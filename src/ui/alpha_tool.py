@@ -1820,7 +1820,24 @@ class AlphaFixerTab(QWidget):
             self.processing_error.emit(errors)
 
     def _log_msg(self, msg: str):
-        self._log.append(msg)
+        """Append a message to the log with colour coding (item 36/37)."""
+        stripped = msg.strip()
+        if stripped.startswith(("✔", "✅")):
+            color = "#4caf50"
+        elif stripped.startswith(("✘", "❌", "⚠")):
+            color = "#f44336" if stripped.startswith(("✘", "❌")) else "#ff9800"
+        elif stripped.startswith("───"):
+            color = "#888"
+        elif stripped.startswith(("📁", "Output")):
+            color = "#64b5f6"
+        else:
+            color = ""
+        if color:
+            import html as _html
+            escaped = _html.escape(msg)
+            self._log.append(f'<span style="color:{color};">{escaped}</span>')
+        else:
+            self._log.append(msg)
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
 

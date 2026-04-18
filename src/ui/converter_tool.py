@@ -1297,7 +1297,34 @@ class ConverterTab(QWidget):
             )
 
     def _log_msg(self, msg: str) -> None:
-        self._log.append(msg)
+        """Append a message to the log with optional colour coding (item 36/37).
+
+        Lines starting with ✔ or ✅ are shown in green.
+        Lines starting with ✘ or ⚠ or 'Error' are shown in red/amber.
+        Separator lines (─) are shown in a muted colour.
+        Plain text is shown in the default text colour.
+        """
+        # Detect message type from first character(s) for colour coding.
+        stripped = msg.strip()
+        if stripped.startswith(("✔", "✅")):
+            color = "#4caf50"   # green
+        elif stripped.startswith(("✘", "⚠", "Error", "❌")):
+            color = "#f44336" if stripped.startswith(("✘", "❌")) else "#ff9800"
+        elif stripped.startswith("───"):
+            color = "#888"     # muted separator
+        elif stripped.startswith("📁") or stripped.startswith("Output"):
+            color = "#64b5f6"  # info blue
+        else:
+            color = ""
+
+        if color:
+            # Escape HTML special characters and wrap in a coloured span.
+            import html as _html
+            escaped = _html.escape(msg)
+            self._log.append(f'<span style="color:{color};">{escaped}</span>')
+        else:
+            self._log.append(msg)
+
         # Trim the log when it grows too large to prevent unbounded memory
         # use and UI lag when scrolling through thousands of lines.
         doc = self._log.document()
