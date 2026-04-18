@@ -217,6 +217,27 @@ class SelectiveAlphaCanvas(QWidget):
         self._undo_stack: list[list[np.ndarray]] = []
         self._redo_stack: list[list[np.ndarray]] = []
 
+        # ── repaint throttle (item 86) ────────────────────────────────
+        # Limit canvas redraws to ~30 fps during freehand/eraser strokes so
+        # _rebuild_composite() (a full numpy recompose) does not run on every
+        # mouse-move event, which caused noticeable drawing lag.
+        self._repaint_pending: bool = False
+        self._repaint_timer = QTimer(self)
+        self._repaint_timer.setInterval(33)   # ~30 fps
+        self._repaint_timer.setSingleShot(False)
+        self._repaint_timer.timeout.connect(self._flush_repaint)
+
+        # ── opacity debounce (item 85) ────────────────────────────────
+        # The overlay-opacity slider fires valueChanged on every pixel of
+        # movement; each change triggers a full composite rebuild.  We apply
+        # the new value only after a short idle period to avoid rebuilding on
+        # every intermediate slider position.
+        self._pending_overlay_alpha: Optional[int] = None
+        self._opacity_debounce = QTimer(self)
+        self._opacity_debounce.setInterval(50)
+        self._opacity_debounce.setSingleShot(True)
+        self._opacity_debounce.timeout.connect(self._apply_pending_opacity)
+
     # ── public setters ────────────────────────────────────────────────────
 
     def set_brush_size(self, v: int) -> None:
@@ -296,12 +317,41 @@ class SelectiveAlphaCanvas(QWidget):
             self.update()
 
     def set_overlay_alpha(self, value: int) -> None:
-        """Set the zone colour overlay opacity (0 = invisible, 255 = fully opaque)."""
+        """Set the zone colour overlay opacity — debounced (item 85).
+
+        The label in the sidebar updates immediately, but the expensive
+        composite rebuild is deferred until the slider is idle for ~50 ms.
+        """
         v = max(0, min(255, int(value)))
+        self._pending_overlay_alpha = v
+        self._opacity_debounce.start()   # restarts the 50 ms countdown
+
+    def _apply_pending_opacity(self) -> None:
+        """Flush any pending overlay-opacity change after the debounce period."""
+        if self._pending_overlay_alpha is None:
+            return
+        v = self._pending_overlay_alpha
+        self._pending_overlay_alpha = None
         if v != self._overlay_alpha:
             self._overlay_alpha = v
             self._composite_dirty = True
             self.update()
+
+    # ── repaint throttle helpers (item 86) ────────────────────────────────
+
+    def _schedule_repaint(self) -> None:
+        """Request a throttled repaint.  Redraws at most once per ~33 ms."""
+        self._repaint_pending = True
+        if not self._repaint_timer.isActive():
+            self._repaint_timer.start()
+
+    def _flush_repaint(self) -> None:
+        """Timer callback — call update() if a repaint is pending, then stop."""
+        if self._repaint_pending:
+            self._repaint_pending = False
+            self.update()
+        else:
+            self._repaint_timer.stop()
 
     # ── image management ──────────────────────────────────────────────────
 
@@ -846,7 +896,7 @@ class SelectiveAlphaCanvas(QWidget):
             self._last_img_pt     = (img_x, img_y)
             self._composite_dirty = True
             self.mask_changed.emit(self._active_zone)
-            self.update()
+            self._schedule_repaint()   # throttled to ~30 fps (item 86)
 
         elif self._tool in ("line", "rect", "ellipse") and self._drag_start_img is not None:
             self._drag_preview = self._build_drag_preview(
@@ -913,6 +963,11 @@ class SelectiveAlphaCanvas(QWidget):
 
         self._drawing     = False
         self._last_img_pt = None
+        # Flush any pending throttled repaint so the final stroke is shown
+        # immediately (item 86).
+        self._repaint_timer.stop()
+        self._repaint_pending = False
+        self.update()
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
         if self._tool == "polygon" and event.button() == Qt.MouseButton.LeftButton:

@@ -1420,35 +1420,104 @@ class SettingsDialog(QDialog):
 
         gv.addWidget(grp_scale)
 
-        # ---- History GroupBox ----
-        grp_history = QGroupBox("History")
+        # ---- History GroupBox (items 8/9) ----
+        grp_history = QGroupBox("📋  History")
         hist_gl = QGridLayout(grp_history)
         hist_gl.setColumnStretch(1, 1)
         hist_gl.setHorizontalSpacing(10)
         hist_gl.setVerticalSpacing(6)
 
-        hist_gl.addWidget(QLabel("Max History Entries per Tool:"), 0, 0)
+        # Default max entries
+        hist_gl.addWidget(QLabel("Default max entries:"), 0, 0)
         self._history_max_spin = QSpinBox()
         self._history_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self._history_max_spin.setRange(10, 1000)
+        self._history_max_spin.setRange(10, 5000)
         self._history_max_spin.setValue(100)
         self._history_max_spin.setSingleStep(10)
-        self._history_max_spin.setMaximumWidth(100)
+        self._history_max_spin.setSuffix("  entries")
+        self._history_max_spin.setMaximumWidth(130)
         self._history_max_spin.setToolTip(
-            "How many processing sessions to keep in History for each tool\n"
-            "(Converter, Alpha & RGBA Adjuster, Selective Alpha).\n"
+            "Default maximum number of history entries kept per tool.\n"
+            "Overridden by per-tool limits below when those are non-zero.\n"
             "Oldest entries are automatically removed when the limit is reached.\n"
-            "Default: 100.  Maximum: 1000."
+            "Default: 100.  Maximum: 5000."
         )
         hist_gl.addWidget(self._history_max_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
+        # Per-tool max entries
+        per_lbl = QLabel("Per-tool limits (0 = use default above):")
+        per_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
+        hist_gl.addWidget(per_lbl, 1, 0, 1, 2)
+
+        hist_gl.addWidget(QLabel("  Converter:"), 2, 0)
+        self._history_max_conv_spin = QSpinBox()
+        self._history_max_conv_spin.setRange(0, 5000)
+        self._history_max_conv_spin.setSpecialValueText("default")
+        self._history_max_conv_spin.setValue(0)
+        self._history_max_conv_spin.setSuffix("  entries")
+        self._history_max_conv_spin.setMaximumWidth(130)
+        self._history_max_conv_spin.setToolTip(
+            "Max history entries for the File Converter (0 = use default above)."
+        )
+        hist_gl.addWidget(self._history_max_conv_spin, 2, 1, Qt.AlignmentFlag.AlignLeft)
+
+        hist_gl.addWidget(QLabel("  Alpha & RGBA Adjuster:"), 3, 0)
+        self._history_max_alpha_spin = QSpinBox()
+        self._history_max_alpha_spin.setRange(0, 5000)
+        self._history_max_alpha_spin.setSpecialValueText("default")
+        self._history_max_alpha_spin.setValue(0)
+        self._history_max_alpha_spin.setSuffix("  entries")
+        self._history_max_alpha_spin.setMaximumWidth(130)
+        self._history_max_alpha_spin.setToolTip(
+            "Max history entries for the Alpha & RGBA Adjuster (0 = use default above)."
+        )
+        hist_gl.addWidget(self._history_max_alpha_spin, 3, 1, Qt.AlignmentFlag.AlignLeft)
+
+        hist_gl.addWidget(QLabel("  Selective Alpha:"), 4, 0)
+        self._history_max_sel_spin = QSpinBox()
+        self._history_max_sel_spin.setRange(0, 5000)
+        self._history_max_sel_spin.setSpecialValueText("default")
+        self._history_max_sel_spin.setValue(0)
+        self._history_max_sel_spin.setSuffix("  entries")
+        self._history_max_sel_spin.setMaximumWidth(130)
+        self._history_max_sel_spin.setToolTip(
+            "Max history entries for the Selective Alpha Tool (0 = use default above)."
+        )
+        hist_gl.addWidget(self._history_max_sel_spin, 4, 1, Qt.AlignmentFlag.AlignLeft)
+
+        # Track history checkboxes
+        track_lbl = QLabel("Track history for:")
+        track_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
+        hist_gl.addWidget(track_lbl, 5, 0, 1, 2)
+
+        self._chk_track_converter = QCheckBox("Converter")
+        self._chk_track_converter.setChecked(True)
+        self._chk_track_converter.setToolTip(
+            "When checked, File Converter batches are saved to history."
+        )
+        hist_gl.addWidget(self._chk_track_converter, 6, 0)
+
+        self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
+        self._chk_track_alpha.setChecked(True)
+        self._chk_track_alpha.setToolTip(
+            "When checked, Alpha & RGBA Adjuster batches are saved to history."
+        )
+        hist_gl.addWidget(self._chk_track_alpha, 7, 0)
+
+        self._chk_track_sel_alpha = QCheckBox("Selective Alpha")
+        self._chk_track_sel_alpha.setChecked(True)
+        self._chk_track_sel_alpha.setToolTip(
+            "When checked, Selective Alpha Tool saves are recorded in history."
+        )
+        hist_gl.addWidget(self._chk_track_sel_alpha, 8, 0)
+
         hist_note = QLabel(
-            "ℹ  Existing history entries are not trimmed immediately — the limit "
-            "only applies to new entries going forward."
+            "ℹ  Existing history entries are not trimmed immediately — limits "
+            "only apply to new entries going forward."
         )
         hist_note.setWordWrap(True)
         hist_note.setStyleSheet("color: #888; font-size: 10px;")
-        hist_gl.addWidget(hist_note, 1, 0, 1, 2)
+        hist_gl.addWidget(hist_note, 9, 0, 1, 2)
 
         gv.addWidget(grp_history)
 
@@ -1550,6 +1619,24 @@ class SettingsDialog(QDialog):
         self._btn_height_combo.currentTextChanged.connect(self._on_btn_height_changed)
         self._widget_spacing_combo.currentTextChanged.connect(self._on_widget_spacing_changed)
         self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
+        self._history_max_conv_spin.valueChanged.connect(
+            lambda v: self._settings.set("history_max_entries_converter", v)
+        )
+        self._history_max_alpha_spin.valueChanged.connect(
+            lambda v: self._settings.set("history_max_entries_alpha", v)
+        )
+        self._history_max_sel_spin.valueChanged.connect(
+            lambda v: self._settings.set("history_max_entries_selective_alpha", v)
+        )
+        self._chk_track_converter.toggled.connect(
+            lambda v: self._settings.set("history_track_converter", v)
+        )
+        self._chk_track_alpha.toggled.connect(
+            lambda v: self._settings.set("history_track_alpha", v)
+        )
+        self._chk_track_sel_alpha.toggled.connect(
+            lambda v: self._settings.set("history_track_selective_alpha", v)
+        )
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
         self._tooltip_mode_combo.currentTextChanged.connect(self._on_tooltip_mode_changed)
@@ -1787,6 +1874,24 @@ class SettingsDialog(QDialog):
         self._widget_spacing_combo.setCurrentIndex(_ws_map.get(ws_val, 1))
         # History max entries
         self._history_max_spin.setValue(self._settings.get("history_max_entries", 100))
+        self._history_max_conv_spin.setValue(
+            int(self._settings.get("history_max_entries_converter", 0))
+        )
+        self._history_max_alpha_spin.setValue(
+            int(self._settings.get("history_max_entries_alpha", 0))
+        )
+        self._history_max_sel_spin.setValue(
+            int(self._settings.get("history_max_entries_selective_alpha", 0))
+        )
+        self._chk_track_converter.setChecked(
+            bool(self._settings.get("history_track_converter", True))
+        )
+        self._chk_track_alpha.setChecked(
+            bool(self._settings.get("history_track_alpha", True))
+        )
+        self._chk_track_sel_alpha.setChecked(
+            bool(self._settings.get("history_track_selective_alpha", True))
+        )
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         click_effects_enabled = self._settings.get("click_effects_enabled", False)
         self._click_effects_theme_check.setChecked(click_effects_enabled)
@@ -2012,6 +2117,12 @@ class SettingsDialog(QDialog):
         mgr.register(self._font_size_spin, "font_size")
         mgr.register(self._ui_scale_combo, "ui_scale_combo")
         mgr.register(self._history_max_spin, "history_max_spin")
+        mgr.register(self._history_max_conv_spin, "history_max_conv_spin")
+        mgr.register(self._history_max_alpha_spin, "history_max_alpha_spin")
+        mgr.register(self._history_max_sel_spin, "history_max_sel_spin")
+        mgr.register(self._chk_track_converter, "history_track_converter")
+        mgr.register(self._chk_track_alpha, "history_track_alpha")
+        mgr.register(self._chk_track_sel_alpha, "history_track_sel_alpha")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
         mgr.register(self._animated_banner_check, "animated_banner_check")

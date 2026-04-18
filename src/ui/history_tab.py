@@ -11,8 +11,7 @@ from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget, QFileDialog, QLineEdit, QGroupBox, QCheckBox,
-    QSpinBox,
+    QTabWidget, QFileDialog, QLineEdit,
 )
 
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
@@ -101,6 +100,11 @@ class HistoryTab(QWidget):
         self._hdr = hdr
         layout.addWidget(hdr)
 
+        # Hint pointing users to where settings live (item 8)
+        hint = QLabel("⚙  History settings are in  Settings → General → History")
+        hint.setStyleSheet("color: #888; font-size: 10px;")
+        layout.addWidget(hint)
+
         btn_row = QHBoxLayout()
         self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
@@ -109,146 +113,7 @@ class HistoryTab(QWidget):
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
 
-        # ── History settings section (items 8 & 9) ────────────────────────
-        settings_box = QGroupBox("⚙  History Settings")
-        settings_box.setCheckable(True)
-        settings_box.setChecked(False)  # Collapsed by default
-        settings_box.setToolTip(
-            "Configure what is recorded in history and how many entries are kept."
-        )
-        sbox_layout = QVBoxLayout(settings_box)
-        sbox_layout.setContentsMargins(8, 6, 8, 6)
-        sbox_layout.setSpacing(6)
-
-        # Global default max entries
-        max_row = QHBoxLayout()
-        max_row.addWidget(QLabel("Default max entries:"))
-        self._history_max_spin = QSpinBox()
-        self._history_max_spin.setRange(10, 5000)
-        self._history_max_spin.setValue(int(self._settings.get("history_max_entries", 100)))
-        self._history_max_spin.setSuffix("  entries")
-        self._history_max_spin.setToolTip(
-            "Default maximum number of history entries kept per tool.\n"
-            "Overridden by per-tool limits below when those are set.\n"
-            "Older entries are pruned automatically when the limit is reached.\n"
-            "Also adjustable in Settings → General."
-        )
-        max_row.addWidget(self._history_max_spin)
-        max_row.addStretch(1)
-        sbox_layout.addLayout(max_row)
-
-        # Per-tool max entries (item 8) ─────────────────────────────────
-        per_tool_lbl = QLabel("Per-tool limits (0 = use default above):")
-        per_tool_lbl.setToolTip(
-            "Set a different history size for each tool.\n"
-            "Leave at 0 to use the default limit above."
-        )
-        sbox_layout.addWidget(per_tool_lbl)
-
-        per_tool_row = QHBoxLayout()
-        per_tool_row.setSpacing(12)
-
-        per_tool_row.addWidget(QLabel("Converter:"))
-        self._history_max_conv_spin = QSpinBox()
-        self._history_max_conv_spin.setRange(0, 5000)
-        self._history_max_conv_spin.setSpecialValueText("default")
-        self._history_max_conv_spin.setValue(
-            int(self._settings.get("history_max_entries_converter", 0))
-        )
-        self._history_max_conv_spin.setSuffix("  entries")
-        self._history_max_conv_spin.setToolTip(
-            "Max history entries for the File Converter (0 = use default above)."
-        )
-        per_tool_row.addWidget(self._history_max_conv_spin)
-
-        per_tool_row.addWidget(QLabel("Alpha Adjuster:"))
-        self._history_max_alpha_spin = QSpinBox()
-        self._history_max_alpha_spin.setRange(0, 5000)
-        self._history_max_alpha_spin.setSpecialValueText("default")
-        self._history_max_alpha_spin.setValue(
-            int(self._settings.get("history_max_entries_alpha", 0))
-        )
-        self._history_max_alpha_spin.setSuffix("  entries")
-        self._history_max_alpha_spin.setToolTip(
-            "Max history entries for the Alpha & RGBA Adjuster (0 = use default above)."
-        )
-        per_tool_row.addWidget(self._history_max_alpha_spin)
-
-        per_tool_row.addWidget(QLabel("Selective Alpha:"))
-        self._history_max_sel_spin = QSpinBox()
-        self._history_max_sel_spin.setRange(0, 5000)
-        self._history_max_sel_spin.setSpecialValueText("default")
-        self._history_max_sel_spin.setValue(
-            int(self._settings.get("history_max_entries_selective_alpha", 0))
-        )
-        self._history_max_sel_spin.setSuffix("  entries")
-        self._history_max_sel_spin.setToolTip(
-            "Max history entries for the Selective Alpha Tool (0 = use default above)."
-        )
-        per_tool_row.addWidget(self._history_max_sel_spin)
-        per_tool_row.addStretch(1)
-        sbox_layout.addLayout(per_tool_row)
-
-        # Per-category tracking checkboxes (item 9)
-        track_row = QHBoxLayout()
-        track_row.addWidget(QLabel("Track history for:"))
-        self._chk_track_converter = QCheckBox("Converter")
-        self._chk_track_converter.setChecked(
-            bool(self._settings.get("history_track_converter", True))
-        )
-        self._chk_track_converter.setToolTip(
-            "When checked, File Converter batches are recorded in history."
-        )
-        track_row.addWidget(self._chk_track_converter)
-        self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
-        self._chk_track_alpha.setChecked(
-            bool(self._settings.get("history_track_alpha", True))
-        )
-        self._chk_track_alpha.setToolTip(
-            "When checked, Alpha & RGBA Adjuster batches are recorded in history."
-        )
-        track_row.addWidget(self._chk_track_alpha)
-        self._chk_track_sel_alpha = QCheckBox("Selective Alpha")
-        self._chk_track_sel_alpha.setChecked(
-            bool(self._settings.get("history_track_selective_alpha", True))
-        )
-        self._chk_track_sel_alpha.setToolTip(
-            "When checked, Selective Alpha Tool saves are recorded in history."
-        )
-        track_row.addWidget(self._chk_track_sel_alpha)
-        track_row.addStretch(1)
-        sbox_layout.addLayout(track_row)
-
-        layout.addWidget(settings_box)
-
-        # Connect settings widgets
-        self._history_max_spin.valueChanged.connect(self._on_history_max_changed)
-        self._history_max_conv_spin.valueChanged.connect(
-            lambda v: self._settings.set(
-                "history_max_entries_converter", v if v > 0 else 0
-            )
-        )
-        self._history_max_alpha_spin.valueChanged.connect(
-            lambda v: self._settings.set(
-                "history_max_entries_alpha", v if v > 0 else 0
-            )
-        )
-        self._history_max_sel_spin.valueChanged.connect(
-            lambda v: self._settings.set(
-                "history_max_entries_selective_alpha", v if v > 0 else 0
-            )
-        )
-        self._chk_track_converter.toggled.connect(
-            lambda v: self._settings.set("history_track_converter", v)
-        )
-        self._chk_track_alpha.toggled.connect(
-            lambda v: self._settings.set("history_track_alpha", v)
-        )
-        self._chk_track_sel_alpha.toggled.connect(
-            lambda v: self._settings.set("history_track_selective_alpha", v)
-        )
-
-        # Sub-tabs: Converter | Alpha & RGBA Adjuster
+        # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
 
         # --- Converter sub-tab ---
@@ -530,10 +395,6 @@ class HistoryTab(QWidget):
     # ------------------------------------------------------------------
     # Clear
     # ------------------------------------------------------------------
-
-    def _on_history_max_changed(self, value: int) -> None:
-        """Persist the max entries setting when the spinbox changes."""
-        self._settings.set("history_max_entries", value)
 
     def _clear_history(self):
         reply = QMessageBox.question(
