@@ -6,15 +6,105 @@ import datetime
 import io
 import os
 
-from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget, QFileDialog, QLineEdit,
+    QTabWidget, QFileDialog, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem,
 )
 
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
+
+
+class _AnimatedGifDelegate(QStyledItemDelegate):
+    """Item delegate that shows animated .gif thumbnails in column 0 (item 80).
+
+    For each GIF builder history entry, a ``QMovie`` is created and started.
+    A shared timer repaints the viewport at ~12 fps so all animations run
+    smoothly without per-movie signal wiring.
+    """
+
+    _GIF_PATH_ROLE = Qt.ItemDataRole.UserRole + 1
+
+    def __init__(self, tree: QTreeWidget, parent=None):
+        super().__init__(parent)
+        self._tree = tree
+        self._movies: dict[str, "QMovie"] = {}
+        # Repaint viewport at ~12 fps while any GIF is loaded
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(80)
+        self._tick_timer.timeout.connect(self._tick)
+        self._tick_timer.start()
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+
+    def set_gif_path(self, item: QTreeWidgetItem, path: str) -> None:
+        """Store *path* on *item* and start a QMovie for .gif files."""
+        item.setData(0, self._GIF_PATH_ROLE, path)
+        if path and path.lower().endswith(".gif") and os.path.isfile(path):
+            if path not in self._movies:
+                try:
+                    from PyQt6.QtGui import QMovie
+                    m = QMovie(path, parent=self)
+                    m.setScaledSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
+                    m.setCacheMode(QMovie.CacheMode.CacheAll)
+                    m.start()
+                    self._movies[path] = m
+                except Exception:
+                    pass
+
+    def clear_movies(self) -> None:
+        """Stop and discard all loaded movies (call before rebuilding the tree)."""
+        for m in self._movies.values():
+            try:
+                m.stop()
+            except Exception:
+                pass
+        self._movies.clear()
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _tick(self) -> None:
+        if self._movies:
+            try:
+                self._tree.viewport().update()
+            except Exception:
+                pass
+
+    def paint(self, painter, option: QStyleOptionViewItem, index) -> None:
+        if index.column() != 0:
+            super().paint(painter, option, index)
+            return
+        item = self._tree.itemFromIndex(index)
+        gif_path = item.data(0, self._GIF_PATH_ROLE) if item is not None else None
+        movie = self._movies.get(gif_path) if gif_path else None
+        if movie is None:
+            super().paint(painter, option, index)
+            return
+        # Draw background + text as normal, but skip the static icon
+        # by temporarily clearing it so Qt's default paint skips the icon area.
+        saved_icon = item.icon(0)
+        item.setIcon(0, QIcon())
+        super().paint(painter, option, index)
+        item.setIcon(0, saved_icon)
+        # Overlay the animated frame in the icon rect
+        frame = movie.currentPixmap()
+        if not frame.isNull():
+            icon_size = self._tree.iconSize()
+            r = option.rect
+            y_off = max(0, (r.height() - icon_size.height()) // 2)
+            dst = QRect(r.left() + 2, r.top() + y_off, icon_size.width(), icon_size.height())
+            scaled = frame.scaled(
+                icon_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.drawPixmap(dst.topLeft(), scaled)
 
 
 def _fmt_ts(ts: str) -> str:
@@ -202,6 +292,9 @@ class HistoryTab(QWidget):
             ],
         )
         gif_layout.addWidget(self._gif_tree)
+        # Animated GIF thumbnails delegate (item 80)
+        self._gif_anim_delegate = _AnimatedGifDelegate(self._gif_tree, self._gif_tree)
+        self._gif_tree.setItemDelegate(self._gif_anim_delegate)
         self._gif_summary = QLabel("")
         self._gif_summary.setObjectName("subheader")
         gif_layout.addWidget(self._gif_summary)
@@ -459,19 +552,30 @@ class HistoryTab(QWidget):
     def _refresh_gif_builder(self):
         """Populate the GIF Builder history tree (item 74)."""
         history = self._settings.get_gif_builder_history()
+        # Clear old movies before rebuilding to avoid stale references (item 80).
+        self._gif_anim_delegate.clear_movies()
         self._gif_tree.clear()
         for entry in history:
             ts = _fmt_ts(entry.get("timestamp", ""))
-            output = os.path.basename(entry.get("output", "?"))
+            output_path = entry.get("output", "")
+            output = os.path.basename(output_path) if output_path else "?"
             n_frames = str(entry.get("frame_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, output, n_frames, n_ok, n_err, files])
-            thumb = _load_thumb(entry.get("first_file", ""))
-            if not thumb.isNull():
-                item.setIcon(0, thumb)
+            # Use the output GIF for animated thumbnail (item 80); fall back to
+            # the first input file for non-GIF outputs or missing files.
+            gif_output = output_path if (output_path and output_path.lower().endswith(".gif")
+                                         and os.path.isfile(output_path)) else ""
+            if gif_output:
+                # Let the animated delegate handle thumbnail rendering
+                self._gif_anim_delegate.set_gif_path(item, gif_output)
+            else:
+                thumb = _load_thumb(entry.get("first_file", ""))
+                if not thumb.isNull():
+                    item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Built: {ts}\nOutput: {output}\n"

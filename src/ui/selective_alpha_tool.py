@@ -3320,6 +3320,10 @@ class SelectiveAlphaTool(QWidget):
                 }
                 if self._settings.get("history_track_selective_alpha", True):
                     self._settings.add_selective_alpha_history(entry)
+            # Offer to delete the original source file (item 33)
+            if self._src_path and os.path.normcase(os.path.abspath(self._src_path)) \
+                    != os.path.normcase(os.path.abspath(path)):
+                self._offer_delete_original(self._src_path)
         except MemoryError:
             QMessageBox.critical(
                 self, "Save Error",
@@ -3332,6 +3336,31 @@ class SelectiveAlphaTool(QWidget):
     def _on_apply(self) -> None:
         """Apply alpha zones — kept for Ctrl+Enter shortcut compatibility."""
         self._on_save()
+
+    def _offer_delete_original(self, src_path: str) -> None:
+        """Ask the user whether to delete the original source file (item 33)."""
+        import pathlib
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete Original File?")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText(
+            "Result saved successfully.\n\n"
+            "Would you like to delete the original source file?\n\n"
+            "⚠  This cannot be undone."
+        )
+        msg.setDetailedText(f"File that will be deleted:\n{src_path}")
+        btn_delete = msg.addButton("🗑  Delete Original", QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton("Keep Original", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_delete)
+        msg.exec()
+        if msg.clickedButton() is btn_delete:
+            try:
+                os.remove(src_path)
+            except OSError as exc:
+                QMessageBox.warning(
+                    self, "Delete Failed",
+                    f"Could not delete '{pathlib.Path(src_path).name}':\n{exc}"
+                )
 
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
