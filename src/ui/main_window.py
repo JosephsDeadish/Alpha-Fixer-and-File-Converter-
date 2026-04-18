@@ -900,6 +900,9 @@ class MainWindow(QMainWindow):
         self._cursor_spin_emoji: str = ""          # which emoji is currently spin/wobble-animated
         # Track dialogs that already have overlays so we don't double-attach (item 2).
         self._overlay_attached_windows: "set[int]" = set()
+        # Custom background overlay (item 81)
+        self._bg_overlay: "QLabel | None" = None
+        self._bg_movie: "QMovie | None" = None
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -2249,11 +2252,113 @@ class MainWindow(QMainWindow):
             self._converter_tab._compare.set_divider_color(accent)
         except AttributeError:
             pass
+        # Apply custom background if enabled (item 81).
+        self._apply_custom_background()
 
     def _update_tab_labels(self):
         """Write the theme-specific label to every tab (no animation prefix)."""
         for i, base in enumerate(self._tab_base_labels):
             self._tabs.setTabText(i, base)
+
+    def _apply_custom_background(self) -> None:
+        """Apply a custom background image or GIF to the main window (item 81).
+
+        When ``custom_bg_enabled`` is True and ``use_theme_bg`` is False a
+        QLabel is placed behind all content and either a static pixmap or an
+        animated QMovie is used to fill it.  When disabled or using the theme
+        background the overlay is hidden.
+        """
+        enabled = bool(self._settings.get("custom_bg_enabled", False))
+        use_theme = bool(self._settings.get("use_theme_bg", True))
+        path = str(self._settings.get("custom_bg_path", "")).strip()
+
+        # Ensure the overlay label exists.
+        if self._bg_overlay is None:
+            self._bg_overlay = QLabel(self)
+            self._bg_overlay.setScaledContents(True)
+            self._bg_overlay.setObjectName("bgOverlay")
+            self._bg_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            self._bg_overlay.lower()
+
+        if not enabled or use_theme or not path:
+            # Stop any running movie and hide the overlay.
+            if self._bg_movie is not None:
+                try:
+                    self._bg_movie.stop()
+                except Exception:
+                    pass
+                self._bg_movie = None
+            self._bg_overlay.setVisible(False)
+            return
+
+        if not os.path.isfile(path):
+            self._bg_overlay.setVisible(False)
+            return
+
+        self._bg_overlay.setGeometry(self.rect())
+        ext = os.path.splitext(path)[1].lower()
+
+        if ext == ".gif":
+            # Use a QMovie for animated GIFs.
+            if self._bg_movie is None or self._bg_movie.fileName() != path:
+                if self._bg_movie is not None:
+                    try:
+                        self._bg_movie.stop()
+                    except Exception:
+                        pass
+                from PyQt6.QtGui import QMovie
+                self._bg_movie = QMovie(path, parent=self)
+                self._bg_movie.setScaledSize(self.size())
+                self._bg_overlay.setMovie(self._bg_movie)
+                self._bg_movie.start()
+        else:
+            # Static image via pixmap.
+            if self._bg_movie is not None:
+                try:
+                    self._bg_movie.stop()
+                except Exception:
+                    pass
+                self._bg_movie = None
+            px = QPixmap(path)
+            if px.isNull():
+                try:
+                    from PIL import Image as _PILImage
+                    from PIL.ImageQt import ImageQt as _IQt
+                    pil = _PILImage.open(path).convert("RGBA")
+                    px = QPixmap.fromImage(_IQt(pil))
+                except Exception:
+                    pass
+            if not px.isNull():
+                self._bg_overlay.setPixmap(px)
+                self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+
+        self._bg_overlay.setVisible(True)
+        self._bg_overlay.lower()
+
+    def resizeEvent(self, event: "QResizeEvent") -> None:  # noqa: N802
+        """Keep the background overlay and effect overlays in sync with window size."""
+        super().resizeEvent(event)
+        if self._bg_overlay is not None:
+            self._bg_overlay.setGeometry(self.rect())
+            if self._bg_movie is not None:
+                try:
+                    self._bg_movie.setScaledSize(self.size())
+                except Exception:
+                    pass
+        if self._trail_overlay is not None:
+            try:
+                self._trail_overlay.setGeometry(self.rect())
+                self._trail_overlay.raise_()
+            except Exception:
+                pass
+        if self._click_effects is not None:
+            try:
+                self._click_effects.setGeometry(self.rect())
+                self._click_effects.raise_()
+            except Exception:
+                pass
+
+
 
     def _make_toolbar_panda_icon(self):
         """Render the panda SVG to a 28×28 QLabel for the toolbar. Returns None on failure."""
