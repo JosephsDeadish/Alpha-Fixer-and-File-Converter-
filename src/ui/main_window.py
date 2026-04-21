@@ -1182,11 +1182,11 @@ class MainWindow(QMainWindow):
         self._banner_lbl = banner_text  # kept for theme update compatibility
 
         self._tabs = QTabWidget()
-        self._tabs.setUsesScrollButtons(True)
-        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
-        # Let tabs expand to fill the available space so they always fit without
-        # needing scroll buttons at normal window sizes, but scroll buttons are
-        # enabled as a fallback when the window is too narrow (item 43).
+        # Item 43: Never show scroll arrows — tabs must always be visible.
+        # setExpanding(True) shares the tab bar width equally across all tabs,
+        # so they shrink rather than scroll when the window is narrow.
+        self._tabs.setUsesScrollButtons(False)
+        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         self._tabs.tabBar().setExpanding(True)
         # Allow drag-to-reorder tabs (item 56).
         self._tabs.tabBar().setMovable(True)
@@ -1194,10 +1194,10 @@ class MainWindow(QMainWindow):
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
         self._selective_alpha_tab = SelectiveAlphaTool(self._settings)
-        self._tabs.addTab(self._alpha_tab, "🖼  Alpha & RGBA")
-        self._tabs.addTab(self._converter_tab, "🔄  Converter")
-        self._tabs.addTab(self._history_tab, "📋  History")
-        self._tabs.addTab(self._selective_alpha_tab, "🎨  Selective Alpha")
+        self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
+        self._tabs.addTab(self._converter_tab, "🔄 Converter")
+        self._tabs.addTab(self._history_tab, "📋 History")
+        self._tabs.addTab(self._selective_alpha_tab, "🎨 Selective α")
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         cv.addWidget(self._tabs, 1)
@@ -2114,7 +2114,7 @@ class MainWindow(QMainWindow):
         base_size = self._settings.get("font_size", 10)
         base_size = max(8, min(24, int(base_size)))
         # Apply UI scale factor on top of the base font size.
-        _scale_factors = {"Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30}
+        _scale_factors = {"Tiny": 0.70, "Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30, "Huge": 1.50}
         scale_key = self._settings.get("ui_scale", "Normal")
         factor = _scale_factors.get(scale_key, 1.0)
         size = max(7, int(round(base_size * factor)))

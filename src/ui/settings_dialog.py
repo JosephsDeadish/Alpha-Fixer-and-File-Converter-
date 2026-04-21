@@ -1624,10 +1624,12 @@ class SettingsDialog(QDialog):
         scale_gl.addWidget(QLabel("UI Scale:"), 0, 0)
         self._ui_scale_combo = QComboBox()
         _SCALE_OPTIONS = [
+            ("Tiny  (70%)",       "Tiny",       "Minimum size — tiny text and controls. For very small screens or ultra-high DPI."),
             ("Compact  (85%)",    "Compact",    "Slightly smaller text and controls — useful on small or dense-DPI screens."),
             ("Normal  (100%)",    "Normal",     "Default size. Best for most standard 1080p and larger displays."),
             ("Large  (115%)",     "Large",      "Slightly larger — good for high-DPI displays or accessibility needs."),
-            ("Extra Large  (130%)","Extra Large","Maximum size. Best for 4K monitors or low-vision users."),
+            ("Extra Large  (130%)", "Extra Large", "Large size. Great for 4K monitors or accessibility."),
+            ("Huge  (150%)",      "Huge",       "Maximum size. Very large text and controls — best for 4K or low-vision users."),
         ]
         for label, _key, tip in _SCALE_OPTIONS:
             self._ui_scale_combo.addItem(label)
@@ -2185,8 +2187,8 @@ class SettingsDialog(QDialog):
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         # UI Scale
         scale_val = self._settings.get("ui_scale", "Normal")
-        _scale_map = {"Compact": 0, "Normal": 1, "Large": 2, "Extra Large": 3}
-        self._ui_scale_combo.setCurrentIndex(_scale_map.get(scale_val, 1))
+        _scale_map = {"Tiny": 0, "Compact": 1, "Normal": 2, "Large": 3, "Extra Large": 4, "Huge": 5}
+        self._ui_scale_combo.setCurrentIndex(_scale_map.get(scale_val, 2))
         # Button height
         btn_h_val = self._settings.get("btn_height", "Normal")
         _btn_h_map = {"Compact": 0, "Normal": 1, "Comfortable": 2}
@@ -3204,12 +3206,12 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_ui_scale_changed(self) -> None:
-        _scale_keys = ["Compact", "Normal", "Large", "Extra Large"]
+        _scale_keys = ["Tiny", "Compact", "Normal", "Large", "Extra Large", "Huge"]
         idx = self._ui_scale_combo.currentIndex()
         key = _scale_keys[idx] if 0 <= idx < len(_scale_keys) else "Normal"
         self._settings.set("ui_scale", key)
         # Apply the scale immediately by adjusting the base font size
-        _scale_factors = {"Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30}
+        _scale_factors = {"Tiny": 0.70, "Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30, "Huge": 1.50}
         factor = _scale_factors.get(key, 1.0)
         base_pt = self._settings.get("font_size", 10)
         scaled_pt = max(7, int(round(base_pt * factor)))
