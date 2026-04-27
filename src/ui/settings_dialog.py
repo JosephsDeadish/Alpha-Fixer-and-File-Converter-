@@ -147,6 +147,13 @@ class SettingsDialog(QDialog):
         self._misc_combo_debounce.timeout.connect(self._flush_misc_combo_changes)
         # Pending values accumulated until the debounce fires.
         self._misc_combo_pending: dict[str, str] = {}
+        # Last-used values for "Use theme" combos (item 1): restored when
+        # the user unchecks "Use theme X" to revert to their manual choice.
+        self._last_trail_style = "dots"
+        self._last_effect_key = "default"
+        self._last_cursor_key = "Default"
+        self._last_sound_profile = "soft"
+        self._last_btn_anim = "press"
         self.setWindowTitle("Settings & Customization 🐼")
         # Adaptive minimum size: shrink proportionally on small or low-resolution
         # screens so the dialog is never forced off the visible area.  We keep the
@@ -1142,6 +1149,14 @@ class SettingsDialog(QDialog):
             self._cursor_theme_info_lbl.setVisible(use_theme)
             if use_theme:
                 self._update_cursor_theme_info()
+            else:
+                # Restore last-used cursor when "Use theme" is turned off (item 1).
+                last = getattr(self, "_last_cursor_key", "Default")
+                idx = self._cursor_combo.findText(last)
+                if idx >= 0:
+                    self._cursor_combo.blockSignals(True)
+                    self._cursor_combo.setCurrentIndex(idx)
+                    self._cursor_combo.blockSignals(False)
         self._cursor_enable_check.toggled.connect(lambda _: _update_cursor_sub())
         self._use_theme_cursor_check.toggled.connect(lambda _: _update_cursor_sub())
         mouse_row.addWidget(grp_cursor, 1)
@@ -2423,6 +2438,23 @@ class SettingsDialog(QDialog):
         for c in controls:
             c.blockSignals(False)
 
+        # Load last-used preferences for "Use theme" combos (item 1).
+        self._last_trail_style = str(
+            self._settings.get("last_trail_style_pref",
+                               self._settings.get("trail_style", "dots")))
+        self._last_effect_key = str(
+            self._settings.get("last_effect_key_pref",
+                               self._theme.get("_effect", "default")))
+        self._last_cursor_key = str(
+            self._settings.get("last_cursor_key_pref",
+                               self._settings.get("cursor", "Default")))
+        self._last_sound_profile = str(
+            self._settings.get("last_sound_profile_pref",
+                               self._settings.get("sound_manual_profile", "soft")))
+        self._last_btn_anim = str(
+            self._settings.get("last_btn_anim_pref",
+                               self._settings.get("button_anim_style", "press")))
+
         # Load notification overlay settings (item 66)
         notif_enabled = bool(self._settings.get("notif_overlay_enabled", True))
         self._notif_overlay_check.setChecked(notif_enabled)
@@ -2860,6 +2892,10 @@ class SettingsDialog(QDialog):
         """Sync the effect key into the theme dict and persist immediately."""
         self._theme["_effect"] = self._effect_combo.currentData() or "default"
         self._settings.set_theme(self._theme)
+        # Track last manual selection so it can be restored on "Use theme" uncheck (item 1).
+        if not self._use_theme_effect_check.isChecked():
+            self._last_effect_key = self._theme["_effect"]
+            self._settings.set("last_effect_key_pref", self._last_effect_key)
         self.settings_changed.emit()
 
     # ------------------------------------------------------------------
@@ -3156,6 +3192,19 @@ class SettingsDialog(QDialog):
         self._trail_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_trail_theme_info()
+        else:
+            # Restore last-used trail style when "Use theme" is turned off (item 1).
+            _TRAIL_STYLE_MAP = {
+                "dots": 0, "ribbon": 1, "noodle": 2, "comet": 3,
+                "fairy": 4, "wave": 5, "sparkle": 6, "rainbow": 7,
+                "distortion": 8, "fire": 9, "lightning": 10,
+                "plasma": 11, "sakura": 12, "smoke": 13,
+            }
+            idx = _TRAIL_STYLE_MAP.get(self._last_trail_style, 0)
+            self._trail_style_combo.blockSignals(True)
+            self._trail_style_combo.setCurrentIndex(idx)
+            self._trail_style_combo.blockSignals(False)
+            self._settings.set("trail_style", self._last_trail_style)
         self.settings_changed.emit()
 
     def _on_trail_style_changed(self) -> None:
@@ -3165,6 +3214,10 @@ class SettingsDialog(QDialog):
         idx = self._trail_style_combo.currentIndex()
         style = _IDX_TO_STYLE[idx] if 0 <= idx < len(_IDX_TO_STYLE) else "dots"
         self._settings.set("trail_style", style)
+        # Track last manual selection so it can be restored on "Use theme" uncheck (item 1).
+        if not self._use_theme_trail_check.isChecked():
+            self._last_trail_style = style
+            self._settings.set("last_trail_style_pref", style)
         self.settings_changed.emit()
 
     def _on_trail_color_changed(self, color: str) -> None:
@@ -3184,9 +3237,14 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_cursor_changed(self) -> None:
+        use_theme = self._use_theme_cursor_check.isChecked()
         self._settings.set("cursor_enabled", self._cursor_enable_check.isChecked())
         self._settings.set("cursor", self._cursor_combo.currentText())
-        self._settings.set("use_theme_cursor", self._use_theme_cursor_check.isChecked())
+        self._settings.set("use_theme_cursor", use_theme)
+        # Track last manual selection so it can be restored on "Use theme" uncheck (item 1).
+        if not use_theme:
+            self._last_cursor_key = self._cursor_combo.currentText()
+            self._settings.set("last_cursor_key_pref", self._last_cursor_key)
         self.settings_changed.emit()
 
     def _on_cursor_anim_changed(self) -> None:
@@ -3299,6 +3357,13 @@ class SettingsDialog(QDialog):
         self._effect_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_effect_theme_info()
+        else:
+            # Restore last-used effect when "Use theme" is turned off (item 1).
+            self._effect_combo.blockSignals(True)
+            self._set_effect_combo(self._last_effect_key)
+            self._effect_combo.blockSignals(False)
+            self._theme["_effect"] = self._last_effect_key
+            self._settings.set_theme(self._theme)
         self.settings_changed.emit()
 
     def _on_tooltip_mode_changed(self) -> None:
@@ -3376,6 +3441,10 @@ class SettingsDialog(QDialog):
     def _on_button_anim_style_changed(self) -> None:
         key = self._button_anim_style_combo.currentData() or "press"
         self._settings.set("button_anim_style", key)
+        # Track last manual selection so it can be restored on "Use theme" uncheck (item 1).
+        if not self._use_theme_button_anim_check.isChecked():
+            self._last_btn_anim = key
+            self._settings.set("last_btn_anim_pref", key)
         self.settings_changed.emit()
 
     def _on_use_theme_button_anim_changed(self) -> None:
@@ -3388,6 +3457,17 @@ class SettingsDialog(QDialog):
         self._btn_anim_theme_info_lbl.setVisible(use_theme)
         if use_theme:
             self._update_btn_anim_theme_info()
+        else:
+            # Restore last-used button animation when "Use theme" is turned off (item 1).
+            _BUTTON_ANIM_IDX_MAP = {
+                "press": 0, "fall": 1, "bounce": 2, "shake": 3,
+                "shatter": 4, "vanish": 5, "explode": 6,
+            }
+            idx = _BUTTON_ANIM_IDX_MAP.get(self._last_btn_anim, 0)
+            self._button_anim_style_combo.blockSignals(True)
+            self._button_anim_style_combo.setCurrentIndex(idx)
+            self._button_anim_style_combo.blockSignals(False)
+            self._settings.set("button_anim_style", self._last_btn_anim)
         self.settings_changed.emit()
 
 

@@ -2258,12 +2258,21 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             new_ss = build_stylesheet(theme, tooltip_style)
-            # Append tooltip font-size override: UI scale should not resize
-            # tooltips (item 53). Tooltips use the raw base size, not the
-            # scaled app-font size.
+            # Inject font-size overrides so ui_scale affects ALL widgets (item 6).
+            # Tooltips are kept at the unscaled base size (item 53).
             try:
-                _tip_base = max(8, min(24, int(self._settings.get("font_size", 10))))
-                new_ss += f"\nQToolTip {{ font-size: {_tip_base}pt; }}"
+                _scale_factors = {
+                    "Tiny": 0.70, "Compact": 0.85, "Normal": 1.0,
+                    "Large": 1.15, "Extra Large": 1.30, "Huge": 1.50,
+                }
+                _base_pt = max(8, min(32, int(self._settings.get("font_size", 10))))
+                _factor = _scale_factors.get(
+                    self._settings.get("ui_scale", "Normal"), 1.0)
+                scaled_px = max(8, min(32, int(round(_base_pt * _factor * 1.33))))
+                unscaled_px = max(8, min(32, int(round(_base_pt * 1.33))))
+                new_ss += f"\nQWidget {{ font-size: {scaled_px}px; }}"
+                new_ss += f"\nQTabBar::tab {{ font-size: {max(8, scaled_px - 2)}px; }}"
+                new_ss += f"\nQToolTip {{ font-size: {unscaled_px}px; }}"
             except Exception:
                 pass
             # Append button-height and widget-spacing overrides (items 6/7/53).
@@ -3667,17 +3676,23 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj: "QObject", event: "QEvent") -> bool:
         """App-level event filter: auto-attach trail/click effects overlays to
-        any new top-level QDialog that appears while effects are enabled (item 2).
+        any new top-level window that appears while effects are enabled (item 2).
+        Covers QDialog, QMainWindow, and bare QWidget top-level windows.
         """
         if event.type() == QEvent.Type.Show:
             try:
-                from PyQt6.QtWidgets import QDialog as _QDialog
-                if (isinstance(obj, _QDialog) and obj is not self
-                        and obj.window() is obj):  # top-level dialog
+                from PyQt6.QtWidgets import QWidget as _QW, QApplication as _QApp
+                from PyQt6.QtCore import Qt as _Qt
+                if (isinstance(obj, _QW)
+                        and not isinstance(obj, _QApp)
+                        and obj is not self
+                        and obj.window() is obj
+                        and obj.isVisible()
+                        and bool(obj.windowFlags() & _Qt.WindowType.Window)):
                     win_id = id(obj)
                     if win_id not in self._overlay_attached_windows:
                         self._overlay_attached_windows.add(win_id)
-                        # Clean up tracking when the dialog is destroyed.
+                        # Clean up tracking when the window is destroyed.
                         obj.destroyed.connect(
                             lambda _o=None, _id=win_id:
                             self._overlay_attached_windows.discard(_id)
@@ -3721,13 +3736,17 @@ class MainWindow(QMainWindow):
 
             # Keep overlays covering the dialog when it resizes.
             def _on_dlg_resize():
-                for child in dlg.children():
+                for child in list(dlg.children()):
                     from .mouse_trail import MouseTrailOverlay as _MTO
                     from .click_effects import ClickEffectsOverlay as _CEO
                     if isinstance(child, (_MTO, _CEO)):
                         try:
+                            if not child.isVisible():
+                                continue
                             child.setGeometry(dlg.rect())
                             child.raise_()
+                        except RuntimeError:
+                            pass  # C++ object already deleted
                         except Exception:
                             pass
 
