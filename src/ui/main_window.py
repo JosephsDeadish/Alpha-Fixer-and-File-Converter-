@@ -1006,6 +1006,9 @@ class MainWindow(QMainWindow):
         self._cursor_spin_emoji: str = ""          # which emoji is currently spin/wobble-animated
         # Track dialogs that already have overlays so we don't double-attach (item 2).
         self._overlay_attached_windows: "set[int]" = set()
+        # Settings-dialog open guard to prevent re-entrant opens/crashy double-init.
+        self._settings_dialog = None
+        self._opening_settings_dialog: bool = False
         # Custom background overlay (item 81)
         self._bg_overlay: "QLabel | None" = None
         self._bg_movie: "QMovie | None" = None
@@ -2652,6 +2655,20 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _open_settings(self):
+        # Re-entrancy guard: avoid creating two settings dialogs at once.
+        if self._opening_settings_dialog:
+            return
+        if self._settings_dialog is not None:
+            try:
+                if self._settings_dialog.isVisible():
+                    self._settings_dialog.raise_()
+                    self._settings_dialog.activateWindow()
+                    return
+            except RuntimeError:
+                self._settings_dialog = None
+            except Exception:
+                self._settings_dialog = None
+        self._opening_settings_dialog = True
         try:
             dlg = SettingsDialog(self._settings, self, tooltip_mgr=self._tooltip_mgr)
         except Exception as _exc:  # noqa: BLE001
@@ -2662,7 +2679,12 @@ class MainWindow(QMainWindow):
                 f"Could not open Settings:\n{_exc}\n\n"
                 "Please try again.  If the problem persists, check the crash log.",
             )
+            self._opening_settings_dialog = False
             return
+        self._settings_dialog = dlg
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dlg.destroyed.connect(lambda *_: setattr(self, "_settings_dialog", None))
+        self._opening_settings_dialog = False
         dlg.theme_changed.connect(lambda t: self._on_settings_changed())
         dlg.theme_changed.connect(lambda t: self._on_theme_changed_sound())
         dlg.settings_changed.connect(self._on_settings_changed)
@@ -3994,4 +4016,3 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         super().closeEvent(event)
-
