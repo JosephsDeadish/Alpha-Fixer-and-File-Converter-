@@ -50,6 +50,7 @@ SUPPORTED_OUTPUT_FORMATS = {
     "TGA": ".tga",
     "TIFF": ".tiff",
     "WEBP": ".webp",
+    "XNB": ".xnb",
 }
 
 # Display list for UI combos (name → extension), alphabetical
@@ -137,6 +138,11 @@ FORMAT_DESCRIPTIONS = {
         "Google WebP — modern lossy/lossless format for the web.\n"
         "Supports alpha channel. Smaller than PNG at similar quality.\n"
         "Best for web assets, UI images, and web-delivered game textures."
+    ),
+    "XNB": (
+        "XNA / MonoGame binary content format — Texture2D asset.\n"
+        "Used by XNA Game Studio and MonoGame for Windows/Xbox/Phone.\n"
+        "Reads most XNB texture sub-formats; writes as Color (RGBA8888)."
     ),
 }
 
@@ -283,12 +289,18 @@ def _save_svg(img: Image.Image, path: str) -> None:
 
 
 def _open_image(path: str) -> Image.Image:
-    """Open an image preserving its native mode (DDS/SVG handled specially)."""
+    """Open an image preserving its native mode (DDS/SVG/XNB/TIM handled specially)."""
     ext = Path(path).suffix.lower()
     if ext == ".dds":
         return _load_dds(path)
     if ext == ".svg":
         return _load_svg(path)
+    if ext == ".xnb":
+        from .xnb_handler import load_xnb
+        return load_xnb(path)
+    if ext == ".tim":
+        from .tim_handler import load_tim
+        return load_tim(path)
     img = Image.open(path)
     try:
         img.load()  # force decode so the file handle can be closed
@@ -456,6 +468,12 @@ def convert_file(
                 finally:
                     if rgba is not img:
                         rgba.close()
+                return output_path
+
+            # --- XNB (XNA/MonoGame Texture2D) ---
+            if ext == ".xnb":
+                from .xnb_handler import save_xnb
+                save_xnb(img, output_path)
                 return output_path
 
             # --- SVG (raster embedded in SVG wrapper) ---

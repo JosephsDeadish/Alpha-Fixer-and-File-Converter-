@@ -45,8 +45,19 @@ from PyQt6.QtWidgets import (
 )
 
 _VIDEO_EXTS = {
+    # Common containers
     ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm",
-    ".m4v", ".mpg", ".mpeg", ".3gp",
+    ".m4v", ".mpg", ".mpeg", ".3gp", ".3g2", ".ts", ".m2ts",
+    ".mts", ".vob", ".ogv", ".ogg", ".rm", ".rmvb", ".divx",
+    ".asf", ".f4v", ".mxf", ".dv", ".yuv",
+    # PlayStation / handheld console video formats (opened via ffmpeg)
+    ".pmf",    # PSP Movie Format (MPEG-2 based)
+    ".pss",    # PlayStation 2 streaming video
+    ".str",    # PlayStation 1/2 streaming video
+    ".xa",     # PlayStation 1 audio/video
+    ".iso",    # ISO disc image (PSP UMD / PS2 DVD)
+    ".umd",    # PSP UMD disc image (same structure as ISO)
+    ".bin",    # CD-ROM disc image (may contain video sectors)
 }
 _IMAGE_EXTS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",
@@ -59,13 +70,24 @@ _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
 
 
 def _has_ffmpeg() -> bool:
-    """Return True if imageio-ffmpeg (or system ffmpeg) is available."""
+    """Return True if imageio-ffmpeg (bundled binary) or system ffmpeg is available."""
+    # 1. imageio-ffmpeg ships a static ffmpeg binary – preferred because it
+    #    works even when no system ffmpeg is installed.
+    try:
+        import imageio_ffmpeg  # noqa: F401
+        _exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if _exe:
+            return True
+    except Exception:
+        pass
+    # 2. Try imageio's legacy ffmpeg plugin path
     try:
         import imageio
         import imageio.plugins.ffmpeg  # noqa: F401
         return True
     except Exception:
         pass
+    # 3. Fall back to a system-installed ffmpeg on the PATH
     try:
         import subprocess
         result = subprocess.run(
@@ -77,6 +99,22 @@ def _has_ffmpeg() -> bool:
         return result.returncode == 0
     except Exception:
         return False
+
+
+def _get_ffmpeg_exe() -> Optional[str]:
+    """Return the path to the ffmpeg executable, or None."""
+    try:
+        import imageio_ffmpeg
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if exe:
+            return exe
+    except Exception:
+        pass
+    try:
+        import shutil
+        return shutil.which("ffmpeg")
+    except Exception:
+        return None
 
 
 def _pil_to_pixmap(pil_img) -> QPixmap:
@@ -183,7 +221,15 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     try:
         import imageio
-        reader = imageio.get_reader(path)
+        # Prefer the imageio-ffmpeg plugin (bundled binary) over the legacy
+        # ffmpeg plugin so the app works without a system-installed ffmpeg.
+        kwargs: dict = {}
+        try:
+            import imageio_ffmpeg  # noqa: F401
+            kwargs["plugin"] = "ffmpeg"
+        except ImportError:
+            pass
+        reader = imageio.get_reader(path, **kwargs)
         meta = reader.get_meta_data()
         fps = float(meta.get("fps", 25))
         frames = []
@@ -239,7 +285,9 @@ class _ClipListWidget(QListWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setDragDropMode(QListWidget.DragDropMode.DragDrop)
+        # InternalMove keeps _ClipEntry objects intact across drags (same
+        # reasoning as _FrameListWidget in gif_builder.py).
+        self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setAcceptDrops(True)
         self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
@@ -583,7 +631,10 @@ class VideoToolDialog(QDialog):
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Video Files", "",
-            "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.mpg);;All Files (*)",
+            "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v "
+            "*.mpg *.mpeg *.3gp *.3g2 *.ts *.m2ts *.mts *.vob *.ogv *.ogg "
+            "*.rm *.rmvb *.divx *.asf *.f4v *.mxf *.dv "
+            "*.pmf *.pss *.str *.xa *.iso *.umd *.bin);;All Files (*)",
         )
         self._load_video_paths(paths)
 

@@ -130,7 +130,12 @@ class _FrameListWidget(QListWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setDragDropMode(QListWidget.DragDropMode.DragDrop)
+        # InternalMove preserves QListWidgetItem objects (including their
+        # Python UserRole data) during drag-reorder.  DragDrop mode would
+        # serialise items through Qt's MIME layer, losing any Python object
+        # stored in a custom role.  External file drops are still handled by
+        # the overridden dragEnterEvent/dropEvent below.
+        self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setAcceptDrops(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
