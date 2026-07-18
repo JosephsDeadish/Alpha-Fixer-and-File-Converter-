@@ -1,7 +1,5 @@
 # 🐼 Alpha Fixer & File Converter
 
-[![Build Windows EXE](https://github.com/JosephsDeadish/Alpha-Fixer-and-File-Converter-/actions/workflows/build.yml/badge.svg)](https://github.com/JosephsDeadish/Alpha-Fixer-and-File-Converter-/actions/workflows/build.yml)
-
 A panda-themed desktop application with two powerful tools:
 
 ## Tools
@@ -39,8 +37,10 @@ Convert between image formats with optional resize and quality control.
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
 - **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth), rising flames (Volcano 🔥), snowflakes (Arctic ❄), pandas (Panda Dark/Light/Secret Sakura 🐼), electric bolts (Neon Panda ⚡)
-- Mouse trail effect with configurable color
-- Custom cursor style (Default, Cross, Pointing Hand, Open Hand)
+- **11 mouse trail styles**: Dots, Ribbon, Noodle 🍜 (physics), Comet, Fairy Dust ✨, Wave 🌊, Sparkle ❄, Rainbow 🌈, Distortion Wave, Fire 🔥, Lightning ⚡ — configurable color and intensity
+- **Animated banner** with 10 styles: Spin, Bounce, Shake, Pendulum, Pulse, Float, Flip, Orbit, Glitch, Static (Settings → Theme)
+- **Animated emoji cursors**: spin (⭐🔮💎), wobble (🦈🐉🌋), and symbol-cycling — automatically selected per theme or fully customizable (Settings → General)
+- Custom cursor style (Default, Cross, Pointing Hand, Open Hand, and more)
 - Click sound effects (built-in synthetic beep or point to your own .wav file)
 - Font size control (8–24pt)
 - **Cycling tooltips** with 4 modes (Settings → General → Tooltip Mode):
@@ -55,6 +55,7 @@ Convert between image formats with optional resize and quality control.
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
+- **Selective Alpha Tool** – paint alpha zones directly on an image with up to 40 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
 - **HiDPI & multi-monitor aware** – fractional DPI scaling (125 %, 150 %, 200 %) and multiple displays are fully supported; window position is automatically corrected if a monitor is disconnected
 - **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
@@ -109,21 +110,7 @@ python main.py
 
 ## Building a Standalone Executable
 
-### ⬇️ Download a pre-built Windows release (easiest)
-
-Every push to `main` automatically builds the Windows exe via GitHub Actions.
-
-1. Go to the **[Actions tab](../../actions/workflows/build.yml)**
-2. Click the latest successful run (green ✅)
-3. Scroll to **Artifacts** at the bottom of the page
-4. Download **`AlphaFixerConverter-Windows-v1.0.0`**
-5. Extract the zip → run **`AlphaFixerConverter.exe`** — no Python needed!
-
-You can also trigger a build manually: Actions → "Build Windows Executable" → **Run workflow**.
-
-### Build it yourself
-
-You can also package the app locally using [PyInstaller](https://pyinstaller.org/).
+You can package the app locally using [PyInstaller](https://pyinstaller.org/).
 
 ### Quick build
 
@@ -150,7 +137,7 @@ scripts\build_exe.bat --onefile          # Windows
 
 ### Manual PyInstaller invocation
 
-The repo ships with a fully-configured spec file:
+The app ships with a fully-configured spec file:
 
 ```bash
 pyinstaller alpha_fixer.spec
@@ -166,7 +153,7 @@ python -m pytest tests/ -v
 
 ```
 src/
-  version.py           - App version constant (1.0.0)
+  version.py           - App version constant (2.0.0)
   core/
     alpha_processor.py   - Alpha channel processing logic
     file_converter.py    - Image format conversion
@@ -179,13 +166,15 @@ src/
     converter_tool.py    - File Converter tab (image preview, shortcuts, history recording)
     history_tab.py       - Conversion History tab (timestamped, colour-coded)
     preview_pane.py      - ImagePreviewPane thumbnail + BeforeAfterWidget comparison slider
+    selective_alpha_tool.py - Selective Alpha Tool (zone painting, transform, mask slots)
     settings_dialog.py   - Settings dialog (themes, effects, tooltip mode, unlock display)
     theme_engine.py      - Qt stylesheet generator + 50 theme palettes (18 preset + 32 hidden) + THEME_EFFECTS map
     click_effects.py     - Per-theme click particle overlay (blood, bats, stars, skulls, otters)
     tooltip_manager.py   - Cycling tooltip engine: Normal / Off / Dumbed Down / No Filter
     drop_list.py         - DropFileList: drag-and-drop, Delete key, right-click remove
-    mouse_trail.py       - Mouse trail particle overlay
+    mouse_trail.py       - Mouse trail particle overlay (11 styles)
     sound_engine.py      - Click sound engine (QSoundEffect + fallback)
+    splash_screen.py     - Animated themed startup splash screen
 tests/
   test_core.py           - Unit tests for alpha processing & presets
   test_converter.py      - Unit tests for file conversion

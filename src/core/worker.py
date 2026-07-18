@@ -8,6 +8,7 @@ per-file success log messages and emit progress updates at most every
 _PROGRESS_MIN_INTERVAL seconds to prevent flooding the UI event queue.
 """
 import os
+import shutil
 import time
 import traceback
 import logging
@@ -18,7 +19,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 # Above this number of files, suppress individual success log lines and
 # throttle progress signals to keep the UI responsive.
-_LARGE_BATCH_THRESHOLD = 1_000
+_LARGE_BATCH_THRESHOLD = 100
 # Minimum seconds between consecutive progress signal emissions in large-batch mode.
 _PROGRESS_MIN_INTERVAL = 0.1   # 100 ms
 
@@ -45,6 +46,8 @@ class AlphaWorker(QThread):
     progress = pyqtSignal(int, int, str)          # current, total, current_file
     file_done = pyqtSignal(str, bool, str)         # path, success, message
     finished = pyqtSignal(int, int)                # success_count, error_count
+    # Emitted when backup is enabled: list of (original_path, backup_path) pairs
+    backup_manifest = pyqtSignal(list)
     error = pyqtSignal(str)
 
     def __init__(
@@ -56,6 +59,7 @@ class AlphaWorker(QThread):
         input_root: Optional[str] = None,
         overwrite: bool = False,
         suffix: str = "",
+        backup_dir: Optional[str] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -66,6 +70,7 @@ class AlphaWorker(QThread):
         self._input_root = input_root
         self._overwrite = overwrite
         self._suffix = suffix
+        self._backup_dir = backup_dir
         self._abort = False
 
     def stop(self):
@@ -77,6 +82,8 @@ class AlphaWorker(QThread):
         errors = 0
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
+        # Track (original_path, backup_path) pairs for undo support
+        backup_pairs: list[tuple[str, str]] = []
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
@@ -89,6 +96,19 @@ class AlphaWorker(QThread):
                 except RuntimeError:
                     return  # receiver destroyed; abort processing
                 last_progress_time = now
+            # Create backup before overwriting if backup_dir is set and this
+            # file will be overwritten in-place (overwrite mode, no output_dir,
+            # no suffix that would create a new name).
+            if (self._backup_dir and self._overwrite
+                    and not self._output_dir and not self._suffix):
+                try:
+                    bk_name = str(idx) + "_" + Path(src).name
+                    bk_path = os.path.join(self._backup_dir, bk_name)
+                    os.makedirs(self._backup_dir, exist_ok=True)
+                    shutil.copy2(src, bk_path)
+                    backup_pairs.append((src, bk_path))
+                except Exception:
+                    pass  # backup failure should not abort processing
             try:
                 img = load_image(src)
                 try:
@@ -162,6 +182,12 @@ class AlphaWorker(QThread):
             self.finished.emit(success, errors)
         except RuntimeError:
             pass  # receiver destroyed during shutdown; nothing to do
+        # Emit backup manifest so the UI can offer an undo button.
+        if backup_pairs:
+            try:
+                self.backup_manifest.emit(backup_pairs)
+            except RuntimeError:
+                pass
 
     def _resolve_output(self, src: str) -> str:
         p = Path(src)
@@ -239,16 +265,24 @@ class ConverterWorker(QThread):
         errors = 0
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
-        for idx, src in enumerate(self._files):
-            if self._abort:
-                break
-            now = time.monotonic()
-            if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
-                try:
-                    self.progress.emit(idx, total, src)
-                except RuntimeError:
-                    return  # receiver destroyed; abort processing
-                last_progress_time = now
+
+        # For large batches use a thread pool so multiple files are processed
+        # concurrently (I/O-bound — benefits from parallelism even on the GIL).
+        # Item 26: parallel conversion significantly reduces wall-clock time.
+        import concurrent.futures
+        import threading
+
+        # Number of parallel workers: CPU count, capped at 8 to avoid too many
+        # simultaneous open files (each PIL operation holds file handles briefly).
+        import os as _os
+        n_workers = min(8, max(1, (_os.cpu_count() or 1)))
+
+        # Thread-safe counter helpers.
+        _lock = threading.Lock()
+        _counters = {"success": 0, "errors": 0, "done": 0}
+
+        def _convert_one(src: str) -> tuple[str, bool, str]:
+            """Convert one file and return (src, ok, dest_or_error)."""
             try:
                 dest = build_output_path(
                     src,
@@ -265,28 +299,49 @@ class ConverterWorker(QThread):
                     resize=self._resize,
                     keep_metadata=self._keep_metadata,
                 )
-                success += 1
-                if not large_batch:
-                    try:
-                        self.file_done.emit(src, True, dest)
-                    except RuntimeError:
-                        return  # receiver destroyed; abort
+                return src, True, dest
             except MemoryError as exc:
-                errors += 1
-                msg = f"Out of memory — {exc}"
-                logger.error("Converter worker MemoryError on %s: %s", src, msg)
-                try:
-                    self.file_done.emit(src, False, msg)
-                except RuntimeError:
-                    return
+                return src, False, f"Out of memory — {exc}"
             except Exception:
-                errors += 1
-                msg = traceback.format_exc()
-                logger.error("Converter worker error on %s:\n%s", src, msg)
-                try:
-                    self.file_done.emit(src, False, msg)
-                except RuntimeError:
-                    return
+                return src, False, traceback.format_exc()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as pool:
+            fut_map: "dict[concurrent.futures.Future, str]" = {}
+            for src in self._files:
+                if self._abort:
+                    break
+                fut_map[pool.submit(_convert_one, src)] = src
+
+            completed = 0
+            for fut in concurrent.futures.as_completed(fut_map):
+                if self._abort:
+                    break
+                src_path, ok, dest_or_err = fut.result()
+                completed += 1
+                now = time.monotonic()
+                if (not large_batch
+                        or completed == total
+                        or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
+                    try:
+                        self.progress.emit(completed, total, src_path)
+                    except RuntimeError:
+                        return
+                    last_progress_time = now
+                if ok:
+                    success += 1
+                    if not large_batch:
+                        try:
+                            self.file_done.emit(src_path, True, dest_or_err)
+                        except RuntimeError:
+                            return
+                else:
+                    errors += 1
+                    logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
+                    try:
+                        self.file_done.emit(src_path, False, dest_or_err)
+                    except RuntimeError:
+                        return
+
         try:
             self.finished.emit(success, errors)
         except RuntimeError:

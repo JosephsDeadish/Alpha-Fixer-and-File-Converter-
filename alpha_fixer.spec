@@ -34,6 +34,8 @@ hidden = [
     "PyQt6.QtGui",
     "PyQt6.QtWidgets",
     "PyQt6.QtMultimedia",
+    "PyQt6.QtSvg",
+    "PyQt6.QtSvgWidgets",
     "src.core.alpha_processor",
     "src.core.file_converter",
     "src.core.presets",
@@ -44,6 +46,7 @@ hidden = [
     "src.ui.converter_tool",
     "src.ui.history_tab",
     "src.ui.preview_pane",
+    "src.ui.selective_alpha_tool",
     "src.ui.settings_dialog",
     "src.ui.theme_engine",
     "src.ui.click_effects",
@@ -51,6 +54,7 @@ hidden = [
     "src.ui.drop_list",
     "src.ui.mouse_trail",
     "src.ui.sound_engine",
+    "src.ui.splash_screen",
     "src.version",
 ]
 

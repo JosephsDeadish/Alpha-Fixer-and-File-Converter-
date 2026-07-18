@@ -4,13 +4,107 @@ History tab – shows recent converter and alpha-fixer runs with timestamps.
 import csv
 import datetime
 import io
+import os
 
-from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget, QFileDialog, QLineEdit,
+    QTabWidget, QFileDialog, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem,
 )
+
+_THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
+
+
+class _AnimatedGifDelegate(QStyledItemDelegate):
+    """Item delegate that shows animated .gif thumbnails in column 0 (item 80).
+
+    For each GIF builder history entry, a ``QMovie`` is created and started.
+    A shared timer repaints the viewport at ~12 fps so all animations run
+    smoothly without per-movie signal wiring.
+    """
+
+    _GIF_PATH_ROLE = Qt.ItemDataRole.UserRole + 1
+
+    def __init__(self, tree: QTreeWidget, parent=None):
+        super().__init__(parent)
+        self._tree = tree
+        self._movies: dict[str, "QMovie"] = {}
+        # Repaint viewport at ~12 fps while any GIF is loaded
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(80)
+        self._tick_timer.timeout.connect(self._tick)
+        self._tick_timer.start()
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+
+    def set_gif_path(self, item: QTreeWidgetItem, path: str) -> None:
+        """Store *path* on *item* and start a QMovie for .gif files."""
+        item.setData(0, self._GIF_PATH_ROLE, path)
+        if path and path.lower().endswith(".gif") and os.path.isfile(path):
+            if path not in self._movies:
+                try:
+                    from PyQt6.QtGui import QMovie
+                    m = QMovie(path, parent=self)
+                    m.setScaledSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
+                    m.setCacheMode(QMovie.CacheMode.CacheAll)
+                    m.start()
+                    self._movies[path] = m
+                except Exception:
+                    pass
+
+    def clear_movies(self) -> None:
+        """Stop and discard all loaded movies (call before rebuilding the tree)."""
+        for m in self._movies.values():
+            try:
+                m.stop()
+            except Exception:
+                pass
+        self._movies.clear()
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _tick(self) -> None:
+        if self._movies:
+            try:
+                self._tree.viewport().update()
+            except Exception:
+                pass
+
+    def paint(self, painter, option: QStyleOptionViewItem, index) -> None:
+        if index.column() != 0:
+            super().paint(painter, option, index)
+            return
+        item = self._tree.itemFromIndex(index)
+        gif_path = item.data(0, self._GIF_PATH_ROLE) if item is not None else None
+        movie = self._movies.get(gif_path) if gif_path else None
+        if movie is None:
+            super().paint(painter, option, index)
+            return
+        # Draw background + text as normal, but skip the static icon
+        # by temporarily clearing it so Qt's default paint skips the icon area.
+        saved_icon = item.icon(0)
+        item.setIcon(0, QIcon())
+        super().paint(painter, option, index)
+        item.setIcon(0, saved_icon)
+        # Overlay the animated frame in the icon rect
+        frame = movie.currentPixmap()
+        if not frame.isNull():
+            icon_size = self._tree.iconSize()
+            r = option.rect
+            y_off = max(0, (r.height() - icon_size.height()) // 2)
+            dst = QRect(r.left() + 2, r.top() + y_off, icon_size.width(), icon_size.height())
+            scaled = frame.scaled(
+                icon_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.drawPixmap(dst.topLeft(), scaled)
 
 
 def _fmt_ts(ts: str) -> str:
@@ -22,12 +116,41 @@ def _fmt_ts(ts: str) -> str:
         return ts
 
 
+def _load_thumb(path: str) -> QIcon:
+    """Return a small QIcon thumbnail for *path*, or an empty QIcon on failure (item 9)."""
+    try:
+        if not path or not os.path.isfile(path):
+            return QIcon()
+        px = QPixmap(path)
+        if px.isNull():
+            # Try Pillow for formats Qt cannot decode directly (e.g. DDS, TGA).
+            try:
+                from PIL import Image as _PILImage
+                from PIL.ImageQt import ImageQt
+                img = _PILImage.open(path).convert("RGBA")
+                img.thumbnail((_THUMB_SIZE * 2, _THUMB_SIZE * 2))
+                px = QPixmap.fromImage(ImageQt(img))
+            except Exception:
+                return QIcon()
+        if px.isNull():
+            return QIcon()
+        scaled = px.scaled(
+            _THUMB_SIZE, _THUMB_SIZE,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        return QIcon(scaled)
+    except Exception:
+        return QIcon()
+
+
 def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWidget:
     """Build a standard history QTreeWidget with the given column headers.
 
     If *col_tips* is provided it must have the same length as *columns*; each
     non-empty string is set as the tooltip for that column header section.
     """
+    from PyQt6.QtCore import QSize
     tree = QTreeWidget()
     tree.setHeaderLabels(columns)
     for i in range(len(columns) - 1):
@@ -40,11 +163,16 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
                 header_item.setToolTip(i, tip)
     tree.setAlternatingRowColors(True)
     tree.setRootIsDecorated(False)
+    tree.setSortingEnabled(True)
+    tree.header().setSectionsClickable(True)
+    tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+    # Allow thumbnail icons to show at full size (item 9)
+    tree.setIconSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
     return tree
 
 
 class HistoryTab(QWidget):
-    """View of the last 50 sessions for the Converter, Alpha & RGBA Adjuster, and Selective Alpha."""
+    """View of the last 100 sessions for the Converter, Alpha & RGBA Adjuster, and Selective Alpha."""
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -62,17 +190,20 @@ class HistoryTab(QWidget):
         self._hdr = hdr
         layout.addWidget(hdr)
 
+        # Hint pointing users to where settings live (item 8)
+        hint = QLabel("⚙  History settings are in  Settings → General → History")
+        hint.setStyleSheet("color: #888; font-size: 10px;")
+        layout.addWidget(hint)
+
         btn_row = QHBoxLayout()
-        self._btn_refresh = QPushButton("🔄  Refresh")
-        self._btn_export = QPushButton("📥  Export CSV…")
+        self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
-        btn_row.addWidget(self._btn_refresh)
         btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)
         layout.addLayout(btn_row)
 
-        # Sub-tabs: Converter | Alpha & RGBA Adjuster
+        # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
 
         # --- Converter sub-tab ---
@@ -82,14 +213,14 @@ class HistoryTab(QWidget):
         self._conv_search = self._make_search_field("converter")
         conv_layout.addWidget(self._conv_search)
         self._conv_tree = _make_tree(
-            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the conversion batch was started.",
                 "Output format chosen for this batch (e.g. PNG, WEBP, DDS).",
                 "Total number of files submitted to the converter.",
                 "Files that converted successfully.",
                 "Files that failed — check the format/path if this is non-zero.",
-                "First 10 input filenames in this batch.",
+                "Input filenames in this batch.",
             ],
         )
         conv_layout.addWidget(self._conv_tree)
@@ -105,14 +236,13 @@ class HistoryTab(QWidget):
         self._alpha_search = self._make_search_field("alpha")
         alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
-            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            ["Time", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the alpha-fix batch was started.",
-                "Preset or manual mode used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors — may be unsupported format or locked file.",
-                "First 10 input filenames in this batch.",
+                "Input filenames in this batch.",
             ],
         )
         alpha_layout.addWidget(self._alpha_tree)
@@ -128,14 +258,14 @@ class HistoryTab(QWidget):
         self._sel_search = self._make_search_field("selective")
         sel_layout.addWidget(self._sel_search)
         self._sel_tree = _make_tree(
-            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names (first 10)"],
+            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the selective-alpha batch was started.",
                 "Zone / mode used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors.",
-                "First 10 input filenames in this batch.",
+                "Input filenames in this batch.",
             ],
         )
         sel_layout.addWidget(self._sel_tree)
@@ -144,11 +274,59 @@ class HistoryTab(QWidget):
         sel_layout.addWidget(self._sel_summary)
         self._sub_tabs.addTab(sel_widget, "🎭  Selective Alpha")
 
+        # --- GIF Builder sub-tab (item 74) ---
+        gif_widget = QWidget()
+        gif_layout = QVBoxLayout(gif_widget)
+        gif_layout.setContentsMargins(0, 6, 0, 0)
+        self._gif_search = self._make_search_field("gif")
+        gif_layout.addWidget(self._gif_search)
+        self._gif_tree = _make_tree(
+            ["Time", "Output", "Frames", "✔ OK", "✘ Err", "File names"],
+            col_tips=[
+                "When the GIF was built.",
+                "Output file path.",
+                "Total number of frames included.",
+                "Frames processed successfully.",
+                "Frames that had errors.",
+                "Input filenames used in this build.",
+            ],
+        )
+        gif_layout.addWidget(self._gif_tree)
+        # Animated GIF thumbnails delegate (item 80)
+        self._gif_anim_delegate = _AnimatedGifDelegate(self._gif_tree, self._gif_tree)
+        self._gif_tree.setItemDelegate(self._gif_anim_delegate)
+        self._gif_summary = QLabel("")
+        self._gif_summary.setObjectName("subheader")
+        gif_layout.addWidget(self._gif_summary)
+        self._sub_tabs.addTab(gif_widget, "🎞  GIF Builder")
+
+        # --- Video Builder sub-tab (item 74) ---
+        vid_widget = QWidget()
+        vid_layout = QVBoxLayout(vid_widget)
+        vid_layout.setContentsMargins(0, 6, 0, 0)
+        self._vid_search = self._make_search_field("video")
+        vid_layout.addWidget(self._vid_search)
+        self._vid_tree = _make_tree(
+            ["Time", "Output", "Clips", "✔ OK", "✘ Err", "File names"],
+            col_tips=[
+                "When the video was built.",
+                "Output file path.",
+                "Total number of clips included.",
+                "Clips processed successfully.",
+                "Clips that had errors.",
+                "Input filenames used in this build.",
+            ],
+        )
+        vid_layout.addWidget(self._vid_tree)
+        self._vid_summary = QLabel("")
+        self._vid_summary.setObjectName("subheader")
+        vid_layout.addWidget(self._vid_summary)
+        self._sub_tabs.addTab(vid_widget, "🎬  Video Builder")
+
         layout.addWidget(self._sub_tabs, 1)
 
         # Connections
-        self._btn_refresh.clicked.connect(self.refresh)
-        self._btn_export.clicked.connect(self._export_csv)
+        self._btn_export.clicked.connect(self._export_history)
         self._btn_clear.clicked.connect(self._clear_history)
 
         self._conv_search.textChanged.connect(
@@ -159,6 +337,12 @@ class HistoryTab(QWidget):
         )
         self._sel_search.textChanged.connect(
             lambda text: self._apply_filter(self._sel_tree, text)
+        )
+        self._gif_search.textChanged.connect(
+            lambda text: self._apply_filter(self._gif_tree, text)
+        )
+        self._vid_search.textChanged.connect(
+            lambda text: self._apply_filter(self._vid_tree, text)
         )
 
     # ------------------------------------------------------------------
@@ -195,7 +379,6 @@ class HistoryTab(QWidget):
 
     def register_tooltips(self, mgr) -> None:
         """Register History tab widgets with the TooltipManager."""
-        mgr.register(self._btn_refresh, "history_refresh_btn")
         mgr.register(self._btn_clear, "history_clear_btn")
         mgr.register(self._btn_export, "history_export_btn")
         mgr.register(self._sub_tabs.widget(0), "history_conv_sub")
@@ -204,12 +387,18 @@ class HistoryTab(QWidget):
         mgr.register(self._conv_tree, "history_conv_tree")
         mgr.register(self._alpha_tree, "history_alpha_tree")
         mgr.register(self._sel_tree, "history_sel_tree")
+        mgr.register(self._gif_tree, "history_gif_tree")
+        mgr.register(self._vid_tree, "history_vid_tree")
         mgr.register(self._conv_summary, "history_conv_summary")
         mgr.register(self._alpha_summary, "history_alpha_summary")
         mgr.register(self._sel_summary, "history_sel_summary")
+        mgr.register(self._gif_summary, "history_gif_summary")
+        mgr.register(self._vid_summary, "history_vid_summary")
         mgr.register(self._conv_search, "history_search")
         mgr.register(self._alpha_search, "history_search")
         mgr.register(self._sel_search, "history_search")
+        mgr.register(self._gif_search, "history_search")
+        mgr.register(self._vid_search, "history_search")
 
     # ------------------------------------------------------------------
     # Theme
@@ -224,11 +413,13 @@ class HistoryTab(QWidget):
         history_label = labels[2]
         prefix = history_label.split("  ", 1)[0] if "  " in history_label else "📋"
         self._hdr.setText(f"{prefix}  Processing History")
-        # Decorate the converter/alpha-fixer sub-tab labels with the theme icon.
+        # Decorate the sub-tab labels with the theme icon.
         icon = get_theme_icon(theme_name)
         self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
         self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha & RGBA Adjuster")
         self._sub_tabs.setTabText(2, f"{icon}🎭  Selective Alpha")
+        self._sub_tabs.setTabText(3, f"{icon}🎞  GIF Builder")
+        self._sub_tabs.setTabText(4, f"{icon}🎬  Video Builder")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -236,14 +427,18 @@ class HistoryTab(QWidget):
 
     @pyqtSlot()
     def refresh(self):
-        """Reload all three history lists from settings and reapply any active filters."""
+        """Reload all history lists from settings and reapply any active filters."""
         self._refresh_converter()
         self._refresh_alpha()
         self._refresh_selective_alpha()
+        self._refresh_gif_builder()
+        self._refresh_video_builder()
         # Re-apply search filters so existing text still works after refresh.
         self._apply_filter(self._conv_tree, self._conv_search.text())
         self._apply_filter(self._alpha_tree, self._alpha_search.text())
         self._apply_filter(self._sel_tree, self._sel_search.text())
+        self._apply_filter(self._gif_tree, self._gif_search.text())
+        self._apply_filter(self._vid_tree, self._vid_search.text())
 
     def _refresh_converter(self):
         history = self._settings.get_converter_history()
@@ -254,8 +449,21 @@ class HistoryTab(QWidget):
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
-            files = ", ".join(entry.get("files", []))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, fmt, n_files, n_ok, n_err, files])
+            # Thumbnail icon from first processed file (item 9)
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Batch: {ts}\nFormat: {fmt}\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Files processed:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -272,14 +480,26 @@ class HistoryTab(QWidget):
         self._alpha_tree.clear()
         for entry in history:
             ts = _fmt_ts(entry.get("timestamp", ""))
-            preset = entry.get("preset", "?")
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
-            files = ", ".join(entry.get("files", []))
-            item = QTreeWidgetItem([ts, preset, n_files, n_ok, n_err, files])
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
+            item = QTreeWidgetItem([ts, n_files, n_ok, n_err, files])
+            # Thumbnail icon from first processed file (item 9)
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Batch: {ts}\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Files processed:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(5):
+                    item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
+                for col in range(5):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._alpha_tree.addTopLevelItem(item)
         total = len(history)
@@ -298,8 +518,26 @@ class HistoryTab(QWidget):
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
-            files = ", ".join(entry.get("files", []))
+            file_list = entry.get("files", [])
+            # Older entries stored source/output but not files list — derive it
+            if not file_list and entry.get("output"):
+                import os as _os
+                file_list = [_os.path.basename(entry["output"])]
+            files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
+            # Thumbnail icon from source image (item 9)
+            thumb_path = entry.get("first_file", entry.get("source", ""))
+            thumb = _load_thumb(thumb_path)
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Batch: {ts}\nMode: {mode}\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Files processed:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -311,6 +549,87 @@ class HistoryTab(QWidget):
                " — run the Selective Alpha tool to see history here.")
         )
 
+    def _refresh_gif_builder(self):
+        """Populate the GIF Builder history tree (item 74)."""
+        history = self._settings.get_gif_builder_history()
+        # Clear old movies before rebuilding to avoid stale references (item 80).
+        self._gif_anim_delegate.clear_movies()
+        self._gif_tree.clear()
+        for entry in history:
+            ts = _fmt_ts(entry.get("timestamp", ""))
+            output_path = entry.get("output", "")
+            output = os.path.basename(output_path) if output_path else "?"
+            n_frames = str(entry.get("frame_count", "?"))
+            n_ok = str(entry.get("success", "?"))
+            n_err = str(entry.get("errors", "?"))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
+            item = QTreeWidgetItem([ts, output, n_frames, n_ok, n_err, files])
+            # Use the output GIF for animated thumbnail (item 80); fall back to
+            # the first input file for non-GIF outputs or missing files.
+            gif_output = output_path if (output_path and output_path.lower().endswith(".gif")
+                                         and os.path.isfile(output_path)) else ""
+            if gif_output:
+                # Let the animated delegate handle thumbnail rendering
+                self._gif_anim_delegate.set_gif_path(item, gif_output)
+            else:
+                thumb = _load_thumb(entry.get("first_file", ""))
+                if not thumb.isNull():
+                    item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Built: {ts}\nOutput: {output}\n"
+                    f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Input files:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
+            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
+                for col in range(6):
+                    item.setForeground(col, Qt.GlobalColor.yellow)
+            self._gif_tree.addTopLevelItem(item)
+        total = len(history)
+        self._gif_summary.setText(
+            f"{total} build{'s' if total != 1 else ''} recorded"
+            + ("  (most recent first)" if total > 0 else
+               " — use the GIF Builder to see history here.")
+        )
+
+    def _refresh_video_builder(self):
+        """Populate the Video Builder history tree (item 74)."""
+        history = self._settings.get_video_builder_history()
+        self._vid_tree.clear()
+        for entry in history:
+            ts = _fmt_ts(entry.get("timestamp", ""))
+            output = os.path.basename(entry.get("output", "?"))
+            n_clips = str(entry.get("clip_count", "?"))
+            n_ok = str(entry.get("success", "?"))
+            n_err = str(entry.get("errors", "?"))
+            file_list = entry.get("files", [])
+            files = ", ".join(file_list)
+            item = QTreeWidgetItem([ts, output, n_clips, n_ok, n_err, files])
+            thumb = _load_thumb(entry.get("first_file", ""))
+            if not thumb.isNull():
+                item.setIcon(0, thumb)
+            if file_list:
+                tooltip = (
+                    f"Built: {ts}\nOutput: {output}\n"
+                    f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    "Input files:\n  " + "\n  ".join(file_list)
+                )
+                for col in range(6):
+                    item.setToolTip(col, tooltip)
+            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
+                for col in range(6):
+                    item.setForeground(col, Qt.GlobalColor.yellow)
+            self._vid_tree.addTopLevelItem(item)
+        total = len(history)
+        self._vid_summary.setText(
+            f"{total} build{'s' if total != 1 else ''} recorded"
+            + ("  (most recent first)" if total > 0 else
+               " — use the Video Builder to see history here.")
+        )
+
     # ------------------------------------------------------------------
     # Clear
     # ------------------------------------------------------------------
@@ -318,57 +637,122 @@ class HistoryTab(QWidget):
     def _clear_history(self):
         reply = QMessageBox.question(
             self, "Clear History",
-            "Delete all conversion and alpha-fixer history?",
+            "Delete all history for all tools?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.clear_converter_history()
             self._settings.clear_alpha_history()
             self._settings.clear_selective_alpha_history()
+            self._settings.clear_gif_builder_history()
+            self._settings.clear_video_builder_history()
+            self.refresh()
             self.refresh()
 
     # ------------------------------------------------------------------
     # Export
     # ------------------------------------------------------------------
 
-    def _export_csv(self) -> None:
-        """Export the currently visible history sub-tab to a CSV file."""
+    def _export_history(self) -> None:
+        """Export the currently visible history sub-tab to a file.
+
+        Supported formats (TXT default): Plain Text, CSV, JSON, HTML.
+        """
+        import json as _json
+
         # Determine which sub-tab is active
-        idx = self._sub_tabs.currentIndex()
-        if idx == 0:
+        tab_idx = self._sub_tabs.currentIndex()
+        if tab_idx == 0:
             tree = self._conv_tree
-            default_name = "converter_history.csv"
-            headers = ["Time", "Format", "Files", "OK", "Errors", "File names (first 10)"]
-        elif idx == 1:
+            tab_name = "converter"
+            headers = ["Time", "Format", "Files", "OK", "Errors", "File names"]
+        elif tab_idx == 1:
             tree = self._alpha_tree
-            default_name = "alpha_fixer_history.csv"
-            headers = ["Time", "Preset / Mode", "Files", "OK", "Errors", "File names (first 10)"]
+            tab_name = "alpha_fixer"
+            headers = ["Time", "Files", "OK", "Errors", "File names"]
         else:
             tree = self._sel_tree
-            default_name = "selective_alpha_history.csv"
-            headers = ["Time", "Mode", "Files", "OK", "Errors", "File names (first 10)"]
+            tab_name = "selective_alpha"
+            headers = ["Time", "Mode", "Files", "OK", "Errors", "File names"]
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export History as CSV", default_name,
-            "CSV Files (*.csv);;All Files (*)",
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export History",
+            f"{tab_name}_history.txt",
+            "Text Files (*.txt);;"
+            "CSV Files (*.csv);;"
+            "JSON Files (*.json);;"
+            "HTML Files (*.html *.htm);;"
+            "All Files (*)",
         )
         if not path:
             return
 
+        # Collect rows from the tree
+        root = tree.invisibleRootItem()
+        rows = [
+            [root.child(r).text(c) for c in range(tree.columnCount())]
+            for r in range(root.childCount())
+        ]
+
+        ext = path.rsplit(".", 1)[-1].lower() if "." in path else "txt"
+
         try:
-            with io.StringIO(newline="") as buf:
-                writer = csv.writer(buf)
-                writer.writerow(headers)
-                root = tree.invisibleRootItem()
-                for row in range(root.childCount()):
-                    item = root.child(row)
-                    writer.writerow([item.text(col) for col in range(tree.columnCount())])
-                content = buf.getvalue()
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                f.write(content)
+            if ext == "csv":
+                self._export_csv(path, headers, rows)
+
+            elif ext == "json":
+                data = [dict(zip(headers, row)) for row in rows]
+                with open(path, "w", encoding="utf-8") as f:
+                    _json.dump(data, f, indent=2, ensure_ascii=False)
+
+            elif ext in ("html", "htm"):
+                th_cells = "".join(f"<th>{h}</th>" for h in headers)
+                tr_rows = "".join(
+                    "<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>"
+                    for row in rows
+                )
+                content = (
+                    "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                    "<style>table{border-collapse:collapse}th,td{border:1px solid #888;"
+                    "padding:4px 8px;text-align:left}th{background:#333;color:#eee}"
+                    "tr:nth-child(even){background:#f5f5f5}</style></head><body>"
+                    f"<h2>{tab_name.replace('_', ' ').title()} History</h2>"
+                    f"<table><thead><tr>{th_cells}</tr></thead><tbody>{tr_rows}</tbody></table>"
+                    "</body></html>"
+                )
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+
+            else:
+                # Plain text (default)
+                col_widths = [max(len(h), *(len(r[i]) for r in rows), 4)
+                              for i, h in enumerate(headers)] if rows else [len(h) for h in headers]
+                def _fmt_row(cells):
+                    return "  ".join(c.ljust(w) for c, w in zip(cells, col_widths))
+                sep = "-" * (sum(col_widths) + 2 * len(col_widths))
+                lines = [_fmt_row(headers), sep] + [_fmt_row(r) for r in rows]
+                content = "\n".join(lines) + "\n"
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+
             QMessageBox.information(
                 self, "Export Complete",
                 f"History exported to:\n{path}",
             )
         except OSError as exc:
-            QMessageBox.warning(self, "Export Failed", f"Could not write CSV:\n{exc}")
+            QMessageBox.warning(self, "Export Failed", f"Could not write file:\n{exc}")
+
+    def _export_csv(self, path: str, headers: list, rows: list) -> None:
+        """Write *rows* with *headers* to *path* as a CSV file.
+
+        Uses ``io.StringIO`` as a context manager to guarantee the in-memory
+        buffer is released even if the csv.writer raises.
+        """
+        with io.StringIO(newline="") as buf:
+            writer = csv.writer(buf)
+            writer.writerow(headers)
+            writer.writerows(rows)
+            content = buf.getvalue()
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            f.write(content)

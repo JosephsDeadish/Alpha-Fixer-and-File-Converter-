@@ -366,19 +366,40 @@ class DropFileList(QListWidget):
 
     def add_paths_batch(self, paths: list[str]) -> int:
         """Add paths in batches, processing events periodically so the UI
-        stays responsive when adding tens of thousands of files."""
+        stays responsive when adding tens of thousands of files (item 25).
+
+        For very large imports (> 10 000 files) the chunk size and processEvents
+        frequency are automatically scaled up to reduce overhead while still
+        keeping the Stop button responsive.
+        """
         existing = {self.item(i).text() for i in range(self.count())}
+        new_paths = [p for p in paths if p not in existing]
+        if not new_paths:
+            return 0
+        # Scale chunk size with import size so we don't call processEvents()
+        # every 500 items when importing 500 000 files (item 25).
+        total = len(new_paths)
+        if total > 100_000:
+            CHUNK = 5_000
+        elif total > 10_000:
+            CHUNK = 2_000
+        else:
+            CHUNK = 500
+        # Suspend visual updates and sorting while bulk-inserting to avoid
+        # repeated layout recalculations which cause UI freezes on large imports.
+        self.setUpdatesEnabled(False)
         added = 0
-        CHUNK = 500
-        for start in range(0, len(paths), CHUNK):
-            chunk = paths[start:start + CHUNK]
-            for p in chunk:
-                if p not in existing:
+        try:
+            for start in range(0, total, CHUNK):
+                chunk = new_paths[start:start + CHUNK]
+                for p in chunk:
                     self.addItem(p)
-                    existing.add(p)
                     added += 1
-            if added and start > 0 and start % 5000 == 0:
+                # Process events every chunk so the UI stays alive and the
+                # Stop button remains responsive on very large imports.
                 QApplication.processEvents()
+        finally:
+            self.setUpdatesEnabled(True)
         if added:
             self.count_changed.emit(self.count())
             if self._thumb_enabled and self.count() <= _THUMB_AUTO_DISABLE:

@@ -197,12 +197,273 @@ os.environ.setdefault("QT_OPENGL", "software")
 _excepthook_active = False
 
 
+# ---------------------------------------------------------------------------
+# Recent action history – circular buffer used by the crash dialog (item 41)
+# ---------------------------------------------------------------------------
+
+import collections as _collections
+
+# Ring buffer of the most recent user-visible actions (button clicks, tool
+# changes, file operations, etc.).  Kept to 30 entries; each entry is a str.
+_ACTION_HISTORY: "_collections.deque[str]" = _collections.deque(maxlen=30)
+
+
+def log_action(description: str) -> None:
+    """Record a user action in the recent-actions ring buffer.
+
+    Called from throughout the application (alpha_tool, converter_tool, etc.)
+    so that the crash dialog can show what the user was doing before the crash.
+    """
+    import datetime as _dt
+    ts = _dt.datetime.now().strftime("%H:%M:%S")
+    _ACTION_HISTORY.append(f"[{ts}] {description}")
+
+
+# ---------------------------------------------------------------------------
+# Crash dialog – human-readable, fully selectable, copyable
+# ---------------------------------------------------------------------------
+
+def _explain_error(exc_type, exc_value) -> str:
+    """Return a plain-English one-liner for common exception types."""
+    name = exc_type.__name__ if exc_type else "Error"
+    msg  = str(exc_value) if exc_value else ""
+    if name == "NameError":
+        return f"A name was used before it was defined: {msg}"
+    if name == "AttributeError":
+        return f"An object did not have the expected attribute: {msg}"
+    if name == "ImportError" or name == "ModuleNotFoundError":
+        return f"A required module could not be imported: {msg}"
+    if name == "TypeError":
+        return f"A function was called with the wrong argument type: {msg}"
+    if name == "ValueError":
+        return f"A function received an invalid value: {msg}"
+    if name == "FileNotFoundError":
+        return f"A required file was not found: {msg}"
+    if name == "PermissionError":
+        return f"Permission denied when accessing a file or resource: {msg}"
+    if name == "MemoryError":
+        return "The application ran out of memory."
+    if name == "RecursionError":
+        return "Maximum recursion depth exceeded (likely an infinite loop in code)."
+    if name == "KeyboardInterrupt":
+        return "The application was interrupted by the user."
+    return f"{name}: {msg}"
+
+
+def _show_crash_dialog(
+    title: str,
+    summary: str,
+    traceback_text: str,
+    sysinfo: str,
+    fatal: bool = False,
+    exc_type=None,
+) -> None:
+    """Show an improved crash dialog with fully selectable, copyable text.
+
+    *summary*       – a short, human-readable description of what went wrong.
+    *traceback_text* – the raw Python traceback string.
+    *sysinfo*       – system / library version info.
+    *fatal*         – when True the application will exit after the dialog.
+    *exc_type*      – the exception class for displaying the error type header.
+    """
+    try:
+        from PyQt6.QtWidgets import (
+            QApplication, QDialog, QVBoxLayout, QHBoxLayout,
+            QLabel, QPlainTextEdit, QPushButton, QFrame,
+        )
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QFont, QClipboard
+
+        app = QApplication.instance()
+        if app is None:
+            return
+
+        dlg = QDialog()
+        dlg.setWindowTitle(title)
+        dlg.setMinimumSize(600, 480)
+        dlg.resize(760, 560)
+        dlg.setWindowFlags(
+            dlg.windowFlags()
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+        )
+
+        # Dark-ish stylesheet that stays readable regardless of system theme.
+        dlg.setStyleSheet("""
+            QDialog {
+                background: #1e1e2e;
+                color: #cdd6f4;
+            }
+            QLabel#title_lbl {
+                color: #f38ba8;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 4px 0;
+            }
+            QLabel#error_type_lbl {
+                color: #fab387;
+                font-size: 12px;
+                font-weight: bold;
+                background: #1e1e2e;
+                padding: 2px 0;
+            }
+            QLabel#summary_lbl {
+                color: #cdd6f4;
+                font-size: 12px;
+                background: #313244;
+                border-radius: 4px;
+                padding: 8px 10px;
+            }
+            QLabel#log_lbl {
+                color: #a6adc8;
+                font-size: 10px;
+            }
+            QPlainTextEdit {
+                background: #11111b;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                font-family: Consolas, "Courier New", monospace;
+                font-size: 10px;
+                selection-background-color: #89b4fa;
+                selection-color: #1e1e2e;
+            }
+            QPushButton {
+                background: #313244;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                padding: 5px 14px;
+                font-size: 11px;
+                min-height: 26px;
+            }
+            QPushButton:hover { background: #45475a; }
+            QPushButton:pressed { background: #585b70; }
+            QPushButton#btn_close {
+                background: #f38ba8;
+                color: #1e1e2e;
+                border: none;
+                font-weight: bold;
+            }
+            QPushButton#btn_close:hover { background: #eba0ac; }
+        """)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 14, 16, 12)
+        layout.setSpacing(10)
+
+        # ── Title ────────────────────────────────────────────────────────
+        title_lbl = QLabel("💥  " + title)
+        title_lbl.setObjectName("title_lbl")
+        layout.addWidget(title_lbl)
+
+        # ── Human-readable summary ───────────────────────────────────────
+        # Show the error type as a distinct highlighted label so it is
+        # immediately obvious even before reading the full traceback.
+        error_type_name = exc_type.__name__ if exc_type else "Error"
+        error_type_lbl = QLabel(f"⚠  Error type:  {error_type_name}")
+        error_type_lbl.setObjectName("error_type_lbl")
+        error_type_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        layout.addWidget(error_type_lbl)
+
+        summary_lbl = QLabel(summary)
+        summary_lbl.setObjectName("summary_lbl")
+        summary_lbl.setWordWrap(True)
+        summary_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        layout.addWidget(summary_lbl)
+
+        # ── Divider ──────────────────────────────────────────────────────
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("color: #45475a;")
+        layout.addWidget(line)
+
+        # ── Full details (traceback + sysinfo) – fully selectable ────────
+        details_label = QLabel("Full details  (select all with Ctrl+A, copy with Ctrl+C):")
+        details_label.setObjectName("log_lbl")
+        layout.addWidget(details_label)
+
+        full_text = traceback_text.rstrip()
+        if sysinfo:
+            full_text += f"\n\n─── System Info ───\n{sysinfo}"
+        # Include the recent action history so the reporter can see what led to the crash
+        if _ACTION_HISTORY:
+            full_text += "\n\n─── Recent Actions (most recent last) ───\n"
+            full_text += "\n".join(_ACTION_HISTORY)
+        if log_file:
+            full_text += f"\n\n─── Log file ───\n{log_file}"
+
+        details_edit = QPlainTextEdit(full_text)
+        details_edit.setReadOnly(True)
+        details_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        layout.addWidget(details_edit, 1)
+
+        # ── Button row ───────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        btn_copy = QPushButton("📋  Copy All")
+        btn_copy.setObjectName("btn_copy")
+        btn_copy.setToolTip("Copy the full crash details to the clipboard")
+
+        def _copy_all():
+            cb = QApplication.clipboard()
+            cb.setText(full_text)
+            btn_copy.setText("✅  Copied!")
+
+        btn_copy.clicked.connect(_copy_all)
+        btn_row.addWidget(btn_copy)
+        btn_row.addStretch()
+
+        label_action = "Exit Application" if fatal else "Close (app will try to continue)"
+        btn_close = QPushButton(("🚪  " if fatal else "✖  ") + label_action)
+        btn_close.setObjectName("btn_close")
+        btn_close.clicked.connect(dlg.accept)
+        btn_row.addWidget(btn_close)
+
+        layout.addLayout(btn_row)
+
+        dlg.exec()
+    except Exception:
+        # If the crash dialog itself fails, fall back silently – the error
+        # was already written to the log file.
+        pass
+
+
+def _collect_sysinfo() -> str:
+    """Return a compact diagnostic string with Python and key-library versions."""
+    lines = [
+        f"Python: {sys.version}",
+        f"Platform: {sys.platform}",
+    ]
+    for mod_name, attr in (
+        ("PyQt6.QtCore", "PYQT_VERSION_STR"),
+        ("PyQt6.QtCore", "QT_VERSION_STR"),
+        ("PIL", "__version__"),
+        ("numpy", "__version__"),
+    ):
+        try:
+            import importlib
+            mod = importlib.import_module(mod_name)
+            lines.append(f"{mod_name}.{attr}: {getattr(mod, attr, '?')}")
+        except Exception as exc:
+            lines.append(f"{mod_name}: MISSING ({exc})")
+    return "\n".join(lines)
+
+
 def _excepthook(exc_type, exc_value, exc_tb):
     """Log uncaught exceptions and show a friendly dialog instead of crashing silently."""
     global _excepthook_active
 
     msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-    logger.critical("Uncaught exception:\n%s", msg)
+    sysinfo = _collect_sysinfo()
+    logger.critical("Uncaught exception:\n%s\nSystem info:\n%s", msg, sysinfo)
 
     # If we're already inside _excepthook (i.e. an error occurred while the
     # previous error dialog was open), only log – do not open another dialog.
@@ -211,18 +472,23 @@ def _excepthook(exc_type, exc_value, exc_tb):
 
     _excepthook_active = True
     try:
-        from PyQt6.QtWidgets import QApplication, QMessageBox
+        from PyQt6.QtWidgets import QApplication
         app = QApplication.instance()
         if app:
-            box = QMessageBox()
-            box.setWindowTitle("Unexpected Error 🐼")
-            box.setText(
-                "An unexpected error occurred. The application will try to continue.\n\n"
-                f"Details logged to:\n{log_file}"
+            explanation = _explain_error(exc_type, exc_value)
+            summary = (
+                "An unexpected error occurred.  "
+                "The application will try to continue running.\n\n"
+                f"Explanation: {explanation}"
             )
-            box.setDetailedText(msg)
-            box.setIcon(QMessageBox.Icon.Critical)
-            box.exec()
+            _show_crash_dialog(
+                title="Unexpected Error 🐼",
+                summary=summary,
+                traceback_text=msg,
+                sysinfo=sysinfo,
+                fatal=False,
+                exc_type=exc_type,
+            )
     except Exception:
         pass
     finally:
@@ -230,6 +496,63 @@ def _excepthook(exc_type, exc_value, exc_tb):
 
 
 sys.excepthook = _excepthook
+
+
+# ---------------------------------------------------------------------------
+# Native-signal crash handler (items 18/32/58/63/64)
+# ---------------------------------------------------------------------------
+# Qt can abort the process via SIGABRT (failed assertions, double-free, etc.)
+# or SIGFPE (FP exceptions) in ways that bypass Python's sys.excepthook,
+# producing a completely silent crash ("no log or crash window").
+# Installing a signal handler lets us at least write the crash to the log
+# file before the process dies so the user has something to attach to a
+# bug report.  We deliberately keep the handler minimal and
+# signal-handler-safe: just write to the log, then re-raise the default
+# handler so the OS can generate a core-dump / WER report as usual.
+
+def _install_native_signal_handlers() -> None:
+    """Install POSIX signal handlers for SIGABRT and SIGFPE.
+
+    Only attempted on platforms where these signals are available
+    (all POSIX systems and Windows via the C runtime).  Any
+    AttributeError or ValueError is silently ignored so that
+    missing signal numbers don't prevent the app from starting.
+    """
+    import signal as _signal
+
+    def _make_handler(sig_name: str):
+        def _handler(signum, frame):
+            try:
+                import traceback as _tb
+                lines = [
+                    f"\n{'=' * 60}",
+                    f"  NATIVE CRASH — signal {sig_name} ({signum}) received",
+                    f"  This is a hard crash (Qt assertion / memory fault).",
+                    f"  Python stack trace at the time of the signal:",
+                    "=" * 60,
+                ]
+                if frame is not None:
+                    lines += _tb.format_stack(frame)
+                logger.critical("\n".join(lines))
+            except Exception:
+                pass  # logging itself must not raise
+            # Re-raise the default signal so the OS can produce a core dump.
+            _signal.signal(signum, _signal.SIG_DFL)
+            _signal.raise_signal(signum)
+        return _handler
+
+    for _sig_attr, _name in (
+        ("SIGABRT", "SIGABRT"),
+        ("SIGFPE",  "SIGFPE"),
+    ):
+        try:
+            _sig = getattr(_signal, _sig_attr)
+            _signal.signal(_sig, _make_handler(_name))
+        except (AttributeError, ValueError, OSError):
+            pass  # Signal not available on this platform
+
+
+_install_native_signal_handlers()
 
 
 # ---------------------------------------------------------------------------
@@ -422,9 +745,36 @@ def main():
 
     logger.info("Starting Alpha Fixer & File Converter")
 
-    from src.core.settings_manager import SettingsManager
-    from src.ui.main_window import MainWindow
-    from src.ui.splash_screen import ThemeSplashScreen
+    # Import application modules.  Any ImportError here typically means a
+    # required library (numpy, Pillow, etc.) is not installed.  Log clearly.
+    try:
+        from src.core.settings_manager import SettingsManager
+        from src.ui.main_window import MainWindow
+        from src.ui.splash_screen import ThemeSplashScreen
+    except ImportError as exc:
+        sysinfo = _collect_sysinfo()
+        logger.critical(
+            "Failed to import application modules (missing library?):\n%s\n"
+            "System info:\n%s",
+            exc, sysinfo,
+        )
+        tb_str = traceback.format_exc()
+        explanation = _explain_error(type(exc), exc)
+        summary = (
+            f"A required library is missing and the application cannot start.\n\n"
+            f"Explanation: {explanation}\n\n"
+            "Install all dependencies with:\n"
+            "    pip install -r requirements.txt"
+        )
+        _show_crash_dialog(
+            title="Startup Error — Missing Library 🐼",
+            summary=summary,
+            traceback_text=tb_str,
+            sysinfo=sysinfo,
+            fatal=True,
+            exc_type=type(exc),
+        )
+        sys.exit(1)
 
     settings = SettingsManager()
 
@@ -443,7 +793,29 @@ def main():
         splash.show()
         app.processEvents()
 
-    window = MainWindow(settings)
+    try:
+        window = MainWindow(settings)
+    except Exception as exc:
+        tb_str = traceback.format_exc()
+        sysinfo = _collect_sysinfo()
+        logger.critical(
+            "Failed to create main window:\n%s\nSystem info:\n%s",
+            tb_str, sysinfo,
+        )
+        explanation = _explain_error(type(exc), exc)
+        summary = (
+            "The main window could not be created and the application cannot start.\n\n"
+            f"Explanation: {explanation}"
+        )
+        _show_crash_dialog(
+            title="Startup Error 🐼",
+            summary=summary,
+            traceback_text=tb_str,
+            sysinfo=sysinfo,
+            fatal=True,
+            exc_type=type(exc),
+        )
+        sys.exit(1)
 
     # Close splash and reveal main window after the splash duration
     from PyQt6.QtCore import QTimer

@@ -3,22 +3,27 @@ File Converter tab widget.
 """
 import datetime
 import os
+import tempfile
 import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
+from .alpha_tool import _FileCollectThread
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
     QProgressBar, QGroupBox, QGridLayout, QScrollArea,
     QLineEdit, QSplitter, QMessageBox, QTextEdit,
+    QAbstractSpinBox, QSlider,
 )
 
-from ..core.alpha_processor import collect_files
-from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS
+from ..core.alpha_processor import collect_files, SUPPORTED_READ
+from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, get_gif_frame_count
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
+from .gif_frame_picker import GifFramePickerDialog
+from .gif_builder import GifBuilderDialog
 from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader
 
 
@@ -43,11 +48,16 @@ class ConverterTab(QWidget):
     list_cleared = pyqtSignal()
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
+    # Emitted when the output directory is changed (browse or typed).
+    # Carries the new path string (empty string = same as source).
+    output_dir_changed = pyqtSignal(str)
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
         self._settings = settings_manager
         self._worker = None
+        # Background file-collection thread (avoids UI freeze on large folders)
+        self._collect_thread: _FileCollectThread | None = None
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
@@ -67,6 +77,23 @@ class ConverterTab(QWidget):
         self._preview_debounce.setSingleShot(True)
         self._preview_debounce.setInterval(150)
         self._preview_debounce.timeout.connect(self._update_converted_preview)
+        # Temp directory used to hold extracted GIF frames between the picker
+        # dialog and the conversion worker.  Created on demand; cleaned up when
+        # a new batch starts (old temp files no longer needed).
+        self._gif_temp_dir: tempfile.TemporaryDirectory | None = None
+        # Flag: True when the 'before' side of the compare widget is showing an
+        # animated GIF via QMovie.  When set, _on_preview_ready skips
+        # set_before() so the animation isn't replaced by a static first-frame.
+        self._before_is_animated: bool = False
+        # Track the effective output directory used for the last run so the
+        # completion message can tell the user where files were saved.
+        self._last_run_out_dir: str | None = None
+        # Spinner timer: animates the run button text while converting
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(150)
+        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_idx = 0
+        self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
         self._setup_shortcuts()
 
@@ -139,6 +166,7 @@ class ConverterTab(QWidget):
         lbl_out = QLabel("Output folder:")
         lbl_out.setMinimumWidth(100)
         lbl_out.setMinimumHeight(24)
+        self._lbl_out = lbl_out
         go_layout.addWidget(lbl_out, 0, 0)
         out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
@@ -156,6 +184,7 @@ class ConverterTab(QWidget):
 
         lbl_suffix = QLabel("Filename suffix:")
         lbl_suffix.setMinimumHeight(24)
+        self._lbl_suffix = lbl_suffix
         go_layout.addWidget(lbl_suffix, 1, 0)
         self._suffix_edit = QLineEdit()
         self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
@@ -252,6 +281,47 @@ class ConverterTab(QWidget):
         preview_row.addWidget(self._output_info_lbl, 0)
         pa_layout.addLayout(preview_row, 1)
 
+        # Redock button: shown when compare is popped out (item 15)
+        self._btn_dock_back = QPushButton("⇙  Redock Preview")
+        self._btn_dock_back.setMinimumHeight(30)
+        self._btn_dock_back.setToolTip(
+            "The preview is currently in a floating window.\n"
+            "Click to close the floating window and redock the preview here."
+        )
+        self._btn_dock_back.setVisible(False)
+        self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
+        pa_layout.addWidget(self._btn_dock_back)
+
+        # GIF speed slider – only visible when the selected source is an
+        # animated GIF; hidden for all other file types.
+        self._gif_speed_widget = QWidget()
+        self._gif_speed_widget.setVisible(False)
+        speed_layout = QHBoxLayout(self._gif_speed_widget)
+        speed_layout.setContentsMargins(4, 2, 4, 2)
+        speed_layout.setSpacing(8)
+
+        speed_lbl = QLabel("GIF Speed:")
+        speed_layout.addWidget(speed_lbl)
+
+        self._gif_speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self._gif_speed_slider.setRange(10, 500)
+        self._gif_speed_slider.setValue(100)
+        self._gif_speed_slider.setTickInterval(50)
+        self._gif_speed_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._gif_speed_slider.setToolTip(
+            "Adjust GIF playback speed in the preview.\n"
+            "100 % = normal speed.  Drag right to speed up, left to slow down."
+        )
+        speed_layout.addWidget(self._gif_speed_slider, 1)
+
+        self._gif_speed_value_lbl = QLabel("100 %")
+        self._gif_speed_value_lbl.setMinimumWidth(48)
+        self._gif_speed_value_lbl.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        speed_layout.addWidget(self._gif_speed_value_lbl)
+        pa_layout.addWidget(self._gif_speed_widget)
+
         # Left column: vertical splitter – controls/file-list on top
         # (scrollable), preview on the bottom (always fully visible).
         # This matches the layout structure used by the Alpha & RGBA Adjuster tab.
@@ -261,6 +331,8 @@ class ConverterTab(QWidget):
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(preview_area)
         left_vsplit.setSizes([420, 280])
+        self._left_vsplit = left_vsplit
+        self._preview_area = preview_area
         splitter.addWidget(left_vsplit)
 
         # ---- Right: options ----
@@ -303,6 +375,7 @@ class ConverterTab(QWidget):
 
         lbl_fmt = QLabel("Convert to:")
         lbl_fmt.setMinimumHeight(24)
+        self._lbl_fmt = lbl_fmt
         gf_layout.addWidget(lbl_fmt, 0, 0)
         self._fmt_combo = QComboBox()
         self._fmt_combo.setMinimumWidth(140)
@@ -322,8 +395,10 @@ class ConverterTab(QWidget):
 
         lbl_quality = QLabel("JPEG/WEBP quality:")
         lbl_quality.setMinimumHeight(24)
+        self._lbl_quality = lbl_quality
         gf_layout.addWidget(lbl_quality, 1, 0)
         self._quality_spin = QSpinBox()
+        self._quality_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._quality_spin.setRange(1, 100)
         self._quality_spin.setMinimumHeight(28)
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
@@ -359,6 +434,7 @@ class ConverterTab(QWidget):
         lbl_w.setMinimumHeight(24)
         gr_layout.addWidget(lbl_w, 1, 0)
         self._width_spin = QSpinBox()
+        self._width_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._width_spin.setRange(1, 32768)
         self._width_spin.setValue(1024)
         self._width_spin.setMinimumHeight(26)
@@ -369,6 +445,7 @@ class ConverterTab(QWidget):
         lbl_h.setMinimumHeight(24)
         gr_layout.addWidget(lbl_h, 2, 0)
         self._height_spin = QSpinBox()
+        self._height_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._height_spin.setRange(1, 32768)
         self._height_spin.setValue(1024)
         self._height_spin.setMinimumHeight(26)
@@ -433,10 +510,14 @@ class ConverterTab(QWidget):
         self._suffix_edit.textChanged.connect(
             lambda t: self._settings.set("output_suffix", t)
         )
+        # GIF speed slider
+        self._gif_speed_slider.valueChanged.connect(self._on_gif_speed_changed)
         # Preview on selection change
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Initialise quality spinbox enabled state for the default format
         self._on_format_changed(self._fmt_combo.currentIndex())
+        # Pop-out/dock-back for compare widget (item 15)
+        self._compare.popout_requested.connect(self._on_compare_popout)
 
     def _setup_shortcuts(self):
         QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
@@ -471,6 +552,16 @@ class ConverterTab(QWidget):
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "conv_status_lbl")
         mgr.register(self._lock_aspect_check, "lock_aspect_check")
+        # Group boxes and section labels (prevent tooltip propagation to wrong parents)
+        mgr.register(self._grp_fmt, "conv_output_format_group")
+        mgr.register(self._grp_out, "conv_output_group")
+        mgr.register(self._grp_resize, "conv_resize_group")
+        mgr.register(self._lbl_files, "conv_files_lbl")
+        mgr.register(self._lbl_out, "conv_out_dir_lbl")
+        mgr.register(self._lbl_suffix, "conv_suffix_lbl")
+        mgr.register(self._lbl_fmt, "conv_format_lbl")
+        mgr.register(self._lbl_quality, "conv_quality_lbl")
+        mgr.register(self._preview_lbl, "conv_preview_lbl")
 
     def update_theme(self, theme_name: str) -> None:
         """Update inner header, section labels and group-box titles to match the active theme."""
@@ -497,7 +588,8 @@ class ConverterTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg *.jp2);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif "
+            "*.ppm *.pcx *.avif *.qoi *.svg *.jp2 *.xnb *.tim);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -508,17 +600,61 @@ class ConverterTab(QWidget):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", last_dir)
         if folder:
             self._settings.set("last_input_dir", folder)
-            files = collect_files([folder], recursive=self._recursive_check.isChecked())
-            self._add_to_list(files)
+            self._add_to_list([folder])
 
     def _add_to_list(self, paths: list[str]):
-        """Add paths using the batch helper to stay responsive for large imports."""
+        """Expand directories, filter to supported formats, then add to list.
+
+        Individual file paths are added synchronously (fast path).
+        Directory paths are expanded in a background ``_FileCollectThread``
+        so the Qt event loop stays responsive even when scanning very large
+        folders (100 000+ files).
+        """
+        individual = [p for p in paths if os.path.isfile(p)]
+        dirs = [p for p in paths if os.path.isdir(p)]
+
+        unsupported_count = sum(
+            1 for p in individual
+            if Path(p).suffix.lower() not in SUPPORTED_READ
+        )
+        valid_files = [p for p in individual if Path(p).suffix.lower() in SUPPORTED_READ]
+
         was_empty = self._file_list.count() == 0
-        self._file_list.add_paths_batch(paths)
-        if was_empty and self._file_list.count() > 0:
-            self._file_list.setCurrentRow(0)
-        if paths:
+        if valid_files:
+            self._file_list.add_paths_batch(valid_files)
+            if was_empty and self._file_list.count() > 0:
+                self._file_list.setCurrentRow(0)
             self.files_added.emit()
+        if unsupported_count:
+            self._log_msg(
+                f"⚠ {unsupported_count} file(s) skipped — format not supported "
+                f"(supported: {', '.join(sorted(SUPPORTED_READ))})"
+            )
+
+        if dirs:
+            # Stop any previous collection thread before starting a new one
+            if self._collect_thread is not None and self._collect_thread.isRunning():
+                self._collect_thread.stop()
+                self._collect_thread.wait(200)
+
+            recursive = self._recursive_check.isChecked()
+            thread = _FileCollectThread(dirs, SUPPORTED_READ, recursive)
+
+            def _on_files_found(batch: list[str]) -> None:
+                pre = self._file_list.count() == 0
+                self._file_list.add_paths_batch(batch)
+                if pre and self._file_list.count() > 0:
+                    self._file_list.setCurrentRow(0)
+                self.files_added.emit()
+
+            def _on_scan_done(total: int) -> None:
+                if total:
+                    self._log_msg(f"📁 Folder scan complete — {total} image(s) found.")
+
+            thread.files_found.connect(_on_files_found)
+            thread.scan_done.connect(_on_scan_done)
+            self._collect_thread = thread
+            thread.start()
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
@@ -531,6 +667,7 @@ class ConverterTab(QWidget):
         item = self._file_list.item(row)
         # Invalidate cached aspect ratio whenever the selection changes
         self._cached_aspect = None
+        self._before_is_animated = False
         if item:
             self._refresh_preview(item.text())
         else:
@@ -544,6 +681,15 @@ class ConverterTab(QWidget):
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
         self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF"))
+        # When GIF is selected, the Process button opens the GIF Builder instead
+        if fmt == "GIF":
+            self._btn_run.setText("🎞  Open GIF Builder  [F5]")
+            self._btn_run.setToolTip(
+                "Open the GIF Builder to compose an animated GIF from the files in the queue."
+            )
+        else:
+            self._btn_run.setText("▶  Convert  [F5]")
+            self._btn_run.setToolTip("")
         self._preview_debounce.start()
 
     @pyqtSlot(int)
@@ -618,19 +764,21 @@ class ConverterTab(QWidget):
     def _refresh_preview(self, path: str) -> None:
         """Show *path* in the compare pane using the current format and quality.
 
-        Loads the source image and an in-memory converted version in a
-        background thread, then sets both sides of the BeforeAfterWidget
-        so the user can see exactly how the format conversion changes the image.
+        For animated GIFs the 'before' side is animated via QMovie.  For all
+        other files the source image is loaded statically.  The 'after' side
+        always shows an in-memory converted version so the user can see the
+        effect of the chosen format and quality before committing.
         """
         if not path or not os.path.isfile(path):
+            self._before_is_animated = False
             self._compare.clear()
             self._source_info_lbl.setText("")
             self._output_info_lbl.setText("")
+            self._gif_speed_widget.setVisible(False)
             return
 
         # Disconnect any stale previous loader to prevent it from overwriting
         # the current preview after the selection or format has changed.
-        # Also ask the thread to abandon work so it doesn't waste CPU.
         if self._preview_loader is not None:
             self._preview_loader.stop()
             try:
@@ -643,7 +791,51 @@ class ConverterTab(QWidget):
         target_fmt = fmt_data[0] if fmt_data else "PNG"
         quality = self._quality_spin.value()
 
-        self._compare.set_loading()
+        # Detect animated GIF so we can play it in the before side
+        is_animated_gif = (
+            Path(path).suffix.lower() == ".gif"
+            and get_gif_frame_count(path) > 1
+        )
+
+        if is_animated_gif:
+            self._before_is_animated = True
+            # Animate the source side using Qt's built-in QMovie so every
+            # frame plays back at the correct delay.
+            self._compare.animate_before(path)
+            # Set the after side to "loading" while we convert the first frame.
+            self._compare.set_loading()
+            # Show GIF speed slider and reset to normal speed.
+            self._gif_speed_slider.blockSignals(True)
+            self._gif_speed_slider.setValue(100)
+            self._gif_speed_slider.blockSignals(False)
+            self._gif_speed_value_lbl.setText("100 %")
+            self._gif_speed_widget.setVisible(True)
+            # Populate source info panel directly (frame count etc.) since the
+            # background loader only gets the first PIL frame.
+            try:
+                from PIL import Image
+                with Image.open(path) as _im:
+                    _w, _h = _im.size
+                    _n = getattr(_im, "n_frames", 1)
+                    _sz = os.path.getsize(path)
+                _sz_str = (
+                    f"{_sz} B" if _sz < 1024
+                    else (f"{_sz / 1024:.1f} KB" if _sz < 1024 ** 2
+                          else f"{_sz / 1024 ** 2:.1f} MB")
+                )
+                self._source_info_lbl.setText(
+                    f"<b>SRC</b><br>size<br><b>{_w} × {_h}</b><br>"
+                    f"mode<br><b>GIF · {_n} frames</b><br>"
+                    f"<b>{_sz_str}</b>"
+                )
+            except Exception:
+                self._source_info_lbl.setText("<b>SRC</b><br>GIF animation")
+        else:
+            self._before_is_animated = False
+            self._compare.set_loading()
+            # Hide GIF speed slider for non-animated sources.
+            self._gif_speed_widget.setVisible(False)
+
         self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality)
         self._preview_loader.ready.connect(self._on_preview_ready)
         self._preview_loader.failed.connect(self._on_preview_failed)
@@ -654,11 +846,23 @@ class ConverterTab(QWidget):
         if folder:
             self._out_dir_edit.setText(folder)
             self._settings.set("converter_output_dir", folder)
+            self.output_dir_changed.emit(folder)
+
+    def set_output_dir(self, path: str) -> None:
+        """Set the output directory from an external source without emitting output_dir_changed."""
+        self._out_dir_edit.blockSignals(True)
+        self._out_dir_edit.setText(path)
+        self._out_dir_edit.blockSignals(False)
+        self._settings.set("converter_output_dir", path)
 
     @pyqtSlot(QImage, QImage, str, str)
     def _on_preview_ready(self, src_qi: QImage, out_qi: QImage, src_meta: str, out_meta: str):
         """Called when the converter preview loader finishes loading both images."""
-        self._compare.set_before(src_qi)
+        # When the source is an animated GIF, the 'before' side is already
+        # playing via QMovie.  Only update the 'after' (converted output) side
+        # so the animation is not replaced by a static first-frame snapshot.
+        if not self._before_is_animated:
+            self._compare.set_before(src_qi)
         self._compare.set_after(out_qi)
 
         def _info_text(label: str, meta: str, skip_first: bool = False) -> str:
@@ -734,12 +938,42 @@ class ConverterTab(QWidget):
             return
         target_format, target_ext = fmt_data
 
+        # ------------------------------------------------------------------
+        # When the target format is GIF, open the GIF Builder so the user can
+        # compose a proper animated GIF from the selected files.  Pre-populate
+        # it with the files already in the queue.
+        # ------------------------------------------------------------------
+        if target_format == "GIF":
+            self._open_gif_builder(expanded)
+            return
+
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
         resize = None
         if self._resize_check.isChecked():
             resize = (self._width_spin.value(), self._height_spin.value())
+
+        # ------------------------------------------------------------------
+        # GIF frame picker: for each animated GIF in the file list, show the
+        # frame-picker dialog so the user can choose which frames to export.
+        # Selected frames are extracted to a temp directory and the GIF path
+        # is replaced in the expanded list with one path per chosen frame.
+        # ------------------------------------------------------------------
+        expanded, gif_fallback_dir = self._expand_gif_frames(expanded)
+        if expanded is None:
+            # User cancelled the frame-picker dialog for at least one GIF.
+            return
+        if not expanded:
+            QMessageBox.information(self, "No Frames Selected",
+                                    "No frames were selected for export.")
+            return
+
+        # When GIF frames were extracted to a temp directory but the user has
+        # not specified an output folder, use the original GIF's parent directory
+        # so converted files appear next to the source GIF rather than being
+        # lost inside a temporary directory.
+        effective_out_dir = out_dir or gif_fallback_dir or None
 
         # Determine a common root directory for relative path preservation
         input_root = None
@@ -753,12 +987,16 @@ class ConverterTab(QWidget):
         # Remember for history
         self._last_run_files = expanded
         self._last_run_format = target_format
+        # Remember where output files will go for the completion message.
+        self._last_run_out_dir = effective_out_dir
 
         self._log.clear()
         self._progress.setValue(0)
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Converting…")
+        self._spinner_idx = 0
+        self._spinner_timer.start()
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
         # Notify main window so it can play the process-start sound
@@ -779,7 +1017,7 @@ class ConverterTab(QWidget):
             files=expanded,
             target_format=target_format,
             target_ext=target_ext,
-            output_dir=out_dir,
+            output_dir=effective_out_dir,
             input_root=input_root,
             quality=quality,
             resize=resize,
@@ -790,6 +1028,119 @@ class ConverterTab(QWidget):
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _expand_gif_frames(self, files: list[str]) -> tuple[list[str] | None, str | None]:
+        """
+        For every animated GIF in *files*, show :class:`GifFramePickerDialog`
+        and replace the GIF path with one temporary PNG path per selected frame.
+
+        Non-GIF files (and single-frame GIFs) are passed through unchanged.
+
+        Returns a tuple ``(expanded, fallback_out_dir)``:
+        - *expanded* is the new file list on success, or ``None`` if the user
+          cancelled the dialog for any GIF.
+        - *fallback_out_dir* is the parent directory of the first animated GIF
+          encountered, or ``None`` when no animated GIFs were processed.  The
+          caller uses this as the output directory when the user has not
+          specified one explicitly, preventing extracted frames from being
+          silently saved into a temporary directory.
+        """
+        from PIL import Image
+
+        # Collect GIFs that actually have multiple frames
+        animated_gifs = [f for f in files if get_gif_frame_count(f) > 1]
+        if not animated_gifs:
+            return files, None  # nothing to expand
+
+        # The fallback output dir is the parent of the first animated GIF so
+        # that converted frames land next to the source file when the user has
+        # not chosen an explicit output directory.
+        fallback_out_dir = str(Path(animated_gifs[0]).parent)
+
+        # Clean up any temp dir from the previous run before creating a new one
+        if self._gif_temp_dir is not None:
+            try:
+                self._gif_temp_dir.cleanup()
+            except Exception:
+                pass
+        self._gif_temp_dir = tempfile.TemporaryDirectory(prefix="alpha_fixer_gif_")
+        tmp_root = Path(self._gif_temp_dir.name)
+
+        result: list[str] = []
+        for src in files:
+            if get_gif_frame_count(src) <= 1:
+                result.append(src)
+                continue
+
+            # Show frame picker for this GIF
+            dlg = GifFramePickerDialog(src, parent=self)
+            if dlg.exec() != dlg.DialogCode.Accepted:
+                # User cancelled – abort the whole run
+                return None, fallback_out_dir
+
+            chosen = dlg.selected_indices()
+            if not chosen:
+                # User left everything unchecked for this GIF; skip it
+                continue
+
+            # Extract chosen frames as temporary PNG files.
+            #
+            # For correct output each frame must be built by compositing onto an
+            # accumulating RGBA canvas from frame 0 (GIF delta encoding stores
+            # only the changed pixels; drawing them straight from seek() produces
+            # frames that look identical or show only a small patch).
+            stem = Path(src).stem
+            try:
+                gif = Image.open(src)
+                try:
+                    canvas_size = gif.size
+                    n_frames = getattr(gif, 'n_frames', 1)
+                    canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+                    chosen_set = set(chosen)
+                    max_idx = max(chosen_set, default=-1)
+
+                    for frame_no in range(min(max_idx + 1, n_frames)):
+                        gif.seek(frame_no)
+                        curr = gif.convert("RGBA")
+                        composite = canvas.copy()
+                        composite.paste(curr, (0, 0), curr)
+                        curr.close()
+
+                        if frame_no in chosen_set:
+                            frame_path = str(
+                                tmp_root / f"{stem}_frame{frame_no + 1:04d}.png"
+                            )
+                            composite.save(frame_path, format="PNG")
+                            result.append(frame_path)
+
+                        disposal = gif.info.get('disposal', 0)
+                        canvas.close()
+                        if disposal == 2:
+                            # Restore-to-background: next frame starts fresh.
+                            canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+                            composite.close()
+                        else:
+                            # disposal 0, 1, 3 – carry the composite forward.
+                            canvas = composite
+
+                    canvas.close()
+                finally:
+                    gif.close()
+            except Exception as exc:
+                QMessageBox.warning(
+                    self, "GIF Frame Extraction Error",
+                    f"Could not extract frames from {Path(src).name}:\n{exc}"
+                )
+                return None, fallback_out_dir
+
+        return result, fallback_out_dir
+
+    def _open_gif_builder(self, initial_files: list[str]) -> None:
+        """Open the GIF Builder dialog pre-populated with *initial_files*."""
+        dlg = GifBuilderDialog(initial_files=initial_files, parent=self)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _stop(self):
         if self._worker:
@@ -807,23 +1158,63 @@ class ConverterTab(QWidget):
         self._progress.setValue(pct)
         elapsed = time.monotonic() - self._batch_start_time
         eta_str = format_eta(current, total, elapsed)
+        file_name = Path(path).name
         self._status_lbl.setText(
-            f"Converting {current + 1}/{total}: {Path(path).name}{eta_str}"
+            f"Converting {current + 1}/{total}: {file_name}{eta_str}"
         )
+        # Update window title so the progress is visible in the taskbar
+        win = self.window()
+        if win is not None:
+            win.setWindowTitle(
+                f"[{pct}%] Converting {current + 1}/{total}: {file_name}"
+            )
+
+    @pyqtSlot(int)
+    def _on_gif_speed_changed(self, value: int) -> None:
+        """Update GIF speed label and apply the new speed to the preview animation."""
+        self._gif_speed_value_lbl.setText(f"{value} %")
+        self._compare.set_animation_speed(value)
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):
-        icon = "✔" if ok else "✘"
         name = Path(src).name
-        self._log_msg(f"{icon} {name}" + ("" if ok else f"  →  {msg.splitlines()[-1] if msg else ''}"))
+        if ok:
+            # msg contains the destination path on success; show both names so
+            # the user always knows where the converted file landed.
+            dest_name = Path(msg).name if msg else "?"
+            self._log_msg(f"✔ {name}  →  {dest_name}")
+        else:
+            self._log_msg(f"✘ {name}  →  {msg.splitlines()[-1] if msg else ''}")
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
+        self._spinner_timer.stop()
+        self._btn_run.setText("▶  Convert  [F5]")
         self._progress.setValue(100)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        # Restore the window title after processing
+        try:
+            from ..version import __version__
+        except Exception:
+            try:
+                from src.version import __version__  # type: ignore[no-redef]
+            except Exception:
+                __version__ = ""
+        win = self.window()
+        if win is not None:
+            ver_str = f"  v{__version__}" if __version__ else ""
+            win.setWindowTitle(
+                f"🐼 Alpha & RGBA Adjuster  |  File Converter{ver_str}"
+            )
+        # Tell the user where converted files were saved so they don't have to
+        # hunt for them (especially when no output folder was explicitly set).
+        if self._last_run_out_dir:
+            self._log_msg(f"Output folder: {self._last_run_out_dir}")
+        else:
+            self._log_msg("Output: saved next to each source file")
 
         # Refresh preview for the currently selected file so the pane stays
         # in sync after conversion (e.g. if the file was converted in-place).
@@ -840,8 +1231,11 @@ class ConverterTab(QWidget):
             "success": success,
             "errors": errors,
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
+            # Store first file path for thumbnail display (item 9)
+            "first_file": str(self._last_run_files[0]) if self._last_run_files else "",
         }
-        self._settings.add_converter_history(entry)
+        if self._settings.get("history_track_converter", True):
+            self._settings.add_converter_history(entry)
         # Notify main window so processing-based theme unlocks can fire
         if success > 0:
             self.processing_done.emit(success)
@@ -849,12 +1243,197 @@ class ConverterTab(QWidget):
             if not self._settings.get("conversion_done_once", False):
                 self._settings.set("conversion_done_once", True)
                 self.first_conversion.emit()
+            # Offer to delete the original source files when the conversion
+            # produced separate output files (suffix set or different output dir).
+            suffix = self._suffix_edit.text().strip()
+            out_dir = self._out_dir_edit.text().strip()
+            if suffix or out_dir:
+                self._offer_delete_originals(self._last_run_files, success)
         if errors > 0:
             self.processing_error.emit(errors)
 
+    _LOG_MAX_LINES = 2_000
+
+    def _offer_delete_originals(self, source_files: list[str], success_count: int) -> None:
+        """Ask the user whether to delete the original source files.
+
+        Only called after a batch that produced separate output files (i.e. a
+        filename suffix or a different output directory was configured).  The
+        dialog makes the irreversible nature of the operation very clear.
+        """
+        n = len(source_files)
+        if n == 0:
+            return
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete Original Files?")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText(
+            f"Conversion finished with {success_count} file(s) converted successfully.\n\n"
+            "Would you like to delete the original source file(s)?\n\n"
+            "⚠  This cannot be undone."
+        )
+        detail_lines = [f.name for f in (Path(p) for p in source_files[:20])]
+        if n > 20:
+            detail_lines.append(f"… and {n - 20} more")
+        msg.setDetailedText("Files that will be deleted:\n" + "\n".join(detail_lines))
+        btn_delete = msg.addButton("🗑  Delete Originals", QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_delete)
+        msg.exec()
+
+        if msg.clickedButton() is btn_delete:
+            deleted = 0
+            failed = 0
+            for path in source_files:
+                try:
+                    os.remove(path)
+                    deleted += 1
+                except OSError:
+                    failed += 1
+            self._log_msg(
+                f"─── Deleted {deleted} original file(s)"
+                + (f", {failed} could not be deleted" if failed else "")
+                + " ───"
+            )
+
     def _log_msg(self, msg: str) -> None:
-        self._log.append(msg)
+        """Append a message to the log with optional colour coding (item 36/37).
+
+        Lines starting with ✔ or ✅ are shown in green.
+        Lines starting with ✘ or ⚠ or 'Error' are shown in red/amber.
+        Separator lines (─) are shown in a muted colour.
+        Plain text is shown in the default text colour.
+        """
+        # Detect message type from first character(s) for colour coding.
+        stripped = msg.strip()
+        if stripped.startswith(("✔", "✅")):
+            color = "#4caf50"   # green
+        elif stripped.startswith(("✘", "⚠", "Error", "❌")):
+            color = "#f44336" if stripped.startswith(("✘", "❌")) else "#ff9800"
+        elif stripped.startswith("───"):
+            color = "#888"     # muted separator
+        elif stripped.startswith("📁") or stripped.startswith("Output"):
+            color = "#64b5f6"  # info blue
+        else:
+            color = ""
+
+        if color:
+            # Escape HTML special characters and wrap in a coloured span.
+            import html as _html
+            escaped = _html.escape(msg)
+            self._log.append(f'<span style="color:{color};">{escaped}</span>')
+        else:
+            self._log.append(msg)
+
+        # Trim the log when it grows too large to prevent unbounded memory
+        # use and UI lag when scrolling through thousands of lines.
+        doc = self._log.document()
+        if doc.blockCount() > self._LOG_MAX_LINES:
+            cursor = self._log.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            cursor.movePosition(
+                cursor.MoveOperation.Down,
+                cursor.MoveMode.KeepAnchor,
+                doc.blockCount() - self._LOG_MAX_LINES,
+            )
+            cursor.removeSelectedText()
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
 
+    def _tick_spinner(self) -> None:
+        """Advance the spinner animation on the run button by one frame."""
+        frame = self._spinner_frames[self._spinner_idx % len(self._spinner_frames)]
+        self._btn_run.setText(f"{frame}  Converting…")
+        self._spinner_idx += 1
+
+    # ------------------------------------------------------------------
+    # Pop-out / dock-back helpers (item 15)
+    # ------------------------------------------------------------------
+
+    def _on_compare_popout(self) -> None:
+        """Called when the ⤢ pop-out/undock button is clicked on the compare widget.
+
+        Hides the embedded compare widget and surrounding info labels to free
+        up space, shows a Redock button, and restores everything when the
+        floating dialog is closed.
+        """
+        dlg = self._compare._popout_dialog
+        if dlg is None:
+            return
+
+        # Hide just the compare widget and its companion labels; keep
+        # preview_area (and the redock button inside it) visible.
+        self._compare.setVisible(False)
+        self._preview_lbl.setVisible(False)
+        self._source_info_lbl.setVisible(False)
+        self._output_info_lbl.setVisible(False)
+        self._gif_speed_widget.setVisible(False)
+        self._btn_dock_back.setVisible(True)
+
+        # Collapse the preview section in the splitter to reclaim space.
+        current = self._left_vsplit.sizes()
+        if current and len(current) == 2:
+            self._left_vsplit_normal_sizes = current[:]
+            total = current[0] + current[1]
+            dock_h = max(self._btn_dock_back.minimumSizeHint().height(), 38)
+            self._left_vsplit.setSizes([total - dock_h, dock_h])
+
+        dlg.finished.connect(self._on_compare_docked_back)
+
+        # Add a transparent overlay "⇙  Redock" button inside the floating
+        # dialog so the user can redock from the dialog itself (item 15).
+        row_w = QWidget(dlg)
+        row_w.setObjectName("dlgDockRow")
+        row = QHBoxLayout(row_w)
+        row.setContentsMargins(4, 2, 4, 2)
+        row.addStretch(1)
+        btn_dock = QPushButton("⇙  Redock", row_w)
+        btn_dock.setObjectName("popoutBtn")
+        btn_dock.setStyleSheet(
+            "QPushButton#popoutBtn {"
+            "  background: rgba(30,30,30,160);"
+            "  color: white;"
+            "  border: 1px solid rgba(255,255,255,60);"
+            "  border-radius: 4px;"
+            "  padding: 3px 8px;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
+            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
+        )
+        btn_dock.setToolTip(
+            "Close this floating window and redock the preview back into the main panel."
+        )
+        btn_dock.clicked.connect(self._on_dock_back_clicked)
+        row.addWidget(btn_dock)
+        # Insert the redock row at the top of the dialog layout.
+        if dlg.layout() is not None:
+            dlg.layout().insertWidget(0, row_w)
+
+        # Hide the pop-out button inside the dialog's compare widget to
+        # prevent infinite pop-outs.
+        for child in dlg.findChildren(type(self._compare)):
+            child.hide_popout_button()
+            break
+
+    def _on_compare_docked_back(self) -> None:
+        """Restore the embedded preview area after the floating dialog closes."""
+        self._compare.setVisible(True)
+        self._preview_lbl.setVisible(True)
+        self._source_info_lbl.setVisible(True)
+        self._output_info_lbl.setVisible(True)
+        # gif_speed_widget only shows for animated GIFs; restore its previous
+        # visibility by letting _on_selection_changed re-evaluate it.
+        self._btn_dock_back.setVisible(False)
+        if hasattr(self, "_left_vsplit_normal_sizes"):
+            self._left_vsplit.setSizes(self._left_vsplit_normal_sizes)
+
+    def _on_dock_back_clicked(self) -> None:
+        """Close the floating pop-out dialog and dock the preview back."""
+        dlg = self._compare._popout_dialog
+        if dlg is not None:
+            dlg.close()
+        else:
+            self._on_compare_docked_back()
 
