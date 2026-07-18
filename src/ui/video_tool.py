@@ -200,6 +200,37 @@ def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
     return img.convert("RGBA")
 
 
+class _ImageFrameGetter:
+    """Picklable frame getter for a single-image clip.
+
+    Using a module-level class instead of a local closure avoids the
+    ``AttributeError: Can't pickle local object '_load_image_as_clip.<locals>._get'``
+    that occurs when Qt serialises QListWidgetItem UserRole data during a
+    drag-to-reorder operation.
+    """
+
+    def __init__(self, img) -> None:
+        self._img = img
+
+    def __call__(self, idx: int):
+        return self._img.copy()
+
+
+class _VideoFrameGetter:
+    """Picklable frame getter for a multi-frame video clip.
+
+    Same motivation as ``_ImageFrameGetter`` – replaces the local closure
+    inside ``_load_video_clip`` so that ``_ClipEntry`` objects remain
+    picklable and survive Qt's internal item-move serialisation.
+    """
+
+    def __init__(self, frames) -> None:
+        self._frames = frames
+
+    def __call__(self, idx: int):
+        return self._frames[max(0, min(len(self._frames) - 1, idx))].copy()
+
+
 class _ClipEntry:
     """One video clip or image in the video tool's timeline."""
 
@@ -246,9 +277,7 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
         reader.close()
         if not frames:
             return None
-        def _get(idx: int):
-            return frames[max(0, min(len(frames) - 1, idx))].copy()
-        return _ClipEntry(path, len(frames), _get, fps)
+        return _ClipEntry(path, len(frames), _VideoFrameGetter(frames), fps)
     except Exception:
         return None
 
@@ -260,9 +289,7 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
         img = Image.open(path).convert("RGBA")
         img_copy = img.copy()
         img.close()
-        def _get(idx: int):
-            return img_copy.copy()
-        return _ClipEntry(path, 1, _get, 25.0)
+        return _ClipEntry(path, 1, _ImageFrameGetter(img_copy), 25.0)
     except Exception:
         return None
 
