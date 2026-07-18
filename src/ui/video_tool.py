@@ -209,10 +209,10 @@ class _ImageFrameGetter:
     drag-to-reorder operation.
     """
 
-    def __init__(self, img) -> None:
+    def __init__(self, img: "PIL.Image.Image") -> None:
         self._img = img
 
-    def __call__(self, idx: int):
+    def __call__(self, idx: int) -> "PIL.Image.Image":
         return self._img.copy()
 
 
@@ -224,10 +224,10 @@ class _VideoFrameGetter:
     picklable and survive Qt's internal item-move serialisation.
     """
 
-    def __init__(self, frames) -> None:
+    def __init__(self, frames: "list[PIL.Image.Image]") -> None:
         self._frames = frames
 
-    def __call__(self, idx: int):
+    def __call__(self, idx: int) -> "PIL.Image.Image":
         return self._frames[max(0, min(len(self._frames) - 1, idx))].copy()
 
 
