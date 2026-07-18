@@ -50,14 +50,17 @@ _VIDEO_EXTS = {
     ".m4v", ".mpg", ".mpeg", ".3gp", ".3g2", ".ts", ".m2ts",
     ".mts", ".vob", ".ogv", ".ogg", ".rm", ".rmvb", ".divx",
     ".asf", ".f4v", ".mxf", ".dv", ".yuv",
-    # PlayStation / handheld console video formats (opened via ffmpeg)
+    # PlayStation / handheld console video formats (decoded via ffmpeg)
     ".pmf",    # PSP Movie Format (MPEG-2 based)
     ".pss",    # PlayStation 2 streaming video
     ".str",    # PlayStation 1/2 streaming video
     ".xa",     # PlayStation 1 audio/video
-    ".iso",    # ISO disc image (PSP UMD / PS2 DVD)
-    ".umd",    # PSP UMD disc image (same structure as ISO)
-    ".bin",    # CD-ROM disc image (may contain video sectors)
+    # Disc images — experimental: ffmpeg can read video streams from these
+    # when the image contains a demuxable video track (e.g. PSP UMD .iso
+    # with MPEG inside).  Raw sector-level disc images may not load.
+    ".iso",    # ISO 9660 disc image (PSP UMD / PS2 DVD)
+    ".umd",    # PSP UMD disc image (same structure as ISO 9660)
+    ".bin",    # CD-ROM disc image (may contain MPEG video sectors)
 }
 _IMAGE_EXTS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",

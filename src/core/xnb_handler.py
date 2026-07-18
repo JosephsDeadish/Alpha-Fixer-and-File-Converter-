@@ -78,7 +78,9 @@ _FMT_VECTOR4        = 15
 _FMT_HALFSINGLE     = 16
 _FMT_HALFVECTOR2    = 17
 _FMT_HALFVECTOR4    = 18
-_FMT_HDRBLENDABLE   = 18   # same value as HalfVector4 in most implementations
+# HdrBlendable shares format ID 19 in the XNA 4.0 spec; MonoGame maps it
+# to the same decoder as HalfVector4 (four float16 channels).
+_FMT_HDRBLENDABLE   = 19
 
 
 def _read_7bit_int(buf: bytes, pos: int) -> tuple[int, int]:

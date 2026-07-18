@@ -96,9 +96,11 @@ _TUTORIAL_STEPS = [
             "• Add source clips and reorder them in the timeline.\n"
             "• Set the output format (MP4, WebM, etc.) and frame rate.\n"
             "• Click <b>Build Video</b> to render the output.\n\n"
-            "Note: FFmpeg must be installed on your system for video features to work."
+            "Note: FFmpeg ships bundled with the app via imageio-ffmpeg — "
+            "no separate FFmpeg installation is required."
         ),
-        "tip": "💡  Tip: Check Settings → Video for FFmpeg path configuration.",
+        "tip": "💡  Tip: Disc-image formats (.iso, .umd, .bin) are experimental — "
+               "they work when the image contains a demuxable video track.",
         "shortcut": None,
     },
     {
