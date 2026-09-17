@@ -32,10 +32,10 @@ Convert between image formats with optional resize and quality control.
 
 ## UI & Customization
 - 🐼 **18 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄, Fairy Garden 🧚, Mermaid 🧜, Shark Bait 🦈, Alien 🛸, Noodle 🍜, Pancake 🥞
-- **🔓 32 hidden unlockable themes** – earn them through use (clicks, alpha fixes, and conversions):
+- **🔓 39 hidden unlockable themes** – earn them through use (clicks, alpha fixes, and conversions):
   - **Secret Skeleton** – unlocks at 100 total clicks
   - **Secret Sakura 🌸** – unlocks at 250 total clicks
-  - Plus 30 more hidden themes that unlock progressively — keep using the app!
+  - Plus 37 more hidden themes that unlock progressively — keep using the app!
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
 - **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth), rising flames (Volcano 🔥), snowflakes (Arctic ❄), pandas (Panda Dark/Light/Secret Sakura 🐼), electric bolts (Neon Panda ⚡)
@@ -171,7 +171,7 @@ src/
     preview_pane.py      - ImagePreviewPane thumbnail + BeforeAfterWidget comparison slider
     selective_alpha_tool.py - Selective Alpha Tool (zone painting, transform, mask slots)
     settings_dialog.py   - Settings dialog (themes, effects, tooltip mode, unlock display)
-    theme_engine.py      - Qt stylesheet generator + 50 theme palettes (18 preset + 32 hidden) + THEME_EFFECTS map
+    theme_engine.py      - Qt stylesheet generator + 57 theme palettes (18 preset + 39 hidden) + THEME_EFFECTS map
     click_effects.py     - Per-theme click particle overlay (blood, bats, stars, skulls, otters)
     tooltip_manager.py   - Cycling tooltip engine: Normal / Off / Dumbed Down / No Filter
     drop_list.py         - DropFileList: drag-and-drop, Delete key, right-click remove

@@ -8771,6 +8771,27 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("TIM is currently supported for loading/inspection only.", src)
         self.assertIn("**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB", src)
 
+    def test_readme_theme_counts_match_theme_engine(self):
+        import importlib.util
+
+        theme_path = os.path.join(self._SRC_DIR, "ui", "theme_engine.py")
+        spec = importlib.util.spec_from_file_location("theme_engine_for_readme_test", theme_path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        src = self._src("../README.md")
+        self.assertIn(f"**🔓 {len(module.HIDDEN_THEMES)} hidden unlockable themes**", src)
+        self.assertIn(
+            f"theme_engine.py      - Qt stylesheet generator + "
+            f"{len(module.PRESET_THEMES) + len(module.HIDDEN_THEMES)} theme palettes "
+            f"({len(module.PRESET_THEMES)} preset + {len(module.HIDDEN_THEMES)} hidden) + THEME_EFFECTS map",
+            src,
+        )
+
+    def test_file_converter_removes_unused_quality_formats_constant(self):
+        src = self._src("core/file_converter.py")
+        self.assertNotIn("_QUALITY_FORMATS =", src)
+
     def test_history_text_export_truncates_long_filename_column(self):
         src = self._src("ui/history_tab.py")
         self.assertIn("if is_last and len(text) > 80:", src)

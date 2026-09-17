@@ -165,10 +165,6 @@ FORMAT_DESCRIPTIONS = {
     ),
 }
 
-# Formats whose save() accepts a quality parameter
-_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif", ".jp2"}
-
-
 def _has_cairosvg() -> bool:
     """Return True when cairosvg is importable."""
     try:
