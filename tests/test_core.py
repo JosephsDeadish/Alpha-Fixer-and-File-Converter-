@@ -8875,8 +8875,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("with self._lock:", src)
         self.assertIn("if filtered is not adjusted:", src)
         self.assertIn("adjusted.close()", src)
-        self.assertIn("get_frame_fn, trim_start, _active_frames = clip_snapshot[ci]", src)
-        self.assertIn("source_pil = get_frame_fn(trim_start + fi)", src)
+        self.assertIn("get_frame_fn, _active_frames = clip_snapshot[ci]", src)
+        self.assertIn("source_pil = get_frame_fn(fi)", src)
 
     def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
         src = self._src("ui/converter_tool.py")
@@ -9016,10 +9016,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_export_uses_snapshot_of_clip_state_during_render(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("clip_snapshot = [", src)
-        self.assertIn("total = sum(active_frames for _, _, active_frames in clip_snapshot)", src)
+        self.assertIn("total = sum(active_frames for _, active_frames in clip_snapshot)", src)
         self.assertIn("def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:", src)
-        self.assertIn("get_frame_fn, trim_start, _active_frames = clip_snapshot[ci]", src)
-        self.assertIn("source_pil = get_frame_fn(trim_start + fi)", src)
+        self.assertIn("get_frame_fn, _active_frames = clip_snapshot[ci]", src)
+        self.assertIn("source_pil = get_frame_fn(fi)", src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
