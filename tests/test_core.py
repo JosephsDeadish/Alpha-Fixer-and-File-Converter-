@@ -8721,16 +8721,22 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_export_caches_adjustment_values_before_frame_loop(self):
         src = self._src("ui/video_tool.py")
+        self.assertIn("canceled = False", src)
         self.assertIn("brightness = self._brightness_slider.value() / 100.0", src)
         self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
         self.assertIn("brightness=brightness", src)
         self.assertIn("contrast=contrast", src)
         self.assertIn("rgba = pil_img.convert(\"RGBA\")", src)
         self.assertIn("rgba.close()", src)
+        self.assertIn("adjusted = source_pil", src)
+        self.assertIn("filtered = source_pil", src)
+        self.assertIn("if filtered is not adjusted:", src)
+        self.assertIn("adjusted.close()", src)
         self.assertIn("source_pil = self._clips[ci].get_frame(fi)", src)
-        self.assertIn("if pil is not source_pil:", src)
+        self.assertIn("if canceled and writer is not None:", src)
+        self.assertIn("writer = None", src)
         self.assertIn("source_pil.close()", src)
-        self.assertIn('rgb = pil if pil.mode == "RGB" else pil.convert("RGB")', src)
+        self.assertIn('rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")', src)
 
     def test_gif_builder_caches_preview_pixmaps(self):
         src = self._src("ui/gif_builder.py")
@@ -8743,6 +8749,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("from pathlib import Path", src)
         self.assertIn("<title>{title} History</title>", src)
         self.assertIn("<caption>{title} History</caption>", src)
+        self.assertIn("tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)", src)
         self.assertIn("final_ext = _filter_default_ext(selected_filter)", src)
         self.assertIn("path = str(Path(path).with_suffix(final_ext))", src)
         self.assertIn("elif not current_ext:", src)
@@ -8778,6 +8785,19 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_preview_pane_handles_already_disconnected_movies(self):
         src = self._src("ui/preview_pane.py")
         self.assertIn("except (RuntimeError, TypeError):", src)
+
+    def test_gif_paths_use_frame_rects_for_partial_updates(self):
+        picker_src = self._src("ui/gif_frame_picker.py")
+        builder_src = self._src("ui/gif_builder.py")
+        converter_src = self._src("ui/converter_tool.py")
+        for src in (picker_src, builder_src, converter_src):
+            self.assertIn("def _gif_frame_rect(", src)
+            self.assertIn('rect = getattr(gif, "dispose_extent", None)', src)
+            self.assertIn("composite.paste(paste_img, (left, top), paste_img)", src)
+
+    def test_theme_engine_hidden_theme_grouping_comment_matches_data(self):
+        src = self._src("ui/theme_engine.py")
+        self.assertIn("# Hidden anime-style themes", src)
 
     def test_readme_theme_counts_match_theme_engine(self):
         import importlib.util

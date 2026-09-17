@@ -52,6 +52,19 @@ _THUMB_H = 100
 _ENTRY_ROLE = Qt.ItemDataRole.UserRole
 
 
+def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
+    """Return the logical update rectangle for the current GIF frame."""
+    rect = getattr(gif, "dispose_extent", None)
+    if isinstance(rect, tuple) and len(rect) == 4:
+        return rect
+    tile = getattr(gif, "tile", None)
+    if tile:
+        candidate = tile[0][1]
+        if isinstance(candidate, tuple) and len(candidate) == 4:
+            return candidate
+    return (0, 0, frame_img.width, frame_img.height)
+
+
 def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
     """Return a list of composited RGBA frames from *path*.
 
@@ -73,8 +86,18 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
                 curr = img.convert("RGBA")
                 previous_canvas = canvas.copy()
                 composite = canvas.copy()
-                composite.paste(curr, (0, 0), curr)
-                curr.close()
+                rect = _gif_frame_rect(img, curr)
+                left, top, right, bottom = rect
+                if curr.size == (right - left, bottom - top):
+                    paste_img = curr
+                else:
+                    paste_img = curr.crop(rect)
+                try:
+                    composite.paste(paste_img, (left, top), paste_img)
+                finally:
+                    if paste_img is not curr:
+                        paste_img.close()
+                    curr.close()
                 frames.append(composite.copy())
                 disposal = getattr(img, "disposal_method", img.info.get("disposal", 0))
                 canvas.close()
@@ -99,9 +122,12 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
 def _pil_to_pixmap(pil_img) -> QPixmap:
     from PIL import Image  # noqa: F401 – needed for convert
     rgba = pil_img.convert("RGBA")
-    data = rgba.tobytes("raw", "RGBA")
-    qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
-    return QPixmap.fromImage(qi)
+    try:
+        data = rgba.tobytes("raw", "RGBA")
+        qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
+        return QPixmap.fromImage(qi)
+    finally:
+        rgba.close()
 
 
 class _FrameEntry:

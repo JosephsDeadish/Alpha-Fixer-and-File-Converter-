@@ -969,6 +969,7 @@ class VideoToolDialog(QDialog):
         saturation = self._saturation_slider.value() / 100.0
         sharpness = self._sharpness_slider.value() / 100.0
         writer = None
+        canceled = False
         wrote_frames = False
         try:
             if fmt == "gif":
@@ -989,13 +990,16 @@ class VideoToolDialog(QDialog):
             for i in range(total):
                 progress.setValue(i)
                 if progress.wasCanceled():
+                    canceled = True
                     break
                 ci, fi = self._global_frame_to_clip(i)
                 source_pil = self._clips[ci].get_frame(fi)
-                pil = source_pil
+                adjusted = source_pil
+                filtered = source_pil
+                rgb = None
                 try:
-                    pil = _apply_adjustments(
-                        pil,
+                    adjusted = _apply_adjustments(
+                        source_pil,
                         brightness=brightness,
                         contrast=contrast,
                         black_point=black_point,
@@ -1003,24 +1007,35 @@ class VideoToolDialog(QDialog):
                         saturation=saturation,
                         sharpness=sharpness,
                     )
-                    pil = _apply_filter(pil, filter_key)
-                    rgb = pil if pil.mode == "RGB" else pil.convert("RGB")
+                    filtered = _apply_filter(adjusted, filter_key)
+                    rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")
                     try:
                         writer.append_data(np.array(rgb))
                     finally:
-                        if rgb is not pil:
+                        if rgb is not None and rgb is not filtered:
                             rgb.close()
                     wrote_frames = True
                 finally:
-                    if pil is not source_pil:
+                    if filtered is not adjusted:
                         try:
-                            source_pil.close()
+                            filtered.close()
+                        except Exception:
+                            pass
+                    if adjusted is not source_pil:
+                        try:
+                            adjusted.close()
                         except Exception:
                             pass
                     try:
-                        pil.close()
+                        source_pil.close()
                     except Exception:
                         pass
+            if canceled and writer is not None:
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+                writer = None
             progress.setValue(total)
         except Exception as exc:
             try:

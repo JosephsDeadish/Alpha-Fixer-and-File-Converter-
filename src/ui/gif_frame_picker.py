@@ -30,9 +30,25 @@ def _pil_to_qpixmap(pil_img) -> QPixmap:
     """Convert a PIL Image to a QPixmap, handling any mode."""
     from PIL import Image
     rgba = pil_img.convert("RGBA")
-    data = rgba.tobytes("raw", "RGBA")
-    qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
-    return QPixmap.fromImage(qi)
+    try:
+        data = rgba.tobytes("raw", "RGBA")
+        qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
+        return QPixmap.fromImage(qi)
+    finally:
+        rgba.close()
+
+
+def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
+    """Return the logical update rectangle for the current GIF frame."""
+    rect = getattr(gif, "dispose_extent", None)
+    if isinstance(rect, tuple) and len(rect) == 4:
+        return rect
+    tile = getattr(gif, "tile", None)
+    if tile:
+        candidate = tile[0][1]
+        if isinstance(candidate, tuple) and len(candidate) == 4:
+            return candidate
+    return (0, 0, frame_img.width, frame_img.height)
 
 
 class GifFramePickerDialog(QDialog):
@@ -153,8 +169,18 @@ class GifFramePickerDialog(QDialog):
                 curr = gif.convert("RGBA")   # force-decode at this position
                 previous_canvas = canvas.copy()
                 composite = canvas.copy()
-                composite.paste(curr, (0, 0), curr)
-                curr.close()
+                rect = _gif_frame_rect(gif, curr)
+                left, top, right, bottom = rect
+                if curr.size == (right - left, bottom - top):
+                    paste_img = curr
+                else:
+                    paste_img = curr.crop(rect)
+                try:
+                    composite.paste(paste_img, (left, top), paste_img)
+                finally:
+                    if paste_img is not curr:
+                        paste_img.close()
+                    curr.close()
                 frames.append(composite.copy())
 
                 disposal = getattr(gif, "disposal_method", gif.info.get('disposal', 0))

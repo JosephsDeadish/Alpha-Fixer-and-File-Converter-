@@ -177,6 +177,13 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
     return tree
 
 
+def _apply_default_sort(tree: QTreeWidget) -> None:
+    """Apply the default newest-first sort and keep the header state in sync."""
+    tree.sortItems(0, Qt.SortOrder.DescendingOrder)
+    tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)
+    tree.setSortingEnabled(True)
+
+
 class HistoryTab(QWidget):
     """History view for Converter, Alpha, Selective Alpha, GIF Builder, and Video Builder runs."""
 
@@ -476,8 +483,7 @@ class HistoryTab(QWidget):
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._conv_tree.addTopLevelItem(item)
-        self._conv_tree.sortItems(0, Qt.SortOrder.DescendingOrder)
-        self._conv_tree.setSortingEnabled(True)
+        _apply_default_sort(self._conv_tree)
         total = len(history)
         self._conv_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
@@ -515,8 +521,7 @@ class HistoryTab(QWidget):
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._alpha_tree.addTopLevelItem(item)
-        self._alpha_tree.sortItems(0, Qt.SortOrder.DescendingOrder)
-        self._alpha_tree.setSortingEnabled(True)
+        _apply_default_sort(self._alpha_tree)
         total = len(history)
         self._alpha_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
@@ -558,8 +563,7 @@ class HistoryTab(QWidget):
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._sel_tree.addTopLevelItem(item)
-        self._sel_tree.sortItems(0, Qt.SortOrder.DescendingOrder)
-        self._sel_tree.setSortingEnabled(True)
+        _apply_default_sort(self._sel_tree)
         total = len(history)
         self._sel_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
@@ -607,8 +611,7 @@ class HistoryTab(QWidget):
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._gif_tree.addTopLevelItem(item)
-        self._gif_tree.sortItems(0, Qt.SortOrder.DescendingOrder)
-        self._gif_tree.setSortingEnabled(True)
+        _apply_default_sort(self._gif_tree)
         total = len(history)
         self._gif_summary.setText(
             f"{total} build{'s' if total != 1 else ''} recorded"
@@ -646,8 +649,7 @@ class HistoryTab(QWidget):
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._vid_tree.addTopLevelItem(item)
-        self._vid_tree.sortItems(0, Qt.SortOrder.DescendingOrder)
-        self._vid_tree.setSortingEnabled(True)
+        _apply_default_sort(self._vid_tree)
         total = len(history)
         self._vid_summary.setText(
             f"{total} build{'s' if total != 1 else ''} recorded"

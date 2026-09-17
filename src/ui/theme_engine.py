@@ -2062,7 +2062,7 @@ THEME_BANNER = {
     # Animal themes
     "Purrfect Cats":     "🐱🧶  Alpha & RGBA Adjuster  |  File Converter  🧶🐱",
     "Good Dog":          "🐶🦴  Alpha & RGBA Adjuster  |  File Converter  🦴🐶",
-    # Newest preset themes
+    # Hidden anime-style themes
     "Anime":             "🌸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌸",
     "Waifu":             "💖🌸  Alpha & RGBA Adjuster  |  File Converter  🌸💖",
     # Latest hidden themes
