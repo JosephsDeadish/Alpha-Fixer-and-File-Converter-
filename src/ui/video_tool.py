@@ -1255,6 +1255,13 @@ class VideoToolDialog(QDialog):
 
         fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"
+        if fmt == "mp4" and not self._video_io_available:
+            QMessageBox.warning(
+                self,
+                "MP4 Export Unavailable",
+                "MP4 export requires both imageio and a working ffmpeg executable.",
+            )
+            return
 
         progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)

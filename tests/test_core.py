@@ -8794,9 +8794,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_build_scripts_install_runtime_requirements_for_packaging(self):
         sh_src = self._src("../scripts/build_exe.sh")
         bat_src = self._src("../scripts/build_exe.bat")
-        self.assertIn('python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg"', sh_src)
+        self.assertIn("Installing runtime dependencies from requirements.txt", sh_src)
         self.assertIn("python -m pip install -r requirements.txt", sh_src)
-        self.assertIn('python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg"', bat_src)
+        self.assertIn("Installing runtime dependencies from requirements.txt", bat_src)
         self.assertIn("python -m pip install -r requirements.txt", bat_src)
 
     def test_pyinstaller_specs_bundle_imageio_and_ffmpeg_metadata(self):
@@ -8810,6 +8810,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")
+        self.assertIn('if fmt == "mp4" and not self._video_io_available:', src)
+        self.assertIn("MP4 Export Unavailable", src)
         self.assertIn("progress.show()", src)
         self.assertIn("QApplication.processEvents()", src)
         self.assertIn("np = None", src)
@@ -9008,8 +9010,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/preview_pane.py")
         self.assertIn("fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))", src)
         self.assertIn("scaled_widths.append(pix.width() * fit_ratio * self._zoom)", src)
-        self.assertIn("max_px = max(0.0, (min(scaled_widths) + w) / 2 - 1.0)", src)
-        self.assertIn("max_py = max(0.0, (min(scaled_heights) + h) / 2 - 1.0)", src)
+        self.assertIn("max_px = max(0.0, (max(scaled_widths) + w) / 2 - 1.0)", src)
+        self.assertIn("max_py = max(0.0, (max(scaled_heights) + h) / 2 - 1.0)", src)
 
     def test_video_export_uses_snapshot_of_clip_state_during_render(self):
         src = self._src("ui/video_tool.py")

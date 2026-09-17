@@ -20,11 +20,9 @@ if ! python -c "import PyInstaller" 2>/dev/null; then
     python -m pip install pyinstaller
 fi
 
-# ── 2. Check / install runtime dependencies ──────────────────────────────────
-if ! python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg" 2>/dev/null; then
-    echo "Runtime dependencies not found – installing from requirements.txt…"
-    python -m pip install -r requirements.txt
-fi
+# ── 2. Sync runtime dependencies ─────────────────────────────────────────────
+echo "Installing runtime dependencies from requirements.txt…"
+python -m pip install -r requirements.txt
 
 # ── 3. Clean previous build artefacts ────────────────────────────────────────
 rm -rf build dist __pycache__

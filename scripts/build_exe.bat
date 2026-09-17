@@ -18,12 +18,9 @@ if errorlevel 1 (
     python -m pip install pyinstaller
 )
 
-REM ── 2. Check / install runtime dependencies ─────────────────────────────────
-python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg" 2>nul
-if errorlevel 1 (
-    echo Runtime dependencies not found – installing from requirements.txt…
-    python -m pip install -r requirements.txt
-)
+REM ── 2. Sync runtime dependencies ────────────────────────────────────────────
+echo Installing runtime dependencies from requirements.txt…
+python -m pip install -r requirements.txt
 
 REM ── 3. Clean previous build artefacts ───────────────────────────────────────
 if exist build   rmdir /s /q build
