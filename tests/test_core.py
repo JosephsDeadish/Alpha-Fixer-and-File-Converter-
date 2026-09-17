@@ -8572,10 +8572,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_history_trees_disable_sorting_during_rebuild_and_sort_descending(self):
         src = self._src("ui/history_tab.py")
         self.assertIn("tree.setSortingEnabled(False)", src)
+        self.assertIn("def _apply_default_sort(tree: QTreeWidget) -> None:", src)
+        self.assertIn("tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)", src)
         for tree_name in ("_conv_tree", "_alpha_tree", "_sel_tree", "_gif_tree", "_vid_tree"):
             self.assertIn(f"self.{tree_name}.setSortingEnabled(False)", src)
-            self.assertIn(f"self.{tree_name}.sortItems(0, Qt.SortOrder.DescendingOrder)", src)
-            self.assertIn(f"self.{tree_name}.setSortingEnabled(True)", src)
+            self.assertIn(f"_apply_default_sort(self.{tree_name})", src)
 
     def test_preview_popout_tooltips_match_actual_behavior(self):
         src = self._src("ui/preview_pane.py")
