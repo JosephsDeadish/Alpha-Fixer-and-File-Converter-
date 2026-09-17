@@ -8587,6 +8587,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn('if fmt == "gif" and not out_path.lower().endswith(".gif"):', src)
         self.assertIn('if fmt != "gif" and not out_path.lower().endswith(".mp4"):', src)
+        self.assertIn("Unsupported Files Skipped", src)
+        self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
 
     def test_sound_engine_honors_theme_sound_override(self):
         src = self._src("ui/sound_engine.py")
@@ -8671,6 +8673,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/history_tab.py")
         self.assertIn("<title>{title} History</title>", src)
         self.assertIn("<caption>{title} History</caption>", src)
+        self.assertIn("final_ext = _filter_default_ext(selected_filter)", src)
+        self.assertIn("path = str(Path(path).with_suffix(final_ext))", src)
 
     def test_video_builder_history_falls_back_when_output_missing(self):
         src = self._src("ui/history_tab.py")
@@ -8681,6 +8685,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/history_tab.py")
         self.assertIn("header_line = _fmt_row(headers)", src)
         self.assertIn("sep = \"-\" * len(header_line)", src)
+
+    def test_xnb_handler_docs_match_supported_header_versions(self):
+        src = self._src("core/xnb_handler.py")
+        self.assertIn("header format versions 4 or 5", src)
+        self.assertNotIn("format versions 5 and 7", src)
 
     def test_history_text_export_truncates_long_filename_column(self):
         src = self._src("ui/history_tab.py")

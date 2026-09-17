@@ -2,7 +2,7 @@
 XNB (XNA Game Studio / MonoGame) file handler.
 
 Supports reading Texture2D assets from XNB files produced by XNA 4.0
-(format version 5) and MonoGame (format versions 5 and 7).
+and compatible MonoGame content that uses header format versions 4 or 5.
 
 Supported surface formats on read:
   • Color             (RGBA8888, format ID 0)

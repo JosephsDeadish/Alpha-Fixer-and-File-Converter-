@@ -693,16 +693,26 @@ class VideoToolDialog(QDialog):
 
     def _on_files_dropped(self, paths: list[str]) -> None:
         vid, img = [], []
+        skipped = []
         for p in paths:
             ext = Path(p).suffix.lower()
             if ext in _VIDEO_EXTS:
                 vid.append(p)
             elif ext in _IMAGE_EXTS:
                 img.append(p)
+            else:
+                skipped.append(Path(p).name)
         if vid:
             self._load_video_paths(vid)
         if img:
             self._load_image_paths(img)
+        if skipped:
+            QMessageBox.information(
+                self,
+                "Unsupported Files Skipped",
+                "These files are not supported by the Video Editor:\n"
+                + "\n".join(skipped),
+            )
 
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -721,7 +731,8 @@ class VideoToolDialog(QDialog):
                 QMessageBox.warning(
                     self, "Load Error",
                     f"Could not open video:\n{Path(path).name}\n"
-                    "Ensure ffmpeg is installed and bundled with the app build."
+                    "Ensure imageio-ffmpeg or a system ffmpeg binary is available,\n"
+                    "and check that the file is a supported, non-corrupt video."
                 )
                 continue
             self._clips.append(clip)

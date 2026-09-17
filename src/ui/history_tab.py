@@ -683,6 +683,17 @@ class HistoryTab(QWidget):
         """
         import json as _json
 
+        def _filter_default_ext(file_filter: str) -> str:
+            if file_filter.startswith("CSV Files"):
+                return ".csv"
+            if file_filter.startswith("JSON Files"):
+                return ".json"
+            if file_filter.startswith("HTML Files"):
+                return ".html"
+            if file_filter.startswith("Text Files"):
+                return ".txt"
+            return ""
+
         # Determine which sub-tab is active
         tab_idx = self._sub_tabs.currentIndex()
         if tab_idx == 0:
@@ -718,6 +729,14 @@ class HistoryTab(QWidget):
         )
         if not path:
             return
+
+        final_ext = _filter_default_ext(selected_filter)
+        current_ext = Path(path).suffix.lower()
+        if final_ext and current_ext != final_ext and not (
+            final_ext == ".html" and current_ext == ".htm"
+        ):
+            path = str(Path(path).with_suffix(final_ext))
+
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
         # Collect rows in the same visible order shown to the user.
@@ -728,7 +747,7 @@ class HistoryTab(QWidget):
                 continue
             rows.append([item.text(c) for c in range(tree.columnCount())])
 
-        ext = path.rsplit(".", 1)[-1].lower() if "." in path else "txt"
+        ext = Path(path).suffix.lower().lstrip(".") or "txt"
 
         try:
             if ext == "csv":
