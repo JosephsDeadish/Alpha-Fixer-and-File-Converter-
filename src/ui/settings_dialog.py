@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
 from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
+from .video_tool import _VIDEO_EXTS
 
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
 _THEME_PREFIX_CHARS = "★🔓🔒 "
@@ -273,8 +274,14 @@ class SettingsDialog(QDialog):
             "overriding any custom file selection below.\n"
             "Uncheck to force a custom file or a plain solid colour."
         )
-        self._use_theme_bg_check.setChecked(True)
+        self._use_theme_bg_check.setChecked(False)
         _cbg_vl.addWidget(self._use_theme_bg_check)
+        self._custom_bg_theme_info_lbl = QLabel(
+            "Theme background override is on. Turn it off to use the selected media file."
+        )
+        self._custom_bg_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._custom_bg_theme_info_lbl.setVisible(False)
+        _cbg_vl.addWidget(self._custom_bg_theme_info_lbl)
         # File picker row (hidden when use-theme is on)
         self._custom_bg_file_row = QWidget()
         _cbg_file_hl = QHBoxLayout(self._custom_bg_file_row)
@@ -301,16 +308,22 @@ class SettingsDialog(QDialog):
             enabled = self._custom_bg_check.isChecked()
             use_theme = self._use_theme_bg_check.isChecked()
             self._custom_bg_sub.setVisible(enabled)
-            self._custom_bg_file_row.setVisible(not use_theme)
+            self._custom_bg_file_row.setVisible(enabled)
+            self._custom_bg_theme_info_lbl.setVisible(enabled and use_theme)
+            self._custom_bg_path_edit.setEnabled(enabled and not use_theme)
+            self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)
 
         self._custom_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._use_theme_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._custom_bg_sub.setVisible(False)  # hidden until enabled
 
         def _browse_bg_file():
+            video_patterns = sorted(f"*{ext}" for ext in _VIDEO_EXTS)
             path, _ = QFileDialog.getOpenFileName(
                 self, "Select Background File", "",
-                "Images & Video (*.png *.jpg *.jpeg *.gif *.mp4 *.webm *.webp *.bmp *.tiff)"
+                "Images & Video (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tif *.tiff "
+                + " ".join(video_patterns)
+                + ")"
                 ";;All Files (*)"
             )
             if path:
@@ -2478,13 +2491,16 @@ class SettingsDialog(QDialog):
         # Load custom background settings (item 81)
         custom_bg_enabled = bool(self._settings.get("custom_bg_enabled", False))
         self._custom_bg_check.setChecked(custom_bg_enabled)
-        use_theme_bg = bool(self._settings.get("use_theme_bg", True))
+        use_theme_bg = bool(self._settings.get("use_theme_bg", False))
         self._use_theme_bg_check.setChecked(use_theme_bg)
         self._custom_bg_path_edit.setText(
             str(self._settings.get("custom_bg_path", ""))
         )
         self._custom_bg_sub.setVisible(custom_bg_enabled)
-        self._custom_bg_file_row.setVisible(not use_theme_bg)
+        self._custom_bg_file_row.setVisible(custom_bg_enabled)
+        self._custom_bg_theme_info_lbl.setVisible(custom_bg_enabled and use_theme_bg)
+        self._custom_bg_path_edit.setEnabled(custom_bg_enabled and not use_theme_bg)
+        self._custom_bg_browse_btn.setEnabled(custom_bg_enabled and not use_theme_bg)
 
     # ------------------------------------------------------------------
     # Tooltip registration
@@ -3571,5 +3587,8 @@ class SettingsDialog(QDialog):
         self._settings.set("custom_bg_path", path)
         # Show/hide sub-settings
         self._custom_bg_sub.setVisible(enabled)
-        self._custom_bg_file_row.setVisible(not use_theme)
+        self._custom_bg_file_row.setVisible(enabled)
+        self._custom_bg_theme_info_lbl.setVisible(enabled and use_theme)
+        self._custom_bg_path_edit.setEnabled(enabled and not use_theme)
+        self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)
         self.settings_changed.emit()

@@ -3,6 +3,7 @@ Main application window.
 """
 import collections
 import math
+import os
 import sys
 import webbrowser
 
@@ -1012,6 +1013,9 @@ class MainWindow(QMainWindow):
         # Custom background overlay (item 81)
         self._bg_overlay: "QLabel | None" = None
         self._bg_movie: "QMovie | None" = None
+        self._bg_video_reader = None
+        self._bg_video_path: str = ""
+        self._bg_video_timer: "QTimer | None" = None
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -2422,15 +2426,15 @@ class MainWindow(QMainWindow):
             self._tabs.setTabText(len(self._tab_base_labels), f"{get_theme_icon(theme_name)}🎨  Selective α")
 
     def _apply_custom_background(self) -> None:
-        """Apply a custom background image or GIF to the main window (item 81).
+        """Apply a custom background image, GIF, or video to the main window.
 
         When ``custom_bg_enabled`` is True and ``use_theme_bg`` is False a
         QLabel is placed behind all content and either a static pixmap or an
-        animated QMovie is used to fill it.  When disabled or using the theme
-        background the overlay is hidden.
+        animated media player is used to fill it.  When disabled or using the
+        theme background the overlay is hidden.
         """
         enabled = bool(self._settings.get("custom_bg_enabled", False))
-        use_theme = bool(self._settings.get("use_theme_bg", True))
+        use_theme = bool(self._settings.get("use_theme_bg", False))
         path = str(self._settings.get("custom_bg_path", "")).strip()
 
         # Ensure the overlay label exists.
@@ -2442,17 +2446,12 @@ class MainWindow(QMainWindow):
             self._bg_overlay.lower()
 
         if not enabled or use_theme or not path:
-            # Stop any running movie and hide the overlay.
-            if self._bg_movie is not None:
-                try:
-                    self._bg_movie.stop()
-                except Exception:
-                    pass
-                self._bg_movie = None
+            self._stop_custom_background_media()
             self._bg_overlay.setVisible(False)
             return
 
         if not os.path.isfile(path):
+            self._stop_custom_background_media()
             self._bg_overlay.setVisible(False)
             return
 
@@ -2461,6 +2460,7 @@ class MainWindow(QMainWindow):
 
         if ext == ".gif":
             # Use a QMovie for animated GIFs.
+            self._stop_custom_background_media(stop_movie=False)
             if self._bg_movie is None or self._bg_movie.fileName() != path:
                 if self._bg_movie is not None:
                     try:
@@ -2472,14 +2472,11 @@ class MainWindow(QMainWindow):
                 self._bg_movie.setScaledSize(self.size())
                 self._bg_overlay.setMovie(self._bg_movie)
                 self._bg_movie.start()
+        elif ext in self._custom_background_video_exts():
+            self._start_video_background(path)
         else:
             # Static image via pixmap.
-            if self._bg_movie is not None:
-                try:
-                    self._bg_movie.stop()
-                except Exception:
-                    pass
-                self._bg_movie = None
+            self._stop_custom_background_media()
             px = QPixmap(path)
             if px.isNull():
                 try:
@@ -2518,6 +2515,95 @@ class MainWindow(QMainWindow):
                 self._click_effects.raise_()
             except Exception:
                 pass
+
+    def _custom_background_video_exts(self) -> set[str]:
+        from .video_tool import _VIDEO_EXTS
+
+        return set(_VIDEO_EXTS)
+
+    def _stop_custom_background_media(self, *, stop_movie: bool = True) -> None:
+        if self._bg_video_timer is not None:
+            self._bg_video_timer.stop()
+        if self._bg_video_reader is not None:
+            try:
+                self._bg_video_reader.close()
+            except Exception:
+                pass
+            self._bg_video_reader = None
+        self._bg_video_path = ""
+        if stop_movie and self._bg_movie is not None:
+            try:
+                self._bg_movie.stop()
+            except Exception:
+                pass
+            self._bg_movie = None
+
+    def _start_video_background(self, path: str) -> None:
+        from .video_tool import _open_video_reader
+
+        if self._bg_overlay is None:
+            return
+        if self._bg_video_timer is None:
+            self._bg_video_timer = QTimer(self)
+            self._bg_video_timer.timeout.connect(self._advance_bg_video_frame)
+        if self._bg_movie is not None:
+            try:
+                self._bg_movie.stop()
+            except Exception:
+                pass
+            self._bg_movie = None
+        if self._bg_video_reader is None or self._bg_video_path != path:
+            self._stop_custom_background_media(stop_movie=False)
+            self._bg_video_reader = _open_video_reader(path)
+            self._bg_video_path = path
+        try:
+            meta = self._bg_video_reader.get_meta_data()
+            fps = float(meta.get("fps") or 25.0)
+        except Exception:
+            fps = 25.0
+        fps = fps if fps > 0 else 25.0
+        self._bg_video_timer.setInterval(max(15, int(round(1000.0 / fps))))
+        self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+        self._advance_bg_video_frame()
+        self._bg_video_timer.start()
+
+    def _advance_bg_video_frame(self) -> None:
+        if self._bg_overlay is None or self._bg_video_reader is None:
+            return
+        frame = None
+        for _ in range(2):
+            try:
+                frame = self._bg_video_reader.get_next_data()
+                break
+            except Exception:
+                if not self._bg_video_path:
+                    break
+                try:
+                    from .video_tool import _open_video_reader
+
+                    self._bg_video_reader.close()
+                    self._bg_video_reader = _open_video_reader(self._bg_video_path)
+                except Exception:
+                    self._stop_custom_background_media()
+                    return
+        if frame is None:
+            return
+        pixmap = self._background_frame_to_pixmap(frame)
+        if pixmap.isNull():
+            return
+        self._bg_overlay.setPixmap(pixmap)
+        self._bg_overlay.setVisible(True)
+        self._bg_overlay.lower()
+
+    def _background_frame_to_pixmap(self, frame) -> QPixmap:
+        try:
+            from PIL import Image as _PILImage
+            from PIL.ImageQt import ImageQt as _IQt
+
+            pil = _PILImage.fromarray(frame).convert("RGBA")
+            return QPixmap.fromImage(_IQt(pil))
+        except Exception:
+            return QPixmap()
 
 
 
@@ -2790,6 +2876,7 @@ class MainWindow(QMainWindow):
         if self._trail_overlay is not None:
             try:
                 from .mouse_trail import MouseTrailOverlay
+                self._enable_mouse_tracking_recursive(dlg)
                 dlg_trail = MouseTrailOverlay(dlg)
                 dlg_trail.setGeometry(dlg.rect())
                 dlg_trail.raise_()
@@ -2905,6 +2992,7 @@ class MainWindow(QMainWindow):
                 if event.type() in (_QEvent.Type.Resize, _QEvent.Type.ChildAdded,
                                     _QEvent.Type.LayoutRequest):
                     try:
+                        self._enable_mouse_tracking_recursive(obj)
                         if dlg_overlay is not None:
                             dlg_overlay.setGeometry(obj.rect())
                             dlg_overlay.raise_()
@@ -2974,6 +3062,16 @@ class MainWindow(QMainWindow):
         overlay.set_fade_speed(int(self._settings.get("trail_fade_speed", 5)))
         overlay.set_intensity(int(self._settings.get("trail_intensity", 100)))
         overlay.set_enabled(trail_enabled)
+
+    def _enable_mouse_tracking_recursive(self, widget: QWidget | None) -> None:
+        if widget is None:
+            return
+        for child in [widget, *widget.findChildren(QWidget)]:
+            try:
+                child.setMouseTracking(True)
+                child.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+            except Exception:
+                pass
 
     def _on_settings_changed(self):
         """Schedule a deferred re-apply of all effect-related settings.
@@ -3736,6 +3834,7 @@ class MainWindow(QMainWindow):
             effects_enabled = self._settings.get("click_effects_enabled", False)
             if not (trail_enabled or effects_enabled):
                 return
+            self._enable_mouse_tracking_recursive(dlg)
 
             # --- trail overlay ---
             if trail_enabled and self._trail_overlay is not None:

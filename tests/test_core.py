@@ -8838,6 +8838,32 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)", main_src)
         self.assertIn("tooltip_mgr=getattr(self.window(), \"_tooltip_mgr\", None)", conv_src)
 
+    def test_custom_background_settings_persist_and_support_video_media(self):
+        settings_src = self._src("core/settings_manager.py")
+        dialog_src = self._src("ui/settings_dialog.py")
+        main_src = self._src("ui/main_window.py")
+        self.assertIn('"custom_bg_enabled": False', settings_src)
+        self.assertIn('"use_theme_bg": False', settings_src)
+        self.assertIn('"custom_bg_path": ""', settings_src)
+        self.assertIn('"custom_bg_enabled", "use_theme_bg", "custom_bg_path"', settings_src)
+        self.assertIn("from .video_tool import _VIDEO_EXTS", dialog_src)
+        self.assertIn("self._use_theme_bg_check.setChecked(False)", dialog_src)
+        self.assertIn("self._custom_bg_file_row.setVisible(enabled)", dialog_src)
+        self.assertIn("self._custom_bg_path_edit.setEnabled(enabled and not use_theme)", dialog_src)
+        self.assertIn("self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)", dialog_src)
+        self.assertIn("video_patterns = sorted(f\"*{ext}\" for ext in _VIDEO_EXTS)", dialog_src)
+        self.assertIn("elif ext in self._custom_background_video_exts():", main_src)
+        self.assertIn("def _start_video_background(self, path: str) -> None:", main_src)
+        self.assertIn("self._bg_video_timer.timeout.connect(self._advance_bg_video_frame)", main_src)
+        self.assertIn("frame = self._bg_video_reader.get_next_data()", main_src)
+
+    def test_dialog_trail_overlays_enable_mouse_tracking_recursively(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("self._enable_mouse_tracking_recursive(dlg)", src)
+        self.assertIn("def _enable_mouse_tracking_recursive(self, widget: QWidget | None) -> None:", src)
+        self.assertIn("child.setMouseTracking(True)", src)
+        self.assertIn("child.setAttribute(Qt.WidgetAttribute.WA_Hover, True)", src)
+
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
         for key in (
