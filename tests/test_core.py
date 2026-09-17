@@ -9105,3 +9105,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/main_window.py")
         self.assertIn('self._settings.get("button_anim_enabled", True)', src)
         self.assertIn('self._settings.get("use_theme_button_anim", True)', src)
+
+    def test_video_probe_uses_duration_only_after_ffmpeg_probe(self):
+        src = self._src("ui/video_tool.py")
+        ffmpeg_pos = src.find("counted, secs = imageio_ffmpeg.count_frames_and_secs(path)")
+        duration_pos = src.find("duration = float(meta.get(\"duration\") or 0.0)")
+        self.assertGreater(ffmpeg_pos, 0)
+        self.assertGreater(duration_pos, ffmpeg_pos)
+
+    def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
+        src = self._src("ui/theme_engine.py")
+        self.assertIn('"Fairy Garden":      "sakura"', src)

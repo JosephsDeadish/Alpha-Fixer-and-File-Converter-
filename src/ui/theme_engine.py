@@ -1830,7 +1830,7 @@ THEME_AMBIENT_MAP: dict[str, str] = {
     "Goth":              "ghost",
     "Volcano":           "ember",
     "Arctic":            "snow",
-    "Fairy Garden":      "confetti",
+    "Fairy Garden":      "sakura",
     # Hidden themes
     "Secret Skeleton":   "ghost",
     "Secret Sakura":     "sakura",
