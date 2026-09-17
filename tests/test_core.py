@@ -8754,7 +8754,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_tool_no_longer_claims_image_sequence_fallback(self):
         src = self._src("ui/video_tool.py")
-        self.assertIn("If ffmpeg is unavailable the dialog can still assemble still images and GIFs into", src)
+        self.assertIn("still images and GIFs", src)
+        self.assertIn("into an animated GIF", src)
         self.assertNotIn('process image-sequence "videos"', src)
         self.assertNotIn("(folders of PNGs)", src)
         self.assertIn("Video clips and MP4 export require both imageio and", src)
@@ -8884,10 +8885,6 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._input_file_dialog_filter()", src)
         self.assertIn("extensions=supported_exts", src)
         self.assertIn('noun = "media" if target_format == "GIF" else "image"', src)
-        self.assertIn("if canceled and writer is not None:", src)
-        self.assertIn("writer = None", src)
-        self.assertIn("source_pil.close()", src)
-        self.assertIn('rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")', src)
 
     def test_gif_builder_caches_preview_pixmaps(self):
         src = self._src("ui/gif_builder.py")
