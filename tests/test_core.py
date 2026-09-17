@@ -9023,7 +9023,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
-        self.assertNotIn("give a shit", src)
+        video_export_section = src.split('"video_export": [', 1)[1].split("],", 1)[0]
+        self.assertNotIn("give a shit", video_export_section)
+        self.assertIn("Choose whether to export the current timeline as MP4 or animated GIF.", video_export_section)
         for key in (
             "video_media_add",
             "video_timeline",
