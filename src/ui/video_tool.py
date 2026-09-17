@@ -255,15 +255,9 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     try:
         import imageio
-        # Prefer the imageio-ffmpeg plugin (bundled binary) over the legacy
-        # ffmpeg plugin so the app works without a system-installed ffmpeg.
-        kwargs: dict = {}
-        try:
-            import imageio_ffmpeg  # noqa: F401
-            kwargs["plugin"] = "ffmpeg"
-        except ImportError:
-            pass
-        reader = imageio.get_reader(path, **kwargs)
+        # Explicitly request the ffmpeg-backed reader. Passing ``plugin=`` here
+        # breaks on imageio v2 because the legacy reader API does not accept it.
+        reader = imageio.get_reader(path, format="FFMPEG")
         meta = reader.get_meta_data()
         fps = float(meta.get("fps", 25))
         frames = []
@@ -384,7 +378,7 @@ class VideoToolDialog(QDialog):
 
         if not self._ffmpeg_available:
             warn = QLabel(
-                "⚠  ffmpeg / imageio-ffmpeg not found — video import and MP4 export unavailable.  "
+                "⚠  ffmpeg / imageio-ffmpeg not found or not bundled — video import and MP4 export unavailable.  "
                 "You can still add images and export an animated GIF."
             )
             warn.setWordWrap(True)
@@ -675,7 +669,7 @@ class VideoToolDialog(QDialog):
                 QMessageBox.warning(
                     self, "Load Error",
                     f"Could not open video:\n{Path(path).name}\n"
-                    "Ensure ffmpeg is installed."
+                    "Ensure ffmpeg is installed and bundled with the app build."
                 )
                 continue
             self._clips.append(clip)

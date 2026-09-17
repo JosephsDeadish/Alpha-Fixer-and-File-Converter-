@@ -13,6 +13,7 @@ Requires:  pip install pyinstaller
 
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 # Pull the authoritative version from src/version.py without importing Qt
 _version_ns: dict = {}
@@ -28,6 +29,7 @@ hidden = [
     "PIL.ImageFilter",
     "numpy",
     "imageio",
+    "imageio_ffmpeg",
     "imageio.plugins",
     "imageio.plugins.pillow",
     "PyQt6.QtCore",
@@ -66,7 +68,7 @@ a = Analysis(
         # Bundle all SVG theme files and the generated icon into the app.
         ("src/assets/svg", "src/assets/svg"),
         ("src/assets/icon.ico", "src/assets"),
-    ],
+    ] + collect_data_files("imageio_ffmpeg") + copy_metadata("imageio_ffmpeg"),
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},

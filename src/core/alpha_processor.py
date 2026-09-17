@@ -47,6 +47,17 @@ def _has_wand() -> bool:
 
 def _load_dds(path: str) -> Image.Image:
     """Load a DDS file, returning an RGBA PIL Image."""
+    try:
+        _tmp = Image.open(path)
+        try:
+            _tmp.load()
+            return _tmp.convert("RGBA")
+        finally:
+            _tmp.close()
+    except MemoryError:
+        raise
+    except Exception as exc:
+        logger.warning("Pillow failed to load DDS %s: %s", path, exc)
     if _has_wand():
         try:
             from wand.image import Image as WandImage
@@ -320,9 +331,21 @@ def _decompress_dds_blocks(
 
 
 def _save_dds(img: Image.Image, path: str):
-    """Save a PIL Image as DDS (BGRA uncompressed) via Wand, or fall back to raw."""
+    """Save a PIL Image as DDS via Pillow/Wand, or fall back to raw."""
+    img_rgba = None
+    try:
+        img_rgba = img.convert("RGBA")
+        img_rgba.save(path, format="DDS")
+        return
+    except MemoryError:
+        raise
+    except Exception as exc:
+        logger.warning("Pillow failed to save DDS %s: %s", path, exc)
+    finally:
+        if img_rgba is not None:
+            img_rgba.close()
+
     if _has_wand():
-        img_rgba = None
         buf = None
         try:
             from wand.image import Image as WandImage

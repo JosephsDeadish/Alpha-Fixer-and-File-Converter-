@@ -1214,12 +1214,6 @@ class MainWindow(QMainWindow):
         corner_layout.setContentsMargins(2, 2, 6, 2)
         corner_layout.setSpacing(4)
 
-        # Unlock status label (shown briefly when a secret theme unlocks)
-        self._unlock_lbl = QLabel("")
-        self._unlock_lbl.setObjectName("subheader")
-        self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 6px;")
-        corner_layout.addWidget(self._unlock_lbl)
-
         # Current theme label
         self._theme_label = QLabel("  Theme: Panda Dark  ")
         self._theme_label.setObjectName("subheader")
@@ -1268,12 +1262,19 @@ class MainWindow(QMainWindow):
 
         self._tabs.setCornerWidget(corner, Qt.Corner.TopRightCorner)
 
+        # Unlock status label now lives in the status bar so notifications no
+        # longer compete with the tab bar for horizontal space.
+        self._unlock_lbl = QLabel("")
+        self._unlock_lbl.setObjectName("subheader")
+        self._unlock_lbl.setStyleSheet("color: #ffcc00; padding: 0 6px;")
+
         self.setCentralWidget(central)
 
         # Status bar
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
         self._status_bar.showMessage("Ready  🐼")
+        self._status_bar.addPermanentWidget(self._unlock_lbl, 0)
 
         # Toolbar panda label no longer used (toolbar removed); keep None so
         # _refresh_toolbar_icon() early-returns without errors.

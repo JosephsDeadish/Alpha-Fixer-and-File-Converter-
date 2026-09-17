@@ -5,6 +5,7 @@ import sys
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 from PIL import Image
@@ -121,6 +122,29 @@ class TestConvertFile(unittest.TestCase):
 
     def test_supported_output_formats_includes_dds(self):
         self.assertIn("DDS", SUPPORTED_OUTPUT_FORMATS)
+
+    def test_dds_to_png_uses_native_loader_when_available(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.dds")
+            dst = os.path.join(tmpdir, "output.png")
+            Image.new("RGBA", (8, 8), (10, 20, 30, 40)).save(src, format="DDS")
+            convert_file(src, dst, "PNG")
+            self.assertTrue(os.path.isfile(dst))
+            img = Image.open(dst).convert("RGBA")
+            self.assertEqual(img.size, (8, 8))
+
+    def test_save_dds_tries_pillow_before_raw_fallback(self):
+        from src.core import alpha_processor as ap
+        img = Image.new("RGBA", (4, 4), (1, 2, 3, 4))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.dds")
+                with mock.patch.object(ap.Image.Image, "save", wraps=Image.Image.save) as save_mock:
+                    ap._save_dds(img, dst)
+                self.assertTrue(save_mock.called)
+                self.assertTrue(os.path.isfile(dst))
+        finally:
+            img.close()
 
     def test_supported_output_formats_includes_png(self):
         self.assertIn("PNG", SUPPORTED_OUTPUT_FORMATS)
