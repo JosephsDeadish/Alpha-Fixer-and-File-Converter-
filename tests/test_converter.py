@@ -18,6 +18,7 @@ from src.core.file_converter import (
     SUPPORTED_OUTPUT_FORMATS,
     _flatten_alpha,
 )
+from src.core.alpha_processor import SUPPORTED_WRITE, save_image
 
 
 def _make_png(path: str, w=8, h=8, alpha=200):
@@ -241,6 +242,35 @@ class TestConvertFile(unittest.TestCase):
                 self.assertEqual(img.size, (4, 4))
             finally:
                 img.close()
+
+    def test_alpha_processor_supported_write_excludes_tim(self):
+        self.assertNotIn(".tim", SUPPORTED_WRITE)
+        self.assertIn(".svg", SUPPORTED_WRITE)
+        self.assertIn(".xnb", SUPPORTED_WRITE)
+
+    def test_alpha_processor_save_svg_uses_svg_writer(self):
+        from src.core import alpha_processor as ap
+
+        img = Image.new("RGBA", (4, 4), (10, 20, 30, 40))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.svg")
+                with mock.patch("src.core.file_converter._save_svg") as save_svg:
+                    save_image(img, dst, ".svg")
+                save_svg.assert_called_once()
+        finally:
+            img.close()
+
+    def test_alpha_processor_save_xnb_uses_xnb_writer(self):
+        img = Image.new("RGBA", (4, 4), (10, 20, 30, 40))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.xnb")
+                with mock.patch("src.core.xnb_handler.save_xnb") as save_xnb:
+                    save_image(img, dst, ".xnb")
+                save_xnb.assert_called_once()
+        finally:
+            img.close()
 
     def test_xnb_rgba64_reorders_channels_to_rgba(self):
         from src.core.xnb_handler import _decode_texture2d, _FMT_RGBA64

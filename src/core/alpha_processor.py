@@ -1,8 +1,10 @@
 """
 Alpha channel processor.
 
-Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick),
-          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, JPEG2000.
+Readable formats: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS, PBM, PGM,
+                  PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM.
+Writable formats: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS, PBM, PGM,
+                  PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB.
 """
 import os
 import io
@@ -31,7 +33,7 @@ SUPPORTED_READ = {
     ".xnb", ".tim",
 }
 
-SUPPORTED_WRITE = SUPPORTED_READ
+SUPPORTED_WRITE = SUPPORTED_READ - {".tim"}
 
 
 def _has_wand() -> bool:
@@ -527,6 +529,14 @@ def save_image(img: Image.Image, path: str, original_ext: str):
     ext = original_ext.lower()
     if ext == ".dds":
         _save_dds(img, path)
+        return
+    if ext == ".xnb":
+        from .xnb_handler import save_xnb  # noqa: PLC0415
+        save_xnb(img, path)
+        return
+    if ext == ".svg":
+        from .file_converter import _save_svg  # noqa: PLC0415
+        _save_svg(img, path)
         return
     if ext in (".jpg", ".jpeg", ".bmp"):
         w, h = img.size

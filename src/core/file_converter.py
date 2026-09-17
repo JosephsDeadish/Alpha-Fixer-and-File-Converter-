@@ -1,8 +1,9 @@
 """
 File converter – converts between image formats.
 
-Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000.
+Supported output formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
+                          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG,
+                          JPEG2000, XNB.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library

@@ -8760,6 +8760,17 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("header format versions 4 or 5", src)
         self.assertNotIn("format versions 5 and 7", src)
 
+    def test_alpha_processor_write_support_matches_documented_handlers(self):
+        src = self._src("core/alpha_processor.py")
+        self.assertIn('SUPPORTED_WRITE = SUPPORTED_READ - {".tim"}', src)
+        self.assertIn('if ext == ".xnb":', src)
+        self.assertIn('if ext == ".svg":', src)
+
+    def test_readme_no_longer_claims_tim_converter_output(self):
+        src = self._src("../README.md")
+        self.assertIn("TIM is currently supported for loading/inspection only.", src)
+        self.assertNotIn("JPEG2000, XNB, TIM", src)
+
     def test_history_text_export_truncates_long_filename_column(self):
         src = self._src("ui/history_tab.py")
         self.assertIn("if is_last and len(text) > 80:", src)
