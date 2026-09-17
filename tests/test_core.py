@@ -8523,16 +8523,11 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
             "_setup_ui must create a 'Saved Masks' group for the slot collection",
         )
 
-    def test_five_save_slots_created(self):
-        """The saved-mask panel must keep the configured slot count stable."""
+    def test_saved_mask_slots_use_shared_limit_constant(self):
+        """The saved-mask panel should gate slot growth through the shared limit constant."""
         src = self._src()
-        match = re.search(r"_MASK_SLOT_COUNT\s*:\s*int\s*=\s*(\d+)", src)
-        self.assertIsNotNone(match, "must define _MASK_SLOT_COUNT as an integer constant")
-        self.assertEqual(
-            int(match.group(1)),
-            150,
-            "saved-mask slot count changed unexpectedly; update UI/tests intentionally if this is desired",
-        )
+        self.assertIn("if len(self._mask_slots) >= self._MASK_SLOT_COUNT:", src)
+        self.assertIn("self._btn_slot_add.setEnabled(len(self._mask_slots) < self._MASK_SLOT_COUNT)", src)
 
     # ------------------------------------------------------------------
     # Autocorrect checkbox placement
@@ -8730,6 +8725,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
         self.assertIn("brightness=brightness", src)
         self.assertIn("contrast=contrast", src)
+        self.assertIn("rgba = pil_img.convert(\"RGBA\")", src)
+        self.assertIn("rgba.close()", src)
         self.assertIn("source_pil = self._clips[ci].get_frame(fi)", src)
         self.assertIn("if pil is not source_pil:", src)
         self.assertIn("source_pil.close()", src)
@@ -8748,6 +8745,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("<caption>{title} History</caption>", src)
         self.assertIn("final_ext = _filter_default_ext(selected_filter)", src)
         self.assertIn("path = str(Path(path).with_suffix(final_ext))", src)
+        self.assertIn("elif not current_ext:", src)
+        self.assertIn('path = str(Path(path).with_suffix(".txt"))', src)
 
     def test_video_builder_history_falls_back_when_output_missing(self):
         src = self._src("ui/history_tab.py")
@@ -8766,14 +8765,19 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_alpha_processor_write_support_matches_documented_handlers(self):
         src = self._src("core/alpha_processor.py")
-        self.assertIn('SUPPORTED_WRITE = SUPPORTED_READ - {".tim"}', src)
+        self.assertIn("SUPPORTED_WRITE = set(SUPPORTED_READ)", src)
         self.assertIn('if ext == ".xnb":', src)
         self.assertIn('if ext == ".svg":', src)
+        self.assertIn('if ext == ".tim":', src)
 
-    def test_readme_no_longer_claims_tim_converter_output(self):
+    def test_readme_documents_tim_converter_output(self):
         src = self._src("../README.md")
-        self.assertIn("TIM is currently supported for loading/inspection only.", src)
-        self.assertIn("**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB", src)
+        self.assertIn("SVG, XNB, and TIM can be saved after processing.", src)
+        self.assertIn("**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM", src)
+
+    def test_preview_pane_handles_already_disconnected_movies(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("except (RuntimeError, TypeError):", src)
 
     def test_readme_theme_counts_match_theme_engine(self):
         import importlib.util

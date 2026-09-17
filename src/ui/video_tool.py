@@ -123,9 +123,12 @@ def _get_ffmpeg_exe() -> Optional[str]:
 def _pil_to_pixmap(pil_img) -> QPixmap:
     from PIL import Image  # noqa: F401
     rgba = pil_img.convert("RGBA")
-    data = rgba.tobytes("raw", "RGBA")
-    qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
-    return QPixmap.fromImage(qi)
+    try:
+        data = rgba.tobytes("raw", "RGBA")
+        qi = QImage(data, rgba.width, rgba.height, QImage.Format.Format_RGBA8888)
+        return QPixmap.fromImage(qi)
+    finally:
+        rgba.close()
 
 
 def _apply_adjustments(pil_img, brightness: float, contrast: float,

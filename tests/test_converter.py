@@ -85,6 +85,23 @@ class TestConvertFile(unittest.TestCase):
             convert_file(src, dst, "BMP")
             self.assertTrue(os.path.isfile(dst))
 
+    def test_png_to_tim(self):
+        from src.core.tim_handler import load_tim
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.tim")
+            _make_png(src, w=4, h=4, alpha=200)
+            convert_file(src, dst, "TIM")
+            self.assertTrue(os.path.isfile(dst))
+            img = load_tim(dst)
+            try:
+                self.assertEqual(img.mode, "RGBA")
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0))[3], 128)
+            finally:
+                img.close()
+
     def test_png_to_tiff(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             src = os.path.join(tmpdir, "input.png")
@@ -243,10 +260,13 @@ class TestConvertFile(unittest.TestCase):
             finally:
                 img.close()
 
-    def test_alpha_processor_supported_write_excludes_tim(self):
-        self.assertNotIn(".tim", SUPPORTED_WRITE)
+    def test_alpha_processor_supported_write_includes_tim(self):
+        self.assertIn(".tim", SUPPORTED_WRITE)
         self.assertIn(".svg", SUPPORTED_WRITE)
         self.assertIn(".xnb", SUPPORTED_WRITE)
+
+    def test_converter_supported_output_includes_tim(self):
+        self.assertEqual(SUPPORTED_OUTPUT_FORMATS["TIM"], ".tim")
 
     def test_alpha_processor_save_svg_uses_svg_writer(self):
         from src.core import alpha_processor as ap
@@ -269,6 +289,43 @@ class TestConvertFile(unittest.TestCase):
                 with mock.patch("src.core.xnb_handler.save_xnb") as save_xnb:
                     save_image(img, dst, ".xnb")
                 save_xnb.assert_called_once()
+        finally:
+            img.close()
+
+    def test_alpha_processor_save_tim_uses_tim_writer(self):
+        img = Image.new("RGBA", (4, 4), (10, 20, 30, 40))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.tim")
+                with mock.patch("src.core.tim_handler.save_tim") as save_tim:
+                    save_image(img, dst, ".tim")
+                save_tim.assert_called_once()
+        finally:
+            img.close()
+
+    def test_tim_roundtrip_preserves_basic_transparency_states(self):
+        from src.core.tim_handler import load_tim, save_tim
+
+        img = Image.new("RGBA", (2, 2))
+        img.putdata([
+            (0, 0, 0, 0),
+            (255, 0, 0, 120),
+            (0, 0, 0, 255),
+            (0, 255, 0, 255),
+        ])
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "roundtrip.tim")
+                save_tim(img, dst)
+                out = load_tim(dst)
+                try:
+                    self.assertEqual(out.getpixel((0, 0))[3], 0)
+                    self.assertEqual(out.getpixel((1, 0))[3], 128)
+                    self.assertEqual(out.getpixel((0, 1)), (0, 0, 0, 255))
+                    self.assertEqual(out.getpixel((1, 1))[1], 248)
+                    self.assertEqual(out.getpixel((1, 1))[3], 255)
+                finally:
+                    out.close()
         finally:
             img.close()
 

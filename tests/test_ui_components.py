@@ -1479,6 +1479,27 @@ class TestFairyTheme(unittest.TestCase):
         from src.ui.theme_engine import PRESET_THEMES
         self.assertIn("Fairy Garden", PRESET_THEMES)
 
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestSelectiveAlphaToolSlots(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        self._widget = SelectiveAlphaTool()
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_saved_mask_slots_grow_to_configured_limit(self):
+        self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_INIT)
+        while self._widget._btn_slot_add.isEnabled():
+            self._widget._on_slot_add()
+        self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_COUNT)
+        self.assertFalse(self._widget._btn_slot_add.isEnabled())
+
     def test_fairy_garden_has_fairy_effect(self):
         from src.ui.theme_engine import FAIRY_THEME
         self.assertEqual(FAIRY_THEME["_effect"], "fairy")

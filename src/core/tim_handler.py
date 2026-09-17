@@ -1,5 +1,5 @@
 """
-PlayStation 1 TIM (Texture Image) file reader.
+PlayStation 1 TIM (Texture Image) file reader/writer.
 
 TIM is the native texture format used by PlayStation 1 games.
 
@@ -38,6 +38,21 @@ _PMODE_24BIT = 3
 
 class TimError(Exception):
     """Raised when a TIM file cannot be parsed."""
+
+
+def _tim_word_to_rgba(word: int) -> tuple[int, int, int, int]:
+    """Convert one 16-bit TIM colour word to RGBA."""
+    r = (word & 0x001F) * 8
+    g = ((word >> 5) & 0x1F) * 8
+    b = ((word >> 10) & 0x1F) * 8
+    stp = (word >> 15) & 1
+    if (word & 0x7FFF) == 0:
+        a = 255 if stp else 0
+    elif stp:
+        a = 128
+    else:
+        a = 255
+    return r, g, b, a
 
 
 def load_tim(path: str) -> Image.Image:
@@ -85,17 +100,7 @@ def load_tim(path: str) -> Image.Image:
 
         for i in range(n_entries):
             word = int.from_bytes(data[pos + i * 2:pos + i * 2 + 2], "little")
-            r = (word & 0x001F) * 8
-            g = ((word >> 5) & 0x1F) * 8
-            b = ((word >> 10) & 0x1F) * 8
-            # STP flag: bit 15; if all RGB=0 and STP=0 → transparent
-            if word == 0:
-                a = 0
-            elif (word >> 15) & 1:
-                a = 128  # semi-transparent
-            else:
-                a = 255
-            clut_colors.append((r, g, b, a))
+            clut_colors.append(_tim_word_to_rgba(word))
 
         pos += n_entries * 2
 
@@ -186,11 +191,13 @@ def _decode_16bit(data: bytes, width: int, height: int) -> Image.Image:
     r = ((arr & 0x001F) * 8).astype(np.uint8)
     g = (((arr >> 5) & 0x1F) * 8).astype(np.uint8)
     b = (((arr >> 10) & 0x1F) * 8).astype(np.uint8)
-    # Transparent where all-zero (black pixels with STP=0)
-    a = np.where(arr == 0, np.uint8(0), np.uint8(255))
-    # Semi-transparent where STP flag set
+    color = arr & 0x7FFF
     stp = ((arr >> 15) & 1).astype(bool)
-    a = np.where(stp & (arr != 0), np.uint8(128), a).astype(np.uint8)
+    a = np.where(
+        color == 0,
+        np.where(stp, np.uint8(255), np.uint8(0)),
+        np.where(stp, np.uint8(128), np.uint8(255)),
+    ).astype(np.uint8)
     return Image.fromarray(np.stack([r, g, b, a], axis=-1), "RGBA")
 
 
@@ -206,3 +213,35 @@ def _decode_24bit(data: bytes, width: int, height: int) -> Image.Image:
     rgba = np.stack([arr[:, :, 2], arr[:, :, 1], arr[:, :, 0],
                      np.full((height, width), 255, dtype=np.uint8)], axis=-1)
     return Image.fromarray(rgba, "RGBA")
+
+
+def save_tim(img: Image.Image, path: str) -> None:
+    """Save an image as a 16-bit direct-colour TIM file."""
+    rgba = img.convert("RGBA") if img.mode != "RGBA" else img
+    try:
+        arr = np.asarray(rgba, dtype=np.uint8)
+        r5 = ((arr[:, :, 0].astype(np.uint16) * 31 + 127) // 255) & 0x1F
+        g5 = ((arr[:, :, 1].astype(np.uint16) * 31 + 127) // 255) & 0x1F
+        b5 = ((arr[:, :, 2].astype(np.uint16) * 31 + 127) // 255) & 0x1F
+        a8 = arr[:, :, 3]
+        words = r5 | (g5 << 5) | (b5 << 10)
+        non_transparent = a8 > 0
+        semi_transparent = (a8 > 0) & (a8 < 255)
+        zero_color = words == 0
+        words = np.where(non_transparent & zero_color, words | 0x8000, words)
+        words = np.where(semi_transparent & ~zero_color, words | 0x8000, words)
+        words = np.where(non_transparent, words, 0).astype("<u2", copy=False)
+
+        height, width = arr.shape[:2]
+        pixel_data = words.tobytes()
+        img_block_size = 12 + len(pixel_data)
+        header = struct.pack("<II", _TIM_MAGIC, _PMODE_16BIT)
+        image_header = struct.pack("<IHHHH", img_block_size, 0, 0, width, height)
+
+        with open(path, "wb") as f:
+            f.write(header)
+            f.write(image_header)
+            f.write(pixel_data)
+    finally:
+        if rgba is not img:
+            rgba.close()

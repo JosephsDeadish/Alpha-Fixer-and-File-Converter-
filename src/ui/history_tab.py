@@ -737,6 +737,8 @@ class HistoryTab(QWidget):
             final_ext == ".html" and current_ext == ".htm"
         ):
             path = str(Path(path).with_suffix(final_ext))
+        elif not current_ext:
+            path = str(Path(path).with_suffix(".txt"))
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 

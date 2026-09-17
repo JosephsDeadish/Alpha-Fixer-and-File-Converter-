@@ -3,7 +3,7 @@ File converter – converts between image formats.
 
 Supported output formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
                           PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG,
-                          JPEG2000, XNB.
+                          JPEG2000, XNB, TIM.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
@@ -52,6 +52,7 @@ SUPPORTED_OUTPUT_FORMATS = {
     "QOI": ".qoi",
     "SVG": ".svg",
     "TGA": ".tga",
+    "TIM": ".tim",
     "TIFF": ".tiff",
     "WEBP": ".webp",
     "XNB": ".xnb",
@@ -147,6 +148,11 @@ FORMAT_DESCRIPTIONS = {
         "  • fallback: embeds raster as base64 PNG — pixel-perfect but\n"
         "      not true vector. No extra libraries required.\n"
         "Useful for icons, logos, UI assets, and scalable game graphics."
+    ),
+    "TIM": (
+        "PlayStation 1 TIM texture — classic console image/texture format.\n"
+        "This app writes 16-bit direct-colour TIM files for export and modding.\n"
+        "Transparency is mapped to TIM's limited transparent/semi-transparent states."
     ),
     "TIFF": (
         "Tagged Image File Format — flexible lossless/compressed format.\n"
@@ -489,6 +495,12 @@ def convert_file(
             if ext == ".xnb":
                 from .xnb_handler import save_xnb
                 save_xnb(img, output_path)
+                return output_path
+
+            # --- TIM (PlayStation 1 texture; 16-bit direct colour) ---
+            if ext == ".tim":
+                from .tim_handler import save_tim
+                save_tim(img, output_path)
                 return output_path
 
             # --- SVG (raster embedded in SVG wrapper) ---

@@ -894,7 +894,7 @@ class BeforeAfterWidget(QWidget):
             try:
                 self._movie.stop()
                 self._movie.frameChanged.disconnect(self._on_movie_frame)
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass  # already disconnected / destroyed
             self._movie.deleteLater()
             self._movie = None

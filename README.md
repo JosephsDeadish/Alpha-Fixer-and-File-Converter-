@@ -7,7 +7,7 @@ A panda-themed desktop application with two powerful tools:
 ### 🖼 Alpha Fixer
 Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, JPEG/JFIF/JPE, BMP, TIFF, GIF, WEBP, TGA, ICO, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM).
 
-SVG and XNB can be saved after processing. TIM is currently supported for loading/inspection only.
+SVG, XNB, and TIM can be saved after processing.
 
 **Features:**
 - Built-in presets: **PS2** (128), **N64** (255), **No Alpha**, **Max Alpha**, **Transparent**, **Half Transparent**, **Invert Alpha**, **Threshold Cut**
@@ -21,7 +21,7 @@ SVG and XNB can be saved after processing. TIM is currently supported for loadin
 ### 🔄 File Converter
 Convert between image formats with optional resize and quality control.
 
-**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB
+**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM
 
 **Features:**
 - Convert any supported format to any other
