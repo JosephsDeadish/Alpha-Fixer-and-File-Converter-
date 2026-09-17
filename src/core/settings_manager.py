@@ -319,6 +319,30 @@ class SettingsManager:
         """
         self._qs.sync()
 
+    def get_custom_shortcuts(self) -> dict[str, str]:
+        """Return the persisted custom-shortcut override map."""
+        raw = self.get("custom_shortcuts", "{}")
+        try:
+            data = json.loads(raw) if raw else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def get_shortcut_binding(self, shortcut_id: str, default: str) -> str:
+        """Return the current key sequence string for *shortcut_id*."""
+        value = self.get_custom_shortcuts().get(shortcut_id, default)
+        return value if isinstance(value, str) and value else default
+
+    def set_shortcut_binding(self, shortcut_id: str, key_sequence: str,
+                             default: str) -> None:
+        """Persist *key_sequence* for *shortcut_id* or clear it if default."""
+        custom = self.get_custom_shortcuts()
+        if key_sequence == default:
+            custom.pop(shortcut_id, None)
+        else:
+            custom[shortcut_id] = key_sequence
+        self.set("custom_shortcuts", json.dumps(custom))
+
     # ------------------------------------------------------------------
     # Theme
     # ------------------------------------------------------------------

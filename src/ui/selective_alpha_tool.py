@@ -1598,6 +1598,27 @@ class SelectiveAlphaTool(QWidget):
     _MASK_SLOT_INIT:  int = 3    # Number of slots created on first launch
     _AZ_SLOT_COUNT:   int = 150  # Maximum number of all-zones slots
     _AZ_SLOT_INIT:    int = 3    # Number of all-zones slots created on first launch
+    SHORTCUT_DEFS = (
+        ("sa_undo", "Ctrl+Z", "Undo last stroke", "Selective Alpha"),
+        ("sa_redo", "Ctrl+Y", "Redo last stroke", "Selective Alpha"),
+        ("sa_redo_alt", "Ctrl+Shift+Z", "Redo last stroke", "Selective Alpha"),
+        ("sa_open", "Ctrl+O", "Open an image", "Selective Alpha"),
+        ("sa_save", "Ctrl+S", "Save result", "Selective Alpha"),
+        ("sa_apply", "Ctrl+Return", "Apply selective alpha", "Selective Alpha"),
+        ("sa_tool_brush", "B", "Select brush tool", "Selective Alpha"),
+        ("sa_tool_eraser", "E", "Select eraser tool", "Selective Alpha"),
+        ("sa_tool_line", "L", "Select line tool", "Selective Alpha"),
+        ("sa_tool_rect", "R", "Select rectangle tool", "Selective Alpha"),
+        ("sa_tool_ellipse", "X", "Select ellipse tool", "Selective Alpha"),
+        ("sa_tool_fill", "F", "Select fill tool", "Selective Alpha"),
+        ("sa_tool_polygon", "P", "Select polygon tool", "Selective Alpha"),
+        ("sa_tool_transform", "T", "Select transform tool", "Selective Alpha"),
+        ("sa_brush_smaller", "[", "Decrease brush or eraser size", "Selective Alpha"),
+        ("sa_brush_larger", "]", "Increase brush or eraser size", "Selective Alpha"),
+        ("sa_toggle_highlights", "H", "Toggle zone highlights", "Selective Alpha"),
+        ("sa_next_zone", "N", "Select next zone", "Selective Alpha"),
+        ("sa_prev_zone", "Shift+N", "Select previous zone", "Selective Alpha"),
+    )
 
     def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -2332,45 +2353,41 @@ class SelectiveAlphaTool(QWidget):
 
     def _setup_shortcuts(self) -> None:
         """Bind common keyboard shortcuts for the Selective Alpha editor."""
-        QShortcut(QKeySequence("Ctrl+Z"),       self).activated.connect(self._on_undo_mask)
-        QShortcut(QKeySequence("Ctrl+Y"),       self).activated.connect(self._on_redo_mask)
-        QShortcut(QKeySequence("Ctrl+Shift+Z"), self).activated.connect(self._on_redo_mask)
-        QShortcut(QKeySequence("Ctrl+O"),       self).activated.connect(self._on_open)
-        QShortcut(QKeySequence("Ctrl+S"),       self).activated.connect(self._on_save)
-        QShortcut(QKeySequence("Ctrl+Return"),  self).activated.connect(self._on_apply)
-        # Drawing tool shortcuts: single-key mnemonics for each tool
-        _TOOL_KEYS = {
-            "B": "freehand",
-            "E": "eraser",
-            "L": "line",
-            "R": "rect",
-            "X": "ellipse",
-            "F": "fill",
-            "P": "polygon",
-            "T": "transform",
-        }
-        for key, tool in _TOOL_KEYS.items():
-            QShortcut(QKeySequence(key), self).activated.connect(
-                lambda _=None, t=tool: self._select_tool_by_key(t)
-            )
-        # Brush size adjust with [ and ]
-        QShortcut(QKeySequence("["), self).activated.connect(
-            lambda: self._adjust_brush_size(-2)
-        )
-        QShortcut(QKeySequence("]"), self).activated.connect(
-            lambda: self._adjust_brush_size(2)
-        )
-        # H: toggle Show Highlights (item 54)
-        QShortcut(QKeySequence("H"), self).activated.connect(
-            lambda: self._btn_show_highlights.click()
-        )
-        # N / Shift+N: cycle to next / previous zone (item 52)
-        QShortcut(QKeySequence("N"), self).activated.connect(
-            lambda: self._cycle_zone(+1)
-        )
-        QShortcut(QKeySequence("Shift+N"), self).activated.connect(
-            lambda: self._cycle_zone(-1)
-        )
+        self._shortcut_objects: dict[str, QShortcut] = {}
+        self._bind_shortcut("sa_undo", "Ctrl+Z", self._on_undo_mask)
+        self._bind_shortcut("sa_redo", "Ctrl+Y", self._on_redo_mask)
+        self._bind_shortcut("sa_redo_alt", "Ctrl+Shift+Z", self._on_redo_mask)
+        self._bind_shortcut("sa_open", "Ctrl+O", self._on_open)
+        self._bind_shortcut("sa_save", "Ctrl+S", self._on_save)
+        self._bind_shortcut("sa_apply", "Ctrl+Return", self._on_apply)
+        self._bind_shortcut("sa_tool_brush", "B", lambda: self._select_tool_by_key("freehand"))
+        self._bind_shortcut("sa_tool_eraser", "E", lambda: self._select_tool_by_key("eraser"))
+        self._bind_shortcut("sa_tool_line", "L", lambda: self._select_tool_by_key("line"))
+        self._bind_shortcut("sa_tool_rect", "R", lambda: self._select_tool_by_key("rect"))
+        self._bind_shortcut("sa_tool_ellipse", "X", lambda: self._select_tool_by_key("ellipse"))
+        self._bind_shortcut("sa_tool_fill", "F", lambda: self._select_tool_by_key("fill"))
+        self._bind_shortcut("sa_tool_polygon", "P", lambda: self._select_tool_by_key("polygon"))
+        self._bind_shortcut("sa_tool_transform", "T", lambda: self._select_tool_by_key("transform"))
+        self._bind_shortcut("sa_brush_smaller", "[", lambda: self._adjust_brush_size(-2))
+        self._bind_shortcut("sa_brush_larger", "]", lambda: self._adjust_brush_size(2))
+        self._bind_shortcut("sa_toggle_highlights", "H", lambda: self._btn_show_highlights.click())
+        self._bind_shortcut("sa_next_zone", "N", lambda: self._cycle_zone(+1))
+        self._bind_shortcut("sa_prev_zone", "Shift+N", lambda: self._cycle_zone(-1))
+
+    @classmethod
+    def shortcut_definitions(cls) -> tuple[tuple[str, str, str, str], ...]:
+        return cls.SHORTCUT_DEFS
+
+    def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
+        shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
+        if shortcut is not None:
+            shortcut.setKey(QKeySequence(key_sequence))
+
+    def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
+        key_sequence = self._settings.get_shortcut_binding(shortcut_id, default)
+        shortcut = QShortcut(QKeySequence(key_sequence), self)
+        shortcut.activated.connect(slot)
+        self._shortcut_objects[shortcut_id] = shortcut
 
     def _cycle_zone(self, direction: int) -> None:
         """Cycle the active zone editor to the next (+1) or previous (-1) zone."""

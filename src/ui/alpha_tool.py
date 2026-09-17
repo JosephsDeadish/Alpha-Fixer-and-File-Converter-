@@ -269,6 +269,12 @@ class AlphaFixerTab(QWidget):
     # Emitted when the output directory is changed (browse or typed).
     # Carries the new path string (empty string = same as source).
     output_dir_changed = pyqtSignal(str)
+    SHORTCUT_DEFS = (
+        ("alpha_run", "F5", "Start processing batch", "Alpha & RGBA"),
+        ("alpha_stop", "Escape", "Stop the current operation", "Alpha & RGBA"),
+        ("alpha_add_files", "Ctrl+O", "Add image files to the queue", "Alpha & RGBA"),
+        ("alpha_add_folder", "Ctrl+Shift+O", "Add a folder to the queue", "Alpha & RGBA"),
+    )
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
@@ -816,10 +822,26 @@ class AlphaFixerTab(QWidget):
         self._refresh_finetune_label()
 
     def _setup_shortcuts(self):
-        QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
-        QShortcut(QKeySequence("Escape"), self).activated.connect(self._stop)
-        QShortcut(QKeySequence("Ctrl+O"), self).activated.connect(self._add_files)
-        QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
+        self._shortcut_objects: dict[str, QShortcut] = {}
+        self._bind_shortcut("alpha_run", "F5", self._run)
+        self._bind_shortcut("alpha_stop", "Escape", self._stop)
+        self._bind_shortcut("alpha_add_files", "Ctrl+O", self._add_files)
+        self._bind_shortcut("alpha_add_folder", "Ctrl+Shift+O", self._add_folder)
+
+    @classmethod
+    def shortcut_definitions(cls) -> tuple[tuple[str, str, str, str], ...]:
+        return cls.SHORTCUT_DEFS
+
+    def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
+        shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
+        if shortcut is not None:
+            shortcut.setKey(QKeySequence(key_sequence))
+
+    def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
+        key_sequence = self._settings.get_shortcut_binding(shortcut_id, default)
+        shortcut = QShortcut(QKeySequence(key_sequence), self)
+        shortcut.activated.connect(slot)
+        self._shortcut_objects[shortcut_id] = shortcut
 
     # ------------------------------------------------------------------
     # Tooltip registration

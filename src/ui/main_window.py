@@ -1201,6 +1201,11 @@ class MainWindow(QMainWindow):
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
         self._selective_alpha_tab = SelectiveAlphaTool(self._settings)
+        self._register_shortcut_provider(self._alpha_tab)
+        self._register_shortcut_provider(self._converter_tab)
+        self._register_shortcut_provider(self._selective_alpha_tab)
+        self._register_shortcut_provider(GifBuilderDialog, owner_attr="_gif_builder_dlg")
+        self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")
         self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
         self._tabs.addTab(self._converter_tab, "🔄 Converter")
         self._tabs.addTab(self._history_tab, "📋 History")
@@ -1429,12 +1434,12 @@ class MainWindow(QMainWindow):
         """Enable or disable button press animations to match the active settings."""
         if self._button_anim is None:
             return
-        enabled = self._settings.get("button_anim_enabled")  # default True from DEFAULTS
+        enabled = self._settings.get("button_anim_enabled", True)
         if not enabled:
             self._button_anim.set_enabled(False)
             return
         theme = self._settings.get_theme()
-        if self._settings.get("use_theme_button_anim"):
+        if self._settings.get("use_theme_button_anim", True):
             mode = theme.get("_button_anim", "press")
         else:
             mode = self._settings.get("button_anim_style", "press")
@@ -3306,15 +3311,7 @@ class MainWindow(QMainWindow):
         Custom key overrides are loaded from settings (key ``"custom_shortcuts"``
         which stores a JSON dict ``{shortcut_id: key_sequence_string}``).
         """
-        import json as _json
         from PyQt6.QtGui import QShortcut
-
-        # Load any user-customised key sequences from settings
-        try:
-            _raw = self._settings.get("custom_shortcuts", "{}")
-            _custom: dict[str, str] = _json.loads(_raw) if _raw else {}
-        except Exception:
-            _custom = {}
 
         # Table of (shortcut_id, default_key, description, group, slot)
         _DEFS: list[tuple[str, str, str, str, object]] = [
@@ -3332,39 +3329,64 @@ class MainWindow(QMainWindow):
         ]
 
         for sc_id, default_key, desc, group, slot in _DEFS:
-            key_str = _custom.get(sc_id, default_key)
+            key_str = self._settings.get_shortcut_binding(sc_id, default_key)
             sc = QShortcut(QKeySequence(key_str), self)
             sc.activated.connect(slot)
             self._shortcut_map[sc_id] = {
                 "sc":      sc,
+                "owner":   self,
+                "owner_attr": None,
                 "default": default_key,
                 "current": key_str,
                 "desc":    desc,
                 "group":   group,
             }
 
+    def _register_shortcut_provider(self, provider, owner_attr: str | None = None) -> None:
+        defs = getattr(provider, "shortcut_definitions", None)
+        if not callable(defs):
+            return
+        for sc_id, default_key, desc, group in defs():
+            key_str = self._settings.get_shortcut_binding(sc_id, default_key)
+            if owner_attr is None and hasattr(provider, "update_shortcut_binding"):
+                try:
+                    provider.update_shortcut_binding(sc_id, key_str)
+                except Exception:
+                    pass
+            self._shortcut_map[sc_id] = {
+                "sc": None,
+                "owner": provider if owner_attr is None else None,
+                "owner_attr": owner_attr,
+                "default": default_key,
+                "current": key_str,
+                "desc": desc,
+                "group": group,
+            }
+
     def _update_shortcut(self, sc_id: str, new_key: str) -> None:
         """Apply a new key sequence to a registered shortcut and persist it (item 20)."""
-        import json as _json
         info = self._shortcut_map.get(sc_id)
         if info is None:
             return
-        info["sc"].setKey(QKeySequence(new_key))
+        shortcut = info.get("sc")
+        if shortcut is not None:
+            shortcut.setKey(QKeySequence(new_key))
+        owner = info.get("owner")
+        if owner is not None and hasattr(owner, "update_shortcut_binding"):
+            try:
+                owner.update_shortcut_binding(sc_id, new_key)
+            except Exception:
+                pass
+        owner_attr = info.get("owner_attr")
+        if owner_attr:
+            target = getattr(self, owner_attr, None)
+            if target is not None and hasattr(target, "update_shortcut_binding"):
+                try:
+                    target.update_shortcut_binding(sc_id, new_key)
+                except Exception:
+                    pass
         info["current"] = new_key
-        # Persist to settings
-        try:
-            _raw = self._settings.get("custom_shortcuts", "{}")
-            _custom: dict[str, str] = _json.loads(_raw) if _raw else {}
-        except Exception:
-            _custom = {}
-        if new_key == info["default"]:
-            _custom.pop(sc_id, None)   # remove override if it matches default
-        else:
-            _custom[sc_id] = new_key
-        try:
-            self._settings.set("custom_shortcuts", _json.dumps(_custom))
-        except Exception:
-            pass
+        self._settings.set_shortcut_binding(sc_id, new_key, info["default"])
 
     def _show_shortcuts(self):
         """Show an interactive keyboard-shortcuts dialog (item 20).
@@ -3383,7 +3405,7 @@ class MainWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("⌨  Keyboard Shortcuts")
-        dlg.setMinimumSize(580, 520)
+        dlg.setMinimumSize(760, 560)
         dlg.setSizeGripEnabled(True)
         app_icon = self.windowIcon()
         if not app_icon.isNull():
@@ -3391,10 +3413,10 @@ class MainWindow(QMainWindow):
         screen = self.screen()
         if screen is not None:
             avail = screen.availableGeometry()
-            init_w = max(640, min(860, int(avail.width() * 0.52)))
+            init_w = max(780, min(980, int(avail.width() * 0.68)))
             init_h = max(540, min(720, int(avail.height() * 0.68)))
         else:
-            init_w, init_h = 700, 580
+            init_w, init_h = 820, 580
         dlg.resize(init_w, init_h)
         dlg.move(
             self.x() + (self.width() - init_w) // 2,
@@ -3420,10 +3442,15 @@ class MainWindow(QMainWindow):
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setAlternatingRowColors(True)
+        table.setWordWrap(True)
+        table.setColumnWidth(2, 150)
 
         def _populate_table():
             table.setRowCount(0)
-            for sc_id, info in self._shortcut_map.items():
+            for sc_id, info in sorted(
+                self._shortcut_map.items(),
+                key=lambda item: (item[1]["group"], item[1]["desc"], item[0]),
+            ):
                 row = table.rowCount()
                 table.insertRow(row)
                 table.setItem(row, 0, QTableWidgetItem(info["group"]))
@@ -3440,21 +3467,23 @@ class MainWindow(QMainWindow):
                 # Change + Reset buttons in a widget
                 ctrl_w = QWidget()
                 ctrl_h = QHBoxLayout(ctrl_w)
-                ctrl_h.setContentsMargins(2, 1, 2, 1)
-                ctrl_h.setSpacing(4)
+                ctrl_h.setContentsMargins(4, 2, 4, 2)
+                ctrl_h.setSpacing(6)
                 btn_change = QPushButton("Change")
-                btn_change.setFixedHeight(24)
+                btn_change.setMinimumWidth(86)
+                btn_change.setMinimumHeight(28)
                 btn_change.setToolTip(
                     "Click then press any key combination to reassign this shortcut."
                 )
                 btn_reset = QPushButton("Reset")
-                btn_reset.setFixedHeight(24)
+                btn_reset.setMinimumWidth(76)
+                btn_reset.setMinimumHeight(28)
                 btn_reset.setEnabled(is_custom)
                 btn_reset.setToolTip(f"Restore default ({info['default']})")
                 ctrl_h.addWidget(btn_change)
                 ctrl_h.addWidget(btn_reset)
                 table.setCellWidget(row, 3, ctrl_w)
-                table.setRowHeight(row, 30)
+                table.setRowHeight(row, 36)
 
                 # Capture shortcut on Change click
                 def _make_change_handler(_sc_id, _btn_c, _key_item, _btn_r, _info):
@@ -3556,45 +3585,14 @@ class MainWindow(QMainWindow):
         outer.addWidget(table)
 
         # ── Read-only reference section ────────────────────────────────
-        outer.addWidget(QLabel("<b>Fixed Shortcuts</b> (non-configurable):"))
+        outer.addWidget(QLabel("<b>Other fixed shortcuts</b> (not yet configurable):"))
         ref_lbl = QLabel(
             "<table cellpadding='4'>"
             "<tr><th align='left'>Tool / Context</th><th align='left'>Key</th><th align='left'>Action</th></tr>"
 
-            "<tr><td><i>Alpha &amp; RGBA / Converter</i></td><td><b>F5</b></td>"
-            "<td>Start processing / conversion batch</td></tr>"
-            "<tr><td></td><td><b>Esc</b></td><td>Stop the current operation</td></tr>"
-            "<tr><td></td><td><b>Ctrl+O</b></td><td>Add image files to the queue</td></tr>"
-            "<tr><td></td><td><b>Ctrl+Shift+O</b></td><td>Add a whole folder to the queue</td></tr>"
-            "<tr><td></td><td><b>Del</b></td><td>Remove selected file(s) from queue</td></tr>"
-            "<tr><td></td><td><b>Ctrl+A</b></td><td>Select all files in queue</td></tr>"
-
-            "<tr><td><i>Selective Alpha (Canvas)</i></td><td><b>Ctrl+O</b></td><td>Open an image</td></tr>"
-            "<tr><td></td><td><b>Ctrl+Z</b></td><td>Undo last stroke</td></tr>"
-            "<tr><td></td><td><b>Ctrl+Y / Ctrl+Shift+Z</b></td><td>Redo</td></tr>"
-            "<tr><td></td><td><b>Ctrl+S / Ctrl+Enter</b></td><td>Save result</td></tr>"
-            "<tr><td></td><td><b>Ctrl+Wheel</b></td><td>Zoom in / out</td></tr>"
+            "<tr><td><i>File queues</i></td><td><b>Ctrl+A</b></td><td>Select all files in queue</td></tr>"
+            "<tr><td><i>Selective Alpha (Canvas)</i></td><td><b>Ctrl+Wheel</b></td><td>Zoom in / out</td></tr>"
             "<tr><td></td><td><b>Middle-drag / Alt+drag</b></td><td>Pan canvas</td></tr>"
-
-            "<tr><td><i>Drawing Tools</i></td><td><b>B</b></td><td>Brush</td></tr>"
-            "<tr><td></td><td><b>E</b></td><td>Eraser</td></tr>"
-            "<tr><td></td><td><b>L</b></td><td>Line</td></tr>"
-            "<tr><td></td><td><b>R</b></td><td>Rectangle fill</td></tr>"
-            "<tr><td></td><td><b>X</b></td><td>Ellipse fill</td></tr>"
-            "<tr><td></td><td><b>F</b></td><td>Flood fill</td></tr>"
-            "<tr><td></td><td><b>P</b></td><td>Polygon</td></tr>"
-            "<tr><td></td><td><b>T</b></td><td>Transform</td></tr>"
-            "<tr><td></td><td><b>[ / ]</b></td><td>Decrease / increase brush size</td></tr>"
-            "<tr><td></td><td><b>H</b></td><td>Toggle zone highlights</td></tr>"
-            "<tr><td></td><td><b>N / Shift+N</b></td><td>Next / previous zone</td></tr>"
-
-            "<tr><td><i>GIF Builder</i></td><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
-            "<tr><td></td><td><b>Ctrl+S</b></td><td>Export GIF</td></tr>"
-
-            "<tr><td><i>Video Editor</i></td><td><b>Space</b></td><td>Play / Pause preview</td></tr>"
-            "<tr><td></td><td><b>Ctrl+S</b></td><td>Export video</td></tr>"
-            "<tr><td></td><td><b>Del</b></td><td>Remove selected clip</td></tr>"
-
             "<tr><td><i>Right-click window</i></td><td><b>Right-click</b></td>"
             "<td>Open GIF Builder, Video Editor, or Settings</td></tr>"
             "</table>"

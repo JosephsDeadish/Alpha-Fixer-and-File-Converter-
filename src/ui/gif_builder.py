@@ -253,6 +253,11 @@ class GifBuilderDialog(QDialog):
     """
 
     exported = pyqtSignal(str)  # emitted with output path on successful export
+    SHORTCUT_DEFS = (
+        ("gif_remove_selected", "Delete", "Remove selected frame", "GIF Builder"),
+        ("gif_export", "Ctrl+S", "Export GIF", "GIF Builder"),
+        ("gif_toggle_play", "Space", "Play or pause preview", "GIF Builder"),
+    )
 
     def __init__(self, initial_files: Optional[list[str]] = None, parent=None, tooltip_mgr=None):
         super().__init__(parent)
@@ -270,8 +275,7 @@ class GifBuilderDialog(QDialog):
             self.register_tooltips(mgr)
         if initial_files:
             self._add_paths(initial_files)
-        QShortcut(QKeySequence("Delete"), self).activated.connect(self._remove_selected)
-        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._export)
+        self._setup_shortcuts()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -470,9 +474,6 @@ class GifBuilderDialog(QDialog):
         self._btn_play.setCheckable(True)
         self._btn_play.setToolTip("Start / stop the animated preview.  Space bar also works.")
         self._btn_play.toggled.connect(self._on_play_toggled)
-        QShortcut(QKeySequence("Space"), self).activated.connect(
-            lambda: self._btn_play.setChecked(not self._btn_play.isChecked())
-        )
         pv_ctrl.addWidget(self._btn_play)
 
         self._preview_frame_lbl = QLabel("0 / 0")
@@ -562,6 +563,43 @@ class GifBuilderDialog(QDialog):
                 return mgr
             parent = parent.parentWidget()
         return None
+
+    @classmethod
+    def shortcut_definitions(cls) -> tuple[tuple[str, str, str, str], ...]:
+        return cls.SHORTCUT_DEFS
+
+    def _resolve_settings(self):
+        parent = self.parentWidget()
+        while parent is not None:
+            settings = getattr(parent, "_settings", None)
+            if settings is not None:
+                return settings
+            parent = parent.parentWidget()
+        return None
+
+    def _setup_shortcuts(self) -> None:
+        self._shortcut_objects: dict[str, QShortcut] = {}
+        self._bind_shortcut("gif_remove_selected", "Delete", self._remove_selected)
+        self._bind_shortcut("gif_export", "Ctrl+S", self._export)
+        self._bind_shortcut(
+            "gif_toggle_play",
+            "Space",
+            lambda: self._btn_play.setChecked(not self._btn_play.isChecked()),
+        )
+
+    def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
+        shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
+        if shortcut is not None:
+            shortcut.setKey(QKeySequence(key_sequence))
+
+    def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
+        settings = self._resolve_settings()
+        key_sequence = default
+        if settings is not None:
+            key_sequence = settings.get_shortcut_binding(shortcut_id, default)
+        shortcut = QShortcut(QKeySequence(key_sequence), self)
+        shortcut.activated.connect(slot)
+        self._shortcut_objects[shortcut_id] = shortcut
 
     def register_tooltips(self, mgr) -> None:
         """Register dialog widgets with the shared TooltipManager."""

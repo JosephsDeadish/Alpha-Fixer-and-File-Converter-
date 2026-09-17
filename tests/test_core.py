@@ -9084,3 +9084,24 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('_THEME_PREFIX_CHARS = "★🔓🔒 "', src)
         self.assertIn('self._theme_preset_combo.addItem(f"🔒 {current_hidden}")', src)
         self.assertIn('idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")', src)
+
+    def test_button_press_animation_runs_after_release(self):
+        src = self._src("ui/click_effects.py")
+        self.assertIn("event.type() == QEvent.Type.MouseButtonRelease", src)
+        self.assertIn("QTimer.singleShot(0, lambda b=obj: self._animate(b) if b is not None else None)", src)
+        self.assertIn("obj.rect().contains(event.position().toPoint())", src)
+
+    def test_shortcuts_dialog_registers_tool_and_dialog_shortcuts(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("self._register_shortcut_provider(self._alpha_tab)", src)
+        self.assertIn("self._register_shortcut_provider(self._converter_tab)", src)
+        self.assertIn("self._register_shortcut_provider(self._selective_alpha_tab)", src)
+        self.assertIn('self._register_shortcut_provider(GifBuilderDialog, owner_attr="_gif_builder_dlg")', src)
+        self.assertIn('self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")', src)
+        self.assertIn("dlg.setMinimumSize(760, 560)", src)
+        self.assertIn("btn_change.setMinimumWidth(86)", src)
+
+    def test_button_anim_settings_use_explicit_fallbacks(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn('self._settings.get("button_anim_enabled", True)', src)
+        self.assertIn('self._settings.get("use_theme_button_anim", True)', src)

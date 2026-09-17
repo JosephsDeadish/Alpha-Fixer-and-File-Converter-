@@ -758,6 +758,31 @@ class _FakeQSettings:
         pass
 
 
+class TestSettingsManagerShortcutBindings(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_get_custom_shortcuts_invalid_payload_returns_empty_dict(self):
+        self._store["custom_shortcuts"] = "not-json"
+        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+
+    def test_set_shortcut_binding_round_trips_and_clears_default(self):
+        self._mgr.set_shortcut_binding("gif_export", "Ctrl+Shift+G", "Ctrl+S")
+        self.assertEqual(
+            self._mgr.get_shortcut_binding("gif_export", "Ctrl+S"),
+            "Ctrl+Shift+G",
+        )
+        self._mgr.set_shortcut_binding("gif_export", "Ctrl+S", "Ctrl+S")
+        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+        self.assertEqual(
+            self._mgr.get_shortcut_binding("gif_export", "Ctrl+S"),
+            "Ctrl+S",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Theme engine – new palettes and THEME_EFFECTS
 # ---------------------------------------------------------------------------
