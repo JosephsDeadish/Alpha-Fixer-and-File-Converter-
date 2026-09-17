@@ -213,6 +213,35 @@ class TestConvertFile(unittest.TestCase):
             img = Image.open(dst)
             self.assertIn(img.mode, ("RGB", "L"))
 
+    def test_png_to_pam_preserves_alpha(self):
+        """PAM output should preserve RGBA data."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.pam")
+            _make_png(src, alpha=128)
+            convert_file(src, dst, "PAM")
+            self.assertTrue(os.path.isfile(dst))
+            img = Image.open(dst)
+            self.assertIn(img.mode, ("RGBA", "RGB"))
+            if "A" in img.mode:
+                self.assertEqual(img.getpixel((0, 0))[3], 128)
+
+    def test_alpha_processor_can_save_pam(self):
+        from src.core.alpha_processor import save_image, SUPPORTED_READ, ALPHA_FORMATS
+
+        self.assertIn(".pam", SUPPORTED_READ)
+        self.assertIn(".pam", ALPHA_FORMATS)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dst = os.path.join(tmpdir, "output.pam")
+            img = Image.new("RGBA", (4, 4), (10, 20, 30, 140))
+            try:
+                save_image(img, dst, ".pam")
+            finally:
+                img.close()
+            self.assertTrue(os.path.isfile(dst))
+            with Image.open(dst) as result:
+                self.assertIn(result.mode, ("RGBA", "RGB"))
+
     def test_png_to_pgm(self):
         """PGM output should be grayscale with no alpha."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -301,7 +330,7 @@ class TestConvertFile(unittest.TestCase):
             self.assertEqual(img.mode, "RGB")
 
     def test_supported_output_formats_includes_new(self):
-        for fmt in ("PBM", "PGM", "PNM", "PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
+        for fmt in ("PAM", "PBM", "PGM", "PNM", "PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
             with self.subTest(fmt=fmt):
                 self.assertIn(fmt, SUPPORTED_OUTPUT_FORMATS)
 

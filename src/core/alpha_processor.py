@@ -2,7 +2,7 @@
 Alpha channel processor.
 
 Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick),
-          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, JPEG2000.
+          PAM, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, JPEG2000.
 """
 import os
 import io
@@ -18,14 +18,14 @@ from .presets import AlphaPreset
 logger = logging.getLogger(__name__)
 
 # Formats that natively support an alpha channel
-ALPHA_FORMATS = {".png", ".webp", ".tga", ".tiff", ".tif", ".dds", ".gif", ".ico"}
+ALPHA_FORMATS = {".png", ".webp", ".tga", ".tiff", ".tif", ".dds", ".gif", ".ico", ".pam"}
 
 # Formats that need conversion to RGBA before processing
 CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp", ".pbm", ".pgm", ".pnm", ".ppm"}
 
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
-    ".gif", ".webp", ".tga", ".ico", ".dds",
+    ".gif", ".webp", ".tga", ".ico", ".dds", ".pam",
     ".pbm", ".pgm", ".pnm", ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2", ".j2k", ".j2c",
     ".xnb", ".tim",
 }

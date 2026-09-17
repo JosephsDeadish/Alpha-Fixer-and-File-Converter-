@@ -2,7 +2,7 @@
 File converter – converts between image formats.
 
 Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000.
+                   PAM, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 SUPPORTED_OUTPUT_FORMATS = {
     "AVIF": ".avif",
     "BMP": ".bmp",
+    "PAM": ".pam",
     "PBM": ".pbm",
     "DDS": ".dds",
     "GIF": ".gif",
@@ -70,6 +71,11 @@ FORMAT_DESCRIPTIONS = {
         "Windows Bitmap — uncompressed raster format.\n"
         "Large file size but lossless and universally supported.\n"
         "No alpha channel support. Best for simple compatibility."
+    ),
+    "PAM": (
+        "Portable Arbitrary Map — flexible Netpbm image format.\n"
+        "Supports full RGBA data, making it useful for alpha masks and interchange.\n"
+        "Best when you need a simple, script-friendly format without losing transparency."
     ),
     "DDS": (
         "DirectDraw Surface — GPU-native texture format.\n"
