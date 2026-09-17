@@ -231,7 +231,7 @@ class _VideoFrameGetter:
         import imageio
 
         self._reader = imageio.get_reader(self._path, format="FFMPEG")
-        self._reader_iter = iter(self._reader)
+        self._reader_iter = None
 
     def _close_reader(self) -> None:
         if self._reader is not None:
@@ -255,11 +255,7 @@ class _VideoFrameGetter:
             if clamped == self._last_idx and self._last_frame is not None:
                 frame = self._last_frame
             else:
-                frame = None
-                for _ in range(self._last_idx + 1, clamped + 1):
-                    frame = next(self._reader_iter)
-                if frame is None:
-                    raise IndexError(f"Could not decode frame {clamped}")
+                frame = self._reader.get_data(clamped)
             self._last_idx = clamped
             self._last_frame = frame
         except Exception:

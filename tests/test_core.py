@@ -8525,8 +8525,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._reader_iter = None", src)
         self.assertIn("self._last_idx = -1", src)
         self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
-        self.assertIn("for _ in range(self._last_idx + 1, clamped + 1):", src)
-        self.assertIn("frame = next(self._reader_iter)", src)
+        self.assertIn("frame = self._reader.get_data(clamped)", src)
 
     def test_video_export_streams_frames_and_cleans_up_partial_output(self):
         src = self._src("ui/video_tool.py")
@@ -8572,6 +8571,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/history_tab.py")
         self.assertIn("for r in range(tree.topLevelItemCount()):", src)
         self.assertIn("if item is None or item.isHidden():", src)
+        self.assertIn("body{background:#ffffff;color:#111111}", src)
 
     def test_video_export_normalizes_output_extension(self):
         src = self._src("ui/video_tool.py")
@@ -8588,3 +8588,13 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('"title": "Video Editor"', src)
         self.assertIn("MP4 or GIF", src)
         self.assertNotIn("WebM", src)
+
+    def test_preview_popout_copies_active_gif_animation_state(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("self._movie_path: str = \"\"", src)
+        self.assertIn("compare.animate_before(self._movie_path)", src)
+        self.assertIn("compare.set_animation_speed(self._movie_speed)", src)
+
+    def test_gif_builder_closes_progress_dialog_on_cancel(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("progress.close()", src)

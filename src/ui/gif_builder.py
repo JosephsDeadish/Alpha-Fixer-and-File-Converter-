@@ -690,6 +690,7 @@ class GifBuilderDialog(QDialog):
                 if progress.wasCanceled():
                     for f in pil_frames:
                         f.close()
+                    progress.close()
                     return
                 # Update progress label with time estimate (item 40)
                 if idx > 0:

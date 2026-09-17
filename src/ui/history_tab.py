@@ -745,7 +745,7 @@ class HistoryTab(QWidget):
                 )
                 content = (
                     "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-                    "<style>table{border-collapse:collapse}th,td{border:1px solid #888;"
+                    "<style>body{background:#ffffff;color:#111111}table{border-collapse:collapse}th,td{border:1px solid #888;"
                     "padding:4px 8px;text-align:left}th{background:#333;color:#eee}"
                     "tr:nth-child(even){background:#f5f5f5}</style></head><body>"
                     f"<h2>{html.escape(tab_name.replace('_', ' ').title())} History</h2>"

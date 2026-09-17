@@ -372,6 +372,8 @@ class BeforeAfterWidget(QWidget):
         self._raw_after: QImage | None = None
         # QMovie used to animate the "before" side when the source is a GIF.
         self._movie: QMovie | None = None
+        self._movie_path: str = ""
+        self._movie_speed: int = 100
         # Zoom & pan state
         self._zoom: float = 1.0          # 1.0 = fit-to-widget
         self._pan_x: float = 0.0         # pixel offset (applied when _zoom > 1)
@@ -480,6 +482,9 @@ class BeforeAfterWidget(QWidget):
         compare._divider_color = self._divider_color
         compare._stats_before = self._stats_before
         compare._stats_after = self._stats_after
+        if self._movie_path:
+            compare.animate_before(self._movie_path)
+            compare.set_animation_speed(self._movie_speed)
         dlg_layout.addWidget(compare, 1)
 
         self._popout_dialog = dlg
@@ -866,7 +871,9 @@ class BeforeAfterWidget(QWidget):
             movie.deleteLater()
             return
         self._movie = movie
+        self._movie_path = path
         self._movie.frameChanged.connect(self._on_movie_frame)
+        self._movie.setSpeed(self._movie_speed)
         self._movie.start()
         self._loading = False
         self.update()
@@ -878,6 +885,7 @@ class BeforeAfterWidget(QWidget):
         Has no effect when no animation is currently playing.
         """
         if self._movie is not None:
+            self._movie_speed = max(1, int(percent))
             self._movie.setSpeed(percent)
 
     def _stop_movie(self) -> None:
@@ -890,6 +898,7 @@ class BeforeAfterWidget(QWidget):
                 pass  # already disconnected / destroyed
             self._movie.deleteLater()
             self._movie = None
+        self._movie_path = ""
 
     def _on_movie_frame(self, _frame_no: int) -> None:
         """Slot called by QMovie on each new frame; updates the before pixmap."""
