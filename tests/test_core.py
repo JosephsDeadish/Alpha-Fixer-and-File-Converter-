@@ -8705,7 +8705,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn('target_suffix = ".gif" if fmt == "gif" else ".mp4"', src)
         self.assertIn("current_suffix = Path(out_path).suffix.lower()", src)
-        self.assertIn("if current_suffix:", src)
+        self.assertIn("if current_suffix in known_media_suffixes:", src)
         self.assertIn("known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {\".gif\", \".mp4\"}", src)
         self.assertIn('out_path = str(Path(out_path).with_suffix(target_suffix))', src)
         self.assertIn('out_path = f"{out_path}{target_suffix}"', src)
@@ -8812,7 +8812,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")
-        self.assertIn('if fmt == "mp4" and not self._video_io_available:', src)
+        self.assertIn('if fmt == "mp4" and not self._mp4_export_available:', src)
         self.assertIn("MP4 Export Unavailable", src)
         self.assertIn("progress.show()", src)
         self.assertIn("QApplication.processEvents()", src)
