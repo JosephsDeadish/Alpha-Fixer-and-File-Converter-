@@ -223,14 +223,11 @@ class _VideoFrameGetter:
         self._path = path
         self._total_frames = max(1, int(total_frames))
         self._reader = None
-        self._last_idx = -1
-        self._last_frame = None
 
     def _open_reader(self) -> None:
         import imageio
 
         self._reader = imageio.get_reader(self._path, format="FFMPEG")
-        self._reader_iter = None
 
     def _close_reader(self) -> None:
         if self._reader is not None:
@@ -239,23 +236,15 @@ class _VideoFrameGetter:
             except Exception:
                 pass
             self._reader = None
-        self._last_idx = -1
-        self._last_frame = None
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
         from PIL import Image
 
         clamped = max(0, min(self._total_frames - 1, int(idx)))
-        if self._reader is None or clamped < self._last_idx:
-            self._close_reader()
+        if self._reader is None:
             self._open_reader()
         try:
-            if clamped == self._last_idx and self._last_frame is not None:
-                frame = self._last_frame
-            else:
-                frame = self._reader.get_data(clamped)
-            self._last_idx = clamped
-            self._last_frame = frame
+            frame = self._reader.get_data(clamped)
         except Exception:
             self._close_reader()
             raise
@@ -271,8 +260,6 @@ class _VideoFrameGetter:
         self._path = state["_path"]
         self._total_frames = max(1, int(state["_total_frames"]))
         self._reader = None
-        self._last_idx = -1
-        self._last_frame = None
 
 
 class _ClipEntry:

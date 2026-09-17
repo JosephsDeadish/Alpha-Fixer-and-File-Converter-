@@ -8519,12 +8519,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertNotIn("close the floating preview", src)
         self.assertIn("The embedded preview stays available here while the floating window is open.", src)
 
-    def test_video_frame_getter_reuses_reader_state(self):
+    def test_video_frame_getter_reuses_cached_reader(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("self._reader = None", src)
-        self.assertIn("self._last_idx = -1", src)
-        self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
+        self.assertIn("if self._reader is None:", src)
         self.assertIn("frame = self._reader.get_data(clamped)", src)
+        self.assertNotIn("self._last_idx = -1", src)
 
     def test_video_export_streams_frames_and_cleans_up_partial_output(self):
         src = self._src("ui/video_tool.py")
@@ -8601,7 +8601,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_gif_builder_releases_frames_on_close(self):
         src = self._src("ui/gif_builder.py")
-        self.assertIn("entry._pil.close()", src)
+        self.assertIn("entry.close()", src)
         self.assertIn("self._frames.clear()", src)
 
     def test_video_export_removes_partial_output_on_error(self):
@@ -8656,3 +8656,13 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/history_tab.py")
         self.assertIn("<title>{title} History</title>", src)
         self.assertIn("<caption>{title} History</caption>", src)
+
+    def test_video_builder_history_falls_back_when_output_missing(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("raw_output = entry.get(\"output\")", src)
+        self.assertIn("output = os.path.basename(raw_output) if raw_output else \"?\"", src)
+
+    def test_history_text_export_separator_matches_rendered_header_width(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("header_line = _fmt_row(headers)", src)
+        self.assertIn("sep = \"-\" * len(header_line)", src)

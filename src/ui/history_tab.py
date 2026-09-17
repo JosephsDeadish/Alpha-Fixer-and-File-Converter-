@@ -621,7 +621,8 @@ class HistoryTab(QWidget):
         self._vid_tree.clear()
         for entry in history:
             ts = _fmt_ts(entry.get("timestamp", ""))
-            output = os.path.basename(entry.get("output", "?"))
+            raw_output = entry.get("output")
+            output = os.path.basename(raw_output) if raw_output else "?"
             n_clips = str(entry.get("clip_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
@@ -763,8 +764,9 @@ class HistoryTab(QWidget):
                               for i, h in enumerate(headers)] if rows else [len(h) for h in headers]
                 def _fmt_row(cells):
                     return "  ".join(c.ljust(w) for c, w in zip(cells, col_widths))
-                sep = "-" * (sum(col_widths) + 2 * len(col_widths))
-                lines = [_fmt_row(headers), sep] + [_fmt_row(r) for r in rows]
+                header_line = _fmt_row(headers)
+                sep = "-" * len(header_line)
+                lines = [header_line, sep] + [_fmt_row(r) for r in rows]
                 content = "\n".join(lines) + "\n"
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)
