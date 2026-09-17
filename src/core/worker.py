@@ -19,7 +19,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 # Above this number of files, suppress individual success log lines and
 # throttle progress signals to keep the UI responsive.
-_LARGE_BATCH_THRESHOLD = 100
+_LARGE_BATCH_THRESHOLD = 1000
 # Minimum seconds between consecutive progress signal emissions in large-batch mode.
 _PROGRESS_MIN_INTERVAL = 0.1   # 100 ms
 

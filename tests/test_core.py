@@ -8657,8 +8657,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_export_normalizes_output_extension(self):
         src = self._src("ui/video_tool.py")
-        self.assertIn('if fmt == "gif" and not out_path.lower().endswith(".gif"):', src)
-        self.assertIn('if fmt != "gif" and not out_path.lower().endswith(".mp4"):', src)
+        self.assertIn('target_suffix = ".gif" if fmt == "gif" else ".mp4"', src)
+        self.assertIn('out_path = str(Path(out_path).with_suffix(target_suffix))', src)
+        self.assertIn('if fmt == "gif":\n                from PIL import Image', src)
+        self.assertIn("gif_frames.append(filtered.copy())", src)
+        self.assertIn('first.save(\n                    out_path,\n                    format="GIF"', src)
         self.assertIn("Unsupported Files Skipped", src)
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
@@ -8679,8 +8682,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("MP4 or GIF", src)
         self.assertIn("combine video clips and ", src)
         self.assertIn("still images into a single export", src)
+        self.assertIn("bundled with the app via imageio-ffmpeg", src)
+        self.assertIn("or when a system ffmpeg install is present", src)
         self.assertNotIn("and GIFs into a single export", src)
         self.assertNotIn("WebM", src)
+
+    def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
+        src = self._src("core/worker.py")
+        self.assertIn("_LARGE_BATCH_THRESHOLD = 1000", src)
 
     def test_preview_popout_copies_active_gif_animation_state(self):
         src = self._src("ui/preview_pane.py")

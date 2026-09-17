@@ -11,9 +11,10 @@ Provides a lightweight video editor that lets the user:
   • Preview with play/pause/rewind and a position scrubber
   • Export to MP4 (via imageio+ffmpeg) or animated GIF (via Pillow)
 
-**Dependency note**: Full video I/O requires ffmpeg on the system PATH plus the
-imageio-ffmpeg package.  If ffmpeg is unavailable the dialog can still process
-image-sequence "videos" (folders of PNGs) and export animated GIFs.
+**Dependency note**: Full video I/O requires a working ffmpeg executable,
+preferably from bundled imageio-ffmpeg or otherwise from the system PATH.
+If ffmpeg is unavailable the dialog can still process image-sequence "videos"
+(folders of PNGs) and export animated GIFs.
 
 UX highlights (Round-90):
   • All numeric controls use drag-sliders – no arrow-button spinboxes.
@@ -458,7 +459,7 @@ class VideoToolDialog(QDialog):
     """Lightweight video editor dialog.
 
     Combines multiple clips, applies visual adjustments and filters, and
-    exports the result.  Requires imageio+ffmpeg for video I/O; still works
+    exports the result. Requires ffmpeg for video I/O, but still works
     for single images and exports animated GIFs without ffmpeg.
     """
 
@@ -1050,10 +1051,9 @@ class VideoToolDialog(QDialog):
             )
         if not out_path:
             return
-        if fmt == "gif" and not out_path.lower().endswith(".gif"):
-            out_path += ".gif"
-        if fmt != "gif" and not out_path.lower().endswith(".mp4"):
-            out_path += ".mp4"
+        target_suffix = ".gif" if fmt == "gif" else ".mp4"
+        if Path(out_path).suffix.lower() != target_suffix:
+            out_path = str(Path(out_path).with_suffix(target_suffix))
 
         fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"
@@ -1061,9 +1061,6 @@ class VideoToolDialog(QDialog):
         progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
-
-        import imageio
-        import numpy as np
 
         progress.setLabelText("Rendering and saving output…")
         brightness = self._brightness_slider.value() / 100.0
@@ -1073,17 +1070,15 @@ class VideoToolDialog(QDialog):
         saturation = self._saturation_slider.value() / 100.0
         sharpness = self._sharpness_slider.value() / 100.0
         writer = None
+        gif_frames = []
         canceled = False
         wrote_frames = False
         try:
             if fmt == "gif":
-                writer = imageio.get_writer(
-                    out_path,
-                    mode="I",
-                    duration=max(0.01, 1.0 / fps),
-                    loop=0,
-                )
+                from PIL import Image  # noqa: F401
             else:
+                import imageio
+                import numpy as np
                 _MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
                 writer = imageio.get_writer(
                     out_path,
@@ -1112,12 +1107,16 @@ class VideoToolDialog(QDialog):
                         sharpness=sharpness,
                     )
                     filtered = _apply_filter(adjusted, filter_key)
-                    rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")
-                    try:
-                        writer.append_data(np.array(rgb))
-                    finally:
-                        if rgb is not None and rgb is not filtered:
-                            rgb.close()
+                    if fmt == "gif":
+                        gif_frames.append(filtered.copy())
+                    else:
+                        import numpy as np
+                        rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")
+                        try:
+                            writer.append_data(np.array(rgb))
+                        finally:
+                            if rgb is not None and rgb is not filtered:
+                                rgb.close()
                     wrote_frames = True
                 finally:
                     if filtered is not adjusted:
@@ -1140,6 +1139,17 @@ class VideoToolDialog(QDialog):
                 except Exception:
                     pass
                 writer = None
+            if fmt == "gif" and not canceled and gif_frames:
+                first, *rest = gif_frames
+                first.save(
+                    out_path,
+                    format="GIF",
+                    save_all=True,
+                    append_images=rest,
+                    duration=max(1, int(round(1000.0 / fps))),
+                    loop=0,
+                    disposal=2,
+                )
             progress.setValue(total)
         except Exception as exc:
             try:
@@ -1153,6 +1163,11 @@ class VideoToolDialog(QDialog):
             if writer is not None:
                 try:
                     writer.close()
+                except Exception:
+                    pass
+            for frame in gif_frames:
+                try:
+                    frame.close()
                 except Exception:
                     pass
 
