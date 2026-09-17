@@ -77,6 +77,16 @@ _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
 
 
 @lru_cache(maxsize=1)
+def _has_imageio() -> bool:
+    """Return True when imageio is importable for video container I/O."""
+    try:
+        import imageio  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+@lru_cache(maxsize=1)
 def _has_ffmpeg() -> bool:
     """Return True if a bundled or PATH ffmpeg executable is available."""
     return _get_ffmpeg_exe() is not None
@@ -474,6 +484,8 @@ class VideoToolDialog(QDialog):
         self._preview_timer.timeout.connect(self._advance_preview)
         self._is_playing: bool = False
         self._ffmpeg_available = _has_ffmpeg()
+        self._imageio_available = _has_imageio()
+        self._video_io_available = self._ffmpeg_available and self._imageio_available
         self._build_ui()
         mgr = self._resolve_tooltip_mgr()
         if mgr is not None:
@@ -495,9 +507,9 @@ class VideoToolDialog(QDialog):
         title.setObjectName("subheader")
         root.addWidget(title)
 
-        if not self._ffmpeg_available:
+        if not self._video_io_available:
             warn = QLabel(
-                "⚠  ffmpeg / imageio-ffmpeg not found or not bundled — video import and MP4 export unavailable.  "
+                "⚠  ffmpeg and/or imageio are unavailable or not bundled — video import and MP4 export unavailable.  "
                 "You can still add images and export an animated GIF."
             )
             warn.setWordWrap(True)
@@ -515,8 +527,8 @@ class VideoToolDialog(QDialog):
 
         tb = QHBoxLayout()
         self._btn_add_video = QPushButton("🎞  Add Video")
-        self._btn_add_video.setEnabled(self._ffmpeg_available)
-        self._btn_add_video.setToolTip("Add a video file to the timeline. (Requires ffmpeg)")
+        self._btn_add_video.setEnabled(self._video_io_available)
+        self._btn_add_video.setToolTip("Add a video file to the timeline. (Requires ffmpeg and imageio)")
         self._btn_add_video.clicked.connect(self._add_video)
         tb.addWidget(self._btn_add_video)
 
@@ -737,7 +749,7 @@ class VideoToolDialog(QDialog):
         fmt_row.addWidget(QLabel("Format:"))
         self._export_fmt_combo = QComboBox()
         self._export_fmt_combo.addItem("Animated GIF (.gif)", userData="gif")
-        if self._ffmpeg_available:
+        if self._video_io_available:
             self._export_fmt_combo.addItem("MP4 Video (.mp4)", userData="mp4")
         fmt_row.addWidget(self._export_fmt_combo, 1)
         ex_vl.addLayout(fmt_row)
@@ -1052,8 +1064,12 @@ class VideoToolDialog(QDialog):
         if not out_path:
             return
         target_suffix = ".gif" if fmt == "gif" else ".mp4"
-        if Path(out_path).suffix.lower() != target_suffix:
-            out_path = str(Path(out_path).with_suffix(target_suffix))
+        current_suffix = Path(out_path).suffix.lower()
+        if current_suffix != target_suffix:
+            if current_suffix:
+                out_path = str(Path(out_path).with_suffix(target_suffix))
+            else:
+                out_path = f"{out_path}{target_suffix}"
 
         fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"

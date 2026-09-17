@@ -20,6 +20,17 @@ from PyQt6.QtWidgets import (
     QPushButton, QHBoxLayout, QDialog,
 )
 
+_UNDOCK_TOOLTIP = (
+    "Undock the preview into a separate floating window.\n"
+    "The embedded preview stays available here while the floating window is open.\n"
+    "Click ⇙ Redock (or close the floating window) to return to the embedded preview."
+)
+
+_REDOCK_TOOLTIP = (
+    "Redock the preview back into the main panel.\n"
+    "Closes the floating window and restores the embedded preview."
+)
+
 
 # ---------------------------------------------------------------------------
 # Floating zoom overlay reused by preview widgets
@@ -414,11 +425,7 @@ class BeforeAfterWidget(QWidget):
     def _make_popout_button(self) -> "QPushButton":
         btn = QPushButton("⇗ Undock", self)
         btn.setObjectName("popoutBtn")
-        btn.setToolTip(
-            "Undock the preview into a separate floating window.\n"
-            "The embedded preview stays available here while the floating window is open.\n"
-            "Click ⇙ Redock (or close the floating window) to close the floating window."
-        )
+        self._apply_popout_button_state(btn, undocked=False)
         btn.setFixedSize(90, 22)
         btn.setStyleSheet(
             "QPushButton#popoutBtn {"
@@ -435,6 +442,12 @@ class BeforeAfterWidget(QWidget):
         btn.clicked.connect(self._on_popout_clicked)
         btn.raise_()
         return btn
+
+    @staticmethod
+    def _apply_popout_button_state(btn: "QPushButton", *, undocked: bool) -> None:
+        """Keep pop-out button text and tooltip in sync from one source of truth."""
+        btn.setText("⇙ Redock" if undocked else "⇗ Undock")
+        btn.setToolTip(_REDOCK_TOOLTIP if undocked else _UNDOCK_TOOLTIP)
 
     def _reposition_popout_btn(self) -> None:
         margin = 6
@@ -491,21 +504,12 @@ class BeforeAfterWidget(QWidget):
 
         # Update button to reflect the "undocked" state so the user knows
         # clicking it again will redock the preview.
-        self._popout_btn.setText("⇙ Redock")
-        self._popout_btn.setToolTip(
-            "Redock the preview back into the main panel.\n"
-            "Closes the floating window and restores the embedded preview."
-        )
+        self._apply_popout_button_state(self._popout_btn, undocked=True)
 
         def _on_dialog_finished(_result=None) -> None:
             """Reset button and stored reference when dialog closes for any reason."""
             self._popout_dialog = None
-            self._popout_btn.setText("⇗ Undock")
-            self._popout_btn.setToolTip(
-                "Undock the preview into a separate floating window.\n"
-                "The embedded preview stays available here while the floating window is open.\n"
-                "Click ⇙ Redock (or close the floating window) to return to the embedded preview."
-            )
+            self._apply_popout_button_state(self._popout_btn, undocked=False)
 
         dlg.finished.connect(_on_dialog_finished)
 
