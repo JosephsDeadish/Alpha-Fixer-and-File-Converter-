@@ -1089,8 +1089,9 @@ class VideoToolDialog(QDialog):
         progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
-
         progress.setLabelText("Rendering and saving output…")
+        progress.show()
+        QApplication.processEvents()
         brightness = self._brightness_slider.value() / 100.0
         contrast = self._contrast_slider.value() / 100.0
         black_point = self._black_slider.value()
@@ -1101,6 +1102,7 @@ class VideoToolDialog(QDialog):
         gif_frames = []
         canceled = False
         wrote_frames = False
+        np = None
         try:
             if fmt == "gif":
                 from PIL import Image  # noqa: F401
@@ -1139,7 +1141,6 @@ class VideoToolDialog(QDialog):
                     if fmt == "gif":
                         gif_frames.append(filtered.copy())
                     else:
-                        import numpy as np
                         rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")
                         try:
                             writer.append_data(np.array(rgb))

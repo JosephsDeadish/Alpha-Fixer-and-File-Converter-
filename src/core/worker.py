@@ -71,10 +71,28 @@ class AlphaWorker(QThread):
         self._overwrite = overwrite
         self._suffix = suffix
         self._backup_dir = backup_dir
+        self._backup_session_dir: Optional[str] = None
         self._abort = False
 
     def stop(self):
         self._abort = True
+
+    def _resolve_backup_path(self, src: str, idx: int) -> str:
+        base_dir = self._backup_session_dir or self._backup_dir or ""
+        relative = None
+        if self._input_root:
+            try:
+                candidate = os.path.relpath(src, self._input_root)
+                if candidate not in (".", "") and not candidate.startswith(".."):
+                    relative = candidate
+            except ValueError:
+                relative = None
+        if not relative:
+            relative = f"{idx}_{Path(src).name}"
+        backup_path = Path(base_dir, relative)
+        if backup_path.exists():
+            backup_path = backup_path.with_name(f"{backup_path.stem}_{idx}{backup_path.suffix}")
+        return str(backup_path)
 
     def run(self):
         total = len(self._files)
@@ -84,6 +102,9 @@ class AlphaWorker(QThread):
         last_progress_time = 0.0
         # Track (original_path, backup_path) pairs for undo support
         backup_pairs: list[tuple[str, str]] = []
+        if self._backup_dir:
+            session_stamp = f"session_{time.time_ns()}_{os.getpid()}"
+            self._backup_session_dir = os.path.join(self._backup_dir, session_stamp)
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
@@ -102,9 +123,8 @@ class AlphaWorker(QThread):
             if (self._backup_dir and self._overwrite
                     and not self._output_dir and not self._suffix):
                 try:
-                    bk_name = str(idx) + "_" + Path(src).name
-                    bk_path = os.path.join(self._backup_dir, bk_name)
-                    os.makedirs(self._backup_dir, exist_ok=True)
+                    bk_path = self._resolve_backup_path(src, idx)
+                    os.makedirs(os.path.dirname(bk_path) or self._backup_session_dir or self._backup_dir, exist_ok=True)
                     shutil.copy2(src, bk_path)
                     backup_pairs.append((src, bk_path))
                 except Exception as exc:

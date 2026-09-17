@@ -873,6 +873,47 @@ class TestWorkerBehavior(unittest.TestCase):
             self.assertEqual(finished, [(0, 1)])
             self.assertEqual(manifests, [])
 
+    def test_alpha_worker_backups_are_isolated_per_run(self):
+        from src.core.worker import AlphaWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "nested", "image.png")
+            os.makedirs(os.path.dirname(src), exist_ok=True)
+            Image.new("RGBA", (2, 2), (1, 2, 3, 4)).save(src)
+            backup_dir = os.path.join(tmpdir, "backup")
+
+            first = AlphaWorker(
+                files=[src],
+                manual_params={},
+                overwrite=True,
+                backup_dir=backup_dir,
+                input_root=tmpdir,
+            )
+            second = AlphaWorker(
+                files=[src],
+                manual_params={},
+                overwrite=True,
+                backup_dir=backup_dir,
+                input_root=tmpdir,
+            )
+
+            manifests = []
+            first.backup_manifest.connect(lambda pairs: manifests.append(list(pairs)))
+            second.backup_manifest.connect(lambda pairs: manifests.append(list(pairs)))
+
+            with mock.patch("src.core.worker.save_image"):
+                first.run()
+                second.run()
+
+            self.assertEqual(len(manifests), 2)
+            first_backup = manifests[0][0][1]
+            second_backup = manifests[1][0][1]
+            self.assertNotEqual(first_backup, second_backup)
+            self.assertTrue(first_backup.startswith(backup_dir))
+            self.assertTrue(second_backup.startswith(backup_dir))
+            self.assertIn(os.path.join("nested", "image.png"), first_backup)
+            self.assertIn(os.path.join("nested", "image.png"), second_backup)
+
     def test_converter_worker_emits_progress_and_results_in_input_order(self):
         from src.core.worker import ConverterWorker
 
@@ -8754,6 +8795,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             self.assertIn('copy_metadata("imageio")', src)
             self.assertIn('collect_data_files("imageio_ffmpeg")', src)
             self.assertIn('copy_metadata("imageio_ffmpeg")', src)
+
+    def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("progress.show()", src)
+        self.assertIn("QApplication.processEvents()", src)
+        self.assertIn("np = None", src)
+        self.assertIn("writer.append_data(np.array(rgb))", src)
+        self.assertNotIn("import numpy as np\n                        rgb =", src)
 
     def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
         src = self._src("../scripts/install_linux_deps.sh")
