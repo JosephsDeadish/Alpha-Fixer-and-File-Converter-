@@ -76,7 +76,7 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
                 composite.paste(curr, (0, 0), curr)
                 curr.close()
                 frames.append(composite.copy())
-                disposal = img.info.get("disposal", 0)
+                disposal = getattr(img, "disposal_method", img.info.get("disposal", 0))
                 canvas.close()
                 if disposal == 2:
                     canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))

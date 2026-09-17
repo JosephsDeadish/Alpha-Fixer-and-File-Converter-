@@ -103,7 +103,9 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            painter.drawPixmap(dst.topLeft(), scaled)
+            x = dst.left() + max(0, (dst.width() - scaled.width()) // 2)
+            y = dst.top() + max(0, (dst.height() - scaled.height()) // 2)
+            painter.drawPixmap(x, y, scaled)
 
 
 def _fmt_ts(ts: str) -> str:
@@ -760,13 +762,23 @@ class HistoryTab(QWidget):
 
             else:
                 # Plain text (default)
-                col_widths = [max(len(h), *(len(r[i]) for r in rows), 4)
-                              for i, h in enumerate(headers)] if rows else [len(h) for h in headers]
+                def _txt_cell(value: str, *, is_last: bool = False) -> str:
+                    text = str(value)
+                    if is_last and len(text) > 80:
+                        return text[:77] + "..."
+                    return text
+
+                txt_rows = [
+                    [_txt_cell(cell, is_last=(i == len(headers) - 1)) for i, cell in enumerate(row)]
+                    for row in rows
+                ]
+                col_widths = [max(len(h), *(len(r[i]) for r in txt_rows), 4)
+                              for i, h in enumerate(headers)] if txt_rows else [len(h) for h in headers]
                 def _fmt_row(cells):
                     return "  ".join(c.ljust(w) for c, w in zip(cells, col_widths))
                 header_line = _fmt_row(headers)
                 sep = "-" * len(header_line)
-                lines = [header_line, sep] + [_fmt_row(r) for r in rows]
+                lines = [header_line, sep] + [_fmt_row(r) for r in txt_rows]
                 content = "\n".join(lines) + "\n"
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)

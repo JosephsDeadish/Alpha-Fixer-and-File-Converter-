@@ -157,7 +157,7 @@ class GifFramePickerDialog(QDialog):
                 curr.close()
                 frames.append(composite.copy())
 
-                disposal = gif.info.get('disposal', 0)
+                disposal = getattr(gif, "disposal_method", gif.info.get('disposal', 0))
                 canvas.close()
                 if disposal == 2:
                     # Restore-to-background: next frame starts on a blank canvas.

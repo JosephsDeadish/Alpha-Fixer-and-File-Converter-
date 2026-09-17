@@ -19,7 +19,7 @@ from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 
 # Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
-_THEME_PREFIX_CHARS = "★🔓 "
+_THEME_PREFIX_CHARS = "★🔓🔒 "
 
 # Maximum character length accepted as a directly-typed custom emoji.
 # Emoji can be multi-codepoint sequences (e.g. 🏴‍☠️ = 7 code units) but are
@@ -2035,6 +2035,15 @@ class SettingsDialog(QDialog):
                 idx = self._theme_preset_combo.count()
                 self._theme_preset_combo.addItem(f"🔓 {name}")
                 _set_tip(idx, name)
+        current_hidden = self._theme.get("name", "")
+        if (
+            current_hidden in HIDDEN_THEMES
+            and not self._settings.get(f"unlock_{HIDDEN_THEMES[current_hidden].get('_unlock', '')}", False)
+            and _matches(current_hidden)
+        ):
+            idx = self._theme_preset_combo.count()
+            self._theme_preset_combo.addItem(f"🔒 {current_hidden}")
+            _set_tip(idx, current_hidden)
         saved = self._settings.get_saved_themes()
         filtered_saved = [n for n in sorted(saved) if _matches(n)]
         if filtered_saved:
@@ -2107,6 +2116,8 @@ class SettingsDialog(QDialog):
             idx = self._theme_preset_combo.findText(f"★ {theme_name}")
         if idx < 0:
             idx = self._theme_preset_combo.findText(f"🔓 {theme_name}")
+        if idx < 0:
+            idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")
         self._theme_preset_combo.setCurrentIndex(
             idx if idx >= 0 else self._theme_preset_combo.count() - 1
         )

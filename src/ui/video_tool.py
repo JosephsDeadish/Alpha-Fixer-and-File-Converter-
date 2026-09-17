@@ -223,6 +223,7 @@ class _VideoFrameGetter:
         self._path = path
         self._total_frames = max(1, int(total_frames))
         self._reader = None
+        self._last_idx = -1
 
     def _open_reader(self) -> None:
         import imageio
@@ -236,15 +237,18 @@ class _VideoFrameGetter:
             except Exception:
                 pass
             self._reader = None
+        self._last_idx = -1
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
         from PIL import Image
 
         clamped = max(0, min(self._total_frames - 1, int(idx)))
-        if self._reader is None:
+        if self._reader is None or clamped < self._last_idx:
+            self._close_reader()
             self._open_reader()
         try:
             frame = self._reader.get_data(clamped)
+            self._last_idx = clamped
         except Exception:
             self._close_reader()
             raise
@@ -260,6 +264,7 @@ class _VideoFrameGetter:
         self._path = state["_path"]
         self._total_frames = max(1, int(state["_total_frames"]))
         self._reader = None
+        self._last_idx = -1
 
 
 class _ClipEntry:
@@ -1003,8 +1008,10 @@ class VideoToolDialog(QDialog):
                 Path(out_path).unlink(missing_ok=True)
             except Exception:
                 pass
+            progress.close()
             return
 
+        progress.close()
         QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
 
     # ------------------------------------------------------------------

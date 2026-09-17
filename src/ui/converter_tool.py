@@ -1114,7 +1114,7 @@ class ConverterTab(QWidget):
                             composite.save(frame_path, format="PNG")
                             result.append(frame_path)
 
-                        disposal = gif.info.get('disposal', 0)
+                        disposal = getattr(gif, "disposal_method", gif.info.get('disposal', 0))
                         canvas.close()
                         if disposal == 2:
                             # Restore-to-background: next frame starts fresh.

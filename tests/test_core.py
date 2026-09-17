@@ -8518,13 +8518,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertNotIn("hide to make room for other controls", src)
         self.assertNotIn("close the floating preview", src)
         self.assertIn("The embedded preview stays available here while the floating window is open.", src)
+        self.assertIn("return to the embedded preview", src)
 
     def test_video_frame_getter_reuses_cached_reader(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("self._reader = None", src)
-        self.assertIn("if self._reader is None:", src)
+        self.assertIn("self._last_idx = -1", src)
+        self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
         self.assertIn("frame = self._reader.get_data(clamped)", src)
-        self.assertNotIn("self._last_idx = -1", src)
 
     def test_video_export_streams_frames_and_cleans_up_partial_output(self):
         src = self._src("ui/video_tool.py")
@@ -8541,12 +8542,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("opt = QStyleOptionViewItem(option)", src)
         self.assertIn("opt.icon = QIcon()", src)
         self.assertNotIn("item.setIcon(0, QIcon())", src)
+        self.assertIn("painter.drawPixmap(x, y, scaled)", src)
 
     def test_gif_disposal_restore_previous_handled(self):
         for rel in ("ui/gif_builder.py", "ui/gif_frame_picker.py", "ui/converter_tool.py"):
             src = self._src(rel)
             self.assertIn("elif disposal == 3:", src, f"{rel} must handle GIF disposal mode 3")
             self.assertIn("previous_canvas = canvas.copy()", src, f"{rel} must preserve pre-frame canvas")
+        self.assertIn('getattr(img, "disposal_method", img.info.get("disposal", 0))', self._src("ui/gif_builder.py"))
+        self.assertIn('getattr(gif, "disposal_method", gif.info.get(\'disposal\', 0))', self._src("ui/gif_frame_picker.py"))
+        self.assertIn('getattr(gif, "disposal_method", gif.info.get(\'disposal\', 0))', self._src("ui/converter_tool.py"))
 
     def test_alpha_worker_emits_backup_manifest_before_finished(self):
         src = self._src("core/worker.py")
@@ -8607,6 +8612,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_export_removes_partial_output_on_error(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+        self.assertIn("progress.close()", src)
 
     def test_build_scripts_use_dedicated_onefile_spec(self):
         sh_src = self._src("../scripts/build_exe.sh")
@@ -8666,3 +8672,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/history_tab.py")
         self.assertIn("header_line = _fmt_row(headers)", src)
         self.assertIn("sep = \"-\" * len(header_line)", src)
+
+    def test_history_text_export_truncates_long_filename_column(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("if is_last and len(text) > 80:", src)
+        self.assertIn('return text[:77] + "..."', src)
+
+    def test_settings_dialog_keeps_locked_hidden_current_theme_selectable(self):
+        src = self._src("ui/settings_dialog.py")
+        self.assertIn('_THEME_PREFIX_CHARS = "★🔓🔒 "', src)
+        self.assertIn('self._theme_preset_combo.addItem(f"🔒 {current_hidden}")', src)
+        self.assertIn('idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")', src)

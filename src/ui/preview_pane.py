@@ -504,7 +504,7 @@ class BeforeAfterWidget(QWidget):
             self._popout_btn.setToolTip(
                 "Undock the preview into a separate floating window.\n"
                 "The embedded preview stays available here while the floating window is open.\n"
-                "Click ⇙ Redock (or close the floating window) to close the floating window."
+                "Click ⇙ Redock (or close the floating window) to return to the embedded preview."
             )
 
         dlg.finished.connect(_on_dialog_finished)
