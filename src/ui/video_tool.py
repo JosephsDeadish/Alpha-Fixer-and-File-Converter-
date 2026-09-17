@@ -222,18 +222,45 @@ class _VideoFrameGetter:
     def __init__(self, path: str, total_frames: int) -> None:
         self._path = path
         self._total_frames = max(1, int(total_frames))
+        self._reader = None
+        self._last_idx = -1
+
+    def _close_reader(self) -> None:
+        if self._reader is not None:
+            try:
+                self._reader.close()
+            except Exception:
+                pass
+            self._reader = None
+        self._last_idx = -1
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
         import imageio
         from PIL import Image
 
         clamped = max(0, min(self._total_frames - 1, int(idx)))
-        reader = imageio.get_reader(self._path, format="FFMPEG")
+        if self._reader is None or clamped < self._last_idx:
+            self._close_reader()
+            self._reader = imageio.get_reader(self._path, format="FFMPEG")
         try:
-            frame = reader.get_data(clamped)
-        finally:
-            reader.close()
+            frame = self._reader.get_data(clamped)
+            self._last_idx = clamped
+        except Exception:
+            self._close_reader()
+            raise
         return Image.fromarray(frame).convert("RGBA")
+
+    def __del__(self) -> None:
+        self._close_reader()
+
+    def __getstate__(self) -> dict:
+        return {"_path": self._path, "_total_frames": self._total_frames}
+
+    def __setstate__(self, state: dict) -> None:
+        self._path = state["_path"]
+        self._total_frames = max(1, int(state["_total_frames"]))
+        self._reader = None
+        self._last_idx = -1
 
 
 class _ClipEntry:
@@ -254,6 +281,11 @@ class _ClipEntry:
 
     def get_frame(self, idx: int) -> "PIL.Image.Image":
         return self._get_frame(self.trim_start + idx)
+
+    def close(self) -> None:
+        close_fn = getattr(self._get_frame, "_close_reader", None)
+        if callable(close_fn):
+            close_fn()
 
 
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
@@ -710,6 +742,7 @@ class VideoToolDialog(QDialog):
         row = self._clip_list.currentRow()
         if row < 0 or row >= len(self._clips):
             return
+        self._clips[row].close()
         del self._clips[row]
         self._clip_list.takeItem(row)
         self._update_scrubber()
@@ -984,4 +1017,6 @@ class VideoToolDialog(QDialog):
 
     def closeEvent(self, event) -> None:
         self._preview_timer.stop()
+        for clip in self._clips:
+            clip.close()
         super().closeEvent(event)

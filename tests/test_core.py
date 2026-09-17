@@ -8488,3 +8488,46 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
             block,
             "autocorrect checkbox must be added inside the Tool Size group block",
         )
+
+
+class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
+    """Source-level regression checks for follow-up review fixes."""
+
+    def _src(self, rel: str) -> str:
+        with open(os.path.join(os.path.dirname(__file__), "..", "src", *rel.split("/")), encoding="utf-8") as f:
+            return f.read()
+
+    def test_alpha_history_export_headers_include_mode(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn(
+            'headers = ["Time", "Mode", "Files", "OK", "Errors", "File names"]',
+            src,
+            "alpha history export headers must include the Mode column",
+        )
+
+    def test_history_trees_disable_sorting_during_rebuild_and_sort_descending(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("tree.setSortingEnabled(False)", src)
+        for tree_name in ("_conv_tree", "_alpha_tree", "_sel_tree", "_gif_tree", "_vid_tree"):
+            self.assertIn(f"self.{tree_name}.setSortingEnabled(False)", src)
+            self.assertIn(f"self.{tree_name}.sortItems(0, Qt.SortOrder.DescendingOrder)", src)
+            self.assertIn(f"self.{tree_name}.setSortingEnabled(True)", src)
+
+    def test_preview_popout_tooltips_match_actual_behavior(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertNotIn("hide to make room for other controls", src)
+        self.assertNotIn("close the floating preview", src)
+        self.assertIn("The embedded preview stays available here while the floating window is open.", src)
+
+    def test_video_frame_getter_reuses_reader_state(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("self._reader = None", src)
+        self.assertIn("self._last_idx = -1", src)
+        self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
+        self.assertIn("self._reader.get_data(clamped)", src)
+
+    def test_video_export_streams_frames_and_cleans_up_partial_output(self):
+        src = self._src("ui/video_tool.py")
+        self.assertNotIn("rendered.append(", src)
+        self.assertIn("writer.append_data(", src)
+        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
