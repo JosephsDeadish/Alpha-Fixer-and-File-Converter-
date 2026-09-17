@@ -213,34 +213,34 @@ class TestConvertFile(unittest.TestCase):
             img = Image.open(dst)
             self.assertIn(img.mode, ("RGB", "L"))
 
-    def test_png_to_pam_preserves_alpha(self):
-        """PAM output should preserve RGBA data."""
+    def test_jfif_input_converts_to_png(self):
+        """JFIF input should be treated like JPEG."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            src = os.path.join(tmpdir, "input.png")
-            dst = os.path.join(tmpdir, "output.pam")
-            _make_png(src, alpha=128)
-            convert_file(src, dst, "PAM")
+            src = os.path.join(tmpdir, "input.jfif")
+            dst = os.path.join(tmpdir, "output.png")
+            Image.new("RGB", (8, 8), (12, 34, 56)).save(src, format="JPEG")
+            convert_file(src, dst, "PNG")
             self.assertTrue(os.path.isfile(dst))
-            img = Image.open(dst)
-            self.assertIn(img.mode, ("RGBA", "RGB"))
-            if "A" in img.mode:
-                self.assertEqual(img.getpixel((0, 0))[3], 128)
+            with Image.open(dst) as img:
+                self.assertEqual(img.size, (8, 8))
+                self.assertIn(img.mode, ("RGBA", "RGB"))
 
-    def test_alpha_processor_can_save_pam(self):
-        from src.core.alpha_processor import save_image, SUPPORTED_READ, ALPHA_FORMATS
+    def test_alpha_processor_loads_jpe_alias(self):
+        from src.core.alpha_processor import load_image, SUPPORTED_READ, CONVERT_TO_RGBA
 
-        self.assertIn(".pam", SUPPORTED_READ)
-        self.assertIn(".pam", ALPHA_FORMATS)
+        self.assertIn(".jpe", SUPPORTED_READ)
+        self.assertIn(".jfif", SUPPORTED_READ)
+        self.assertIn(".jpe", CONVERT_TO_RGBA)
+        self.assertIn(".jfif", CONVERT_TO_RGBA)
         with tempfile.TemporaryDirectory() as tmpdir:
-            dst = os.path.join(tmpdir, "output.pam")
-            img = Image.new("RGBA", (4, 4), (10, 20, 30, 140))
+            src = os.path.join(tmpdir, "input.jpe")
+            Image.new("RGB", (4, 4), (10, 20, 30)).save(src, format="JPEG")
+            img = load_image(src)
             try:
-                save_image(img, dst, ".pam")
+                self.assertEqual(img.mode, "RGBA")
+                self.assertEqual(img.size, (4, 4))
             finally:
                 img.close()
-            self.assertTrue(os.path.isfile(dst))
-            with Image.open(dst) as result:
-                self.assertIn(result.mode, ("RGBA", "RGB"))
 
     def test_png_to_pgm(self):
         """PGM output should be grayscale with no alpha."""
@@ -330,7 +330,7 @@ class TestConvertFile(unittest.TestCase):
             self.assertEqual(img.mode, "RGB")
 
     def test_supported_output_formats_includes_new(self):
-        for fmt in ("PAM", "PBM", "PGM", "PNM", "PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
+        for fmt in ("PBM", "PGM", "PNM", "PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
             with self.subTest(fmt=fmt):
                 self.assertIn(fmt, SUPPORTED_OUTPUT_FORMATS)
 

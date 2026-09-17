@@ -2,7 +2,7 @@
 Alpha channel processor.
 
 Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick),
-          PAM, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, JPEG2000.
+          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, JPEG2000.
 """
 import os
 import io
@@ -18,15 +18,16 @@ from .presets import AlphaPreset
 logger = logging.getLogger(__name__)
 
 # Formats that natively support an alpha channel
-ALPHA_FORMATS = {".png", ".webp", ".tga", ".tiff", ".tif", ".dds", ".gif", ".ico", ".pam"}
+ALPHA_FORMATS = {".png", ".webp", ".tga", ".tiff", ".tif", ".dds", ".gif", ".ico"}
 
 # Formats that need conversion to RGBA before processing
-CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp", ".pbm", ".pgm", ".pnm", ".ppm"}
+CONVERT_TO_RGBA = {".jpg", ".jpeg", ".jfif", ".jpe", ".bmp", ".pbm", ".pgm", ".pnm", ".ppm"}
 
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
-    ".gif", ".webp", ".tga", ".ico", ".dds", ".pam",
+    ".gif", ".webp", ".tga", ".ico", ".dds",
     ".pbm", ".pgm", ".pnm", ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2", ".j2k", ".j2c",
+    ".jfif", ".jpe",
     ".xnb", ".tim",
 }
 
@@ -577,17 +578,6 @@ def save_image(img: Image.Image, path: str, original_ext: str):
                 save_img.close()
             if flat is not None and flat is not img:
                 flat.close()
-        return
-    if ext == ".pam":
-        w, h = img.size
-        try:
-            img.save(path, format="PAM")
-        except MemoryError:
-            raise MemoryError(
-                f"Not enough memory to write {w}×{h} image "
-                f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
-                "Try processing a smaller file."
-            )
         return
     w, h = img.size
     try:
