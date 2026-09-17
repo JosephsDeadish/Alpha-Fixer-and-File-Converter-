@@ -1076,10 +1076,23 @@ class VideoToolDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _export(self) -> None:
-        total = self._total_preview_frames()
+        clip_snapshot = [
+            (clip._get_frame, clip.trim_start, clip.active_frames)
+            for clip in self._clips
+            if clip.active_frames > 0
+        ]
+        total = sum(active_frames for _, _, active_frames in clip_snapshot)
         if total == 0:
             QMessageBox.information(self, "No Clips", "Add at least one clip or image first.")
             return
+
+        def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:
+            idx = global_idx
+            for clip_idx, (_, _, active_frames) in enumerate(clip_snapshot):
+                if idx < active_frames:
+                    return clip_idx, idx
+                idx -= active_frames
+            return max(0, len(clip_snapshot) - 1), 0
 
         fmt = self._export_fmt_combo.currentData() or "gif"
         if fmt == "gif":
@@ -1141,8 +1154,9 @@ class VideoToolDialog(QDialog):
                 if progress.wasCanceled():
                     canceled = True
                     break
-                ci, fi = self._global_frame_to_clip(i)
-                source_pil = self._clips[ci].get_frame(fi)
+                ci, fi = _global_frame_to_snapshot(i)
+                get_frame_fn, trim_start, _active_frames = clip_snapshot[ci]
+                source_pil = get_frame_fn(trim_start + fi)
                 adjusted = source_pil
                 filtered = source_pil
                 rgb = None

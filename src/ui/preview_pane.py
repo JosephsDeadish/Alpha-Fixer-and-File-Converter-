@@ -578,9 +578,22 @@ class BeforeAfterWidget(QWidget):
     def _clamp_pan(self) -> None:
         """Clamp pan offsets so the image cannot be dragged completely off-screen."""
         w, h = self.width(), self.height()
-        # Allow panning by at most half the scaled image dimension
-        max_px = w * (self._zoom - 1) / 2 + w * 0.5
-        max_py = h * (self._zoom - 1) / 2 + h * 0.5
+        pixmaps = [
+            pix for pix in (self._pix_before, self._pix_after)
+            if pix is not None and not pix.isNull()
+        ]
+        if not pixmaps or w <= 0 or h <= 0:
+            self._pan_x = 0.0
+            self._pan_y = 0.0
+            return
+        scaled_widths = []
+        scaled_heights = []
+        for pix in pixmaps:
+            fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))
+            scaled_widths.append(pix.width() * fit_ratio * self._zoom)
+            scaled_heights.append(pix.height() * fit_ratio * self._zoom)
+        max_px = max(0.0, (min(scaled_widths) + w) / 2 - 1.0)
+        max_py = max(0.0, (min(scaled_heights) + h) / 2 - 1.0)
         self._pan_x = max(-max_px, min(max_px, self._pan_x))
         self._pan_y = max(-max_py, min(max_py, self._pan_y))
 

@@ -8642,8 +8642,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._reader = None", src)
         self.assertIn("self._last_idx = -1", src)
         self.assertIn("self._last_frame = None", src)
-        self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
-        self.assertIn("elif clamped == self._last_idx + 1:", src)
+        self.assertIn("self._prefetched_frame = first_frame", src)
+        self.assertIn("if clamped == 0 and self._prefetched_frame is not None:", src)
+        self.assertIn("reopened = self._reader is None or clamped < self._last_idx", src)
+        self.assertIn("elif not reopened and clamped == self._last_idx + 1:", src)
         self.assertIn("frame = self._reader.get_next_data()", src)
         self.assertIn("frame = self._reader.get_data(clamped)", src)
 
@@ -8711,7 +8713,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('os.environ.setdefault("IMAGEIO_FFMPEG_EXE", ffmpeg_exe)', src)
         self.assertNotIn('os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe', src)
         self.assertIn("self._video_io_available = self._ffmpeg_available and self._imageio_available", src)
-        self.assertIn("first_frame_ok = False", src)
+        self.assertIn("first_frame = None", src)
         self.assertIn("QApplication.processEvents()", src)
         self.assertIn('if fmt == "gif":\n                from PIL import Image', src)
         self.assertIn("gif_frames.append(filtered.copy())", src)
@@ -8720,7 +8722,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
         self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
-        self.assertIn("first_frame_ok = reader.get_data(0) is not None", src)
+        self.assertIn("first_frame = reader.get_data(0)", src)
+        self.assertIn("return fps, frame_count, first_frame", src)
         self.assertIn("self._reader = _open_video_reader(self._path)", src)
         self.assertIn("self._trim_start_slider.setValue(clip.trim_start)", src)
         self.assertIn("self._trim_end_slider.setValue(clip.trim_end)", src)
@@ -8981,6 +8984,24 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("QApplication.processEvents(", src)
         self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
         self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
+        self.assertIn("self.setUpdatesEnabled(False)", src)
+        self.assertIn("self.setUpdatesEnabled(True)", src)
+        self.assertIn("self.viewport().update()", src)
+
+    def test_preview_pane_clamps_pan_to_scaled_pixmap_bounds(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))", src)
+        self.assertIn("scaled_widths.append(pix.width() * fit_ratio * self._zoom)", src)
+        self.assertIn("max_px = max(0.0, (min(scaled_widths) + w) / 2 - 1.0)", src)
+        self.assertIn("max_py = max(0.0, (min(scaled_heights) + h) / 2 - 1.0)", src)
+
+    def test_video_export_uses_snapshot_of_clip_state_during_render(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("clip_snapshot = [", src)
+        self.assertIn("total = sum(active_frames for _, _, active_frames in clip_snapshot)", src)
+        self.assertIn("def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:", src)
+        self.assertIn("get_frame_fn, trim_start, _active_frames = clip_snapshot[ci]", src)
+        self.assertIn("source_pil = get_frame_fn(trim_start + fi)", src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")

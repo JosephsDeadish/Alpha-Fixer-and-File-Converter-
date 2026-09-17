@@ -385,23 +385,22 @@ class DropFileList(QListWidget):
             CHUNK = 2_000
         else:
             CHUNK = 500
-        # Suspend visual updates and sorting while bulk-inserting to avoid
-        # repeated layout recalculations which cause UI freezes on large imports.
-        self.setUpdatesEnabled(False)
         added = 0
-        try:
-            for start in range(0, total, CHUNK):
-                chunk = new_paths[start:start + CHUNK]
+        for start in range(0, total, CHUNK):
+            chunk = new_paths[start:start + CHUNK]
+            self.setUpdatesEnabled(False)
+            try:
                 for p in chunk:
                     self.addItem(p)
                     added += 1
-                # Process events every chunk so the UI stays alive and the
-                # Stop button remains responsive on very large imports.
-                QApplication.processEvents(
-                    QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers
-                )
-        finally:
-            self.setUpdatesEnabled(True)
+            finally:
+                self.setUpdatesEnabled(True)
+            self.viewport().update()
+            # Process events every chunk so the UI stays alive and the
+            # Stop button remains responsive on very large imports.
+            QApplication.processEvents(
+                QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers
+            )
         if added:
             self.count_changed.emit(self.count())
             if self._thumb_enabled and self.count() <= _THUMB_AUTO_DISABLE:
