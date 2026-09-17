@@ -547,6 +547,11 @@ def convert_file(
                         flat.close()
                 return output_path
 
+            # --- PAM (Portable Arbitrary Map; supports RGBA) ---
+            if ext == ".pam":
+                img.save(output_path, format="PAM")
+                return output_path
+
             # --- PCX (RGB or P, no alpha) ---
             if ext == ".pcx":
                 flat = _flatten_alpha(img)

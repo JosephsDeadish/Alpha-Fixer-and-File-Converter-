@@ -578,6 +578,17 @@ def save_image(img: Image.Image, path: str, original_ext: str):
             if flat is not None and flat is not img:
                 flat.close()
         return
+    if ext == ".pam":
+        w, h = img.size
+        try:
+            img.save(path, format="PAM")
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to write {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+                "Try processing a smaller file."
+            )
+        return
     w, h = img.size
     try:
         img.save(path)
