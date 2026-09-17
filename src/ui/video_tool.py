@@ -223,7 +223,6 @@ class _VideoFrameGetter:
         self._path = path
         self._total_frames = max(1, int(total_frames))
         self._reader = None
-        self._reader_iter = None
         self._last_idx = -1
         self._last_frame = None
 
@@ -240,7 +239,6 @@ class _VideoFrameGetter:
             except Exception:
                 pass
             self._reader = None
-        self._reader_iter = None
         self._last_idx = -1
         self._last_frame = None
 
@@ -273,7 +271,6 @@ class _VideoFrameGetter:
         self._path = state["_path"]
         self._total_frames = max(1, int(state["_total_frames"]))
         self._reader = None
-        self._reader_iter = None
         self._last_idx = -1
         self._last_frame = None
 
@@ -994,6 +991,10 @@ class VideoToolDialog(QDialog):
                         pass
             progress.setValue(total)
         except Exception as exc:
+            try:
+                Path(out_path).unlink(missing_ok=True)
+            except Exception:
+                pass
             progress.close()
             QMessageBox.critical(self, "Export Error", f"Could not save output:\n{exc}")
             return

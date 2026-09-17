@@ -8522,7 +8522,6 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_frame_getter_reuses_reader_state(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("self._reader = None", src)
-        self.assertIn("self._reader_iter = None", src)
         self.assertIn("self._last_idx = -1", src)
         self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
         self.assertIn("frame = self._reader.get_data(clamped)", src)
@@ -8572,6 +8571,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("for r in range(tree.topLevelItemCount()):", src)
         self.assertIn("if item is None or item.isHidden():", src)
         self.assertIn("body{background:#ffffff;color:#111111}", src)
+        self.assertIn("word-break:break-word;overflow-wrap:anywhere", src)
 
     def test_video_export_normalizes_output_extension(self):
         src = self._src("ui/video_tool.py")
@@ -8598,3 +8598,18 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_gif_builder_closes_progress_dialog_on_cancel(self):
         src = self._src("ui/gif_builder.py")
         self.assertIn("progress.close()", src)
+
+    def test_gif_builder_releases_frames_on_close(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("entry._pil.close()", src)
+        self.assertIn("self._frames.clear()", src)
+
+    def test_video_export_removes_partial_output_on_error(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+
+    def test_build_scripts_use_dedicated_onefile_spec(self):
+        sh_src = self._src("../scripts/build_exe.sh")
+        bat_src = self._src("../scripts/build_exe.bat")
+        self.assertIn("alpha_fixer_onefile.spec", sh_src)
+        self.assertIn("alpha_fixer_onefile.spec", bat_src)

@@ -26,7 +26,7 @@ rm -rf build dist __pycache__
 # ── 3. Run PyInstaller ────────────────────────────────────────────────────────
 if [[ "$1" == "--onefile" ]]; then
     echo "Building single-file executable…"
-    pyinstaller --onefile alpha_fixer.spec
+    pyinstaller alpha_fixer_onefile.spec
 else
     echo "Building one-folder application…"
     pyinstaller alpha_fixer.spec

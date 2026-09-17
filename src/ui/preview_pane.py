@@ -884,9 +884,9 @@ class BeforeAfterWidget(QWidget):
         100 = normal speed, 200 = twice as fast, 50 = half speed.
         Has no effect when no animation is currently playing.
         """
+        self._movie_speed = max(1, int(percent))
         if self._movie is not None:
-            self._movie_speed = max(1, int(percent))
-            self._movie.setSpeed(percent)
+            self._movie.setSpeed(self._movie_speed)
 
     def _stop_movie(self) -> None:
         """Stop and clean up any running QMovie."""

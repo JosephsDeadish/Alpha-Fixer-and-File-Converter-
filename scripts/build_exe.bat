@@ -25,7 +25,7 @@ if exist dist    rmdir /s /q dist
 REM ── 3. Run PyInstaller ──────────────────────────────────────────────────────
 if "%1"=="--onefile" (
     echo Building single-file executable…
-    pyinstaller --onefile alpha_fixer.spec
+    pyinstaller alpha_fixer_onefile.spec
 ) else (
     echo Building one-folder application…
     pyinstaller alpha_fixer.spec

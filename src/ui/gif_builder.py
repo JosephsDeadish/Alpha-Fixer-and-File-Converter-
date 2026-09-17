@@ -772,4 +772,10 @@ class GifBuilderDialog(QDialog):
 
     def closeEvent(self, event) -> None:
         self._preview_timer.stop()
+        for entry in self._frames:
+            try:
+                entry._pil.close()
+            except Exception:
+                pass
+        self._frames.clear()
         super().closeEvent(event)
