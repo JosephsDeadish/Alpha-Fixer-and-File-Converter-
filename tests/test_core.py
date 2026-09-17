@@ -2601,10 +2601,10 @@ class TestRound3Hardening(unittest.TestCase):
         self.assertIn("_cancel_event.set()", clear_src,
                       "clear() must call self._cancel_event.set() to retire old event")
 
-    def test_drop_list_bulk_insert_excludes_user_input_events(self):
+    def test_drop_list_bulk_insert_keeps_user_input_events_enabled(self):
         src = self._drop_list_source()
-        self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
         self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
+        self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
 
     def test_thumb_runnable_cancel_prevents_emit(self):
         """_ThumbRunnable.run() must return early (without emitting) when the
