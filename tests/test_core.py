@@ -8638,3 +8638,21 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("libxcb-cursor.so.0", src)
         self.assertIn("libxkbcommon-x11.so.0", src)
         self.assertIn("Install the Qt X11/XCB support libraries for your distribution", src)
+
+    def test_video_export_caches_adjustment_values_before_frame_loop(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("brightness = self._brightness_slider.value() / 100.0", src)
+        self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
+        self.assertIn("brightness=brightness", src)
+        self.assertIn("contrast=contrast", src)
+
+    def test_gif_builder_caches_preview_pixmaps(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("self._thumb_cache", src)
+        self.assertIn("cached = self._thumb_cache.get(key)", src)
+        self.assertIn("self._thumb_cache = {key: pix}", src)
+
+    def test_history_html_export_includes_title_and_caption(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("<title>{title} History</title>", src)
+        self.assertIn("<caption>{title} History</caption>", src)

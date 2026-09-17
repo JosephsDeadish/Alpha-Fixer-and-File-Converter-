@@ -947,6 +947,12 @@ class VideoToolDialog(QDialog):
         import numpy as np
 
         progress.setLabelText("Rendering and saving output…")
+        brightness = self._brightness_slider.value() / 100.0
+        contrast = self._contrast_slider.value() / 100.0
+        black_point = self._black_slider.value()
+        white_point = self._white_slider.value()
+        saturation = self._saturation_slider.value() / 100.0
+        sharpness = self._sharpness_slider.value() / 100.0
         writer = None
         wrote_frames = False
         try:
@@ -974,12 +980,12 @@ class VideoToolDialog(QDialog):
                 try:
                     pil = _apply_adjustments(
                         pil,
-                        brightness=self._brightness_slider.value() / 100.0,
-                        contrast=self._contrast_slider.value() / 100.0,
-                        black_point=self._black_slider.value(),
-                        white_point=self._white_slider.value(),
-                        saturation=self._saturation_slider.value() / 100.0,
-                        sharpness=self._sharpness_slider.value() / 100.0,
+                        brightness=brightness,
+                        contrast=contrast,
+                        black_point=black_point,
+                        white_point=white_point,
+                        saturation=saturation,
+                        sharpness=sharpness,
                     )
                     pil = _apply_filter(pil, filter_key)
                     writer.append_data(np.array(pil.convert("RGB")))

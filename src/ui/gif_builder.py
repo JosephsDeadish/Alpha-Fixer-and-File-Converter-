@@ -113,14 +113,22 @@ class _FrameEntry:
         self.frame_index = frame_index  # 0-based index within source (>0 for animated GIF)
         self._pil = pil_image           # RGBA PIL image; ownership transferred here
         self.delay_ms: Optional[int] = delay_ms  # None = use global delay
+        self._thumb_cache: dict[tuple[int, int], QPixmap] = {}
 
     def thumbnail(self, w: int, h: int) -> QPixmap:
         from PIL import Image
+        key = (w, h)
+        cached = self._thumb_cache.get(key)
+        if cached is not None:
+            return cached
         tmp = self._pil.copy()
         tmp.thumbnail((w, h), Image.LANCZOS)
-        return _pil_to_pixmap(tmp)
+        pix = _pil_to_pixmap(tmp)
+        self._thumb_cache = {key: pix}
+        return pix
 
     def close(self) -> None:
+        self._thumb_cache.clear()
         try:
             self._pil.close()
         except Exception:
