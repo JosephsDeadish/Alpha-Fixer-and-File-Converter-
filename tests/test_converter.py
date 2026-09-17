@@ -46,6 +46,42 @@ def _make_palette_png(path: str, w=8, h=8):
     img.save(path)
 
 
+def _make_raw_dds(
+    path: str,
+    width: int,
+    height: int,
+    bits: int,
+    pixel_data: bytes,
+    *,
+    pf_flags: int = 0x41,
+    r_mask: int = 0x00FF0000,
+    g_mask: int = 0x0000FF00,
+    b_mask: int = 0x000000FF,
+    a_mask: int = 0xFF000000,
+):
+    def dword(n: int) -> bytes:
+        return int(n).to_bytes(4, "little")
+
+    header = bytearray(128)
+    header[0:4] = b"DDS "
+    header[4:8] = dword(124)
+    header[8:12] = dword(0x000A1007)
+    header[12:16] = dword(height)
+    header[16:20] = dword(width)
+    header[20:24] = dword(width * max(1, bits // 8))
+    header[76:80] = dword(32)
+    header[80:84] = dword(pf_flags)
+    header[88:92] = dword(bits)
+    header[92:96] = dword(r_mask)
+    header[96:100] = dword(g_mask)
+    header[100:104] = dword(b_mask)
+    header[104:108] = dword(a_mask)
+    header[108:112] = dword(0x1000)
+    with open(path, "wb") as f:
+        f.write(bytes(header))
+        f.write(pixel_data)
+
+
 class TestBuildOutputPath(unittest.TestCase):
 
     def test_same_dir(self):
@@ -178,6 +214,88 @@ class TestConvertFile(unittest.TestCase):
                     self.assertEqual(result.size, (4, 4))
         finally:
             img.close()
+
+    def test_load_dds_supports_16bit_argb1555_masks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.dds")
+            pixels = (
+                (0xFC00).to_bytes(2, "little")
+                + (0x83E0).to_bytes(2, "little")
+                + (0x801F).to_bytes(2, "little")
+                + (0xFFFF).to_bytes(2, "little")
+            )
+            _make_raw_dds(
+                src,
+                2,
+                2,
+                16,
+                pixels,
+                pf_flags=0x41,
+                r_mask=0x7C00,
+                g_mask=0x03E0,
+                b_mask=0x001F,
+                a_mask=0x8000,
+            )
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.mode, "RGBA")
+                self.assertEqual(img.size, (2, 2))
+                self.assertGreaterEqual(img.getpixel((0, 0))[0], 240)
+                self.assertEqual(img.getpixel((0, 0))[3], 255)
+                self.assertGreaterEqual(img.getpixel((1, 0))[1], 240)
+                self.assertGreaterEqual(img.getpixel((0, 1))[2], 240)
+            finally:
+                img.close()
+
+    def test_load_dds_supports_luminance_alpha_masks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.dds")
+            pixels = (0x4080).to_bytes(2, "little")
+            _make_raw_dds(
+                src,
+                1,
+                1,
+                16,
+                pixels,
+                pf_flags=0x20001,
+                r_mask=0x00FF,
+                g_mask=0x0000,
+                b_mask=0x0000,
+                a_mask=0xFF00,
+            )
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (128, 128, 128, 64))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_custom_32bit_channel_masks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.dds")
+            pixels = bytes((10, 20, 30, 40))
+            _make_raw_dds(
+                src,
+                1,
+                1,
+                32,
+                pixels,
+                pf_flags=0x41,
+                r_mask=0x000000FF,
+                g_mask=0x0000FF00,
+                b_mask=0x00FF0000,
+                a_mask=0xFF000000,
+            )
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (10, 20, 30, 40))
+            finally:
+                img.close()
 
     def test_supported_output_formats_includes_png(self):
         self.assertIn("PNG", SUPPORTED_OUTPUT_FORMATS)

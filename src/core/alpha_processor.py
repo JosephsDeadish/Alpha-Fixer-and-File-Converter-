@@ -93,6 +93,10 @@ def _load_dds_raw(path: str) -> Image.Image:
     pf_flags = int.from_bytes(data[80:84], "little")
     pf_fourcc = data[84:88]
     bits = int.from_bytes(data[88:92], "little")
+    r_mask = int.from_bytes(data[92:96], "little")
+    g_mask = int.from_bytes(data[96:100], "little")
+    b_mask = int.from_bytes(data[100:104], "little")
+    a_mask = int.from_bytes(data[104:108], "little")
 
     # Check for DX10 extended header (FourCC = "DX10")
     dx10_dxgi_format = 0
@@ -162,30 +166,65 @@ def _load_dds_raw(path: str) -> Image.Image:
     expected = width * height * (bits // 8)
     if len(pixel_data) < expected or bits not in (32, 24, 16, 8):
         raise ValueError(f"Unsupported DDS pixel format (bits={bits})")
-    arr = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(
-        height, width, bits // 8
-    )
-    if bits == 32:
-        img = Image.fromarray(arr[:, :, [2, 1, 0, 3]], "RGBA")
+    _DDPF_LUMINANCE = 0x20000
+
+    def _scale_mask(masked_values: np.ndarray, mask: int) -> np.ndarray:
+        if mask == 0:
+            return np.zeros(masked_values.shape, dtype=np.uint8)
+        shift = (mask & -mask).bit_length() - 1
+        max_value = mask >> shift
+        channel = (masked_values & mask) >> shift
+        if max_value <= 0:
+            return np.zeros(masked_values.shape, dtype=np.uint8)
+        return ((channel.astype(np.uint32) * 255 + max_value // 2) // max_value).astype(np.uint8)
+
+    if bits == 8:
+        grey = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(height, width)
+        return Image.fromarray(grey, "L").convert("RGBA")
+
+    if bits == 16:
+        values = np.frombuffer(pixel_data[:expected], dtype="<u2").astype(np.uint32).reshape(height, width)
     elif bits == 24:
+        raw = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(height, width, 3)
+        values = (
+            raw[:, :, 0].astype(np.uint32)
+            | (raw[:, :, 1].astype(np.uint32) << 8)
+            | (raw[:, :, 2].astype(np.uint32) << 16)
+        )
+    else:
+        values = np.frombuffer(pixel_data[:expected], dtype="<u4").astype(np.uint32).reshape(height, width)
+
+    if any((r_mask, g_mask, b_mask, a_mask)):
+        colour_masks = [mask for mask in (r_mask, g_mask, b_mask) if mask]
+        if pf_flags & _DDPF_LUMINANCE or len(colour_masks) == 1:
+            lum_mask = colour_masks[0] if colour_masks else 0xFF
+            lum = _scale_mask(values, lum_mask)
+            alpha = _scale_mask(values, a_mask) if a_mask else np.full(lum.shape, 255, dtype=np.uint8)
+            rgba = np.stack([lum, lum, lum, alpha], axis=-1)
+            return Image.fromarray(rgba, "RGBA")
+        r = _scale_mask(values, r_mask) if r_mask else np.zeros(values.shape, dtype=np.uint8)
+        g = _scale_mask(values, g_mask) if g_mask else np.zeros(values.shape, dtype=np.uint8)
+        b = _scale_mask(values, b_mask) if b_mask else np.zeros(values.shape, dtype=np.uint8)
+        a = _scale_mask(values, a_mask) if a_mask else np.full(values.shape, 255, dtype=np.uint8)
+        rgba = np.stack([r, g, b, a], axis=-1)
+        return Image.fromarray(rgba, "RGBA")
+
+    arr = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(height, width, bits // 8)
+    if bits == 32:
+        return Image.fromarray(arr[:, :, [2, 1, 0, 3]], "RGBA")
+    if bits == 24:
         _rgb = Image.fromarray(arr[:, :, [2, 1, 0]], "RGB")
         try:
-            img = _rgb.convert("RGBA")
+            return _rgb.convert("RGBA")
         finally:
             _rgb.close()
-    elif bits == 16:
-        # A8L8 or R5G6B5 – treat as greyscale+alpha or convert to RGBA
-        r5g6b5 = arr.reshape(height, width, 2)
-        val = r5g6b5[:, :, 0].astype(np.uint16) | (r5g6b5[:, :, 1].astype(np.uint16) << 8)
-        r = ((val >> 11) & 0x1F).astype(np.uint8) * 8
-        g = ((val >> 5) & 0x3F).astype(np.uint8) * 4
-        b = (val & 0x1F).astype(np.uint8) * 8
-        rgba = np.stack([r, g, b, np.full_like(r, 255)], axis=-1)
-        img = Image.fromarray(rgba, "RGBA")
-    else:  # bits == 8
-        grey = arr[:, :, 0]
-        img = Image.fromarray(grey, "L").convert("RGBA")
-    return img
+    r5g6b5 = arr.reshape(height, width, 2)
+    val = r5g6b5[:, :, 0].astype(np.uint16) | (r5g6b5[:, :, 1].astype(np.uint16) << 8)
+    r = ((val >> 11) & 0x1F).astype(np.uint8) * 8
+    g = ((val >> 5) & 0x3F).astype(np.uint8) * 4
+    b = (val & 0x1F).astype(np.uint8) * 8
+    rgba = np.stack([r, g, b, np.full_like(r, 255)], axis=-1)
+    return Image.fromarray(rgba, "RGBA")
 
 
 # --------------------------------------------------------------------------- #

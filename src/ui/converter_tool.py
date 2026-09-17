@@ -25,6 +25,7 @@ from .drop_list import DropFileList
 from .gif_frame_picker import GifFramePickerDialog
 from .gif_builder import GifBuilderDialog
 from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader
+from .video_tool import _VIDEO_EXTS
 
 
 def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
@@ -601,12 +602,25 @@ class ConverterTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif "
-            "*.ppm *.pcx *.avif *.qoi *.svg *.jp2 *.xnb *.tim);;All Files (*)",
+            self._input_file_dialog_filter(),
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
             self._add_to_list(paths)
+
+    def _selected_target_format(self) -> str:
+        fmt_data = self._fmt_combo.currentData()
+        return fmt_data[0] if fmt_data else ""
+
+    def _supported_input_exts(self) -> set[str]:
+        if self._selected_target_format() == "GIF":
+            return SUPPORTED_READ | _VIDEO_EXTS
+        return SUPPORTED_READ
+
+    def _input_file_dialog_filter(self) -> str:
+        exts = " ".join(sorted(f"*{ext}" for ext in self._supported_input_exts()))
+        label = "Media" if self._selected_target_format() == "GIF" else "Images"
+        return f"{label} ({exts});;All Files (*)"
 
     def _add_folder(self):
         last_dir = self._settings.get("last_input_dir", "")
@@ -626,11 +640,12 @@ class ConverterTab(QWidget):
         individual = [p for p in paths if os.path.isfile(p)]
         dirs = [p for p in paths if os.path.isdir(p)]
 
+        supported_exts = self._supported_input_exts()
         unsupported_count = sum(
             1 for p in individual
-            if Path(p).suffix.lower() not in SUPPORTED_READ
+            if Path(p).suffix.lower() not in supported_exts
         )
-        valid_files = [p for p in individual if Path(p).suffix.lower() in SUPPORTED_READ]
+        valid_files = [p for p in individual if Path(p).suffix.lower() in supported_exts]
 
         was_empty = self._file_list.count() == 0
         if valid_files:
@@ -641,7 +656,7 @@ class ConverterTab(QWidget):
         if unsupported_count:
             self._log_msg(
                 f"⚠ {unsupported_count} file(s) skipped — format not supported "
-                f"(supported: {', '.join(sorted(SUPPORTED_READ))})"
+                f"(supported: {', '.join(sorted(supported_exts))})"
             )
 
         if dirs:
@@ -651,7 +666,7 @@ class ConverterTab(QWidget):
                 self._collect_thread.wait(200)
 
             recursive = self._recursive_check.isChecked()
-            thread = _FileCollectThread(dirs, SUPPORTED_READ, recursive)
+            thread = _FileCollectThread(dirs, supported_exts, recursive)
 
             def _on_files_found(batch: list[str]) -> None:
                 pre = self._file_list.count() == 0
@@ -941,15 +956,21 @@ class ConverterTab(QWidget):
             QMessageBox.information(self, "No Files", "Please add files or a folder first.")
             return
 
-        expanded = collect_files(files, recursive=self._recursive_check.isChecked())
-        if not expanded:
-            QMessageBox.information(self, "No Files", "No supported image files found.")
-            return
-
         fmt_data = self._fmt_combo.currentData()
         if not fmt_data:
             return
         target_format, target_ext = fmt_data
+
+        supported_exts = self._supported_input_exts()
+        expanded = collect_files(
+            files,
+            extensions=supported_exts,
+            recursive=self._recursive_check.isChecked(),
+        )
+        if not expanded:
+            noun = "media" if target_format == "GIF" else "image"
+            QMessageBox.information(self, "No Files", f"No supported {noun} files found.")
+            return
 
         # ------------------------------------------------------------------
         # When the target format is GIF, open the GIF Builder so the user can

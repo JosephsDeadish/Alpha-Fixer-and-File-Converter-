@@ -1498,9 +1498,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         )
         with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
             with patch.dict(sys.modules, {"imageio_ffmpeg": fake_ffmpeg}):
-                fps, frame_count = vt._probe_video_clip("/tmp/test.mp4")
+                fps, frame_count, first_frame = vt._probe_video_clip("/tmp/test.mp4")
         self.assertEqual(fps, 30.0)
         self.assertEqual(frame_count, 12)
+        self.assertIsNone(first_frame)
 
 
 # ---------------------------------------------------------------------------

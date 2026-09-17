@@ -13,8 +13,8 @@ Provides a lightweight video editor that lets the user:
 
 **Dependency note**: Full video I/O requires a working ffmpeg executable,
 preferably from bundled imageio-ffmpeg or otherwise from the system PATH.
-If ffmpeg is unavailable the dialog can still assemble still images into
-an animated GIF.
+If ffmpeg is unavailable the dialog can still assemble still images and GIFs
+into an animated GIF.
 
 UX highlights (Round-90):
   • All numeric controls use drag-sliders – no arrow-button spinboxes.
@@ -68,12 +68,28 @@ _VIDEO_EXTS = {
 }
 _IMAGE_EXTS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",
+    ".gif", ".dds", ".tga", ".ico", ".ppm", ".pgm", ".pbm", ".pnm",
+    ".pcx", ".avif", ".qoi", ".svg", ".jp2", ".j2k", ".j2c",
+    ".jfif", ".jpe", ".xnb", ".tim",
 }
 
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
 
 _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
+
+
+def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
+    """Return the logical update rectangle for the current GIF frame."""
+    rect = getattr(gif, "dispose_extent", None)
+    if isinstance(rect, tuple) and len(rect) == 4:
+        return rect
+    tile = getattr(gif, "tile", None)
+    if tile:
+        candidate = tile[0][1]
+        if isinstance(candidate, tuple) and len(candidate) == 4:
+            return candidate
+    return (0, 0, frame_img.width, frame_img.height)
 
 
 @lru_cache(maxsize=1)
@@ -314,6 +330,31 @@ class _ImageFrameGetter:
     def __call__(self, idx: int) -> "PIL.Image.Image":
         return self._img.copy()
 
+    def _close_reader(self) -> None:
+        try:
+            self._img.close()
+        except Exception:
+            pass
+
+
+class _SequenceFrameGetter:
+    """Picklable frame getter backed by one or more in-memory PIL frames."""
+
+    def __init__(self, frames: list["PIL.Image.Image"]) -> None:
+        self._frames = list(frames)
+
+    def __call__(self, idx: int) -> "PIL.Image.Image":
+        clamped = max(0, min(len(self._frames) - 1, int(idx)))
+        return self._frames[clamped].copy()
+
+    def _close_reader(self) -> None:
+        for frame in self._frames:
+            try:
+                frame.close()
+            except Exception:
+                pass
+        self._frames.clear()
+
 
 class _VideoFrameGetter:
     """Picklable frame getter for a multi-frame video clip."""
@@ -422,13 +463,72 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
 
 
 def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
-    """Wrap a single image file as a 1-frame clip."""
+    """Wrap a still image or animated GIF file as a clip."""
     try:
         from PIL import Image
-        img = Image.open(path).convert("RGBA")
-        img_copy = img.copy()
-        img.close()
-        return _ClipEntry(path, 1, _ImageFrameGetter(img_copy), 25.0)
+        from ..core.alpha_processor import load_image
+
+        ext = Path(path).suffix.lower()
+        if ext == ".gif":
+            gif = Image.open(path)
+            frames: list[Image.Image] = []
+            durations: list[int] = []
+            try:
+                n = getattr(gif, "n_frames", 1)
+                if n <= 1:
+                    frames.append(gif.convert("RGBA"))
+                else:
+                    canvas = Image.new("RGBA", gif.size, (0, 0, 0, 0))
+                    try:
+                        for i in range(n):
+                            gif.seek(i)
+                            curr = gif.convert("RGBA")
+                            previous_canvas = canvas.copy()
+                            composite = canvas.copy()
+                            rect = _gif_frame_rect(gif, curr)
+                            left, top, right, bottom = rect
+                            rect_size = (max(0, right - left), max(0, bottom - top))
+                            if curr.size == rect_size:
+                                paste_img = curr
+                            elif curr.width >= right and curr.height >= bottom:
+                                paste_img = curr.crop(rect)
+                            else:
+                                paste_img = curr
+                            try:
+                                composite.paste(paste_img, (left, top), paste_img)
+                            finally:
+                                if paste_img is not curr:
+                                    paste_img.close()
+                                curr.close()
+                            frames.append(composite.copy())
+                            durations.append(max(1, int(gif.info.get("duration", 100) or 100)))
+                            disposal = getattr(gif, "disposal_method", gif.info.get("disposal", 0))
+                            canvas.close()
+                            if disposal == 2:
+                                canvas = Image.new("RGBA", gif.size, (0, 0, 0, 0))
+                                composite.close()
+                                previous_canvas.close()
+                            elif disposal == 3:
+                                canvas = previous_canvas
+                                composite.close()
+                            else:
+                                canvas = composite
+                                previous_canvas.close()
+                    finally:
+                        canvas.close()
+            finally:
+                gif.close()
+            fps = 25.0
+            if durations:
+                avg_duration = sum(durations) / len(durations)
+                if avg_duration > 0:
+                    fps = max(0.1, min(60.0, 1000.0 / avg_duration))
+            total_frames = max(1, len(frames))
+            getter = _SequenceFrameGetter(frames)
+            return _ClipEntry(path, total_frames, getter, fps)
+
+        img = load_image(path)
+        return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0)
     except Exception:
         return None
 
@@ -449,7 +549,7 @@ class _ClipListWidget(QListWidget):
     fires after any internal drag so the caller can re-sync ``_clips``.
     """
 
-    files_dropped = pyqtSignal(list)  # list[str]
+    files_dropped = pyqtSignal(list, int)  # list[str], insert_row
     order_changed = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -479,7 +579,15 @@ class _ClipListWidget(QListWidget):
             paths = [url.toLocalFile() for url in event.mimeData().urls()
                      if url.toLocalFile()]
             if paths:
-                self.files_dropped.emit(paths)
+                pos = event.position().toPoint()
+                row = self.count()
+                index = self.indexAt(pos)
+                if index.isValid():
+                    row = index.row()
+                    rect = self.visualRect(index)
+                    if pos.y() > rect.center().y():
+                        row += 1
+                self.files_dropped.emit(paths, row)
                 event.acceptProposedAction()
                 return
         super().dropEvent(event)
@@ -532,7 +640,7 @@ class VideoToolDialog(QDialog):
         if not self._video_io_available:
             warn = QLabel(
                 "⚠  ffmpeg and/or imageio are unavailable or not bundled — video import and MP4 export unavailable.  "
-                "You can still add images and export an animated GIF."
+                "You can still add images/GIFs and export an animated GIF."
             )
             warn.setWordWrap(True)
             warn.setStyleSheet("color: orange;")
@@ -554,8 +662,8 @@ class VideoToolDialog(QDialog):
         self._btn_add_video.clicked.connect(self._add_video)
         tb.addWidget(self._btn_add_video)
 
-        self._btn_add_img = QPushButton("🖼  Add Images")
-        self._btn_add_img.setToolTip("Add still image(s) as single-frame clips.")
+        self._btn_add_img = QPushButton("🖼  Add Images / GIFs")
+        self._btn_add_img.setToolTip("Add still image(s), animated GIFs, or other supported image files.")
         self._btn_add_img.clicked.connect(self._add_images)
         tb.addWidget(self._btn_add_img)
 
@@ -823,21 +931,50 @@ class VideoToolDialog(QDialog):
     # Clip management
     # ------------------------------------------------------------------
 
-    def _on_files_dropped(self, paths: list[str]) -> None:
-        vid, img = [], []
+    def _next_insert_row(self) -> int:
+        row = self._clip_list.currentRow()
+        return len(self._clips) if row < 0 else row + 1
+
+    def _insert_clip(self, clip: "_ClipEntry", label: str, row: Optional[int] = None) -> int:
+        insert_row = len(self._clips) if row is None else max(0, min(len(self._clips), row))
+        self._clips.insert(insert_row, clip)
+        item = QListWidgetItem(label)
+        item.setData(_CLIP_ROLE, clip)
+        self._clip_list.insertItem(insert_row, item)
+        self._clip_list.setCurrentRow(insert_row)
+        return insert_row + 1
+
+    def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
         skipped = []
-        for p in paths:
-            ext = Path(p).suffix.lower()
+        next_row = max(0, min(len(self._clips), insert_row))
+        for path in paths:
+            ext = Path(path).suffix.lower()
             if ext in _VIDEO_EXTS:
-                vid.append(p)
+                clip = _load_video_clip(path)
+                if clip is None:
+                    QMessageBox.warning(
+                        self, "Load Error",
+                        f"Could not open video:\n{Path(path).name}\n"
+                        "Ensure imageio-ffmpeg or a system ffmpeg binary is available,\n"
+                        "and check that the file is a supported, non-corrupt video."
+                    )
+                    continue
+                label = f"🎞  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+                next_row = self._insert_clip(clip, label, next_row)
             elif ext in _IMAGE_EXTS:
-                img.append(p)
+                clip = _load_image_as_clip(path)
+                if clip is None:
+                    skipped.append(Path(path).name)
+                    continue
+                if clip.total_frames > 1:
+                    label = f"🖼  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+                else:
+                    label = f"🖼  {Path(path).name}"
+                next_row = self._insert_clip(clip, label, next_row)
             else:
-                skipped.append(Path(p).name)
-        if vid:
-            self._load_video_paths(vid)
-        if img:
-            self._load_image_paths(img)
+                skipped.append(Path(path).name)
+        self._update_scrubber()
+        self._update_preview()
         if skipped:
             QMessageBox.information(
                 self,
@@ -854,9 +991,10 @@ class VideoToolDialog(QDialog):
             "*.rm *.rmvb *.divx *.asf *.f4v *.mxf *.dv "
             "*.pmf *.pss *.str *.xa *.iso *.umd *.bin);;All Files (*)",
         )
-        self._load_video_paths(paths)
+        self._load_video_paths(paths, insert_row=self._next_insert_row())
 
-    def _load_video_paths(self, paths: list[str]) -> None:
+    def _load_video_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
+        next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         for path in paths:
             clip = _load_video_clip(path)
             if clip is None:
@@ -867,30 +1005,30 @@ class VideoToolDialog(QDialog):
                     "and check that the file is a supported, non-corrupt video."
                 )
                 continue
-            self._clips.append(clip)
-            item = QListWidgetItem(f"🎞  {Path(path).name}  "
-                                   f"[{clip.total_frames} fr @ {clip.fps:.1f} fps]")
-            item.setData(_CLIP_ROLE, clip)
-            self._clip_list.addItem(item)
+            label = f"🎞  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+            next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
 
     def _add_images(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Add Images", "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif);;All Files (*)",
+            self, "Add Images / GIFs", "",
+            "Images (*.png *.jpg *.jpeg *.jfif *.jpe *.webp *.bmp *.tiff *.tif *.gif *.dds "
+            "*.tga *.ico *.ppm *.pgm *.pbm *.pnm *.pcx *.avif *.qoi *.svg *.jp2 *.j2k *.j2c "
+            "*.xnb *.tim);;All Files (*)",
         )
-        self._load_image_paths(paths)
+        self._load_image_paths(paths, insert_row=self._next_insert_row())
 
-    def _load_image_paths(self, paths: list[str]) -> None:
+    def _load_image_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
+        next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         for path in paths:
             clip = _load_image_as_clip(path)
             if clip is None:
                 continue
-            self._clips.append(clip)
-            item = QListWidgetItem(f"🖼  {Path(path).name}")
-            item.setData(_CLIP_ROLE, clip)
-            self._clip_list.addItem(item)
+            label = f"🖼  {Path(path).name}"
+            if clip.total_frames > 1:
+                label = f"🖼  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+            next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
 
