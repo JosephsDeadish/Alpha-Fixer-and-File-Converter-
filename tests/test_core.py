@@ -8567,3 +8567,24 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("Quality (JPEG/WEBP/AVIF/JPEG2000):", src)
         self.assertIn('fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000")', src)
         self.assertIn("Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs.", src)
+
+    def test_history_export_uses_visible_sorted_rows_only(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("for r in range(tree.topLevelItemCount()):", src)
+        self.assertIn("if item is None or item.isHidden():", src)
+
+    def test_video_export_normalizes_output_extension(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('if fmt == "gif" and not out_path.lower().endswith(".gif"):', src)
+        self.assertIn('if fmt != "gif" and not out_path.lower().endswith(".mp4"):', src)
+
+    def test_sound_engine_honors_theme_sound_override(self):
+        src = self._src("ui/sound_engine.py")
+        self.assertIn('self._settings.get("sound_theme_preset", "")', src)
+        self.assertIn("if not theme_name:", src)
+
+    def test_tutorial_video_step_matches_current_ui(self):
+        src = self._src("ui/tutorial_dialog.py")
+        self.assertIn('"title": "Video Editor"', src)
+        self.assertIn("MP4 or GIF", src)
+        self.assertNotIn("WebM", src)

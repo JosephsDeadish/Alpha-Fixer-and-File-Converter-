@@ -938,6 +938,10 @@ class VideoToolDialog(QDialog):
             )
         if not out_path:
             return
+        if fmt == "gif" and not out_path.lower().endswith(".gif"):
+            out_path += ".gif"
+        if fmt != "gif" and not out_path.lower().endswith(".mp4"):
+            out_path += ".mp4"
 
         fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"

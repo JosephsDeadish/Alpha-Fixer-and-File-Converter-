@@ -89,13 +89,13 @@ _TUTORIAL_STEPS = [
     },
     {
         "icon": "🎬",
-        "title": "Video Builder",
+        "title": "Video Editor",
         "body": (
-            "The <b>Video Builder</b> tab lets you combine video clips, images, "
-            "and GIFs into a single video file using FFmpeg.\n\n"
+            "The <b>Video Editor</b> dialog lets you combine video clips, images, "
+            "and GIFs into a single export using FFmpeg.\n\n"
             "• Add source clips and reorder them in the timeline.\n"
-            "• Set the output format (MP4, WebM, etc.) and frame rate.\n"
-            "• Click <b>Build Video</b> to render the output.\n\n"
+            "• Set the export format (MP4 or GIF) and frame rate.\n"
+            "• Click <b>Export</b> to render the output.\n\n"
             "Note: FFmpeg ships bundled with the app via imageio-ffmpeg — "
             "no separate FFmpeg installation is required."
         ),

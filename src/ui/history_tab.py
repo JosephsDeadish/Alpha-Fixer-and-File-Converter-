@@ -718,12 +718,13 @@ class HistoryTab(QWidget):
             return
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
-        # Collect rows from the tree
-        root = tree.invisibleRootItem()
-        rows = [
-            [root.child(r).text(c) for c in range(tree.columnCount())]
-            for r in range(root.childCount())
-        ]
+        # Collect rows in the same visible order shown to the user.
+        rows = []
+        for r in range(tree.topLevelItemCount()):
+            item = tree.topLevelItem(r)
+            if item is None or item.isHidden():
+                continue
+            rows.append([item.text(c) for c in range(tree.columnCount())])
 
         ext = path.rsplit(".", 1)[-1].lower() if "." in path else "txt"
 
