@@ -8774,7 +8774,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_readme_theme_counts_match_theme_engine(self):
         import importlib.util
 
-        theme_path = os.path.join(self._SRC_DIR, "ui", "theme_engine.py")
+        theme_path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "theme_engine.py")
         spec = importlib.util.spec_from_file_location("theme_engine_for_readme_test", theme_path)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
