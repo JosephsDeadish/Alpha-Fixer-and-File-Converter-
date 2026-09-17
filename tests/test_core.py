@@ -8804,6 +8804,27 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("writer.append_data(np.array(rgb))", src)
         self.assertNotIn("import numpy as np\n                        rgb =", src)
 
+    def test_video_export_closes_mp4_writer_before_success(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("if not canceled and writer is not None:", src)
+        self.assertIn("writer.close()", src)
+        self.assertIn("writer = None", src)
+
+    def test_video_preview_closes_adjusted_and_filtered_images(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("filtered = _apply_filter(adjusted, filter_key)", src)
+        self.assertIn("if filtered is not None and filtered is not adjusted:", src)
+        self.assertIn("if adjusted is not None and adjusted is not source:", src)
+        self.assertIn("if source is not None:", src)
+
+    def test_video_probe_only_decodes_first_frame_as_last_resort(self):
+        src = self._src("ui/video_tool.py")
+        duration_idx = src.index("if duration > 0 and fps > 0:")
+        decode_idx = src.index("first_frame = reader.get_data(0)")
+        self.assertGreater(decode_idx, duration_idx)
+        self.assertIn("return fps, frame_count, first_frame", src)
+        self.assertIn("_VideoFrameGetter(path, frame_count, first_frame)", src)
+
     def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
         src = self._src("../scripts/install_linux_deps.sh")
         self.assertIn("libxcb-cursor0", src)

@@ -134,10 +134,10 @@ def _coerce_frame_count(value) -> int:
     return count if count > 0 else 0
 
 
-def _probe_video_clip(path: str) -> tuple[float, int]:
-    """Return (fps, frame_count) for a video, tolerating weak metadata."""
+def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
+    """Return (fps, frame_count, first_frame) for a video, tolerating weak metadata."""
     reader = _open_video_reader(path)
-    first_frame_ok = False
+    first_frame = None
     try:
         meta = reader.get_meta_data()
         try:
@@ -145,10 +145,6 @@ def _probe_video_clip(path: str) -> tuple[float, int]:
         except Exception:
             fps = 25.0
         fps = fps if fps > 0 else 25.0
-        try:
-            first_frame_ok = reader.get_data(0) is not None
-        except Exception:
-            first_frame_ok = False
         frame_count = _coerce_frame_count(meta.get("nframes"))
         if frame_count <= 0:
             try:
@@ -172,9 +168,14 @@ def _probe_video_clip(path: str) -> tuple[float, int]:
                 duration = 0.0
             if duration > 0 and fps > 0:
                 frame_count = max(1, int(round(duration * fps)))
-        if frame_count <= 0 and first_frame_ok:
-            frame_count = 1
-        return fps, frame_count
+        if frame_count <= 0:
+            try:
+                first_frame = reader.get_data(0)
+            except Exception:
+                first_frame = None
+            if first_frame is not None:
+                frame_count = 1
+        return fps, frame_count, first_frame
     finally:
         reader.close()
 
@@ -317,9 +318,10 @@ class _ImageFrameGetter:
 class _VideoFrameGetter:
     """Picklable frame getter for a multi-frame video clip."""
 
-    def __init__(self, path: str, total_frames: int) -> None:
+    def __init__(self, path: str, total_frames: int, first_frame=None) -> None:
         self._path = path
         self._total_frames = max(1, int(total_frames))
+        self._prefetched_frame = first_frame
         self._reader = None
         self._last_idx = -1
         self._last_frame = None
@@ -343,13 +345,20 @@ class _VideoFrameGetter:
 
         clamped = max(0, min(self._total_frames - 1, int(idx)))
         with self._lock:
-            if self._reader is None or clamped < self._last_idx:
+            if clamped == 0 and self._prefetched_frame is not None:
+                frame = self._prefetched_frame
+                self._last_idx = 0
+                self._last_frame = frame
+                self._prefetched_frame = None
+                return Image.fromarray(frame).convert("RGBA")
+            reopened = self._reader is None or clamped < self._last_idx
+            if reopened:
                 self._close_reader()
                 self._open_reader()
             try:
                 if clamped == self._last_idx and self._last_frame is not None:
                     frame = self._last_frame
-                elif clamped == self._last_idx + 1:
+                elif not reopened and clamped == self._last_idx + 1:
                     frame = self._reader.get_next_data()
                 else:
                     frame = self._reader.get_data(clamped)
@@ -369,6 +378,7 @@ class _VideoFrameGetter:
     def __setstate__(self, state: dict) -> None:
         self._path = state["_path"]
         self._total_frames = max(1, int(state["_total_frames"]))
+        self._prefetched_frame = None
         self._reader = None
         self._last_idx = -1
         self._last_frame = None
@@ -403,10 +413,10 @@ class _ClipEntry:
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     try:
-        fps, frame_count = _probe_video_clip(path)
+        fps, frame_count, first_frame = _probe_video_clip(path)
         if frame_count <= 0:
             return None
-        return _ClipEntry(path, frame_count, _VideoFrameGetter(path, frame_count), fps)
+        return _ClipEntry(path, frame_count, _VideoFrameGetter(path, frame_count, first_frame), fps)
     except Exception:
         return None
 
@@ -993,10 +1003,13 @@ class VideoToolDialog(QDialog):
             return
         g = max(0, min(self._scrubber.value(), total - 1))
         ci, fi = self._global_frame_to_clip(g)
+        source = None
+        adjusted = None
+        filtered = None
         try:
-            pil = self._clips[ci].get_frame(fi)
-            pil = _apply_adjustments(
-                pil,
+            source = self._clips[ci].get_frame(fi)
+            adjusted = _apply_adjustments(
+                source,
                 brightness=self._brightness_slider.value() / 100.0,
                 contrast=self._contrast_slider.value() / 100.0,
                 black_point=self._black_slider.value(),
@@ -1005,16 +1018,22 @@ class VideoToolDialog(QDialog):
                 sharpness=self._sharpness_slider.value() / 100.0,
             )
             filter_key = self._filter_combo.currentData() or "none"
-            pil = _apply_filter(pil, filter_key)
-            pix = _pil_to_pixmap(pil).scaled(
+            filtered = _apply_filter(adjusted, filter_key)
+            pix = _pil_to_pixmap(filtered).scaled(
                 _PREVIEW_MAX_W, _PREVIEW_MAX_H,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self._preview_lbl.setPixmap(pix)
-            pil.close()
         except Exception as exc:
             self._preview_lbl.setText(f"(preview error: {exc})")
+        finally:
+            if filtered is not None and filtered is not adjusted:
+                filtered.close()
+            if adjusted is not None and adjusted is not source:
+                adjusted.close()
+            if source is not None:
+                source.close()
 
         self._pos_lbl.setText(f"{g + 1} / {total}")
 
@@ -1168,6 +1187,9 @@ class VideoToolDialog(QDialog):
                     writer.close()
                 except Exception:
                     pass
+                writer = None
+            if not canceled and writer is not None:
+                writer.close()
                 writer = None
             if fmt == "gif" and not canceled and gif_frames:
                 first, *rest = gif_frames
