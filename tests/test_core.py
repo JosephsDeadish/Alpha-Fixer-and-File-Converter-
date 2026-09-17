@@ -8635,7 +8635,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _apply_popout_button_state(", src)
         self.assertIn("The embedded preview stays available here while the floating window is open.", src)
         self.assertIn("return to the embedded preview", src)
-        self.assertIn("super().wheelEvent(event)", src)
+        self.assertIn("event.ignore()", src)
 
     def test_video_frame_getter_reuses_cached_reader(self):
         src = self._src("ui/video_tool.py")
@@ -8706,6 +8706,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('target_suffix = ".gif" if fmt == "gif" else ".mp4"', src)
         self.assertIn("current_suffix = Path(out_path).suffix.lower()", src)
         self.assertIn("if current_suffix:", src)
+        self.assertIn("known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {\".gif\", \".mp4\"}", src)
         self.assertIn('out_path = str(Path(out_path).with_suffix(target_suffix))', src)
         self.assertIn('out_path = f"{out_path}{target_suffix}"', src)
         self.assertIn("def _has_imageio() -> bool:", src)
@@ -9120,11 +9121,13 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/theme_engine.py")
         self.assertIn('"Fairy Garden":      "sakura"', src)
 
-    def test_video_io_availability_requires_imageio_ffmpeg(self):
+    def test_mp4_export_availability_requires_imageio_ffmpeg(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("def _has_imageio_ffmpeg() -> bool:", src)
         self.assertIn("self._imageio_ffmpeg_available = _has_imageio_ffmpeg()", src)
-        self.assertIn("and self._imageio_ffmpeg_available", src)
+        self.assertIn("self._video_io_available = self._ffmpeg_available and self._imageio_available", src)
+        self.assertIn("self._mp4_export_available = (", src)
+        self.assertIn("self._video_io_available and self._imageio_ffmpeg_available", src)
 
     def test_preview_zoom_scales_from_fit_size(self):
         src = self._src("ui/preview_pane.py")

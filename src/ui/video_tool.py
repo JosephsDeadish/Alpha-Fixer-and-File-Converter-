@@ -631,10 +631,9 @@ class VideoToolDialog(QDialog):
         self._ffmpeg_available = _has_ffmpeg()
         self._imageio_available = _has_imageio()
         self._imageio_ffmpeg_available = _has_imageio_ffmpeg()
-        self._video_io_available = (
-            self._ffmpeg_available
-            and self._imageio_available
-            and self._imageio_ffmpeg_available
+        self._video_io_available = self._ffmpeg_available and self._imageio_available
+        self._mp4_export_available = (
+            self._video_io_available and self._imageio_ffmpeg_available
         )
         self._build_ui()
         mgr = self._resolve_tooltip_mgr()
@@ -1299,14 +1298,15 @@ class VideoToolDialog(QDialog):
         target_suffix = ".gif" if fmt == "gif" else ".mp4"
         current_suffix = Path(out_path).suffix.lower()
         if current_suffix != target_suffix:
-            if current_suffix:
+            known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
+            if current_suffix in known_media_suffixes:
                 out_path = str(Path(out_path).with_suffix(target_suffix))
             else:
                 out_path = f"{out_path}{target_suffix}"
 
         fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"
-        if fmt == "mp4" and not self._video_io_available:
+        if fmt == "mp4" and not self._mp4_export_available:
             QMessageBox.warning(
                 self,
                 "MP4 Export Unavailable",

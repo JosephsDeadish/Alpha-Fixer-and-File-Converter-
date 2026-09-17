@@ -676,7 +676,7 @@ class BeforeAfterWidget(QWidget):
         self._popout_btn.raise_()
 
     def wheelEvent(self, event):  # noqa: N802
-        """Ctrl+scroll zooms in/out; plain scroll is passed to the parent."""
+        """Ctrl+scroll zooms in/out; plain scroll bubbles to the parent."""
         from PyQt6.QtCore import Qt as _Qt
         if event.modifiers() & _Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
@@ -686,7 +686,7 @@ class BeforeAfterWidget(QWidget):
                 self.zoom_out()
             event.accept()
         else:
-            super().wheelEvent(event)
+            event.ignore()
 
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
