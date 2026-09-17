@@ -5,11 +5,11 @@ Opens a step-by-step tutorial that introduces the main tools and features of
 the application with fun, friendly descriptions and keyboard-shortcut hints.
 """
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QProgressBar, QApplication, QScrollArea, QWidget,
+    QFrame, QProgressBar, QScrollArea, QWidget,
 )
 
 

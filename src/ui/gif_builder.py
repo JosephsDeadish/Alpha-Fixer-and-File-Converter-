@@ -735,6 +735,10 @@ class GifBuilderDialog(QDialog):
                     optimize=optimize,
                 )
         except Exception as exc:
+            try:
+                Path(out_path).unlink(missing_ok=True)
+            except Exception:
+                pass
             QMessageBox.critical(self, "Save Error", f"Could not save GIF:\n{exc}")
             return
         finally:

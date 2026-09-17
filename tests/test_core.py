@@ -8522,12 +8522,18 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_frame_getter_reuses_reader_state(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("self._reader = None", src)
+        self.assertIn("self._reader_iter = None", src)
         self.assertIn("self._last_idx = -1", src)
         self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
-        self.assertIn("self._reader.get_data(clamped)", src)
+        self.assertIn("for _ in range(self._last_idx + 1, clamped + 1):", src)
+        self.assertIn("frame = next(self._reader_iter)", src)
 
     def test_video_export_streams_frames_and_cleans_up_partial_output(self):
         src = self._src("ui/video_tool.py")
         self.assertNotIn("rendered.append(", src)
         self.assertIn("writer.append_data(", src)
+        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+
+    def test_gif_builder_removes_partial_file_on_save_error(self):
+        src = self._src("ui/gif_builder.py")
         self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
