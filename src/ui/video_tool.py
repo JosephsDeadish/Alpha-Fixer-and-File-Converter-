@@ -305,9 +305,7 @@ class _VideoFrameGetter:
         self._lock = Lock()
 
     def _open_reader(self) -> None:
-        import imageio
-
-        self._reader = imageio.get_reader(self._path, format="FFMPEG")
+        self._reader = _open_video_reader(self._path)
 
     def _close_reader(self) -> None:
         if self._reader is not None:
@@ -908,26 +906,36 @@ class VideoToolDialog(QDialog):
         )
 
     def _on_trim_start_changed(self, val: int) -> None:
-        self._trim_start_lbl.setText(str(val))
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
             clip.trim_start = min(val, clip.trim_end)
+            self._trim_start_slider.blockSignals(True)
+            self._trim_start_slider.setValue(clip.trim_start)
+            self._trim_start_slider.blockSignals(False)
+            self._trim_start_lbl.setText(str(clip.trim_start))
             self._clip_info_lbl.setText(
                 f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
             )
             self._update_scrubber()
+        else:
+            self._trim_start_lbl.setText(str(val))
 
     def _on_trim_end_changed(self, val: int) -> None:
-        self._trim_end_lbl.setText(str(val))
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
             clip.trim_end = max(val, clip.trim_start)
+            self._trim_end_slider.blockSignals(True)
+            self._trim_end_slider.setValue(clip.trim_end)
+            self._trim_end_slider.blockSignals(False)
+            self._trim_end_lbl.setText(str(clip.trim_end))
             self._clip_info_lbl.setText(
                 f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
             )
             self._update_scrubber()
+        else:
+            self._trim_end_lbl.setText(str(val))
 
     # ------------------------------------------------------------------
     # Preview / transport

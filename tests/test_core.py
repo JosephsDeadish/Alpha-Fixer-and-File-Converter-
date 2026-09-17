@@ -8664,6 +8664,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _probe_video_clip(path: str)", src)
         self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
         self.assertIn("first_frame_ok = reader.get_data(0) is not None", src)
+        self.assertIn("self._reader = _open_video_reader(self._path)", src)
+        self.assertIn("self._trim_start_slider.setValue(clip.trim_start)", src)
+        self.assertIn("self._trim_end_slider.setValue(clip.trim_end)", src)
 
     def test_sound_engine_honors_theme_sound_override(self):
         src = self._src("ui/sound_engine.py")
@@ -8863,6 +8866,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _enable_mouse_tracking_recursive(self, widget: QWidget | None) -> None:", src)
         self.assertIn("child.setMouseTracking(True)", src)
         self.assertIn("child.setAttribute(Qt.WidgetAttribute.WA_Hover, True)", src)
+
+    def test_drop_list_keeps_stop_button_clickable_during_bulk_add(self):
+        src = self._src("ui/drop_list.py")
+        self.assertIn("QApplication.processEvents(", src)
+        self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
+        self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
