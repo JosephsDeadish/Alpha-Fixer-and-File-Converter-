@@ -8597,6 +8597,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/tutorial_dialog.py")
         self.assertIn('"title": "Video Editor"', src)
         self.assertIn("MP4 or GIF", src)
+        self.assertIn("video clips and still images", src)
+        self.assertNotIn("and GIFs into a single export", src)
         self.assertNotIn("WebM", src)
 
     def test_preview_popout_copies_active_gif_animation_state(self):

@@ -266,14 +266,17 @@ def _decode_texture2d(
 
     if surface_fmt == _FMT_RGBA64:
         arr = np.frombuffer(data, dtype="<u2").reshape(height, width, 4)
-        rgba = (arr >> 8).astype(np.uint8)
+        rgba = (arr[:, :, [2, 1, 0, 3]] >> 8).astype(np.uint8)
         return Image.fromarray(rgba, "RGBA")
 
     if surface_fmt == _FMT_RGBA1010102:
         arr = np.frombuffer(data, dtype="<u4").reshape(height, width)
-        r = ((arr >> 22) & 0xFF).astype(np.uint8)
-        g = ((arr >> 12) & 0xFF).astype(np.uint8)
-        b = ((arr >> 2) & 0xFF).astype(np.uint8)
+        r10 = (arr >> 22) & 0x3FF
+        g10 = (arr >> 12) & 0x3FF
+        b10 = (arr >> 2) & 0x3FF
+        r = ((r10 * 255 + 511) // 1023).astype(np.uint8)
+        g = ((g10 * 255 + 511) // 1023).astype(np.uint8)
+        b = ((b10 * 255 + 511) // 1023).astype(np.uint8)
         a = ((arr & 0x3) * 85).astype(np.uint8)
         return Image.fromarray(np.stack([r, g, b, a], axis=-1), "RGBA")
 

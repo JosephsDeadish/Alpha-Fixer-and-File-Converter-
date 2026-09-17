@@ -242,6 +242,25 @@ class TestConvertFile(unittest.TestCase):
             finally:
                 img.close()
 
+    def test_xnb_rgba64_reorders_channels_to_rgba(self):
+        from src.core.xnb_handler import _decode_texture2d, _FMT_RGBA64
+
+        data = bytes.fromhex("0011002200330044")
+        with _decode_texture2d(data, 1, 1, _FMT_RGBA64) as img:
+            self.assertEqual(img.getpixel((0, 0)), (0x33, 0x22, 0x11, 0x44))
+
+    def test_xnb_rgba1010102_uses_full_10bit_channels(self):
+        from src.core.xnb_handler import _decode_texture2d, _FMT_RGBA1010102
+
+        packed = (1023 << 22) | (512 << 12) | (256 << 2) | 0x3
+        data = packed.to_bytes(4, "little")
+        with _decode_texture2d(data, 1, 1, _FMT_RGBA1010102) as img:
+            r, g, b, a = img.getpixel((0, 0))
+            self.assertEqual(r, 255)
+            self.assertEqual(g, 128)
+            self.assertEqual(b, 64)
+            self.assertEqual(a, 255)
+
     def test_png_to_pgm(self):
         """PGM output should be grayscale with no alpha."""
         with tempfile.TemporaryDirectory() as tmpdir:

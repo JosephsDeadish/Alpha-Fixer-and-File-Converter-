@@ -91,8 +91,8 @@ _TUTORIAL_STEPS = [
         "icon": "🎬",
         "title": "Video Editor",
         "body": (
-            "The <b>Video Editor</b> dialog lets you combine video clips, images, "
-            "and GIFs into a single export using FFmpeg.\n\n"
+            "The <b>Video Editor</b> dialog lets you combine video clips and "
+            "still images into a single export using FFmpeg.\n\n"
             "• Add source clips and reorder them in the timeline.\n"
             "• Set the export format (MP4 or GIF) and frame rate.\n"
             "• Click <b>Export</b> to render the output.\n\n"
