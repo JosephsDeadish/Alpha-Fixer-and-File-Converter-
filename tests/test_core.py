@@ -8597,7 +8597,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/tutorial_dialog.py")
         self.assertIn('"title": "Video Editor"', src)
         self.assertIn("MP4 or GIF", src)
-        self.assertIn("video clips and still images", src)
+        self.assertIn("combine video clips and ", src)
+        self.assertIn("still images into a single export", src)
         self.assertNotIn("and GIFs into a single export", src)
         self.assertNotIn("WebM", src)
 
