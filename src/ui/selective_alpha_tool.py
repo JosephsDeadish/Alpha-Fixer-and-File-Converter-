@@ -162,6 +162,7 @@ class SelectiveAlphaCanvas(QWidget):
             np.zeros((1, 1), dtype=np.uint8) for _ in range(NUM_ZONES)
         ]
         self._src_qimage: Optional[QImage] = None   # source cached as QImage
+        self._src_arr: Optional[np.ndarray] = None
 
         # ── zone display settings ─────────────────────────────────────
         self._zone_alphas:  list[int]  = [255] * NUM_ZONES
@@ -360,19 +361,41 @@ class SelectiveAlphaCanvas(QWidget):
 
     def load_image(self, path: str) -> bool:
         """Load an image from *path*.  Returns True on success."""
+        img: Optional[Image.Image] = None
+        rgba: Optional[Image.Image] = None
         try:
             img = Image.open(path)
             img.load()
+            try:
+                rgba = img.convert("RGBA") if img.mode != "RGBA" else img
+            except MemoryError:
+                img.close()
+                raise
+            new_arr = np.array(rgba, dtype=np.uint8).copy()
+            src_qimage = _pil_to_qimage(rgba)
+        except MemoryError:
+            if rgba is not None and rgba is not img:
+                rgba.close()
+            if img is not None and img is rgba:
+                img.close()
+            raise
         except Exception:
+            if rgba is not None and rgba is not img:
+                rgba.close()
+            if img is not None:
+                img.close()
             return False
+
         self.unload_image()
-        self._src_img = img.convert("RGBA") if img.mode != "RGBA" else img
+        self._src_img = rgba
+        rgba = None
+        self._src_arr = new_arr
         self._img_w, self._img_h = self._src_img.size
         self._masks = [
             np.zeros((self._img_h, self._img_w), dtype=np.uint8)
             for _ in range(NUM_ZONES)
         ]
-        self._src_qimage = _pil_to_qimage(self._src_img)
+        self._src_qimage = src_qimage
         self._undo_stack.clear()
         self._redo_stack.clear()
         self._emit_undo_redo_state()
@@ -386,9 +409,13 @@ class SelectiveAlphaCanvas(QWidget):
         if self._src_img is not None:
             self._src_img.close()
             self._src_img = None
+        self._src_arr = None
+        for i, mask in enumerate(self._masks):
+            if mask is not None and hasattr(mask, "close"):
+                mask.close()
+            self._masks[i] = None
         self._src_qimage = None
         self._img_w = self._img_h = 0
-        self._masks = [np.zeros((1, 1), dtype=np.uint8) for _ in range(NUM_ZONES)]
         self._undo_stack.clear()
         self._redo_stack.clear()
         self._composite_dirty = True
@@ -628,7 +655,7 @@ class SelectiveAlphaCanvas(QWidget):
             qi.fill(Qt.GlobalColor.black)
             return qi
 
-        src_arr = np.array(self._src_img, dtype=np.uint8).copy()
+        src_arr = self._src_arr.copy() if self._src_arr is not None else np.array(self._src_img, dtype=np.uint8).copy()
 
         blend = self._overlay_alpha / 255.0
         for i in range(NUM_ZONES):
@@ -1078,7 +1105,7 @@ class SelectiveAlphaCanvas(QWidget):
     def _do_fill(self, mask: np.ndarray, x: int, y: int) -> None:
         if self._src_img is None:
             return
-        src_arr = np.array(self._src_img, dtype=np.uint8)
+        src_arr = self._src_arr if self._src_arr is not None else np.array(self._src_img, dtype=np.uint8)
         edges   = detect_edges(src_arr)
         result  = edge_flood_fill(mask.astype(bool), edges, x, y)
         mask[:] = result.astype(np.uint8)
@@ -1087,7 +1114,7 @@ class SelectiveAlphaCanvas(QWidget):
         if self._src_img is None:
             return
         try:
-            src_arr   = np.array(self._src_img, dtype=np.uint8)
+            src_arr   = self._src_arr if self._src_arr is not None else np.array(self._src_img, dtype=np.uint8)
             edges     = detect_edges(src_arr)
             corrected = autocorrect_mask(mask.astype(bool), edges)
             mask[:]   = corrected.astype(np.uint8)
@@ -1885,7 +1912,7 @@ class SelectiveAlphaTool(QWidget):
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_INIT
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
-        slots_box = QGroupBox("📋 Single-Zone Clipboard  (one zone mask per slot)")
+        slots_box = QGroupBox("Saved Masks")
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
@@ -3221,56 +3248,7 @@ class SelectiveAlphaTool(QWidget):
     def _on_save(self) -> None:
         if not self._canvas.has_image():
             return
-        # Auto-apply the zones before saving so the user doesn't need a
-        # separate Apply step (items 84/85).
-        try:
-            bool_masks = self._canvas.get_masks_as_bool()
-            zone_alphas = list(self._canvas._zone_alphas)
-        except Exception as exc:
-            QMessageBox.critical(self, "Save Error",
-                                 f"Could not read zone data:\n{exc}")
-            return
-
-        # Warn if no zones are painted.
-        if all(m is None or not m.any() for m in bool_masks):
-            QMessageBox.information(
-                self, "No zones painted",
-                "Paint at least one zone before saving."
-            )
-            return
-
-        # Log the action for crash reporting
-        try:
-            from main import log_action
-            zones_used = sum(1 for m in bool_masks if m is not None and m.any())
-            log_action(f"Selective alpha: applied {zones_used} zone(s) to '{self._src_path}'")
-        except Exception:
-            pass
-
-        try:
-            src_img = self._canvas.get_source_image()
-            result = None
-            result = apply_selective_alpha(src_img, bool_masks, zone_alphas)
-            # Push previous result onto the undo-process history stack (capped).
-            if self._result_img is not None:
-                self._result_history.append(self._result_img)
-                if len(self._result_history) > _MAX_HISTORY:
-                    self._result_history.pop(0).close()
-            self._result_img = result
-            result = None
-        except MemoryError:
-            if result is not None:
-                result.close()
-            QMessageBox.critical(
-                self, "Apply Error",
-                "Not enough memory to apply alpha zones to this image.\n"
-                "Try reducing the image size or closing other applications."
-            )
-            return
-        except Exception as exc:
-            if result is not None:
-                result.close()
-            QMessageBox.critical(self, "Apply Error", str(exc))
+        if not self._on_apply():
             return
 
         # Always default to a .png path – PNG is the only widely-supported
@@ -3333,9 +3311,57 @@ class SelectiveAlphaTool(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, "Save Error", str(exc))
 
-    def _on_apply(self) -> None:
-        """Apply alpha zones — kept for Ctrl+Enter shortcut compatibility."""
-        self._on_save()
+    def _on_apply(self) -> bool:
+        """Apply alpha zones and cache the result for saving/undo."""
+        if not self._canvas.has_image():
+            return False
+        try:
+            bool_masks = self._canvas.get_masks_as_bool()
+            zone_alphas = list(self._canvas._zone_alphas)
+        except Exception as exc:
+            QMessageBox.critical(self, "Apply Error",
+                                 f"Could not read zone data:\n{exc}")
+            return False
+
+        if all(m is None or not m.any() for m in bool_masks):
+            QMessageBox.information(
+                self, "No zones painted",
+                "Paint at least one zone before saving."
+            )
+            return False
+
+        try:
+            from main import log_action
+            zones_used = sum(1 for m in bool_masks if m is not None and m.any())
+            log_action(f"Selective alpha: applied {zones_used} zone(s) to '{self._src_path}'")
+        except Exception:
+            pass
+
+        result = None
+        try:
+            src_img = self._canvas.get_source_image()
+            result = apply_selective_alpha(src_img, bool_masks, zone_alphas)
+            if self._result_img is not None:
+                self._result_history.append(self._result_img)
+                if len(self._result_history) > _MAX_HISTORY:
+                    self._result_history.pop(0).close()
+            self._result_img = result
+            result = None
+            return True
+        except MemoryError:
+            if result is not None:
+                result.close()
+            QMessageBox.critical(
+                self, "Apply Error",
+                "Not enough memory to apply alpha zones to this image.\n"
+                "Try reducing the image size or closing other applications."
+            )
+            return False
+        except Exception as exc:
+            if result is not None:
+                result.close()
+            QMessageBox.critical(self, "Apply Error", str(exc))
+            return False
 
     def _offer_delete_original(self, src_path: str) -> None:
         """Ask the user whether to delete the original source file (item 33)."""
@@ -3645,4 +3671,3 @@ class SelectiveAlphaTool(QWidget):
             self._history_overlay.reposition(event.size())
             self._history_overlay.raise_()
         return False
-

@@ -5896,58 +5896,88 @@ _VULGAR: dict[str, list[str]] = {
         "Pick a format. Set quality if it's lossy. That's literally all you do here.",
         "PNG = no quality loss. JPEG = smaller but squishier. Pick wisely.",
         "The output format group. You configure it once and forget about it. That's the dream.",
+        "Choose the format before you mash Convert, you magnificent goblin.",
+        "Wrong format in, wrong format out. This box decides the whole fucking outcome.",
     ],
     "conv_output_group": [
         "Where converted files land and what they're named. Groundbreaking UI.",
         "Blank folder = next to source. Folder set = in that folder. Very advanced.",
         "No suffix = overwrites source. Suffix = new file. Choose carefully or suffer.",
         "Output folder and suffix. The two settings that determine if you accidentally delete everything.",
+        "This section answers two questions: where the files go and how badly you want to overwrite shit.",
+        "Use a suffix if you enjoy safety. Leave it blank if you enjoy living dangerously.",
     ],
     "conv_resize_group": [
         "Resize settings. For when you want a different sized output.",
         "Enable it. Set width/height. Done. Extremely optional.",
         "Lock aspect ratio keeps proportions. Because stretched images look stupid.",
         "Leave it disabled if you don't need resizing. Nobody forces you to use every feature.",
+        "Only turn this on if you actually want smaller or bigger files, not because checkboxes tempt you.",
+        "Resize controls: the place where good images go to get weird if you type reckless numbers.",
     ],
     "conv_files_lbl": [
         "Files and folders queued for conversion. Nothing revolutionary.",
         "Drag shit here or use the buttons. Your call.",
         "Input files section. Drag things in. Convert them. Feel accomplished.",
+        "This label is attached to the pile of files you're about to bully into another format.",
+        "No files here means the converter has jack shit to do.",
+        "Put your source files in this list or keep staring at an empty queue, champion.",
     ],
     "conv_out_dir_lbl": [
         "Output folder label. The box beside it is where the path goes.",
         "Blank = saves next to source. Set a path = saves there. That's it.",
         "Output folder. Where your converted files will end up. Not that complicated.",
+        "This is the 'where does my converted crap go' label.",
+        "If the folder box is empty, the app dumps results beside the originals. Lazy but effective.",
+        "Set a folder if you want order. Leave it blank if you want chaos in every directory.",
     ],
     "conv_suffix_lbl": [
         "Filename suffix label. The box beside it takes the suffix text.",
         "Add '_new' or '_converted' to avoid overwriting source files. Or don't.",
         "Blank suffix = overwrites source. You've been warned. Many times.",
+        "A suffix is the tiny bit of text that saves you from nuking your originals, dumbass.",
+        "Type something like _fixed and future-you won't hate present-you as much.",
+        "Leave this blank only if you're absolutely sure you want replacement-city.",
     ],
     "conv_format_lbl": [
         "Convert to — the dropdown is right there. Click it. Pick something.",
         "Format selector is to the right. This label is just pointing you at it.",
         "Convert to label. The format dropdown is right beside it. Use it.",
+        "This label exists because apparently the dropdown needed a little fucking signpost.",
+        "Pick the target format next to this before you start wondering why nothing changed.",
+        "Yes, the important dropdown is the one beside this label. Incredible detective work.",
     ],
     "conv_quality_lbl": [
         "Quality for JPEG/WEBP. Higher = better-looking but bigger. Math.",
         "PNG doesn't give a shit about this setting. Only lossy formats care.",
         "Quality label. The spinner to the right is where you actually set it.",
+        "Higher quality means bigger files and fewer regrets. Usually.",
+        "If you're exporting PNG, this setting can sit there looking pretty and doing fuck-all.",
+        "The number beside this controls how hard JPEG/WebP mangles your pixels.",
     ],
     "conv_preview_lbl": [
         "Preview shows source and output side by side. Drag the handle to compare.",
         "Ctrl+Scroll to zoom. Middle-drag to pan. Pop-out button for a bigger view.",
         "Preview label. The comparison widget below it is where the magic happens.",
+        "Look here before batch-converting 400 files into accidental garbage.",
+        "The preview is your last chance to notice something looks cursed before committing.",
+        "Source on one side, result on the other, regret in the middle if you chose badly.",
     ],
     "alpha_output_group": [
         "Output folder and suffix for fixed alpha files. Same deal as the converter.",
         "Blank folder = saves next to source. Add a suffix to not destroy your originals.",
         "Alpha tool output group. Configure it before running a batch.",
+        "This decides where alpha-fixed files go and whether they clobber the originals.",
+        "Use a suffix unless you enjoy irreversible decisions made at high speed.",
+        "Same concept as the converter output section, just with more transparency and more opportunities to fuck up.",
     ],
     "alpha_tune_group": [
         "Threshold and clamp. The controls that make the alpha magic happen.",
         "Threshold = how aggressively near-white gets axed. Clamp = alpha output limits.",
         "Alpha channel settings group. These are the knobs. Turn them appropriately.",
+        "These sliders are where you decide how brutal the alpha cleanup should be.",
+        "Bad values here can make edges look like absolute shit, so maybe preview first.",
+        "Threshold and clamp: two innocent-looking controls with serious pixel-destroying potential.",
     ],
     "theme_search": [
         "Search for a theme. Type letters, list shrinks. Delete letters, list grows. Profound.",
@@ -6918,7 +6948,7 @@ class TooltipManager(QObject):
             pass
 
     def mode(self) -> str:
-        default = _SettingsManager._DEFAULTS.get("tooltip_mode", "Dumbed Down")
+        default = _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
         return self._settings.get("tooltip_mode", default)
 
     def _cleanup_tab_bar(self, bar_id: int) -> None:

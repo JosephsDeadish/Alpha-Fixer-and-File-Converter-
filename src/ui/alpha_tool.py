@@ -930,24 +930,28 @@ class AlphaFixerTab(QWidget):
             # Stop any previous collection thread before starting a new one
             if self._collect_thread is not None and self._collect_thread.isRunning():
                 self._collect_thread.stop()
-                self._collect_thread.wait(200)
 
             recursive = self._recursive_check.isChecked()
             thread = _FileCollectThread(dirs, SUPPORTED_READ, recursive)
 
-            def _on_files_found(batch: list[str]) -> None:
+            def _on_files_found(batch: list[str], current_thread=thread) -> None:
+                if self._collect_thread is not current_thread:
+                    return
                 pre = self._file_list.count() == 0
                 self._file_list.add_paths_batch(batch)
                 if pre and self._file_list.count() > 0:
                     self._file_list.setCurrentRow(0)
                 self.files_added.emit()
 
-            def _on_scan_done(total: int) -> None:
+            def _on_scan_done(total: int, current_thread=thread) -> None:
+                if self._collect_thread is current_thread:
+                    self._collect_thread = None
                 if total:
                     self._log_msg(f"📁 Folder scan complete — {total} image(s) found.")
 
             thread.files_found.connect(_on_files_found)
             thread.scan_done.connect(_on_scan_done)
+            thread.finished.connect(thread.deleteLater)
             self._collect_thread = thread
             thread.start()
 

@@ -17,6 +17,7 @@ ORG_NAME = "PandaTools"
 
 # Default custom emoji used when none have been configured yet
 DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
+SELECTIVE_ALPHA_UI_ZONE_COUNT = 7
 
 
 def _settings_ini_path() -> str:
@@ -139,7 +140,7 @@ class SettingsManager:
         "window_h": 700,
         "window_maximized": False,
         # Tooltip
-        "tooltip_mode": "Dumbed Down",
+        "tooltip_mode": "No Filter 🤬",
         "tooltip_mode_changed_once": False,
         "alpha_fix_done_once": False,
         "conversion_done_once": False,
@@ -242,7 +243,7 @@ class SettingsManager:
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
         # Zone alpha values (40 zones, defaults to 128 each – 50% transparent)
-        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128]",
+        "sa_zone_alphas": json.dumps([128] * SELECTIVE_ALPHA_UI_ZONE_COUNT),
         # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
         # Empty string = use built-in ZONE_COLORS palette.
         "sa_zone_colors": "",
@@ -522,15 +523,14 @@ class SettingsManager:
         )
         try:
             data = json.loads(raw)
-            if isinstance(data, list) and 1 <= len(data) <= 40:
-                result = [max(0, min(255, int(v))) for v in data]
-                # Pad to exactly 40 for backward-compat with older saves
-                if len(result) < 40:
-                    result += [128] * (40 - len(result))
+            if isinstance(data, list) and data:
+                result = [max(0, min(255, int(v))) for v in data[:SELECTIVE_ALPHA_UI_ZONE_COUNT]]
+                if len(result) < SELECTIVE_ALPHA_UI_ZONE_COUNT:
+                    result += [128] * (SELECTIVE_ALPHA_UI_ZONE_COUNT - len(result))
                 return result
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
-        return [128] * 40
+        return [128] * SELECTIVE_ALPHA_UI_ZONE_COUNT
 
     def set_sa_zone_alphas(self, alphas: list[int]) -> None:
         """Persist the zone alpha values (up to 40 zones)."""
