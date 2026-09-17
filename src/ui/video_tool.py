@@ -44,7 +44,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QComboBox, QGroupBox, QGridLayout,
-    QMessageBox, QProgressDialog, QSplitter, QWidget,
+    QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QScrollArea,
 )
 
@@ -145,7 +145,10 @@ def _probe_video_clip(path: str) -> tuple[float, int]:
         except Exception:
             fps = 25.0
         fps = fps if fps > 0 else 25.0
-        first_frame_ok = reader.get_data(0) is not None
+        try:
+            first_frame_ok = reader.get_data(0) is not None
+        except Exception:
+            first_frame_ok = False
         frame_count = _coerce_frame_count(meta.get("nframes"))
         if frame_count <= 0:
             try:
@@ -476,8 +479,9 @@ class VideoToolDialog(QDialog):
     """Lightweight video editor dialog.
 
     Combines multiple clips, applies visual adjustments and filters, and
-    exports the result. Requires ffmpeg for video I/O, but still works
-    for single images and exports animated GIFs without ffmpeg.
+    exports the result. Video clips and MP4 export require both imageio and
+    a working ffmpeg executable. Still-image clips can still be assembled
+    into animated GIF exports without ffmpeg.
     """
 
     def __init__(self, parent=None, tooltip_mgr=None):
@@ -1112,6 +1116,7 @@ class VideoToolDialog(QDialog):
                 )
             for i in range(total):
                 progress.setValue(i)
+                QApplication.processEvents()
                 if progress.wasCanceled():
                     canceled = True
                     break

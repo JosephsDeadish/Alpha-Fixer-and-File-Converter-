@@ -8670,6 +8670,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('os.environ.setdefault("IMAGEIO_FFMPEG_EXE", ffmpeg_exe)', src)
         self.assertNotIn('os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe', src)
         self.assertIn("self._video_io_available = self._ffmpeg_available and self._imageio_available", src)
+        self.assertIn("first_frame_ok = False", src)
+        self.assertIn("QApplication.processEvents()", src)
         self.assertIn('if fmt == "gif":\n                from PIL import Image', src)
         self.assertIn("gif_frames.append(filtered.copy())", src)
         self.assertIn('first.save(\n                    out_path,\n                    format="GIF"', src)
@@ -8703,6 +8705,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("If ffmpeg is unavailable the dialog can still assemble still images into", src)
         self.assertNotIn('process image-sequence "videos"', src)
         self.assertNotIn("(folders of PNGs)", src)
+        self.assertIn("Video clips and MP4 export require both imageio and", src)
 
     def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
         src = self._src("core/worker.py")
