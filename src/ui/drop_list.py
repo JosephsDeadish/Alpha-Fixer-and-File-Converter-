@@ -12,7 +12,7 @@ import threading
 from collections import OrderedDict
 
 from PyQt6.QtCore import (
-    Qt, QEvent, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
+    Qt, QEvent, QEventLoop, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont
@@ -397,7 +397,10 @@ class DropFileList(QListWidget):
                     added += 1
                 # Process events every chunk so the UI stays alive and the
                 # Stop button remains responsive on very large imports.
-                QApplication.processEvents()
+                QApplication.processEvents(
+                    QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                    | QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers
+                )
         finally:
             self.setUpdatesEnabled(True)
         if added:

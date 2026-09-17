@@ -2601,6 +2601,11 @@ class TestRound3Hardening(unittest.TestCase):
         self.assertIn("_cancel_event.set()", clear_src,
                       "clear() must call self._cancel_event.set() to retire old event")
 
+    def test_drop_list_bulk_insert_excludes_user_input_events(self):
+        src = self._drop_list_source()
+        self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
+        self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
+
     def test_thumb_runnable_cancel_prevents_emit(self):
         """_ThumbRunnable.run() must return early (without emitting) when the
         cancel event is already set.  Verified via source inspection since
@@ -8572,6 +8577,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_history_trees_disable_sorting_during_rebuild_and_sort_descending(self):
         src = self._src("ui/history_tab.py")
         self.assertIn("tree.setSortingEnabled(False)", src)
+        self.assertIn("class _HistoryItem(QTreeWidgetItem):", src)
+        self.assertIn('item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))', src)
         self.assertIn("def _apply_default_sort(tree: QTreeWidget) -> None:", src)
         self.assertIn("tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)", src)
         for tree_name in ("_conv_tree", "_alpha_tree", "_sel_tree", "_gif_tree", "_vid_tree"):
@@ -8723,6 +8730,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_export_caches_adjustment_values_before_frame_loop(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("@lru_cache(maxsize=1)", src)
+        self.assertIn("from threading import Lock", src)
         self.assertIn("return _get_ffmpeg_exe() is not None", src)
         self.assertNotIn('["ffmpeg", "-version"]', src)
         self.assertIn("canceled = False", src)
@@ -8734,6 +8742,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("rgba.close()", src)
         self.assertIn("adjusted = source_pil", src)
         self.assertIn("filtered = source_pil", src)
+        self.assertIn("self._lock = Lock()", src)
+        self.assertIn("with self._lock:", src)
         self.assertIn("if filtered is not adjusted:", src)
         self.assertIn("adjusted.close()", src)
         self.assertIn("source_pil = self._clips[ci].get_frame(fi)", src)
@@ -8807,8 +8817,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_history_tooltips_describe_visual_previews(self):
         src = self._src("ui/history_tab.py")
+        self.assertIn("def _set_history_tooltip(", src)
+        self.assertIn("def _set_builder_tooltip(", src)
         self.assertIn("Preview: animated GIF thumbnail shown from the output file.", src)
         self.assertIn("Preview: first clip thumbnail shown.", src)
+        self.assertIn("if file_list:", src)
+        self.assertIn("for col in range(columns):", src)
 
     def test_readme_theme_counts_match_theme_engine(self):
         import importlib.util

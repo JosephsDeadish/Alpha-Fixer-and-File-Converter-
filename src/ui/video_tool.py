@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from typing import Optional
 
 from PyQt6.QtCore import (
@@ -203,6 +204,7 @@ class _VideoFrameGetter:
         self._reader = None
         self._last_idx = -1
         self._last_frame = None
+        self._lock = Lock()
 
     def _open_reader(self) -> None:
         import imageio
@@ -223,21 +225,22 @@ class _VideoFrameGetter:
         from PIL import Image
 
         clamped = max(0, min(self._total_frames - 1, int(idx)))
-        if self._reader is None or clamped < self._last_idx:
-            self._close_reader()
-            self._open_reader()
-        try:
-            if clamped == self._last_idx and self._last_frame is not None:
-                frame = self._last_frame
-            elif clamped == self._last_idx + 1:
-                frame = self._reader.get_next_data()
-            else:
-                frame = self._reader.get_data(clamped)
-            self._last_idx = clamped
-            self._last_frame = frame
-        except Exception:
-            self._close_reader()
-            raise
+        with self._lock:
+            if self._reader is None or clamped < self._last_idx:
+                self._close_reader()
+                self._open_reader()
+            try:
+                if clamped == self._last_idx and self._last_frame is not None:
+                    frame = self._last_frame
+                elif clamped == self._last_idx + 1:
+                    frame = self._reader.get_next_data()
+                else:
+                    frame = self._reader.get_data(clamped)
+                self._last_idx = clamped
+                self._last_frame = frame
+            except Exception:
+                self._close_reader()
+                raise
         return Image.fromarray(frame).convert("RGBA")
 
     def __del__(self) -> None:
@@ -252,6 +255,7 @@ class _VideoFrameGetter:
         self._reader = None
         self._last_idx = -1
         self._last_frame = None
+        self._lock = Lock()
 
 
 class _ClipEntry:

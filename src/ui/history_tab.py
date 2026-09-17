@@ -19,6 +19,20 @@ from PyQt6.QtWidgets import (
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 
+class _HistoryItem(QTreeWidgetItem):
+    """Tree item that sorts the time column using stored raw timestamp data."""
+
+    _SORT_ROLE = Qt.ItemDataRole.UserRole + 2
+
+    def __lt__(self, other) -> bool:
+        tree = self.treeWidget()
+        if tree is not None and tree.sortColumn() == 0:
+            left = self.data(0, self._SORT_ROLE) or self.text(0)
+            right = other.data(0, self._SORT_ROLE) or other.text(0)
+            return str(left) < str(right)
+        return super().__lt__(other)
+
+
 class _AnimatedGifDelegate(QStyledItemDelegate):
     """Item delegate that shows animated .gif thumbnails in column 0 (item 80).
 
@@ -182,6 +196,24 @@ def _apply_default_sort(tree: QTreeWidget) -> None:
     tree.sortItems(0, Qt.SortOrder.DescendingOrder)
     tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)
     tree.setSortingEnabled(True)
+
+
+def _set_history_tooltip(item: QTreeWidgetItem, columns: int, base_text: str, file_list: list[str]) -> None:
+    """Apply a tooltip to every visible history cell, appending file names when present."""
+    tooltip = base_text
+    if file_list:
+        tooltip += "\n\nFiles processed:\n  " + "\n  ".join(file_list)
+    for col in range(columns):
+        item.setToolTip(col, tooltip)
+
+
+def _set_builder_tooltip(item: QTreeWidgetItem, columns: int, base_text: str, file_list: list[str]) -> None:
+    """Apply a tooltip to every builder-history cell, appending input files when present."""
+    tooltip = base_text
+    if file_list:
+        tooltip += "\n\nInput files:\n  " + "\n  ".join(file_list)
+    for col in range(columns):
+        item.setToolTip(col, tooltip)
 
 
 class HistoryTab(QWidget):
@@ -466,21 +498,21 @@ class HistoryTab(QWidget):
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, fmt, n_files, n_ok, n_err, files])
+            item = _HistoryItem([ts, fmt, n_files, n_ok, n_err, files])
+            item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
-            if file_list:
-                tooltip = (
-                    f"Batch: {ts}\nFormat: {fmt}\n"
-                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
-                    f"{preview_text}\n\n"
-                    "Files processed:\n  " + "\n  ".join(file_list)
-                )
-                for col in range(6):
-                    item.setToolTip(col, tooltip)
+            _set_history_tooltip(
+                item,
+                6,
+                f"Batch: {ts}\nFormat: {fmt}\n"
+                f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                f"{preview_text}",
+                file_list,
+            )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -505,22 +537,22 @@ class HistoryTab(QWidget):
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
+            item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
+            item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
-            if file_list:
-                tooltip = (
-                    f"Batch: {ts}\n"
-                    f"Mode: {mode}\n"
-                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
-                    f"{preview_text}\n\n"
-                    "Files processed:\n  " + "\n  ".join(file_list)
-                )
-                for col in range(6):
-                    item.setToolTip(col, tooltip)
+            _set_history_tooltip(
+                item,
+                6,
+                f"Batch: {ts}\n"
+                f"Mode: {mode}\n"
+                f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                f"{preview_text}",
+                file_list,
+            )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -549,22 +581,22 @@ class HistoryTab(QWidget):
                 import os as _os
                 file_list = [_os.path.basename(entry["output"])]
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
+            item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
+            item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             # Thumbnail icon from source image (item 9)
             thumb_path = entry.get("first_file", entry.get("source", ""))
             thumb = _load_thumb(thumb_path)
             preview_text = "Preview: source thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
-            if file_list:
-                tooltip = (
-                    f"Batch: {ts}\nMode: {mode}\n"
-                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
-                    f"{preview_text}\n\n"
-                    "Files processed:\n  " + "\n  ".join(file_list)
-                )
-                for col in range(6):
-                    item.setToolTip(col, tooltip)
+            _set_history_tooltip(
+                item,
+                6,
+                f"Batch: {ts}\nMode: {mode}\n"
+                f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                f"{preview_text}",
+                file_list,
+            )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -593,7 +625,8 @@ class HistoryTab(QWidget):
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, output, n_frames, n_ok, n_err, files])
+            item = _HistoryItem([ts, output, n_frames, n_ok, n_err, files])
+            item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             # Use the output GIF for animated thumbnail (item 80); fall back to
             # the first input file for non-GIF outputs or missing files.
             gif_output = output_path if (output_path and output_path.lower().endswith(".gif")
@@ -607,15 +640,14 @@ class HistoryTab(QWidget):
                 preview_text = "Preview: first input thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
                 if not thumb.isNull():
                     item.setIcon(0, thumb)
-            if file_list:
-                tooltip = (
-                    f"Built: {ts}\nOutput: {output}\n"
-                    f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n"
-                    f"{preview_text}\n\n"
-                    "Input files:\n  " + "\n  ".join(file_list)
-                )
-                for col in range(6):
-                    item.setToolTip(col, tooltip)
+            _set_builder_tooltip(
+                item,
+                6,
+                f"Built: {ts}\nOutput: {output}\n"
+                f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n"
+                f"{preview_text}",
+                file_list,
+            )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
@@ -642,20 +674,20 @@ class HistoryTab(QWidget):
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, output, n_clips, n_ok, n_err, files])
+            item = _HistoryItem([ts, output, n_clips, n_ok, n_err, files])
+            item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first clip thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
-            if file_list:
-                tooltip = (
-                    f"Built: {ts}\nOutput: {output}\n"
-                    f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n"
-                    f"{preview_text}\n\n"
-                    "Input files:\n  " + "\n  ".join(file_list)
-                )
-                for col in range(6):
-                    item.setToolTip(col, tooltip)
+            _set_builder_tooltip(
+                item,
+                6,
+                f"Built: {ts}\nOutput: {output}\n"
+                f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n"
+                f"{preview_text}",
+                file_list,
+            )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
                 for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
