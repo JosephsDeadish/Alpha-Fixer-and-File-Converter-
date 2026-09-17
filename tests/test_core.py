@@ -9110,8 +9110,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_probe_uses_duration_only_after_ffmpeg_probe(self):
         src = self._src("ui/video_tool.py")
         ffmpeg_pos = src.find("counted, secs = imageio_ffmpeg.count_frames_and_secs(path)")
+        reader_count_pos = src.find("frame_count = _coerce_frame_count(reader.count_frames())")
         duration_pos = src.find("duration = float(meta.get(\"duration\") or 0.0)")
         self.assertGreater(ffmpeg_pos, 0)
+        self.assertGreater(reader_count_pos, ffmpeg_pos)
         self.assertGreater(duration_pos, ffmpeg_pos)
 
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
@@ -9130,3 +9132,15 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("fit_w = max(1, int(round(pix.width() * fit_ratio)))", src)
         self.assertIn("fit_h = max(1, int(round(pix.height() * fit_ratio)))", src)
         self.assertIn("max(1, int(round(fit_w * zoom)))", src)
+
+    def test_tutorial_dialog_keeps_navigation_shortcuts_alive(self):
+        src = self._src("ui/tutorial_dialog.py")
+        self.assertIn("self._shortcut_next = QShortcut(QKeySequence(Qt.Key.Key_Right), self)", src)
+        self.assertIn("self._shortcut_prev = QShortcut(QKeySequence(Qt.Key.Key_Left), self)", src)
+
+    def test_mp4_unavailable_warning_mentions_imageio_ffmpeg(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn(
+            "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable.",
+            src,
+        )

@@ -143,10 +143,10 @@ class TutorialDialog(QDialog):
         self._show_step(0)
 
         # Keyboard navigation: Left/Right arrows advance steps.
-        QShortcut(QKeySequence(Qt.Key.Key_Right), self,
-                  activated=self._next)
-        QShortcut(QKeySequence(Qt.Key.Key_Left), self,
-                  activated=self._prev)
+        self._shortcut_next = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
+        self._shortcut_next.activated.connect(self._next)
+        self._shortcut_prev = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
+        self._shortcut_prev.activated.connect(self._prev)
 
     # ------------------------------------------------------------------
     # UI construction

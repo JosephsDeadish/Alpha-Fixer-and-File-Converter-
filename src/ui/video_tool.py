@@ -174,17 +174,17 @@ def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
         frame_count = _coerce_frame_count(meta.get("nframes"))
         if frame_count <= 0:
             try:
-                frame_count = _coerce_frame_count(reader.count_frames())
-            except Exception:
-                pass
-        if frame_count <= 0:
-            try:
                 import imageio_ffmpeg
 
                 counted, secs = imageio_ffmpeg.count_frames_and_secs(path)
                 frame_count = _coerce_frame_count(counted)
                 if frame_count <= 0 and secs > 0 and fps > 0:
                     frame_count = max(1, int(round(secs * fps)))
+            except Exception:
+                pass
+        if frame_count <= 0:
+            try:
+                frame_count = _coerce_frame_count(reader.count_frames())
             except Exception:
                 pass
         if frame_count <= 0:
@@ -1310,7 +1310,7 @@ class VideoToolDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "MP4 Export Unavailable",
-                "MP4 export requires both imageio and a working ffmpeg executable.",
+                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable.",
             )
             return
 
