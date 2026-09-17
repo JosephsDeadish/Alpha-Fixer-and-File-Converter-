@@ -15,14 +15,21 @@ REM ── 1. Check / install PyInstaller ────────────�
 python -c "import PyInstaller" 2>nul
 if errorlevel 1 (
     echo PyInstaller not found – installing…
-    pip install pyinstaller
+    python -m pip install pyinstaller
 )
 
-REM ── 2. Clean previous build artefacts ───────────────────────────────────────
+REM ── 2. Check / install runtime dependencies ─────────────────────────────────
+python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg" 2>nul
+if errorlevel 1 (
+    echo Runtime dependencies not found – installing from requirements.txt…
+    python -m pip install -r requirements.txt
+)
+
+REM ── 3. Clean previous build artefacts ───────────────────────────────────────
 if exist build   rmdir /s /q build
 if exist dist    rmdir /s /q dist
 
-REM ── 3. Run PyInstaller ──────────────────────────────────────────────────────
+REM ── 4. Run PyInstaller ──────────────────────────────────────────────────────
 if "%1"=="--onefile" (
     echo Building single-file executable…
     pyinstaller alpha_fixer_onefile.spec

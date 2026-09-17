@@ -17,13 +17,19 @@ cd "$REPO_ROOT"
 # ── 1. Check / install PyInstaller ───────────────────────────────────────────
 if ! python -c "import PyInstaller" 2>/dev/null; then
     echo "PyInstaller not found – installing…"
-    pip install pyinstaller
+    python -m pip install pyinstaller
 fi
 
-# ── 2. Clean previous build artefacts ────────────────────────────────────────
+# ── 2. Check / install runtime dependencies ──────────────────────────────────
+if ! python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg" 2>/dev/null; then
+    echo "Runtime dependencies not found – installing from requirements.txt…"
+    python -m pip install -r requirements.txt
+fi
+
+# ── 3. Clean previous build artefacts ────────────────────────────────────────
 rm -rf build dist __pycache__
 
-# ── 3. Run PyInstaller ────────────────────────────────────────────────────────
+# ── 4. Run PyInstaller ────────────────────────────────────────────────────────
 if [[ "$1" == "--onefile" ]]; then
     echo "Building single-file executable…"
     pyinstaller alpha_fixer_onefile.spec

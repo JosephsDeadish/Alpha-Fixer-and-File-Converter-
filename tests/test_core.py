@@ -8613,3 +8613,28 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         bat_src = self._src("../scripts/build_exe.bat")
         self.assertIn("alpha_fixer_onefile.spec", sh_src)
         self.assertIn("alpha_fixer_onefile.spec", bat_src)
+
+    def test_build_scripts_install_runtime_requirements_for_packaging(self):
+        sh_src = self._src("../scripts/build_exe.sh")
+        bat_src = self._src("../scripts/build_exe.bat")
+        self.assertIn('python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg"', sh_src)
+        self.assertIn("python -m pip install -r requirements.txt", sh_src)
+        self.assertIn('python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg"', bat_src)
+        self.assertIn("python -m pip install -r requirements.txt", bat_src)
+
+    def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
+        src = self._src("../scripts/install_linux_deps.sh")
+        self.assertIn("libxcb-cursor0", src)
+        self.assertIn("libxcb-icccm4", src)
+        self.assertIn("libxcb-image0", src)
+        self.assertIn("libxcb-keysyms1", src)
+        self.assertIn("libxcb-render-util0", src)
+        self.assertIn("libxcb-util1", src)
+        self.assertIn("libxcb-xkb1", src)
+        self.assertIn("libxkbcommon-x11-0", src)
+
+    def test_linux_startup_hints_cover_qxcb_runtime_packages(self):
+        src = self._src("../main.py")
+        self.assertIn("libxcb-cursor.so.0", src)
+        self.assertIn("libxkbcommon-x11.so.0", src)
+        self.assertIn("Install the Qt X11/XCB support libraries for your distribution", src)
