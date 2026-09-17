@@ -13,8 +13,8 @@ Provides a lightweight video editor that lets the user:
 
 **Dependency note**: Full video I/O requires a working ffmpeg executable,
 preferably from bundled imageio-ffmpeg or otherwise from the system PATH.
-If ffmpeg is unavailable the dialog can still process image-sequence "videos"
-(folders of PNGs) and export animated GIFs.
+If ffmpeg is unavailable the dialog can still assemble still images into
+an animated GIF.
 
 UX highlights (Round-90):
   • All numeric controls use drag-sliders – no arrow-button spinboxes.
@@ -87,6 +87,15 @@ def _has_imageio() -> bool:
 
 
 @lru_cache(maxsize=1)
+def _configure_imageio_ffmpeg() -> Optional[str]:
+    """Configure imageio to use the bundled/system ffmpeg executable once."""
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if ffmpeg_exe:
+        os.environ.setdefault("IMAGEIO_FFMPEG_EXE", ffmpeg_exe)
+    return ffmpeg_exe
+
+
+@lru_cache(maxsize=1)
 def _has_ffmpeg() -> bool:
     """Return True if a bundled or PATH ffmpeg executable is available."""
     return _get_ffmpeg_exe() is not None
@@ -112,9 +121,7 @@ def _open_video_reader(path: str):
     """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
     import imageio
 
-    ffmpeg_exe = _get_ffmpeg_exe()
-    if ffmpeg_exe:
-        os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe
+    _configure_imageio_ffmpeg()
     return imageio.get_reader(path, format="FFMPEG")
 
 
@@ -479,6 +486,7 @@ class VideoToolDialog(QDialog):
         self.setMinimumSize(960, 660)
         self.setModal(False)
         self._tooltip_mgr = tooltip_mgr
+        _configure_imageio_ffmpeg()
         self._clips: list[_ClipEntry] = []
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)

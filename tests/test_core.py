@@ -8666,6 +8666,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('out_path = str(Path(out_path).with_suffix(target_suffix))', src)
         self.assertIn('out_path = f"{out_path}{target_suffix}"', src)
         self.assertIn("def _has_imageio() -> bool:", src)
+        self.assertIn("def _configure_imageio_ffmpeg() -> Optional[str]:", src)
+        self.assertIn('os.environ.setdefault("IMAGEIO_FFMPEG_EXE", ffmpeg_exe)', src)
+        self.assertNotIn('os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe', src)
         self.assertIn("self._video_io_available = self._ffmpeg_available and self._imageio_available", src)
         self.assertIn('if fmt == "gif":\n                from PIL import Image', src)
         self.assertIn("gif_frames.append(filtered.copy())", src)
@@ -8695,6 +8698,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertNotIn("and GIFs into a single export", src)
         self.assertNotIn("WebM", src)
 
+    def test_video_tool_no_longer_claims_image_sequence_fallback(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("If ffmpeg is unavailable the dialog can still assemble still images into", src)
+        self.assertNotIn('process image-sequence "videos"', src)
+        self.assertNotIn("(folders of PNGs)", src)
+
     def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
         src = self._src("core/worker.py")
         self.assertIn("_LARGE_BATCH_THRESHOLD = 1000", src)
@@ -8702,8 +8711,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_preview_popout_copies_active_gif_animation_state(self):
         src = self._src("ui/preview_pane.py")
         self.assertIn("self._movie_path: str = \"\"", src)
-        self.assertIn("compare.animate_before(self._movie_path)", src)
-        self.assertIn("compare.set_animation_speed(self._movie_speed)", src)
+        self.assertIn("def _mirror_movie_frame(_frame_no: int) -> None:", src)
+        self.assertIn("self._movie.frameChanged.connect(_mirror_movie_frame)", src)
+        self.assertIn("self._movie.frameChanged.disconnect(_mirror_movie_frame)", src)
 
     def test_gif_builder_closes_progress_dialog_on_cancel(self):
         src = self._src("ui/gif_builder.py")
