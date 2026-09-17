@@ -988,7 +988,8 @@ class VideoToolDialog(QDialog):
                 if progress.wasCanceled():
                     break
                 ci, fi = self._global_frame_to_clip(i)
-                pil = self._clips[ci].get_frame(fi)
+                source_pil = self._clips[ci].get_frame(fi)
+                pil = source_pil
                 try:
                     pil = _apply_adjustments(
                         pil,
@@ -1008,6 +1009,11 @@ class VideoToolDialog(QDialog):
                             rgb.close()
                     wrote_frames = True
                 finally:
+                    if pil is not source_pil:
+                        try:
+                            source_pil.close()
+                        except Exception:
+                            pass
                     try:
                         pil.close()
                     except Exception:

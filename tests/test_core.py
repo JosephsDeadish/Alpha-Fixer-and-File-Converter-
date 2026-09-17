@@ -8730,6 +8730,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
         self.assertIn("brightness=brightness", src)
         self.assertIn("contrast=contrast", src)
+        self.assertIn("source_pil = self._clips[ci].get_frame(fi)", src)
+        self.assertIn("if pil is not source_pil:", src)
+        self.assertIn("source_pil.close()", src)
         self.assertIn('rgb = pil if pil.mode == "RGB" else pil.convert("RGB")', src)
 
     def test_gif_builder_caches_preview_pixmaps(self):
@@ -8740,6 +8743,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_history_html_export_includes_title_and_caption(self):
         src = self._src("ui/history_tab.py")
+        self.assertIn("from pathlib import Path", src)
         self.assertIn("<title>{title} History</title>", src)
         self.assertIn("<caption>{title} History</caption>", src)
         self.assertIn("final_ext = _filter_default_ext(selected_filter)", src)

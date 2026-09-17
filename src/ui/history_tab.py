@@ -6,6 +6,7 @@ import datetime
 import html
 import io
 import os
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot
 from PyQt6.QtGui import QIcon, QPixmap
