@@ -8456,9 +8456,11 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
 
     def test_five_save_slots_created(self):
         """The saved-mask panel must keep the configured slot count stable."""
-        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        src = self._src()
+        match = re.search(r"_MASK_SLOT_COUNT\s*:\s*int\s*=\s*(\d+)", src)
+        self.assertIsNotNone(match, "must define _MASK_SLOT_COUNT as an integer constant")
         self.assertEqual(
-            SelectiveAlphaTool._MASK_SLOT_COUNT,
+            int(match.group(1)),
             150,
             "saved-mask slot count changed unexpectedly; update UI/tests intentionally if this is desired",
         )
