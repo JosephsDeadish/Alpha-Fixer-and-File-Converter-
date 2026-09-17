@@ -169,6 +169,13 @@ def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
                 pass
         if frame_count <= 0:
             try:
+                duration = float(meta.get("duration") or 0.0)
+            except Exception:
+                duration = 0.0
+            if duration > 0 and fps > 0:
+                frame_count = max(1, int(round(duration * fps)))
+        if frame_count <= 0:
+            try:
                 import imageio_ffmpeg
 
                 counted, secs = imageio_ffmpeg.count_frames_and_secs(path)
@@ -177,13 +184,6 @@ def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
                     frame_count = max(1, int(round(secs * fps)))
             except Exception:
                 pass
-        if frame_count <= 0:
-            try:
-                duration = float(meta.get("duration") or 0.0)
-            except Exception:
-                duration = 0.0
-            if duration > 0 and fps > 0:
-                frame_count = max(1, int(round(duration * fps)))
         if frame_count <= 0:
             try:
                 first_frame = reader.get_data(0)
