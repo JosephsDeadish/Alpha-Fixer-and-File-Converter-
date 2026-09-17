@@ -26,6 +26,7 @@ Opening the dialog:
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -72,36 +73,10 @@ _PREVIEW_MAX_H = 320
 _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
 
 
+@lru_cache(maxsize=1)
 def _has_ffmpeg() -> bool:
-    """Return True if imageio-ffmpeg (bundled binary) or system ffmpeg is available."""
-    # 1. imageio-ffmpeg ships a static ffmpeg binary – preferred because it
-    #    works even when no system ffmpeg is installed.
-    try:
-        import imageio_ffmpeg  # noqa: F401
-        _exe = imageio_ffmpeg.get_ffmpeg_exe()
-        if _exe:
-            return True
-    except Exception:
-        pass
-    # 2. Try imageio's legacy ffmpeg plugin path
-    try:
-        import imageio
-        import imageio.plugins.ffmpeg  # noqa: F401
-        return True
-    except Exception:
-        pass
-    # 3. Fall back to a system-installed ffmpeg on the PATH
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["ffmpeg", "-version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=3,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+    """Return True if a bundled or PATH ffmpeg executable is available."""
+    return _get_ffmpeg_exe() is not None
 
 
 def _get_ffmpeg_exe() -> Optional[str]:

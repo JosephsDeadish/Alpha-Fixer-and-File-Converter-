@@ -8722,6 +8722,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_export_caches_adjustment_values_before_frame_loop(self):
         src = self._src("ui/video_tool.py")
+        self.assertIn("@lru_cache(maxsize=1)", src)
+        self.assertIn("return _get_ffmpeg_exe() is not None", src)
+        self.assertNotIn('["ffmpeg", "-version"]', src)
         self.assertIn("canceled = False", src)
         self.assertIn("brightness = self._brightness_slider.value() / 100.0", src)
         self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
@@ -8794,11 +8797,18 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         for src in (picker_src, builder_src, converter_src):
             self.assertIn("def _gif_frame_rect(", src)
             self.assertIn('rect = getattr(gif, "dispose_extent", None)', src)
+            self.assertIn("if curr.size == rect_size:", src)
+            self.assertIn("elif curr.width >= right and curr.height >= bottom:", src)
             self.assertIn("composite.paste(paste_img, (left, top), paste_img)", src)
 
     def test_theme_engine_hidden_theme_grouping_comment_matches_data(self):
         src = self._src("ui/theme_engine.py")
         self.assertIn("# Hidden anime-style themes", src)
+
+    def test_history_tooltips_describe_visual_previews(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("Preview: animated GIF thumbnail shown from the output file.", src)
+        self.assertIn("Preview: first clip thumbnail shown.", src)
 
     def test_readme_theme_counts_match_theme_engine(self):
         import importlib.util

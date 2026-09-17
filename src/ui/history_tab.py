@@ -469,12 +469,14 @@ class HistoryTab(QWidget):
             item = QTreeWidgetItem([ts, fmt, n_files, n_ok, n_err, files])
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
+            preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\nFormat: {fmt}\n"
-                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                    f"{preview_text}\n\n"
                     "Files processed:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
@@ -506,13 +508,15 @@ class HistoryTab(QWidget):
             item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
+            preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\n"
                     f"Mode: {mode}\n"
-                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                    f"{preview_text}\n\n"
                     "Files processed:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
@@ -549,12 +553,14 @@ class HistoryTab(QWidget):
             # Thumbnail icon from source image (item 9)
             thumb_path = entry.get("first_file", entry.get("source", ""))
             thumb = _load_thumb(thumb_path)
+            preview_text = "Preview: source thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\nMode: {mode}\n"
-                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                    f"{preview_text}\n\n"
                     "Files processed:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
@@ -595,14 +601,17 @@ class HistoryTab(QWidget):
             if gif_output:
                 # Let the animated delegate handle thumbnail rendering
                 self._gif_anim_delegate.set_gif_path(item, gif_output)
+                preview_text = "Preview: animated GIF thumbnail shown from the output file."
             else:
                 thumb = _load_thumb(entry.get("first_file", ""))
+                preview_text = "Preview: first input thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
                 if not thumb.isNull():
                     item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Built: {ts}\nOutput: {output}\n"
-                    f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n"
+                    f"{preview_text}\n\n"
                     "Input files:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):
@@ -635,12 +644,14 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = QTreeWidgetItem([ts, output, n_clips, n_ok, n_err, files])
             thumb = _load_thumb(entry.get("first_file", ""))
+            preview_text = "Preview: first clip thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
             if file_list:
                 tooltip = (
                     f"Built: {ts}\nOutput: {output}\n"
-                    f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n\n"
+                    f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n"
+                    f"{preview_text}\n\n"
                     "Input files:\n  " + "\n  ".join(file_list)
                 )
                 for col in range(6):

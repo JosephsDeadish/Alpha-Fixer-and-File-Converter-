@@ -171,10 +171,13 @@ class GifFramePickerDialog(QDialog):
                 composite = canvas.copy()
                 rect = _gif_frame_rect(gif, curr)
                 left, top, right, bottom = rect
-                if curr.size == (right - left, bottom - top):
+                rect_size = (max(0, right - left), max(0, bottom - top))
+                if curr.size == rect_size:
                     paste_img = curr
-                else:
+                elif curr.width >= right and curr.height >= bottom:
                     paste_img = curr.crop(rect)
+                else:
+                    paste_img = curr
                 try:
                     composite.paste(paste_img, (left, top), paste_img)
                 finally:
