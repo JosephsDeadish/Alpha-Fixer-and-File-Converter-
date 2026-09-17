@@ -107,8 +107,15 @@ class AlphaWorker(QThread):
                     os.makedirs(self._backup_dir, exist_ok=True)
                     shutil.copy2(src, bk_path)
                     backup_pairs.append((src, bk_path))
-                except Exception:
-                    pass  # backup failure should not abort processing
+                except Exception as exc:
+                    errors += 1
+                    msg = f"Backup failed — {exc}"
+                    logger.error("Alpha worker backup failure on %s: %s", src, msg)
+                    try:
+                        self.file_done.emit(src, False, msg)
+                    except RuntimeError:
+                        return
+                    continue
             try:
                 img = load_image(src)
                 try:
@@ -270,19 +277,14 @@ class ConverterWorker(QThread):
         # concurrently (I/O-bound — benefits from parallelism even on the GIL).
         # Item 26: parallel conversion significantly reduces wall-clock time.
         import concurrent.futures
-        import threading
 
         # Number of parallel workers: CPU count, capped at 8 to avoid too many
         # simultaneous open files (each PIL operation holds file handles briefly).
         import os as _os
         n_workers = min(8, max(1, (_os.cpu_count() or 1)))
 
-        # Thread-safe counter helpers.
-        _lock = threading.Lock()
-        _counters = {"success": 0, "errors": 0, "done": 0}
-
-        def _convert_one(src: str) -> tuple[str, bool, str]:
-            """Convert one file and return (src, ok, dest_or_error)."""
+        def _convert_one(idx: int, src: str) -> tuple[int, str, bool, str]:
+            """Convert one file and return (index, src, ok, dest_or_error)."""
             try:
                 dest = build_output_path(
                     src,
@@ -299,22 +301,23 @@ class ConverterWorker(QThread):
                     resize=self._resize,
                     keep_metadata=self._keep_metadata,
                 )
-                return src, True, dest
+                return idx, src, True, dest
             except MemoryError as exc:
-                return src, False, f"Out of memory — {exc}"
+                return idx, src, False, f"Out of memory — {exc}"
             except Exception:
-                return src, False, traceback.format_exc()
+                return idx, src, False, traceback.format_exc()
 
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_workers)
         try:
             pending: "set[concurrent.futures.Future]" = set()
             next_idx = 0
+            buffered: dict[int, tuple[int, str, bool, str]] = {}
+            emit_idx = 0
 
             while next_idx < total and len(pending) < n_workers and not self._abort:
-                pending.add(pool.submit(_convert_one, self._files[next_idx]))
+                pending.add(pool.submit(_convert_one, next_idx, self._files[next_idx]))
                 next_idx += 1
 
-            completed = 0
             while pending:
                 if self._abort:
                     for fut in pending:
@@ -326,36 +329,39 @@ class ConverterWorker(QThread):
                     return_when=concurrent.futures.FIRST_COMPLETED,
                 )
                 for fut in done:
-                    src_path, ok, dest_or_err = fut.result()
-                    completed += 1
-                    now = time.monotonic()
-                    if (not large_batch
-                            or completed == total
-                            or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
-                        try:
-                            self.progress.emit(completed, total, src_path)
-                        except RuntimeError:
-                            pool.shutdown(wait=False, cancel_futures=True)
-                            return
-                        last_progress_time = now
-                    if ok:
-                        success += 1
-                        if not large_batch:
+                    result = fut.result()
+                    buffered[result[0]] = result
+                    while emit_idx in buffered:
+                        order_idx, src_path, ok, dest_or_err = buffered.pop(emit_idx)
+                        now = time.monotonic()
+                        if (not large_batch
+                                or order_idx == total - 1
+                                or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
                             try:
-                                self.file_done.emit(src_path, True, dest_or_err)
+                                self.progress.emit(order_idx, total, src_path)
                             except RuntimeError:
                                 pool.shutdown(wait=False, cancel_futures=True)
                                 return
-                    else:
-                        errors += 1
-                        logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
-                        try:
-                            self.file_done.emit(src_path, False, dest_or_err)
-                        except RuntimeError:
-                            pool.shutdown(wait=False, cancel_futures=True)
-                            return
+                            last_progress_time = now
+                        if ok:
+                            success += 1
+                            if not large_batch:
+                                try:
+                                    self.file_done.emit(src_path, True, dest_or_err)
+                                except RuntimeError:
+                                    pool.shutdown(wait=False, cancel_futures=True)
+                                    return
+                        else:
+                            errors += 1
+                            logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
+                            try:
+                                self.file_done.emit(src_path, False, dest_or_err)
+                            except RuntimeError:
+                                pool.shutdown(wait=False, cancel_futures=True)
+                                return
+                        emit_idx += 1
                     while next_idx < total and len(pending) < n_workers and not self._abort:
-                        pending.add(pool.submit(_convert_one, self._files[next_idx]))
+                        pending.add(pool.submit(_convert_one, next_idx, self._files[next_idx]))
                         next_idx += 1
         finally:
             if not self._abort:

@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -835,6 +836,74 @@ class TestAlphaWorkerResolveOutput(unittest.TestCase):
         w = self._make_worker(output_dir=None, suffix="", overwrite=True)
         result = w._resolve_output("/src/image.png")
         self.assertEqual(result, "/src/image.png")
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed — skipping worker tests")
+class TestWorkerBehavior(unittest.TestCase):
+
+    def test_alpha_worker_skips_inplace_write_when_backup_fails(self):
+        from src.core.worker import AlphaWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "image.png")
+            Image.new("RGBA", (2, 2), (1, 2, 3, 4)).save(src)
+            backup_dir = os.path.join(tmpdir, "backup")
+            worker = AlphaWorker(
+                files=[src],
+                manual_params={},
+                overwrite=True,
+                backup_dir=backup_dir,
+            )
+            file_done = []
+            finished = []
+            manifests = []
+            worker.file_done.connect(lambda path, ok, msg: file_done.append((path, ok, msg)))
+            worker.finished.connect(lambda ok_count, err_count: finished.append((ok_count, err_count)))
+            worker.backup_manifest.connect(lambda pairs: manifests.append(list(pairs)))
+
+            with mock.patch("src.core.worker.shutil.copy2", side_effect=OSError("disk full")):
+                with mock.patch("src.core.worker.save_image") as save_mock:
+                    worker.run()
+
+            save_mock.assert_not_called()
+            self.assertEqual(len(file_done), 1)
+            self.assertEqual(file_done[0][0], src)
+            self.assertFalse(file_done[0][1])
+            self.assertIn("Backup failed", file_done[0][2])
+            self.assertEqual(finished, [(0, 1)])
+            self.assertEqual(manifests, [])
+
+    def test_converter_worker_emits_progress_and_results_in_input_order(self):
+        from src.core.worker import ConverterWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = os.path.join(tmpdir, "first.png")
+            second = os.path.join(tmpdir, "second.png")
+            Image.new("RGBA", (2, 2), (10, 20, 30, 40)).save(first)
+            Image.new("RGBA", (2, 2), (50, 60, 70, 80)).save(second)
+            worker = ConverterWorker(
+                files=[first, second],
+                target_format="PNG",
+                target_ext=".png",
+            )
+            progress = []
+            done = []
+            worker.progress.connect(lambda current, total, path: progress.append((current, total, path)))
+            worker.file_done.connect(lambda path, ok, msg: done.append((path, ok, msg)))
+
+            def _fake_convert(src, dest, target_format, **kwargs):
+                import time as _time
+                if os.path.basename(src) == "first.png":
+                    _time.sleep(0.05)
+                Path(dest).write_bytes(b"ok")
+
+            with mock.patch("src.core.worker.convert_file", side_effect=_fake_convert):
+                worker.run()
+
+            self.assertEqual([entry[2] for entry in progress], [first, second])
+            self.assertEqual([entry[0] for entry in progress], [0, 1])
+            self.assertEqual([entry[0] for entry in done], [first, second])
+            self.assertTrue(all(entry[1] for entry in done))
 
 
 # ---------------------------------------------------------------------------
