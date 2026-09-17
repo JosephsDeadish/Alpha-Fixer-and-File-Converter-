@@ -2,7 +2,7 @@
 File converter – converts between image formats.
 
 Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PPM, PCX, AVIF, QOI, SVG, JPEG2000.
+                   PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
@@ -37,12 +37,15 @@ logger = logging.getLogger(__name__)
 SUPPORTED_OUTPUT_FORMATS = {
     "AVIF": ".avif",
     "BMP": ".bmp",
+    "PBM": ".pbm",
     "DDS": ".dds",
     "GIF": ".gif",
+    "PGM": ".pgm",
     "ICO": ".ico",
     "JPEG": ".jpg",
     "JPEG2000": ".jp2",
     "PCX": ".pcx",
+    "PNM": ".pnm",
     "PNG": ".png",
     "PPM": ".ppm",
     "QOI": ".qoi",
@@ -73,10 +76,20 @@ FORMAT_DESCRIPTIONS = {
         "Used by DirectX games and engines (Unreal, Unity, etc.).\n"
         "Supports DXT/BC compressed formats. Required for many game modding workflows."
     ),
+    "PBM": (
+        "Portable Bitmap — simple 1-bit black-and-white image format.\n"
+        "Best for masks, monochrome art, and legacy toolchains.\n"
+        "No greyscale or alpha; output is thresholded to pure black or white."
+    ),
     "GIF": (
         "Graphics Interchange Format — 256-colour indexed format with animation.\n"
         "Limited palette makes it unsuitable for photos or detailed textures.\n"
         "Supports 1-bit transparency only. Best for simple icons or animations."
+    ),
+    "PGM": (
+        "Portable Graymap — simple greyscale image format.\n"
+        "Useful for masks, heightmaps, scientific tools, and older pipelines.\n"
+        "Stores luminance only; alpha is flattened before saving."
     ),
     "ICO": (
         "Windows Icon format — multi-size icon bundle.\n"
@@ -97,6 +110,11 @@ FORMAT_DESCRIPTIONS = {
         "PC Paintbrush format — old lossless format from the DOS era.\n"
         "Limited support in modern software. Use PNG or BMP instead where possible.\n"
         "Still encountered in some legacy game assets and old CAD workflows."
+    ),
+    "PNM": (
+        "Portable AnyMap — Netpbm family container (PBM/PGM/PPM).\n"
+        "Simple interchange format for command-line tools and legacy pipelines.\n"
+        "This app saves color PNM output as a standard RGB pixmap."
     ),
     "PNG": (
         "Portable Network Graphics — lossless compression with full alpha channel.\n"
@@ -501,19 +519,24 @@ def convert_file(
                         flat.close()
                 return output_path
 
-            # --- PPM (RGB only, no alpha) ---
-            if ext == ".ppm":
+            # --- Netpbm family (PBM/PGM/PNM/PPM; no alpha) ---
+            if ext in (".pbm", ".pgm", ".pnm", ".ppm"):
                 flat = _flatten_alpha(img)
-                rgb = None
+                save_img = None
                 try:
-                    if flat.mode not in ("RGB", "L"):
-                        rgb = flat.convert("RGB")
-                        rgb.save(output_path)
+                    if ext == ".pbm":
+                        grey = flat if flat.mode == "L" else flat.convert("L")
+                        save_img = grey.point(lambda v: 255 if v >= 128 else 0, mode="1")
+                    elif ext == ".pgm":
+                        save_img = flat if flat.mode == "L" else flat.convert("L")
+                    elif flat.mode not in ("RGB", "L"):
+                        save_img = flat.convert("RGB")
                     else:
-                        flat.save(output_path)
+                        save_img = flat
+                    save_img.save(output_path)
                 finally:
-                    if rgb is not None:
-                        rgb.close()
+                    if save_img is not None and save_img is not flat:
+                        save_img.close()
                     if flat is not img:
                         flat.close()
                 return output_path

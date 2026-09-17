@@ -8537,3 +8537,33 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_gif_builder_removes_partial_file_on_save_error(self):
         src = self._src("ui/gif_builder.py")
         self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+
+    def test_history_gif_delegate_paint_has_no_model_side_effects(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("opt = QStyleOptionViewItem(option)", src)
+        self.assertIn("opt.icon = QIcon()", src)
+        self.assertNotIn("item.setIcon(0, QIcon())", src)
+
+    def test_gif_disposal_restore_previous_handled(self):
+        for rel in ("ui/gif_builder.py", "ui/gif_frame_picker.py", "ui/converter_tool.py"):
+            src = self._src(rel)
+            self.assertIn("elif disposal == 3:", src, f"{rel} must handle GIF disposal mode 3")
+            self.assertIn("previous_canvas = canvas.copy()", src, f"{rel} must preserve pre-frame canvas")
+
+    def test_alpha_worker_emits_backup_manifest_before_finished(self):
+        src = self._src("core/worker.py")
+        manifest_idx = src.index("self.backup_manifest.emit(backup_pairs)")
+        finished_idx = src.index("self.finished.emit(success, errors)")
+        self.assertLess(manifest_idx, finished_idx)
+
+    def test_converter_worker_submits_incrementally_and_cancels_pending_work(self):
+        src = self._src("core/worker.py")
+        self.assertIn("return_when=concurrent.futures.FIRST_COMPLETED", src)
+        self.assertIn("pool.shutdown(wait=False, cancel_futures=True)", src)
+        self.assertNotIn("for src in self._files:\n                if self._abort:\n                    break\n                fut_map[pool.submit(_convert_one, src)] = src", src)
+
+    def test_converter_tool_quality_ui_mentions_all_supported_formats(self):
+        src = self._src("ui/converter_tool.py")
+        self.assertIn("Quality (JPEG/WEBP/AVIF/JPEG2000):", src)
+        self.assertIn('fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000")', src)
+        self.assertIn("Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs.", src)

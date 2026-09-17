@@ -87,12 +87,10 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
         if movie is None:
             super().paint(painter, option, index)
             return
-        # Draw background + text as normal, but skip the static icon
-        # by temporarily clearing it so Qt's default paint skips the icon area.
-        saved_icon = item.icon(0)
-        item.setIcon(0, QIcon())
-        super().paint(painter, option, index)
-        item.setIcon(0, saved_icon)
+        # Draw background + text as normal, but skip the static icon.
+        opt = QStyleOptionViewItem(option)
+        opt.icon = QIcon()
+        super().paint(painter, opt, index)
         # Overlay the animated frame in the icon rect
         frame = movie.currentPixmap()
         if not frame.isNull():

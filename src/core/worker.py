@@ -178,16 +178,16 @@ class AlphaWorker(QThread):
                     self.file_done.emit(src, False, msg)  # always emit errors
                 except RuntimeError:
                     return
-        try:
-            self.finished.emit(success, errors)
-        except RuntimeError:
-            pass  # receiver destroyed during shutdown; nothing to do
         # Emit backup manifest so the UI can offer an undo button.
         if backup_pairs:
             try:
                 self.backup_manifest.emit(backup_pairs)
             except RuntimeError:
                 pass
+        try:
+            self.finished.emit(success, errors)
+        except RuntimeError:
+            pass  # receiver destroyed during shutdown; nothing to do
 
     def _resolve_output(self, src: str) -> str:
         p = Path(src)
@@ -305,42 +305,61 @@ class ConverterWorker(QThread):
             except Exception:
                 return src, False, traceback.format_exc()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as pool:
-            fut_map: "dict[concurrent.futures.Future, str]" = {}
-            for src in self._files:
-                if self._abort:
-                    break
-                fut_map[pool.submit(_convert_one, src)] = src
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_workers)
+        try:
+            pending: "set[concurrent.futures.Future]" = set()
+            next_idx = 0
+
+            while next_idx < total and len(pending) < n_workers and not self._abort:
+                pending.add(pool.submit(_convert_one, self._files[next_idx]))
+                next_idx += 1
 
             completed = 0
-            for fut in concurrent.futures.as_completed(fut_map):
+            while pending:
                 if self._abort:
+                    for fut in pending:
+                        fut.cancel()
+                    pool.shutdown(wait=False, cancel_futures=True)
                     break
-                src_path, ok, dest_or_err = fut.result()
-                completed += 1
-                now = time.monotonic()
-                if (not large_batch
-                        or completed == total
-                        or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
-                    try:
-                        self.progress.emit(completed, total, src_path)
-                    except RuntimeError:
-                        return
-                    last_progress_time = now
-                if ok:
-                    success += 1
-                    if not large_batch:
+                done, pending = concurrent.futures.wait(
+                    pending,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
+                for fut in done:
+                    src_path, ok, dest_or_err = fut.result()
+                    completed += 1
+                    now = time.monotonic()
+                    if (not large_batch
+                            or completed == total
+                            or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
                         try:
-                            self.file_done.emit(src_path, True, dest_or_err)
+                            self.progress.emit(completed, total, src_path)
                         except RuntimeError:
+                            pool.shutdown(wait=False, cancel_futures=True)
                             return
-                else:
-                    errors += 1
-                    logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
-                    try:
-                        self.file_done.emit(src_path, False, dest_or_err)
-                    except RuntimeError:
-                        return
+                        last_progress_time = now
+                    if ok:
+                        success += 1
+                        if not large_batch:
+                            try:
+                                self.file_done.emit(src_path, True, dest_or_err)
+                            except RuntimeError:
+                                pool.shutdown(wait=False, cancel_futures=True)
+                                return
+                    else:
+                        errors += 1
+                        logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
+                        try:
+                            self.file_done.emit(src_path, False, dest_or_err)
+                        except RuntimeError:
+                            pool.shutdown(wait=False, cancel_futures=True)
+                            return
+                    while next_idx < total and len(pending) < n_workers and not self._abort:
+                        pending.add(pool.submit(_convert_one, self._files[next_idx]))
+                        next_idx += 1
+        finally:
+            if not self._abort:
+                pool.shutdown(wait=True, cancel_futures=False)
 
         try:
             self.finished.emit(success, errors)

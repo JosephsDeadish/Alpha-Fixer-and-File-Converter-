@@ -213,6 +213,39 @@ class TestConvertFile(unittest.TestCase):
             img = Image.open(dst)
             self.assertIn(img.mode, ("RGB", "L"))
 
+    def test_png_to_pgm(self):
+        """PGM output should be grayscale with no alpha."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.pgm")
+            _make_png(src)
+            convert_file(src, dst, "PGM")
+            self.assertTrue(os.path.isfile(dst))
+            img = Image.open(dst)
+            self.assertEqual(img.mode, "L")
+
+    def test_png_to_pbm(self):
+        """PBM output should be 1-bit with no alpha."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.pbm")
+            _make_png(src)
+            convert_file(src, dst, "PBM")
+            self.assertTrue(os.path.isfile(dst))
+            img = Image.open(dst)
+            self.assertEqual(img.mode, "1")
+
+    def test_png_to_pnm(self):
+        """PNM output should save successfully through the Netpbm path."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.pnm")
+            _make_png(src)
+            convert_file(src, dst, "PNM")
+            self.assertTrue(os.path.isfile(dst))
+            img = Image.open(dst)
+            self.assertIn(img.mode, ("RGB", "L"))
+
     def test_png_to_pcx(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             src = os.path.join(tmpdir, "input.png")
@@ -268,7 +301,7 @@ class TestConvertFile(unittest.TestCase):
             self.assertEqual(img.mode, "RGB")
 
     def test_supported_output_formats_includes_new(self):
-        for fmt in ("PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
+        for fmt in ("PBM", "PGM", "PNM", "PPM", "PCX", "AVIF", "QOI", "JPEG2000"):
             with self.subTest(fmt=fmt):
                 self.assertIn(fmt, SUPPORTED_OUTPUT_FORMATS)
 
@@ -383,6 +416,16 @@ class TestSupportedRead(unittest.TestCase):
 
     def test_avif_in_supported_read(self):
         self.assertIn(".avif", self.exts)
+
+    def test_netpbm_family_in_supported_read(self):
+        for ext in (".pbm", ".pgm", ".pnm"):
+            with self.subTest(ext=ext):
+                self.assertIn(ext, self.exts)
+
+    def test_jpeg2000_aliases_in_supported_read(self):
+        for ext in (".j2k", ".j2c"):
+            with self.subTest(ext=ext):
+                self.assertIn(ext, self.exts)
 
 
 class TestSvgVtracerFallback(unittest.TestCase):

@@ -71,13 +71,23 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
             for i in range(n):
                 img.seek(i)
                 curr = img.convert("RGBA")
+                previous_canvas = canvas.copy()
                 composite = canvas.copy()
                 composite.paste(curr, (0, 0), curr)
                 curr.close()
                 frames.append(composite.copy())
                 disposal = img.info.get("disposal", 0)
                 canvas.close()
-                canvas = Image.new("RGBA", img.size, (0, 0, 0, 0)) if disposal == 2 else composite
+                if disposal == 2:
+                    canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                    composite.close()
+                    previous_canvas.close()
+                elif disposal == 3:
+                    canvas = previous_canvas
+                    composite.close()
+                else:
+                    canvas = composite
+                    previous_canvas.close()
             canvas.close()
     except EOFError:
         pass

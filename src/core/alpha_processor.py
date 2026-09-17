@@ -2,7 +2,7 @@
 Alpha channel processor.
 
 Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick),
-          PPM, PCX, AVIF, QOI.
+          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, JPEG2000.
 """
 import os
 import io
@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 ALPHA_FORMATS = {".png", ".webp", ".tga", ".tiff", ".tif", ".dds", ".gif", ".ico"}
 
 # Formats that need conversion to RGBA before processing
-CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp"}
+CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp", ".pbm", ".pgm", ".pnm", ".ppm"}
 
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
     ".gif", ".webp", ".tga", ".ico", ".dds",
-    ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2",
+    ".pbm", ".pgm", ".pnm", ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2", ".j2k", ".j2c",
     ".xnb", ".tim",
 }
 
@@ -547,6 +547,36 @@ def save_image(img: Image.Image, path: str, original_ext: str):
             )
         finally:
             img_rgb.close()
+        return
+    if ext in (".pbm", ".pgm", ".pnm", ".ppm"):
+        w, h = img.size
+        flat = None
+        save_img = None
+        try:
+            flat = img.convert("RGB") if img.mode not in ("RGB", "L", "1") else img
+            if ext == ".pbm":
+                grey = flat if flat.mode == "L" else flat.convert("L")
+                save_img = grey.point(lambda v: 255 if v >= 128 else 0, mode="1")
+                if grey is not flat:
+                    grey.close()
+            elif ext == ".pgm":
+                save_img = flat if flat.mode == "L" else flat.convert("L")
+            elif flat.mode not in ("RGB", "L"):
+                save_img = flat.convert("RGB")
+            else:
+                save_img = flat
+            save_img.save(path)
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to write {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+                "Try processing a smaller file."
+            )
+        finally:
+            if save_img is not None and save_img is not flat and save_img is not img:
+                save_img.close()
+            if flat is not None and flat is not img:
+                flat.close()
         return
     w, h = img.size
     try:

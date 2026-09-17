@@ -393,7 +393,7 @@ class ConverterTab(QWidget):
         if idx >= 0:
             self._fmt_combo.setCurrentIndex(idx)
 
-        lbl_quality = QLabel("JPEG/WEBP quality:")
+        lbl_quality = QLabel("Quality (JPEG/WEBP/AVIF/JPEG2000):")
         lbl_quality.setMinimumHeight(24)
         self._lbl_quality = lbl_quality
         gf_layout.addWidget(lbl_quality, 1, 0)
@@ -410,7 +410,7 @@ class ConverterTab(QWidget):
         )
         self._keep_metadata_check.setToolTip(
             "Copy EXIF, ICC profile, and DPI data from the source file to the output.\n"
-            "Supported for JPEG, PNG, WEBP, and TIFF outputs."
+            "Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs."
         )
         gf_layout.addWidget(self._keep_metadata_check, 2, 0, 1, 2)
 
@@ -677,10 +677,10 @@ class ConverterTab(QWidget):
 
     @pyqtSlot(int)
     def _on_format_changed(self, _index: int):
-        """Enable quality spinbox only for formats that support it (JPEG/WEBP/AVIF)."""
+        """Enable quality spinbox only for formats that support it."""
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
-        self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF"))
+        self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"))
         # When GIF is selected, the Process button opens the GIF Builder instead
         if fmt == "GIF":
             self._btn_run.setText("🎞  Open GIF Builder  [F5]")
@@ -698,7 +698,7 @@ class ConverterTab(QWidget):
         # Only debounce the preview refresh if quality affects the output format
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
-        if fmt in ("JPEG", "WEBP", "AVIF"):
+        if fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"):
             self._preview_debounce.start()
 
     @pyqtSlot(int)
@@ -1102,6 +1102,7 @@ class ConverterTab(QWidget):
                     for frame_no in range(min(max_idx + 1, n_frames)):
                         gif.seek(frame_no)
                         curr = gif.convert("RGBA")
+                        previous_canvas = canvas.copy()
                         composite = canvas.copy()
                         composite.paste(curr, (0, 0), curr)
                         curr.close()
@@ -1119,9 +1120,14 @@ class ConverterTab(QWidget):
                             # Restore-to-background: next frame starts fresh.
                             canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
                             composite.close()
+                            previous_canvas.close()
+                        elif disposal == 3:
+                            canvas = previous_canvas
+                            composite.close()
                         else:
-                            # disposal 0, 1, 3 – carry the composite forward.
+                            # disposal 0, 1 – carry the composite forward.
                             canvas = composite
+                            previous_canvas.close()
 
                     canvas.close()
                 finally:
@@ -1436,4 +1442,3 @@ class ConverterTab(QWidget):
             dlg.close()
         else:
             self._on_compare_docked_back()
-

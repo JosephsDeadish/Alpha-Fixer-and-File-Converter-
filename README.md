@@ -5,7 +5,7 @@ A panda-themed desktop application with two powerful tools:
 ## Tools
 
 ### 🖼 Alpha Fixer
-Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, BMP, TIFF, WEBP, TGA, ICO, GIF).
+Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM).
 
 **Features:**
 - Built-in presets: **PS2** (128), **N64** (255), **No Alpha**, **Max Alpha**, **Transparent**, **Half Transparent**, **Invert Alpha**, **Threshold Cut**
@@ -19,13 +19,13 @@ Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, BMP
 ### 🔄 File Converter
 Convert between image formats with optional resize and quality control.
 
-**Supported formats:** PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS
+**Supported formats:** PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM
 
 **Features:**
 - Convert any supported format to any other
 - Batch convert whole folders and subfolders (preserves directory structure)
 - Optional resize (width × height)
-- JPEG/WEBP quality control
+- JPEG/WEBP/AVIF/JPEG2000 quality control
 - Custom output folder
 
 ## UI & Customization

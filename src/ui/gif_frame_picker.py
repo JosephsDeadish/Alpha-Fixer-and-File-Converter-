@@ -151,6 +151,7 @@ class GifFramePickerDialog(QDialog):
             for frame_no in range(n_frames):
                 gif.seek(frame_no)
                 curr = gif.convert("RGBA")   # force-decode at this position
+                previous_canvas = canvas.copy()
                 composite = canvas.copy()
                 composite.paste(curr, (0, 0), curr)
                 curr.close()
@@ -162,12 +163,14 @@ class GifFramePickerDialog(QDialog):
                     # Restore-to-background: next frame starts on a blank canvas.
                     canvas = Image.new("RGBA", gif_size, (0, 0, 0, 0))
                     composite.close()
+                    previous_canvas.close()
+                elif disposal == 3:
+                    canvas = previous_canvas
+                    composite.close()
                 else:
-                    # disposal 0, 1, 3 – keep current composite as the base
-                    # for the next frame (disposal=3 "restore-to-previous" is
-                    # approximated as "keep" which is correct for the vast
-                    # majority of animated GIFs in the wild).
+                    # disposal 0, 1 – keep current composite as the base.
                     canvas = composite
+                    previous_canvas.close()
             canvas.close()
             self._frame_count = len(frames)
         except Exception as exc:
