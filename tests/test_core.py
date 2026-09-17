@@ -8836,8 +8836,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         duration_idx = src.index("if duration > 0 and fps > 0:")
         count_idx = src.index("imageio_ffmpeg.count_frames_and_secs(path)")
         decode_idx = src.index("first_frame = reader.get_data(0)")
-        self.assertLess(duration_idx, count_idx)
-        self.assertGreater(decode_idx, duration_idx)
+        self.assertLess(count_idx, duration_idx)
+        self.assertGreater(decode_idx, count_idx)
         self.assertIn("return fps, frame_count, first_frame", src)
         self.assertIn("_VideoFrameGetter(path, frame_count, first_frame)", src)
 
