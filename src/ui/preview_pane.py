@@ -498,8 +498,8 @@ class BeforeAfterWidget(QWidget):
             self._popout_btn.setText("⇗ Undock")
             self._popout_btn.setToolTip(
                 "Undock the preview into a separate floating window.\n"
-                "The preview panel here will hide to make room for other controls.\n"
-                "Click ⇙ Redock (or close the floating window) to redock it."
+                "Opens a separate floating window while keeping the embedded preview here.\n"
+                "Click ⇙ Redock (or close the floating window) to close the floating preview."
             )
 
         dlg.finished.connect(_on_dialog_finished)

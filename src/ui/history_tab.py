@@ -3,6 +3,7 @@ History tab – shows recent converter and alpha-fixer runs with timestamps.
 """
 import csv
 import datetime
+import html
 import io
 import os
 
@@ -241,9 +242,10 @@ class HistoryTab(QWidget):
         self._alpha_search = self._make_search_field("alpha")
         alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
-            ["Time", "Files", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the alpha-fix batch was started.",
+                "Preset / mode used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors — may be unsupported format or locked file.",
@@ -485,12 +487,13 @@ class HistoryTab(QWidget):
         self._alpha_tree.clear()
         for entry in history:
             ts = _fmt_ts(entry.get("timestamp", ""))
+            mode = entry.get("mode", entry.get("preset", "?"))
             n_files = str(entry.get("file_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = QTreeWidgetItem([ts, n_files, n_ok, n_err, files])
+            item = QTreeWidgetItem([ts, mode, n_files, n_ok, n_err, files])
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             if not thumb.isNull():
@@ -498,13 +501,14 @@ class HistoryTab(QWidget):
             if file_list:
                 tooltip = (
                     f"Batch: {ts}\n"
+                    f"Mode: {mode}\n"
                     f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n\n"
                     "Files processed:\n  " + "\n  ".join(file_list)
                 )
-                for col in range(5):
+                for col in range(6):
                     item.setToolTip(col, tooltip)
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(5):
+                for col in range(6):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._alpha_tree.addTopLevelItem(item)
         total = len(history)
@@ -720,9 +724,9 @@ class HistoryTab(QWidget):
                     _json.dump(data, f, indent=2, ensure_ascii=False)
 
             elif ext in ("html", "htm"):
-                th_cells = "".join(f"<th>{h}</th>" for h in headers)
+                th_cells = "".join(f"<th>{html.escape(str(h))}</th>" for h in headers)
                 tr_rows = "".join(
-                    "<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>"
+                    "<tr>" + "".join(f"<td>{html.escape(str(c))}</td>" for c in row) + "</tr>"
                     for row in rows
                 )
                 content = (
@@ -730,7 +734,7 @@ class HistoryTab(QWidget):
                     "<style>table{border-collapse:collapse}th,td{border:1px solid #888;"
                     "padding:4px 8px;text-align:left}th{background:#333;color:#eee}"
                     "tr:nth-child(even){background:#f5f5f5}</style></head><body>"
-                    f"<h2>{tab_name.replace('_', ' ').title()} History</h2>"
+                    f"<h2>{html.escape(tab_name.replace('_', ' ').title())} History</h2>"
                     f"<table><thead><tr>{th_cells}</tr></thead><tbody>{tr_rows}</tbody></table>"
                     "</body></html>"
                 )

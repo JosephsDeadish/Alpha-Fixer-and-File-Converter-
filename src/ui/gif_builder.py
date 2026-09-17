@@ -717,7 +717,14 @@ class GifBuilderDialog(QDialog):
         progress.setValue(len(self._frames))
         try:
             if len(pil_frames) == 1:
-                pil_frames[0].save(out_path, format="GIF", optimize=optimize)
+                pil_frames[0].save(
+                    out_path, format="GIF",
+                    save_all=True,
+                    append_images=[],
+                    duration=durations[0] if durations else global_delay,
+                    loop=loop,
+                    optimize=optimize,
+                )
             else:
                 pil_frames[0].save(
                     out_path, format="GIF",

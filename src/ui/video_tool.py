@@ -217,18 +217,23 @@ class _ImageFrameGetter:
 
 
 class _VideoFrameGetter:
-    """Picklable frame getter for a multi-frame video clip.
+    """Picklable frame getter for a multi-frame video clip."""
 
-    Same motivation as ``_ImageFrameGetter`` – replaces the local closure
-    inside ``_load_video_clip`` so that ``_ClipEntry`` objects remain
-    picklable and survive Qt's internal item-move serialisation.
-    """
-
-    def __init__(self, frames: "list[PIL.Image.Image]") -> None:
-        self._frames = frames
+    def __init__(self, path: str, total_frames: int) -> None:
+        self._path = path
+        self._total_frames = max(1, int(total_frames))
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
-        return self._frames[max(0, min(len(self._frames) - 1, idx))].copy()
+        import imageio
+        from PIL import Image
+
+        clamped = max(0, min(self._total_frames - 1, int(idx)))
+        reader = imageio.get_reader(self._path, format="FFMPEG")
+        try:
+            frame = reader.get_data(clamped)
+        finally:
+            reader.close()
+        return Image.fromarray(frame).convert("RGBA")
 
 
 class _ClipEntry:
@@ -260,18 +265,20 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
         reader = imageio.get_reader(path, format="FFMPEG")
         meta = reader.get_meta_data()
         fps = float(meta.get("fps", 25))
-        frames = []
         try:
-            for frame in reader:
-                from PIL import Image
-                img = Image.fromarray(frame).convert("RGBA")
-                frames.append(img)
-        except StopIteration:
-            pass
+            frame_count = int(meta.get("nframes") or 0)
+        except Exception:
+            frame_count = 0
+        if frame_count <= 0:
+            try:
+                frame_count = int(reader.count_frames())
+            except Exception:
+                duration = float(meta.get("duration") or 0.0)
+                frame_count = int(round(duration * fps)) if duration > 0 else 0
         reader.close()
-        if not frames:
+        if frame_count <= 0:
             return None
-        return _ClipEntry(path, len(frames), _VideoFrameGetter(frames), fps)
+        return _ClipEntry(path, frame_count, _VideoFrameGetter(path, frame_count), fps)
     except Exception:
         return None
 
@@ -887,84 +894,70 @@ class VideoToolDialog(QDialog):
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
 
-        from PIL import Image
+        import imageio
+        import numpy as np
 
-        rendered: list[Image.Image] = []
+        progress.setLabelText("Rendering and saving output…")
+        writer = None
+        wrote_frames = False
         try:
+            if fmt == "gif":
+                writer = imageio.get_writer(
+                    out_path,
+                    mode="I",
+                    duration=max(0.01, 1.0 / fps),
+                    loop=0,
+                )
+            else:
+                _MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
+                writer = imageio.get_writer(
+                    out_path,
+                    fps=fps,
+                    codec="libx264",
+                    quality=_MP4_QUALITY,
+                )
             for i in range(total):
                 progress.setValue(i)
                 if progress.wasCanceled():
                     break
                 ci, fi = self._global_frame_to_clip(i)
                 pil = self._clips[ci].get_frame(fi)
-                pil = _apply_adjustments(
-                    pil,
-                    brightness=self._brightness_slider.value() / 100.0,
-                    contrast=self._contrast_slider.value() / 100.0,
-                    black_point=self._black_slider.value(),
-                    white_point=self._white_slider.value(),
-                    saturation=self._saturation_slider.value() / 100.0,
-                    sharpness=self._sharpness_slider.value() / 100.0,
-                )
-                pil = _apply_filter(pil, filter_key)
-                rendered.append(pil)
-        except Exception as exc:
-            for f in rendered:
                 try:
-                    f.close()
-                except Exception:
-                    pass
-            progress.close()
-            QMessageBox.critical(self, "Render Error", f"Error rendering frames:\n{exc}")
-            return
-
-        if progress.wasCanceled() or not rendered:
-            for f in rendered:
-                try:
-                    f.close()
-                except Exception:
-                    pass
-            return
-
-        progress.setLabelText("Saving output…")
-        progress.setValue(total)
-
-        try:
-            if fmt == "gif":
-                delay_ms = max(10, int(1000 / fps))
-                palettes = [f.quantize(colors=255,
-                                       method=Image.Quantize.FASTOCTREE,
-                                       dither=0) for f in rendered]
-                palettes[0].save(
-                    out_path, format="GIF",
-                    save_all=True,
-                    append_images=palettes[1:],
-                    duration=delay_ms,
-                    loop=0,
-                    optimize=True,
-                )
-                for p in palettes:
+                    pil = _apply_adjustments(
+                        pil,
+                        brightness=self._brightness_slider.value() / 100.0,
+                        contrast=self._contrast_slider.value() / 100.0,
+                        black_point=self._black_slider.value(),
+                        white_point=self._white_slider.value(),
+                        saturation=self._saturation_slider.value() / 100.0,
+                        sharpness=self._sharpness_slider.value() / 100.0,
+                    )
+                    pil = _apply_filter(pil, filter_key)
+                    writer.append_data(np.array(pil.convert("RGB")))
+                    wrote_frames = True
+                finally:
                     try:
-                        p.close()
+                        pil.close()
                     except Exception:
                         pass
-            else:
-                import imageio
-                import numpy as np
-                _MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
-                with imageio.get_writer(out_path, fps=fps, codec="libx264",
-                                        quality=_MP4_QUALITY) as writer:
-                    for f in rendered:
-                        writer.append_data(np.array(f.convert("RGB")))
+            progress.setValue(total)
         except Exception as exc:
+            progress.close()
             QMessageBox.critical(self, "Export Error", f"Could not save output:\n{exc}")
             return
         finally:
-            for f in rendered:
+            if writer is not None:
                 try:
-                    f.close()
+                    writer.close()
                 except Exception:
                     pass
+
+        if progress.wasCanceled() or not wrote_frames:
+            try:
+                Path(out_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            return
 
         QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
 
