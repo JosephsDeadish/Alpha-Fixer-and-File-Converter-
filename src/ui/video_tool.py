@@ -224,6 +224,7 @@ class _VideoFrameGetter:
         self._total_frames = max(1, int(total_frames))
         self._reader = None
         self._last_idx = -1
+        self._last_frame = None
 
     def _open_reader(self) -> None:
         import imageio
@@ -238,6 +239,7 @@ class _VideoFrameGetter:
                 pass
             self._reader = None
         self._last_idx = -1
+        self._last_frame = None
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
         from PIL import Image
@@ -247,8 +249,14 @@ class _VideoFrameGetter:
             self._close_reader()
             self._open_reader()
         try:
-            frame = self._reader.get_data(clamped)
+            if clamped == self._last_idx and self._last_frame is not None:
+                frame = self._last_frame
+            elif clamped == self._last_idx + 1:
+                frame = self._reader.get_next_data()
+            else:
+                frame = self._reader.get_data(clamped)
             self._last_idx = clamped
+            self._last_frame = frame
         except Exception:
             self._close_reader()
             raise
@@ -265,6 +273,7 @@ class _VideoFrameGetter:
         self._total_frames = max(1, int(state["_total_frames"]))
         self._reader = None
         self._last_idx = -1
+        self._last_frame = None
 
 
 class _ClipEntry:
@@ -980,7 +989,12 @@ class VideoToolDialog(QDialog):
                         sharpness=sharpness,
                     )
                     pil = _apply_filter(pil, filter_key)
-                    writer.append_data(np.array(pil.convert("RGB")))
+                    rgb = pil if pil.mode == "RGB" else pil.convert("RGB")
+                    try:
+                        writer.append_data(np.array(rgb))
+                    finally:
+                        if rgb is not pil:
+                            rgb.close()
                     wrote_frames = True
                 finally:
                     try:

@@ -51,7 +51,6 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
                     from PyQt6.QtGui import QMovie
                     m = QMovie(path, parent=self)
                     m.setScaledSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
-                    m.setCacheMode(QMovie.CacheMode.CacheAll)
                     m.start()
                     self._movies[path] = m
                 except Exception:

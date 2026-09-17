@@ -8519,12 +8519,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertNotIn("close the floating preview", src)
         self.assertIn("The embedded preview stays available here while the floating window is open.", src)
         self.assertIn("return to the embedded preview", src)
+        self.assertIn("super().wheelEvent(event)", src)
 
     def test_video_frame_getter_reuses_cached_reader(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("self._reader = None", src)
         self.assertIn("self._last_idx = -1", src)
+        self.assertIn("self._last_frame = None", src)
         self.assertIn("if self._reader is None or clamped < self._last_idx:", src)
+        self.assertIn("elif clamped == self._last_idx + 1:", src)
+        self.assertIn("frame = self._reader.get_next_data()", src)
         self.assertIn("frame = self._reader.get_data(clamped)", src)
 
     def test_video_export_streams_frames_and_cleans_up_partial_output(self):
@@ -8543,6 +8547,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("opt.icon = QIcon()", src)
         self.assertNotIn("item.setIcon(0, QIcon())", src)
         self.assertIn("painter.drawPixmap(x, y, scaled)", src)
+        self.assertNotIn("CacheMode.CacheAll", src)
 
     def test_gif_disposal_restore_previous_handled(self):
         for rel in ("ui/gif_builder.py", "ui/gif_frame_picker.py", "ui/converter_tool.py"):
@@ -8651,6 +8656,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
         self.assertIn("brightness=brightness", src)
         self.assertIn("contrast=contrast", src)
+        self.assertIn('rgb = pil if pil.mode == "RGB" else pil.convert("RGB")', src)
 
     def test_gif_builder_caches_preview_pixmaps(self):
         src = self._src("ui/gif_builder.py")

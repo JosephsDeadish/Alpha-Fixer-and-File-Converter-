@@ -651,7 +651,7 @@ class BeforeAfterWidget(QWidget):
                 self.zoom_out()
             event.accept()
         else:
-            event.ignore()
+            super().wheelEvent(event)
 
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
