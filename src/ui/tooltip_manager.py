@@ -6868,6 +6868,7 @@ _VULGAR: dict[str, list[str]] = {
         "If the metadata lies, the loader now checks the actual frames before giving up. Imagine that.",
         "Drag media straight into the timeline if clicking buttons is too much cardio for you.",
         "This is step one of editing: get the damn media into the tool.",
+        "If a file still refuses to load, it's probably corrupt or ffmpeg is missing — not personal, just annoying.",
     ],
     "video_timeline": [
         "This is the fucking timeline. Order matters. Drag clips until they stop looking wrong.",
@@ -6875,6 +6876,7 @@ _VULGAR: dict[str, list[str]] = {
         "Select a clip, trim the useless bits, or delete it entirely if it sucks.",
         "Videos and stills can sit together here like one chaotic little production line.",
         "If the final export order is wrong, it's because this list is wrong. Start there.",
+        "Every item here feeds the same preview and export pipeline, so fix the lineup before blaming the output.",
     ],
     "video_trim": [
         "Use these sliders to chop off the boring shit at the start or end of the selected clip.",
@@ -6882,6 +6884,7 @@ _VULGAR: dict[str, list[str]] = {
         "Only the selected clip changes. The original file on disk stays untouched, obviously.",
         "The info label helps you keep track of which clip you're trimming so you don't butcher the wrong one.",
         "Trim first, preview second, export third. That's the sane order of operations.",
+        "If nothing is selected, these controls are basically waiting for you to make a better decision.",
     ],
     "video_preview": [
         "This is where you preview the whole edited timeline before committing to an export.",
@@ -6889,6 +6892,7 @@ _VULGAR: dict[str, list[str]] = {
         "Preview FPS affects playback timing and export timing, so don't ignore it.",
         "Everything here reflects your current filters and slider tweaks. No secret second version exists.",
         "If it looks fucked here, the export will look fucked too. Preview is not decorative.",
+        "Use the preview to catch bad trims, weird timing, and ugly filters before you waste minutes exporting garbage.",
     ],
     "video_filter": [
         "Pick a filter for the whole timeline if the footage needs extra flavor or extra damage.",
@@ -6896,6 +6900,7 @@ _VULGAR: dict[str, list[str]] = {
         "The preview updates live so you can see whether you've improved the image or absolutely ruined it.",
         "Filters apply to decoded frames during processing. Your original files stay pristine and innocent.",
         "Pair this with brightness/contrast if you're going full mad scientist on the footage.",
+        "Filters are global here, so one dumb choice can lovingly ruin every clip at once.",
     ],
     "video_export": [
         "Choose whether this mess becomes an MP4 or a GIF and then export the damn thing.",
@@ -6903,6 +6908,7 @@ _VULGAR: dict[str, list[str]] = {
         "Export bakes in your order, trims, filters, and all the slider nonsense you've configured.",
         "Ctrl+S works because moving the mouse every time is bullshit.",
         "Preview it first unless you enjoy wasting time rendering something obviously wrong.",
+        "If you picked GIF, expect big files fast when you dump in a full video and refuse to resize it.",
     ],
     "gif_media_add": [
         "Add images or videos to the GIF Builder. Yes, videos too. Finally.",
@@ -6910,6 +6916,7 @@ _VULGAR: dict[str, list[str]] = {
         "Mix PNGs, GIFs, WEBMs, whatever — if the format is supported, pile it in.",
         "Drag files onto the frame grid if the button feels too ceremonial for you.",
         "Video imports start with frame timing based on fps so the result isn't instantly cursed.",
+        "Long videos mean a shitload of frames, so maybe show a tiny bit of restraint before importing a whole movie.",
     ],
     "gif_frame_list": [
         "This is the stack of frames your GIF is built from. Every weird decision lives here.",
@@ -6917,6 +6924,7 @@ _VULGAR: dict[str, list[str]] = {
         "Remove a few frames or nuke the whole list if the build has gone to hell.",
         "Selecting a frame updates the preview and per-frame timing controls like a competent UI should.",
         "Videos and animated GIFs both explode into multiple frame entries in this list. Beautiful chaos.",
+        "If the output jitters or tells the wrong story, the screwup is usually somewhere in this frame pile.",
     ],
     "gif_frame_delay": [
         "This controls how fast the GIF blasts through its frames.",
@@ -6924,6 +6932,7 @@ _VULGAR: dict[str, list[str]] = {
         "Video imports get a sensible fps-based starting delay, then you can mess with it however you want.",
         "Smaller number = faster as hell. Bigger number = slower and easier on human eyeballs.",
         "Check the preview after changing this unless you enjoy debugging timing by pure guesswork.",
+        "Bad delay settings can make perfectly fine frames look broken, so don't blame the images first.",
     ],
     "gif_export_settings": [
         "These settings control looping and resize before export, aka the shit that decides how huge and annoying the final GIF is.",
@@ -6931,6 +6940,7 @@ _VULGAR: dict[str, list[str]] = {
         "Resize here changes only the exported GIF, not your originals. The source files are innocent.",
         "Use width and height to stop yourself from exporting an absurdly massive file by accident.",
         "This section is where you prevent a dumb export before it happens.",
+        "If the file size comes out monstrous, this panel is where you should have made better choices.",
     ],
     "gif_preview": [
         "Preview the GIF here before you commit this animated disaster to disk.",
@@ -6938,6 +6948,7 @@ _VULGAR: dict[str, list[str]] = {
         "The frame counter tells you exactly where you are because your brain should not have to do that manually.",
         "Preview speed follows the current delay settings, not whatever tempo you imagined in your head.",
         "If the animation looks wrong here, exporting it won't perform a miracle.",
+        "Use this box to catch busted order, ugly resize choices, and timing crimes before saving them forever.",
     ],
     "gif_export": [
         "Press this and the app builds the fucking GIF.",
@@ -6945,6 +6956,7 @@ _VULGAR: dict[str, list[str]] = {
         "Ctrl+S works too because shortcuts save lives and wrist movement.",
         "Palette optimization can shrink the file, but it'll take a bit longer. That's the trade.",
         "Preview first. Export second. Swear less afterward.",
+        "If the result sucks, don't act shocked — this button only saves the choices you already made.",
     ],
 }
 
