@@ -8769,7 +8769,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_readme_no_longer_claims_tim_converter_output(self):
         src = self._src("../README.md")
         self.assertIn("TIM is currently supported for loading/inspection only.", src)
-        self.assertNotIn("JPEG2000, XNB, TIM", src)
+        self.assertIn("**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB", src)
 
     def test_history_text_export_truncates_long_filename_column(self):
         src = self._src("ui/history_tab.py")
