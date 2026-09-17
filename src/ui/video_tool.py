@@ -103,6 +103,16 @@ def _has_imageio() -> bool:
 
 
 @lru_cache(maxsize=1)
+def _has_imageio_ffmpeg() -> bool:
+    """Return True when the imageio-ffmpeg plugin is importable."""
+    try:
+        import imageio_ffmpeg  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+@lru_cache(maxsize=1)
 def _configure_imageio_ffmpeg() -> Optional[str]:
     """Configure imageio to use the bundled/system ffmpeg executable once."""
     ffmpeg_exe = _get_ffmpeg_exe()
@@ -620,7 +630,12 @@ class VideoToolDialog(QDialog):
         self._is_playing: bool = False
         self._ffmpeg_available = _has_ffmpeg()
         self._imageio_available = _has_imageio()
-        self._video_io_available = self._ffmpeg_available and self._imageio_available
+        self._imageio_ffmpeg_available = _has_imageio_ffmpeg()
+        self._video_io_available = (
+            self._ffmpeg_available
+            and self._imageio_available
+            and self._imageio_ffmpeg_available
+        )
         self._build_ui()
         mgr = self._resolve_tooltip_mgr()
         if mgr is not None:
@@ -642,7 +657,7 @@ class VideoToolDialog(QDialog):
 
         if not self._video_io_available:
             warn = QLabel(
-                "⚠  ffmpeg and/or imageio are unavailable or not bundled — video import and MP4 export unavailable.  "
+                "⚠  ffmpeg, imageio, or imageio-ffmpeg are unavailable or not bundled — video import and MP4 export unavailable.  "
                 "You can still add images/GIFs and export an animated GIF."
             )
             warn.setWordWrap(True)
@@ -661,7 +676,7 @@ class VideoToolDialog(QDialog):
         tb = QHBoxLayout()
         self._btn_add_video = QPushButton("🎞  Add Video")
         self._btn_add_video.setEnabled(self._video_io_available)
-        self._btn_add_video.setToolTip("Add a video file to the timeline. (Requires ffmpeg and imageio)")
+        self._btn_add_video.setToolTip("Add a video file to the timeline. (Requires ffmpeg, imageio, and imageio-ffmpeg)")
         self._btn_add_video.clicked.connect(self._add_video)
         tb.addWidget(self._btn_add_video)
 

@@ -706,22 +706,20 @@ class BeforeAfterWidget(QWidget):
         def _draw_pix(pix: QPixmap, clip_x: int, clip_w: int):
             if clip_w <= 0:
                 return
-            if zoom <= 1.0:
-                scaled = pix.scaled(
-                    w, h,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                ox = (w - scaled.width()) // 2
-                oy = (h - scaled.height()) // 2
-            else:
-                scaled = pix.scaled(
-                    int(w * zoom), int(h * zoom),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                ox = (w - scaled.width()) // 2 + int(self._pan_x)
-                oy = (h - scaled.height()) // 2 + int(self._pan_y)
+            fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))
+            fit_w = max(1, int(round(pix.width() * fit_ratio)))
+            fit_h = max(1, int(round(pix.height() * fit_ratio)))
+            scaled = pix.scaled(
+                max(1, int(round(fit_w * zoom))),
+                max(1, int(round(fit_h * zoom))),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            ox = (w - scaled.width()) // 2
+            oy = (h - scaled.height()) // 2
+            if zoom > 1.0:
+                ox += int(self._pan_x)
+                oy += int(self._pan_y)
             painter.setClipRect(QRect(clip_x, 0, clip_w, h))
             painter.drawPixmap(ox, oy, scaled)
             painter.setClipping(False)

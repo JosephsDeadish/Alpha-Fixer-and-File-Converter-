@@ -9116,3 +9116,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
         src = self._src("ui/theme_engine.py")
         self.assertIn('"Fairy Garden":      "sakura"', src)
+
+    def test_video_io_availability_requires_imageio_ffmpeg(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("def _has_imageio_ffmpeg() -> bool:", src)
+        self.assertIn("self._imageio_ffmpeg_available = _has_imageio_ffmpeg()", src)
+        self.assertIn("and self._imageio_ffmpeg_available", src)
+
+    def test_preview_zoom_scales_from_fit_size(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))", src)
+        self.assertIn("fit_w = max(1, int(round(pix.width() * fit_ratio)))", src)
+        self.assertIn("fit_h = max(1, int(round(pix.height() * fit_ratio)))", src)
+        self.assertIn("max(1, int(round(fit_w * zoom)))", src)
