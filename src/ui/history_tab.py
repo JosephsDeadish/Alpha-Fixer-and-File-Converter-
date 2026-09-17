@@ -127,9 +127,14 @@ def _load_thumb(path: str) -> QIcon:
             try:
                 from PIL import Image as _PILImage
                 from PIL.ImageQt import ImageQt
-                img = _PILImage.open(path).convert("RGBA")
-                img.thumbnail((_THUMB_SIZE * 2, _THUMB_SIZE * 2))
-                px = QPixmap.fromImage(ImageQt(img))
+                img = _PILImage.open(path)
+                rgba = img.convert("RGBA")
+                try:
+                    rgba.thumbnail((_THUMB_SIZE * 2, _THUMB_SIZE * 2))
+                    px = QPixmap.fromImage(ImageQt(rgba))
+                finally:
+                    rgba.close()
+                    img.close()
             except Exception:
                 return QIcon()
         if px.isNull():
@@ -377,7 +382,7 @@ class HistoryTab(QWidget):
     # Tooltip registration
     # ------------------------------------------------------------------
 
-    def register_tooltips(self, mgr) -> None:
+    def register_tooltips(self, mgr: "TooltipManager") -> None:
         """Register History tab widgets with the TooltipManager."""
         mgr.register(self._btn_clear, "history_clear_btn")
         mgr.register(self._btn_export, "history_export_btn")
@@ -694,6 +699,7 @@ class HistoryTab(QWidget):
         )
         if not path:
             return
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
         # Collect rows from the tree
         root = tree.invisibleRootItem()

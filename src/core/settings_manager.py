@@ -112,7 +112,7 @@ class SettingsManager:
         "font_size": 10,
         "ui_scale": "Normal",          # Compact / Normal / Large / Extra Large
         # History settings
-        "history_max_entries": 100,     # Max history entries saved per tool
+        "history_max_entries": 50,      # Max history entries saved per tool
         "history_track_converter": True,          # Record Converter history
         "history_track_alpha": True,              # Record Alpha & RGBA Adjuster history
         "history_track_selective_alpha": True,    # Record Selective Alpha Tool history
@@ -393,7 +393,7 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_converter_history(self, entry: dict, max_entries: int = 100):
+    def add_converter_history(self, entry: dict, max_entries: int = 50):
         history = self.get_converter_history()
         history.insert(0, entry)
         # Per-tool limit takes priority over global limit when > 0 (item 8)
@@ -415,7 +415,7 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_alpha_history(self, entry: dict, max_entries: int = 100):
+    def add_alpha_history(self, entry: dict, max_entries: int = 50):
         history = self.get_alpha_history()
         history.insert(0, entry)
         # Per-tool limit takes priority over global limit when > 0 (item 8)
@@ -447,7 +447,7 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_selective_alpha_history(self, entry: dict, max_entries: int = 100):
+    def add_selective_alpha_history(self, entry: dict, max_entries: int = 50):
         history = self.get_selective_alpha_history()
         history.insert(0, entry)
         # Per-tool limit takes priority over global limit when > 0 (item 8)
@@ -474,7 +474,7 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_gif_builder_history(self, entry: dict, max_entries: int = 100):
+    def add_gif_builder_history(self, entry: dict, max_entries: int = 50):
         history = self.get_gif_builder_history()
         history.insert(0, entry)
         limit = int(self.get("history_max_entries", max_entries))
@@ -498,7 +498,7 @@ class SettingsManager:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def add_video_builder_history(self, entry: dict, max_entries: int = 100):
+    def add_video_builder_history(self, entry: dict, max_entries: int = 50):
         history = self.get_video_builder_history()
         history.insert(0, entry)
         limit = int(self.get("history_max_entries", max_entries))

@@ -1757,7 +1757,7 @@ class SettingsDialog(QDialog):
         self._history_max_spin = QSpinBox()
         self._history_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._history_max_spin.setRange(10, 5000)
-        self._history_max_spin.setValue(100)
+        self._history_max_spin.setValue(50)
         self._history_max_spin.setSingleStep(10)
         self._history_max_spin.setSuffix("  entries")
         self._history_max_spin.setMaximumWidth(130)
@@ -1765,7 +1765,7 @@ class SettingsDialog(QDialog):
             "Default maximum number of history entries kept per tool.\n"
             "Overridden by per-tool limits below when those are non-zero.\n"
             "Oldest entries are automatically removed when the limit is reached.\n"
-            "Default: 100.  Maximum: 5000."
+            "Default: 50.  Maximum: 5000."
         )
         hist_gl.addWidget(self._history_max_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2222,7 +2222,7 @@ class SettingsDialog(QDialog):
         _pp_map = {"Minimal": 0, "Normal": 1, "Spacious": 2}
         self._panel_padding_combo.setCurrentIndex(_pp_map.get(pp_val, 1))
         # History max entries
-        self._history_max_spin.setValue(self._settings.get("history_max_entries", 100))
+        self._history_max_spin.setValue(self._settings.get("history_max_entries", 50))
         self._history_max_conv_spin.setValue(
             int(self._settings.get("history_max_entries_converter", 0))
         )
