@@ -92,13 +92,13 @@ _TUTORIAL_STEPS = [
         "title": "Video Editor",
         "body": (
             "The <b>Video Editor</b> dialog lets you combine video clips and "
-            "still images or GIFs into a single export using FFmpeg.\n\n"
+            "still images or GIFs into a single export.\n\n"
             "• Add source clips and reorder them in the timeline.\n"
             "• Set the export format (MP4 or GIF) and frame rate.\n"
             "• Click <b>Export</b> to render the output.\n\n"
-            "Note: FFmpeg is available when bundled with the app via imageio-ffmpeg "
-            "or when a system ffmpeg install is present. If neither is available, "
-            "video import and MP4 export stay unavailable but GIF export from images/GIFs still works."
+            "Note: Video import and MP4 export need FFmpeg, ideally from bundled "
+            "imageio-ffmpeg or a system ffmpeg install. If FFmpeg is unavailable, "
+            "GIF export from images/GIFs still works."
         ),
         "tip": "💡  Tip: Disc-image formats (.iso, .umd, .bin) are experimental — "
                "they work when the image contains a demuxable video track.",

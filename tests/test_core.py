@@ -8747,8 +8747,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("MP4 or GIF", src)
         self.assertIn("combine video clips and ", src)
         self.assertIn("still images or GIFs into a single export", src)
-        self.assertIn("bundled with the app via imageio-ffmpeg", src)
-        self.assertIn("or when a system ffmpeg install is present", src)
+        self.assertIn("Video import and MP4 export need FFmpeg", src)
+        self.assertIn("imageio-ffmpeg or a system ffmpeg install", src)
         self.assertIn("GIF export from images/GIFs still works", src)
         self.assertNotIn("WebM", src)
 
@@ -9010,8 +9010,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/preview_pane.py")
         self.assertIn("fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))", src)
         self.assertIn("scaled_widths.append(pix.width() * fit_ratio * self._zoom)", src)
-        self.assertIn("max_px = max(0.0, (max(scaled_widths) + w) / 2 - 1.0)", src)
-        self.assertIn("max_py = max(0.0, (max(scaled_heights) + h) / 2 - 1.0)", src)
+        self.assertIn("max_px = max(0.0, (max(scaled_widths) - w) / 2)", src)
+        self.assertIn("max_py = max(0.0, (max(scaled_heights) - h) / 2)", src)
 
     def test_video_export_uses_snapshot_of_clip_state_during_render(self):
         src = self._src("ui/video_tool.py")
@@ -9023,6 +9023,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
+        self.assertNotIn("give a shit", src)
         for key in (
             "video_media_add",
             "video_timeline",

@@ -4698,8 +4698,8 @@ _DUMBED: dict[str, list[str]] = {
         "Use this with brightness/contrast if you want to really commit to the bit.",
     ],
     "video_export": [
-        "Choose whether this thing becomes an MP4 or a GIF.",
-        "MP4 needs ffmpeg. GIF doesn't give a shit about audio and just wants frames.",
+        "Choose whether to export the current timeline as MP4 or animated GIF.",
+        "MP4 needs ffmpeg. GIF export uses the current rendered frames and ignores audio.",
         "Export uses the current order, trims, filters, and all the sliders you've touched.",
         "Ctrl+S still saves you from moving the mouse all the way over here.",
         "If the preview looks wrong, exporting it wrong will not magically fix it.",

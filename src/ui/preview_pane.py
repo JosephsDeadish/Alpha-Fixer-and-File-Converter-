@@ -592,8 +592,8 @@ class BeforeAfterWidget(QWidget):
             fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))
             scaled_widths.append(pix.width() * fit_ratio * self._zoom)
             scaled_heights.append(pix.height() * fit_ratio * self._zoom)
-        max_px = max(0.0, (max(scaled_widths) + w) / 2 - 1.0)
-        max_py = max(0.0, (max(scaled_heights) + h) / 2 - 1.0)
+        max_px = max(0.0, (max(scaled_widths) - w) / 2)
+        max_py = max(0.0, (max(scaled_heights) - h) / 2)
         self._pan_x = max(-max_px, min(max_px, self._pan_x))
         self._pan_y = max(-max_py, min(max_py, self._pan_y))
 
