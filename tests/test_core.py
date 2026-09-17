@@ -8746,6 +8746,15 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('python -c "import PyQt6, PIL, numpy, imageio, imageio_ffmpeg"', bat_src)
         self.assertIn("python -m pip install -r requirements.txt", bat_src)
 
+    def test_pyinstaller_specs_bundle_imageio_and_ffmpeg_metadata(self):
+        folder_src = self._src("../alpha_fixer.spec")
+        onefile_src = self._src("../alpha_fixer_onefile.spec")
+        for src in (folder_src, onefile_src):
+            self.assertIn('collect_data_files("imageio")', src)
+            self.assertIn('copy_metadata("imageio")', src)
+            self.assertIn('collect_data_files("imageio_ffmpeg")', src)
+            self.assertIn('copy_metadata("imageio_ffmpeg")', src)
+
     def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
         src = self._src("../scripts/install_linux_deps.sh")
         self.assertIn("libxcb-cursor0", src)

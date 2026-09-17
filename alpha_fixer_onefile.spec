@@ -60,7 +60,11 @@ a = Analysis(
     datas=[
         ("src/assets/svg", "src/assets/svg"),
         ("src/assets/icon.ico", "src/assets"),
-    ] + collect_data_files("imageio_ffmpeg") + copy_metadata("imageio_ffmpeg"),
+    ]
+    + collect_data_files("imageio")
+    + copy_metadata("imageio")
+    + collect_data_files("imageio_ffmpeg")
+    + copy_metadata("imageio_ffmpeg"),
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},
