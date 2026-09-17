@@ -5,6 +5,7 @@ and the extended SettingsManager.
 import os
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -1468,6 +1469,35 @@ class TestUseThemeCursorSetting(unittest.TestCase):
         """use_theme_cursor must be included in EXPORT_KEYS."""
         from src.core.settings_manager import SettingsManager
         self.assertIn("use_theme_cursor", SettingsManager.EXPORT_KEYS)
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestVideoProbeFallbacks(unittest.TestCase):
+    def test_probe_video_clip_uses_imageio_ffmpeg_count_fallback(self):
+        from src.ui import video_tool as vt
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 0, "duration": 0}
+
+            def get_data(self, idx):
+                self.last_idx = idx
+                return [[0]]
+
+            def count_frames(self):
+                raise RuntimeError("metadata missing")
+
+            def close(self):
+                return None
+
+        fake_ffmpeg = types.SimpleNamespace(
+            count_frames_and_secs=lambda path: (12, 0.4),
+        )
+        with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+            with patch.dict(sys.modules, {"imageio_ffmpeg": fake_ffmpeg}):
+                fps, frame_count = vt._probe_video_clip("/tmp/test.mp4")
+        self.assertEqual(fps, 30.0)
+        self.assertEqual(frame_count, 12)
 
 
 # ---------------------------------------------------------------------------

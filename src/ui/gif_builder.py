@@ -38,12 +38,14 @@ from PyQt6.QtWidgets import (
     QProgressDialog, QSplitter, QWidget,
     QFrame, QSpinBox, QAbstractSpinBox,
 )
+from .video_tool import _VIDEO_EXTS, _load_video_frames
 
-# Supported input extensions (what PIL can open)
-_SUPPORTED_EXTS = {
+# Supported image input extensions (what PIL can open directly)
+_IMAGE_EXTS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",
     ".gif", ".ico", ".ppm", ".pcx", ".tga", ".avif",
 }
+_SUPPORTED_EXTS = _IMAGE_EXTS | _VIDEO_EXTS
 
 _THUMB_W = 120
 _THUMB_H = 100
@@ -252,16 +254,20 @@ class GifBuilderDialog(QDialog):
 
     exported = pyqtSignal(str)  # emitted with output path on successful export
 
-    def __init__(self, initial_files: Optional[list[str]] = None, parent=None):
+    def __init__(self, initial_files: Optional[list[str]] = None, parent=None, tooltip_mgr=None):
         super().__init__(parent)
         self.setWindowTitle("🎞 GIF Builder")
         self.setMinimumSize(860, 620)
         self.setModal(False)
+        self._tooltip_mgr = tooltip_mgr
         self._frames: list[_FrameEntry] = []
         self._preview_idx: int = 0
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._build_ui()
+        mgr = self._resolve_tooltip_mgr()
+        if mgr is not None:
+            self.register_tooltips(mgr)
         if initial_files:
             self._add_paths(initial_files)
         QShortcut(QKeySequence("Delete"), self).activated.connect(self._remove_selected)
@@ -298,11 +304,11 @@ class GifBuilderDialog(QDialog):
 
         # Toolbar
         tb = QHBoxLayout()
-        self._btn_add = QPushButton("➕  Add Images")
+        self._btn_add = QPushButton("➕  Add Media")
         self._btn_add.setToolTip(
-            "Add one or more images to the GIF.\n"
-            "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (all frames), ICO, and more.\n"
-            "You can also drag image files directly onto the grid below."
+            "Add one or more images or video files to the GIF.\n"
+            "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (all frames), MP4, WEBM, AVI, MOV, and more.\n"
+            "You can also drag supported media files directly onto the grid below."
         )
         self._btn_add.setMinimumHeight(32)
         self._btn_add.clicked.connect(self._on_add_clicked)
@@ -320,7 +326,7 @@ class GifBuilderDialog(QDialog):
         left_layout.addLayout(tb)
 
         # Hint label
-        hint = QLabel("💡 Drag frames to reorder  •  Drop image files to add")
+        hint = QLabel("💡 Drag frames to reorder  •  Drop image or video files to add")
         hint.setStyleSheet("color: gray; font-style: italic; font-size: 11px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
@@ -496,32 +502,40 @@ class GifBuilderDialog(QDialog):
 
     def _on_add_clicked(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Add Images", "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif *.gif "
-            "*.ico *.ppm *.pcx *.tga *.avif);;All Files (*)",
+            self, "Add Media", "",
+            "Media (*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif *.gif "
+            "*.ico *.ppm *.pcx *.tga *.avif *.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm "
+            "*.m4v *.mpg *.mpeg *.3gp *.3g2 *.ts *.m2ts *.mts *.vob *.ogv *.ogg "
+            "*.rm *.rmvb *.divx *.asf *.f4v *.mxf *.dv *.pmf *.pss *.str *.xa *.iso *.umd *.bin);;All Files (*)",
         )
         if paths:
             self._add_paths(paths)
 
     def _add_paths(self, paths: list[str]) -> None:
-        """Load image files and append their frames to the list."""
-        progress = QProgressDialog("Loading images…", "Cancel", 0, len(paths), self)
+        """Load image/video files and append their frames to the list."""
+        progress = QProgressDialog("Loading media…", "Cancel", 0, len(paths), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(500)
         for i, path in enumerate(paths):
             progress.setValue(i)
             if progress.wasCanceled():
                 break
-            if Path(path).suffix.lower() not in _SUPPORTED_EXTS:
+            ext = Path(path).suffix.lower()
+            if ext not in _SUPPORTED_EXTS:
                 continue
             try:
-                pil_frames = _load_pillow_rgba(path)
+                if ext in _VIDEO_EXTS:
+                    pil_frames, fps = _load_video_frames(path)
+                    frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))
+                else:
+                    pil_frames = _load_pillow_rgba(path)
+                    frame_delay_ms = None
             except Exception as exc:
                 QMessageBox.warning(self, "Load Error",
                                     f"Could not load {Path(path).name}:\n{exc}")
                 continue
             for frame_idx, pil_frame in enumerate(pil_frames):
-                entry = _FrameEntry(path, frame_idx, pil_frame)
+                entry = _FrameEntry(path, frame_idx, pil_frame, delay_ms=frame_delay_ms)
                 self._frames.append(entry)
                 item = QListWidgetItem()
                 item.setIcon(QIcon(entry.thumbnail(_THUMB_W, _THUMB_H)))
@@ -536,6 +550,37 @@ class GifBuilderDialog(QDialog):
         self._update_count()
         self._update_scrubber()
         self._update_preview_frame()
+
+    def _resolve_tooltip_mgr(self):
+        if self._tooltip_mgr is not None:
+            return self._tooltip_mgr
+        parent = self.parentWidget()
+        while parent is not None:
+            mgr = getattr(parent, "_tooltip_mgr", None)
+            if mgr is not None:
+                self._tooltip_mgr = mgr
+                return mgr
+            parent = parent.parentWidget()
+        return None
+
+    def register_tooltips(self, mgr) -> None:
+        """Register dialog widgets with the shared TooltipManager."""
+        self._tooltip_mgr = mgr
+        mgr.register(self._btn_add, "gif_media_add")
+        mgr.register(self._btn_remove, "gif_frame_list")
+        mgr.register(self._btn_clear, "gif_frame_list")
+        mgr.register(self._frame_list, "gif_frame_list")
+        mgr.register(self._pf_check, "gif_frame_delay")
+        mgr.register(self._pf_slider, "gif_frame_delay")
+        mgr.register(self._delay_slider, "gif_frame_delay")
+        mgr.register(self._loop_slider, "gif_export_settings")
+        mgr.register(self._width_slider, "gif_export_settings")
+        mgr.register(self._height_slider, "gif_export_settings")
+        mgr.register(self._preview_lbl, "gif_preview")
+        mgr.register(self._scrubber, "gif_preview")
+        mgr.register(self._btn_rewind, "gif_preview")
+        mgr.register(self._btn_play, "gif_preview")
+        mgr.register(self._btn_export, "gif_export")
 
     def _sync_frames_from_list(self) -> None:
         """Rebuild ``self._frames`` from current list-widget item order."""

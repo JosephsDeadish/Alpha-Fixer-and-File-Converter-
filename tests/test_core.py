@@ -8661,6 +8661,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('if fmt != "gif" and not out_path.lower().endswith(".mp4"):', src)
         self.assertIn("Unsupported Files Skipped", src)
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
+        self.assertIn("def _probe_video_clip(path: str)", src)
+        self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
+        self.assertIn("first_frame_ok = reader.get_data(0) is not None", src)
 
     def test_sound_engine_honors_theme_sound_override(self):
         src = self._src("ui/sound_engine.py")
@@ -8757,6 +8760,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._thumb_cache", src)
         self.assertIn("cached = self._thumb_cache.get(key)", src)
         self.assertIn("self._thumb_cache = {key: pix}", src)
+        self.assertIn("from .video_tool import _VIDEO_EXTS, _load_video_frames", src)
+        self.assertIn("_SUPPORTED_EXTS = _IMAGE_EXTS | _VIDEO_EXTS", src)
+        self.assertIn("if ext in _VIDEO_EXTS:", src)
+        self.assertIn("pil_frames, fps = _load_video_frames(path)", src)
+        self.assertIn("frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))", src)
 
     def test_history_html_export_includes_title_and_caption(self):
         src = self._src("ui/history_tab.py")
@@ -8814,6 +8822,39 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_theme_engine_hidden_theme_grouping_comment_matches_data(self):
         src = self._src("ui/theme_engine.py")
         self.assertIn("# Hidden anime-style themes", src)
+
+    def test_video_and_gif_dialogs_register_tooltip_manager_keys(self):
+        video_src = self._src("ui/video_tool.py")
+        gif_src = self._src("ui/gif_builder.py")
+        main_src = self._src("ui/main_window.py")
+        conv_src = self._src("ui/converter_tool.py")
+        self.assertIn("def register_tooltips(self, mgr) -> None:", video_src)
+        self.assertIn('mgr.register(self._btn_add_video, "video_media_add")', video_src)
+        self.assertIn('mgr.register(self._btn_export, "video_export")', video_src)
+        self.assertIn("def register_tooltips(self, mgr) -> None:", gif_src)
+        self.assertIn('mgr.register(self._btn_add, "gif_media_add")', gif_src)
+        self.assertIn('mgr.register(self._btn_export, "gif_export")', gif_src)
+        self.assertIn("GifBuilderDialog(parent=self, tooltip_mgr=self._tooltip_mgr)", main_src)
+        self.assertIn("VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)", main_src)
+        self.assertIn("tooltip_mgr=getattr(self.window(), \"_tooltip_mgr\", None)", conv_src)
+
+    def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
+        src = self._src("ui/tooltip_manager.py")
+        for key in (
+            "video_media_add",
+            "video_timeline",
+            "video_trim",
+            "video_preview",
+            "video_filter",
+            "video_export",
+            "gif_media_add",
+            "gif_frame_list",
+            "gif_frame_delay",
+            "gif_export_settings",
+            "gif_preview",
+            "gif_export",
+        ):
+            self.assertEqual(src.count(f'"{key}"'), 3, f"{key} must appear in all 3 tooltip mode dicts")
 
     def test_history_tooltips_describe_visual_previews(self):
         src = self._src("ui/history_tab.py")

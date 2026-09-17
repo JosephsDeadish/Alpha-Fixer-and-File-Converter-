@@ -1169,7 +1169,11 @@ class ConverterTab(QWidget):
 
     def _open_gif_builder(self, initial_files: list[str]) -> None:
         """Open the GIF Builder dialog pre-populated with *initial_files*."""
-        dlg = GifBuilderDialog(initial_files=initial_files, parent=self)
+        dlg = GifBuilderDialog(
+            initial_files=initial_files,
+            parent=self,
+            tooltip_mgr=getattr(self.window(), "_tooltip_mgr", None),
+        )
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()

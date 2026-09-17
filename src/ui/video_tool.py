@@ -27,6 +27,7 @@ Opening the dialog:
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 from threading import Lock
 from typing import Optional
@@ -94,6 +95,103 @@ def _get_ffmpeg_exe() -> Optional[str]:
         return shutil.which("ffmpeg")
     except Exception:
         return None
+
+
+def _open_video_reader(path: str):
+    """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
+    import imageio
+
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if ffmpeg_exe:
+        os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe
+    return imageio.get_reader(path, format="FFMPEG")
+
+
+def _coerce_frame_count(value) -> int:
+    """Return a positive integer frame count, or 0 when unavailable."""
+    try:
+        count = int(value)
+    except Exception:
+        return 0
+    return count if count > 0 else 0
+
+
+def _probe_video_clip(path: str) -> tuple[float, int]:
+    """Return (fps, frame_count) for a video, tolerating weak metadata."""
+    reader = _open_video_reader(path)
+    first_frame_ok = False
+    try:
+        meta = reader.get_meta_data()
+        try:
+            fps = float(meta.get("fps") or 25.0)
+        except Exception:
+            fps = 25.0
+        fps = fps if fps > 0 else 25.0
+        first_frame_ok = reader.get_data(0) is not None
+        frame_count = _coerce_frame_count(meta.get("nframes"))
+        if frame_count <= 0:
+            try:
+                frame_count = _coerce_frame_count(reader.count_frames())
+            except Exception:
+                pass
+        if frame_count <= 0:
+            try:
+                import imageio_ffmpeg
+
+                counted, secs = imageio_ffmpeg.count_frames_and_secs(path)
+                frame_count = _coerce_frame_count(counted)
+                if frame_count <= 0 and secs > 0 and fps > 0:
+                    frame_count = max(1, int(round(secs * fps)))
+            except Exception:
+                pass
+        if frame_count <= 0:
+            try:
+                duration = float(meta.get("duration") or 0.0)
+            except Exception:
+                duration = 0.0
+            if duration > 0 and fps > 0:
+                frame_count = max(1, int(round(duration * fps)))
+        if frame_count <= 0 and first_frame_ok:
+            frame_count = 1
+        return fps, frame_count
+    finally:
+        reader.close()
+
+
+def _load_video_frames(path: str) -> tuple[list["PIL.Image.Image"], float]:
+    """Decode a whole video into RGBA frames for reuse in GIF Builder."""
+    from PIL import Image
+
+    reader = _open_video_reader(path)
+    frames: list[Image.Image] = []
+    try:
+        meta = reader.get_meta_data()
+        try:
+            fps = float(meta.get("fps") or 25.0)
+        except Exception:
+            fps = 25.0
+        fps = fps if fps > 0 else 25.0
+        frame_index = 0
+        while True:
+            try:
+                frame = reader.get_data(frame_index)
+            except IndexError:
+                break
+            except Exception:
+                if frame_index == 0:
+                    raise
+                break
+            pil = Image.fromarray(frame)
+            try:
+                frames.append(pil.convert("RGBA"))
+            finally:
+                pil.close()
+            frame_index += 1
+        if not frames:
+            raise ValueError("No readable frames found in video.")
+        return frames, fps
+    finally:
+        reader.close()
 
 
 def _pil_to_pixmap(pil_img) -> QPixmap:
@@ -286,23 +384,7 @@ class _ClipEntry:
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     try:
-        import imageio
-        # Explicitly request the ffmpeg-backed reader. Passing ``plugin=`` here
-        # breaks on imageio v2 because the legacy reader API does not accept it.
-        reader = imageio.get_reader(path, format="FFMPEG")
-        meta = reader.get_meta_data()
-        fps = float(meta.get("fps", 25))
-        try:
-            frame_count = int(meta.get("nframes") or 0)
-        except Exception:
-            frame_count = 0
-        if frame_count <= 0:
-            try:
-                frame_count = int(reader.count_frames())
-            except Exception:
-                duration = float(meta.get("duration") or 0.0)
-                frame_count = int(round(duration * fps)) if duration > 0 else 0
-        reader.close()
+        fps, frame_count = _probe_video_clip(path)
         if frame_count <= 0:
             return None
         return _ClipEntry(path, frame_count, _VideoFrameGetter(path, frame_count), fps)
@@ -382,17 +464,21 @@ class VideoToolDialog(QDialog):
     for single images and exports animated GIFs without ffmpeg.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, tooltip_mgr=None):
         super().__init__(parent)
         self.setWindowTitle("🎬 Video Editor")
         self.setMinimumSize(960, 660)
         self.setModal(False)
+        self._tooltip_mgr = tooltip_mgr
         self._clips: list[_ClipEntry] = []
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._is_playing: bool = False
         self._ffmpeg_available = _has_ffmpeg()
         self._build_ui()
+        mgr = self._resolve_tooltip_mgr()
+        if mgr is not None:
+            self.register_tooltips(mgr)
         QShortcut(QKeySequence("Delete"), self).activated.connect(self._remove_selected)
         QShortcut(QKeySequence("Space"), self).activated.connect(self._toggle_play)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._export)
@@ -668,6 +754,37 @@ class VideoToolDialog(QDialog):
 
         splitter.addWidget(right_scroll)
         splitter.setSizes([240, 420, 260])
+
+    def _resolve_tooltip_mgr(self):
+        if self._tooltip_mgr is not None:
+            return self._tooltip_mgr
+        parent = self.parentWidget()
+        while parent is not None:
+            mgr = getattr(parent, "_tooltip_mgr", None)
+            if mgr is not None:
+                self._tooltip_mgr = mgr
+                return mgr
+            parent = parent.parentWidget()
+        return None
+
+    def register_tooltips(self, mgr) -> None:
+        """Register dialog widgets with the shared TooltipManager."""
+        self._tooltip_mgr = mgr
+        mgr.register(self._btn_add_video, "video_media_add")
+        mgr.register(self._btn_add_img, "video_media_add")
+        mgr.register(self._btn_remove, "video_timeline")
+        mgr.register(self._clip_list, "video_timeline")
+        mgr.register(self._trim_start_slider, "video_trim")
+        mgr.register(self._trim_end_slider, "video_trim")
+        mgr.register(self._clip_info_lbl, "video_trim")
+        mgr.register(self._preview_lbl, "video_preview")
+        mgr.register(self._scrubber, "video_preview")
+        mgr.register(self._btn_rewind, "video_preview")
+        mgr.register(self._btn_play, "video_preview")
+        mgr.register(self._fps_slider, "video_preview")
+        mgr.register(self._filter_combo, "video_filter")
+        mgr.register(self._export_fmt_combo, "video_export")
+        mgr.register(self._btn_export, "video_export")
 
     # ------------------------------------------------------------------
     # Clip management

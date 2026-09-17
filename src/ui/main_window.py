@@ -3689,13 +3689,13 @@ class MainWindow(QMainWindow):
         chosen = menu.exec(event.globalPos())
         if chosen is act_gif:
             if not hasattr(self, "_gif_builder_dlg") or self._gif_builder_dlg is None:
-                self._gif_builder_dlg = GifBuilderDialog(parent=self)
+                self._gif_builder_dlg = GifBuilderDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
             self._gif_builder_dlg.show()
             self._gif_builder_dlg.raise_()
             self._gif_builder_dlg.activateWindow()
         elif chosen is act_video:
             if not hasattr(self, "_video_tool_dlg") or self._video_tool_dlg is None:
-                self._video_tool_dlg = VideoToolDialog(parent=self)
+                self._video_tool_dlg = VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
             self._video_tool_dlg.show()
             self._video_tool_dlg.raise_()
             self._video_tool_dlg.activateWindow()
