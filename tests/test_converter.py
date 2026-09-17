@@ -146,6 +146,21 @@ class TestConvertFile(unittest.TestCase):
         finally:
             img.close()
 
+    def test_save_dds_falls_back_when_pillow_save_fails(self):
+        from src.core import alpha_processor as ap
+        img = Image.new("RGBA", (4, 4), (9, 8, 7, 6))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.dds")
+                with mock.patch.object(ap, "_has_wand", return_value=False):
+                    with mock.patch.object(ap.Image.Image, "save", side_effect=OSError("save failed")):
+                        ap._save_dds(img, dst)
+                self.assertTrue(os.path.isfile(dst))
+                with Image.open(dst) as result:
+                    self.assertEqual(result.size, (4, 4))
+        finally:
+            img.close()
+
     def test_supported_output_formats_includes_png(self):
         self.assertIn("PNG", SUPPORTED_OUTPUT_FORMATS)
 
