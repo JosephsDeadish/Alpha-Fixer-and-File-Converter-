@@ -2416,6 +2416,10 @@ class MainWindow(QMainWindow):
         """Write the theme-specific label to every tab (no animation prefix)."""
         for i, base in enumerate(self._tab_base_labels):
             self._tabs.setTabText(i, base)
+        if self._tabs.count() > len(self._tab_base_labels):
+            from .theme_engine import get_theme_icon
+            theme_name = self._settings.get("theme", "Panda Dark")
+            self._tabs.setTabText(len(self._tab_base_labels), f"{get_theme_icon(theme_name)}🎨  Selective α")
 
     def _apply_custom_background(self) -> None:
         """Apply a custom background image or GIF to the main window (item 81).

@@ -8455,13 +8455,12 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
         )
 
     def test_five_save_slots_created(self):
-        """The 'Saved Masks' panel must define the _MASK_SLOT_COUNT constant."""
-        src = self._src()
-        # Look for _MASK_SLOT_COUNT constant
-        self.assertIn(
-            "_MASK_SLOT_COUNT",
-            src,
-            "must define _MASK_SLOT_COUNT for the saved-mask slot collection size",
+        """The saved-mask panel must keep the configured slot count stable."""
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        self.assertEqual(
+            SelectiveAlphaTool._MASK_SLOT_COUNT,
+            150,
+            "saved-mask slot count changed unexpectedly; update UI/tests intentionally if this is desired",
         )
 
     # ------------------------------------------------------------------

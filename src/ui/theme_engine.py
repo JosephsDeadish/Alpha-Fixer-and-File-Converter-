@@ -203,7 +203,7 @@ OTTER_THEME = {
     "scrollbar": "#2e1f09",
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
-    "_cursor": "emoji:🦦",
+    "_cursor": "emoji:🤘",
     "_trail": "noodle",
     "_trail_color": "#e8a040",
     "_banner_anim": "bounce",
@@ -262,7 +262,7 @@ GALAXY_OTTER_THEME = {
     "scrollbar": "#0f0820",
     "scrollbar_handle": "#a06aff",
     "_effect": "galaxy_otter",
-    "_cursor": "emoji:🦦",
+    "_cursor": "emoji:🤘",
     "_flock": "stars",
     "_trail": "comet",
     "_trail_color": "#a06aff",
@@ -2294,8 +2294,8 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
 
 
-def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str, str]:
-    """Return theme-specific (alpha_fixer_label, converter_label, history_label, selective_alpha_label).
+def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
+    """Return theme-specific labels for the Alpha, Converter, and History tabs.
 
     Each theme has its own emoji prefix from ``_THEME_TAB_EMOJIS``, so the
     tabs visually reflect the active theme.  The labels are *static* per theme
@@ -2307,7 +2307,6 @@ def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str, str]:
         f"{e[0]}  Alpha & RGBA Adjuster",
         f"{e[1]}  Converter",
         f"{e[2]}  History",
-        f"🎨  Selective Alpha",
     )
 
 

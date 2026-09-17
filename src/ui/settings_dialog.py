@@ -71,6 +71,7 @@ _EFFECT_OPTIONS = [
     ("mermaid",      "Mermaid — Magical sea creatures 🧜🐠"),
     ("shark",        "Shark — Bite & oceanic carnage 🦈🩸"),
     ("alien",        "Alien — UFO abduction beams 🛸👽"),
+    ("slither",      "Snake Pit — Slithering serpent trail 🐍"),
     ("custom",       "Custom — Your own emoji 🎨"),
 ]
 
@@ -1086,7 +1087,7 @@ class SettingsDialog(QDialog):
         )
         self._use_theme_cursor_check.setToolTip(
             "When enabled the cursor shape is chosen automatically to match the\n"
-            "active theme — e.g. Otter Cove gets the 🦦 otter cursor."
+            "active theme — e.g. Otter Cove gets the 🤘 rock cursor."
         )
         _cursor_sub_vl.addWidget(self._use_theme_cursor_check)
         # Info label shown when "Use theme cursor" is ON (item 4)

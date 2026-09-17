@@ -172,7 +172,7 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
 
 
 class HistoryTab(QWidget):
-    """View of the last 100 sessions for the Converter, Alpha & RGBA Adjuster, and Selective Alpha."""
+    """History view for Converter, Alpha, Selective Alpha, GIF Builder, and Video Builder runs."""
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
@@ -647,7 +647,6 @@ class HistoryTab(QWidget):
             self._settings.clear_gif_builder_history()
             self._settings.clear_video_builder_history()
             self.refresh()
-            self.refresh()
 
     # ------------------------------------------------------------------
     # Export
@@ -670,10 +669,18 @@ class HistoryTab(QWidget):
             tree = self._alpha_tree
             tab_name = "alpha_fixer"
             headers = ["Time", "Files", "OK", "Errors", "File names"]
-        else:
+        elif tab_idx == 2:
             tree = self._sel_tree
             tab_name = "selective_alpha"
             headers = ["Time", "Mode", "Files", "OK", "Errors", "File names"]
+        elif tab_idx == 3:
+            tree = self._gif_tree
+            tab_name = "gif_builder"
+            headers = ["Time", "Output", "Frames", "OK", "Errors", "File names"]
+        else:
+            tree = self._vid_tree
+            tab_name = "video_builder"
+            headers = ["Time", "Output", "Clips", "OK", "Errors", "File names"]
 
         path, selected_filter = QFileDialog.getSaveFileName(
             self,
