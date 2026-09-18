@@ -29,7 +29,7 @@ from typing import Optional
 # Opening one of these shows a warning so the user can decide whether to
 # continue (the image is still loaded) or cancel; the result should be
 # saved as PNG to preserve the alpha channel.
-_NO_ALPHA_EXTS = frozenset({".jpg", ".jpeg", ".bmp", ".gif"})
+_NO_ALPHA_EXTS = frozenset({".jpg", ".jpeg", ".jfif", ".jpe", ".bmp", ".gif"})
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -3132,7 +3132,7 @@ class SelectiveAlphaTool(QWidget):
             self,
             "Open Image",
             "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.gif *.ico);;All Files (*)",
+            "Images (*.png *.jpg *.jpeg *.jfif *.jpe *.bmp *.tiff *.tif *.webp *.tga *.gif *.ico);;All Files (*)",
         )
         if not path:
             return

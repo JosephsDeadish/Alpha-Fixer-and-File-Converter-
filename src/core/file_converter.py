@@ -453,7 +453,7 @@ def convert_file(
                 return {}
             kw: dict = {}
             try:
-                if fmt_ext in (".jpg", ".jpeg"):
+                if fmt_ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
                     for k in ("exif", "icc_profile", "dpi"):
                         if k in src_img.info:
                             kw[k] = src_img.info[k]
@@ -509,7 +509,7 @@ def convert_file(
                 return output_path
 
             # --- JPEG (no alpha, RGB or L only) ---
-            if ext in (".jpg", ".jpeg"):
+            if ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
                 flat = _flatten_alpha(img)
                 try:
                     flat.save(output_path, quality=quality, **_meta_kwargs(ext))

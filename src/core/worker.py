@@ -174,7 +174,7 @@ class AlphaWorker(QThread):
                     # Warn when saving to a format that does not support alpha so
                     # the user knows their alpha changes were silently discarded.
                     warn = ""
-                    if ext in (".jpg", ".jpeg", ".bmp"):
+                    if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):
                         warn = (
                             f"{ext[1:].upper()} does not support an alpha channel — "
                             "alpha changes were discarded. Save as PNG to preserve alpha."
@@ -269,6 +269,7 @@ class ConverterWorker(QThread):
         resize: Optional[tuple[int, int]] = None,
         keep_metadata: bool = False,
         suffix: str = "",
+        source_aliases: Optional[dict[str, str]] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -281,6 +282,7 @@ class ConverterWorker(QThread):
         self._resize = resize
         self._keep_metadata = keep_metadata
         self._suffix = suffix
+        self._source_aliases = dict(source_aliases or {})
         self._abort = False
 
     def stop(self):
@@ -306,8 +308,9 @@ class ConverterWorker(QThread):
         def _convert_one(idx: int, src: str) -> tuple[int, str, bool, str]:
             """Convert one file and return (index, src, ok, dest_or_error)."""
             try:
+                logical_src = self._source_aliases.get(src, src)
                 dest = build_output_path(
-                    src,
+                    logical_src,
                     self._target_ext,
                     output_dir=self._output_dir,
                     input_root=self._input_root,

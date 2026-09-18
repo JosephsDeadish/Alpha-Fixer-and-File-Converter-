@@ -1016,7 +1016,7 @@ class ConverterTab(QWidget):
         # Selected frames are extracted to a temp directory and the GIF path
         # is replaced in the expanded list with one path per chosen frame.
         # ------------------------------------------------------------------
-        expanded, gif_fallback_dir = self._expand_gif_frames(expanded)
+        expanded, logical_sources = self._expand_gif_frames(expanded)
         if expanded is None:
             # User cancelled the frame-picker dialog for at least one GIF.
             return
@@ -1025,17 +1025,12 @@ class ConverterTab(QWidget):
                                     "No frames were selected for export.")
             return
 
-        # When GIF frames were extracted to a temp directory but the user has
-        # not specified an output folder, use the original GIF's parent directory
-        # so converted files appear next to the source GIF rather than being
-        # lost inside a temporary directory.
-        effective_out_dir = out_dir or gif_fallback_dir or None
-
         # Determine a common root directory for relative path preservation
         input_root = None
-        if len(expanded) > 1:
+        logical_files = [logical_sources.get(path, path) for path in expanded]
+        if len(logical_files) > 1:
             try:
-                dirs = [os.path.dirname(f) for f in expanded]
+                dirs = [os.path.dirname(f) for f in logical_files]
                 input_root = os.path.commonpath(dirs)
             except ValueError:
                 pass
@@ -1044,7 +1039,7 @@ class ConverterTab(QWidget):
         self._last_run_files = expanded
         self._last_run_format = target_format
         # Remember where output files will go for the completion message.
-        self._last_run_out_dir = effective_out_dir
+        self._last_run_out_dir = out_dir or None
 
         self._log.clear()
         self._progress.setValue(0)
@@ -1073,45 +1068,39 @@ class ConverterTab(QWidget):
             files=expanded,
             target_format=target_format,
             target_ext=target_ext,
-            output_dir=effective_out_dir,
+            output_dir=out_dir or None,
             input_root=input_root,
             quality=quality,
             resize=resize,
             keep_metadata=self._keep_metadata_check.isChecked(),
             suffix=suffix,
+            source_aliases=logical_sources,
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
-    def _expand_gif_frames(self, files: list[str]) -> tuple[list[str] | None, str | None]:
+    def _expand_gif_frames(self, files: list[str]) -> tuple[list[str] | None, dict[str, str]]:
         """
         For every animated GIF in *files*, show :class:`GifFramePickerDialog`
         and replace the GIF path with one temporary PNG path per selected frame.
 
         Non-GIF files (and single-frame GIFs) are passed through unchanged.
 
-        Returns a tuple ``(expanded, fallback_out_dir)``:
+        Returns a tuple ``(expanded, logical_sources)``:
         - *expanded* is the new file list on success, or ``None`` if the user
           cancelled the dialog for any GIF.
-        - *fallback_out_dir* is the parent directory of the first animated GIF
-          encountered, or ``None`` when no animated GIFs were processed.  The
-          caller uses this as the output directory when the user has not
-          specified one explicitly, preventing extracted frames from being
-          silently saved into a temporary directory.
+        - *logical_sources* maps temporary extracted frame paths back to the
+          original per-frame logical source path so output routing still treats
+          them as if they came from the source GIF's directory tree.
         """
         from PIL import Image
 
         # Collect GIFs that actually have multiple frames
         animated_gifs = [f for f in files if get_gif_frame_count(f) > 1]
         if not animated_gifs:
-            return files, None  # nothing to expand
-
-        # The fallback output dir is the parent of the first animated GIF so
-        # that converted frames land next to the source file when the user has
-        # not chosen an explicit output directory.
-        fallback_out_dir = str(Path(animated_gifs[0]).parent)
+            return files, {}  # nothing to expand
 
         # Clean up any temp dir from the previous run before creating a new one
         if self._gif_temp_dir is not None:
@@ -1123,6 +1112,7 @@ class ConverterTab(QWidget):
         tmp_root = Path(self._gif_temp_dir.name)
 
         result: list[str] = []
+        logical_sources: dict[str, str] = {}
         for src in files:
             if get_gif_frame_count(src) <= 1:
                 result.append(src)
@@ -1132,7 +1122,7 @@ class ConverterTab(QWidget):
             dlg = GifFramePickerDialog(src, parent=self)
             if dlg.exec() != dlg.DialogCode.Accepted:
                 # User cancelled – abort the whole run
-                return None, fallback_out_dir
+                return None, {}
 
             chosen = dlg.selected_indices()
             if not chosen:
@@ -1178,10 +1168,14 @@ class ConverterTab(QWidget):
 
                         if frame_no in chosen_set:
                             frame_path = str(
-                                tmp_root / f"{stem}_frame{frame_no + 1:04d}.png"
+                                tmp_root / f"{len(logical_sources):08d}_{stem}_frame{frame_no + 1:04d}.png"
+                            )
+                            logical_path = str(
+                                Path(src).parent / f"{stem}_frame{frame_no + 1:04d}.png"
                             )
                             composite.save(frame_path, format="PNG")
                             result.append(frame_path)
+                            logical_sources[frame_path] = logical_path
 
                         disposal = getattr(gif, "disposal_method", gif.info.get('disposal', 0))
                         canvas.close()
@@ -1206,9 +1200,8 @@ class ConverterTab(QWidget):
                     self, "GIF Frame Extraction Error",
                     f"Could not extract frames from {Path(src).name}:\n{exc}"
                 )
-                return None, fallback_out_dir
-
-        return result, fallback_out_dir
+                return None, {}
+        return result, logical_sources
 
     def _open_gif_builder(self, initial_files: list[str]) -> None:
         """Open the GIF Builder dialog pre-populated with *initial_files*."""

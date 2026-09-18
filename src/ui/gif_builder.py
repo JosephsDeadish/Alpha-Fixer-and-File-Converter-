@@ -42,7 +42,7 @@ from .video_tool import _VIDEO_EXTS, _load_video_frames
 
 # Supported image input extensions (what PIL can open directly)
 _IMAGE_EXTS = {
-    ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",
+    ".png", ".jpg", ".jpeg", ".jfif", ".jpe", ".webp", ".bmp", ".tiff", ".tif",
     ".gif", ".ico", ".ppm", ".pcx", ".tga", ".avif",
 }
 _SUPPORTED_EXTS = _IMAGE_EXTS | _VIDEO_EXTS
@@ -504,7 +504,7 @@ class GifBuilderDialog(QDialog):
     def _on_add_clicked(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Media", "",
-            "Media (*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif *.gif "
+            "Media (*.png *.jpg *.jpeg *.jfif *.jpe *.webp *.bmp *.tiff *.tif *.gif "
             "*.ico *.ppm *.pcx *.tga *.avif *.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm "
             "*.m4v *.mpg *.mpeg *.3gp *.3g2 *.ts *.m2ts *.mts *.vob *.ogv *.ogg "
             "*.rm *.rmvb *.divx *.asf *.f4v *.mxf *.dv *.pmf *.pss *.str *.xa *.iso *.umd *.bin);;All Files (*)",

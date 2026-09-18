@@ -378,6 +378,22 @@ class TestConvertFile(unittest.TestCase):
             finally:
                 img.close()
 
+    def test_alpha_processor_saves_jfif_and_jpe_aliases(self):
+        from src.core.alpha_processor import save_image
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img = Image.new("RGBA", (4, 4), (10, 20, 30, 120))
+            try:
+                for ext in (".jfif", ".jpe"):
+                    dst = os.path.join(tmpdir, f"output{ext}")
+                    save_image(img, dst, ext)
+                    self.assertTrue(os.path.isfile(dst))
+                    with Image.open(dst) as saved:
+                        self.assertEqual(saved.format, "JPEG")
+                        self.assertEqual(saved.size, (4, 4))
+            finally:
+                img.close()
+
     def test_alpha_processor_supported_write_includes_tim(self):
         self.assertIn(".tim", SUPPORTED_WRITE)
         self.assertIn(".svg", SUPPORTED_WRITE)

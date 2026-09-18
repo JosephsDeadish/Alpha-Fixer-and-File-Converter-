@@ -946,6 +946,36 @@ class TestWorkerBehavior(unittest.TestCase):
             self.assertEqual([entry[0] for entry in done], [first, second])
             self.assertTrue(all(entry[1] for entry in done))
 
+    def test_converter_worker_uses_logical_source_alias_for_output_routing(self):
+        from src.core.worker import ConverterWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            extracted = os.path.join(tmpdir, "temp_frame.png")
+            logical_root = os.path.join(tmpdir, "originals")
+            logical = os.path.join(logical_root, "nested", "anim_frame0001.png")
+            output_dir = os.path.join(tmpdir, "out")
+            os.makedirs(os.path.dirname(logical), exist_ok=True)
+            Image.new("RGBA", (2, 2), (10, 20, 30, 40)).save(extracted)
+            worker = ConverterWorker(
+                files=[extracted],
+                target_format="PNG",
+                target_ext=".png",
+                output_dir=output_dir,
+                input_root=logical_root,
+                source_aliases={extracted: logical},
+            )
+            seen = []
+
+            def _fake_convert(src, dest, target_format, **kwargs):
+                seen.append((src, dest, target_format))
+                Path(dest).parent.mkdir(parents=True, exist_ok=True)
+                Path(dest).write_bytes(b"ok")
+
+            with mock.patch("src.core.worker.convert_file", side_effect=_fake_convert):
+                worker.run()
+
+            self.assertEqual(seen, [(extracted, os.path.join(output_dir, "nested", "anim_frame0001.png"), "PNG")])
+
 
 # ---------------------------------------------------------------------------
 # apply_rgba_adjust tests
@@ -3617,7 +3647,7 @@ class TestRound9ResourceHygiene(unittest.TestCase):
         # use that anchor to avoid matching the JPEG key inside _meta_kwargs.
         dispatch_pos = fn.find("_save_w, _save_h = img.size")
         self.assertGreater(dispatch_pos, 0, "_save_w/_save_h capture not found")
-        jpeg_pos = fn.find('(".jpg", ".jpeg")', dispatch_pos)
+        jpeg_pos = fn.find('(".jpg", ".jpeg", ".jfif", ".jpe")', dispatch_pos)
         self.assertGreater(jpeg_pos, 0, "JPEG branch not found in convert_file format dispatch")
         jpeg_section = fn[jpeg_pos: jpeg_pos + 300]
         self.assertNotIn(
@@ -8930,6 +8960,30 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._input_file_dialog_filter()", src)
         self.assertIn("extensions=supported_exts", src)
         self.assertIn('noun = "media" if target_format == "GIF" else "image"', src)
+        self.assertIn("expanded, logical_sources = self._expand_gif_frames(expanded)", src)
+        self.assertIn("logical_files = [logical_sources.get(path, path) for path in expanded]", src)
+        self.assertIn("source_aliases=logical_sources", src)
+        self.assertIn("return files, {}", src)
+        self.assertIn('tmp_root / f"{len(logical_sources):08d}_{stem}_frame{frame_no + 1:04d}.png"', src)
+        self.assertIn('logical_sources[frame_path] = logical_path', src)
+
+    def test_jpeg_alias_support_is_consistent_across_ui_and_save_paths(self):
+        file_converter = self._src("core/file_converter.py")
+        worker = self._src("core/worker.py")
+        alpha_tool = self._src("ui/alpha_tool.py")
+        selective_alpha = self._src("ui/selective_alpha_tool.py")
+        gif_builder = self._src("ui/gif_builder.py")
+        settings = self._src("ui/settings_dialog.py")
+        alpha_processor = self._src("core/alpha_processor.py")
+        self.assertIn('if fmt_ext in (".jpg", ".jpeg", ".jfif", ".jpe"):', file_converter)
+        self.assertIn('if ext in (".jpg", ".jpeg", ".jfif", ".jpe"):', file_converter)
+        self.assertIn('if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):', worker)
+        self.assertIn('if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp")', alpha_processor)
+        self.assertIn("*.jfif *.jpe", alpha_tool)
+        self.assertIn('frozenset({".jpg", ".jpeg", ".jfif", ".jpe", ".bmp", ".gif"})', selective_alpha)
+        self.assertIn("*.jfif *.jpe", selective_alpha)
+        self.assertIn('".png", ".jpg", ".jpeg", ".jfif", ".jpe", ".webp"', gif_builder)
+        self.assertIn("*.jpg *.jpeg *.jfif *.jpe", settings)
 
     def test_gif_builder_caches_preview_pixmaps(self):
         src = self._src("ui/gif_builder.py")

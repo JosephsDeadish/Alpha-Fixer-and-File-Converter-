@@ -581,7 +581,7 @@ def save_image(img: Image.Image, path: str, original_ext: str):
         from .tim_handler import save_tim  # noqa: PLC0415
         save_tim(img, path)
         return
-    if ext in (".jpg", ".jpeg", ".bmp"):
+    if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):
         w, h = img.size
         try:
             img_rgb = img.convert("RGB")

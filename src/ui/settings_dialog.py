@@ -321,7 +321,7 @@ class SettingsDialog(QDialog):
             video_patterns = sorted(f"*{ext}" for ext in _VIDEO_EXTS)
             path, _ = QFileDialog.getOpenFileName(
                 self, "Select Background File", "",
-                "Images & Video (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tif *.tiff "
+                "Images & Video (*.png *.jpg *.jpeg *.jfif *.jpe *.gif *.webp *.bmp *.tif *.tiff "
                 + " ".join(video_patterns)
                 + ")"
                 ";;All Files (*)"
