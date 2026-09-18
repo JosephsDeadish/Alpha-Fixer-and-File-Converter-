@@ -9095,6 +9095,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_shortcuts_dialog_registers_tool_and_dialog_shortcuts(self):
         src = self._src("ui/main_window.py")
+        self.assertIn("from .gif_builder import GifBuilderDialog", src)
+        self.assertIn("from .video_tool import VideoToolDialog", src)
         self.assertIn("self._register_shortcut_provider(self._alpha_tab)", src)
         self.assertIn("self._register_shortcut_provider(self._converter_tab)", src)
         self.assertIn("self._register_shortcut_provider(self._selective_alpha_tab)", src)

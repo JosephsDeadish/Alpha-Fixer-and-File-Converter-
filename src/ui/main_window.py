@@ -19,6 +19,7 @@ from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
 from .converter_tool import ConverterTab
+from .gif_builder import GifBuilderDialog
 from .history_tab import HistoryTab
 from .selective_alpha_tool import SelectiveAlphaTool
 from .settings_dialog import SettingsDialog
@@ -27,6 +28,7 @@ from .theme_engine import (
     get_theme_svg_path, get_theme_status,
     get_theme_tab_labels, get_theme_icon,
 )
+from .video_tool import VideoToolDialog
 try:
     from ..version import __version__
 except Exception:
@@ -3768,8 +3770,6 @@ class MainWindow(QMainWindow):
 
     def contextMenuEvent(self, event) -> None:
         """Right-click anywhere on the main window to access the tool shortcuts."""
-        from .gif_builder import GifBuilderDialog
-        from .video_tool import VideoToolDialog
         menu = QMenu(self)
         act_gif = menu.addAction("🎞  Open GIF Builder")
         act_gif.setToolTip(
