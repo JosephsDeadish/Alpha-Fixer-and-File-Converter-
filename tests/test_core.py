@@ -8730,14 +8730,25 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _mux_mp4_audio(", src)
         self.assertIn('progress.setLabelText("Mixing source audio into MP4…")', src)
         self.assertIn('"-i", "anullsrc=channel_layout=stereo:sample_rate=48000"', src)
+        self.assertIn("silence_input_index = input_index", src)
+        self.assertIn('f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"', src)
         self.assertIn('"-c:a", "aac"', src)
         self.assertIn("first = Image.open(gif_frame_paths[0])", src)
         self.assertIn("append_images=rest", src)
+        self.assertIn("if rest:", src)
+        self.assertIn('first.save(out_path, format="GIF")', src)
         self.assertIn("Unsupported Files Skipped", src)
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
         self.assertIn("def _coerce_frame_size(value) -> Optional[tuple[int, int]]:", src)
         self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
+
+    def test_gif_frame_picker_uses_modern_resampling_enum(self):
+        src = self._src("ui/gif_frame_picker.py")
+        self.assertIn("Image.Resampling.LANCZOS", src)
+
+    def test_video_tool_keeps_probe_and_image_gif_support_helpers(self):
+        src = self._src("ui/video_tool.py")
         self.assertIn("first_frame = reader.get_data(0)", src)
         self.assertIn("return fps, frame_count, frame_size, first_frame", src)
         self.assertNotIn("def __del__(self) -> None:", src)

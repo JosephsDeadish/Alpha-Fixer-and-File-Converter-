@@ -221,7 +221,7 @@ class GifFramePickerDialog(QDialog):
 
         for idx, frame in enumerate(frames):
             # frame is already RGBA; thumbnail in-place then build pixmap.
-            frame.thumbnail((_THUMB_W, _THUMB_H), Image.LANCZOS)
+            frame.thumbnail((_THUMB_W, _THUMB_H), Image.Resampling.LANCZOS)
             pixmap = _pil_to_qpixmap(frame)
             frame.close()
 

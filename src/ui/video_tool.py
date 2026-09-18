@@ -1876,6 +1876,19 @@ class VideoToolDialog(QDialog):
         filter_parts: list[str] = []
         concat_inputs: list[str] = []
         input_index = 1
+        needs_silence = any(
+            max(0, int(clip["active_frames"])) > 0
+            and not (clip["clip_type"] == "video" and clip["has_audio"])
+            for clip in clip_snapshot
+        )
+        silence_input_index = None
+        if needs_silence:
+            cmd.extend([
+                "-f", "lavfi",
+                "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+            ])
+            silence_input_index = input_index
+            input_index += 1
         for clip_idx, clip in enumerate(clip_snapshot):
             active_frames = max(0, int(clip["active_frames"]))
             if active_frames <= 0:
@@ -1896,16 +1909,14 @@ class VideoToolDialog(QDialog):
                 ]
                 filter_parts.append(",".join(filters) + f"[{label}]")
             else:
-                cmd.extend([
-                    "-f", "lavfi",
-                    "-t", f"{output_duration:.6f}",
-                    "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                ])
+                if silence_input_index is None:
+                    raise RuntimeError("FFmpeg silence source is unavailable for MP4 audio export.")
                 filter_parts.append(
-                    f"[{input_index}:a]atrim=end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"
+                    f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"
                 )
             concat_inputs.append(f"[{label}]")
-            input_index += 1
+            if clip["clip_type"] == "video" and clip["has_audio"]:
+                input_index += 1
 
         if not concat_inputs:
             raise RuntimeError("No audio segments were available for MP4 export.")
@@ -2110,15 +2121,18 @@ class VideoToolDialog(QDialog):
                 first = Image.open(gif_frame_paths[0])
                 rest = [Image.open(path) for path in gif_frame_paths[1:]]
                 try:
-                    first.save(
-                        out_path,
-                        format="GIF",
-                        save_all=True,
-                        append_images=rest,
-                        duration=max(1, int(round(1000.0 / fps))),
-                        loop=0,
-                        disposal=2,
-                    )
+                    if rest:
+                        first.save(
+                            out_path,
+                            format="GIF",
+                            save_all=True,
+                            append_images=rest,
+                            duration=max(1, int(round(1000.0 / fps))),
+                            loop=0,
+                            disposal=2,
+                        )
+                    else:
+                        first.save(out_path, format="GIF")
                 finally:
                     first.close()
                     for frame in rest:
