@@ -18,6 +18,7 @@ Public API
 import math
 import random
 
+from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QObject, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
                          QPainterPath, QPen, QPixmap)
@@ -3749,6 +3750,16 @@ class ButtonPressAnimator(QObject):
         """Change the animation mode without altering the enabled state."""
         self._mode = mode
 
+    @staticmethod
+    def _is_live_widget(btn: QWidget | None) -> bool:
+        """Return True when *btn* still wraps a live Qt widget."""
+        if btn is None:
+            return False
+        try:
+            return not sip.isdeleted(btn)
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     # Event filter
     # ------------------------------------------------------------------
@@ -3765,7 +3776,7 @@ class ButtonPressAnimator(QObject):
                     and obj.isVisible()):
                 if hasattr(event, "position") and not obj.rect().contains(event.position().toPoint()):
                     return False
-                QTimer.singleShot(0, lambda b=obj: self._animate(b) if b is not None else None)
+                QTimer.singleShot(0, lambda b=obj: self._animate(b))
             # QTabBar is intentionally excluded (item 56): clicking a tab should
             # not animate the entire tab bar — only QPushButton presses animate.
         return False  # always pass the event through
@@ -3775,6 +3786,8 @@ class ButtonPressAnimator(QObject):
     # ------------------------------------------------------------------
 
     def _animate(self, btn: QWidget) -> None:
+        if not self._is_live_widget(btn):
+            return
         mode = self._mode
         if mode == "none":
             return

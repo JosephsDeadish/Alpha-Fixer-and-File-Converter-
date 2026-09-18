@@ -9110,8 +9110,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_button_press_animation_runs_after_release(self):
         src = self._src("ui/click_effects.py")
         self.assertIn("event.type() == QEvent.Type.MouseButtonRelease", src)
-        self.assertIn("QTimer.singleShot(0, lambda b=obj: self._animate(b) if b is not None else None)", src)
+        self.assertIn("from PyQt6 import sip", src)
+        self.assertIn("def _is_live_widget(btn: QWidget | None) -> bool:", src)
+        self.assertIn("return not sip.isdeleted(btn)", src)
+        self.assertIn("QTimer.singleShot(0, lambda b=obj: self._animate(b))", src)
         self.assertIn("obj.rect().contains(event.position().toPoint())", src)
+        self.assertIn("if not self._is_live_widget(btn):", src)
 
     def test_shortcuts_dialog_registers_tool_and_dialog_shortcuts(self):
         src = self._src("ui/main_window.py")

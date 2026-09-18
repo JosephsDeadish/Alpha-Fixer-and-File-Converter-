@@ -492,6 +492,32 @@ class TestBeforeAfterWidget(unittest.TestCase):
         self._app.processEvents()
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestButtonPressAnimator(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(300, 200)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_deleted_button_animation_is_ignored(self):
+        from PyQt6.QtWidgets import QPushButton
+        from src.ui.click_effects import ButtonPressAnimator
+
+        btn = QPushButton("Close", self._parent)
+        animator = ButtonPressAnimator(self._parent)
+        animator.set_mode("press")
+        btn.deleteLater()
+        self._app.processEvents()
+
+        animator._animate(btn)
+
+
 # ---------------------------------------------------------------------------
 # _AlphaPreviewLoader (before/after background processor)
 # ---------------------------------------------------------------------------
