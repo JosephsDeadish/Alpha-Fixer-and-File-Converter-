@@ -9093,7 +9093,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('"custom_bg_enabled", "use_theme_bg", "custom_bg_path"', settings_src)
         self.assertIn("from .video_tool import _VIDEO_EXTS", dialog_src)
         self.assertIn("self._use_theme_bg_check.setChecked(False)", dialog_src)
-        self.assertIn("self._custom_bg_file_row.setVisible(enabled)", dialog_src)
+        self.assertIn("self._custom_bg_file_row.setVisible(enabled and not use_theme)", dialog_src)
         self.assertIn("self._custom_bg_path_edit.setEnabled(enabled and not use_theme)", dialog_src)
         self.assertIn("self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)", dialog_src)
         self.assertIn("video_patterns = sorted(f\"*{ext}\" for ext in _VIDEO_EXTS)", dialog_src)
