@@ -2077,8 +2077,7 @@ class VideoToolDialog(QDialog):
         saturation = self._saturation_slider.value() / 100.0
         sharpness = self._sharpness_slider.value() / 100.0
         writer = None
-        gif_frame_paths: list[str] = []
-        gif_frame_dir = None
+        gif_frames = []
         canceled = False
         wrote_frames = False
         append_video_frame = None
@@ -2136,11 +2135,8 @@ class VideoToolDialog(QDialog):
                             if rgb is not None and rgb is not framed:
                                 rgb.close()
                     if fmt == "gif":
-                        if gif_frame_dir is None:
-                            gif_frame_dir = tempfile.TemporaryDirectory(prefix="alpha_fixer_video_gif_")
-                        frame_path = Path(gif_frame_dir.name) / f"frame_{i:06d}.png"
-                        framed.save(frame_path)
-                        gif_frame_paths.append(str(frame_path))
+                        gif_frames.append(framed)
+                        framed = None
                     wrote_frames = True
                 finally:
                     if framed is not None and framed is not filtered:
@@ -2171,11 +2167,9 @@ class VideoToolDialog(QDialog):
             if not canceled and writer is not None:
                 writer.close()
                 writer = None
-            if fmt == "gif" and not canceled and gif_frame_paths:
-                from PIL import Image
-
-                first = Image.open(gif_frame_paths[0])
-                rest = [Image.open(path) for path in gif_frame_paths[1:]]
+            if fmt == "gif" and not canceled and gif_frames:
+                first = gif_frames[0]
+                rest = gif_frames[1:]
                 try:
                     if rest:
                         first.save(
@@ -2196,12 +2190,12 @@ class VideoToolDialog(QDialog):
                             disposal=2,
                         )
                 finally:
-                    first.close()
-                    for frame in rest:
+                    for frame in gif_frames:
                         try:
                             frame.close()
                         except Exception:
                             pass
+                    gif_frames.clear()
             elif fmt == "mp4" and not canceled and wrote_frames and temp_mp4 is not None:
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
@@ -2231,8 +2225,12 @@ class VideoToolDialog(QDialog):
                     Path(temp_mp4).unlink(missing_ok=True)
                 except Exception:
                     pass
-            if gif_frame_dir is not None:
-                gif_frame_dir.cleanup()
+            for frame in gif_frames:
+                try:
+                    frame.close()
+                except Exception:
+                    pass
+            gif_frames.clear()
 
         if progress.wasCanceled() or not wrote_frames:
             try:
