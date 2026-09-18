@@ -31,7 +31,7 @@ from functools import lru_cache
 import os
 from pathlib import Path
 from threading import Lock
-from typing import Optional
+from typing import Callable, Optional
 
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, pyqtSignal,
@@ -1623,8 +1623,32 @@ class VideoToolDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _export(self) -> None:
+        def _snapshot_clip_render_state(clip: "_ClipEntry") -> tuple[Callable[[int], object], int, Optional[tuple[int, int]]]:
+            trim_start = clip.trim_start
+            clip_type = clip.clip_type
+            speed_percent = clip.speed_percent
+            still_duration_frames = clip.still_duration_frames
+            frame_size = clip.frame_size
+            base_active_frames = max(0, clip.trim_end - trim_start + 1)
+            if clip_type == "image":
+                active_frames = max(1, int(still_duration_frames))
+            else:
+                speed = max(0.1, speed_percent / 100.0)
+                active_frames = max(1, int(round(base_active_frames / speed))) if base_active_frames > 0 else 0
+            get_source_frame = clip._get_frame
+
+            def _get_snapshot_frame(output_idx: int):
+                if clip_type == "image" or base_active_frames <= 0:
+                    return get_source_frame(trim_start)
+                speed = max(0.1, speed_percent / 100.0)
+                mapped = int(output_idx * speed)
+                source_offset = max(0, min(base_active_frames - 1, mapped))
+                return get_source_frame(trim_start + source_offset)
+
+            return _get_snapshot_frame, active_frames, frame_size
+
         clip_snapshot = [
-            (clip.get_frame, clip.active_frames, clip.frame_size)
+            _snapshot_clip_render_state(clip)
             for clip in self._clips
             if clip.active_frames > 0
         ]

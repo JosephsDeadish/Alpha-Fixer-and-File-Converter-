@@ -5,6 +5,8 @@ Opens a step-by-step tutorial that introduces the main tools and features of
 the application with fun, friendly descriptions and keyboard-shortcut hints.
 """
 
+from html import escape
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -25,6 +27,7 @@ _TUTORIAL_STEPS = [
             "Press <b>Next</b> to begin the tour, or press <b>Esc</b> to close."
         ),
         "tip": "💡  Tip: You can drag & drop files directly onto the file list in any tool.",
+        "body_is_html": True,
         "shortcut": None,
     },
     {
@@ -39,6 +42,7 @@ _TUTORIAL_STEPS = [
             "After conversion you can choose to delete the originals."
         ),
         "tip": "💡  Tip: Hold Ctrl and click to select multiple files at once.",
+        "body_is_html": True,
         "shortcut": "Ctrl+Enter to start conversion",
     },
     {
@@ -55,6 +59,7 @@ _TUTORIAL_STEPS = [
             "The live preview updates as you drag the sliders."
         ),
         "tip": "💡  Tip: Right-click the preview to copy alpha zones to the Selective Alpha tool.",
+        "body_is_html": True,
         "shortcut": "Ctrl+Z to undo; Ctrl+Enter to process",
     },
     {
@@ -70,6 +75,7 @@ _TUTORIAL_STEPS = [
             "When you're happy, click <b>Save Result</b> to write the new PNG."
         ),
         "tip": "💡  Tip: Right-click on the canvas to paste zones from the Alpha Adjuster.",
+        "body_is_html": True,
         "shortcut": "Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save",
     },
     {
@@ -85,6 +91,7 @@ _TUTORIAL_STEPS = [
             "Your built GIFs show up in the History tab with an animated thumbnail."
         ),
         "tip": "💡  Tip: You can right-click frames to remove or duplicate them.",
+        "body_is_html": True,
         "shortcut": None,
     },
     {
@@ -103,6 +110,7 @@ _TUTORIAL_STEPS = [
         ),
         "tip": "💡  Tip: Disc-image formats (.iso, .umd, .bin) are experimental — "
                "they work when the image contains a demuxable video track.",
+        "body_is_html": True,
         "shortcut": None,
     },
     {
@@ -118,6 +126,7 @@ _TUTORIAL_STEPS = [
             "• <b>Shortcuts</b> — remap keyboard shortcuts to your liking (press F1)."
         ),
         "tip": "💡  Tip: Hover over any control to see a helpful tooltip.",
+        "body_is_html": True,
         "shortcut": "F1 for keyboard shortcuts · ⚙ for settings",
     },
 ]
@@ -270,8 +279,11 @@ class TutorialDialog(QDialog):
         self._icon_lbl.setText(step["icon"])
         self._title_lbl.setText(step["title"])
 
-        # Convert newlines in body to HTML line breaks for RichText rendering
-        body_html = step["body"].replace("\n", "<br>")
+        body_text = step["body"]
+        if step.get("body_is_html"):
+            body_html = body_text.replace("\n", "<br>")
+        else:
+            body_html = escape(body_text).replace("\n", "<br>")
         self._body_lbl.setText(body_html)
 
         tip = step.get("tip", "")
