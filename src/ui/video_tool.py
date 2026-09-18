@@ -554,23 +554,23 @@ class _VideoFrameGetter:
                 self._last_idx = 0
                 self._last_frame = frame
                 self._prefetched_frame = None
-                return Image.fromarray(frame).convert("RGBA")
-            reopened = self._reader is None or clamped < self._last_idx
-            if reopened:
-                self._close_reader()
-                self._open_reader()
-            try:
-                if clamped == self._last_idx and self._last_frame is not None:
-                    frame = self._last_frame
-                elif not reopened and clamped == self._last_idx + 1:
-                    frame = self._reader.get_next_data()
-                else:
-                    frame = self._reader.get_data(clamped)
-                self._last_idx = clamped
-                self._last_frame = frame
-            except Exception:
-                self._close_reader()
-                raise
+            else:
+                reopened = self._reader is None or clamped < self._last_idx
+                if reopened:
+                    self._close_reader()
+                    self._open_reader()
+                try:
+                    if clamped == self._last_idx and self._last_frame is not None:
+                        frame = self._last_frame
+                    elif not reopened and clamped == self._last_idx + 1:
+                        frame = self._reader.get_next_data()
+                    else:
+                        frame = self._reader.get_data(clamped)
+                    self._last_idx = clamped
+                    self._last_frame = frame
+                except Exception:
+                    self._close_reader()
+                    raise
         return Image.fromarray(frame).convert("RGBA")
 
     def __getstate__(self) -> dict:
@@ -2188,7 +2188,13 @@ class VideoToolDialog(QDialog):
                             disposal=2,
                         )
                     else:
-                        first.save(out_path, format="GIF")
+                        first.save(
+                            out_path,
+                            format="GIF",
+                            duration=max(1, int(round(1000.0 / fps))),
+                            loop=0,
+                            disposal=2,
+                        )
                 finally:
                     first.close()
                     for frame in rest:

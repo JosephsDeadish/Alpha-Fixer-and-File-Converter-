@@ -8736,7 +8736,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("first = Image.open(gif_frame_paths[0])", src)
         self.assertIn("append_images=rest", src)
         self.assertIn("if rest:", src)
-        self.assertIn('first.save(out_path, format="GIF")', src)
+        self.assertIn('duration=max(1, int(round(1000.0 / fps)))', src)
+        self.assertIn('loop=0,', src)
+        self.assertIn('disposal=2,', src)
         self.assertIn("Unsupported Files Skipped", src)
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
@@ -9262,7 +9264,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("keep source audio from video clips", src)
         self.assertIn("Preview playback stays silent.", src)
         self.assertIn("self._body_lbl.setOpenExternalLinks(False)", src)
-        self.assertIn("self._body_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)", src)
+        self.assertIn("Qt.TextInteractionFlag.TextSelectableByMouse", src)
+        self.assertIn("Qt.TextInteractionFlag.TextSelectableByKeyboard", src)
+        self.assertIn("self._body_lbl.setFocusPolicy(Qt.FocusPolicy.StrongFocus)", src)
 
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
         src = self._src("ui/theme_engine.py")
