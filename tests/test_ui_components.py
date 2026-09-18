@@ -1634,6 +1634,73 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(vt._build_atempo_filters(4.0), ["atempo=2.0", "atempo=2"])
         self.assertEqual(vt._build_atempo_filters(0.25), ["atempo=0.5", "atempo=0.5"])
 
+    def test_export_rewrites_mismatched_gif_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        saved_paths = []
+        try:
+            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.mp4", "")):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("PIL.Image.Image.save", autospec=True, side_effect=lambda self, path, **kwargs: saved_paths.append(path)):
+                        dialog._export()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(saved_paths, ["/tmp/video-output.gif"])
+
+    def test_export_rewrites_mismatched_mp4_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        class _FakeWriter:
+            def __init__(self):
+                self.closed = False
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                self.closed = True
+
+        dialog = vt.VideoToolDialog()
+        dialog._mp4_export_available = True
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        writer_paths = []
+        fake_writer = _FakeWriter()
+        try:
+            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.gif", "")):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or fake_writer):
+                        dialog._export()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

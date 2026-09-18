@@ -2159,7 +2159,7 @@ class VideoToolDialog(QDialog):
                             filtered.close()
                         except Exception:
                             pass
-                    if adjusted is not source_pil:
+                    if adjusted is not source_pil and adjusted is not filtered:
                         try:
                             adjusted.close()
                         except Exception:
