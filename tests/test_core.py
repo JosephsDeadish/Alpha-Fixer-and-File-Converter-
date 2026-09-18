@@ -9020,10 +9020,21 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_export_uses_snapshot_of_clip_state_during_render(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("clip_snapshot = [", src)
-        self.assertIn("total = sum(active_frames for _, active_frames in clip_snapshot)", src)
+        self.assertIn("total = sum(active_frames for _, active_frames, _ in clip_snapshot)", src)
         self.assertIn("def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:", src)
-        self.assertIn("get_frame_fn, _active_frames = clip_snapshot[ci]", src)
+        self.assertIn("canvas_size = self._timeline_canvas_size(fmt)", src)
+        self.assertIn("get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]", src)
         self.assertIn("source_pil = get_frame_fn(fi)", src)
+        self.assertIn("framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)", src)
+
+    def test_video_editor_exposes_insert_mode_and_canvas_summary(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('self._insert_mode_combo.addItem("After selected clip", userData="after")', src)
+        self.assertIn('self._insert_mode_combo.addItem("Before selected clip", userData="before")', src)
+        self.assertIn('self._insert_mode_combo.addItem("At end of timeline", userData="end")', src)
+        self.assertIn('self._export_size_lbl = QLabel("Canvas: auto once clips are added")', src)
+        self.assertIn("def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:", src)
+        self.assertIn('detail = "Canvas: auto from the largest clip (rounded for MP4 compatibility)"', src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
@@ -9157,3 +9168,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             "Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.",
             src,
         )
+
+    def test_alpha_preview_helpers_persist_and_show_in_popout(self):
+        settings_src = self._src("core/settings_manager.py")
+        alpha_src = self._src("ui/alpha_tool.py")
+        self.assertIn('"alpha_preview_highlight": False', settings_src)
+        self.assertIn('"alpha_preview_detect_atlas": False', settings_src)
+        self.assertIn('preview_hint = QLabel(', alpha_src)
+        self.assertIn('self._alpha_vis_check.setChecked(self._settings.get("alpha_preview_highlight", False))', alpha_src)
+        self.assertIn('self._atlas_detect_check.setChecked(self._settings.get("alpha_preview_detect_atlas", False))', alpha_src)
+        self.assertIn('atlas_chk = QCheckBox("🗺  Detect Atlas", row_w)', alpha_src)
+        self.assertIn("def _apply_alpha_vis_to_widget(self, widget) -> None:", alpha_src)

@@ -43,7 +43,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
-    QComboBox, QGroupBox, QGridLayout,
+    QComboBox, QGroupBox, QGridLayout, QCheckBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QScrollArea,
 )
@@ -325,6 +325,47 @@ def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
     return img.convert("RGBA")
 
 
+def _coerce_export_size(size: tuple[int, int], fmt: str) -> tuple[int, int]:
+    """Clamp export size and round MP4 output up to even dimensions."""
+    width = max(1, int(size[0]))
+    height = max(1, int(size[1]))
+    if fmt == "mp4":
+        if width % 2:
+            width += 1
+        if height % 2:
+            height += 1
+    return width, height
+
+
+def _fit_frame_to_canvas(pil_img, canvas_size: tuple[int, int], fmt: str) -> "PIL.Image.Image":
+    """Resize a frame to fit inside a shared export canvas with letterboxing."""
+    from PIL import Image, ImageOps
+
+    canvas_size = _coerce_export_size(canvas_size, fmt)
+    if pil_img.size == canvas_size and pil_img.mode == "RGBA":
+        return pil_img.copy()
+
+    rgba = pil_img if pil_img.mode == "RGBA" else pil_img.convert("RGBA")
+    fitted = rgba
+    canvas = None
+    try:
+        if rgba.size != canvas_size:
+            fitted = ImageOps.contain(rgba, canvas_size, method=Image.Resampling.LANCZOS)
+        background = (0, 0, 0, 255) if fmt == "mp4" else (0, 0, 0, 0)
+        canvas = Image.new("RGBA", canvas_size, background)
+        offset = (
+            max(0, (canvas_size[0] - fitted.width) // 2),
+            max(0, (canvas_size[1] - fitted.height) // 2),
+        )
+        canvas.paste(fitted, offset, fitted)
+        return canvas
+    finally:
+        if fitted is not rgba:
+            fitted.close()
+        if rgba is not pil_img:
+            rgba.close()
+
+
 class _ImageFrameGetter:
     """Picklable frame getter for a single-image clip.
 
@@ -440,11 +481,13 @@ class _ClipEntry:
     """One video clip or image in the video tool's timeline."""
 
     def __init__(self, path: str, total_frames: int,
-                 get_frame_fn, fps: float = 25.0):
+                 get_frame_fn, fps: float = 25.0,
+                 frame_size: Optional[tuple[int, int]] = None):
         self.path = path
         self.total_frames = total_frames
         self.fps = fps
         self._get_frame = get_frame_fn   # callable(frame_idx) → PIL RGBA image
+        self.frame_size = frame_size
         self.trim_start: int = 0
         self.trim_end: int = max(0, total_frames - 1)
 
@@ -467,7 +510,19 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
         fps, frame_count, first_frame = _probe_video_clip(path)
         if frame_count <= 0:
             return None
-        return _ClipEntry(path, frame_count, _VideoFrameGetter(path, frame_count, first_frame), fps)
+        frame_size = None
+        if first_frame is not None:
+            try:
+                frame_size = (int(first_frame.shape[1]), int(first_frame.shape[0]))
+            except Exception:
+                frame_size = None
+        return _ClipEntry(
+            path,
+            frame_count,
+            _VideoFrameGetter(path, frame_count, first_frame),
+            fps,
+            frame_size=frame_size,
+        )
     except Exception:
         return None
 
@@ -535,10 +590,10 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
                     fps = max(0.1, min(60.0, 1000.0 / avg_duration))
             total_frames = max(1, len(frames))
             getter = _SequenceFrameGetter(frames)
-            return _ClipEntry(path, total_frames, getter, fps)
+            return _ClipEntry(path, total_frames, getter, fps, frame_size=frames[0].size if frames else None)
 
         img = load_image(path)
-        return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0)
+        return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0, frame_size=img.size)
     except Exception:
         return None
 
@@ -692,6 +747,19 @@ class VideoToolDialog(QDialog):
         self._btn_remove.clicked.connect(self._remove_selected)
         tb.addWidget(self._btn_remove)
         left_layout.addLayout(tb)
+
+        insert_row = QHBoxLayout()
+        insert_row.addWidget(QLabel("Insert new clips:"))
+        self._insert_mode_combo = QComboBox()
+        self._insert_mode_combo.addItem("After selected clip", userData="after")
+        self._insert_mode_combo.addItem("Before selected clip", userData="before")
+        self._insert_mode_combo.addItem("At end of timeline", userData="end")
+        self._insert_mode_combo.setToolTip(
+            "Controls where newly added media is inserted when using the Add buttons.\n"
+            "Dropping files onto the timeline still inserts exactly at the drop position."
+        )
+        insert_row.addWidget(self._insert_mode_combo, 1)
+        left_layout.addLayout(insert_row)
 
         hint = QLabel("💡 Drag clips to reorder  •  Drop files to add")
         hint.setStyleSheet("color: gray; font-style: italic; font-size: 11px;")
@@ -901,8 +969,21 @@ class VideoToolDialog(QDialog):
         self._export_fmt_combo.addItem("Animated GIF (.gif)", userData="gif")
         if self._mp4_export_available:
             self._export_fmt_combo.addItem("MP4 Video (.mp4)", userData="mp4")
+        self._export_fmt_combo.currentIndexChanged.connect(self._update_export_summary)
         fmt_row.addWidget(self._export_fmt_combo, 1)
         ex_vl.addLayout(fmt_row)
+
+        self._export_size_lbl = QLabel("Canvas: auto once clips are added")
+        self._export_size_lbl.setWordWrap(True)
+        self._export_size_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        ex_vl.addWidget(self._export_size_lbl)
+
+        self._export_pad_lbl = QLabel(
+            "Mixed-size clips are resized to fit and centred automatically."
+        )
+        self._export_pad_lbl.setWordWrap(True)
+        self._export_pad_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        ex_vl.addWidget(self._export_pad_lbl)
 
         self._btn_export = QPushButton("💾  Export…")
         self._btn_export.setToolTip("Render and export.  Shortcut: Ctrl+S")
@@ -986,7 +1067,12 @@ class VideoToolDialog(QDialog):
 
     def _next_insert_row(self) -> int:
         row = self._clip_list.currentRow()
-        return len(self._clips) if row < 0 else row + 1
+        mode = self._insert_mode_combo.currentData() or "after"
+        if mode == "end" or row < 0:
+            return len(self._clips)
+        if mode == "before":
+            return max(0, row)
+        return row + 1
 
     def _insert_clip(self, clip: "_ClipEntry", label: str, row: Optional[int] = None) -> int:
         insert_row = len(self._clips) if row is None else max(0, min(len(self._clips), row))
@@ -1176,6 +1262,7 @@ class VideoToolDialog(QDialog):
         self._scrubber.setRange(0, total)
         self._scrubber.blockSignals(False)
         self._pos_lbl.setText(f"0 / {self._total_preview_frames()}")
+        self._update_export_summary()
 
     def _global_frame_to_clip(self, global_idx: int):
         idx = global_idx
@@ -1268,18 +1355,18 @@ class VideoToolDialog(QDialog):
 
     def _export(self) -> None:
         clip_snapshot = [
-            (clip.get_frame, clip.active_frames)
+            (clip.get_frame, clip.active_frames, clip.frame_size)
             for clip in self._clips
             if clip.active_frames > 0
         ]
-        total = sum(active_frames for _, active_frames in clip_snapshot)
+        total = sum(active_frames for _, active_frames, _ in clip_snapshot)
         if total == 0:
             QMessageBox.information(self, "No Clips", "Add at least one clip or image first.")
             return
 
         def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:
             idx = global_idx
-            for clip_idx, (_, active_frames) in enumerate(clip_snapshot):
+            for clip_idx, (_, active_frames, _frame_size) in enumerate(clip_snapshot):
                 if idx < active_frames:
                     return clip_idx, idx
                 idx -= active_frames
@@ -1309,6 +1396,10 @@ class VideoToolDialog(QDialog):
 
         fps = max(0.1, float(self._fps_slider.value()))
         filter_key = self._filter_combo.currentData() or "none"
+        canvas_size = self._timeline_canvas_size(fmt)
+        if canvas_size is None:
+            QMessageBox.warning(self, "Export Error", "Could not determine an output size.")
+            return
         if fmt == "mp4" and not self._mp4_export_available:
             QMessageBox.warning(
                 self,
@@ -1354,10 +1445,11 @@ class VideoToolDialog(QDialog):
                     canceled = True
                     break
                 ci, fi = _global_frame_to_snapshot(i)
-                get_frame_fn, _active_frames = clip_snapshot[ci]
+                get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]
                 source_pil = get_frame_fn(fi)
                 adjusted = source_pil
                 filtered = source_pil
+                framed = None
                 rgb = None
                 try:
                     adjusted = _apply_adjustments(
@@ -1370,17 +1462,23 @@ class VideoToolDialog(QDialog):
                         sharpness=sharpness,
                     )
                     filtered = _apply_filter(adjusted, filter_key)
+                    framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)
                     if fmt == "gif":
-                        gif_frames.append(filtered.copy())
+                        gif_frames.append(framed.copy())
                     else:
-                        rgb = filtered if filtered.mode == "RGB" else filtered.convert("RGB")
+                        rgb = framed if framed.mode == "RGB" else framed.convert("RGB")
                         try:
                             writer.append_data(np.array(rgb))
                         finally:
-                            if rgb is not None and rgb is not filtered:
+                            if rgb is not None and rgb is not framed:
                                 rgb.close()
                     wrote_frames = True
                 finally:
+                    if framed is not None and framed is not filtered:
+                        try:
+                            framed.close()
+                        except Exception:
+                            pass
                     if filtered is not adjusted:
                         try:
                             filtered.close()
@@ -1467,6 +1565,55 @@ class VideoToolDialog(QDialog):
         self._filter_combo.setCurrentIndex(0)
         self._filter_combo.blockSignals(False)
         self._update_preview()
+
+    def _clip_canvas_size(self, clip: "_ClipEntry") -> Optional[tuple[int, int]]:
+        if clip.frame_size and clip.frame_size[0] > 0 and clip.frame_size[1] > 0:
+            return clip.frame_size
+        probe = None
+        try:
+            probe = clip.get_frame(0)
+            clip.frame_size = probe.size
+            return clip.frame_size
+        except Exception:
+            return None
+        finally:
+            if probe is not None:
+                try:
+                    probe.close()
+                except Exception:
+                    pass
+
+    def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:
+        active = [clip for clip in self._clips if clip.active_frames > 0]
+        if not active:
+            return None
+        sizes = [self._clip_canvas_size(clip) for clip in active]
+        sizes = [size for size in sizes if size is not None]
+        if not sizes:
+            return None
+        width = max(size[0] for size in sizes)
+        height = max(size[1] for size in sizes)
+        export_fmt = fmt or (self._export_fmt_combo.currentData() or "gif")
+        return _coerce_export_size((width, height), export_fmt)
+
+    def _update_export_summary(self) -> None:
+        canvas_size = self._timeline_canvas_size()
+        if canvas_size is None:
+            self._export_size_lbl.setText("Canvas: auto once clips are added")
+            self._export_pad_lbl.setText("Mixed-size clips are resized to fit and centred automatically.")
+            return
+        natural_sizes = [self._clip_canvas_size(clip) for clip in self._clips if clip.active_frames > 0]
+        natural_sizes = [size for size in natural_sizes if size is not None]
+        natural_width = max(size[0] for size in natural_sizes)
+        natural_height = max(size[1] for size in natural_sizes)
+        if canvas_size == (natural_width, natural_height):
+            detail = "Canvas: auto from the largest clip"
+        else:
+            detail = "Canvas: auto from the largest clip (rounded for MP4 compatibility)"
+        self._export_size_lbl.setText(f"{detail}: {canvas_size[0]} × {canvas_size[1]}")
+        self._export_pad_lbl.setText(
+            "Mixed-size clips are scaled to fit this canvas and letterboxed automatically."
+        )
 
     def closeEvent(self, event) -> None:
         self._preview_timer.stop()

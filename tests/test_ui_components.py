@@ -1528,6 +1528,35 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(frame_count, 12)
         self.assertIsNone(first_frame)
 
+    def test_mp4_export_size_rounds_up_to_even_dimensions(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(vt._coerce_export_size((641, 479), "mp4"), (642, 480))
+        self.assertEqual(vt._coerce_export_size((641, 479), "gif"), (641, 479))
+
+    def test_mixed_size_frames_are_letterboxed_to_shared_canvas(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        src = Image.new("RGBA", (200, 100), (255, 0, 0, 255))
+        try:
+            framed = vt._fit_frame_to_canvas(src, (400, 400), "gif")
+            try:
+                self.assertEqual(framed.size, (400, 400))
+                self.assertEqual(framed.getpixel((200, 200)), (255, 0, 0, 255))
+                self.assertEqual(framed.getpixel((20, 20))[3], 0)
+            finally:
+                framed.close()
+        finally:
+            src.close()
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

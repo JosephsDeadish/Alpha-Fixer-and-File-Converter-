@@ -474,6 +474,12 @@ class AlphaFixerTab(QWidget):
             "Works with or independently of 'Highlight Alpha Values'."
         )
         ca_layout.addWidget(self._atlas_detect_check)
+        preview_hint = QLabel(
+            "Preview helpers only change the viewer, not the processed file."
+        )
+        preview_hint.setStyleSheet("color: gray; font-size: 11px;")
+        preview_hint.setWordWrap(True)
+        ca_layout.addWidget(preview_hint)
         # Atlas region list for overlay drawing (updated when atlas detect is on)
         self._atlas_cells: list[tuple[int, int, int, int]] = []
 
@@ -808,6 +814,12 @@ class AlphaFixerTab(QWidget):
         self._alpha_vis_check.toggled.connect(self._on_alpha_vis_toggled)
         # Atlas detection toggle → re-detect atlas and update overlay (item 11)
         self._atlas_detect_check.toggled.connect(self._on_atlas_detect_toggled)
+        self._alpha_vis_check.toggled.connect(
+            lambda checked: self._settings.set("alpha_preview_highlight", checked)
+        )
+        self._atlas_detect_check.toggled.connect(
+            lambda checked: self._settings.set("alpha_preview_detect_atlas", checked)
+        )
         # Pop-out button: include the Highlight Alpha Values checkbox in the
         # floating window so users can toggle the overlay there too.
         self._compare.popout_requested.connect(self._on_compare_popout)
@@ -818,6 +830,8 @@ class AlphaFixerTab(QWidget):
         self._suffix_edit.textChanged.connect(
             lambda t: self._settings.set("output_suffix", t)
         )
+        self._alpha_vis_check.setChecked(self._settings.get("alpha_preview_highlight", False))
+        self._atlas_detect_check.setChecked(self._settings.get("alpha_preview_detect_atlas", False))
         # Initialise the live params label
         self._refresh_finetune_label()
 
@@ -1305,7 +1319,7 @@ class AlphaFixerTab(QWidget):
         dlg.finished.connect(self._on_compare_docked_back)
 
         from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QPushButton as _QPB, QWidget as _QW
-        # Top row: Highlight checkbox + Dock Back button
+        # Top row: preview helper checkboxes + Dock Back button
         row_w = _QW(dlg)
         row = QHBoxLayout(row_w)
         row.setContentsMargins(4, 4, 4, 4)
@@ -1313,6 +1327,10 @@ class AlphaFixerTab(QWidget):
         chk.setChecked(self._alpha_vis_check.isChecked())
         chk.setToolTip(self._alpha_vis_check.toolTip())
         row.addWidget(chk)
+        atlas_chk = QCheckBox("🗺  Detect Atlas", row_w)
+        atlas_chk.setChecked(self._atlas_detect_check.isChecked())
+        atlas_chk.setToolTip(self._atlas_detect_check.toolTip())
+        row.addWidget(atlas_chk)
         row.addStretch(1)
         # Redock button inside the dialog so users can re-dock from within it.
         # Styled as a transparent overlay to match the pop-out button (item 16).
@@ -1351,18 +1369,26 @@ class AlphaFixerTab(QWidget):
         def _toggle(checked: bool) -> None:
             # Keep the main checkbox in sync.
             self._alpha_vis_check.setChecked(checked)
-            if pop_compare is None or not pop_compare.has_images():
-                return
-            if checked:
-                pop_compare.set_before(self._alpha_vis_overlay(pop_compare.before_image()))
-                pop_compare.set_after(self._alpha_vis_overlay(pop_compare.after_image()))
-            else:
-                pop_compare.set_before(pop_compare.before_image())
-                pop_compare.set_after(pop_compare.after_image())
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        def _toggle_atlas(checked: bool) -> None:
+            self._atlas_detect_check.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
 
         chk.toggled.connect(_toggle)
+        atlas_chk.toggled.connect(_toggle_atlas)
         # Also keep pop-out in sync when main checkbox changes.
         self._alpha_vis_check.toggled.connect(lambda v: chk.setChecked(v))
+        self._atlas_detect_check.toggled.connect(lambda v: atlas_chk.setChecked(v))
+        if pop_compare is not None:
+            self._alpha_vis_check.toggled.connect(
+                lambda _v: pop_compare.has_images() and self._apply_alpha_vis_to_widget(pop_compare)
+            )
+            self._atlas_detect_check.toggled.connect(
+                lambda _v: pop_compare.has_images() and self._apply_alpha_vis_to_widget(pop_compare)
+            )
 
     def _on_compare_docked_back(self) -> None:
         """Restore the embedded compare area after the floating dialog is closed."""
@@ -1388,8 +1414,11 @@ class AlphaFixerTab(QWidget):
 
     def _apply_alpha_vis_to_compare(self) -> None:
         """Apply the alpha heat-map overlay and/or atlas overlay to the current compare images."""
-        before_raw = self._compare.before_image()
-        after_raw = self._compare.after_image()
+        self._apply_alpha_vis_to_widget(self._compare)
+
+    def _apply_alpha_vis_to_widget(self, widget) -> None:
+        before_raw = widget.before_image()
+        after_raw = widget.after_image()
         if before_raw is None or after_raw is None:
             return
         if self._alpha_vis_check.isChecked():
@@ -1402,8 +1431,8 @@ class AlphaFixerTab(QWidget):
         if self._atlas_detect_check.isChecked() and self._atlas_cells:
             before_img = self._draw_atlas_overlay(before_img)
             after_img = self._draw_atlas_overlay(after_img)
-        self._compare.set_before(before_img)
-        self._compare.set_after(after_img)
+        widget.set_before(before_img)
+        widget.set_after(after_img)
 
     def _draw_atlas_overlay(self, img: "QImage") -> "QImage":
         """Draw colored bounding boxes for detected atlas cells onto *img* (item 11)."""

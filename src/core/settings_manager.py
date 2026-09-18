@@ -268,6 +268,9 @@ class SettingsManager:
         "hold_effects_enabled": False,
         "hold_effects_key": "bubble",    # "bubble" | "blood" | "shake"
         "use_theme_hold_effects": False,
+        # Alpha preview helpers
+        "alpha_preview_highlight": False,
+        "alpha_preview_detect_atlas": False,
     }
 
     def __init__(self):
