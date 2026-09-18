@@ -10,7 +10,8 @@ import webbrowser
 from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPixmap, QPainter, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
 from PyQt6.QtWidgets import (
-    QMainWindow, QTabWidget, QStatusBar, QMenu,
+    QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox,
+    QComboBox, QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
     QMessageBox, QFileDialog,
 )
@@ -2341,6 +2342,25 @@ class MainWindow(QMainWindow):
                 new_ss += f"\nQGroupBox {{ padding: {_pp}px; }}"
             except Exception:
                 pass
+            if bool(self._settings.get("custom_bg_enabled", False)) and not bool(self._settings.get("use_theme_bg", False)):
+                new_ss += (
+                    '\nQWidget[customBgTransparent="true"],'
+                    '\nQLabel[customBgTransparent="true"],'
+                    '\nQAbstractScrollArea[customBgTransparent="true"],'
+                    '\nQAbstractScrollArea[customBgTransparent="true"] > QWidget,'
+                    '\nQAbstractItemView[customBgTransparent="true"],'
+                    '\nQAbstractItemView[customBgTransparent="true"] > QWidget {'
+                    '\n    background: transparent;'
+                    '\n    background-color: transparent;'
+                    '\n    border-image: none;'
+                    '\n}'
+                    '\nQTabWidget[customBgTransparent="true"],'
+                    '\nQTabWidget[customBgTransparent="true"]::pane,'
+                    '\nQTabBar[customBgTransparent="true"] {'
+                    '\n    background: transparent;'
+                    '\n    background-color: transparent;'
+                    '\n}'
+                )
             if new_ss != self._last_stylesheet:
                 app.setStyleSheet(new_ss)
                 self._last_stylesheet = new_ss
@@ -2544,25 +2564,47 @@ class MainWindow(QMainWindow):
 
         return set(_VIDEO_EXTS)
 
-    def _set_background_host_transparency(self, enabled: bool) -> None:
-        style = "background: transparent;"
-        for widget in self._bg_host_widgets:
+    def _background_transparency_targets(self) -> list[QWidget]:
+        """Return container widgets that should go transparent for media backgrounds."""
+        targets: list[QWidget] = []
+        seen: set[int] = set()
+
+        def _track(widget: QWidget | None) -> None:
             if widget is None:
+                return
+            ident = id(widget)
+            if ident in seen:
+                return
+            seen.add(ident)
+            targets.append(widget)
+
+        def _should_skip(widget: QWidget) -> bool:
+            return isinstance(widget, (QAbstractButton, QComboBox, QAbstractSpinBox))
+
+        for root in self._bg_host_widgets:
+            if root is None:
                 continue
-            try:
-                widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-                widget.setStyleSheet(style if enabled else "")
-            except Exception:
-                pass
+            if not _should_skip(root):
+                _track(root)
+            for child in root.findChildren(QWidget):
+                if _should_skip(child):
+                    continue
+                _track(child)
+                if isinstance(child, (QAbstractScrollArea, QAbstractItemView)):
+                    _track(child.viewport())
         if self._bg_tabs is not None:
+            _track(self._bg_tabs)
+            _track(self._bg_tabs.tabBar())
+        return targets
+
+    def _set_background_host_transparency(self, enabled: bool) -> None:
+        for widget in self._background_transparency_targets():
             try:
-                self._bg_tabs.setStyleSheet(
-                    (
-                        "QTabWidget { background: transparent; }"
-                        "QTabWidget::pane { background: transparent; }"
-                        "QTabBar { background: transparent; }"
-                    ) if enabled else ""
-                )
+                widget.setProperty("customBgTransparent", enabled)
+                widget.setAutoFillBackground(not enabled)
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.update()
             except Exception:
                 pass
 

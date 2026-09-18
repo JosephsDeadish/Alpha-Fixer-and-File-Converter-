@@ -281,6 +281,20 @@ class DropFileList(QListWidget):
                 "Drop files or folders here\nor use the Add Files button",
             )
             painter.end()
+            return
+        summary = self._thumbnail_failure_summary()
+        if summary:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            hint_rect = self.viewport().rect().adjusted(10, 0, -10, -8)
+            painter.setFont(QFont(painter.font().family(), 9))
+            painter.setPen(QColor(255, 214, 102, 215))
+            painter.drawText(
+                hint_rect,
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+                summary,
+            )
+            painter.end()
 
     # ------------------------------------------------------------------
     # Thumbnail helpers
@@ -378,11 +392,19 @@ class DropFileList(QListWidget):
         if not path or path in self._reported_thumb_failures:
             return
         self._reported_thumb_failures.add(path)
+        self.viewport().update()
         logger.warning("Thumbnail skipped for %s: %s", path, reason)
         try:
             self.thumbnail_failed.emit(path, reason)
         except RuntimeError:
             pass
+
+    def _thumbnail_failure_summary(self) -> str:
+        count = len(self._reported_thumb_failures)
+        if count <= 0:
+            return ""
+        noun = "thumbnail" if count == 1 else "thumbnails"
+        return f"⚠ {count} {noun} unavailable — files still work."
 
     # ------------------------------------------------------------------
     # Public batch-add helper (avoids UI freeze for large imports)
@@ -544,6 +566,7 @@ class DropFileList(QListWidget):
             self._thumb_cache.clear()
             self._pending.clear()
             self._reported_thumb_failures.clear()
+            self.viewport().update()
 
     # ------------------------------------------------------------------
     # Remove helpers (can also be called externally)
@@ -585,6 +608,7 @@ class DropFileList(QListWidget):
             self._pending.discard(path)
             self._reported_thumb_failures.discard(path)
             self.takeItem(self.row(item))
+        self.viewport().update()
         self.count_changed.emit(self.count())
         self.file_removed.emit()
 
@@ -601,6 +625,7 @@ class DropFileList(QListWidget):
         self._cancel_event.set()
         self._cancel_event = threading.Event()
         super().clear()
+        self.viewport().update()
         self.count_changed.emit(0)
         self.list_cleared.emit()
 
@@ -616,4 +641,5 @@ class DropFileList(QListWidget):
         self._cancel_event.set()
         self._cancel_event = threading.Event()
         super().clear()
+        self.viewport().update()
         self.count_changed.emit(0)

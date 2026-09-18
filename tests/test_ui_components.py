@@ -164,6 +164,19 @@ class TestDropFileList(unittest.TestCase):
         self._widget._on_thumb_failed("/tmp/bad.png", "decode failed again")
         self.assertEqual(received, [("/tmp/bad.png", "decode failed")])
 
+    def test_thumbnail_failure_summary_tracks_unique_paths(self):
+        self.assertEqual(self._widget._thumbnail_failure_summary(), "")
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_failure_summary(),
+            "⚠ 1 thumbnail unavailable — files still work.",
+        )
+        self._widget._on_thumb_failed("/tmp/b.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_failure_summary(),
+            "⚠ 2 thumbnails unavailable — files still work.",
+        )
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys

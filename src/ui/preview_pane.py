@@ -187,21 +187,25 @@ class _ThumbLoader(QThread):
 
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
+            if self._abort:
+                return
 
             meta_text = (
                 f"{Path(self._path).name}\n"
                 f"{width} × {height}  ·  {mode}{alpha_note}\n"
                 f"{_fmt_size(file_size)}{meta_note}"
             )
-            try:
-                self.loaded.emit(qimg, meta_text)
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.loaded.emit(qimg, meta_text)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            try:
-                self.failed.emit(str(exc))
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.failed.emit(str(exc))
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
@@ -290,15 +294,18 @@ class _ConvertedThumbLoader(QThread):
                 qimg = _pil_to_qimage(img)
                 img.close()
                 img = None
+                if self._abort:
+                    return
                 meta = (
                     f"{Path(self._path).name}\n"
                     f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                     f"Preview as {fmt}  (source shown)"
                 )
-                try:
-                    self.loaded.emit(qimg, meta)
-                except RuntimeError:
-                    pass  # receiver destroyed; nothing to do
+                if not self._abort:
+                    try:
+                        self.loaded.emit(qimg, meta)
+                    except RuntimeError:
+                        pass  # receiver destroyed; nothing to do
                 return
 
             if save_img is not img:
@@ -308,6 +315,8 @@ class _ConvertedThumbLoader(QThread):
             preview_img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(preview_img)
             preview_img.close()
+            if self._abort:
+                return
 
             quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
             meta = (
@@ -315,15 +324,17 @@ class _ConvertedThumbLoader(QThread):
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                 f"Preview as {fmt}{quality_note}  ·  ~{_fmt_size(converted_size)}"
             )
-            try:
-                self.loaded.emit(qimg, meta)
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.loaded.emit(qimg, meta)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            try:
-                self.failed.emit(str(exc))
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.failed.emit(str(exc))
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
@@ -1128,6 +1139,7 @@ class ImagePreviewPane(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._loader: _ThumbLoader | None = None
+        self._load_request_id: int = 0
         # Full-resolution pixmap received from the loader thread.  Stored so
         # it can be re-scaled to whatever size the pane has at any given time.
         self._current_pix: QPixmap | None = None
@@ -1228,6 +1240,8 @@ class ImagePreviewPane(QWidget):
 
     def _start_loader(self, loader):
         """Disconnect and stop any stale loader, then start *loader*."""
+        self._load_request_id += 1
+        request_id = self._load_request_id
         if self._loader is not None:
             self._loader.stop()
             try:
@@ -1237,11 +1251,24 @@ class ImagePreviewPane(QWidget):
                 pass  # already disconnected
         self._meta_label.setText("Loading…")
         self._loader = loader
-        self._loader.loaded.connect(self._on_loaded)
-        self._loader.failed.connect(self._on_failed)
+        self._loader.loaded.connect(
+            lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)
+        )
+        self._loader.failed.connect(
+            lambda err, request_id=request_id: self._on_failed(request_id, err)
+        )
         self._loader.start()
 
     def clear(self):
+        self._load_request_id += 1
+        if self._loader is not None:
+            self._loader.stop()
+            try:
+                self._loader.loaded.disconnect()
+                self._loader.failed.disconnect()
+            except RuntimeError:
+                pass
+            self._loader = None
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText("Select a file to preview")
@@ -1250,7 +1277,9 @@ class ImagePreviewPane(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_loaded(self, qimg: QImage, meta: str):
+    def _on_loaded(self, request_id: int, qimg: QImage, meta: str):
+        if request_id != self._load_request_id:
+            return
         # Store the full pixmap so _update_display_pix can re-scale it any
         # time the pane changes size (e.g., window resize or splitter drag).
         self._current_pix = QPixmap.fromImage(qimg)
@@ -1272,7 +1301,9 @@ class ImagePreviewPane(QWidget):
             self._update_display_pix()
         self._meta_label.setText(meta)
 
-    def _on_failed(self, err: str):
+    def _on_failed(self, request_id: int, err: str):
+        if request_id != self._load_request_id:
+            return
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText(f"Preview unavailable\n{err[:80]}")

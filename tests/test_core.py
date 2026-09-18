@@ -9101,6 +9101,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _set_background_host_transparency(self, enabled: bool) -> None:", main_src)
         self.assertIn("self._set_background_host_transparency(True)", main_src)
         self.assertIn("self._set_background_host_transparency(False)", main_src)
+        self.assertIn('customBgTransparent', main_src)
+        self.assertIn("def _background_transparency_targets(self) -> list[QWidget]:", main_src)
         self.assertIn("self._bg_overlay.stackUnder(central)", main_src)
         self.assertIn("self._bg_overlay.clear()", main_src)
         self.assertIn("def _start_video_background(self, path: str) -> None:", main_src)
@@ -9122,6 +9124,19 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self.setUpdatesEnabled(False)", src)
         self.assertIn("self.setUpdatesEnabled(True)", src)
         self.assertIn("self.viewport().update()", src)
+
+    def test_preview_pane_ignores_stale_loader_results(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("self._load_request_id: int = 0", src)
+        self.assertIn("if request_id != self._load_request_id:", src)
+        self.assertIn("self._loader.loaded.connect(", src)
+        self.assertIn("lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)", src)
+        self.assertIn("lambda err, request_id=request_id: self._on_failed(request_id, err)", src)
+
+    def test_drop_list_surfaces_thumbnail_failure_summary(self):
+        src = self._src("ui/drop_list.py")
+        self.assertIn("def _thumbnail_failure_summary(self) -> str:", src)
+        self.assertIn("⚠ {count} {noun} unavailable — files still work.", src)
 
     def test_preview_pane_clamps_pan_to_scaled_pixmap_bounds(self):
         src = self._src("ui/preview_pane.py")
