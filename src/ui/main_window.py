@@ -1018,6 +1018,8 @@ class MainWindow(QMainWindow):
         self._bg_video_reader = None
         self._bg_video_path: str = ""
         self._bg_video_timer: "QTimer | None" = None
+        self._bg_host_widgets: list[QWidget] = []
+        self._bg_tabs: "QTabWidget | None" = None
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -1161,6 +1163,7 @@ class MainWindow(QMainWindow):
 
         # Central widget with tabs
         central = QWidget()
+        self._bg_host_widgets = [central]
         cv = QVBoxLayout(central)
         cv.setContentsMargins(0, 0, 0, 0)
         cv.setSpacing(0)
@@ -1169,6 +1172,7 @@ class MainWindow(QMainWindow):
         # The emoji rotates continuously (like a turning gear) using _SpinningEmojiLabel.
         # The emoji changes to reflect the active theme without cycling between emojis.
         banner_container = QWidget()
+        self._bg_host_widgets.append(banner_container)
         banner_container.setObjectName("header")
         banner_layout = QHBoxLayout(banner_container)
         banner_layout.setContentsMargins(8, 6, 8, 6)
@@ -1191,6 +1195,7 @@ class MainWindow(QMainWindow):
         self._banner_lbl = banner_text  # kept for theme update compatibility
 
         self._tabs = QTabWidget()
+        self._bg_tabs = self._tabs
         # Item 43: Never show scroll arrows — tabs must always be visible.
         # setExpanding(True) shares the tab bar width equally across all tabs,
         # so they shrink rather than scroll when the window is narrow.
@@ -1203,6 +1208,13 @@ class MainWindow(QMainWindow):
         self._converter_tab = ConverterTab(self._settings)
         self._history_tab = HistoryTab(self._settings)
         self._selective_alpha_tab = SelectiveAlphaTool(self._settings)
+        self._bg_host_widgets.extend([
+            self._tabs,
+            self._alpha_tab,
+            self._converter_tab,
+            self._history_tab,
+            self._selective_alpha_tab,
+        ])
         self._register_shortcut_provider(self._alpha_tab)
         self._register_shortcut_provider(self._converter_tab)
         self._register_shortcut_provider(self._selective_alpha_tab)
@@ -1221,6 +1233,7 @@ class MainWindow(QMainWindow):
         # Corner widget: Settings / Help / Patreon buttons on the right of the tab bar.
         # This puts all tool controls in one row, freeing vertical space for content.
         corner = QWidget()
+        self._bg_host_widgets.append(corner)
         corner_layout = QHBoxLayout(corner)
         corner_layout.setContentsMargins(2, 2, 6, 2)
         corner_layout.setSpacing(4)
@@ -2454,15 +2467,18 @@ class MainWindow(QMainWindow):
 
         if not enabled or use_theme or not path:
             self._stop_custom_background_media()
+            self._set_background_host_transparency(False)
             self._bg_overlay.setVisible(False)
             return
 
         if not os.path.isfile(path):
             self._stop_custom_background_media()
+            self._set_background_host_transparency(False)
             self._bg_overlay.setVisible(False)
             return
 
         self._bg_overlay.setGeometry(self.rect())
+        self._set_background_host_transparency(True)
         ext = os.path.splitext(path)[1].lower()
 
         if ext == ".gif":
@@ -2498,7 +2514,7 @@ class MainWindow(QMainWindow):
                 self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
 
         self._bg_overlay.setVisible(True)
-        self._bg_overlay.lower()
+        self._restack_background_overlay()
 
     def resizeEvent(self, event: "QResizeEvent") -> None:  # noqa: N802
         """Keep the background overlay and effect overlays in sync with window size."""
@@ -2528,6 +2544,39 @@ class MainWindow(QMainWindow):
 
         return set(_VIDEO_EXTS)
 
+    def _set_background_host_transparency(self, enabled: bool) -> None:
+        style = "background: transparent;"
+        for widget in self._bg_host_widgets:
+            if widget is None:
+                continue
+            try:
+                widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+                widget.setStyleSheet(style if enabled else "")
+            except Exception:
+                pass
+        if self._bg_tabs is not None:
+            try:
+                self._bg_tabs.setStyleSheet(
+                    (
+                        "QTabWidget { background: transparent; }"
+                        "QTabWidget::pane { background: transparent; }"
+                        "QTabBar { background: transparent; }"
+                    ) if enabled else ""
+                )
+            except Exception:
+                pass
+
+    def _restack_background_overlay(self) -> None:
+        if self._bg_overlay is None:
+            return
+        try:
+            self._bg_overlay.lower()
+            central = self.centralWidget()
+            if central is not None:
+                self._bg_overlay.stackUnder(central)
+        except Exception:
+            pass
+
     def _stop_custom_background_media(self, *, stop_movie: bool = True) -> None:
         if self._bg_video_timer is not None:
             self._bg_video_timer.stop()
@@ -2544,6 +2593,12 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             self._bg_movie = None
+        if self._bg_overlay is not None:
+            try:
+                self._bg_overlay.clear()
+                self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+            except Exception:
+                pass
 
     def _start_video_background(self, path: str) -> None:
         from .video_tool import _open_video_reader
@@ -2600,7 +2655,7 @@ class MainWindow(QMainWindow):
             return
         self._bg_overlay.setPixmap(pixmap)
         self._bg_overlay.setVisible(True)
-        self._bg_overlay.lower()
+        self._restack_background_overlay()
 
     def _background_frame_to_pixmap(self, frame) -> QPixmap:
         try:
