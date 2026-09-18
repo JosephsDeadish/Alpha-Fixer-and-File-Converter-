@@ -102,7 +102,7 @@ _TUTORIAL_STEPS = [
             "still images or GIFs into a single export.\n\n"
             "• Add source clips, split a moving clip at the playhead, and insert media between the halves.\n"
             "• Adjust per-clip speed for videos/GIFs or how long still images stay on screen.\n"
-            "• MP4 export can keep source audio from video clips, mute it, or change the output volume.\n"
+            "• MP4 export can keep source audio from video clips, mute it, or change the output volume. Preview playback stays silent.\n"
             "• Set the export format (MP4 or GIF) and frame rate.\n"
             "• Click <b>Export</b> to render the output.\n\n"
             "Note: Video import and MP4 export need imageio, imageio-ffmpeg, and "

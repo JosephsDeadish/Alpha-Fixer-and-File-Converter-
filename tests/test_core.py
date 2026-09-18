@@ -9075,7 +9075,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._btn_split = QPushButton("✂  Split at Playhead")', src)
         self.assertIn('self._clip_speed_slider = _make_hslider(10, 400, 100)', src)
         self.assertIn('self._still_duration_spin.setRange(1, 3600)', src)
-        self.assertIn('grp_audio = QGroupBox("Audio (MP4)")', src)
+        self.assertIn('self._audio_group = QGroupBox("Audio (MP4 export only)")', src)
         self.assertIn('self._export_size_lbl = QLabel("Canvas: auto once clips are added")', src)
         self.assertIn("def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:", src)
         self.assertIn("def _active_clip_canvas_sizes(self) -> list[tuple[int, int]]:", src)
@@ -9098,6 +9098,15 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertEqual(src.count("def _update_ui_state(self) -> None:"), 1)
         self.assertEqual(src.count("def _update_timeline_summary(self) -> None:"), 1)
         self.assertEqual(src.count("def _format_clip_info_text(self, clip: \"_ClipEntry\") -> str:"), 1)
+
+    def test_video_audio_controls_only_enable_when_mp4_has_real_audio(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('self._audio_group.setVisible(self._mp4_export_available and is_mp4)', src)
+        self.assertIn("allow_audio_source_controls = allow_audio_controls and has_audio_source", src)
+        self.assertIn("self._audio_enable_check.setEnabled(allow_audio_source_controls)", src)
+        self.assertIn("audio_enabled = allow_audio_source_controls and self._audio_enable_check.isChecked()", src)
+        self.assertIn("No source audio stream was detected in the current video clips, so volume and mute controls stay disabled.", src)
+        self.assertIn("These controls only affect exported MP4 audio. Preview playback stays silent.", src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
@@ -9241,6 +9250,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("split a moving clip at the playhead", src)
         self.assertIn("Adjust per-clip speed for videos/GIFs", src)
         self.assertIn("keep source audio from video clips", src)
+        self.assertIn("Preview playback stays silent.", src)
 
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
         src = self._src("ui/theme_engine.py")

@@ -1160,9 +1160,16 @@ class VideoToolDialog(QDialog):
         self._export_pad_lbl.setStyleSheet("color: gray; font-size: 11px;")
         ex_vl.addWidget(self._export_pad_lbl)
 
-        grp_audio = QGroupBox("Audio (MP4)")
-        audio_vl = QVBoxLayout(grp_audio)
+        self._audio_group = QGroupBox("Audio (MP4 export only)")
+        audio_vl = QVBoxLayout(self._audio_group)
         audio_vl.setSpacing(6)
+
+        self._audio_scope_lbl = QLabel(
+            "These controls only affect exported MP4 audio. Preview playback stays silent."
+        )
+        self._audio_scope_lbl.setWordWrap(True)
+        self._audio_scope_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        audio_vl.addWidget(self._audio_scope_lbl)
 
         self._audio_enable_check = QCheckBox("Keep source audio in MP4 export")
         self._audio_enable_check.setChecked(True)
@@ -1200,7 +1207,7 @@ class VideoToolDialog(QDialog):
         self._audio_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
         audio_vl.addWidget(self._audio_hint_lbl)
 
-        ex_vl.addWidget(grp_audio)
+        ex_vl.addWidget(self._audio_group)
 
         self._btn_export = QPushButton("💾  Export…")
         self._btn_export.setToolTip("Render and export.  Shortcut: Ctrl+S")
@@ -1603,9 +1610,13 @@ class VideoToolDialog(QDialog):
         has_video_clips = self._timeline_has_video_clips()
         has_audio_source = has_video_clips and self._timeline_has_detected_audio()
         allow_audio_controls = is_mp4 and self._mp4_export_available and has_video_clips
+        allow_audio_source_controls = allow_audio_controls and has_audio_source
 
-        self._audio_enable_check.setEnabled(allow_audio_controls)
-        audio_enabled = allow_audio_controls and self._audio_enable_check.isChecked()
+        if hasattr(self, "_audio_group"):
+            self._audio_group.setVisible(self._mp4_export_available and is_mp4)
+
+        self._audio_enable_check.setEnabled(allow_audio_source_controls)
+        audio_enabled = allow_audio_source_controls and self._audio_enable_check.isChecked()
         self._audio_mute_check.setEnabled(audio_enabled)
         volume_enabled = audio_enabled and not self._audio_mute_check.isChecked()
         self._audio_volume_slider.setEnabled(volume_enabled)
@@ -1613,17 +1624,19 @@ class VideoToolDialog(QDialog):
 
         if not is_mp4:
             hint = "GIF export is always silent."
+        elif not self._mp4_export_available:
+            hint = "MP4 export audio controls are unavailable until the video backend is installed and working."
         elif not has_video_clips:
             hint = "Audio controls only apply when the timeline contains at least one video clip."
         elif not has_audio_source:
-            hint = "No source audio stream was detected in the current video clips, so the MP4 export will stay silent."
+            hint = "No source audio stream was detected in the current video clips, so volume and mute controls stay disabled."
         elif not self._audio_enable_check.isChecked():
             hint = "MP4 export will stay silent until source audio is enabled."
         elif self._audio_mute_check.isChecked() or self._audio_volume_slider.value() <= 0:
             hint = "MP4 export will render without sound because audio is muted."
         else:
             hint = (
-                "Source audio is trimmed and time-matched per video clip. "
+                "Source audio is trimmed, time-matched, and volume-adjusted per video clip. "
                 "Still-image and GIF sections are filled with silence."
             )
         self._audio_hint_lbl.setText(hint)
