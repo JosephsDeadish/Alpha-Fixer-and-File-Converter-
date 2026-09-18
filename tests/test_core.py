@@ -2644,7 +2644,7 @@ class TestRound3Hardening(unittest.TestCase):
 
     def test_drop_list_bulk_insert_keeps_user_input_events_enabled(self):
         src = self._drop_list_source()
-        self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
+        self.assertIn("QApplication.processEvents()", src)
         self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
 
     def test_thumb_runnable_cancel_prevents_emit(self):
@@ -8898,7 +8898,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("with self._lock:", src)
         self.assertIn("if filtered is not adjusted:", src)
         self.assertIn("adjusted.close()", src)
-        self.assertIn('source_pil = clip_snapshot[ci]["get_frame"](fi)', src)
+        self.assertIn('source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)', src)
         self.assertNotIn("size=canvas_size", src)
 
     def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
@@ -9027,8 +9027,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_drop_list_keeps_stop_button_clickable_during_bulk_add(self):
         src = self._src("ui/drop_list.py")
-        self.assertIn("QApplication.processEvents(", src)
-        self.assertIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
+        self.assertIn("QApplication.processEvents()", src)
+        self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
         self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
         self.assertIn("self.setUpdatesEnabled(False)", src)
         self.assertIn("self.setUpdatesEnabled(True)", src)
@@ -9045,12 +9045,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn("clip_snapshot = [", src)
         self.assertIn("def _snapshot_clip_render_state(self, clip: \"_ClipEntry\", output_fps: float) -> dict[str, object]:", src)
-        self.assertIn('clip_type == "video" and _video_has_audio_stream(clip.path)', src)
+        self.assertIn('"has_audio": clip_type == "video" and clip.has_audio,', src)
         self.assertIn('"timeline_seconds": timeline_seconds,', src)
         self.assertIn('total = sum(int(clip["active_frames"]) for clip in clip_snapshot)', src)
         self.assertIn("def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:", src)
         self.assertIn("canvas_size = self._timeline_canvas_size(fmt)", src)
-        self.assertIn('source_pil = clip_snapshot[ci]["get_frame"](fi)', src)
+        self.assertIn('source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)', src)
+        self.assertIn('def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):', src)
+        self.assertIn('"frame_getter": clip._get_frame,', src)
         self.assertIn("framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)", src)
         self.assertIn('pixelformat="yuv420p"', src)
 
@@ -9200,6 +9202,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn("new_clip.trim_start = max(0, min(clip.trim_start, new_clip.total_frames - 1))", src)
         self.assertIn("new_clip.trim_end = max(new_clip.trim_start, min(clip.trim_end, new_clip.total_frames - 1))", src)
+
+    def test_video_editor_caches_audio_stream_presence_per_clip(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("has_audio: bool = False", src)
+        self.assertIn("self.has_audio = has_audio", src)
+        self.assertIn("has_audio=_video_has_audio_stream(path)", src)
+        self.assertIn("and clip.has_audio", src)
+        self.assertIn('"has_audio": clip_type == "video" and clip.has_audio,', src)
 
     def test_button_anim_settings_use_explicit_fallbacks(self):
         src = self._src("ui/main_window.py")

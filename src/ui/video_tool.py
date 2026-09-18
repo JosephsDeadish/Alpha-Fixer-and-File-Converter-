@@ -549,13 +549,15 @@ class _ClipEntry:
     def __init__(self, path: str, total_frames: int,
                  get_frame_fn, fps: float = 25.0,
                  frame_size: Optional[tuple[int, int]] = None,
-                 clip_type: str = "video"):
+                 clip_type: str = "video",
+                 has_audio: bool = False):
         self.path = path
         self.total_frames = total_frames
         self.fps = fps
         self._get_frame = get_frame_fn   # callable(frame_idx) → PIL RGBA image
         self.frame_size = frame_size
         self.clip_type = clip_type
+        self.has_audio = has_audio
         self.speed_percent: int = 100
         self.still_duration_frames: int = 25 if clip_type == "image" else 1
         self.trim_start: int = 0
@@ -629,6 +631,7 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
             fps,
             frame_size=frame_size,
             clip_type="video",
+            has_audio=_video_has_audio_stream(path),
         )
     except Exception:
         return None
@@ -1590,7 +1593,7 @@ class VideoToolDialog(QDialog):
         return any(
             clip.clip_type == "video"
             and clip.active_frames > 0
-            and _video_has_audio_stream(clip.path)
+            and clip.has_audio
             for clip in self._clips
         )
 
@@ -1821,18 +1824,8 @@ class VideoToolDialog(QDialog):
             active_frames = max(1, int(round(base_active_frames / speed))) if base_active_frames > 0 else 0
         timeline_seconds = active_frames / max(0.1, output_fps) if active_frames > 0 else 0.0
         source_duration_seconds = base_active_frames / max(0.1, clip.fps) if base_active_frames > 0 else 0.0
-        get_source_frame = clip._get_frame
-
-        def _get_snapshot_frame(output_idx: int):
-            if clip_type == "image" or base_active_frames <= 0:
-                return get_source_frame(trim_start)
-            speed = max(0.1, speed_percent / 100.0)
-            mapped = int(output_idx * speed)
-            source_offset = max(0, min(base_active_frames - 1, mapped))
-            return get_source_frame(trim_start + source_offset)
-
         return {
-            "get_frame": _get_snapshot_frame,
+            "frame_getter": clip._get_frame,
             "active_frames": active_frames,
             "frame_size": frame_size,
             "clip_type": clip_type,
@@ -1841,10 +1834,23 @@ class VideoToolDialog(QDialog):
             "trim_end": trim_end,
             "clip_fps": clip.fps,
             "base_active_frames": base_active_frames,
+            "speed_percent": speed_percent,
             "timeline_seconds": timeline_seconds,
             "source_duration_seconds": source_duration_seconds,
-            "has_audio": clip_type == "video" and _video_has_audio_stream(clip.path),
+            "has_audio": clip_type == "video" and clip.has_audio,
         }
+
+    def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):
+        get_source_frame = clip["frame_getter"]
+        trim_start = int(clip["trim_start"])
+        clip_type = str(clip["clip_type"])
+        base_active_frames = int(clip["base_active_frames"])
+        if clip_type == "image" or base_active_frames <= 0:
+            return get_source_frame(trim_start)
+        speed = max(0.1, int(clip["speed_percent"]) / 100.0)
+        mapped = int(output_idx * speed)
+        source_offset = max(0, min(base_active_frames - 1, mapped))
+        return get_source_frame(trim_start + source_offset)
 
     def _should_mux_audio(self, fmt: str, clip_snapshot: list[dict[str, object]]) -> bool:
         return (
@@ -2038,7 +2044,7 @@ class VideoToolDialog(QDialog):
                     canceled = True
                     break
                 ci, fi = _global_frame_to_snapshot(i)
-                source_pil = clip_snapshot[ci]["get_frame"](fi)
+                source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)
                 adjusted = source_pil
                 filtered = source_pil
                 framed = None

@@ -398,9 +398,7 @@ class DropFileList(QListWidget):
             self.viewport().update()
             # Process events every chunk so the UI stays alive and the
             # Stop button remains responsive on very large imports.
-            QApplication.processEvents(
-                QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers
-            )
+            QApplication.processEvents()
         if added:
             self.count_changed.emit(self.count())
             if self._thumb_enabled and self.count() <= _THUMB_AUTO_DISABLE:
