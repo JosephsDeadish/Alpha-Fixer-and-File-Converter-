@@ -1286,11 +1286,14 @@ class VideoToolDialog(QDialog):
         return sum(c.active_frames for c in self._clips)
 
     def _update_scrubber(self) -> None:
-        total = max(0, self._total_preview_frames() - 1)
+        total_frames = self._total_preview_frames()
+        total = max(0, total_frames - 1)
+        current = min(self._scrubber.value(), total)
         self._scrubber.blockSignals(True)
         self._scrubber.setRange(0, total)
+        self._scrubber.setValue(current)
         self._scrubber.blockSignals(False)
-        self._pos_lbl.setText(f"0 / {self._total_preview_frames()}")
+        self._pos_lbl.setText(f"{(current + 1) if total_frames else 0} / {total_frames}")
         self._update_export_summary()
 
     def _global_frame_to_clip(self, global_idx: int):
@@ -1596,6 +1599,8 @@ class VideoToolDialog(QDialog):
         self._update_preview()
 
     def _clip_canvas_size(self, clip: "_ClipEntry") -> Optional[tuple[int, int]]:
+        if clip.active_frames <= 0:
+            return None
         if clip.frame_size and clip.frame_size[0] > 0 and clip.frame_size[1] > 0:
             return clip.frame_size
         probe = None

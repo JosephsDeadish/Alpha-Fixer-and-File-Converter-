@@ -9041,6 +9041,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('detail = "Canvas: auto from the largest clip (rounded for MP4 compatibility)"', src)
         self.assertIn("def _format_clip_label(clip: \"_ClipEntry\", path: str, icon: str) -> str:", src)
         self.assertIn('size_text = f"{size[0]}×{size[1]}  •  " if size else ""', src)
+        self.assertIn("if clip.active_frames <= 0:", src)
+        self.assertIn("current = min(self._scrubber.value(), total)", src)
+        self.assertIn('self._pos_lbl.setText(f"{(current + 1) if total_frames else 0} / {total_frames}")', src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
