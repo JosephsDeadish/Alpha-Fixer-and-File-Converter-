@@ -654,10 +654,10 @@ class VideoToolDialog(QDialog):
         title.setObjectName("subheader")
         root.addWidget(title)
 
-        if not self._video_io_available:
+        if not self._mp4_export_available:
             warn = QLabel(
-                "⚠  ffmpeg, imageio, or imageio-ffmpeg are unavailable or not bundled — video import and MP4 export unavailable.  "
-                "You can still add images/GIFs and export an animated GIF."
+                "⚠  MP4 export needs imageio, imageio-ffmpeg, and a working ffmpeg executable.  "
+                "Video import still works with imageio plus a bundled or system ffmpeg, and you can always export an animated GIF."
             )
             warn.setWordWrap(True)
             warn.setStyleSheet("color: orange;")
@@ -896,7 +896,7 @@ class VideoToolDialog(QDialog):
         fmt_row.addWidget(QLabel("Format:"))
         self._export_fmt_combo = QComboBox()
         self._export_fmt_combo.addItem("Animated GIF (.gif)", userData="gif")
-        if self._video_io_available:
+        if self._mp4_export_available:
             self._export_fmt_combo.addItem("MP4 Video (.mp4)", userData="mp4")
         fmt_row.addWidget(self._export_fmt_combo, 1)
         ex_vl.addLayout(fmt_row)

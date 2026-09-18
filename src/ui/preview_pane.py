@@ -601,6 +601,7 @@ class BeforeAfterWidget(QWidget):
     def set_before(self, qimg: QImage) -> None:
         """Set the 'before' (original) side."""
         self._stop_movie()
+        self._raw_before = qimg.copy()
         self._pix_before = QPixmap.fromImage(qimg)
         self._loading = False
         self.update()

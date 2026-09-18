@@ -9130,6 +9130,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._video_io_available = self._ffmpeg_available and self._imageio_available", src)
         self.assertIn("self._mp4_export_available = (", src)
         self.assertIn("self._video_io_available and self._imageio_ffmpeg_available", src)
+        self.assertIn("if not self._mp4_export_available:", src)
+        self.assertIn("if self._mp4_export_available:", src)
 
     def test_preview_zoom_scales_from_fit_size(self):
         src = self._src("ui/preview_pane.py")
@@ -9137,6 +9139,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("fit_w = max(1, int(round(pix.width() * fit_ratio)))", src)
         self.assertIn("fit_h = max(1, int(round(pix.height() * fit_ratio)))", src)
         self.assertIn("max(1, int(round(fit_w * zoom)))", src)
+        self.assertIn("self._raw_before = qimg.copy()", src)
 
     def test_tutorial_dialog_keeps_navigation_shortcuts_alive(self):
         src = self._src("ui/tutorial_dialog.py")
@@ -9147,5 +9150,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn(
             "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable.",
+            src,
+        )
+        self.assertIn(
+            "Video import still works with imageio plus a bundled or system ffmpeg, and you can always export an animated GIF.",
             src,
         )
