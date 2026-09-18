@@ -157,6 +157,13 @@ class TestDropFileList(unittest.TestCase):
         self._widget.paths_dropped.emit(["/tmp/fake.png"])
         self.assertEqual(received, ["/tmp/fake.png"])
 
+    def test_thumbnail_failed_signal_emits_once_per_path(self):
+        received = []
+        self._widget.thumbnail_failed.connect(lambda path, reason: received.append((path, reason)))
+        self._widget._on_thumb_failed("/tmp/bad.png", "decode failed")
+        self._widget._on_thumb_failed("/tmp/bad.png", "decode failed again")
+        self.assertEqual(received, [("/tmp/bad.png", "decode failed")])
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys

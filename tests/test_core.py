@@ -2672,6 +2672,16 @@ class TestRound3Hardening(unittest.TestCase):
         self.assertIn("_cancel_event.set()", clear_src,
                       "clear() must call self._cancel_event.set() to retire old event")
 
+    def test_drop_list_reports_thumbnail_failures_once(self):
+        src = self._drop_list_source()
+        self.assertIn("failed = pyqtSignal(str, str)", src)
+        self.assertIn("thumbnail_failed = pyqtSignal(str, str)", src)
+        self.assertIn("self._signals.failed.connect(self._on_thumb_failed)", src)
+        self.assertIn("self._reported_thumb_failures: set[str] = set()", src)
+        self.assertIn("self._reported_thumb_failures.add(path)", src)
+        self.assertIn('logger.warning("Thumbnail skipped for %s: %s", path, reason)', src)
+        self.assertIn("self.thumbnail_failed.emit(path, reason)", src)
+
     def test_drop_list_bulk_insert_keeps_user_input_events_enabled(self):
         src = self._drop_list_source()
         self.assertIn("QApplication.processEvents()", src)
@@ -9355,6 +9365,29 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("if store_raw:", src)
         self.assertIn("self._raw_after = qimg.copy()", src)
         self.assertIn("compare._raw_before = self._raw_before.copy()", src)
+
+    def test_converter_preview_ignores_stale_loader_results(self):
+        src = self._src("ui/converter_tool.py")
+        self.assertIn("self._preview_request_id: int = 0", src)
+        self.assertIn('self._current_preview_path: str = ""', src)
+        self.assertIn("self._preview_request_id += 1", src)
+        self.assertIn("self._on_preview_ready_if_current", src)
+        self.assertIn("self._on_preview_failed_if_current", src)
+        self.assertIn("if request_id != self._preview_request_id or expected_path != self._current_preview_path:", src)
+        preview_src = self._src("ui/preview_pane.py")
+        self.assertIn("if self._abort:", preview_src)
+        self.assertIn("return", preview_src)
+
+    def test_converter_and_settings_layout_cleanup_removes_cramped_controls(self):
+        converter_src = self._src("ui/converter_tool.py")
+        settings_src = self._src("ui/settings_dialog.py")
+        self.assertIn("go_layout.setColumnStretch(2, 0)", converter_src)
+        self.assertIn("go_layout.addWidget(self._btn_out_dir, 0, 2)", converter_src)
+        self.assertNotIn("go_layout.setRowMinimumHeight(0, 40)", converter_src)
+        self.assertNotIn("go_layout.setRowMinimumHeight(1, 40)", converter_src)
+        self.assertIn("psl = QGridLayout()", settings_src)
+        self.assertIn('self._custom_bg_browse_btn = QPushButton("Browse…")', settings_src)
+        self.assertIn("self._custom_bg_browse_btn.setMinimumWidth(90)", settings_src)
 
     def test_tutorial_dialog_keeps_navigation_shortcuts_alive(self):
         src = self._src("ui/tutorial_dialog.py")

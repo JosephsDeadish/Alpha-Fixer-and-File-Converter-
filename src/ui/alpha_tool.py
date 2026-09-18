@@ -797,6 +797,7 @@ class AlphaFixerTab(QWidget):
         self._file_list.file_removed.connect(self.files_removed)
         self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
+        self._file_list.thumbnail_failed.connect(self._on_thumbnail_failed)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label
@@ -1873,6 +1874,12 @@ class AlphaFixerTab(QWidget):
                 )
         if errors > 0:
             self.processing_error.emit(errors)
+
+    @pyqtSlot(str, str)
+    def _on_thumbnail_failed(self, path: str, reason: str) -> None:
+        name = os.path.basename(path) or path
+        short_reason = reason.splitlines()[0].strip() if reason else "thumbnail generation failed"
+        self._log_msg(f"⚠ Thumbnail skipped for {name} — {short_reason}")
 
     def _log_msg(self, msg: str):
         """Append a message to the log with colour coding (item 36/37)."""

@@ -216,9 +216,10 @@ class SettingsDialog(QDialog):
         ps_vl.addLayout(search_row)
 
         # Preset selection row
-        psl = QHBoxLayout()
-        psl.setSpacing(8)
-        psl.addWidget(QLabel("Theme:"))
+        psl = QGridLayout()
+        psl.setHorizontalSpacing(8)
+        psl.setVerticalSpacing(6)
+        psl.addWidget(QLabel("Theme:"), 0, 0)
         self._theme_preset_combo = QComboBox()
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
@@ -226,7 +227,7 @@ class SettingsDialog(QDialog):
             "Hover over each theme to see a description of its style."
         )
         self._rebuild_theme_combo()
-        psl.addWidget(self._theme_preset_combo, 1)
+        psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
         self._btn_save_theme = QPushButton("Save as…")
         self._btn_delete_theme = QPushButton("Delete")
         self._btn_export_theme = QPushButton("Export Theme…")
@@ -243,10 +244,13 @@ class SettingsDialog(QDialog):
             "Import a theme from a previously exported JSON file.\n"
             "This will overwrite the current custom theme colors and settings."
         )
-        psl.addWidget(self._btn_save_theme)
-        psl.addWidget(self._btn_delete_theme)
-        psl.addWidget(self._btn_export_theme)
-        psl.addWidget(self._btn_import_theme)
+        psl.addWidget(self._btn_save_theme, 1, 0)
+        psl.addWidget(self._btn_delete_theme, 1, 1)
+        psl.addWidget(self._btn_export_theme, 1, 2)
+        psl.addWidget(self._btn_import_theme, 1, 3)
+        psl.setColumnStretch(1, 1)
+        psl.setColumnStretch(2, 1)
+        psl.setColumnStretch(3, 1)
         ps_vl.addLayout(psl)
         tv.addWidget(grp_preset_select)
 
@@ -297,8 +301,8 @@ class SettingsDialog(QDialog):
         )
         self._custom_bg_path_edit.setReadOnly(False)
         _cbg_file_hl.addWidget(self._custom_bg_path_edit, 1)
-        self._custom_bg_browse_btn = QPushButton("…")
-        self._custom_bg_browse_btn.setFixedWidth(30)
+        self._custom_bg_browse_btn = QPushButton("Browse…")
+        self._custom_bg_browse_btn.setMinimumWidth(90)
         self._custom_bg_browse_btn.setToolTip("Browse for a background image or video file.")
         _cbg_file_hl.addWidget(self._custom_bg_browse_btn)
         _cbg_vl.addWidget(self._custom_bg_file_row)

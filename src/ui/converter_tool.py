@@ -90,6 +90,8 @@ class ConverterTab(QWidget):
         # Active preview loader (kept so signals can be disconnected when
         # a new file or format is selected before the old thread finishes).
         self._preview_loader: _ConverterPreviewLoader | None = None
+        self._preview_request_id: int = 0
+        self._current_preview_path: str = ""
         # Debounce timer: waits 150 ms after the last format/quality change
         # before refreshing the preview so rapid spin-box steps don't each
         # kick off a separate background conversion.
@@ -173,22 +175,16 @@ class ConverterTab(QWidget):
         go_layout.setContentsMargins(10, 14, 10, 12)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
+        go_layout.setColumnStretch(2, 0)
         go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
-        # Explicit row minimum heights prevent the nested QHBoxLayout in row 0
-        # from causing the two rows to visually overlap on some platforms.
-        # 40 px gives comfortable clearance for 28 px widgets plus any
-        # platform-default margins the nested QHBoxLayout may add.
-        go_layout.setRowMinimumHeight(0, 40)
-        go_layout.setRowMinimumHeight(1, 40)
 
         lbl_out = QLabel("Output folder:")
         lbl_out.setMinimumWidth(100)
         lbl_out.setMinimumHeight(24)
         self._lbl_out = lbl_out
         go_layout.addWidget(lbl_out, 0, 0)
-        out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
         self._out_dir_edit.setMinimumHeight(28)
@@ -198,9 +194,8 @@ class ConverterTab(QWidget):
         self._btn_out_dir = QPushButton("Browse…")
         self._btn_out_dir.setMinimumWidth(80)
         self._btn_out_dir.setMinimumHeight(28)
-        out_row.addWidget(self._out_dir_edit, 1)
-        out_row.addWidget(self._btn_out_dir)
-        go_layout.addLayout(out_row, 0, 1)
+        go_layout.addWidget(self._out_dir_edit, 0, 1)
+        go_layout.addWidget(self._btn_out_dir, 0, 2)
 
         lbl_suffix = QLabel("Filename suffix:")
         lbl_suffix.setMinimumHeight(24)
@@ -516,6 +511,7 @@ class ConverterTab(QWidget):
         self._file_list.file_removed.connect(self.files_removed)
         self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
+        self._file_list.thumbnail_failed.connect(self._on_thumbnail_failed)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
@@ -820,6 +816,7 @@ class ConverterTab(QWidget):
         effect of the chosen format and quality before committing.
         """
         if not path or not os.path.isfile(path):
+            self._current_preview_path = ""
             self._before_is_animated = False
             self._compare.clear()
             self._source_info_lbl.setText("")
@@ -840,6 +837,9 @@ class ConverterTab(QWidget):
         fmt_data = self._fmt_combo.currentData()
         target_fmt = fmt_data[0] if fmt_data else "PNG"
         quality = self._quality_spin.value()
+        self._preview_request_id += 1
+        request_id = self._preview_request_id
+        self._current_preview_path = path
 
         # Detect animated GIF so we can play it in the before side
         is_animated_gif = (
@@ -887,8 +887,14 @@ class ConverterTab(QWidget):
             self._gif_speed_widget.setVisible(False)
 
         self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality)
-        self._preview_loader.ready.connect(self._on_preview_ready)
-        self._preview_loader.failed.connect(self._on_preview_failed)
+        self._preview_loader.ready.connect(
+            lambda src_qi, out_qi, src_meta, out_meta, rid=request_id, expected_path=path:
+            self._on_preview_ready_if_current(rid, expected_path, src_qi, out_qi, src_meta, out_meta)
+        )
+        self._preview_loader.failed.connect(
+            lambda err, rid=request_id, expected_path=path:
+            self._on_preview_failed_if_current(rid, expected_path, err)
+        )
         self._preview_loader.start()
 
     def _browse_out_dir(self):
@@ -959,6 +965,30 @@ class ConverterTab(QWidget):
         self._output_info_lbl.setText(
             f"<b>OUT</b><br>Preview<br><b>unavailable</b><br><b>{err_snippet}</b>"
         )
+
+    def _on_preview_ready_if_current(
+        self,
+        request_id: int,
+        expected_path: str,
+        src_qi: QImage,
+        out_qi: QImage,
+        src_meta: str,
+        out_meta: str,
+    ) -> None:
+        if request_id != self._preview_request_id or expected_path != self._current_preview_path:
+            return
+        self._on_preview_ready(src_qi, out_qi, src_meta, out_meta)
+
+    def _on_preview_failed_if_current(self, request_id: int, expected_path: str, err: str) -> None:
+        if request_id != self._preview_request_id or expected_path != self._current_preview_path:
+            return
+        self._on_preview_failed(err)
+
+    @pyqtSlot(str, str)
+    def _on_thumbnail_failed(self, path: str, reason: str) -> None:
+        name = os.path.basename(path) or path
+        short_reason = reason.splitlines()[0].strip() if reason else "thumbnail generation failed"
+        self._log_msg(f"⚠ Thumbnail skipped for {name} — {short_reason}")
 
     def _save_format_setting(self):
         fmt_data = self._fmt_combo.currentData()

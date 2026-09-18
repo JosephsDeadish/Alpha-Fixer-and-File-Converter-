@@ -1060,6 +1060,8 @@ class _ConverterPreviewLoader(QThread):
                 )
                 img.close()
                 img = None
+                if self._abort:
+                    return
                 try:
                     self.ready.emit(src_qi, out_qi, src_meta, out_meta)
                 except RuntimeError:
@@ -1087,6 +1089,8 @@ class _ConverterPreviewLoader(QThread):
                 f"Preview as {fmt}{quality_note}\n"
                 f"~{_fmt_size(converted_size)}"
             )
+            if self._abort:
+                return
             try:
                 self.ready.emit(src_qi, out_qi, src_meta, out_meta)
             except RuntimeError:
