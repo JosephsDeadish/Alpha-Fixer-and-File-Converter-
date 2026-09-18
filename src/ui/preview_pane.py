@@ -499,7 +499,7 @@ class BeforeAfterWidget(QWidget):
         if self._movie_path:
             compare._movie_path = self._movie_path
             if self._pix_before is not None:
-                compare._pix_before = self._pix_before
+                compare._pix_before = self._pix_before.copy()
 
             def _mirror_movie_frame(_frame_no: int) -> None:
                 if self._movie is None:

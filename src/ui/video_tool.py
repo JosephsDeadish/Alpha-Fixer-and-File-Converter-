@@ -75,8 +75,6 @@ _IMAGE_EXTS = {
 
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
-_MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
-
 _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
 
 
@@ -1470,7 +1468,6 @@ class VideoToolDialog(QDialog):
                     out_path,
                     fps=fps,
                     codec="libx264",
-                    quality=_MP4_QUALITY,
                 )
             for i in range(total):
                 progress.setValue(i)

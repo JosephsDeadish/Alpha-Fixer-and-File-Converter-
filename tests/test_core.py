@@ -8717,7 +8717,6 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("and self._imageio_ffmpeg_available", src)
         self.assertIn("first_frame = None", src)
         self.assertIn("QApplication.processEvents()", src)
-        self.assertIn("_MP4_QUALITY = 8", src)
         self.assertIn('if fmt == "gif":\n                pass', src)
         self.assertIn("gif_frames.append(framed.copy())", src)
         self.assertIn('first.save(\n                    out_path,\n                    format="GIF"', src)
@@ -8775,6 +8774,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _mirror_movie_frame(_frame_no: int) -> None:", src)
         self.assertIn("self._movie.frameChanged.connect(_mirror_movie_frame)", src)
         self.assertIn("self._movie.frameChanged.disconnect(_mirror_movie_frame)", src)
+        self.assertIn("compare._pix_before = self._pix_before.copy()", src)
 
     def test_gif_builder_closes_progress_dialog_on_cancel(self):
         src = self._src("ui/gif_builder.py")
