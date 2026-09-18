@@ -1599,6 +1599,25 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         finally:
             src.close()
 
+    def test_clip_timing_supports_still_duration_and_speed_mapping(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        image_clip = vt._ClipEntry("/tmp/image.png", 1, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="image")
+        image_clip.still_duration_frames = 40
+        self.assertEqual(image_clip.active_frames, 40)
+        frame = image_clip.get_frame(17)
+        frame.close()
+
+        video_clip = vt._ClipEntry("/tmp/video.mp4", 10, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="video")
+        video_clip.speed_percent = 200
+        self.assertEqual(video_clip.active_frames, 5)
+        self.assertEqual(video_clip.output_index_to_source_offset(4), 8)
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

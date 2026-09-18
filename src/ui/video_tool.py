@@ -43,7 +43,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
-    QComboBox, QGroupBox, QGridLayout,
+    QComboBox, QGroupBox, QGridLayout, QSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QScrollArea,
 )
@@ -396,6 +396,11 @@ def _fit_frame_to_canvas(pil_img, canvas_size: tuple[int, int], fmt: str) -> "PI
             rgba.close()
 
 
+def _format_extension_filter(label: str, extensions: set[str]) -> str:
+    patterns = " ".join(f"*{ext}" for ext in sorted(extensions))
+    return f"{label} ({patterns});;All Files (*)"
+
+
 class _ImageFrameGetter:
     """Picklable frame getter for a single-image clip.
 
@@ -509,21 +514,45 @@ class _ClipEntry:
 
     def __init__(self, path: str, total_frames: int,
                  get_frame_fn, fps: float = 25.0,
-                 frame_size: Optional[tuple[int, int]] = None):
+                 frame_size: Optional[tuple[int, int]] = None,
+                 clip_type: str = "video"):
         self.path = path
         self.total_frames = total_frames
         self.fps = fps
         self._get_frame = get_frame_fn   # callable(frame_idx) → PIL RGBA image
         self.frame_size = frame_size
+        self.clip_type = clip_type
+        self.speed_percent: int = 100
+        self.still_duration_frames: int = 25 if clip_type == "image" else 1
         self.trim_start: int = 0
         self.trim_end: int = max(0, total_frames - 1)
 
     @property
-    def active_frames(self) -> int:
+    def base_active_frames(self) -> int:
         return max(0, self.trim_end - self.trim_start + 1)
 
+    @property
+    def active_frames(self) -> int:
+        if self.clip_type == "image":
+            return max(1, int(self.still_duration_frames))
+        base = self.base_active_frames
+        if base <= 0:
+            return 0
+        speed = max(0.1, self.speed_percent / 100.0)
+        return max(1, int(round(base / speed)))
+
+    def output_index_to_source_offset(self, idx: int) -> int:
+        if self.clip_type == "image":
+            return 0
+        base = self.base_active_frames
+        if base <= 0:
+            return 0
+        speed = max(0.1, self.speed_percent / 100.0)
+        mapped = int(idx * speed)
+        return max(0, min(base - 1, mapped))
+
     def get_frame(self, idx: int) -> "PIL.Image.Image":
-        return self._get_frame(self.trim_start + idx)
+        return self._get_frame(self.trim_start + self.output_index_to_source_offset(idx))
 
     def close(self) -> None:
         close_fn = getattr(self._get_frame, "_close_reader", None)
@@ -534,9 +563,10 @@ class _ClipEntry:
 def _format_clip_label(clip: "_ClipEntry", path: str, icon: str) -> str:
     size = clip.frame_size
     size_text = f"{size[0]}×{size[1]}  •  " if size else ""
-    if clip.total_frames > 1:
-        return f"{icon}  {Path(path).name}  [{size_text}{clip.total_frames} fr @ {clip.fps:.1f} fps]"
-    return f"{icon}  {Path(path).name}  [{size_text}still]"
+    if clip.clip_type == "image":
+        return f"{icon}  {Path(path).name}  [{size_text}still • {clip.still_duration_frames} fr]"
+    speed_suffix = "" if clip.speed_percent == 100 else f" • {clip.speed_percent}% speed"
+    return f"{icon}  {Path(path).name}  [{size_text}{clip.active_frames} fr @ {clip.fps:.1f} fps{speed_suffix}]"
 
 
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
@@ -551,6 +581,7 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
             _VideoFrameGetter(path, frame_count, first_frame),
             fps,
             frame_size=frame_size,
+            clip_type="video",
         )
     except Exception:
         return None
@@ -619,10 +650,17 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
                     fps = max(0.1, min(60.0, 1000.0 / avg_duration))
             total_frames = max(1, len(frames))
             getter = _SequenceFrameGetter(frames)
-            return _ClipEntry(path, total_frames, getter, fps, frame_size=frames[0].size if frames else None)
+            return _ClipEntry(
+                path,
+                total_frames,
+                getter,
+                fps,
+                frame_size=frames[0].size if frames else None,
+                clip_type="gif",
+            )
 
         img = load_image(path)
-        return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0, frame_size=img.size)
+        return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0, frame_size=img.size, clip_type="image")
     except Exception:
         return None
 
@@ -700,12 +738,14 @@ class VideoToolDialog(QDialog):
         ("video_remove_selected", "Delete", "Remove selected clip", "Video Editor"),
         ("video_toggle_play", "Space", "Play or pause preview", "Video Editor"),
         ("video_export", "Ctrl+S", "Export video or GIF", "Video Editor"),
+        ("video_split_clip", "Ctrl+E", "Split clip at playhead", "Video Editor"),
     )
 
     def __init__(self, parent=None, tooltip_mgr=None):
         super().__init__(parent)
         self.setWindowTitle("🎬 Video Editor")
-        self.setMinimumSize(960, 660)
+        self.setMinimumSize(1120, 760)
+        self.resize(1320, 820)
         self.setModal(False)
         self._tooltip_mgr = tooltip_mgr
         _configure_imageio_ffmpeg()
@@ -775,6 +815,13 @@ class VideoToolDialog(QDialog):
         self._btn_remove.setToolTip("Remove selected clip.  Shortcut: Delete")
         self._btn_remove.clicked.connect(self._remove_selected)
         tb.addWidget(self._btn_remove)
+
+        self._btn_split = QPushButton("✂  Split at Playhead")
+        self._btn_split.setToolTip(
+            "Split the clip under the current playhead so you can insert media between the two parts.  Shortcut: Ctrl+E"
+        )
+        self._btn_split.clicked.connect(self._split_clip_at_playhead)
+        tb.addWidget(self._btn_split)
         left_layout.addLayout(tb)
 
         insert_row = QHBoxLayout()
@@ -837,6 +884,47 @@ class VideoToolDialog(QDialog):
         trim_vl.addWidget(self._clip_info_lbl)
         left_layout.addWidget(grp_trim)
 
+        grp_timing = QGroupBox("Selected Clip Timing")
+        timing_vl = QVBoxLayout(grp_timing)
+        timing_vl.setSpacing(6)
+
+        clip_speed_row = QHBoxLayout()
+        clip_speed_row.addWidget(QLabel("Clip speed:"))
+        self._clip_speed_slider = _make_hslider(10, 400, 100)
+        self._clip_speed_slider.setToolTip(
+            "Adjust playback speed for the selected video or animated GIF clip.\n"
+            "100% = original speed, lower = slower, higher = faster."
+        )
+        self._clip_speed_slider.valueChanged.connect(self._on_clip_speed_changed)
+        clip_speed_row.addWidget(self._clip_speed_slider, 1)
+        self._clip_speed_lbl = QLabel("1.00×")
+        self._clip_speed_lbl.setFixedWidth(56)
+        self._clip_speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        clip_speed_row.addWidget(self._clip_speed_lbl)
+        timing_vl.addLayout(clip_speed_row)
+
+        still_row = QHBoxLayout()
+        still_row.addWidget(QLabel("Still duration:"))
+        self._still_duration_spin = QSpinBox()
+        self._still_duration_spin.setRange(1, 3600)
+        self._still_duration_spin.setValue(25)
+        self._still_duration_spin.setToolTip(
+            "How many timeline frames a still image should stay on screen.\n"
+            "At 25 FPS, 25 frames = about 1 second."
+        )
+        self._still_duration_spin.valueChanged.connect(self._on_still_duration_changed)
+        still_row.addWidget(self._still_duration_spin)
+        self._still_duration_lbl = QLabel("1.00 s")
+        self._still_duration_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        still_row.addWidget(self._still_duration_lbl, 1)
+        timing_vl.addLayout(still_row)
+
+        self._timing_hint_lbl = QLabel("")
+        self._timing_hint_lbl.setWordWrap(True)
+        self._timing_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        timing_vl.addWidget(self._timing_hint_lbl)
+        left_layout.addWidget(grp_timing)
+
         splitter.addWidget(left)
 
         # ── Centre: preview ──────────────────────────────────────────────
@@ -893,6 +981,7 @@ class VideoToolDialog(QDialog):
         self._fps_slider.valueChanged.connect(
             lambda v: self._fps_val_lbl.setText(f"{v} fps")
         )
+        self._fps_slider.valueChanged.connect(lambda _v: self._update_timing_controls())
         fps_row.addWidget(self._fps_slider, 1)
         fps_row.addWidget(self._fps_val_lbl)
         pv_layout.addLayout(fps_row)
@@ -1056,6 +1145,7 @@ class VideoToolDialog(QDialog):
         self._bind_shortcut("video_remove_selected", "Delete", self._remove_selected)
         self._bind_shortcut("video_toggle_play", "Space", self._toggle_play)
         self._bind_shortcut("video_export", "Ctrl+S", self._export)
+        self._bind_shortcut("video_split_clip", "Ctrl+E", self._split_clip_at_playhead)
 
     def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
         shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
@@ -1077,10 +1167,15 @@ class VideoToolDialog(QDialog):
         mgr.register(self._btn_add_video, "video_media_add")
         mgr.register(self._btn_add_img, "video_media_add")
         mgr.register(self._btn_remove, "video_timeline")
+        mgr.register(self._btn_split, "video_timeline")
+        mgr.register(self._insert_mode_combo, "video_timeline")
         mgr.register(self._clip_list, "video_timeline")
         mgr.register(self._trim_start_slider, "video_trim")
         mgr.register(self._trim_end_slider, "video_trim")
         mgr.register(self._clip_info_lbl, "video_trim")
+        mgr.register(self._clip_speed_slider, "video_trim")
+        mgr.register(self._still_duration_spin, "video_trim")
+        mgr.register(self._timing_hint_lbl, "video_trim")
         mgr.register(self._preview_lbl, "video_preview")
         mgr.register(self._scrubber, "video_preview")
         mgr.register(self._btn_rewind, "video_preview")
@@ -1111,6 +1206,27 @@ class VideoToolDialog(QDialog):
         self._clip_list.insertItem(insert_row, item)
         self._clip_list.setCurrentRow(insert_row)
         return insert_row + 1
+
+    def _refresh_clip_item(self, row: int) -> None:
+        if row < 0 or row >= len(self._clips):
+            return
+        clip = self._clips[row]
+        item = self._clip_list.item(row)
+        if item is None:
+            return
+        icon = "🎞" if clip.clip_type == "video" else "🖼"
+        item.setText(_format_clip_label(clip, clip.path, icon))
+
+    def _reload_clip(self, clip: "_ClipEntry") -> Optional["_ClipEntry"]:
+        if clip.clip_type == "video":
+            new_clip = _load_video_clip(clip.path)
+        else:
+            new_clip = _load_image_as_clip(clip.path)
+        if new_clip is None:
+            return None
+        new_clip.speed_percent = clip.speed_percent
+        new_clip.still_duration_frames = clip.still_duration_frames
+        return new_clip
 
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
         skipped = []
@@ -1151,10 +1267,7 @@ class VideoToolDialog(QDialog):
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Video Files", "",
-            "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v "
-            "*.mpg *.mpeg *.3gp *.3g2 *.ts *.m2ts *.mts *.vob *.ogv *.ogg "
-            "*.rm *.rmvb *.divx *.asf *.f4v *.mxf *.dv "
-            "*.pmf *.pss *.str *.xa *.iso *.umd *.bin);;All Files (*)",
+            _format_extension_filter("Video Files", _VIDEO_EXTS),
         )
         self._load_video_paths(paths, insert_row=self._next_insert_row())
 
@@ -1178,9 +1291,7 @@ class VideoToolDialog(QDialog):
     def _add_images(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Images / GIFs", "",
-            "Images (*.png *.jpg *.jpeg *.jfif *.jpe *.webp *.bmp *.tiff *.tif *.gif *.dds "
-            "*.tga *.ico *.ppm *.pgm *.pbm *.pnm *.pcx *.avif *.qoi *.svg *.jp2 *.j2k *.j2c "
-            "*.xnb *.tim);;All Files (*)",
+            _format_extension_filter("Images", _IMAGE_EXTS),
         )
         self._load_image_paths(paths, insert_row=self._next_insert_row())
 
@@ -1224,6 +1335,7 @@ class VideoToolDialog(QDialog):
             self._trim_end_slider.setRange(0, 0)
             self._trim_start_slider.blockSignals(False)
             self._trim_end_slider.blockSignals(False)
+            self._update_timing_controls()
             return
         clip = self._clips[row]
         self._trim_start_slider.blockSignals(True)
@@ -1238,10 +1350,11 @@ class VideoToolDialog(QDialog):
         self._trim_start_slider.blockSignals(False)
         self._trim_end_slider.blockSignals(False)
         self._clip_info_lbl.setText(
-            f"{clip.total_frames} total  •  {clip.active_frames} active  •  "
+            f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
             f"{clip.fps:.1f} fps"
             + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
         )
+        self._update_timing_controls()
 
     def _on_trim_start_changed(self, val: int) -> None:
         row = self._clip_list.currentRow()
@@ -1253,10 +1366,12 @@ class VideoToolDialog(QDialog):
             self._trim_start_slider.blockSignals(False)
             self._trim_start_lbl.setText(str(clip.trim_start))
             self._clip_info_lbl.setText(
-                f"{clip.total_frames} total  •  {clip.active_frames} active  •  "
+                f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
                 f"{clip.fps:.1f} fps"
                 + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
             )
+            self._refresh_clip_item(row)
+            self._update_timing_controls()
             self._update_scrubber()
         else:
             self._trim_start_lbl.setText(str(val))
@@ -1271,13 +1386,122 @@ class VideoToolDialog(QDialog):
             self._trim_end_slider.blockSignals(False)
             self._trim_end_lbl.setText(str(clip.trim_end))
             self._clip_info_lbl.setText(
-                f"{clip.total_frames} total  •  {clip.active_frames} active  •  "
+                f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
                 f"{clip.fps:.1f} fps"
                 + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
             )
+            self._refresh_clip_item(row)
+            self._update_timing_controls()
             self._update_scrubber()
         else:
             self._trim_end_lbl.setText(str(val))
+
+    def _update_timing_controls(self) -> None:
+        row = self._clip_list.currentRow()
+        if row < 0 or row >= len(self._clips):
+            self._clip_speed_slider.setEnabled(False)
+            self._still_duration_spin.setEnabled(False)
+            self._btn_split.setEnabled(False)
+            self._clip_speed_lbl.setText("1.00×")
+            self._still_duration_lbl.setText("0.00 s")
+            self._timing_hint_lbl.setText("Select a clip to adjust its timing.")
+            return
+        clip = self._clips[row]
+        fps = max(0.1, float(self._fps_slider.value()))
+        self._clip_speed_slider.blockSignals(True)
+        self._clip_speed_slider.setValue(max(10, min(400, int(clip.speed_percent))))
+        self._clip_speed_slider.blockSignals(False)
+        self._clip_speed_lbl.setText(f"{clip.speed_percent / 100:.2f}×")
+        self._still_duration_spin.blockSignals(True)
+        self._still_duration_spin.setValue(max(1, int(clip.still_duration_frames)))
+        self._still_duration_spin.blockSignals(False)
+        self._still_duration_lbl.setText(f"{clip.still_duration_frames / fps:.2f} s")
+        is_still = clip.clip_type == "image"
+        self._clip_speed_slider.setEnabled(not is_still)
+        self._still_duration_spin.setEnabled(is_still)
+        self._btn_split.setEnabled(not is_still and clip.base_active_frames > 1)
+        if is_still:
+            self._timing_hint_lbl.setText(
+                "Still images stay on screen for the selected number of timeline frames."
+            )
+        else:
+            self._timing_hint_lbl.setText(
+                "Clip speed affects preview and export timing for the selected moving clip."
+            )
+
+    def _on_clip_speed_changed(self, value: int) -> None:
+        row = self._clip_list.currentRow()
+        if row < 0 or row >= len(self._clips):
+            self._clip_speed_lbl.setText(f"{value / 100:.2f}×")
+            return
+        clip = self._clips[row]
+        if clip.clip_type == "image":
+            return
+        clip.speed_percent = max(10, min(400, int(value)))
+        self._clip_speed_lbl.setText(f"{clip.speed_percent / 100:.2f}×")
+        self._refresh_clip_item(row)
+        self._update_scrubber()
+        self._update_preview()
+        self._on_clip_selected(row)
+
+    def _on_still_duration_changed(self, value: int) -> None:
+        row = self._clip_list.currentRow()
+        fps = max(0.1, float(self._fps_slider.value()))
+        self._still_duration_lbl.setText(f"{max(1, int(value)) / fps:.2f} s")
+        if row < 0 or row >= len(self._clips):
+            return
+        clip = self._clips[row]
+        if clip.clip_type != "image":
+            return
+        clip.still_duration_frames = max(1, int(value))
+        self._refresh_clip_item(row)
+        self._update_scrubber()
+        self._update_preview()
+        self._on_clip_selected(row)
+
+    def _split_clip_at_playhead(self) -> None:
+        total = self._total_preview_frames()
+        if total <= 1 or not self._clips:
+            QMessageBox.information(self, "Split Clip", "Load a multi-frame clip before splitting.")
+            return
+        clip_row, frame_idx = self._global_frame_to_clip(max(0, min(self._scrubber.value(), total - 1)))
+        clip = self._clips[clip_row]
+        if clip.clip_type == "image" or clip.base_active_frames <= 1:
+            QMessageBox.information(
+                self,
+                "Split Clip",
+                "Move the playhead onto a video or animated GIF clip with at least two frames.",
+            )
+            return
+        source_offset = clip.output_index_to_source_offset(frame_idx)
+        if source_offset >= clip.base_active_frames - 1:
+            QMessageBox.information(
+                self,
+                "Split Clip",
+                "Move the playhead earlier in the clip so there is room to split after the current frame.",
+            )
+            return
+        original_trim_start = clip.trim_start
+        original_trim_end = clip.trim_end
+        clip.trim_end = original_trim_start + source_offset
+        second_half = self._reload_clip(clip)
+        if second_half is None:
+            clip.trim_end = original_trim_end
+            QMessageBox.warning(self, "Split Clip", "Could not duplicate the selected clip for splitting.")
+            return
+        second_half.trim_start = original_trim_start + source_offset + 1
+        second_half.trim_end = original_trim_end
+        insert_row = clip_row + 1
+        self._clips.insert(insert_row, second_half)
+        item = QListWidgetItem(_format_clip_label(second_half, second_half.path, "🎞" if second_half.clip_type == "video" else "🖼"))
+        item.setData(_CLIP_ROLE, second_half)
+        self._clip_list.insertItem(insert_row, item)
+        self._refresh_clip_item(clip_row)
+        self._clip_list.setCurrentRow(clip_row)
+        self._on_clip_selected(clip_row)
+        self._update_scrubber()
+        self._update_preview()
+        self._update_timing_controls()
 
     # ------------------------------------------------------------------
     # Preview / transport
