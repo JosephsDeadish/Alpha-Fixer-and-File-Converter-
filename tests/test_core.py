@@ -9112,6 +9112,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("audio_enabled = allow_audio_source_controls and self._audio_enable_check.isChecked()", src)
         self.assertIn("No source audio stream was detected in the current video clips, so volume and mute controls stay disabled.", src)
         self.assertIn("These controls only affect exported MP4 audio. Preview playback stays silent.", src)
+        self.assertIn("def _get_ffprobe_exe() -> Optional[str]:", src)
+        self.assertIn('ffmpeg_path.with_name("ffprobe")', src)
+        self.assertIn('"-select_streams", "a:0"', src)
+        self.assertIn('"-show_entries", "stream=index"', src)
+        self.assertIn("if result.returncode == 0 and result.stdout.strip():", src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
@@ -9256,6 +9261,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("Adjust per-clip speed for videos/GIFs", src)
         self.assertIn("keep source audio from video clips", src)
         self.assertIn("Preview playback stays silent.", src)
+        self.assertIn("self._body_lbl.setOpenExternalLinks(False)", src)
+        self.assertIn("self._body_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)", src)
 
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
         src = self._src("ui/theme_engine.py")

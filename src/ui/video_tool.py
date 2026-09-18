@@ -145,6 +145,27 @@ def _get_ffmpeg_exe() -> Optional[str]:
         return None
 
 
+def _get_ffprobe_exe() -> Optional[str]:
+    """Return the path to ffprobe when available alongside ffmpeg or in PATH."""
+    try:
+        ffmpeg_exe = _get_ffmpeg_exe()
+        if ffmpeg_exe:
+            ffmpeg_path = Path(ffmpeg_exe)
+            for candidate in (
+                ffmpeg_path.with_name("ffprobe"),
+                ffmpeg_path.with_name("ffprobe.exe"),
+            ):
+                if candidate.is_file():
+                    return str(candidate)
+    except Exception:
+        pass
+    try:
+        import shutil
+        return shutil.which("ffprobe")
+    except Exception:
+        return None
+
+
 def _open_video_reader(path: str):
     """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
     import imageio
@@ -406,6 +427,28 @@ def _format_extension_filter(label: str, extensions: set[str]) -> str:
 
 @lru_cache(maxsize=128)
 def _video_has_audio_stream(path: str) -> bool:
+    ffprobe_exe = _get_ffprobe_exe()
+    if ffprobe_exe:
+        try:
+            result = subprocess.run(
+                [
+                    ffprobe_exe,
+                    "-v", "error",
+                    "-select_streams", "a:0",
+                    "-show_entries", "stream=index",
+                    "-of", "csv=p=0",
+                    path,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return True
+        except Exception:
+            pass
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
         return False

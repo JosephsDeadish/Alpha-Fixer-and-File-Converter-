@@ -222,6 +222,7 @@ class TutorialDialog(QDialog):
         self._body_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self._body_lbl.setTextFormat(Qt.TextFormat.RichText)
         self._body_lbl.setOpenExternalLinks(False)
+        self._body_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         body_vl.addWidget(self._body_lbl)
         body_vl.addStretch(1)
         scroll.setWidget(body_container)
