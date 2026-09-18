@@ -890,6 +890,12 @@ class VideoToolDialog(QDialog):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
 
+        self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s")
+        self._timeline_summary_lbl.setWordWrap(True)
+        self._timeline_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._timeline_summary_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self._timeline_summary_lbl)
+
         self._clip_list = _ClipListWidget()
         self._clip_list.files_dropped.connect(self._on_files_dropped)
         self._clip_list.order_changed.connect(self._sync_clips_from_list)
@@ -1205,6 +1211,7 @@ class VideoToolDialog(QDialog):
         splitter.addWidget(right_scroll)
         splitter.setSizes([240, 420, 260])
         self._update_audio_controls()
+        self._update_ui_state()
 
     def _resolve_tooltip_mgr(self):
         if self._tooltip_mgr is not None:
@@ -1311,6 +1318,51 @@ class VideoToolDialog(QDialog):
                 + "\n".join(skipped),
             )
 
+    def _format_clip_info_text(self, clip: "_ClipEntry") -> str:
+        return (
+            f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
+            f"{clip.fps:.1f} fps"
+            + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
+        )
+
+    def _update_timeline_summary(self) -> None:
+        total_frames = self._total_preview_frames()
+        fps = max(0.1, float(self._fps_slider.value()))
+        seconds = total_frames / fps if total_frames else 0.0
+        self._timeline_summary_lbl.setText(
+            f"Timeline: {len(self._clips)} clip{'s' if len(self._clips) != 1 else ''}  •  "
+            f"{seconds:.2f} s  •  {total_frames} frames"
+        )
+
+    def _update_ui_state(self) -> None:
+        has_clips = bool(self._clips)
+        row = self._clip_list.currentRow()
+        has_selection = 0 <= row < len(self._clips)
+
+        if not has_clips:
+            if self._is_playing:
+                self._preview_timer.stop()
+                self._is_playing = False
+            self._btn_play.blockSignals(True)
+            self._btn_play.setChecked(False)
+            self._btn_play.blockSignals(False)
+            self._btn_play.setText("▶  Play")
+
+        self._btn_remove.setEnabled(has_selection)
+        self._btn_rewind.setEnabled(has_clips)
+        self._btn_play.setEnabled(has_clips)
+        self._scrubber.setEnabled(has_clips)
+        self._btn_export.setEnabled(has_clips)
+        self._trim_start_slider.setEnabled(has_selection)
+        self._trim_end_slider.setEnabled(has_selection)
+        if not has_selection:
+            self._trim_start_lbl.setText("0")
+            self._trim_end_lbl.setText("0")
+            self._clip_info_lbl.setText("Select a clip to adjust trim and timing.")
+
+        self._update_timeline_summary()
+        self._update_audio_controls()
+
     def _refresh_clip_item(self, row: int) -> None:
         if row < 0 or row >= len(self._clips):
             return
@@ -1414,8 +1466,13 @@ class VideoToolDialog(QDialog):
         self._clips[row].close()
         del self._clips[row]
         self._clip_list.takeItem(row)
+        if self._clip_list.count():
+            self._clip_list.setCurrentRow(min(row, self._clip_list.count() - 1))
+        else:
+            self._clip_list.setCurrentRow(-1)
         self._update_scrubber()
         self._update_preview()
+        self._update_ui_state()
 
     def _sync_clips_from_list(self) -> None:
         """Rebuild ``self._clips`` from current list-item order."""
@@ -1426,6 +1483,7 @@ class VideoToolDialog(QDialog):
                 self._clips.append(clip)
         self._update_scrubber()
         self._update_preview()
+        self._update_ui_state()
 
     def _on_clip_selected(self, row: int) -> None:
         if row < 0 or row >= len(self._clips):
