@@ -9127,9 +9127,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn("def _has_imageio_ffmpeg() -> bool:", src)
         self.assertIn("self._imageio_ffmpeg_available = _has_imageio_ffmpeg()", src)
-        self.assertIn("self._video_io_available = self._ffmpeg_available and self._imageio_available", src)
-        self.assertIn("self._mp4_export_available = (", src)
-        self.assertIn("self._video_io_available and self._imageio_ffmpeg_available", src)
+        self.assertIn("self._video_io_available = (", src)
+        self.assertIn("and self._imageio_available", src)
+        self.assertIn("and self._imageio_ffmpeg_available", src)
+        self.assertIn("self._mp4_export_available = self._video_io_available", src)
         self.assertIn("if not self._mp4_export_available:", src)
         self.assertIn("if self._mp4_export_available:", src)
 
@@ -9149,10 +9150,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_mp4_unavailable_warning_mentions_imageio_ffmpeg(self):
         src = self._src("ui/video_tool.py")
         self.assertIn(
-            "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable.",
+            "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.",
             src,
         )
         self.assertIn(
-            "Video import still works with imageio plus a bundled or system ffmpeg, and you can always export an animated GIF.",
+            "Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.",
             src,
         )

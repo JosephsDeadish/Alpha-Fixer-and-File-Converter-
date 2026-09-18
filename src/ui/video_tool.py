@@ -631,10 +631,12 @@ class VideoToolDialog(QDialog):
         self._ffmpeg_available = _has_ffmpeg()
         self._imageio_available = _has_imageio()
         self._imageio_ffmpeg_available = _has_imageio_ffmpeg()
-        self._video_io_available = self._ffmpeg_available and self._imageio_available
-        self._mp4_export_available = (
-            self._video_io_available and self._imageio_ffmpeg_available
+        self._video_io_available = (
+            self._ffmpeg_available
+            and self._imageio_available
+            and self._imageio_ffmpeg_available
         )
+        self._mp4_export_available = self._video_io_available
         self._build_ui()
         mgr = self._resolve_tooltip_mgr()
         if mgr is not None:
@@ -656,8 +658,8 @@ class VideoToolDialog(QDialog):
 
         if not self._mp4_export_available:
             warn = QLabel(
-                "⚠  MP4 export needs imageio, imageio-ffmpeg, and a working ffmpeg executable.  "
-                "Video import still works with imageio plus a bundled or system ffmpeg, and you can always export an animated GIF."
+                "⚠  Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.  "
+                "You can still add images/GIFs and export an animated GIF."
             )
             warn.setWordWrap(True)
             warn.setStyleSheet("color: orange;")
@@ -1310,7 +1312,7 @@ class VideoToolDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "MP4 Export Unavailable",
-                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable.",
+                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.",
             )
             return
 
