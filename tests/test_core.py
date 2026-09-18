@@ -8717,7 +8717,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("and self._imageio_ffmpeg_available", src)
         self.assertIn("first_frame = None", src)
         self.assertIn("QApplication.processEvents()", src)
-        self.assertIn('if fmt == "gif":\n                pass', src)
+        self.assertIn('if fmt != "gif":', src)
+        self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
         self.assertIn("gif_frames.append(framed.copy())", src)
         self.assertIn('first.save(\n                    out_path,\n                    format="GIF"', src)
         self.assertIn("Unsupported Files Skipped", src)
@@ -8820,8 +8821,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("MP4 Export Unavailable", src)
         self.assertIn("progress.show()", src)
         self.assertIn("QApplication.processEvents()", src)
-        self.assertIn("np = None", src)
-        self.assertIn("writer.append_data(np.array(rgb))", src)
+        self.assertIn("append_video_frame = None", src)
+        self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
         self.assertNotIn("import numpy as np\n                        rgb =", src)
 
     def test_video_export_closes_mp4_writer_before_success(self):
@@ -9150,14 +9151,19 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._settings.get("button_anim_enabled", True)', src)
         self.assertIn('self._settings.get("use_theme_button_anim", True)', src)
 
-    def test_video_probe_uses_duration_only_after_ffmpeg_probe(self):
+    def test_video_probe_uses_duration_only_after_reader_and_ffmpeg_fallbacks(self):
         src = self._src("ui/video_tool.py")
         ffmpeg_pos = src.find("counted, secs = imageio_ffmpeg.count_frames_and_secs(path)")
         reader_count_pos = src.find("frame_count = _coerce_frame_count(reader.count_frames())")
         duration_pos = src.find("duration = float(meta.get(\"duration\") or 0.0)")
         self.assertGreater(ffmpeg_pos, 0)
-        self.assertGreater(reader_count_pos, ffmpeg_pos)
+        self.assertGreater(ffmpeg_pos, reader_count_pos)
         self.assertGreater(duration_pos, ffmpeg_pos)
+
+    def test_tutorial_mentions_video_editor_split_and_timing_controls(self):
+        src = self._src("ui/tutorial_dialog.py")
+        self.assertIn("split a moving clip at the playhead", src)
+        self.assertIn("Adjust per-clip speed for videos/GIFs", src)
 
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
         src = self._src("ui/theme_engine.py")

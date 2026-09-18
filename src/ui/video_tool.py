@@ -190,17 +190,17 @@ def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]],
         frame_count = _coerce_frame_count(meta.get("nframes"))
         if frame_count <= 0:
             try:
+                frame_count = _coerce_frame_count(reader.count_frames())
+            except Exception:
+                pass
+        if frame_count <= 0:
+            try:
                 import imageio_ffmpeg
 
                 counted, secs = imageio_ffmpeg.count_frames_and_secs(path)
                 frame_count = _coerce_frame_count(counted)
                 if frame_count <= 0 and secs > 0 and fps > 0:
                     frame_count = max(1, int(round(secs * fps)))
-            except Exception:
-                pass
-        if frame_count <= 0:
-            try:
-                frame_count = _coerce_frame_count(reader.count_frames())
             except Exception:
                 pass
         if frame_count <= 0:
@@ -550,6 +550,19 @@ class _ClipEntry:
         speed = max(0.1, self.speed_percent / 100.0)
         mapped = int(idx * speed)
         return max(0, min(base - 1, mapped))
+
+    def split_second_half_offset(self, output_idx: int) -> Optional[int]:
+        if self.clip_type == "image":
+            return None
+        base = self.base_active_frames
+        if base <= 1:
+            return None
+        current = self.output_index_to_source_offset(output_idx)
+        for next_idx in range(max(0, int(output_idx)) + 1, self.active_frames):
+            candidate = self.output_index_to_source_offset(next_idx)
+            if candidate > current:
+                return candidate
+        return None
 
     def get_frame(self, idx: int) -> "PIL.Image.Image":
         return self._get_frame(self.trim_start + self.output_index_to_source_offset(idx))
@@ -1473,8 +1486,8 @@ class VideoToolDialog(QDialog):
                 "Move the playhead onto a video or animated GIF clip with at least two frames.",
             )
             return
-        source_offset = clip.output_index_to_source_offset(frame_idx)
-        if source_offset >= clip.base_active_frames - 1:
+        second_half_offset = clip.split_second_half_offset(frame_idx)
+        if second_half_offset is None:
             QMessageBox.information(
                 self,
                 "Split Clip",
@@ -1483,13 +1496,12 @@ class VideoToolDialog(QDialog):
             return
         original_trim_start = clip.trim_start
         original_trim_end = clip.trim_end
-        clip.trim_end = original_trim_start + source_offset
         second_half = self._reload_clip(clip)
         if second_half is None:
-            clip.trim_end = original_trim_end
             QMessageBox.warning(self, "Split Clip", "Could not duplicate the selected clip for splitting.")
             return
-        second_half.trim_start = original_trim_start + source_offset + 1
+        clip.trim_end = original_trim_start + second_half_offset - 1
+        second_half.trim_start = original_trim_start + second_half_offset
         second_half.trim_end = original_trim_end
         insert_row = clip_row + 1
         self._clips.insert(insert_row, second_half)
@@ -1681,11 +1693,9 @@ class VideoToolDialog(QDialog):
         gif_frames = []
         canceled = False
         wrote_frames = False
-        np = None
+        append_video_frame = None
         try:
-            if fmt == "gif":
-                pass
-            else:
+            if fmt != "gif":
                 import imageio
                 import numpy as np
                 writer = imageio.get_writer(
@@ -1693,6 +1703,7 @@ class VideoToolDialog(QDialog):
                     fps=fps,
                     codec="libx264",
                 )
+                append_video_frame = lambda frame: writer.append_data(np.array(frame))
             for i in range(total):
                 progress.setValue(i)
                 QApplication.processEvents()
@@ -1723,7 +1734,7 @@ class VideoToolDialog(QDialog):
                     else:
                         rgb = framed if framed.mode == "RGB" else framed.convert("RGB")
                         try:
-                            writer.append_data(np.array(rgb))
+                            append_video_frame(rgb)
                         finally:
                             if rgb is not None and rgb is not framed:
                                 rgb.close()

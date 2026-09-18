@@ -1618,6 +1618,12 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(video_clip.active_frames, 5)
         self.assertEqual(video_clip.output_index_to_source_offset(4), 8)
 
+        slow_clip = vt._ClipEntry("/tmp/slow.mp4", 6, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="video")
+        slow_clip.speed_percent = 50
+        self.assertEqual(slow_clip.output_index_to_source_offset(0), 0)
+        self.assertEqual(slow_clip.output_index_to_source_offset(1), 0)
+        self.assertEqual(slow_clip.split_second_half_offset(0), 1)
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

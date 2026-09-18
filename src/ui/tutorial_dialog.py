@@ -93,7 +93,8 @@ _TUTORIAL_STEPS = [
         "body": (
             "The <b>Video Editor</b> dialog lets you combine video clips and "
             "still images or GIFs into a single export.\n\n"
-            "• Add source clips and reorder them in the timeline.\n"
+            "• Add source clips, split a moving clip at the playhead, and insert media between the halves.\n"
+            "• Adjust per-clip speed for videos/GIFs or how long still images stay on screen.\n"
             "• Set the export format (MP4 or GIF) and frame rate.\n"
             "• Click <b>Export</b> to render the output.\n\n"
             "Note: Video import and MP4 export need imageio, imageio-ffmpeg, and "
