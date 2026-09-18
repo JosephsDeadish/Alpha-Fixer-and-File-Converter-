@@ -2093,6 +2093,7 @@ class VideoToolDialog(QDialog):
         append_video_frame = None
         render_path = out_path
         temp_mp4 = None
+        export_stage = "render setup"
         try:
             if fmt != "gif":
                 if self._should_mux_audio(fmt, clip_snapshot):
@@ -2108,11 +2109,13 @@ class VideoToolDialog(QDialog):
                 import numpy as np
                 writer = imageio.get_writer(
                     render_path,
+                    format="FFMPEG",
                     fps=fps,
                     codec="libx264",
                     pixelformat="yuv420p",
                 )
                 append_video_frame = lambda frame: writer.append_data(np.array(frame))
+            export_stage = "frame rendering"
             for i in range(total):
                 progress.setValue(i)
                 QApplication.processEvents()
@@ -2178,6 +2181,7 @@ class VideoToolDialog(QDialog):
                 writer.close()
                 writer = None
             if fmt == "gif" and not canceled and gif_frames:
+                export_stage = "GIF assembly"
                 first = gif_frames[0]
                 rest = gif_frames[1:]
                 try:
@@ -2207,6 +2211,7 @@ class VideoToolDialog(QDialog):
                             pass
                     gif_frames.clear()
             elif fmt == "mp4" and not canceled and wrote_frames and temp_mp4 is not None:
+                export_stage = "audio muxing"
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
                 self._mux_mp4_audio(render_path, out_path, clip_snapshot, fps)
@@ -2222,7 +2227,7 @@ class VideoToolDialog(QDialog):
                 except Exception:
                     pass
             progress.close()
-            QMessageBox.critical(self, "Export Error", f"Could not save output:\n{exc}")
+            QMessageBox.critical(self, "Export Error", f"Could not save output during {export_stage}:\n{exc}")
             return
         finally:
             if writer is not None:

@@ -1689,17 +1689,19 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         dialog._timeline_canvas_size = lambda fmt: (2, 2)
         dialog._should_mux_audio = lambda fmt, clips: False
         writer_paths = []
+        writer_kwargs = []
         fake_writer = _FakeWriter()
         try:
             with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.gif", "")):
                 with patch.object(vt.QMessageBox, "information"):
-                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or fake_writer):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or writer_kwargs.append(kwargs) or fake_writer):
                         dialog._export()
         finally:
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
         self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
+        self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
 
 
 # ---------------------------------------------------------------------------
