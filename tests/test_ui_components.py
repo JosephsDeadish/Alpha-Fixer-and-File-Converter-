@@ -1624,6 +1624,16 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(slow_clip.output_index_to_source_offset(1), 0)
         self.assertEqual(slow_clip.split_second_half_offset(0), 1)
 
+    def test_audio_tempo_filter_chain_stays_within_ffmpeg_limits(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(vt._build_atempo_filters(1.0), ["atempo=1"])
+        self.assertEqual(vt._build_atempo_filters(4.0), ["atempo=2.0", "atempo=2"])
+        self.assertEqual(vt._build_atempo_filters(0.25), ["atempo=0.5", "atempo=0.5"])
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

@@ -10,6 +10,7 @@ Provides a lightweight video editor that lets the user:
   • Apply visual filters: greyscale, sepia, invert, sharpen, blur, vignette, etc.
   • Preview with play/pause/rewind and a position scrubber
   • Export to MP4 (via imageio+ffmpeg) or animated GIF (via Pillow)
+  • Keep or mute source audio for MP4 exports and adjust output volume
 
 **Dependency note**: Full video I/O requires imageio, imageio-ffmpeg, and a
 working ffmpeg executable, preferably bundled and otherwise from the system PATH.
@@ -30,6 +31,8 @@ from __future__ import annotations
 from functools import lru_cache
 import os
 from pathlib import Path
+import subprocess
+import tempfile
 from threading import Lock
 from typing import Callable, Optional
 
@@ -43,7 +46,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
-    QComboBox, QGroupBox, QGridLayout, QSpinBox,
+    QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QScrollArea,
 )
@@ -401,6 +404,37 @@ def _format_extension_filter(label: str, extensions: set[str]) -> str:
     return f"{label} ({patterns});;All Files (*)"
 
 
+@lru_cache(maxsize=128)
+def _video_has_audio_stream(path: str) -> bool:
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        return False
+    try:
+        result = subprocess.run(
+            [ffmpeg_exe, "-v", "error", "-i", path, "-map", "0:a:0", "-f", "null", "-"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=20,
+        )
+    except Exception:
+        return False
+    return result.returncode == 0
+
+
+def _build_atempo_filters(speed_factor: float) -> list[str]:
+    remaining = max(0.01, float(speed_factor))
+    filters: list[str] = []
+    while remaining < 0.5:
+        filters.append("atempo=0.5")
+        remaining /= 0.5
+    while remaining > 2.0:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    filters.append(f"atempo={remaining:.6f}".rstrip("0").rstrip("."))
+    return filters
+
+
 class _ImageFrameGetter:
     """Picklable frame getter for a single-image clip.
 
@@ -742,10 +776,11 @@ class VideoToolDialog(QDialog):
     """Lightweight video editor dialog.
 
     Combines multiple clips, applies visual adjustments and filters, and
-    exports the result. Video clips and MP4 export require imageio,
-    imageio-ffmpeg, and a working ffmpeg executable. Still-image clips can
-    still be assembled into animated GIF exports without those video
-    dependencies.
+    exports the result. MP4 exports can optionally carry over source audio
+    from video clips while still-image/GIF sections render as silence. Video
+    clips and MP4 export require imageio, imageio-ffmpeg, and a working
+    ffmpeg executable. Still-image clips can still be assembled into
+    animated GIF exports without those video dependencies.
     """
     SHORTCUT_DEFS = (
         ("video_remove_selected", "Delete", "Remove selected clip", "Video Editor"),
@@ -1116,6 +1151,48 @@ class VideoToolDialog(QDialog):
         self._export_pad_lbl.setStyleSheet("color: gray; font-size: 11px;")
         ex_vl.addWidget(self._export_pad_lbl)
 
+        grp_audio = QGroupBox("Audio (MP4)")
+        audio_vl = QVBoxLayout(grp_audio)
+        audio_vl.setSpacing(6)
+
+        self._audio_enable_check = QCheckBox("Keep source audio in MP4 export")
+        self._audio_enable_check.setChecked(True)
+        self._audio_enable_check.setToolTip(
+            "When enabled, MP4 export keeps audio from source video clips where available.\n"
+            "Still-image and GIF sections stay silent."
+        )
+        self._audio_enable_check.toggled.connect(self._update_audio_controls)
+        audio_vl.addWidget(self._audio_enable_check)
+
+        self._audio_mute_check = QCheckBox("Mute exported audio")
+        self._audio_mute_check.setToolTip("Disable audio in the exported MP4 without changing the picture.")
+        self._audio_mute_check.toggled.connect(self._update_audio_controls)
+        audio_vl.addWidget(self._audio_mute_check)
+
+        audio_volume_row = QHBoxLayout()
+        audio_volume_row.addWidget(QLabel("Volume:"))
+        self._audio_volume_slider = _make_hslider(0, 200, 100)
+        self._audio_volume_slider.setToolTip(
+            "Adjust MP4 audio loudness.\n100% = original volume, 0% = silent, 200% = twice as loud."
+        )
+        self._audio_volume_slider.valueChanged.connect(
+            lambda v: self._audio_volume_lbl.setText(f"{v}%")
+        )
+        self._audio_volume_slider.valueChanged.connect(lambda _v: self._update_audio_controls())
+        audio_volume_row.addWidget(self._audio_volume_slider, 1)
+        self._audio_volume_lbl = QLabel("100%")
+        self._audio_volume_lbl.setFixedWidth(52)
+        self._audio_volume_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        audio_volume_row.addWidget(self._audio_volume_lbl)
+        audio_vl.addLayout(audio_volume_row)
+
+        self._audio_hint_lbl = QLabel("")
+        self._audio_hint_lbl.setWordWrap(True)
+        self._audio_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        audio_vl.addWidget(self._audio_hint_lbl)
+
+        ex_vl.addWidget(grp_audio)
+
         self._btn_export = QPushButton("💾  Export…")
         self._btn_export.setToolTip("Render and export.  Shortcut: Ctrl+S")
         self._btn_export.setMinimumHeight(34)
@@ -1127,6 +1204,7 @@ class VideoToolDialog(QDialog):
 
         splitter.addWidget(right_scroll)
         splitter.setSizes([240, 420, 260])
+        self._update_audio_controls()
 
     def _resolve_tooltip_mgr(self):
         if self._tooltip_mgr is not None:
@@ -1196,6 +1274,10 @@ class VideoToolDialog(QDialog):
         mgr.register(self._fps_slider, "video_preview")
         mgr.register(self._filter_combo, "video_filter")
         mgr.register(self._export_fmt_combo, "video_export")
+        mgr.register(self._audio_enable_check, "video_export")
+        mgr.register(self._audio_mute_check, "video_export")
+        mgr.register(self._audio_volume_slider, "video_export")
+        mgr.register(self._audio_hint_lbl, "video_export")
         mgr.register(self._btn_export, "video_export")
 
     # ------------------------------------------------------------------
@@ -1219,6 +1301,15 @@ class VideoToolDialog(QDialog):
         self._clip_list.insertItem(insert_row, item)
         self._clip_list.setCurrentRow(insert_row)
         return insert_row + 1
+
+    def _show_skipped_files(self, skipped: list[str]) -> None:
+        if skipped:
+            QMessageBox.information(
+                self,
+                "Unsupported Files Skipped",
+                "These files are not supported by the Video Editor:\n"
+                + "\n".join(skipped),
+            )
 
     def _refresh_clip_item(self, row: int) -> None:
         if row < 0 or row >= len(self._clips):
@@ -1269,13 +1360,7 @@ class VideoToolDialog(QDialog):
                 skipped.append(Path(path).name)
         self._update_scrubber()
         self._update_preview()
-        if skipped:
-            QMessageBox.information(
-                self,
-                "Unsupported Files Skipped",
-                "These files are not supported by the Video Editor:\n"
-                + "\n".join(skipped),
-            )
+        self._show_skipped_files(skipped)
 
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -1309,15 +1394,18 @@ class VideoToolDialog(QDialog):
         self._load_image_paths(paths, insert_row=self._next_insert_row())
 
     def _load_image_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
+        skipped = []
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         for path in paths:
             clip = _load_image_as_clip(path)
             if clip is None:
+                skipped.append(Path(path).name)
                 continue
             label = _format_clip_label(clip, path, "🖼")
             next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
+        self._show_skipped_files(skipped)
 
     def _remove_selected(self) -> None:
         row = self._clip_list.currentRow()
@@ -1442,6 +1530,48 @@ class VideoToolDialog(QDialog):
                 "Clip speed affects preview and export timing for the selected moving clip."
             )
 
+    def _timeline_has_video_clips(self) -> bool:
+        return any(clip.clip_type == "video" and clip.active_frames > 0 for clip in self._clips)
+
+    def _timeline_has_detected_audio(self) -> bool:
+        return any(
+            clip.clip_type == "video"
+            and clip.active_frames > 0
+            and _video_has_audio_stream(clip.path)
+            for clip in self._clips
+        )
+
+    def _update_audio_controls(self) -> None:
+        export_fmt = self._export_fmt_combo.currentData() if hasattr(self, "_export_fmt_combo") else "gif"
+        is_mp4 = export_fmt == "mp4"
+        has_video_clips = self._timeline_has_video_clips()
+        has_audio_source = has_video_clips and self._timeline_has_detected_audio()
+        allow_audio_controls = is_mp4 and self._mp4_export_available and has_video_clips
+
+        self._audio_enable_check.setEnabled(allow_audio_controls)
+        audio_enabled = allow_audio_controls and self._audio_enable_check.isChecked()
+        self._audio_mute_check.setEnabled(audio_enabled)
+        volume_enabled = audio_enabled and not self._audio_mute_check.isChecked()
+        self._audio_volume_slider.setEnabled(volume_enabled)
+        self._audio_volume_lbl.setEnabled(volume_enabled)
+
+        if not is_mp4:
+            hint = "GIF export is always silent."
+        elif not has_video_clips:
+            hint = "Audio controls only apply when the timeline contains at least one video clip."
+        elif not has_audio_source:
+            hint = "No source audio stream was detected in the current video clips, so the MP4 export will stay silent."
+        elif not self._audio_enable_check.isChecked():
+            hint = "MP4 export will stay silent until source audio is enabled."
+        elif self._audio_mute_check.isChecked() or self._audio_volume_slider.value() <= 0:
+            hint = "MP4 export will render without sound because audio is muted."
+        else:
+            hint = (
+                "Source audio is trimmed and time-matched per video clip. "
+                "Still-image and GIF sections are filled with silence."
+            )
+        self._audio_hint_lbl.setText(hint)
+
     def _on_clip_speed_changed(self, value: int) -> None:
         row = self._clip_list.currentRow()
         if row < 0 or row >= len(self._clips):
@@ -1452,6 +1582,9 @@ class VideoToolDialog(QDialog):
             return
         clip.speed_percent = max(10, min(400, int(value)))
         self._clip_speed_lbl.setText(f"{clip.speed_percent / 100:.2f}×")
+        self._after_selected_clip_timing_changed(row)
+
+    def _after_selected_clip_timing_changed(self, row: int) -> None:
         self._refresh_clip_item(row)
         self._update_scrubber()
         self._update_preview()
@@ -1467,10 +1600,7 @@ class VideoToolDialog(QDialog):
         if clip.clip_type != "image":
             return
         clip.still_duration_frames = max(1, int(value))
-        self._refresh_clip_item(row)
-        self._update_scrubber()
-        self._update_preview()
-        self._on_clip_selected(row)
+        self._after_selected_clip_timing_changed(row)
 
     def _split_clip_at_playhead(self) -> None:
         total = self._total_preview_frames()
@@ -1622,44 +1752,147 @@ class VideoToolDialog(QDialog):
     # Export
     # ------------------------------------------------------------------
 
-    def _export(self) -> None:
-        def _snapshot_clip_render_state(clip: "_ClipEntry") -> tuple[Callable[[int], object], int, Optional[tuple[int, int]]]:
-            trim_start = clip.trim_start
-            clip_type = clip.clip_type
-            speed_percent = clip.speed_percent
-            still_duration_frames = clip.still_duration_frames
-            frame_size = clip.frame_size
-            base_active_frames = max(0, clip.trim_end - trim_start + 1)
-            if clip_type == "image":
-                active_frames = max(1, int(still_duration_frames))
+    def _snapshot_clip_render_state(self, clip: "_ClipEntry", output_fps: float) -> dict[str, object]:
+        trim_start = clip.trim_start
+        trim_end = clip.trim_end
+        clip_type = clip.clip_type
+        speed_percent = clip.speed_percent
+        still_duration_frames = clip.still_duration_frames
+        frame_size = clip.frame_size
+        base_active_frames = max(0, trim_end - trim_start + 1)
+        if clip_type == "image":
+            active_frames = max(1, int(still_duration_frames))
+        else:
+            speed = max(0.1, speed_percent / 100.0)
+            active_frames = max(1, int(round(base_active_frames / speed))) if base_active_frames > 0 else 0
+        timeline_seconds = active_frames / max(0.1, output_fps) if active_frames > 0 else 0.0
+        get_source_frame = clip._get_frame
+
+        def _get_snapshot_frame(output_idx: int):
+            if clip_type == "image" or base_active_frames <= 0:
+                return get_source_frame(trim_start)
+            speed = max(0.1, speed_percent / 100.0)
+            mapped = int(output_idx * speed)
+            source_offset = max(0, min(base_active_frames - 1, mapped))
+            return get_source_frame(trim_start + source_offset)
+
+        return {
+            "get_frame": _get_snapshot_frame,
+            "active_frames": active_frames,
+            "frame_size": frame_size,
+            "clip_type": clip_type,
+            "path": clip.path,
+            "trim_start": trim_start,
+            "trim_end": trim_end,
+            "clip_fps": clip.fps,
+            "base_active_frames": base_active_frames,
+            "timeline_seconds": timeline_seconds,
+            "has_audio": clip_type == "video" and _video_has_audio_stream(clip.path),
+        }
+
+    def _should_mux_audio(self, fmt: str, clip_snapshot: list[dict[str, object]]) -> bool:
+        return (
+            fmt == "mp4"
+            and self._audio_enable_check.isChecked()
+            and not self._audio_mute_check.isChecked()
+            and self._audio_volume_slider.value() > 0
+            and any(bool(clip["has_audio"]) for clip in clip_snapshot)
+        )
+
+    def _mux_mp4_audio(
+        self,
+        silent_video_path: str,
+        out_path: str,
+        clip_snapshot: list[dict[str, object]],
+        output_fps: float,
+    ) -> None:
+        ffmpeg_exe = _get_ffmpeg_exe()
+        if not ffmpeg_exe:
+            raise RuntimeError("FFmpeg is unavailable for MP4 audio export.")
+
+        cmd = [ffmpeg_exe, "-y", "-v", "error", "-i", silent_video_path]
+        filter_parts: list[str] = []
+        concat_inputs: list[str] = []
+        input_index = 1
+        for clip_idx, clip in enumerate(clip_snapshot):
+            active_frames = max(0, int(clip["active_frames"]))
+            if active_frames <= 0:
+                continue
+            duration = float(clip["timeline_seconds"])
+            label = f"a{clip_idx}"
+            if clip["clip_type"] == "video" and clip["has_audio"]:
+                cmd.extend(["-i", str(clip["path"])])
+                trim_start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
+                trim_end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
+                source_duration = max(0.001, trim_end - trim_start)
+                tempo_factor = max(0.01, source_duration / max(0.001, duration))
+                filters = [
+                    f"[{input_index}:a]atrim=start={trim_start:.6f}:end={trim_end:.6f}",
+                    "asetpts=PTS-STARTPTS",
+                    *_build_atempo_filters(tempo_factor),
+                ]
+                filter_parts.append(",".join(filters) + f"[{label}]")
             else:
-                speed = max(0.1, speed_percent / 100.0)
-                active_frames = max(1, int(round(base_active_frames / speed))) if base_active_frames > 0 else 0
-            get_source_frame = clip._get_frame
+                cmd.extend([
+                    "-f", "lavfi",
+                    "-t", f"{duration:.6f}",
+                    "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                ])
+                filter_parts.append(
+                    f"[{input_index}:a]atrim=end={duration:.6f},asetpts=PTS-STARTPTS[{label}]"
+                )
+            concat_inputs.append(f"[{label}]")
+            input_index += 1
 
-            def _get_snapshot_frame(output_idx: int):
-                if clip_type == "image" or base_active_frames <= 0:
-                    return get_source_frame(trim_start)
-                speed = max(0.1, speed_percent / 100.0)
-                mapped = int(output_idx * speed)
-                source_offset = max(0, min(base_active_frames - 1, mapped))
-                return get_source_frame(trim_start + source_offset)
+        if not concat_inputs:
+            raise RuntimeError("No audio segments were available for MP4 export.")
 
-            return _get_snapshot_frame, active_frames, frame_size
+        filter_parts.append(
+            "".join(concat_inputs) + f"concat=n={len(concat_inputs)}:v=0:a=1[a_concat]"
+        )
+        volume = max(0.0, self._audio_volume_slider.value() / 100.0)
+        output_label = "[a_concat]"
+        if abs(volume - 1.0) > 0.0001:
+            filter_parts.append(f"[a_concat]volume={volume:.3f}[a_out]")
+            output_label = "[a_out]"
 
+        cmd.extend([
+            "-filter_complex", ";".join(filter_parts),
+            "-map", "0:v:0",
+            "-map", output_label,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-shortest",
+            out_path,
+        ])
+
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "FFmpeg audio mux failed.")
+
+    def _export(self) -> None:
+        output_fps = max(0.1, float(self._fps_slider.value()))
         clip_snapshot = [
-            _snapshot_clip_render_state(clip)
+            self._snapshot_clip_render_state(clip, output_fps)
             for clip in self._clips
             if clip.active_frames > 0
         ]
-        total = sum(active_frames for _, active_frames, _ in clip_snapshot)
+        total = sum(int(clip["active_frames"]) for clip in clip_snapshot)
         if total == 0:
             QMessageBox.information(self, "No Clips", "Add at least one clip or image first.")
             return
 
         def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:
             idx = global_idx
-            for clip_idx, (_, active_frames, _frame_size) in enumerate(clip_snapshot):
+            for clip_idx, clip in enumerate(clip_snapshot):
+                active_frames = int(clip["active_frames"])
                 if idx < active_frames:
                     return clip_idx, idx
                 idx -= active_frames
@@ -1687,7 +1920,7 @@ class VideoToolDialog(QDialog):
             else:
                 out_path = f"{out_path}{target_suffix}"
 
-        fps = max(0.1, float(self._fps_slider.value()))
+        fps = output_fps
         filter_key = self._filter_combo.currentData() or "none"
         canvas_size = self._timeline_canvas_size(fmt)
         if canvas_size is None:
@@ -1714,16 +1947,28 @@ class VideoToolDialog(QDialog):
         saturation = self._saturation_slider.value() / 100.0
         sharpness = self._sharpness_slider.value() / 100.0
         writer = None
-        gif_frames = []
+        gif_frame_paths: list[str] = []
+        gif_frame_dir = None
         canceled = False
         wrote_frames = False
         append_video_frame = None
+        render_path = out_path
+        temp_mp4 = None
         try:
             if fmt != "gif":
+                if self._should_mux_audio(fmt, clip_snapshot):
+                    temp_file = tempfile.NamedTemporaryFile(
+                        prefix="alpha_fixer_video_",
+                        suffix=".mp4",
+                        delete=False,
+                    )
+                    temp_mp4 = temp_file.name
+                    temp_file.close()
+                    render_path = temp_mp4
                 import imageio
                 import numpy as np
                 writer = imageio.get_writer(
-                    out_path,
+                    render_path,
                     fps=fps,
                     codec="libx264",
                 )
@@ -1735,8 +1980,7 @@ class VideoToolDialog(QDialog):
                     canceled = True
                     break
                 ci, fi = _global_frame_to_snapshot(i)
-                get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]
-                source_pil = get_frame_fn(fi)
+                source_pil = clip_snapshot[ci]["get_frame"](fi)
                 adjusted = source_pil
                 filtered = source_pil
                 framed = None
@@ -1753,15 +1997,19 @@ class VideoToolDialog(QDialog):
                     )
                     filtered = _apply_filter(adjusted, filter_key)
                     framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)
-                    if fmt == "gif":
-                        gif_frames.append(framed.copy())
-                    else:
+                    if fmt != "gif":
                         rgb = framed if framed.mode == "RGB" else framed.convert("RGB")
                         try:
                             append_video_frame(rgb)
                         finally:
                             if rgb is not None and rgb is not framed:
                                 rgb.close()
+                    if fmt == "gif":
+                        if gif_frame_dir is None:
+                            gif_frame_dir = tempfile.TemporaryDirectory(prefix="alpha_fixer_video_gif_")
+                        frame_path = Path(gif_frame_dir.name) / f"frame_{i:06d}.png"
+                        framed.save(frame_path)
+                        gif_frame_paths.append(str(frame_path))
                     wrote_frames = True
                 finally:
                     if framed is not None and framed is not filtered:
@@ -1792,23 +2040,43 @@ class VideoToolDialog(QDialog):
             if not canceled and writer is not None:
                 writer.close()
                 writer = None
-            if fmt == "gif" and not canceled and gif_frames:
-                first, *rest = gif_frames
-                first.save(
-                    out_path,
-                    format="GIF",
-                    save_all=True,
-                    append_images=rest,
-                    duration=max(1, int(round(1000.0 / fps))),
-                    loop=0,
-                    disposal=2,
-                )
+            if fmt == "gif" and not canceled and gif_frame_paths:
+                from PIL import Image
+
+                first = Image.open(gif_frame_paths[0])
+                rest = [Image.open(path) for path in gif_frame_paths[1:]]
+                try:
+                    first.save(
+                        out_path,
+                        format="GIF",
+                        save_all=True,
+                        append_images=rest,
+                        duration=max(1, int(round(1000.0 / fps))),
+                        loop=0,
+                        disposal=2,
+                    )
+                finally:
+                    first.close()
+                    for frame in rest:
+                        try:
+                            frame.close()
+                        except Exception:
+                            pass
+            elif fmt == "mp4" and not canceled and wrote_frames and temp_mp4 is not None:
+                progress.setLabelText("Mixing source audio into MP4…")
+                QApplication.processEvents()
+                self._mux_mp4_audio(render_path, out_path, clip_snapshot, fps)
             progress.setValue(total)
         except Exception as exc:
             try:
                 Path(out_path).unlink(missing_ok=True)
             except Exception:
                 pass
+            if temp_mp4 is not None:
+                try:
+                    Path(temp_mp4).unlink(missing_ok=True)
+                except Exception:
+                    pass
             progress.close()
             QMessageBox.critical(self, "Export Error", f"Could not save output:\n{exc}")
             return
@@ -1818,17 +2086,24 @@ class VideoToolDialog(QDialog):
                     writer.close()
                 except Exception:
                     pass
-            for frame in gif_frames:
+            if temp_mp4 is not None:
                 try:
-                    frame.close()
+                    Path(temp_mp4).unlink(missing_ok=True)
                 except Exception:
                     pass
+            if gif_frame_dir is not None:
+                gif_frame_dir.cleanup()
 
         if progress.wasCanceled() or not wrote_frames:
             try:
                 Path(out_path).unlink(missing_ok=True)
             except Exception:
                 pass
+            if temp_mp4 is not None:
+                try:
+                    Path(temp_mp4).unlink(missing_ok=True)
+                except Exception:
+                    pass
             progress.close()
             return
 
@@ -1875,12 +2150,13 @@ class VideoToolDialog(QDialog):
                 except Exception:
                     pass
 
-    def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:
+    def _active_clip_canvas_sizes(self) -> list[tuple[int, int]]:
         active = [clip for clip in self._clips if clip.active_frames > 0]
-        if not active:
-            return None
         sizes = [self._clip_canvas_size(clip) for clip in active]
-        sizes = [size for size in sizes if size is not None]
+        return [size for size in sizes if size is not None]
+
+    def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:
+        sizes = self._active_clip_canvas_sizes()
         if not sizes:
             return None
         width = max(size[0] for size in sizes)
@@ -1889,15 +2165,18 @@ class VideoToolDialog(QDialog):
         return _coerce_export_size((width, height), export_fmt)
 
     def _update_export_summary(self) -> None:
-        canvas_size = self._timeline_canvas_size()
-        if canvas_size is None:
+        self._update_audio_controls()
+        natural_sizes = self._active_clip_canvas_sizes()
+        if not natural_sizes:
             self._export_size_lbl.setText("Canvas: auto once clips are added")
             self._export_pad_lbl.setText("Mixed-size clips are resized to fit and centred automatically.")
             return
-        natural_sizes = [self._clip_canvas_size(clip) for clip in self._clips if clip.active_frames > 0]
-        natural_sizes = [size for size in natural_sizes if size is not None]
         natural_width = max(size[0] for size in natural_sizes)
         natural_height = max(size[1] for size in natural_sizes)
+        canvas_size = _coerce_export_size(
+            (natural_width, natural_height),
+            self._export_fmt_combo.currentData() or "gif",
+        )
         if canvas_size == (natural_width, natural_height):
             detail = "Canvas: auto from the largest clip"
         else:

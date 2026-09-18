@@ -8711,6 +8711,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('out_path = f"{out_path}{target_suffix}"', src)
         self.assertIn("def _has_imageio() -> bool:", src)
         self.assertIn("def _configure_imageio_ffmpeg() -> Optional[str]:", src)
+        self.assertIn("def _video_has_audio_stream(path: str) -> bool:", src)
+        self.assertIn("def _build_atempo_filters(speed_factor: float) -> list[str]:", src)
         self.assertIn('os.environ.setdefault("IMAGEIO_FFMPEG_EXE", ffmpeg_exe)', src)
         self.assertNotIn('os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe', src)
         self.assertIn("self._imageio_ffmpeg_available = _has_imageio_ffmpeg()", src)
@@ -8719,8 +8721,18 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("QApplication.processEvents()", src)
         self.assertIn('if fmt != "gif":', src)
         self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
-        self.assertIn("gif_frames.append(framed.copy())", src)
-        self.assertIn('first.save(\n                    out_path,\n                    format="GIF"', src)
+        self.assertIn('gif_frame_dir = tempfile.TemporaryDirectory(prefix="alpha_fixer_video_gif_")', src)
+        self.assertIn('frame_path = Path(gif_frame_dir.name) / f"frame_{i:06d}.png"', src)
+        self.assertIn("gif_frame_paths.append(str(frame_path))", src)
+        self.assertIn('self._audio_enable_check = QCheckBox("Keep source audio in MP4 export")', src)
+        self.assertIn('self._audio_mute_check = QCheckBox("Mute exported audio")', src)
+        self.assertIn('self._audio_volume_slider = _make_hslider(0, 200, 100)', src)
+        self.assertIn("def _mux_mp4_audio(", src)
+        self.assertIn('progress.setLabelText("Mixing source audio into MP4…")', src)
+        self.assertIn('"-i", "anullsrc=channel_layout=stereo:sample_rate=48000"', src)
+        self.assertIn('"-c:a", "aac"', src)
+        self.assertIn("first = Image.open(gif_frame_paths[0])", src)
+        self.assertIn("append_images=rest", src)
         self.assertIn("Unsupported Files Skipped", src)
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
@@ -8753,6 +8765,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("MP4 or GIF", src)
         self.assertIn("combine video clips and ", src)
         self.assertIn("still images or GIFs into a single export", src)
+        self.assertIn("keep source audio from video clips", src)
         self.assertIn("Video import and MP4 export need imageio, imageio-ffmpeg, and ", src)
         self.assertIn("GIF export from images/GIFs still works", src)
         self.assertNotIn("WebM", src)
@@ -8763,7 +8776,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("into an animated GIF", src)
         self.assertNotIn('process image-sequence "videos"', src)
         self.assertNotIn("(folders of PNGs)", src)
-        self.assertIn("Video clips and MP4 export require imageio,", src)
+        self.assertIn("MP4 exports can optionally carry over source audio", src)
+        self.assertIn("clips and MP4 export require imageio,", src)
         self.assertIn("imageio-ffmpeg, and a working ffmpeg executable.", src)
 
     def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
@@ -8884,8 +8898,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("with self._lock:", src)
         self.assertIn("if filtered is not adjusted:", src)
         self.assertIn("adjusted.close()", src)
-        self.assertIn("get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]", src)
-        self.assertIn("source_pil = get_frame_fn(fi)", src)
+        self.assertIn('source_pil = clip_snapshot[ci]["get_frame"](fi)', src)
         self.assertNotIn("size=canvas_size", src)
 
     def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
@@ -8977,6 +8990,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('mgr.register(self._btn_split, "video_timeline")', video_src)
         self.assertIn('mgr.register(self._clip_speed_slider, "video_trim")', video_src)
         self.assertIn('mgr.register(self._still_duration_spin, "video_trim")', video_src)
+        self.assertIn('mgr.register(self._audio_enable_check, "video_export")', video_src)
+        self.assertIn('mgr.register(self._audio_volume_slider, "video_export")', video_src)
         self.assertIn("def register_tooltips(self, mgr) -> None:", gif_src)
         self.assertIn('mgr.register(self._btn_add, "gif_media_add")', gif_src)
         self.assertIn('mgr.register(self._btn_export, "gif_export")', gif_src)
@@ -9029,11 +9044,13 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_video_export_uses_snapshot_of_clip_state_during_render(self):
         src = self._src("ui/video_tool.py")
         self.assertIn("clip_snapshot = [", src)
-        self.assertIn("total = sum(active_frames for _, active_frames, _ in clip_snapshot)", src)
+        self.assertIn("def _snapshot_clip_render_state(self, clip: \"_ClipEntry\", output_fps: float) -> dict[str, object]:", src)
+        self.assertIn('clip_type == "video" and _video_has_audio_stream(clip.path)', src)
+        self.assertIn('"timeline_seconds": timeline_seconds,', src)
+        self.assertIn('total = sum(int(clip["active_frames"]) for clip in clip_snapshot)', src)
         self.assertIn("def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:", src)
         self.assertIn("canvas_size = self._timeline_canvas_size(fmt)", src)
-        self.assertIn("get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]", src)
-        self.assertIn("source_pil = get_frame_fn(fi)", src)
+        self.assertIn('source_pil = clip_snapshot[ci]["get_frame"](fi)', src)
         self.assertIn("framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)", src)
 
     def test_video_editor_exposes_insert_mode_and_canvas_summary(self):
@@ -9044,8 +9061,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._btn_split = QPushButton("✂  Split at Playhead")', src)
         self.assertIn('self._clip_speed_slider = _make_hslider(10, 400, 100)', src)
         self.assertIn('self._still_duration_spin.setRange(1, 3600)', src)
+        self.assertIn('grp_audio = QGroupBox("Audio (MP4)")', src)
         self.assertIn('self._export_size_lbl = QLabel("Canvas: auto once clips are added")', src)
         self.assertIn("def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:", src)
+        self.assertIn("def _active_clip_canvas_sizes(self) -> list[tuple[int, int]]:", src)
         self.assertIn('detail = "Canvas: auto from the largest clip (rounded for MP4 compatibility)"', src)
         self.assertIn("def _format_clip_label(clip: \"_ClipEntry\", path: str, icon: str) -> str:", src)
         self.assertIn('size_text = f"{size[0]}×{size[1]}  •  " if size else ""', src)
@@ -9067,6 +9086,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("Choose whether to export the current timeline as MP4 or animated GIF.", video_export_section)
         self.assertIn("Split at Playhead", src)
         self.assertIn("Still images now stay on screen for a configurable duration", src)
+        self.assertIn("keep source audio from video clips", src)
         for key in (
             "video_media_add",
             "video_timeline",
@@ -9164,6 +9184,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/tutorial_dialog.py")
         self.assertIn("split a moving clip at the playhead", src)
         self.assertIn("Adjust per-clip speed for videos/GIFs", src)
+        self.assertIn("keep source audio from video clips", src)
 
     def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
         src = self._src("ui/theme_engine.py")
