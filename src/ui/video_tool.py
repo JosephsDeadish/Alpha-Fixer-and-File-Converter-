@@ -661,6 +661,16 @@ def _format_clip_label(clip: "_ClipEntry", path: str, icon: str) -> str:
     return f"{icon}  {Path(path).name}  [{size_text}{clip.active_frames} fr @ {clip.fps:.1f} fps{speed_suffix}]"
 
 
+_ADJUSTMENT_DEFAULT_VALUES = {
+    "brightness": 100,
+    "contrast": 100,
+    "saturation": 100,
+    "sharpness": 100,
+    "black_point": 0,
+    "white_point": 255,
+}
+
+
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     try:
@@ -1131,27 +1141,27 @@ class VideoToolDialog(QDialog):
             return f"{v / 100:.2f}"
 
         self._brightness_slider = _adj_row(
-            "Brightness:", 10, 400, 100, _f,
+            "Brightness:", 10, 400, _ADJUSTMENT_DEFAULT_VALUES["brightness"], _f,
             "1.00 = original  •  >1 = brighter  •  <1 = darker"
         )
         self._contrast_slider = _adj_row(
-            "Contrast:", 10, 400, 100, _f,
+            "Contrast:", 10, 400, _ADJUSTMENT_DEFAULT_VALUES["contrast"], _f,
             "1.00 = original  •  >1 = more contrast"
         )
         self._saturation_slider = _adj_row(
-            "Saturation:", 0, 400, 100, _f,
+            "Saturation:", 0, 400, _ADJUSTMENT_DEFAULT_VALUES["saturation"], _f,
             "1.00 = original  •  0.00 = greyscale  •  >1 = vivid"
         )
         self._sharpness_slider = _adj_row(
-            "Sharpness:", 0, 400, 100, _f,
+            "Sharpness:", 0, 400, _ADJUSTMENT_DEFAULT_VALUES["sharpness"], _f,
             "1.00 = original  •  >1 = sharper  •  <1 = softer"
         )
         self._black_slider = _adj_row(
-            "Black point:", 0, 254, 0,
+            "Black point:", 0, 254, _ADJUSTMENT_DEFAULT_VALUES["black_point"],
             tooltip="Input level mapped to black — lifts shadows"
         )
         self._white_slider = _adj_row(
-            "White point:", 1, 255, 255,
+            "White point:", 1, 255, _ADJUSTMENT_DEFAULT_VALUES["white_point"],
             tooltip="Input level mapped to white — pulls down highlights"
         )
 
@@ -2112,7 +2122,7 @@ class VideoToolDialog(QDialog):
                 ci, fi = _global_frame_to_snapshot(i)
                 source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)
                 adjusted = source_pil
-                filtered = source_pil
+                filtered = None
                 framed = None
                 rgb = None
                 try:
@@ -2144,7 +2154,7 @@ class VideoToolDialog(QDialog):
                             framed.close()
                         except Exception:
                             pass
-                    if filtered is not adjusted:
+                    if filtered is not None and filtered is not adjusted and filtered is not source_pil:
                         try:
                             filtered.close()
                         except Exception:
@@ -2242,6 +2252,12 @@ class VideoToolDialog(QDialog):
                     Path(temp_mp4).unlink(missing_ok=True)
                 except Exception:
                     pass
+            for frame in gif_frames:
+                try:
+                    frame.close()
+                except Exception:
+                    pass
+            gif_frames.clear()
             progress.close()
             return
 
@@ -2254,12 +2270,12 @@ class VideoToolDialog(QDialog):
 
     def _reset_adjustments(self) -> None:
         for slider, val in [
-            (self._brightness_slider, 100),
-            (self._contrast_slider, 100),
-            (self._saturation_slider, 100),
-            (self._sharpness_slider, 100),
-            (self._black_slider, 0),
-            (self._white_slider, 255),
+            (self._brightness_slider, _ADJUSTMENT_DEFAULT_VALUES["brightness"]),
+            (self._contrast_slider, _ADJUSTMENT_DEFAULT_VALUES["contrast"]),
+            (self._saturation_slider, _ADJUSTMENT_DEFAULT_VALUES["saturation"]),
+            (self._sharpness_slider, _ADJUSTMENT_DEFAULT_VALUES["sharpness"]),
+            (self._black_slider, _ADJUSTMENT_DEFAULT_VALUES["black_point"]),
+            (self._white_slider, _ADJUSTMENT_DEFAULT_VALUES["white_point"]),
         ]:
             slider.blockSignals(True)
             slider.setValue(val)
