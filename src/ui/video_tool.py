@@ -890,7 +890,7 @@ class VideoToolDialog(QDialog):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
 
-        self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s")
+        self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")
         self._timeline_summary_lbl.setWordWrap(True)
         self._timeline_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
         self._timeline_summary_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -995,7 +995,7 @@ class VideoToolDialog(QDialog):
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview_lbl.setMinimumSize(_PREVIEW_MAX_W, _PREVIEW_MAX_H)
         self._preview_lbl.setFrameShape(QFrame.Shape.StyledPanel)
-        self._preview_lbl.setText("(no clips)")
+        self._preview_lbl.setText("Add clips to preview and export.")
         pv_layout.addWidget(self._preview_lbl, 1)
 
         # Scrubber
@@ -1412,6 +1412,7 @@ class VideoToolDialog(QDialog):
                 skipped.append(Path(path).name)
         self._update_scrubber()
         self._update_preview()
+        self._update_ui_state()
         self._show_skipped_files(skipped)
 
     def _add_video(self) -> None:
@@ -1457,6 +1458,7 @@ class VideoToolDialog(QDialog):
             next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
+        self._update_ui_state()
         self._show_skipped_files(skipped)
 
     def _remove_selected(self) -> None:
@@ -1487,7 +1489,6 @@ class VideoToolDialog(QDialog):
 
     def _on_clip_selected(self, row: int) -> None:
         if row < 0 or row >= len(self._clips):
-            self._clip_info_lbl.setText("")
             self._trim_start_slider.blockSignals(True)
             self._trim_end_slider.blockSignals(True)
             self._trim_start_slider.setRange(0, 0)
@@ -1495,6 +1496,7 @@ class VideoToolDialog(QDialog):
             self._trim_start_slider.blockSignals(False)
             self._trim_end_slider.blockSignals(False)
             self._update_timing_controls()
+            self._update_ui_state()
             return
         clip = self._clips[row]
         self._trim_start_slider.blockSignals(True)
@@ -1508,12 +1510,9 @@ class VideoToolDialog(QDialog):
         self._trim_end_lbl.setText(str(clip.trim_end))
         self._trim_start_slider.blockSignals(False)
         self._trim_end_slider.blockSignals(False)
-        self._clip_info_lbl.setText(
-            f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
-            f"{clip.fps:.1f} fps"
-            + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
-        )
+        self._clip_info_lbl.setText(self._format_clip_info_text(clip))
         self._update_timing_controls()
+        self._update_ui_state()
 
     def _on_trim_start_changed(self, val: int) -> None:
         row = self._clip_list.currentRow()
@@ -1524,14 +1523,11 @@ class VideoToolDialog(QDialog):
             self._trim_start_slider.setValue(clip.trim_start)
             self._trim_start_slider.blockSignals(False)
             self._trim_start_lbl.setText(str(clip.trim_start))
-            self._clip_info_lbl.setText(
-                f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
-                f"{clip.fps:.1f} fps"
-                + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
-            )
+            self._clip_info_lbl.setText(self._format_clip_info_text(clip))
             self._refresh_clip_item(row)
             self._update_timing_controls()
             self._update_scrubber()
+            self._update_ui_state()
         else:
             self._trim_start_lbl.setText(str(val))
 
@@ -1544,14 +1540,11 @@ class VideoToolDialog(QDialog):
             self._trim_end_slider.setValue(clip.trim_end)
             self._trim_end_slider.blockSignals(False)
             self._trim_end_lbl.setText(str(clip.trim_end))
-            self._clip_info_lbl.setText(
-                f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
-                f"{clip.fps:.1f} fps"
-                + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
-            )
+            self._clip_info_lbl.setText(self._format_clip_info_text(clip))
             self._refresh_clip_item(row)
             self._update_timing_controls()
             self._update_scrubber()
+            self._update_ui_state()
         else:
             self._trim_end_lbl.setText(str(val))
 
@@ -1647,6 +1640,7 @@ class VideoToolDialog(QDialog):
         self._update_scrubber()
         self._update_preview()
         self._on_clip_selected(row)
+        self._update_ui_state()
 
     def _on_still_duration_changed(self, value: int) -> None:
         row = self._clip_list.currentRow()
@@ -1733,7 +1727,7 @@ class VideoToolDialog(QDialog):
     def _update_preview(self) -> None:
         total = self._total_preview_frames()
         if total == 0 or not self._clips:
-            self._preview_lbl.setText("(no clips)")
+            self._preview_lbl.setText("Add clips to preview and export.")
             self._pos_lbl.setText("0 / 0")
             return
         g = max(0, min(self._scrubber.value(), total - 1))

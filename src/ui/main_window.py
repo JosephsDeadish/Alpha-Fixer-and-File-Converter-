@@ -3080,6 +3080,50 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    def _iter_visible_top_level_windows(self) -> list[QWidget]:
+        app = QApplication.instance()
+        if app is None:
+            return []
+        windows: list[QWidget] = []
+        for widget in app.topLevelWidgets():
+            if widget is None or widget is self:
+                continue
+            try:
+                if not widget.isWindow() or not widget.isVisible():
+                    continue
+            except RuntimeError:
+                continue
+            windows.append(widget)
+        return windows
+
+    def _sync_dialog_trail_overlays(self) -> None:
+        from .mouse_trail import MouseTrailOverlay
+
+        trail_enabled = self._settings.get("trail_enabled", False)
+        for dlg in self._iter_visible_top_level_windows():
+            self._enable_mouse_tracking_recursive(dlg)
+            overlays = [
+                child for child in dlg.children()
+                if isinstance(child, MouseTrailOverlay)
+            ]
+            if trail_enabled and not overlays:
+                overlay = MouseTrailOverlay(dlg)
+                overlay.setGeometry(dlg.rect())
+                overlay.raise_()
+                self._apply_trail_to(overlay)
+                overlay.set_enabled(True)
+                continue
+            for index, overlay in enumerate(overlays):
+                try:
+                    if index > 0:
+                        overlay.deleteLater()
+                        continue
+                    overlay.setGeometry(dlg.rect())
+                    overlay.raise_()
+                    self._apply_trail_to(overlay)
+                except RuntimeError:
+                    pass
+
     def _on_settings_changed(self):
         """Schedule a deferred re-apply of all effect-related settings.
 
@@ -3270,6 +3314,7 @@ class MainWindow(QMainWindow):
         self._trail_overlay.set_enabled(
             self._settings.get("trail_enabled", False)
         )
+        self._sync_dialog_trail_overlays()
 
     def _export_settings(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -3837,7 +3882,12 @@ class MainWindow(QMainWindow):
             # --- trail overlay ---
             if trail_enabled and self._trail_overlay is not None:
                 from .mouse_trail import MouseTrailOverlay
-                _trail = MouseTrailOverlay(dlg)
+                _trail = next(
+                    (child for child in dlg.children() if isinstance(child, MouseTrailOverlay)),
+                    None,
+                )
+                if _trail is None:
+                    _trail = MouseTrailOverlay(dlg)
                 _trail.setGeometry(dlg.rect())
                 _trail.raise_()
                 self._apply_trail_to(_trail)
@@ -3847,7 +3897,12 @@ class MainWindow(QMainWindow):
             if effects_enabled and self._click_effects is not None:
                 from .click_effects import ClickEffectsOverlay
                 from .theme_engine import THEME_EFFECTS
-                _ov = ClickEffectsOverlay(dlg)
+                _ov = next(
+                    (child for child in dlg.children() if isinstance(child, ClickEffectsOverlay)),
+                    None,
+                )
+                if _ov is None:
+                    _ov = ClickEffectsOverlay(dlg)
                 _ov.setGeometry(dlg.rect())
                 _ov.raise_()
                 theme = self._settings.get_theme()

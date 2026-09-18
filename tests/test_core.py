@@ -9078,6 +9078,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("if clip.active_frames <= 0:", src)
         self.assertIn("current = min(self._scrubber.value(), total)", src)
         self.assertIn('self._pos_lbl.setText(f"{(current + 1) if total_frames else 0} / {total_frames}")', src)
+        self.assertIn('self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")', src)
+        self.assertIn('self._preview_lbl.setText("Add clips to preview and export.")', src)
+        self.assertIn('self._clip_info_lbl.setText("Select a clip to adjust trim and timing.")', src)
+        self.assertEqual(src.count("def _update_ui_state(self) -> None:"), 1)
+        self.assertEqual(src.count("def _update_timeline_summary(self) -> None:"), 1)
+        self.assertEqual(src.count("def _format_clip_info_text(self, clip: \"_ClipEntry\") -> str:"), 1)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
@@ -9144,6 +9150,19 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._theme_preset_combo.addItem(f"🔒 {current_hidden}")', src)
         self.assertIn('idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")', src)
 
+    def test_settings_dialog_has_clear_general_and_sound_guidance(self):
+        src = self._src("ui/settings_dialog.py")
+        self.assertIn("Quick guide: Theme changes colors and visuals, General handles layout/tooltips/effects,", src)
+        self.assertIn("Sound settings are kept separate from visual theme controls so it is easier to tell", src)
+
+    def test_theme_ambient_tooltips_keep_panda_mapping_consistent(self):
+        dialog_src = self._src("ui/settings_dialog.py")
+        tooltip_src = self._src("ui/tooltip_manager.py")
+        self.assertIn("Panda themes use Bamboo Leaves when theme ambient is enabled.", dialog_src)
+        self.assertIn("Panda themes use Bamboo Leaves.", tooltip_src)
+        self.assertIn("Panda gets Bamboo Leaves.", tooltip_src)
+        self.assertNotIn("Panda gets nothing.", tooltip_src)
+
     def test_button_press_animation_runs_after_release(self):
         src = self._src("ui/click_effects.py")
         self.assertIn("event.type() == QEvent.Type.MouseButtonRelease", src)
@@ -9165,6 +9184,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")', src)
         self.assertIn("dlg.setMinimumSize(760, 560)", src)
         self.assertIn("btn_change.setMinimumWidth(86)", src)
+
+    def test_main_window_resyncs_dialog_trails_for_visible_windows(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("def _iter_visible_top_level_windows(self) -> list[QWidget]:", src)
+        self.assertIn("def _sync_dialog_trail_overlays(self) -> None:", src)
+        self.assertIn("for dlg in self._iter_visible_top_level_windows():", src)
+        self.assertIn("overlay = MouseTrailOverlay(dlg)", src)
+        self.assertIn("if index > 0:", src)
+        self.assertIn("overlay.deleteLater()", src)
+        self.assertIn("self._sync_dialog_trail_overlays()", src)
 
     def test_button_anim_settings_use_explicit_fallbacks(self):
         src = self._src("ui/main_window.py")

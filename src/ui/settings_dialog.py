@@ -821,7 +821,8 @@ class SettingsDialog(QDialog):
         )
         self._use_theme_ambient_check.setToolTip(
             "When enabled the ambient style is chosen automatically from the active theme.\n"
-            "Themes without a defined ambient (e.g. Panda, Otter) will disable the effect.\n"
+            "Themes without a defined ambient will disable the effect automatically.\n"
+            "Panda themes use Bamboo Leaves when theme ambient is enabled.\n"
             "Uncheck to manually pick an ambient style from the list below."
         )
         _ba_sub_vl.addWidget(self._use_theme_ambient_check)
@@ -1580,6 +1581,17 @@ class SettingsDialog(QDialog):
         gv.setContentsMargins(8, 8, 8, 8)
         gv.setSpacing(8)
 
+        general_intro = QLabel(
+            "Quick guide: Theme changes colors and visuals, General handles layout/tooltips/effects, "
+            "and Sound controls clicks and ambience. Most changes apply immediately."
+        )
+        general_intro.setWordWrap(True)
+        general_intro.setStyleSheet(
+            "padding: 6px 8px; border: 1px solid rgba(255,255,255,40); "
+            "border-radius: 6px; color: #bbb;"
+        )
+        gv.addWidget(general_intro)
+
         # ---- Tooltip Appearance GroupBox ----
         grp_misc = QGroupBox("Tooltip Appearance")
         misc_gl = QGridLayout(grp_misc)
@@ -1875,6 +1887,16 @@ class SettingsDialog(QDialog):
         sv = QVBoxLayout(sound_tab)
         sv.setContentsMargins(8, 8, 8, 8)
         sv.setSpacing(8)
+        sound_intro = QLabel(
+            "Sound settings are kept separate from visual theme controls so it is easier to tell "
+            "what affects ambience, clicks, and notifications."
+        )
+        sound_intro.setWordWrap(True)
+        sound_intro.setStyleSheet(
+            "padding: 6px 8px; border: 1px solid rgba(255,255,255,40); "
+            "border-radius: 6px; color: #bbb;"
+        )
+        sv.addWidget(sound_intro)
         sv.addWidget(self._grp_sound)
         sv.addStretch(1)
         sound_scroll = QScrollArea()

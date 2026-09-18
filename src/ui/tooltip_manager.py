@@ -436,7 +436,7 @@ _NORMAL: dict[str, list[str]] = {
     "use_theme_ambient": [
         "Auto-selects the ambient animation style defined by the active theme.",
         "Themes like Bat Cave use Ghost Wisps, Galaxy uses Shooting Stars, Gore uses Embers.",
-        "Themes without a defined ambient (Panda, Otter, etc.) disable the ambient when this is on.",
+        "Themes without a defined ambient disable the ambient when this is on, while Panda themes use Bamboo Leaves.",
         "This prevents Panda getting snow or Goth getting confetti — effects match the mood.",
         "Uncheck to manually pick any ambient style regardless of the active theme.",
         "When enabled, switching themes automatically updates the ambient to match.",
@@ -2958,7 +2958,7 @@ _DUMBED: dict[str, list[str]] = {
     "use_theme_ambient": [
         "Makes the ambient particles match your theme automatically. Smart particles.",
         "Check this and the app picks the ambient vibe that goes with your theme. Very thoughtful.",
-        "Bat Cave gets Ghost Wisps. Galaxy gets Stars. Panda gets nothing. Very on-brand.",
+        "Bat Cave gets Ghost Wisps. Galaxy gets Stars. Panda gets Bamboo Leaves. The bear gets themed leaf confetti.",
         "Use Theme Ambient: so you don't accidentally put confetti on your Goth theme.",
         "Automated ambient mood matching. The app decides what floats around you. Trust it.",
         "Themed ambient = automatic atmospheric coordination. Like having a personal interior decorator.",
@@ -3252,6 +3252,7 @@ _DUMBED: dict[str, list[str]] = {
         "Tooltip Mode is here. Dumbed Down is honestly the funniest one.",
         "Font size, reset button — all buried in here. Explore.",
         "Effects, trails, fonts, resets - it's all here in one glorious tab.",
+        "Theme is in the Theme tab, sound is in the Sound tab, and the general weirdness lives here where it belongs.",
         "Congratulations on finding General Settings. You'll probably spend a while in here.",
         "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
     ],
@@ -5110,7 +5111,7 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "use_theme_ambient": [
         "Makes the background particles automatically match your theme. Because chaos needs coordination.",
-        "Check this and your ambient reflects the theme. Bat Cave gets ghosts. Galaxy gets stars. Panda gets nothing.",
+        "Check this and your ambient reflects the theme. Bat Cave gets ghosts. Galaxy gets stars. Panda gets bamboo leaves because apparently the bear has branding.",
         "Smart ambient theme sync: Gore gets embers, Goth gets wisps, Candy Land gets confetti. The system works.",
         "This checkbox prevents you from accidentally having fucking confetti on your Abyssal Void theme.",
         "Themes without ambient = effect disabled. No random snow on your Lava Cave. The app has standards.",
@@ -5994,6 +5995,7 @@ _VULGAR: dict[str, list[str]] = {
         "Tooltip mode selector lives here. Change it to No Filter if you haven't yet. Do it now. DO IT.",
         "All changes apply immediately. Most have no undo. Live recklessly. This is just app cosmetics.",
         "Mouse trail? Enable. Click effects? Enable. Font size 24? Bold choice but enable.",
+        "Theme shit stays in Theme, sound shit stays in Sound, and the general tweaky nonsense lives here where it belongs.",
     ],
     "settings_sound_tab": [
         "Sound tab. Enable sounds. Pick a profile. Set the volume. Your audio journey starts here.",
