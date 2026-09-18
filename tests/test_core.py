@@ -9052,6 +9052,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("canvas_size = self._timeline_canvas_size(fmt)", src)
         self.assertIn('source_pil = clip_snapshot[ci]["get_frame"](fi)', src)
         self.assertIn("framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)", src)
+        self.assertIn('pixelformat="yuv420p"', src)
 
     def test_video_editor_exposes_insert_mode_and_canvas_summary(self):
         src = self._src("ui/video_tool.py")
@@ -9194,6 +9195,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("if index > 0:", src)
         self.assertIn("overlay.deleteLater()", src)
         self.assertIn("self._sync_dialog_trail_overlays()", src)
+
+    def test_reloaded_clips_preserve_trim_bounds_before_split(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("new_clip.trim_start = max(0, min(clip.trim_start, new_clip.total_frames - 1))", src)
+        self.assertIn("new_clip.trim_end = max(new_clip.trim_start, min(clip.trim_end, new_clip.total_frames - 1))", src)
 
     def test_button_anim_settings_use_explicit_fallbacks(self):
         src = self._src("ui/main_window.py")

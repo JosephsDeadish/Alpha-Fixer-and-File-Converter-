@@ -1382,6 +1382,8 @@ class VideoToolDialog(QDialog):
             return None
         new_clip.speed_percent = clip.speed_percent
         new_clip.still_duration_frames = clip.still_duration_frames
+        new_clip.trim_start = max(0, min(clip.trim_start, new_clip.total_frames - 1))
+        new_clip.trim_end = max(new_clip.trim_start, min(clip.trim_end, new_clip.total_frames - 1))
         return new_clip
 
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
@@ -2026,6 +2028,7 @@ class VideoToolDialog(QDialog):
                     render_path,
                     fps=fps,
                     codec="libx264",
+                    pixelformat="yuv420p",
                 )
                 append_video_frame = lambda frame: writer.append_data(np.array(frame))
             for i in range(total):
