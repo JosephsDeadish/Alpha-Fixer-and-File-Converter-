@@ -8749,8 +8749,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("MP4 or GIF", src)
         self.assertIn("combine video clips and ", src)
         self.assertIn("still images or GIFs into a single export", src)
-        self.assertIn("Video import and MP4 export need FFmpeg", src)
-        self.assertIn("imageio-ffmpeg or a system ffmpeg install", src)
+        self.assertIn("Video import and MP4 export need imageio, imageio-ffmpeg, and ", src)
         self.assertIn("GIF export from images/GIFs still works", src)
         self.assertNotIn("WebM", src)
 
@@ -8760,7 +8759,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("into an animated GIF", src)
         self.assertNotIn('process image-sequence "videos"', src)
         self.assertNotIn("(folders of PNGs)", src)
-        self.assertIn("Video clips and MP4 export require both imageio and", src)
+        self.assertIn("Video clips and MP4 export require imageio,", src)
+        self.assertIn("imageio-ffmpeg, and a working ffmpeg executable.", src)
 
     def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
         src = self._src("core/worker.py")

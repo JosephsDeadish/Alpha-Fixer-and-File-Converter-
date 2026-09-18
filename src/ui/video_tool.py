@@ -2,7 +2,7 @@
 Video Tool Dialog.
 
 Provides a lightweight video editor that lets the user:
-  • Add one or more video clips (via imageio + ffmpeg, or image sequences)
+  • Add one or more video clips (via imageio + imageio-ffmpeg + ffmpeg)
   • Drag clips in the list to reorder them (no Up/Down buttons)
   • Trim clips with start/end sliders
   • Adjust white point, black point, brightness, contrast, saturation, sharpness
@@ -11,9 +11,9 @@ Provides a lightweight video editor that lets the user:
   • Preview with play/pause/rewind and a position scrubber
   • Export to MP4 (via imageio+ffmpeg) or animated GIF (via Pillow)
 
-**Dependency note**: Full video I/O requires a working ffmpeg executable,
-preferably from bundled imageio-ffmpeg or otherwise from the system PATH.
-If ffmpeg is unavailable the dialog can still assemble still images and GIFs
+**Dependency note**: Full video I/O requires imageio, imageio-ffmpeg, and a
+working ffmpeg executable, preferably bundled and otherwise from the system PATH.
+If video dependencies are unavailable the dialog can still assemble still images and GIFs
 into an animated GIF.
 
 UX highlights (Round-90):
@@ -607,9 +607,10 @@ class VideoToolDialog(QDialog):
     """Lightweight video editor dialog.
 
     Combines multiple clips, applies visual adjustments and filters, and
-    exports the result. Video clips and MP4 export require both imageio and
-    a working ffmpeg executable. Still-image clips can still be assembled
-    into animated GIF exports without ffmpeg.
+    exports the result. Video clips and MP4 export require imageio,
+    imageio-ffmpeg, and a working ffmpeg executable. Still-image clips can
+    still be assembled into animated GIF exports without those video
+    dependencies.
     """
     SHORTCUT_DEFS = (
         ("video_remove_selected", "Delete", "Remove selected clip", "Video Editor"),

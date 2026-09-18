@@ -96,9 +96,9 @@ _TUTORIAL_STEPS = [
             "• Add source clips and reorder them in the timeline.\n"
             "• Set the export format (MP4 or GIF) and frame rate.\n"
             "• Click <b>Export</b> to render the output.\n\n"
-            "Note: Video import and MP4 export need FFmpeg, ideally from bundled "
-            "imageio-ffmpeg or a system ffmpeg install. If FFmpeg is unavailable, "
-            "GIF export from images/GIFs still works."
+            "Note: Video import and MP4 export need imageio, imageio-ffmpeg, and "
+            "FFmpeg, ideally bundled or available from the system. If those video "
+            "dependencies are unavailable, GIF export from images/GIFs still works."
         ),
         "tip": "💡  Tip: Disc-image formats (.iso, .umd, .bin) are experimental — "
                "they work when the image contains a demuxable video track.",
