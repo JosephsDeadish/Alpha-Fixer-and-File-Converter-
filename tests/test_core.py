@@ -8884,7 +8884,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("adjusted.close()", src)
         self.assertIn("get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]", src)
         self.assertIn("source_pil = get_frame_fn(fi)", src)
-        self.assertIn("size=canvas_size", src)
+        self.assertNotIn("size=canvas_size", src)
 
     def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
         src = self._src("ui/converter_tool.py")
@@ -9151,7 +9151,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("and self._imageio_available", src)
         self.assertIn("and self._imageio_ffmpeg_available", src)
         self.assertIn("self._mp4_export_available = self._video_io_available", src)
-        self.assertIn("if not self._mp4_export_available:", src)
+        self.assertIn("if not self._video_io_available:", src)
         self.assertIn("if self._mp4_export_available:", src)
 
     def test_preview_zoom_scales_from_fit_size(self):

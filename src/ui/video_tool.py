@@ -740,7 +740,7 @@ class VideoToolDialog(QDialog):
         title.setObjectName("subheader")
         root.addWidget(title)
 
-        if not self._mp4_export_available:
+        if not self._video_io_available:
             warn = QLabel(
                 "⚠  Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.  "
                 "You can still add images/GIFs and export an animated GIF."
@@ -1468,7 +1468,6 @@ class VideoToolDialog(QDialog):
                     fps=fps,
                     codec="libx264",
                     quality=_MP4_QUALITY,
-                    size=canvas_size,
                 )
             for i in range(total):
                 progress.setValue(i)
