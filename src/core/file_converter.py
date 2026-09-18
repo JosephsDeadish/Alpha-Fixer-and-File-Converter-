@@ -1,8 +1,9 @@
 """
 File converter – converts between image formats.
 
-Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PPM, PCX, AVIF, QOI, SVG, JPEG2000.
+Supported output formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
+                          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG,
+                          JPEG2000, XNB, TIM.
 
 SVG input (raster rendering) requires one of:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
@@ -37,19 +38,24 @@ logger = logging.getLogger(__name__)
 SUPPORTED_OUTPUT_FORMATS = {
     "AVIF": ".avif",
     "BMP": ".bmp",
+    "PBM": ".pbm",
     "DDS": ".dds",
     "GIF": ".gif",
+    "PGM": ".pgm",
     "ICO": ".ico",
     "JPEG": ".jpg",
     "JPEG2000": ".jp2",
     "PCX": ".pcx",
+    "PNM": ".pnm",
     "PNG": ".png",
     "PPM": ".ppm",
     "QOI": ".qoi",
     "SVG": ".svg",
     "TGA": ".tga",
+    "TIM": ".tim",
     "TIFF": ".tiff",
     "WEBP": ".webp",
+    "XNB": ".xnb",
 }
 
 # Display list for UI combos (name → extension), alphabetical
@@ -72,10 +78,20 @@ FORMAT_DESCRIPTIONS = {
         "Used by DirectX games and engines (Unreal, Unity, etc.).\n"
         "Supports DXT/BC compressed formats. Required for many game modding workflows."
     ),
+    "PBM": (
+        "Portable Bitmap — simple 1-bit black-and-white image format.\n"
+        "Best for masks, monochrome art, and legacy toolchains.\n"
+        "No greyscale or alpha; output is thresholded to pure black or white."
+    ),
     "GIF": (
         "Graphics Interchange Format — 256-colour indexed format with animation.\n"
         "Limited palette makes it unsuitable for photos or detailed textures.\n"
         "Supports 1-bit transparency only. Best for simple icons or animations."
+    ),
+    "PGM": (
+        "Portable Graymap — simple greyscale image format.\n"
+        "Useful for masks, heightmaps, scientific tools, and older pipelines.\n"
+        "Stores luminance only; alpha is flattened before saving."
     ),
     "ICO": (
         "Windows Icon format — multi-size icon bundle.\n"
@@ -96,6 +112,11 @@ FORMAT_DESCRIPTIONS = {
         "PC Paintbrush format — old lossless format from the DOS era.\n"
         "Limited support in modern software. Use PNG or BMP instead where possible.\n"
         "Still encountered in some legacy game assets and old CAD workflows."
+    ),
+    "PNM": (
+        "Portable AnyMap — Netpbm family container (PBM/PGM/PPM).\n"
+        "Simple interchange format for command-line tools and legacy pipelines.\n"
+        "This app saves color PNM output as a standard RGB pixmap."
     ),
     "PNG": (
         "Portable Network Graphics — lossless compression with full alpha channel.\n"
@@ -128,6 +149,11 @@ FORMAT_DESCRIPTIONS = {
         "      not true vector. No extra libraries required.\n"
         "Useful for icons, logos, UI assets, and scalable game graphics."
     ),
+    "TIM": (
+        "PlayStation 1 TIM texture — classic console image/texture format.\n"
+        "This app writes 16-bit direct-colour TIM files for export and modding.\n"
+        "Transparency is mapped to TIM's limited transparent/semi-transparent states."
+    ),
     "TIFF": (
         "Tagged Image File Format — flexible lossless/compressed format.\n"
         "Used in professional print, photography, and scientific imaging.\n"
@@ -138,11 +164,12 @@ FORMAT_DESCRIPTIONS = {
         "Supports alpha channel. Smaller than PNG at similar quality.\n"
         "Best for web assets, UI images, and web-delivered game textures."
     ),
+    "XNB": (
+        "XNA / MonoGame binary content format — Texture2D asset.\n"
+        "Used by XNA Game Studio and MonoGame for Windows/Xbox/Phone.\n"
+        "Reads most XNB texture sub-formats; writes as Color (RGBA8888)."
+    ),
 }
-
-# Formats whose save() accepts a quality parameter
-_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif", ".jp2"}
-
 
 def _has_cairosvg() -> bool:
     """Return True when cairosvg is importable."""
@@ -283,12 +310,18 @@ def _save_svg(img: Image.Image, path: str) -> None:
 
 
 def _open_image(path: str) -> Image.Image:
-    """Open an image preserving its native mode (DDS/SVG handled specially)."""
+    """Open an image preserving its native mode (DDS/SVG/XNB/TIM handled specially)."""
     ext = Path(path).suffix.lower()
     if ext == ".dds":
         return _load_dds(path)
     if ext == ".svg":
         return _load_svg(path)
+    if ext == ".xnb":
+        from .xnb_handler import load_xnb
+        return load_xnb(path)
+    if ext == ".tim":
+        from .tim_handler import load_tim
+        return load_tim(path)
     img = Image.open(path)
     try:
         img.load()  # force decode so the file handle can be closed
@@ -420,7 +453,7 @@ def convert_file(
                 return {}
             kw: dict = {}
             try:
-                if fmt_ext in (".jpg", ".jpeg"):
+                if fmt_ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
                     for k in ("exif", "icc_profile", "dpi"):
                         if k in src_img.info:
                             kw[k] = src_img.info[k]
@@ -458,13 +491,25 @@ def convert_file(
                         rgba.close()
                 return output_path
 
+            # --- XNB (XNA/MonoGame Texture2D) ---
+            if ext == ".xnb":
+                from .xnb_handler import save_xnb
+                save_xnb(img, output_path)
+                return output_path
+
+            # --- TIM (PlayStation 1 texture; 16-bit direct colour) ---
+            if ext == ".tim":
+                from .tim_handler import save_tim
+                save_tim(img, output_path)
+                return output_path
+
             # --- SVG (raster embedded in SVG wrapper) ---
             if ext == ".svg":
                 _save_svg(img, output_path)
                 return output_path
 
             # --- JPEG (no alpha, RGB or L only) ---
-            if ext in (".jpg", ".jpeg"):
+            if ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
                 flat = _flatten_alpha(img)
                 try:
                     flat.save(output_path, quality=quality, **_meta_kwargs(ext))
@@ -483,19 +528,24 @@ def convert_file(
                         flat.close()
                 return output_path
 
-            # --- PPM (RGB only, no alpha) ---
-            if ext == ".ppm":
+            # --- Netpbm family (PBM/PGM/PNM/PPM; no alpha) ---
+            if ext in (".pbm", ".pgm", ".pnm", ".ppm"):
                 flat = _flatten_alpha(img)
-                rgb = None
+                save_img = None
                 try:
-                    if flat.mode not in ("RGB", "L"):
-                        rgb = flat.convert("RGB")
-                        rgb.save(output_path)
+                    if ext == ".pbm":
+                        grey = flat if flat.mode == "L" else flat.convert("L")
+                        save_img = grey.point(lambda v: 255 if v >= 128 else 0, mode="1")
+                    elif ext == ".pgm":
+                        save_img = flat if flat.mode == "L" else flat.convert("L")
+                    elif flat.mode not in ("RGB", "L"):
+                        save_img = flat.convert("RGB")
                     else:
-                        flat.save(output_path)
+                        save_img = flat
+                    save_img.save(output_path)
                 finally:
-                    if rgb is not None:
-                        rgb.close()
+                    if save_img is not None and save_img is not flat:
+                        save_img.close()
                     if flat is not img:
                         flat.close()
                 return output_path
@@ -589,6 +639,23 @@ def convert_file(
         if img is not src_img:
             img.close()
         src_img.close()
+
+
+def get_gif_frame_count(path: str) -> int:
+    """
+    Return the number of frames in a GIF file.
+
+    Returns 1 for non-animated GIFs or any non-GIF file.
+    Returns 1 on any error (safe fallback so callers need no try/except).
+    """
+    try:
+        ext = Path(path).suffix.lower()
+        if ext != ".gif":
+            return 1
+        with Image.open(path) as img:
+            return getattr(img, "n_frames", 1)
+    except Exception:
+        return 1
 
 
 def build_output_path(

@@ -841,12 +841,10 @@ class SoundEngine(QObject):
         # Theme sound path
         if self._settings.get("use_theme_sound", False):
             try:
-                # Use the explicitly-selected sound theme preset if one is set,
-                # otherwise fall back to the active visual theme.
-                preset_name = str(self._settings.get("sound_theme_preset", "")).strip()
-                if preset_name:
-                    theme_name = preset_name
-                else:
+                # Use the saved theme-sound override when present; otherwise
+                # follow the currently active visual theme.
+                theme_name = str(self._settings.get("sound_theme_preset", "")).strip()
+                if not theme_name:
                     theme = self._settings.get_theme()
                     theme_name = theme.get("name", "")
                 # Goth/rock themes cycle between three rock sub-profiles

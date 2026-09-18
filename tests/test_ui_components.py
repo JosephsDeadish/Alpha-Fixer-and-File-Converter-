@@ -5,6 +5,7 @@ and the extended SettingsManager.
 import os
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -155,6 +156,26 @@ class TestDropFileList(unittest.TestCase):
         # Simulate internal emit (bypassing actual drag)
         self._widget.paths_dropped.emit(["/tmp/fake.png"])
         self.assertEqual(received, ["/tmp/fake.png"])
+
+    def test_thumbnail_failed_signal_emits_once_per_path(self):
+        received = []
+        self._widget.thumbnail_failed.connect(lambda path, reason: received.append((path, reason)))
+        self._widget._on_thumb_failed("/tmp/bad.png", "decode failed")
+        self._widget._on_thumb_failed("/tmp/bad.png", "decode failed again")
+        self.assertEqual(received, [("/tmp/bad.png", "decode failed")])
+
+    def test_thumbnail_failure_summary_tracks_unique_paths(self):
+        self.assertEqual(self._widget._thumbnail_failure_summary(), "")
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_failure_summary(),
+            "⚠ 1 thumbnail unavailable — files still work.",
+        )
+        self._widget._on_thumb_failed("/tmp/b.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_failure_summary(),
+            "⚠ 2 thumbnails unavailable — files still work.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +453,21 @@ class TestBeforeAfterWidget(unittest.TestCase):
         qi = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 200)))
         w.set_after(qi)
         self.assertIsNotNone(w._pix_after)
+        self.assertIsNotNone(w.after_image())
+
+    def test_display_only_updates_do_not_replace_raw_preview_images(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        before_raw = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 0, 0, 255)))
+        after_raw = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 255, 0, 255)))
+        before_overlay = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 255)))
+        after_overlay = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 255, 0, 255)))
+        w.store_raw_images(before_raw, after_raw)
+        w.set_before(before_overlay, store_raw=False)
+        w.set_after(after_overlay, store_raw=False)
+        self.assertEqual(w.before_image().pixelColor(0, 0).getRgb(), before_raw.pixelColor(0, 0).getRgb())
+        self.assertEqual(w.after_image().pixelColor(0, 0).getRgb(), after_raw.pixelColor(0, 0).getRgb())
 
     def test_set_loading_clears_after(self):
         from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
@@ -474,6 +510,32 @@ class TestBeforeAfterWidget(unittest.TestCase):
         w.set_after(qi)
         w.show()
         self._app.processEvents()
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestButtonPressAnimator(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(300, 200)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_deleted_button_animation_is_ignored(self):
+        from PyQt6.QtWidgets import QPushButton
+        from src.ui.click_effects import ButtonPressAnimator
+
+        btn = QPushButton("Close", self._parent)
+        animator = ButtonPressAnimator(self._parent)
+        animator.set_mode("press")
+        btn.deleteLater()
+        self._app.processEvents()
+
+        animator._animate(btn)
 
 
 # ---------------------------------------------------------------------------
@@ -755,6 +817,31 @@ class _FakeQSettings:
 
     def sync(self):
         pass
+
+
+class TestSettingsManagerShortcutBindings(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_get_custom_shortcuts_invalid_payload_returns_empty_dict(self):
+        self._store["custom_shortcuts"] = "not-json"
+        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+
+    def test_set_shortcut_binding_round_trips_and_clears_default(self):
+        self._mgr.set_shortcut_binding("gif_export", "Ctrl+Shift+G", "Ctrl+S")
+        self.assertEqual(
+            self._mgr.get_shortcut_binding("gif_export", "Ctrl+S"),
+            "Ctrl+Shift+G",
+        )
+        self._mgr.set_shortcut_binding("gif_export", "Ctrl+S", "Ctrl+S")
+        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+        self.assertEqual(
+            self._mgr.get_shortcut_binding("gif_export", "Ctrl+S"),
+            "Ctrl+S",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1470,6 +1557,173 @@ class TestUseThemeCursorSetting(unittest.TestCase):
         self.assertIn("use_theme_cursor", SettingsManager.EXPORT_KEYS)
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestVideoProbeFallbacks(unittest.TestCase):
+    def test_probe_video_clip_uses_imageio_ffmpeg_count_fallback(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 0, "duration": 0}
+
+            def get_data(self, idx):
+                self.last_idx = idx
+                return [[0]]
+
+            def count_frames(self):
+                raise RuntimeError("metadata missing")
+
+            def close(self):
+                return None
+
+        fake_ffmpeg = types.SimpleNamespace(
+            count_frames_and_secs=lambda path: (12, 0.4),
+        )
+        with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+            with patch.dict(sys.modules, {"imageio_ffmpeg": fake_ffmpeg}):
+                fps, frame_count, frame_size, first_frame = vt._probe_video_clip("/tmp/test.mp4")
+        self.assertEqual(fps, 30.0)
+        self.assertEqual(frame_count, 12)
+        self.assertEqual(frame_size, (1, 1))
+        self.assertIsNone(first_frame)
+
+    def test_mp4_export_size_rounds_up_to_even_dimensions(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(vt._coerce_export_size((641, 479), "mp4"), (642, 480))
+        self.assertEqual(vt._coerce_export_size((641, 479), "gif"), (641, 479))
+
+    def test_mixed_size_frames_are_letterboxed_to_shared_canvas(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        src = Image.new("RGBA", (200, 100), (255, 0, 0, 255))
+        try:
+            framed = vt._fit_frame_to_canvas(src, (400, 400), "gif")
+            try:
+                self.assertEqual(framed.size, (400, 400))
+                self.assertEqual(framed.getpixel((200, 200)), (255, 0, 0, 255))
+                self.assertEqual(framed.getpixel((20, 20))[3], 0)
+            finally:
+                framed.close()
+        finally:
+            src.close()
+
+    def test_clip_timing_supports_still_duration_and_speed_mapping(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        image_clip = vt._ClipEntry("/tmp/image.png", 1, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="image")
+        image_clip.still_duration_frames = 40
+        self.assertEqual(image_clip.active_frames, 40)
+        frame = image_clip.get_frame(17)
+        frame.close()
+
+        video_clip = vt._ClipEntry("/tmp/video.mp4", 10, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="video")
+        video_clip.speed_percent = 200
+        self.assertEqual(video_clip.active_frames, 5)
+        self.assertEqual(video_clip.output_index_to_source_offset(4), 8)
+
+        slow_clip = vt._ClipEntry("/tmp/slow.mp4", 6, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="video")
+        slow_clip.speed_percent = 50
+        self.assertEqual(slow_clip.output_index_to_source_offset(0), 0)
+        self.assertEqual(slow_clip.output_index_to_source_offset(1), 0)
+        self.assertEqual(slow_clip.split_second_half_offset(0), 1)
+
+    def test_audio_tempo_filter_chain_stays_within_ffmpeg_limits(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(vt._build_atempo_filters(1.0), ["atempo=1"])
+        self.assertEqual(vt._build_atempo_filters(4.0), ["atempo=2.0", "atempo=2"])
+        self.assertEqual(vt._build_atempo_filters(0.25), ["atempo=0.5", "atempo=0.5"])
+
+    def test_export_rewrites_mismatched_gif_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        saved_paths = []
+        try:
+            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.mp4", "")):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("PIL.Image.Image.save", autospec=True, side_effect=lambda self, path, **kwargs: saved_paths.append(path)):
+                        dialog._export()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(saved_paths, ["/tmp/video-output.gif"])
+
+    def test_export_rewrites_mismatched_mp4_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        class _FakeWriter:
+            def __init__(self):
+                self.closed = False
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                self.closed = True
+
+        dialog = vt.VideoToolDialog()
+        dialog._mp4_export_available = True
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        writer_paths = []
+        writer_kwargs = []
+        fake_writer = _FakeWriter()
+        try:
+            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.gif", "")):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or writer_kwargs.append(kwargs) or fake_writer):
+                        dialog._export()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
+        self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
+
+
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect
 # ---------------------------------------------------------------------------
@@ -1478,6 +1732,27 @@ class TestFairyTheme(unittest.TestCase):
     def test_fairy_garden_in_preset_themes(self):
         from src.ui.theme_engine import PRESET_THEMES
         self.assertIn("Fairy Garden", PRESET_THEMES)
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestSelectiveAlphaToolSlots(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        self._widget = SelectiveAlphaTool()
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_saved_mask_slots_grow_to_configured_limit(self):
+        self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_INIT)
+        while self._widget._btn_slot_add.isEnabled():
+            self._widget._on_slot_add()
+        self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_COUNT)
+        self.assertFalse(self._widget._btn_slot_add.isEnabled())
 
     def test_fairy_garden_has_fairy_effect(self):
         from src.ui.theme_engine import FAIRY_THEME

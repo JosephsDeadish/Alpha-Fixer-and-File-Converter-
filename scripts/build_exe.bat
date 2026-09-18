@@ -15,17 +15,21 @@ REM ── 1. Check / install PyInstaller ────────────�
 python -c "import PyInstaller" 2>nul
 if errorlevel 1 (
     echo PyInstaller not found – installing…
-    pip install pyinstaller
+    python -m pip install pyinstaller
 )
 
-REM ── 2. Clean previous build artefacts ───────────────────────────────────────
+REM ── 2. Sync runtime dependencies ────────────────────────────────────────────
+echo Installing runtime dependencies from requirements.txt…
+python -m pip install -r requirements.txt
+
+REM ── 3. Clean previous build artefacts ───────────────────────────────────────
 if exist build   rmdir /s /q build
 if exist dist    rmdir /s /q dist
 
-REM ── 3. Run PyInstaller ──────────────────────────────────────────────────────
+REM ── 4. Run PyInstaller ──────────────────────────────────────────────────────
 if "%1"=="--onefile" (
     echo Building single-file executable…
-    pyinstaller --onefile --windowed --name AlphaFixerConverter main.py
+    pyinstaller alpha_fixer_onefile.spec
 ) else (
     echo Building one-folder application…
     pyinstaller alpha_fixer.spec

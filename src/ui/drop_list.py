@@ -9,14 +9,17 @@ DropFileList – a QListWidget subclass that:
 """
 import os
 import threading
+import logging
 from collections import OrderedDict
 
 from PyQt6.QtCore import (
-    Qt, QEvent, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
+    Qt, QEvent, QEventLoop, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont
 from PyQt6.QtWidgets import QListWidget, QMenu, QApplication
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +53,7 @@ class _ThumbSignals(QObject):
     # always constructed on the main (GUI) thread.  QImage is safe to create
     # and pass across threads; QPixmap and QPainter on a QPixmap are not.
     loaded = pyqtSignal(str, QImage)  # path, composite QImage
+    failed = pyqtSignal(str, str)  # path, reason
 
 
 class _ThumbRunnable(QRunnable):
@@ -137,8 +141,13 @@ class _ThumbRunnable(QRunnable):
                     self._signals.loaded.emit(self._path, out)
                 except RuntimeError:
                     pass  # receiver destroyed; nothing to do
-        except Exception:
-            pass  # silently skip unreadable / non-image files
+        except Exception as exc:
+            if not self._cancel.is_set():
+                try:
+                    reason = str(exc).strip() or "Unreadable image or thumbnail generation failed."
+                    self._signals.failed.emit(self._path, reason)
+                except RuntimeError:
+                    pass
         finally:
             if img is not None:
                 img.close()
@@ -157,6 +166,7 @@ class DropFileList(QListWidget):
     file_removed  = pyqtSignal()       # emitted when items are explicitly removed by the user
     list_cleared  = pyqtSignal()       # emitted when all items are cleared at once
     drag_entered  = pyqtSignal()       # emitted when files are first dragged over the list
+    thumbnail_failed = pyqtSignal(str, str)  # path, reason
 
     # Icon shown in the centre of the list when no files have been added yet
     _EMPTY_STATE_ICON = "📂"
@@ -181,12 +191,14 @@ class DropFileList(QListWidget):
         self._thumb_enabled: bool = True
         self._thumb_cache: OrderedDict[str, QIcon] = OrderedDict()
         self._pending: set[str] = set()   # paths currently being loaded
+        self._reported_thumb_failures: set[str] = set()
         self._pool = QThreadPool.globalInstance()
         self._pool.setMaxThreadCount(max(2, self._pool.maxThreadCount() // 2))
 
         # Shared signals object (must live on the main thread)
         self._signals = _ThumbSignals()
         self._signals.loaded.connect(self._on_thumb_loaded)
+        self._signals.failed.connect(self._on_thumb_failed)
 
         # Cancellation event shared with all _ThumbRunnable tasks.  When the
         # list is cleared, we retire the current event (set it so running
@@ -267,6 +279,20 @@ class DropFileList(QListWidget):
                 rect.adjusted(0, 40, 0, 0),
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                 "Drop files or folders here\nor use the Add Files button",
+            )
+            painter.end()
+            return
+        summary = self._thumbnail_failure_summary()
+        if summary:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            hint_rect = self.viewport().rect().adjusted(10, 0, -10, -8)
+            painter.setFont(QFont(painter.font().family(), 9))
+            painter.setPen(QColor(255, 214, 102, 215))
+            painter.drawText(
+                hint_rect,
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+                summary,
             )
             painter.end()
 
@@ -360,25 +386,65 @@ class DropFileList(QListWidget):
                 item.setIcon(icon)
                 break  # paths are unique
 
+    @pyqtSlot(str, str)
+    def _on_thumb_failed(self, path: str, reason: str) -> None:
+        self._pending.discard(path)
+        if not path or path in self._reported_thumb_failures:
+            return
+        self._reported_thumb_failures.add(path)
+        self.viewport().update()
+        logger.warning("Thumbnail skipped for %s: %s", path, reason)
+        try:
+            self.thumbnail_failed.emit(path, reason)
+        except RuntimeError:
+            pass
+
+    def _thumbnail_failure_summary(self) -> str:
+        count = len(self._reported_thumb_failures)
+        if count <= 0:
+            return ""
+        noun = "thumbnail" if count == 1 else "thumbnails"
+        return f"⚠ {count} {noun} unavailable — files still work."
+
     # ------------------------------------------------------------------
     # Public batch-add helper (avoids UI freeze for large imports)
     # ------------------------------------------------------------------
 
     def add_paths_batch(self, paths: list[str]) -> int:
         """Add paths in batches, processing events periodically so the UI
-        stays responsive when adding tens of thousands of files."""
+        stays responsive when adding tens of thousands of files (item 25).
+
+        For very large imports (> 10 000 files) the chunk size and processEvents
+        frequency are automatically scaled up to reduce overhead while still
+        keeping the Stop button responsive.
+        """
         existing = {self.item(i).text() for i in range(self.count())}
+        new_paths = [p for p in paths if p not in existing]
+        if not new_paths:
+            return 0
+        # Scale chunk size with import size so we don't call processEvents()
+        # every 500 items when importing 500 000 files (item 25).
+        total = len(new_paths)
+        if total > 100_000:
+            CHUNK = 5_000
+        elif total > 10_000:
+            CHUNK = 2_000
+        else:
+            CHUNK = 500
         added = 0
-        CHUNK = 500
-        for start in range(0, len(paths), CHUNK):
-            chunk = paths[start:start + CHUNK]
-            for p in chunk:
-                if p not in existing:
+        for start in range(0, total, CHUNK):
+            chunk = new_paths[start:start + CHUNK]
+            self.setUpdatesEnabled(False)
+            try:
+                for p in chunk:
                     self.addItem(p)
-                    existing.add(p)
                     added += 1
-            if added and start > 0 and start % 5000 == 0:
-                QApplication.processEvents()
+            finally:
+                self.setUpdatesEnabled(True)
+            self.viewport().update()
+            # Process events every chunk so the UI stays alive and the
+            # Stop button remains responsive on very large imports.
+            QApplication.processEvents()
         if added:
             self.count_changed.emit(self.count())
             if self._thumb_enabled and self.count() <= _THUMB_AUTO_DISABLE:
@@ -499,6 +565,8 @@ class DropFileList(QListWidget):
                     item.setIcon(QIcon())
             self._thumb_cache.clear()
             self._pending.clear()
+            self._reported_thumb_failures.clear()
+            self.viewport().update()
 
     # ------------------------------------------------------------------
     # Remove helpers (can also be called externally)
@@ -538,7 +606,9 @@ class DropFileList(QListWidget):
             path = item.text()
             self._thumb_cache.pop(path, None)
             self._pending.discard(path)
+            self._reported_thumb_failures.discard(path)
             self.takeItem(self.row(item))
+        self.viewport().update()
         self.count_changed.emit(self.count())
         self.file_removed.emit()
 
@@ -547,6 +617,7 @@ class DropFileList(QListWidget):
             return
         self._thumb_cache.clear()
         self._pending.clear()
+        self._reported_thumb_failures.clear()
         self._load_tick.stop()
         # Cancel any runnables that are still queued or running so they don't
         # waste CPU decoding thumbnails for items that no longer exist.
@@ -554,6 +625,7 @@ class DropFileList(QListWidget):
         self._cancel_event.set()
         self._cancel_event = threading.Event()
         super().clear()
+        self.viewport().update()
         self.count_changed.emit(0)
         self.list_cleared.emit()
 
@@ -563,9 +635,11 @@ class DropFileList(QListWidget):
             return
         self._thumb_cache.clear()
         self._pending.clear()
+        self._reported_thumb_failures.clear()
         self._load_tick.stop()
         # Same cancellation as _clear_all for consistency.
         self._cancel_event.set()
         self._cancel_event = threading.Event()
         super().clear()
+        self.viewport().update()
         self.count_changed.emit(0)

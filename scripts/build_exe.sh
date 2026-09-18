@@ -17,16 +17,20 @@ cd "$REPO_ROOT"
 # ── 1. Check / install PyInstaller ───────────────────────────────────────────
 if ! python -c "import PyInstaller" 2>/dev/null; then
     echo "PyInstaller not found – installing…"
-    pip install pyinstaller
+    python -m pip install pyinstaller
 fi
 
-# ── 2. Clean previous build artefacts ────────────────────────────────────────
+# ── 2. Sync runtime dependencies ─────────────────────────────────────────────
+echo "Installing runtime dependencies from requirements.txt…"
+python -m pip install -r requirements.txt
+
+# ── 3. Clean previous build artefacts ────────────────────────────────────────
 rm -rf build dist __pycache__
 
-# ── 3. Run PyInstaller ────────────────────────────────────────────────────────
+# ── 4. Run PyInstaller ────────────────────────────────────────────────────────
 if [[ "$1" == "--onefile" ]]; then
     echo "Building single-file executable…"
-    pyinstaller --onefile --windowed --name AlphaFixerConverter main.py
+    pyinstaller alpha_fixer_onefile.spec
 else
     echo "Building one-folder application…"
     pyinstaller alpha_fixer.spec

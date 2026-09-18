@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -837,6 +838,145 @@ class TestAlphaWorkerResolveOutput(unittest.TestCase):
         self.assertEqual(result, "/src/image.png")
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed — skipping worker tests")
+class TestWorkerBehavior(unittest.TestCase):
+
+    def test_alpha_worker_skips_inplace_write_when_backup_fails(self):
+        from src.core.worker import AlphaWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "image.png")
+            Image.new("RGBA", (2, 2), (1, 2, 3, 4)).save(src)
+            backup_dir = os.path.join(tmpdir, "backup")
+            worker = AlphaWorker(
+                files=[src],
+                manual_params={},
+                overwrite=True,
+                backup_dir=backup_dir,
+            )
+            file_done = []
+            finished = []
+            manifests = []
+            worker.file_done.connect(lambda path, ok, msg: file_done.append((path, ok, msg)))
+            worker.finished.connect(lambda ok_count, err_count: finished.append((ok_count, err_count)))
+            worker.backup_manifest.connect(lambda pairs: manifests.append(list(pairs)))
+
+            with mock.patch("src.core.worker.shutil.copy2", side_effect=OSError("disk full")):
+                with mock.patch("src.core.worker.save_image") as save_mock:
+                    worker.run()
+
+            save_mock.assert_not_called()
+            self.assertEqual(len(file_done), 1)
+            self.assertEqual(file_done[0][0], src)
+            self.assertFalse(file_done[0][1])
+            self.assertIn("Backup failed", file_done[0][2])
+            self.assertEqual(finished, [(0, 1)])
+            self.assertEqual(manifests, [])
+
+    def test_alpha_worker_backups_are_isolated_per_run(self):
+        from src.core.worker import AlphaWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "nested", "image.png")
+            os.makedirs(os.path.dirname(src), exist_ok=True)
+            Image.new("RGBA", (2, 2), (1, 2, 3, 4)).save(src)
+            backup_dir = os.path.join(tmpdir, "backup")
+
+            first = AlphaWorker(
+                files=[src],
+                manual_params={},
+                overwrite=True,
+                backup_dir=backup_dir,
+                input_root=tmpdir,
+            )
+            second = AlphaWorker(
+                files=[src],
+                manual_params={},
+                overwrite=True,
+                backup_dir=backup_dir,
+                input_root=tmpdir,
+            )
+
+            manifests = []
+            first.backup_manifest.connect(lambda pairs: manifests.append(list(pairs)))
+            second.backup_manifest.connect(lambda pairs: manifests.append(list(pairs)))
+
+            with mock.patch("src.core.worker.save_image"):
+                first.run()
+                second.run()
+
+            self.assertEqual(len(manifests), 2)
+            first_backup = manifests[0][0][1]
+            second_backup = manifests[1][0][1]
+            self.assertNotEqual(first_backup, second_backup)
+            self.assertTrue(first_backup.startswith(backup_dir))
+            self.assertTrue(second_backup.startswith(backup_dir))
+            self.assertIn(os.path.join("nested", "image.png"), first_backup)
+            self.assertIn(os.path.join("nested", "image.png"), second_backup)
+
+    def test_converter_worker_emits_progress_and_results_in_input_order(self):
+        from src.core.worker import ConverterWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = os.path.join(tmpdir, "first.png")
+            second = os.path.join(tmpdir, "second.png")
+            Image.new("RGBA", (2, 2), (10, 20, 30, 40)).save(first)
+            Image.new("RGBA", (2, 2), (50, 60, 70, 80)).save(second)
+            worker = ConverterWorker(
+                files=[first, second],
+                target_format="PNG",
+                target_ext=".png",
+            )
+            progress = []
+            done = []
+            worker.progress.connect(lambda current, total, path: progress.append((current, total, path)))
+            worker.file_done.connect(lambda path, ok, msg: done.append((path, ok, msg)))
+
+            def _fake_convert(src, dest, target_format, **kwargs):
+                import time as _time
+                if os.path.basename(src) == "first.png":
+                    _time.sleep(0.05)
+                Path(dest).write_bytes(b"ok")
+
+            with mock.patch("src.core.worker.convert_file", side_effect=_fake_convert):
+                worker.run()
+
+            self.assertEqual([entry[2] for entry in progress], [first, second])
+            self.assertEqual([entry[0] for entry in progress], [0, 1])
+            self.assertEqual([entry[0] for entry in done], [first, second])
+            self.assertTrue(all(entry[1] for entry in done))
+
+    def test_converter_worker_uses_logical_source_alias_for_output_routing(self):
+        from src.core.worker import ConverterWorker
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            extracted = os.path.join(tmpdir, "temp_frame.png")
+            logical_root = os.path.join(tmpdir, "originals")
+            logical = os.path.join(logical_root, "nested", "anim_frame0001.png")
+            output_dir = os.path.join(tmpdir, "out")
+            os.makedirs(os.path.dirname(logical), exist_ok=True)
+            Image.new("RGBA", (2, 2), (10, 20, 30, 40)).save(extracted)
+            worker = ConverterWorker(
+                files=[extracted],
+                target_format="PNG",
+                target_ext=".png",
+                output_dir=output_dir,
+                input_root=logical_root,
+                source_aliases={extracted: logical},
+            )
+            seen = []
+
+            def _fake_convert(src, dest, target_format, **kwargs):
+                seen.append((src, dest, target_format))
+                Path(dest).parent.mkdir(parents=True, exist_ok=True)
+                Path(dest).write_bytes(b"ok")
+
+            with mock.patch("src.core.worker.convert_file", side_effect=_fake_convert):
+                worker.run()
+
+            self.assertEqual(seen, [(extracted, os.path.join(output_dir, "nested", "anim_frame0001.png"), "PNG")])
+
+
 # ---------------------------------------------------------------------------
 # apply_rgba_adjust tests
 # ---------------------------------------------------------------------------
@@ -954,13 +1094,13 @@ class TestThemeEngineBannerFrames(unittest.TestCase):
 
     def test_preset_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.PRESET_THEMES), 20,
-                         f"Expected 20 preset themes, got {len(te.PRESET_THEMES)}")
+        self.assertEqual(len(te.PRESET_THEMES), 18,
+                         f"Expected 18 preset themes, got {len(te.PRESET_THEMES)}")
 
     def test_hidden_theme_count(self):
         te = self._import_theme_engine()
-        self.assertEqual(len(te.HIDDEN_THEMES), 37,
-                         f"Expected 37 hidden themes, got {len(te.HIDDEN_THEMES)}")
+        self.assertEqual(len(te.HIDDEN_THEMES), 39,
+                         f"Expected 39 hidden themes, got {len(te.HIDDEN_THEMES)}")
 
     def test_new_preset_svgs_exist(self):
         """Mermaid, Shark Bait, and Alien should have dedicated SVG files."""
@@ -2532,6 +2672,21 @@ class TestRound3Hardening(unittest.TestCase):
         self.assertIn("_cancel_event.set()", clear_src,
                       "clear() must call self._cancel_event.set() to retire old event")
 
+    def test_drop_list_reports_thumbnail_failures_once(self):
+        src = self._drop_list_source()
+        self.assertIn("failed = pyqtSignal(str, str)", src)
+        self.assertIn("thumbnail_failed = pyqtSignal(str, str)", src)
+        self.assertIn("self._signals.failed.connect(self._on_thumb_failed)", src)
+        self.assertIn("self._reported_thumb_failures: set[str] = set()", src)
+        self.assertIn("self._reported_thumb_failures.add(path)", src)
+        self.assertIn('logger.warning("Thumbnail skipped for %s: %s", path, reason)', src)
+        self.assertIn("self.thumbnail_failed.emit(path, reason)", src)
+
+    def test_drop_list_bulk_insert_keeps_user_input_events_enabled(self):
+        src = self._drop_list_source()
+        self.assertIn("QApplication.processEvents()", src)
+        self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
+
     def test_thumb_runnable_cancel_prevents_emit(self):
         """_ThumbRunnable.run() must return early (without emitting) when the
         cancel event is already set.  Verified via source inspection since
@@ -3502,7 +3657,7 @@ class TestRound9ResourceHygiene(unittest.TestCase):
         # use that anchor to avoid matching the JPEG key inside _meta_kwargs.
         dispatch_pos = fn.find("_save_w, _save_h = img.size")
         self.assertGreater(dispatch_pos, 0, "_save_w/_save_h capture not found")
-        jpeg_pos = fn.find('(".jpg", ".jpeg")', dispatch_pos)
+        jpeg_pos = fn.find('(".jpg", ".jpeg", ".jfif", ".jpe")', dispatch_pos)
         self.assertGreater(jpeg_pos, 0, "JPEG branch not found in convert_file format dispatch")
         jpeg_section = fn[jpeg_pos: jpeg_pos + 300]
         self.assertNotIn(
@@ -7019,14 +7174,16 @@ class TestRound23AnimatedCursor(unittest.TestCase):
                       "🔥 (fire) must have an animation sequence in _CURSOR_ANIM_FRAMES")
 
     def test_cursor_anim_frames_has_sparkle(self):
-        """Sparkle emoji must have an animation sequence defined."""
+        """Sparkle emoji must be handled by the spin or wobble cursor animation."""
         src = self._src(self._MAIN_SRC)
         self.assertIn("_CURSOR_ANIM_FRAMES", src)
-        # Find the dict body and check ✨ is a key
-        start = src.find("_CURSOR_ANIM_FRAMES")
-        block = src[start:start + 2000]
-        self.assertIn("✨", block,
-                      "✨ must have an animation sequence in _CURSOR_ANIM_FRAMES")
+        # _CURSOR_ANIM_FRAMES is intentionally empty; ✨ is handled by
+        # _CURSOR_SPIN_EMOJI (smooth 360° rotation).
+        spin_start = src.find("_CURSOR_SPIN_EMOJI: frozenset")
+        self.assertNotEqual(spin_start, -1, "_CURSOR_SPIN_EMOJI frozenset must exist")
+        spin_block = src[spin_start:spin_start + 500]
+        self.assertIn("✨", spin_block,
+                      "✨ must be listed in _CURSOR_SPIN_EMOJI")
 
     # ------------------------------------------------------------------
     # Animation timer methods
@@ -7089,13 +7246,19 @@ class TestRound23AnimatedCursor(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_cursor_anim_interval_is_400ms(self):
-        """Cursor animation must run at 400 ms per frame (≈ 2.5 fps)."""
+        """Cursor animation must run at a defined ms interval per frame.
+
+        The cycling fallback uses 250 ms; spin uses 80 ms; wobble uses 60 ms.
+        Verify at least one interval is set inside _start_cursor_anim.
+        """
         src = self._src(self._MAIN_SRC)
         start = src.find("def _start_cursor_anim(")
         end_def = src.find("\n    def ", start + 1)
         body = src[start:end_def]
-        self.assertIn("400", body,
-                      "_start_cursor_anim must set the timer interval to 400 ms")
+        self.assertTrue(
+            any(ms in body for ms in ("250", "80", "60")),
+            "_start_cursor_anim must set the timer interval (250/80/60 ms)"
+        )
 
     # ------------------------------------------------------------------
     # Settings defaults
@@ -8446,15 +8609,11 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
             "_setup_ui must create a 'Saved Masks' group for the slot collection",
         )
 
-    def test_five_save_slots_created(self):
-        """The 'Saved Masks' panel must create exactly 5 save/paste slot pairs."""
+    def test_saved_mask_slots_use_shared_limit_constant(self):
+        """The saved-mask panel should gate slot growth through the shared limit constant."""
         src = self._src()
-        # Look for _MASK_SLOT_COUNT = 5 constant
-        self.assertIn(
-            "_MASK_SLOT_COUNT = 5",
-            src,
-            "must define _MASK_SLOT_COUNT = 5 for the collection size",
-        )
+        self.assertIn("if len(self._mask_slots) >= self._MASK_SLOT_COUNT:", src)
+        self.assertIn("self._btn_slot_add.setEnabled(len(self._mask_slots) < self._MASK_SLOT_COUNT)", src)
 
     # ------------------------------------------------------------------
     # Autocorrect checkbox placement
@@ -8479,3 +8638,798 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
             block,
             "autocorrect checkbox must be added inside the Tool Size group block",
         )
+
+
+class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
+    """Source-level regression checks for follow-up review fixes."""
+
+    def _src(self, rel: str) -> str:
+        with open(os.path.join(os.path.dirname(__file__), "..", "src", *rel.split("/")), encoding="utf-8") as f:
+            return f.read()
+
+    def test_alpha_history_export_headers_include_mode(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn(
+            'headers = ["Time", "Mode", "Files", "OK", "Errors", "File names"]',
+            src,
+            "alpha history export headers must include the Mode column",
+        )
+
+    def test_history_trees_disable_sorting_during_rebuild_and_sort_descending(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("tree.setSortingEnabled(False)", src)
+        self.assertIn("class _HistoryItem(QTreeWidgetItem):", src)
+        self.assertIn('item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))', src)
+        self.assertIn("def _apply_default_sort(tree: QTreeWidget) -> None:", src)
+        self.assertIn("tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)", src)
+        for tree_name in ("_conv_tree", "_alpha_tree", "_sel_tree", "_gif_tree", "_vid_tree"):
+            self.assertIn(f"self.{tree_name}.setSortingEnabled(False)", src)
+            self.assertIn(f"_apply_default_sort(self.{tree_name})", src)
+
+    def test_preview_popout_tooltips_match_actual_behavior(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertNotIn("hide to make room for other controls", src)
+        self.assertNotIn("close the floating preview", src)
+        self.assertIn("_UNDOCK_TOOLTIP = (", src)
+        self.assertIn("_REDOCK_TOOLTIP = (", src)
+        self.assertIn("def _apply_popout_button_state(", src)
+        self.assertIn("The embedded preview stays available here while the floating window is open.", src)
+        self.assertIn("return to the embedded preview", src)
+        self.assertIn("event.ignore()", src)
+
+    def test_video_frame_getter_reuses_cached_reader(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("self._reader = None", src)
+        self.assertIn("self._last_idx = -1", src)
+        self.assertIn("self._last_frame = None", src)
+        self.assertIn("self._prefetched_frame = first_frame", src)
+        self.assertIn("if clamped == 0 and self._prefetched_frame is not None:", src)
+        self.assertIn("reopened = self._reader is None or clamped < self._last_idx", src)
+        self.assertIn("elif not reopened and clamped == self._last_idx + 1:", src)
+        self.assertIn("frame = self._reader.get_next_data()", src)
+        self.assertIn("frame = self._reader.get_data(clamped)", src)
+
+    def test_video_export_streams_frames_and_cleans_up_partial_output(self):
+        src = self._src("ui/video_tool.py")
+        self.assertNotIn("rendered.append(", src)
+        self.assertIn("writer.append_data(", src)
+        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+
+    def test_gif_builder_removes_partial_file_on_save_error(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+
+    def test_history_gif_delegate_paint_has_no_model_side_effects(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("opt = QStyleOptionViewItem(option)", src)
+        self.assertIn("opt.icon = QIcon()", src)
+        self.assertNotIn("item.setIcon(0, QIcon())", src)
+        self.assertIn("painter.drawPixmap(x, y, scaled)", src)
+        self.assertNotIn("CacheMode.CacheAll", src)
+
+    def test_gif_disposal_restore_previous_handled(self):
+        for rel in ("ui/gif_builder.py", "ui/gif_frame_picker.py", "ui/converter_tool.py"):
+            src = self._src(rel)
+            self.assertIn("elif disposal == 3:", src, f"{rel} must handle GIF disposal mode 3")
+            self.assertIn("previous_canvas = canvas.copy()", src, f"{rel} must preserve pre-frame canvas")
+        self.assertIn('getattr(img, "disposal_method", img.info.get("disposal", 0))', self._src("ui/gif_builder.py"))
+        self.assertIn('getattr(gif, "disposal_method", gif.info.get(\'disposal\', 0))', self._src("ui/gif_frame_picker.py"))
+        self.assertIn('getattr(gif, "disposal_method", gif.info.get(\'disposal\', 0))', self._src("ui/converter_tool.py"))
+
+    def test_alpha_worker_emits_backup_manifest_before_finished(self):
+        src = self._src("core/worker.py")
+        manifest_idx = src.index("self.backup_manifest.emit(backup_pairs)")
+        finished_idx = src.index("self.finished.emit(success, errors)")
+        self.assertLess(manifest_idx, finished_idx)
+
+    def test_converter_worker_submits_incrementally_and_cancels_pending_work(self):
+        src = self._src("core/worker.py")
+        self.assertIn("return_when=concurrent.futures.FIRST_COMPLETED", src)
+        self.assertIn("pool.shutdown(wait=False, cancel_futures=True)", src)
+        self.assertNotIn("for src in self._files:\n                if self._abort:\n                    break\n                fut_map[pool.submit(_convert_one, src)] = src", src)
+
+    def test_converter_tool_quality_ui_mentions_all_supported_formats(self):
+        src = self._src("ui/converter_tool.py")
+        self.assertIn("Quality (JPEG/WEBP/AVIF/JPEG2000):", src)
+        self.assertIn('fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000")', src)
+        self.assertIn("Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs.", src)
+
+    def test_history_export_uses_visible_sorted_rows_only(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("for r in range(tree.topLevelItemCount()):", src)
+        self.assertIn("if item is None or item.isHidden():", src)
+        self.assertIn("body{background:#ffffff;color:#111111}", src)
+        self.assertIn("word-break:break-word;overflow-wrap:anywhere", src)
+
+    def test_video_export_normalizes_output_extension(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('target_suffix = ".gif" if fmt == "gif" else ".mp4"', src)
+        self.assertIn("current_suffix = Path(out_path).suffix.lower()", src)
+        self.assertIn("if current_suffix in known_media_suffixes:", src)
+        self.assertIn("known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {\".gif\", \".mp4\"}", src)
+        self.assertIn('out_path = str(Path(out_path).with_suffix(target_suffix))', src)
+        self.assertIn('out_path = f"{out_path}{target_suffix}"', src)
+        self.assertIn("def _has_imageio() -> bool:", src)
+        self.assertIn("def _configure_imageio_ffmpeg() -> Optional[str]:", src)
+        self.assertIn("def _video_has_audio_stream(path: str) -> bool:", src)
+        self.assertIn("def _build_atempo_filters(speed_factor: float) -> list[str]:", src)
+        self.assertIn('os.environ.setdefault("IMAGEIO_FFMPEG_EXE", ffmpeg_exe)', src)
+        self.assertNotIn('os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe', src)
+        self.assertIn("self._imageio_ffmpeg_available = _has_imageio_ffmpeg()", src)
+        self.assertIn("and self._imageio_ffmpeg_available", src)
+        self.assertIn("first_frame = None", src)
+        self.assertIn("QApplication.processEvents()", src)
+        self.assertIn('if fmt != "gif":', src)
+        self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
+        self.assertIn('format="FFMPEG"', src)
+        self.assertIn("gif_frames = []", src)
+        self.assertIn("gif_frames.append(framed)", src)
+        self.assertIn("framed = None", src)
+        self.assertIn("filtered = None", src)
+        self.assertIn("if filtered is not None and filtered is not adjusted and filtered is not source_pil:", src)
+        self.assertIn('self._audio_enable_check = QCheckBox("Keep source audio in MP4 export")', src)
+        self.assertIn('self._audio_mute_check = QCheckBox("Mute exported audio")', src)
+        self.assertIn('self._audio_volume_slider = _make_hslider(0, 200, 100)', src)
+        self.assertIn("def _mux_mp4_audio(", src)
+        self.assertIn('progress.setLabelText("Mixing source audio into MP4…")', src)
+        self.assertIn('"-i", "anullsrc=channel_layout=stereo:sample_rate=48000"', src)
+        self.assertIn("silence_input_index = input_index", src)
+        self.assertIn('f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"', src)
+        self.assertIn('"-c:a", "aac"', src)
+        self.assertIn("first = gif_frames[0]", src)
+        self.assertIn("append_images=rest", src)
+        self.assertIn("if rest:", src)
+        self.assertIn('duration=max(1, int(round(1000.0 / fps)))', src)
+        self.assertIn('loop=0,', src)
+        self.assertIn('disposal=2,', src)
+        self.assertIn("gif_frames.clear()", src)
+        self.assertIn("_ADJUSTMENT_DEFAULT_VALUES = {", src)
+        self.assertIn('(self._brightness_slider, _ADJUSTMENT_DEFAULT_VALUES["brightness"])', src)
+        self.assertIn('f"Could not save output during {export_stage}:\\n{exc}"', src)
+        self.assertIn("Unsupported Files Skipped", src)
+        self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
+        self.assertIn("def _probe_video_clip(path: str)", src)
+        self.assertIn("def _coerce_frame_size(value) -> Optional[tuple[int, int]]:", src)
+        self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
+
+    def test_gif_frame_picker_uses_modern_resampling_enum(self):
+        src = self._src("ui/gif_frame_picker.py")
+        self.assertIn("Image.Resampling.LANCZOS", src)
+
+    def test_video_tool_keeps_probe_and_image_gif_support_helpers(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("first_frame = reader.get_data(0)", src)
+        self.assertIn("return fps, frame_count, frame_size, first_frame", src)
+        self.assertNotIn("def __del__(self) -> None:", src)
+        self.assertIn('self._btn_add_img = QPushButton("🖼  Add Images / GIFs")', src)
+        self.assertIn("Add still image(s), animated GIFs, or other supported image files.", src)
+        self.assertIn('files_dropped = pyqtSignal(list, int)', src)
+        self.assertIn("rect = self.visualRect(index)", src)
+        self.assertIn("self.files_dropped.emit(paths, row)", src)
+        self.assertIn('if ext == ".gif":', src)
+        self.assertIn("durations.append(max(1, int(gif.info.get(\"duration\", 100) or 100)))", src)
+        self.assertIn("frame_size=frames[0].size if frames else None,", src)
+        self.assertIn('clip_type="gif",', src)
+        self.assertIn("self._reader = _open_video_reader(self._path)", src)
+        self.assertIn("self._trim_start_slider.setValue(clip.trim_start)", src)
+        self.assertIn("self._trim_end_slider.setValue(clip.trim_end)", src)
+
+    def test_sound_engine_honors_theme_sound_override(self):
+        src = self._src("ui/sound_engine.py")
+        self.assertIn('self._settings.get("sound_theme_preset", "")', src)
+        self.assertIn("if not theme_name:", src)
+
+    def test_tutorial_video_step_matches_current_ui(self):
+        src = self._src("ui/tutorial_dialog.py")
+        self.assertIn('"title": "Video Editor"', src)
+        self.assertIn("MP4 or GIF", src)
+        self.assertIn("combine video clips and ", src)
+        self.assertIn("still images or GIFs into a single export", src)
+        self.assertIn("keep source audio from video clips", src)
+        self.assertIn("Video import and MP4 export need imageio, imageio-ffmpeg, and ", src)
+        self.assertIn("GIF export from images/GIFs still works", src)
+        self.assertNotIn("WebM", src)
+
+    def test_video_tool_no_longer_claims_image_sequence_fallback(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("still images and GIFs", src)
+        self.assertIn("into an animated GIF", src)
+        self.assertNotIn('process image-sequence "videos"', src)
+        self.assertNotIn("(folders of PNGs)", src)
+        self.assertIn("MP4 exports can optionally carry over source audio", src)
+        self.assertIn("clips and MP4 export require imageio,", src)
+        self.assertIn("imageio-ffmpeg, and a working ffmpeg executable.", src)
+
+    def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
+        src = self._src("core/worker.py")
+        self.assertIn("_LARGE_BATCH_THRESHOLD = 1000", src)
+
+    def test_preview_popout_copies_active_gif_animation_state(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("self._movie_path: str = \"\"", src)
+        self.assertIn("def _mirror_movie_frame(_frame_no: int) -> None:", src)
+        self.assertIn("self._movie.frameChanged.connect(_mirror_movie_frame)", src)
+        self.assertIn("self._movie.frameChanged.disconnect(_mirror_movie_frame)", src)
+        self.assertIn("compare._pix_before = self._pix_before.copy()", src)
+
+    def test_gif_builder_closes_progress_dialog_on_cancel(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("progress.close()", src)
+
+    def test_gif_builder_releases_frames_on_close(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("entry.close()", src)
+        self.assertIn("self._frames.clear()", src)
+
+    def test_video_export_removes_partial_output_on_error(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+        self.assertIn("progress.close()", src)
+
+    def test_build_scripts_use_dedicated_onefile_spec(self):
+        sh_src = self._src("../scripts/build_exe.sh")
+        bat_src = self._src("../scripts/build_exe.bat")
+        self.assertIn("alpha_fixer_onefile.spec", sh_src)
+        self.assertIn("alpha_fixer_onefile.spec", bat_src)
+
+    def test_build_scripts_install_runtime_requirements_for_packaging(self):
+        sh_src = self._src("../scripts/build_exe.sh")
+        bat_src = self._src("../scripts/build_exe.bat")
+        self.assertIn("Installing runtime dependencies from requirements.txt", sh_src)
+        self.assertIn("python -m pip install -r requirements.txt", sh_src)
+        self.assertIn("Installing runtime dependencies from requirements.txt", bat_src)
+        self.assertIn("python -m pip install -r requirements.txt", bat_src)
+
+    def test_pyinstaller_specs_bundle_imageio_and_ffmpeg_metadata(self):
+        folder_src = self._src("../alpha_fixer.spec")
+        onefile_src = self._src("../alpha_fixer_onefile.spec")
+        for src in (folder_src, onefile_src):
+            self.assertIn('collect_data_files("imageio")', src)
+            self.assertIn('copy_metadata("imageio")', src)
+            self.assertIn('collect_data_files("imageio_ffmpeg")', src)
+            self.assertIn('copy_metadata("imageio_ffmpeg")', src)
+
+    def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('if fmt == "mp4" and not self._mp4_export_available:', src)
+        self.assertIn("MP4 Export Unavailable", src)
+        self.assertIn("progress.show()", src)
+        self.assertIn("QApplication.processEvents()", src)
+        self.assertIn("append_video_frame = None", src)
+        self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
+        self.assertNotIn("import numpy as np\n                        rgb =", src)
+
+    def test_video_export_closes_mp4_writer_before_success(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("if not canceled and writer is not None:", src)
+        self.assertIn("writer.close()", src)
+        self.assertIn("writer = None", src)
+
+    def test_video_preview_closes_adjusted_and_filtered_images(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("filtered = _apply_filter(adjusted, filter_key)", src)
+        self.assertIn("if filtered is not None and filtered is not adjusted:", src)
+        self.assertIn("if adjusted is not None and adjusted is not source:", src)
+        self.assertIn("if source is not None:", src)
+
+    def test_video_probe_only_decodes_first_frame_as_last_resort(self):
+        src = self._src("ui/video_tool.py")
+        duration_idx = src.index("if duration > 0 and fps > 0:")
+        count_idx = src.index("imageio_ffmpeg.count_frames_and_secs(path)")
+        decode_idx = src.index("first_frame = reader.get_data(0)")
+        self.assertLess(count_idx, duration_idx)
+        self.assertGreater(decode_idx, count_idx)
+        self.assertIn("return fps, frame_count, frame_size, first_frame", src)
+        self.assertIn("_VideoFrameGetter(path, frame_count, first_frame)", src)
+
+    def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
+        src = self._src("../scripts/install_linux_deps.sh")
+        self.assertIn("libxcb-cursor0", src)
+        self.assertIn("libxcb-icccm4", src)
+        self.assertIn("libxcb-image0", src)
+        self.assertIn("libxcb-keysyms1", src)
+        self.assertIn("libxcb-render-util0", src)
+        self.assertIn("libxcb-util1", src)
+        self.assertIn("libxcb-xkb1", src)
+        self.assertIn("libxkbcommon-x11-0", src)
+
+    def test_linux_startup_hints_cover_qxcb_runtime_packages(self):
+        src = self._src("../main.py")
+        self.assertIn("libxcb-cursor.so.0", src)
+        self.assertIn("libxkbcommon-x11.so.0", src)
+        self.assertIn("Install the Qt X11/XCB support libraries for your distribution", src)
+
+    def test_video_export_caches_adjustment_values_before_frame_loop(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("@lru_cache(maxsize=1)", src)
+        self.assertIn("from threading import Lock", src)
+        self.assertIn("return _get_ffmpeg_exe() is not None", src)
+        self.assertNotIn('["ffmpeg", "-version"]', src)
+        self.assertIn("canceled = False", src)
+        self.assertIn("brightness = self._brightness_slider.value() / 100.0", src)
+        self.assertIn("contrast = self._contrast_slider.value() / 100.0", src)
+        self.assertIn("brightness=brightness", src)
+        self.assertIn("contrast=contrast", src)
+        self.assertIn("rgba = pil_img.convert(\"RGBA\")", src)
+        self.assertIn("rgba.close()", src)
+        self.assertIn("adjusted = source_pil", src)
+        self.assertIn("filtered = None", src)
+        self.assertIn("self._lock = Lock()", src)
+        self.assertIn("with self._lock:", src)
+        self.assertIn("if filtered is not None and filtered is not adjusted and filtered is not source_pil:", src)
+        self.assertIn("adjusted.close()", src)
+        self.assertIn('source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)', src)
+        self.assertNotIn("size=canvas_size", src)
+
+    def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
+        src = self._src("ui/converter_tool.py")
+        self.assertIn("from .video_tool import _VIDEO_EXTS", src)
+        self.assertIn("def _supported_input_exts(self) -> set[str]:", src)
+        self.assertIn('if self._selected_target_format() == "GIF":', src)
+        self.assertIn("return SUPPORTED_READ | _VIDEO_EXTS", src)
+        self.assertIn("self._input_file_dialog_filter()", src)
+        self.assertIn("extensions=supported_exts", src)
+        self.assertIn('noun = "media" if target_format == "GIF" else "image"', src)
+        self.assertIn("expanded, logical_sources = self._expand_gif_frames(expanded)", src)
+        self.assertIn("logical_files = [logical_sources.get(path, path) for path in expanded]", src)
+        self.assertIn("source_aliases=logical_sources", src)
+        self.assertIn("return files, {}", src)
+        self.assertIn('tmp_root / f"{len(logical_sources):08d}_{stem}_frame{frame_no + 1:04d}.png"', src)
+        self.assertIn('logical_sources[frame_path] = logical_path', src)
+
+    def test_jpeg_alias_support_is_consistent_across_ui_and_save_paths(self):
+        file_converter = self._src("core/file_converter.py")
+        worker = self._src("core/worker.py")
+        alpha_tool = self._src("ui/alpha_tool.py")
+        selective_alpha = self._src("ui/selective_alpha_tool.py")
+        gif_builder = self._src("ui/gif_builder.py")
+        settings = self._src("ui/settings_dialog.py")
+        alpha_processor = self._src("core/alpha_processor.py")
+        self.assertIn('if fmt_ext in (".jpg", ".jpeg", ".jfif", ".jpe"):', file_converter)
+        self.assertIn('if ext in (".jpg", ".jpeg", ".jfif", ".jpe"):', file_converter)
+        self.assertIn('if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):', worker)
+        self.assertIn('if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp")', alpha_processor)
+        self.assertIn("*.jfif *.jpe", alpha_tool)
+        self.assertIn('frozenset({".jpg", ".jpeg", ".jfif", ".jpe", ".bmp", ".gif"})', selective_alpha)
+        self.assertIn("*.jfif *.jpe", selective_alpha)
+        self.assertIn('".png", ".jpg", ".jpeg", ".jfif", ".jpe", ".webp"', gif_builder)
+        self.assertIn("*.jpg *.jpeg *.jfif *.jpe", settings)
+
+    def test_gif_builder_caches_preview_pixmaps(self):
+        src = self._src("ui/gif_builder.py")
+        self.assertIn("self._thumb_cache", src)
+        self.assertIn("cached = self._thumb_cache.get(key)", src)
+        self.assertIn("self._thumb_cache = {key: pix}", src)
+        self.assertIn("from .video_tool import _VIDEO_EXTS, _load_video_frames", src)
+        self.assertIn("_SUPPORTED_EXTS = _IMAGE_EXTS | _VIDEO_EXTS", src)
+        self.assertIn("if ext in _VIDEO_EXTS:", src)
+        self.assertIn("pil_frames, fps = _load_video_frames(path)", src)
+        self.assertIn("frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))", src)
+
+    def test_history_html_export_includes_title_and_caption(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("from pathlib import Path", src)
+        self.assertIn("<title>{title} History</title>", src)
+        self.assertIn("<caption>{title} History</caption>", src)
+        self.assertIn("tree.header().setSortIndicator(0, Qt.SortOrder.DescendingOrder)", src)
+        self.assertIn("final_ext = _filter_default_ext(selected_filter)", src)
+        self.assertIn("path = str(Path(path).with_suffix(final_ext))", src)
+        self.assertIn("elif not current_ext:", src)
+        self.assertIn('path = str(Path(path).with_suffix(".txt"))', src)
+
+    def test_video_builder_history_falls_back_when_output_missing(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("raw_output = entry.get(\"output\")", src)
+        self.assertIn("output = os.path.basename(raw_output) if raw_output else \"?\"", src)
+
+    def test_history_text_export_separator_matches_rendered_header_width(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("header_line = _fmt_row(headers)", src)
+        self.assertIn("sep = \"-\" * len(header_line)", src)
+
+    def test_xnb_handler_docs_match_supported_header_versions(self):
+        src = self._src("core/xnb_handler.py")
+        self.assertIn("header format versions 4 or 5", src)
+        self.assertNotIn("format versions 5 and 7", src)
+
+    def test_alpha_processor_write_support_matches_documented_handlers(self):
+        src = self._src("core/alpha_processor.py")
+        self.assertIn("SUPPORTED_WRITE = set(SUPPORTED_READ)", src)
+        self.assertIn('if ext == ".xnb":', src)
+        self.assertIn('if ext == ".svg":', src)
+        self.assertIn('if ext == ".tim":', src)
+
+    def test_readme_documents_tim_converter_output(self):
+        src = self._src("../README.md")
+        self.assertIn("SVG, XNB, and TIM can be saved after processing.", src)
+        self.assertIn("**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM", src)
+
+    def test_preview_pane_handles_already_disconnected_movies(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("except (RuntimeError, TypeError):", src)
+
+    def test_gif_paths_use_frame_rects_for_partial_updates(self):
+        picker_src = self._src("ui/gif_frame_picker.py")
+        builder_src = self._src("ui/gif_builder.py")
+        converter_src = self._src("ui/converter_tool.py")
+        for src in (picker_src, builder_src, converter_src):
+            self.assertIn("def _gif_frame_rect(", src)
+            self.assertIn('rect = getattr(gif, "dispose_extent", None)', src)
+            self.assertIn("if curr.size == rect_size:", src)
+            self.assertIn("elif curr.width >= right and curr.height >= bottom:", src)
+            self.assertIn("composite.paste(paste_img, (left, top), paste_img)", src)
+
+    def test_theme_engine_hidden_theme_grouping_comment_matches_data(self):
+        src = self._src("ui/theme_engine.py")
+        self.assertIn("# Hidden anime-style themes", src)
+
+    def test_video_and_gif_dialogs_register_tooltip_manager_keys(self):
+        video_src = self._src("ui/video_tool.py")
+        gif_src = self._src("ui/gif_builder.py")
+        main_src = self._src("ui/main_window.py")
+        conv_src = self._src("ui/converter_tool.py")
+        self.assertIn("def register_tooltips(self, mgr) -> None:", video_src)
+        self.assertIn('mgr.register(self._btn_add_video, "video_media_add")', video_src)
+        self.assertIn('mgr.register(self._btn_export, "video_export")', video_src)
+        self.assertIn('mgr.register(self._btn_split, "video_timeline")', video_src)
+        self.assertIn('mgr.register(self._clip_speed_slider, "video_trim")', video_src)
+        self.assertIn('mgr.register(self._still_duration_spin, "video_trim")', video_src)
+        self.assertIn('mgr.register(self._audio_enable_check, "video_export")', video_src)
+        self.assertIn('mgr.register(self._audio_volume_slider, "video_export")', video_src)
+        self.assertIn("def register_tooltips(self, mgr) -> None:", gif_src)
+        self.assertIn('mgr.register(self._btn_add, "gif_media_add")', gif_src)
+        self.assertIn('mgr.register(self._btn_export, "gif_export")', gif_src)
+        self.assertIn("GifBuilderDialog(parent=self, tooltip_mgr=self._tooltip_mgr)", main_src)
+        self.assertIn("VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)", main_src)
+        self.assertIn("tooltip_mgr=getattr(self.window(), \"_tooltip_mgr\", None)", conv_src)
+
+    def test_custom_background_settings_persist_and_support_video_media(self):
+        settings_src = self._src("core/settings_manager.py")
+        dialog_src = self._src("ui/settings_dialog.py")
+        main_src = self._src("ui/main_window.py")
+        self.assertIn('"custom_bg_enabled": False', settings_src)
+        self.assertIn('"use_theme_bg": False', settings_src)
+        self.assertIn('"custom_bg_path": ""', settings_src)
+        self.assertIn('"custom_bg_enabled", "use_theme_bg", "custom_bg_path"', settings_src)
+        self.assertIn("from .video_tool import _VIDEO_EXTS", dialog_src)
+        self.assertIn("self._use_theme_bg_check.setChecked(False)", dialog_src)
+        self.assertIn("self._custom_bg_file_row.setVisible(enabled and not use_theme)", dialog_src)
+        self.assertIn("self._custom_bg_path_edit.setEnabled(enabled and not use_theme)", dialog_src)
+        self.assertIn("self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)", dialog_src)
+        self.assertIn("video_patterns = sorted(f\"*{ext}\" for ext in _VIDEO_EXTS)", dialog_src)
+        self.assertIn("elif ext in self._custom_background_video_exts():", main_src)
+        self.assertIn("def _set_background_host_transparency(self, enabled: bool) -> None:", main_src)
+        self.assertIn("self._set_background_host_transparency(True)", main_src)
+        self.assertIn("self._set_background_host_transparency(False)", main_src)
+        self.assertIn('customBgTransparent', main_src)
+        self.assertIn("def _background_transparency_targets(self) -> list[QWidget]:", main_src)
+        self.assertIn("self._bg_overlay.stackUnder(central)", main_src)
+        self.assertIn("self._bg_overlay.clear()", main_src)
+        self.assertIn("def _start_video_background(self, path: str) -> None:", main_src)
+        self.assertIn("self._bg_video_timer.timeout.connect(self._advance_bg_video_frame)", main_src)
+        self.assertIn("frame = self._bg_video_reader.get_next_data()", main_src)
+
+    def test_dialog_trail_overlays_enable_mouse_tracking_recursively(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("self._enable_mouse_tracking_recursive(dlg)", src)
+        self.assertIn("def _enable_mouse_tracking_recursive(self, widget: QWidget | None) -> None:", src)
+        self.assertIn("child.setMouseTracking(True)", src)
+        self.assertIn("child.setAttribute(Qt.WidgetAttribute.WA_Hover, True)", src)
+
+    def test_drop_list_keeps_stop_button_clickable_during_bulk_add(self):
+        src = self._src("ui/drop_list.py")
+        self.assertIn("QApplication.processEvents()", src)
+        self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers", src)
+        self.assertNotIn("QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents", src)
+        self.assertIn("self.setUpdatesEnabled(False)", src)
+        self.assertIn("self.setUpdatesEnabled(True)", src)
+        self.assertIn("self.viewport().update()", src)
+
+    def test_preview_pane_ignores_stale_loader_results(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("self._load_request_id: int = 0", src)
+        self.assertIn("if request_id != self._load_request_id:", src)
+        self.assertIn("self._loader.loaded.connect(", src)
+        self.assertIn("lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)", src)
+        self.assertIn("lambda err, request_id=request_id: self._on_failed(request_id, err)", src)
+
+    def test_drop_list_surfaces_thumbnail_failure_summary(self):
+        src = self._src("ui/drop_list.py")
+        self.assertIn("def _thumbnail_failure_summary(self) -> str:", src)
+        self.assertIn("⚠ {count} {noun} unavailable — files still work.", src)
+
+    def test_preview_pane_clamps_pan_to_scaled_pixmap_bounds(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))", src)
+        self.assertIn("scaled_widths.append(pix.width() * fit_ratio * self._zoom)", src)
+        self.assertIn("max_px = max(0.0, (max(scaled_widths) - w) / 2)", src)
+        self.assertIn("max_py = max(0.0, (max(scaled_heights) - h) / 2)", src)
+
+    def test_video_export_uses_snapshot_of_clip_state_during_render(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("clip_snapshot = [", src)
+        self.assertIn("def _snapshot_clip_render_state(self, clip: \"_ClipEntry\", output_fps: float) -> dict[str, object]:", src)
+        self.assertIn('"has_audio": clip_type == "video" and clip.has_audio,', src)
+        self.assertIn('"timeline_seconds": timeline_seconds,', src)
+        self.assertIn('total = sum(int(clip["active_frames"]) for clip in clip_snapshot)', src)
+        self.assertIn("def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:", src)
+        self.assertIn("canvas_size = self._timeline_canvas_size(fmt)", src)
+        self.assertIn('source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)', src)
+        self.assertIn('def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):', src)
+        self.assertIn('"frame_getter": clip._get_frame,', src)
+        self.assertIn("framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)", src)
+        self.assertIn('pixelformat="yuv420p"', src)
+
+    def test_video_editor_exposes_insert_mode_and_canvas_summary(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('self._insert_mode_combo.addItem("After selected clip", userData="after")', src)
+        self.assertIn('self._insert_mode_combo.addItem("Before selected clip", userData="before")', src)
+        self.assertIn('self._insert_mode_combo.addItem("At end of timeline", userData="end")', src)
+        self.assertIn('self._btn_split = QPushButton("✂  Split at Playhead")', src)
+        self.assertIn('self._clip_speed_slider = _make_hslider(10, 400, 100)', src)
+        self.assertIn('self._still_duration_spin.setRange(1, 3600)', src)
+        self.assertIn('self._audio_group = QGroupBox("Audio (MP4 export only)")', src)
+        self.assertIn('self._export_size_lbl = QLabel("Canvas: auto once clips are added")', src)
+        self.assertIn("def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:", src)
+        self.assertIn("def _active_clip_canvas_sizes(self) -> list[tuple[int, int]]:", src)
+        self.assertIn('detail = "Canvas: auto from the largest clip (rounded for MP4 compatibility)"', src)
+        self.assertIn("def _format_clip_label(clip: \"_ClipEntry\", path: str, icon: str) -> str:", src)
+        self.assertIn('size_text = f"{size[0]}×{size[1]}  •  " if size else ""', src)
+        self.assertIn('return f"{icon}  {Path(path).name}  [{size_text}still • {clip.still_duration_frames} fr]"', src)
+        self.assertIn("def _split_clip_at_playhead(self) -> None:", src)
+        self.assertIn('self._bind_shortcut("video_split_clip", "Ctrl+E", self._split_clip_at_playhead)', src)
+        self.assertIn('self.setMinimumSize(1120, 760)', src)
+        self.assertIn('self.resize(1320, 820)', src)
+        self.assertIn('_format_extension_filter("Video Files", _VIDEO_EXTS)', src)
+        self.assertIn('_format_extension_filter("Images", _IMAGE_EXTS)', src)
+        self.assertIn("if clip.active_frames <= 0:", src)
+        self.assertIn("current = min(self._scrubber.value(), total)", src)
+        self.assertIn('self._pos_lbl.setText(f"{(current + 1) if total_frames else 0} / {total_frames}")', src)
+        self.assertIn('self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")', src)
+        self.assertIn('self._preview_lbl.setText("Add clips to preview and export.")', src)
+        self.assertIn('self._clip_info_lbl.setText("Select a clip to adjust trim and timing.")', src)
+        self.assertEqual(src.count("def _update_ui_state(self) -> None:"), 1)
+        self.assertEqual(src.count("def _update_timeline_summary(self) -> None:"), 1)
+        self.assertEqual(src.count("def _format_clip_info_text(self, clip: \"_ClipEntry\") -> str:"), 1)
+
+    def test_video_audio_controls_only_enable_when_mp4_has_real_audio(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn('self._audio_group.setVisible(self._mp4_export_available and is_mp4)', src)
+        self.assertIn("allow_audio_source_controls = allow_audio_controls and has_audio_source", src)
+        self.assertIn("self._audio_enable_check.setEnabled(allow_audio_source_controls)", src)
+        self.assertIn("audio_enabled = allow_audio_source_controls and self._audio_enable_check.isChecked()", src)
+        self.assertIn("No source audio stream was detected in the current video clips, so volume and mute controls stay disabled.", src)
+        self.assertIn("These controls only affect exported MP4 audio. Preview playback stays silent.", src)
+        self.assertIn("def _get_ffprobe_exe() -> Optional[str]:", src)
+        self.assertIn('ffmpeg_path.with_name("ffprobe")', src)
+        self.assertIn('"-select_streams", "a:0"', src)
+        self.assertIn('"-show_entries", "stream=index"', src)
+        self.assertIn("if result.returncode == 0 and result.stdout.strip():", src)
+
+    def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
+        src = self._src("ui/tooltip_manager.py")
+        video_export_section = src.split('"video_export": [', 1)[1].split("],", 1)[0]
+        self.assertNotIn("give a shit", video_export_section)
+        self.assertIn("Choose whether to export the current timeline as MP4 or animated GIF.", video_export_section)
+        self.assertIn("Split at Playhead", src)
+        self.assertIn("Still images now stay on screen for a configurable duration", src)
+        self.assertIn("keep source audio from video clips", src)
+        for key in (
+            "video_media_add",
+            "video_timeline",
+            "video_trim",
+            "video_preview",
+            "video_filter",
+            "video_export",
+            "gif_media_add",
+            "gif_frame_list",
+            "gif_frame_delay",
+            "gif_export_settings",
+            "gif_preview",
+            "gif_export",
+        ):
+            self.assertEqual(src.count(f'"{key}"'), 3, f"{key} must appear in all 3 tooltip mode dicts")
+
+    def test_history_tooltips_describe_visual_previews(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("def _set_history_tooltip(", src)
+        self.assertIn("def _set_builder_tooltip(", src)
+        self.assertIn("Preview: animated GIF thumbnail shown from the output file.", src)
+        self.assertIn("Preview: first clip thumbnail shown.", src)
+        self.assertIn("if file_list:", src)
+        self.assertIn("for col in range(columns):", src)
+
+    def test_readme_theme_counts_match_theme_engine(self):
+        import importlib.util
+
+        theme_path = os.path.join(os.path.dirname(__file__), "..", "src", "ui", "theme_engine.py")
+        spec = importlib.util.spec_from_file_location("theme_engine_for_readme_test", theme_path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        src = self._src("../README.md")
+        self.assertIn(f"**🔓 {len(module.HIDDEN_THEMES)} hidden unlockable themes**", src)
+        self.assertIn(
+            f"theme_engine.py      - Qt stylesheet generator + "
+            f"{len(module.PRESET_THEMES) + len(module.HIDDEN_THEMES)} theme palettes "
+            f"({len(module.PRESET_THEMES)} preset + {len(module.HIDDEN_THEMES)} hidden) + THEME_EFFECTS map",
+            src,
+        )
+
+    def test_file_converter_removes_unused_quality_formats_constant(self):
+        src = self._src("core/file_converter.py")
+        self.assertNotIn("_QUALITY_FORMATS =", src)
+
+    def test_history_text_export_truncates_long_filename_column(self):
+        src = self._src("ui/history_tab.py")
+        self.assertIn("if is_last and len(text) > 80:", src)
+        self.assertIn('return text[:77] + "..."', src)
+
+    def test_settings_dialog_keeps_locked_hidden_current_theme_selectable(self):
+        src = self._src("ui/settings_dialog.py")
+        self.assertIn('_THEME_PREFIX_CHARS = "★🔓🔒 "', src)
+        self.assertIn('self._theme_preset_combo.addItem(f"🔒 {current_hidden}")', src)
+        self.assertIn('idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")', src)
+
+    def test_settings_dialog_has_clear_general_and_sound_guidance(self):
+        src = self._src("ui/settings_dialog.py")
+        self.assertIn("Quick guide: Theme changes colors and visuals, General handles layout/tooltips/effects,", src)
+        self.assertIn("Sound settings are kept separate from visual theme controls so it is easier to tell", src)
+
+    def test_theme_ambient_tooltips_keep_panda_mapping_consistent(self):
+        dialog_src = self._src("ui/settings_dialog.py")
+        tooltip_src = self._src("ui/tooltip_manager.py")
+        self.assertIn("Panda themes use Bamboo Leaves when theme ambient is enabled.", dialog_src)
+        self.assertIn("Panda themes use Bamboo Leaves.", tooltip_src)
+        self.assertIn("Panda gets Bamboo Leaves.", tooltip_src)
+        self.assertNotIn("Panda gets nothing.", tooltip_src)
+
+    def test_button_press_animation_runs_after_release(self):
+        src = self._src("ui/click_effects.py")
+        self.assertIn("event.type() == QEvent.Type.MouseButtonRelease", src)
+        self.assertIn("from PyQt6 import sip", src)
+        self.assertIn("def _is_live_widget(btn: QWidget | None) -> bool:", src)
+        self.assertIn("return not sip.isdeleted(btn)", src)
+        self.assertIn("QTimer.singleShot(0, lambda b=obj: self._animate(b))", src)
+        self.assertIn("obj.rect().contains(event.position().toPoint())", src)
+        self.assertIn("if not self._is_live_widget(btn):", src)
+
+    def test_shortcuts_dialog_registers_tool_and_dialog_shortcuts(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("from .gif_builder import GifBuilderDialog", src)
+        self.assertIn("from .video_tool import VideoToolDialog", src)
+        self.assertIn("self._register_shortcut_provider(self._alpha_tab)", src)
+        self.assertIn("self._register_shortcut_provider(self._converter_tab)", src)
+        self.assertIn("self._register_shortcut_provider(self._selective_alpha_tab)", src)
+        self.assertIn('self._register_shortcut_provider(GifBuilderDialog, owner_attr="_gif_builder_dlg")', src)
+        self.assertIn('self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")', src)
+        self.assertIn("dlg.setMinimumSize(760, 560)", src)
+        self.assertIn("btn_change.setMinimumWidth(86)", src)
+
+    def test_main_window_resyncs_dialog_trails_for_visible_windows(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("def _iter_visible_top_level_windows(self) -> list[QWidget]:", src)
+        self.assertIn("def _sync_dialog_trail_overlays(self) -> None:", src)
+        self.assertIn("for dlg in self._iter_visible_top_level_windows():", src)
+        self.assertIn("overlay = MouseTrailOverlay(dlg)", src)
+        self.assertIn("if index > 0:", src)
+        self.assertIn("overlay.deleteLater()", src)
+        self.assertIn("self._sync_dialog_trail_overlays()", src)
+
+    def test_reloaded_clips_preserve_trim_bounds_before_split(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("new_clip.trim_start = max(0, min(clip.trim_start, new_clip.total_frames - 1))", src)
+        self.assertIn("new_clip.trim_end = max(new_clip.trim_start, min(clip.trim_end, new_clip.total_frames - 1))", src)
+
+    def test_video_editor_caches_audio_stream_presence_per_clip(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("has_audio: bool = False", src)
+        self.assertIn("self.has_audio = has_audio", src)
+        self.assertIn("has_audio=_video_has_audio_stream(path)", src)
+        self.assertIn("and clip.has_audio", src)
+        self.assertIn('"has_audio": clip_type == "video" and clip.has_audio,', src)
+
+    def test_button_anim_settings_use_explicit_fallbacks(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn('self._settings.get("button_anim_enabled", True)', src)
+        self.assertIn('self._settings.get("use_theme_button_anim", True)', src)
+
+    def test_video_probe_uses_duration_only_after_reader_and_ffmpeg_fallbacks(self):
+        src = self._src("ui/video_tool.py")
+        ffmpeg_pos = src.find("counted, secs = imageio_ffmpeg.count_frames_and_secs(path)")
+        reader_count_pos = src.find("frame_count = _coerce_frame_count(reader.count_frames())")
+        duration_pos = src.find("duration = float(meta.get(\"duration\") or 0.0)")
+        self.assertGreater(ffmpeg_pos, 0)
+        self.assertGreater(ffmpeg_pos, reader_count_pos)
+        self.assertGreater(duration_pos, ffmpeg_pos)
+
+    def test_tutorial_mentions_video_editor_split_and_timing_controls(self):
+        src = self._src("ui/tutorial_dialog.py")
+        self.assertIn("split a moving clip at the playhead", src)
+        self.assertIn("Adjust per-clip speed for videos/GIFs", src)
+        self.assertIn("keep source audio from video clips", src)
+        self.assertIn("Preview playback stays silent.", src)
+        self.assertIn("self._body_lbl.setOpenExternalLinks(False)", src)
+        self.assertIn("Qt.TextInteractionFlag.TextSelectableByMouse", src)
+        self.assertIn("Qt.TextInteractionFlag.TextSelectableByKeyboard", src)
+        self.assertIn("self._body_lbl.setFocusPolicy(Qt.FocusPolicy.StrongFocus)", src)
+
+    def test_fairy_garden_theme_ambient_matches_sakura_visuals(self):
+        src = self._src("ui/theme_engine.py")
+        self.assertIn('"Fairy Garden":      "sakura"', src)
+
+    def test_mp4_export_availability_requires_imageio_ffmpeg(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn("def _has_imageio_ffmpeg() -> bool:", src)
+        self.assertIn("self._imageio_ffmpeg_available = _has_imageio_ffmpeg()", src)
+        self.assertIn("self._video_io_available = (", src)
+        self.assertIn("and self._imageio_available", src)
+        self.assertIn("and self._imageio_ffmpeg_available", src)
+        self.assertIn("self._mp4_export_available = self._video_io_available", src)
+        self.assertIn("if not self._video_io_available:", src)
+        self.assertIn("if self._mp4_export_available:", src)
+
+    def test_preview_zoom_scales_from_fit_size(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))", src)
+        self.assertIn("fit_w = max(1, int(round(pix.width() * fit_ratio)))", src)
+        self.assertIn("fit_h = max(1, int(round(pix.height() * fit_ratio)))", src)
+        self.assertIn("max(1, int(round(fit_w * zoom)))", src)
+        self.assertIn("self._raw_before = qimg.copy()", src)
+        self.assertIn("def set_before(self, qimg: QImage, *, store_raw: bool = True, stop_movie: bool = True) -> None:", src)
+        self.assertIn("if store_raw:", src)
+        self.assertIn("self._raw_after = qimg.copy()", src)
+        self.assertIn("compare._raw_before = self._raw_before.copy()", src)
+
+    def test_converter_preview_ignores_stale_loader_results(self):
+        src = self._src("ui/converter_tool.py")
+        self.assertIn("self._preview_request_id: int = 0", src)
+        self.assertIn('self._current_preview_path: str = ""', src)
+        self.assertIn("self._preview_request_id += 1", src)
+        self.assertIn("self._on_preview_ready_if_current", src)
+        self.assertIn("self._on_preview_failed_if_current", src)
+        self.assertIn("if request_id != self._preview_request_id or expected_path != self._current_preview_path:", src)
+        preview_src = self._src("ui/preview_pane.py")
+        self.assertIn("if self._abort:", preview_src)
+        self.assertIn("return", preview_src)
+
+    def test_converter_and_settings_layout_cleanup_removes_cramped_controls(self):
+        converter_src = self._src("ui/converter_tool.py")
+        settings_src = self._src("ui/settings_dialog.py")
+        self.assertIn("go_layout.setColumnStretch(2, 0)", converter_src)
+        self.assertIn("go_layout.addWidget(self._btn_out_dir, 0, 2)", converter_src)
+        self.assertNotIn("go_layout.setRowMinimumHeight(0, 40)", converter_src)
+        self.assertNotIn("go_layout.setRowMinimumHeight(1, 40)", converter_src)
+        self.assertIn("psl = QGridLayout()", settings_src)
+        self.assertIn('self._custom_bg_browse_btn = QPushButton("Browse…")', settings_src)
+        self.assertIn("self._custom_bg_browse_btn.setMinimumWidth(90)", settings_src)
+
+    def test_tutorial_dialog_keeps_navigation_shortcuts_alive(self):
+        src = self._src("ui/tutorial_dialog.py")
+        self.assertIn("self._shortcut_next = QShortcut(QKeySequence(Qt.Key.Key_Right), self)", src)
+        self.assertIn("self._shortcut_prev = QShortcut(QKeySequence(Qt.Key.Key_Left), self)", src)
+
+    def test_mp4_unavailable_warning_mentions_imageio_ffmpeg(self):
+        src = self._src("ui/video_tool.py")
+        self.assertIn(
+            "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.",
+            src,
+        )
+        self.assertIn(
+            "Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.",
+            src,
+        )
+
+    def test_alpha_preview_helpers_persist_and_show_in_popout(self):
+        settings_src = self._src("core/settings_manager.py")
+        alpha_src = self._src("ui/alpha_tool.py")
+        self.assertIn('"alpha_preview_highlight": False', settings_src)
+        self.assertIn('"alpha_preview_detect_atlas": False', settings_src)
+        self.assertIn('preview_hint = QLabel(', alpha_src)
+        self.assertIn('self._alpha_vis_check.setChecked(self._settings.get("alpha_preview_highlight", False))', alpha_src)
+        self.assertIn('self._atlas_detect_check.setChecked(self._settings.get("alpha_preview_detect_atlas", False))', alpha_src)
+        self.assertIn('atlas_chk = QCheckBox("🗺  Detect Atlas", row_w)', alpha_src)
+        self.assertIn("def _apply_alpha_vis_to_widget(self, widget) -> None:", alpha_src)
+        self.assertIn('self._apply_alpha_vis_to_compare()', alpha_src)
+        no_cells_section = alpha_src.split("if not self._atlas_cells:", 1)[1].split("n = len(self._atlas_cells)", 1)[0]
+        self.assertNotIn('self._atlas_detect_check.setChecked(False)', no_cells_section)

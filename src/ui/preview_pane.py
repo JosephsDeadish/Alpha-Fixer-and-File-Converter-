@@ -13,16 +13,79 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QThread, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QFont, QFontMetrics,
-    QPixmap, QImage, QColor,
+    QPixmap, QImage, QColor, QMovie,
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame,
+    QPushButton, QHBoxLayout, QDialog,
+)
+
+_UNDOCK_TOOLTIP = (
+    "Undock the preview into a separate floating window.\n"
+    "The embedded preview stays available here while the floating window is open.\n"
+    "Click ⇙ Redock (or close the floating window) to return to the embedded preview."
+)
+
+_REDOCK_TOOLTIP = (
+    "Redock the preview back into the main panel.\n"
+    "Closes the floating window and restores the embedded preview."
 )
 
 
 # ---------------------------------------------------------------------------
-# Shared PIL → QImage helper
+# Floating zoom overlay reused by preview widgets
 # ---------------------------------------------------------------------------
+
+class _ZoomOverlayBar(QFrame):
+    """Compact semi-transparent zoom control bar (－ / ⊡ / ＋).
+
+    Create as a *child* of the widget it should float over, then call
+    ``reposition(parent_size)`` in the parent's ``resizeEvent`` to keep it
+    pinned to the top-right corner.
+    """
+
+    def __init__(self, zoom_in_cb, zoom_out_cb, zoom_fit_cb, parent=None):
+        super().__init__(parent)
+        self.setObjectName("zoomOverlayBar")
+        self.setStyleSheet(
+            "QFrame#zoomOverlayBar {"
+            "  background: rgba(20, 20, 20, 155);"
+            "  border-radius: 6px;"
+            "  border: 1px solid rgba(255,255,255,35);"
+            "}"
+            "QPushButton {"
+            "  background: rgba(55,55,55,190);"
+            "  color: #eee;"
+            "  border: none;"
+            "  border-radius: 4px;"
+            "  font-size: 13px;"
+            "  min-width: 24px; max-width: 24px;"
+            "  min-height: 20px; max-height: 20px;"
+            "  padding: 0;"
+            "}"
+            "QPushButton:hover  { background: rgba(95,95,95,210); }"
+            "QPushButton:pressed{ background: rgba(35,35,35,240); }"
+        )
+        row = QHBoxLayout(self)
+        row.setContentsMargins(3, 2, 3, 2)
+        row.setSpacing(3)
+        for label, tip, cb in [
+            ("－", "Zoom out  (Ctrl + scroll-down)", zoom_out_cb),
+            ("⊡", "Reset zoom / fit to window",      zoom_fit_cb),
+            ("＋", "Zoom in  (Ctrl + scroll-up)",     zoom_in_cb),
+        ]:
+            btn = QPushButton(label)
+            btn.setToolTip(tip)
+            btn.clicked.connect(cb)
+            row.addWidget(btn)
+        self.adjustSize()
+        self.raise_()
+
+    def reposition(self, parent_size) -> None:
+        """Pin to top-right corner of *parent_size*."""
+        margin = 6
+        self.move(parent_size.width() - self.width() - margin, margin)
+
 
 def _pil_to_qimage(img) -> QImage:
     """Convert any PIL Image to a detached RGBA QImage."""
@@ -124,21 +187,25 @@ class _ThumbLoader(QThread):
 
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(img)
+            if self._abort:
+                return
 
             meta_text = (
                 f"{Path(self._path).name}\n"
                 f"{width} × {height}  ·  {mode}{alpha_note}\n"
                 f"{_fmt_size(file_size)}{meta_note}"
             )
-            try:
-                self.loaded.emit(qimg, meta_text)
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.loaded.emit(qimg, meta_text)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            try:
-                self.failed.emit(str(exc))
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.failed.emit(str(exc))
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
@@ -227,15 +294,18 @@ class _ConvertedThumbLoader(QThread):
                 qimg = _pil_to_qimage(img)
                 img.close()
                 img = None
+                if self._abort:
+                    return
                 meta = (
                     f"{Path(self._path).name}\n"
                     f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                     f"Preview as {fmt}  (source shown)"
                 )
-                try:
-                    self.loaded.emit(qimg, meta)
-                except RuntimeError:
-                    pass  # receiver destroyed; nothing to do
+                if not self._abort:
+                    try:
+                        self.loaded.emit(qimg, meta)
+                    except RuntimeError:
+                        pass  # receiver destroyed; nothing to do
                 return
 
             if save_img is not img:
@@ -245,6 +315,8 @@ class _ConvertedThumbLoader(QThread):
             preview_img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
             qimg = _pil_to_qimage(preview_img)
             preview_img.close()
+            if self._abort:
+                return
 
             quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
             meta = (
@@ -252,15 +324,17 @@ class _ConvertedThumbLoader(QThread):
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                 f"Preview as {fmt}{quality_note}  ·  ~{_fmt_size(converted_size)}"
             )
-            try:
-                self.loaded.emit(qimg, meta)
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.loaded.emit(qimg, meta)
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         except Exception as exc:
-            try:
-                self.failed.emit(str(exc))
-            except RuntimeError:
-                pass  # receiver destroyed; nothing to do
+            if not self._abort:
+                try:
+                    self.failed.emit(str(exc))
+                except RuntimeError:
+                    pass  # receiver destroyed; nothing to do
         finally:
             if img is not None:
                 img.close()
@@ -281,7 +355,15 @@ class BeforeAfterWidget(QWidget):
     set_after(QImage)   – update the right (processed) side
     set_loading()       – show a "Processing…" indicator on the right side
     clear()             – reset to empty placeholder
+
+    Signals
+    -------
+    popout_requested()  – emitted when the ⤢ pop-out button is clicked.
+                          The parent tool should open a floating dialog.
     """
+
+    #: Emitted when the user clicks the ⤢ pop-out button.
+    popout_requested = pyqtSignal()
 
     _HANDLE_R = 14    # handle circle radius (px)
     _DIVIDER_W = 2    # divider line width (px)
@@ -291,6 +373,8 @@ class BeforeAfterWidget(QWidget):
     # painted inside the widget itself instead of relying on the external side
     # panel QLabels in alpha_tool.py (those labels always occupy 84 px each).
     _COMPACT_OVERLAY_WIDTH_THRESHOLD = 500
+    # Default divider / handle accent color (matches the default "Panda Dark" theme).
+    _DEFAULT_DIVIDER_COLOR = "#e94560"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -308,6 +392,20 @@ class BeforeAfterWidget(QWidget):
         # re-running the background worker.
         self._raw_before: QImage | None = None
         self._raw_after: QImage | None = None
+        # QMovie used to animate the "before" side when the source is a GIF.
+        self._movie: QMovie | None = None
+        self._movie_path: str = ""
+        self._movie_speed: int = 100
+        # Zoom & pan state
+        self._zoom: float = 1.0          # 1.0 = fit-to-widget
+        self._pan_x: float = 0.0         # pixel offset (applied when _zoom > 1)
+        self._pan_y: float = 0.0
+        self._panning: bool = False
+        self._pan_start_pos: "QPoint | None" = None
+        # Theme-tinted divider colour (updated by set_divider_color).
+        self._divider_color: str = self._DEFAULT_DIVIDER_COLOR
+        # Floating pop-out dialog (kept alive while open so images persist).
+        self._popout_dialog: "QDialog | None" = None
 
         self.setMinimumSize(180, 120)
         self.setSizePolicy(
@@ -316,21 +414,215 @@ class BeforeAfterWidget(QWidget):
         )
         self.setMouseTracking(True)
         self.setToolTip(
-            "Drag the ◀▶ handle to compare original and processed image"
+            "Drag the ◀▶ handle to compare original and processed image.\n"
+            "Ctrl+Scroll to zoom; middle-drag to pan when zoomed.\n"
+            "Click ⤢ (top-left) to pop out a resizable floating window."
         )
 
+        # Floating zoom overlay (top-right corner)
+        self._zoom_bar = _ZoomOverlayBar(
+            self.zoom_in, self.zoom_out, self.zoom_reset, self
+        )
+        self._zoom_bar.reposition(self.size())
+
+        # Floating pop-out button (top-left corner)
+        self._popout_btn = self._make_popout_button()
+        self._reposition_popout_btn()
+
     # ------------------------------------------------------------------
-    # Public API
+    # Pop-out overlay button
     # ------------------------------------------------------------------
 
-    def set_before(self, qimg: QImage) -> None:
+    def _make_popout_button(self) -> "QPushButton":
+        btn = QPushButton("⇗ Undock", self)
+        btn.setObjectName("popoutBtn")
+        self._apply_popout_button_state(btn, undocked=False)
+        btn.setFixedSize(90, 22)
+        btn.setStyleSheet(
+            "QPushButton#popoutBtn {"
+            "  background: rgba(20,20,20,155);"
+            "  color: #eee;"
+            "  border: 1px solid rgba(255,255,255,35);"
+            "  border-radius: 5px;"
+            "  font-size: 13px;"
+            "  padding: 0;"
+            "}"
+            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
+            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
+        )
+        btn.clicked.connect(self._on_popout_clicked)
+        btn.raise_()
+        return btn
+
+    @staticmethod
+    def _apply_popout_button_state(btn: "QPushButton", *, undocked: bool) -> None:
+        """Keep pop-out button text and tooltip in sync from one source of truth."""
+        btn.setText("⇙ Redock" if undocked else "⇗ Undock")
+        btn.setToolTip(_REDOCK_TOOLTIP if undocked else _UNDOCK_TOOLTIP)
+
+    def _reposition_popout_btn(self) -> None:
+        margin = 6
+        self._popout_btn.move(margin, margin)
+
+    def _on_popout_clicked(self) -> None:
+        """Undock or redock the floating comparison window.
+
+        Clicking once undocks.  Clicking again (when the dialog is open)
+        redocks the preview — the button text changes to "⇙ Redock"
+        as a visual cue.  This also fixes the infinite-popout bug where
+        closing the dialog via its ✕ button would leave _popout_dialog
+        pointing to a hidden dialog, allowing a new one to be opened on the
+        next click instead of re-using the existing reference.
+        """
+        # If a pop-out dialog is already visible, dock it back.
+        if self._popout_dialog is not None and not self._popout_dialog.isHidden():
+            self._popout_dialog.close()
+            return
+
+        dlg = QDialog(self.window())
+        dlg.setWindowTitle("Preview — Undocked Comparison")
+        dlg.resize(900, 600)
+        dlg.setMinimumSize(400, 300)
+        # Add minimize button hint so the floating window can be minimized (item 17)
+        dlg.setWindowFlags(
+            dlg.windowFlags()
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+        )
+        dlg_layout = QVBoxLayout(dlg)
+        dlg_layout.setContentsMargins(6, 6, 6, 6)
+        dlg_layout.setSpacing(4)
+
+        # Stand-alone BeforeAfterWidget with the same images
+        compare = BeforeAfterWidget(dlg)
+        _mirror_movie_frame = None
+        if self._pix_before is not None:
+            compare._pix_before = self._pix_before.copy()
+        if self._pix_after is not None:
+            compare._pix_after = self._pix_after.copy()
+        if self._raw_before is not None:
+            compare._raw_before = self._raw_before.copy()
+        if self._raw_after is not None:
+            compare._raw_after = self._raw_after.copy()
+        compare._divider_color = self._divider_color
+        compare._stats_before = self._stats_before
+        compare._stats_after = self._stats_after
+        if self._movie_path:
+            compare._movie_path = self._movie_path
+            if self._pix_before is not None:
+                compare._pix_before = self._pix_before.copy()
+
+            def _mirror_movie_frame(_frame_no: int) -> None:
+                if self._movie is None:
+                    return
+                pix = self._movie.currentPixmap()
+                if not pix.isNull():
+                    compare._pix_before = pix
+                    compare.update()
+
+            if self._movie is not None:
+                self._movie.frameChanged.connect(_mirror_movie_frame)
+        dlg_layout.addWidget(compare, 1)
+
+        self._popout_dialog = dlg
+
+        # Update button to reflect the "undocked" state so the user knows
+        # clicking it again will redock the preview.
+        self._apply_popout_button_state(self._popout_btn, undocked=True)
+
+        def _on_dialog_finished(_result=None) -> None:
+            """Reset button and stored reference when dialog closes for any reason."""
+            if self._movie is not None and _mirror_movie_frame is not None:
+                try:
+                    self._movie.frameChanged.disconnect(_mirror_movie_frame)
+                except (RuntimeError, TypeError):
+                    pass
+            self._popout_dialog = None
+            self._apply_popout_button_state(self._popout_btn, undocked=False)
+
+        dlg.finished.connect(_on_dialog_finished)
+
+        # Emit signal so the parent tool can attach extra widgets (e.g. checkboxes)
+        self.popout_requested.emit()
+        dlg.show()
+
+    # ------------------------------------------------------------------
+    # Pop-out button visibility
+    # ------------------------------------------------------------------
+
+    def hide_popout_button(self) -> None:
+        """Hide the pop-out overlay button (e.g. when widget is already inside a pop-out dialog)."""
+        self._popout_btn.hide()
+
+    # ------------------------------------------------------------------
+    # Theme tinting
+    # ------------------------------------------------------------------
+
+    def set_divider_color(self, color: str) -> None:
+        """Update the divider / handle accent color to match the active theme."""
+        self._divider_color = color or self._DEFAULT_DIVIDER_COLOR
+        self.update()
+
+    # ------------------------------------------------------------------
+    # Zoom API
+    # ------------------------------------------------------------------
+
+    def zoom_in(self) -> None:
+        """Zoom in by 25%."""
+        self._zoom = min(8.0, self._zoom * 1.25)
+        self._clamp_pan()
+        self.update()
+
+    def zoom_out(self) -> None:
+        """Zoom out by 25%."""
+        self._zoom = max(0.2, self._zoom / 1.25)
+        self._clamp_pan()
+        self.update()
+
+    def zoom_reset(self) -> None:
+        """Reset zoom to fit-to-widget and clear pan offset."""
+        self._zoom = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self.update()
+
+    def _clamp_pan(self) -> None:
+        """Clamp pan offsets so the image cannot be dragged completely off-screen."""
+        w, h = self.width(), self.height()
+        pixmaps = [
+            pix for pix in (self._pix_before, self._pix_after)
+            if pix is not None and not pix.isNull()
+        ]
+        if not pixmaps or w <= 0 or h <= 0:
+            self._pan_x = 0.0
+            self._pan_y = 0.0
+            return
+        scaled_widths = []
+        scaled_heights = []
+        for pix in pixmaps:
+            fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))
+            scaled_widths.append(pix.width() * fit_ratio * self._zoom)
+            scaled_heights.append(pix.height() * fit_ratio * self._zoom)
+        max_px = max(0.0, (max(scaled_widths) - w) / 2)
+        max_py = max(0.0, (max(scaled_heights) - h) / 2)
+        self._pan_x = max(-max_px, min(max_px, self._pan_x))
+        self._pan_y = max(-max_py, min(max_py, self._pan_y))
+
+
+    def set_before(self, qimg: QImage, *, store_raw: bool = True, stop_movie: bool = True) -> None:
         """Set the 'before' (original) side."""
+        if stop_movie:
+            self._stop_movie()
+        if store_raw:
+            self._raw_before = qimg.copy()
         self._pix_before = QPixmap.fromImage(qimg)
         self._loading = False
         self.update()
 
-    def set_after(self, qimg: QImage) -> None:
+    def set_after(self, qimg: QImage, *, store_raw: bool = True) -> None:
         """Set the 'after' (processed) side."""
+        if store_raw:
+            self._raw_after = qimg.copy()
         self._pix_after = QPixmap.fromImage(qimg)
         self._loading = False
         self.update()
@@ -358,6 +650,7 @@ class BeforeAfterWidget(QWidget):
 
     def clear(self) -> None:
         """Reset to empty / placeholder state."""
+        self._stop_movie()
         self._pix_before = None
         self._pix_after = None
         self._loading = False
@@ -392,6 +685,24 @@ class BeforeAfterWidget(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._checker = None  # invalidate; rebuilt lazily in paintEvent
+        self._clamp_pan()
+        self._zoom_bar.reposition(event.size())
+        self._zoom_bar.raise_()
+        self._reposition_popout_btn()
+        self._popout_btn.raise_()
+
+    def wheelEvent(self, event):  # noqa: N802
+        """Ctrl+scroll zooms in/out; plain scroll bubbles to the parent."""
+        from PyQt6.QtCore import Qt as _Qt
+        if event.modifiers() & _Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoom_in()
+            elif delta < 0:
+                self.zoom_out()
+            event.accept()
+        else:
+            event.ignore()
 
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
@@ -406,16 +717,25 @@ class BeforeAfterWidget(QWidget):
         painter.drawPixmap(0, 0, self._checker)
 
         # ── Helper: draw pixmap scaled to widget, clipped to x-band ─
+        zoom = self._zoom
+
         def _draw_pix(pix: QPixmap, clip_x: int, clip_w: int):
             if clip_w <= 0:
                 return
+            fit_ratio = min(w / max(1, pix.width()), h / max(1, pix.height()))
+            fit_w = max(1, int(round(pix.width() * fit_ratio)))
+            fit_h = max(1, int(round(pix.height() * fit_ratio)))
             scaled = pix.scaled(
-                w, h,
+                max(1, int(round(fit_w * zoom))),
+                max(1, int(round(fit_h * zoom))),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             ox = (w - scaled.width()) // 2
             oy = (h - scaled.height()) // 2
+            if zoom > 1.0:
+                ox += int(self._pan_x)
+                oy += int(self._pan_y)
             painter.setClipRect(QRect(clip_x, 0, clip_w, h))
             painter.drawPixmap(ox, oy, scaled)
             painter.setClipping(False)
@@ -431,7 +751,7 @@ class BeforeAfterWidget(QWidget):
             painter.setClipRect(QRect(split_x, 0, w - split_x, h))
             painter.fillRect(split_x, 0, w - split_x, h, QColor(0, 0, 0, 110))
             painter.setClipping(False)
-            painter.setPen(QColor("#e94560"))
+            painter.setPen(QColor(self._divider_color))
             painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
             painter.drawText(
                 QRect(split_x, 0, w - split_x, h),
@@ -459,17 +779,21 @@ class BeforeAfterWidget(QWidget):
             if split_x > 55:
                 btext = "BEFORE"
                 bw = fm.horizontalAdvance(btext) + 8
-                painter.fillRect(4, 4, bw, lh, QColor(0, 0, 0, 150))
+                # Offset BEFORE downward to clear the pop-out button in the top-left corner.
+                by = 32
+                painter.fillRect(4, by, bw, lh, QColor(0, 0, 0, 150))
                 painter.setPen(QColor("#dddddd"))
-                painter.drawText(8, 4 + fm.ascent() + 2, btext)
+                painter.drawText(8, by + fm.ascent() + 2, btext)
 
             if w - split_x > 55:
                 atext = "AFTER"
                 aw2 = fm.horizontalAdvance(atext) + 8
                 ax = w - aw2 - 4
-                painter.fillRect(ax, 4, aw2, lh, QColor(0, 0, 0, 150))
-                painter.setPen(QColor("#e94560"))
-                painter.drawText(ax + 4, 4 + fm.ascent() + 2, atext)
+                # Offset AFTER downward to clear the zoom overlay bar in the top-right corner.
+                ay = 32
+                painter.fillRect(ax, ay, aw2, lh, QColor(0, 0, 0, 150))
+                painter.setPen(QColor(self._divider_color))
+                painter.drawText(ax + 4, ay + fm.ascent() + 2, atext)
 
         # ── Alpha stats overlay (compact, below divider handle) ──────────
         # The primary stats display is now in the side panels in alpha_tool.py;
@@ -499,26 +823,26 @@ class BeforeAfterWidget(QWidget):
                 sa_x = w - sa_w - margin
                 sa_y = h - slh - margin
                 painter.fillRect(sa_x, sa_y, sa_w, slh, QColor(0, 0, 0, 150))
-                painter.setPen(QColor("#e94560"))
+                painter.setPen(QColor(self._divider_color))
                 painter.setClipRect(QRect(sa_x, sa_y, sa_w, slh))
                 painter.drawText(sa_x + 4, sa_y + sfm.ascent() + 2,
                                  self._stats_after)
                 painter.setClipping(False)
 
         # ── Divider line ──────────────────────────────────────────────
-        painter.setPen(QPen(QColor("#e94560"), self._DIVIDER_W))
+        painter.setPen(QPen(QColor(self._divider_color), self._DIVIDER_W))
         painter.drawLine(split_x, 0, split_x, h)
 
         # ── Handle circle ─────────────────────────────────────────────
         hr = self._HANDLE_R
         hy = h // 2
-        painter.setPen(QPen(QColor("#e94560"), 2))
+        painter.setPen(QPen(QColor(self._divider_color), 2))
         painter.setBrush(QBrush(QColor("#1a1a2e")))
         painter.drawEllipse(split_x - hr, hy - hr, hr * 2, hr * 2)
 
         # Chevron arrows inside the handle
         aw_v, ah_v = self._ARROW_W, self._ARROW_H
-        painter.setPen(QPen(QColor("#e94560"), 2))
+        painter.setPen(QPen(QColor(self._divider_color), 2))
         painter.setBrush(QBrush())
         # Left-pointing arrow
         painter.drawLine(split_x - 2, hy, split_x - aw_v, hy)
@@ -536,19 +860,35 @@ class BeforeAfterWidget(QWidget):
             if self._near_divider(event.pos().x()):
                 self._dragging = True
                 self._update_split(event.pos().x())
+        if event.button() == Qt.MouseButton.MiddleButton and self._zoom > 1.0:
+            self._panning = True
+            self._pan_start_pos = event.pos()
 
     def mouseMoveEvent(self, event):  # noqa: N802
-        if self._dragging:
+        if self._panning and self._pan_start_pos is not None:
+            delta = event.pos() - self._pan_start_pos
+            self._pan_x += delta.x()
+            self._pan_y += delta.y()
+            self._pan_start_pos = event.pos()
+            self._clamp_pan()
+            self.update()
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif self._dragging:
             self._update_split(event.pos().x())
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         elif self._near_divider(event.pos().x()):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif self._zoom > 1.0:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, event):  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = False
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._panning = False
+            self._pan_start_pos = None
 
     # ------------------------------------------------------------------
     # Helpers
@@ -561,6 +901,61 @@ class BeforeAfterWidget(QWidget):
     def _update_split(self, x: int) -> None:
         self._split = max(0.02, min(0.98, x / max(self.width(), 1)))
         self.update()
+
+    # ------------------------------------------------------------------
+    # Animated GIF support
+    # ------------------------------------------------------------------
+
+    def animate_before(self, path: str) -> None:
+        """Animate an animated GIF on the 'before' side using QMovie.
+
+        Each decoded frame is captured as a QPixmap and painted into the
+        split-view's left panel so the animation plays inside the normal
+        before/after comparison widget.  Any previously running movie is
+        stopped first.  The 'after' side (converted output) is not affected.
+        """
+        self._stop_movie()
+        movie = QMovie(path)
+        if not movie.isValid():
+            movie.deleteLater()
+            return
+        self._movie = movie
+        self._movie_path = path
+        self._movie.frameChanged.connect(self._on_movie_frame)
+        self._movie.setSpeed(self._movie_speed)
+        self._movie.start()
+        self._loading = False
+        self.update()
+
+    def set_animation_speed(self, percent: int) -> None:
+        """Set the playback speed of the GIF animation as a percentage of normal speed.
+
+        100 = normal speed, 200 = twice as fast, 50 = half speed.
+        Has no effect when no animation is currently playing.
+        """
+        self._movie_speed = max(1, int(percent))
+        if self._movie is not None:
+            self._movie.setSpeed(self._movie_speed)
+
+    def _stop_movie(self) -> None:
+        """Stop and clean up any running QMovie."""
+        if self._movie is not None:
+            try:
+                self._movie.stop()
+                self._movie.frameChanged.disconnect(self._on_movie_frame)
+            except (RuntimeError, TypeError):
+                pass  # already disconnected / destroyed
+            self._movie.deleteLater()
+            self._movie = None
+        self._movie_path = ""
+
+    def _on_movie_frame(self, _frame_no: int) -> None:
+        """Slot called by QMovie on each new frame; updates the before pixmap."""
+        if self._movie is not None:
+            pix = self._movie.currentPixmap()
+            if not pix.isNull():
+                self._pix_before = pix
+                self.update()
 
 
 # ---------------------------------------------------------------------------
@@ -676,6 +1071,8 @@ class _ConverterPreviewLoader(QThread):
                 )
                 img.close()
                 img = None
+                if self._abort:
+                    return
                 try:
                     self.ready.emit(src_qi, out_qi, src_meta, out_meta)
                 except RuntimeError:
@@ -703,6 +1100,8 @@ class _ConverterPreviewLoader(QThread):
                 f"Preview as {fmt}{quality_note}\n"
                 f"~{_fmt_size(converted_size)}"
             )
+            if self._abort:
+                return
             try:
                 self.ready.emit(src_qi, out_qi, src_meta, out_meta)
             except RuntimeError:
@@ -740,6 +1139,7 @@ class ImagePreviewPane(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._loader: _ThumbLoader | None = None
+        self._load_request_id: int = 0
         # Full-resolution pixmap received from the loader thread.  Stored so
         # it can be re-scaled to whatever size the pane has at any given time.
         self._current_pix: QPixmap | None = None
@@ -840,6 +1240,8 @@ class ImagePreviewPane(QWidget):
 
     def _start_loader(self, loader):
         """Disconnect and stop any stale loader, then start *loader*."""
+        self._load_request_id += 1
+        request_id = self._load_request_id
         if self._loader is not None:
             self._loader.stop()
             try:
@@ -849,11 +1251,24 @@ class ImagePreviewPane(QWidget):
                 pass  # already disconnected
         self._meta_label.setText("Loading…")
         self._loader = loader
-        self._loader.loaded.connect(self._on_loaded)
-        self._loader.failed.connect(self._on_failed)
+        self._loader.loaded.connect(
+            lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)
+        )
+        self._loader.failed.connect(
+            lambda err, request_id=request_id: self._on_failed(request_id, err)
+        )
         self._loader.start()
 
     def clear(self):
+        self._load_request_id += 1
+        if self._loader is not None:
+            self._loader.stop()
+            try:
+                self._loader.loaded.disconnect()
+                self._loader.failed.disconnect()
+            except RuntimeError:
+                pass
+            self._loader = None
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText("Select a file to preview")
@@ -862,7 +1277,9 @@ class ImagePreviewPane(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_loaded(self, qimg: QImage, meta: str):
+    def _on_loaded(self, request_id: int, qimg: QImage, meta: str):
+        if request_id != self._load_request_id:
+            return
         # Store the full pixmap so _update_display_pix can re-scale it any
         # time the pane changes size (e.g., window resize or splitter drag).
         self._current_pix = QPixmap.fromImage(qimg)
@@ -884,7 +1301,9 @@ class ImagePreviewPane(QWidget):
             self._update_display_pix()
         self._meta_label.setText(meta)
 
-    def _on_failed(self, err: str):
+    def _on_failed(self, request_id: int, err: str):
+        if request_id != self._load_request_id:
+            return
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText(f"Preview unavailable\n{err[:80]}")

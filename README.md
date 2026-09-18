@@ -1,13 +1,13 @@
 # 🐼 Alpha Fixer & File Converter
 
-[![Build Windows EXE](https://github.com/JosephsDeadish/Alpha-Fixer-and-File-Converter-/actions/workflows/build.yml/badge.svg)](https://github.com/JosephsDeadish/Alpha-Fixer-and-File-Converter-/actions/workflows/build.yml)
-
 A panda-themed desktop application with two powerful tools:
 
 ## Tools
 
 ### 🖼 Alpha Fixer
-Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, BMP, TIFF, WEBP, TGA, ICO, GIF).
+Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, JPEG/JFIF/JPE, BMP, TIFF, GIF, WEBP, TGA, ICO, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM).
+
+SVG, XNB, and TIM can be saved after processing.
 
 **Features:**
 - Built-in presets: **PS2** (128), **N64** (255), **No Alpha**, **Max Alpha**, **Transparent**, **Half Transparent**, **Invert Alpha**, **Threshold Cut**
@@ -21,26 +21,28 @@ Fix, adjust, and batch-process alpha channels on image files (PNG, DDS, JPG, BMP
 ### 🔄 File Converter
 Convert between image formats with optional resize and quality control.
 
-**Supported formats:** PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS
+**Supported formats:** PNG, JPEG (including `.jfif` / `.jpe`), BMP, TIFF, WEBP, TGA, ICO, GIF, DDS, PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM
 
 **Features:**
 - Convert any supported format to any other
 - Batch convert whole folders and subfolders (preserves directory structure)
 - Optional resize (width × height)
-- JPEG/WEBP quality control
+- JPEG/WEBP/AVIF/JPEG2000 quality control
 - Custom output folder
 
 ## UI & Customization
 - 🐼 **18 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄, Fairy Garden 🧚, Mermaid 🧜, Shark Bait 🦈, Alien 🛸, Noodle 🍜, Pancake 🥞
-- **🔓 32 hidden unlockable themes** – earn them through use (clicks, alpha fixes, and conversions):
+- **🔓 39 hidden unlockable themes** – earn them through use (clicks, alpha fixes, and conversions):
   - **Secret Skeleton** – unlocks at 100 total clicks
   - **Secret Sakura 🌸** – unlocks at 250 total clicks
-  - Plus 30 more hidden themes that unlock progressively — keep using the app!
+  - Plus 37 more hidden themes that unlock progressively — keep using the app!
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
 - **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth), rising flames (Volcano 🔥), snowflakes (Arctic ❄), pandas (Panda Dark/Light/Secret Sakura 🐼), electric bolts (Neon Panda ⚡)
-- Mouse trail effect with configurable color
-- Custom cursor style (Default, Cross, Pointing Hand, Open Hand)
+- **11 mouse trail styles**: Dots, Ribbon, Noodle 🍜 (physics), Comet, Fairy Dust ✨, Wave 🌊, Sparkle ❄, Rainbow 🌈, Distortion Wave, Fire 🔥, Lightning ⚡ — configurable color and intensity
+- **Animated banner** with 10 styles: Spin, Bounce, Shake, Pendulum, Pulse, Float, Flip, Orbit, Glitch, Static (Settings → Theme)
+- **Animated emoji cursors**: spin (⭐🔮💎), wobble (🦈🐉🌋), and symbol-cycling — automatically selected per theme or fully customizable (Settings → General)
+- Custom cursor style (Default, Cross, Pointing Hand, Open Hand, and more)
 - Click sound effects (built-in synthetic beep or point to your own .wav file)
 - Font size control (8–24pt)
 - **Cycling tooltips** with 4 modes (Settings → General → Tooltip Mode):
@@ -55,6 +57,7 @@ Convert between image formats with optional resize and quality control.
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
+- **Selective Alpha Tool** – paint alpha zones directly on an image with up to 40 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
 - **HiDPI & multi-monitor aware** – fractional DPI scaling (125 %, 150 %, 200 %) and multiple displays are fully supported; window position is automatically corrected if a monitor is disconnected
 - **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
@@ -83,7 +86,7 @@ pip install -r requirements.txt
 
 ### Linux system libraries
 
-PyQt6 requires several system-level shared libraries.  Use the one-shot installer:
+PyQt6 requires several system-level shared libraries, including the extra X11/XCB packages needed by the packaged Linux app. Use the one-shot installer:
 
 ```bash
 bash scripts/install_linux_deps.sh
@@ -96,6 +99,7 @@ Or install manually by distribution:
 | libEGL (`libegl1`) | `sudo apt-get install -y libegl1` | `sudo dnf install -y mesa-libEGL` | `sudo pacman -S mesa` | `sudo zypper install -y libEGL1` |
 | libGL (`libgl1`) | `sudo apt-get install -y libgl1` | `sudo dnf install -y mesa-libGL` | *(included)* | `sudo zypper install -y libGL1` |
 | libpulse (`libpulse0`) | `sudo apt-get install -y libpulse0` | `sudo dnf install -y pulseaudio-libs` | `sudo pacman -S libpulse` | `sudo zypper install -y libpulse0` |
+| Qt X11/XCB extras (`libxcb-cursor.so.0`, `libxkbcommon-x11.so.0`, etc.) | `sudo apt-get install -y libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0` | `sudo dnf install -y libxkbcommon-x11 xcb-util xcb-util-cursor xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm` | `sudo pacman -S libxkbcommon-x11 xcb-util xcb-util-cursor xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm` | `sudo zypper install -y libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0` |
 
 If any of these are missing, `main.py` will detect the problem at startup and print the exact install command for your distribution before exiting cleanly — no cryptic crashes.
 
@@ -109,21 +113,7 @@ python main.py
 
 ## Building a Standalone Executable
 
-### ⬇️ Download a pre-built Windows release (easiest)
-
-Every push to `main` automatically builds the Windows exe via GitHub Actions.
-
-1. Go to the **[Actions tab](../../actions/workflows/build.yml)**
-2. Click the latest successful run (green ✅)
-3. Scroll to **Artifacts** at the bottom of the page
-4. Download **`AlphaFixerConverter-Windows-v1.0.0`**
-5. Extract the zip → run **`AlphaFixerConverter.exe`** — no Python needed!
-
-You can also trigger a build manually: Actions → "Build Windows Executable" → **Run workflow**.
-
-### Build it yourself
-
-You can also package the app locally using [PyInstaller](https://pyinstaller.org/).
+You can package the app locally using [PyInstaller](https://pyinstaller.org/).
 
 ### Quick build
 
@@ -150,7 +140,7 @@ scripts\build_exe.bat --onefile          # Windows
 
 ### Manual PyInstaller invocation
 
-The repo ships with a fully-configured spec file:
+The app ships with a fully-configured spec file:
 
 ```bash
 pyinstaller alpha_fixer.spec
@@ -166,7 +156,7 @@ python -m pytest tests/ -v
 
 ```
 src/
-  version.py           - App version constant (1.0.0)
+  version.py           - App version constant (2.0.0)
   core/
     alpha_processor.py   - Alpha channel processing logic
     file_converter.py    - Image format conversion
@@ -179,13 +169,15 @@ src/
     converter_tool.py    - File Converter tab (image preview, shortcuts, history recording)
     history_tab.py       - Conversion History tab (timestamped, colour-coded)
     preview_pane.py      - ImagePreviewPane thumbnail + BeforeAfterWidget comparison slider
+    selective_alpha_tool.py - Selective Alpha Tool (zone painting, transform, mask slots)
     settings_dialog.py   - Settings dialog (themes, effects, tooltip mode, unlock display)
-    theme_engine.py      - Qt stylesheet generator + 50 theme palettes (18 preset + 32 hidden) + THEME_EFFECTS map
+    theme_engine.py      - Qt stylesheet generator + 57 theme palettes (18 preset + 39 hidden) + THEME_EFFECTS map
     click_effects.py     - Per-theme click particle overlay (blood, bats, stars, skulls, otters)
     tooltip_manager.py   - Cycling tooltip engine: Normal / Off / Dumbed Down / No Filter
     drop_list.py         - DropFileList: drag-and-drop, Delete key, right-click remove
-    mouse_trail.py       - Mouse trail particle overlay
+    mouse_trail.py       - Mouse trail particle overlay (11 styles)
     sound_engine.py      - Click sound engine (QSoundEffect + fallback)
+    splash_screen.py     - Animated themed startup splash screen
 tests/
   test_core.py           - Unit tests for alpha processing & presets
   test_converter.py      - Unit tests for file conversion
