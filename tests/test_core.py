@@ -8727,7 +8727,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _coerce_frame_size(value) -> Optional[tuple[int, int]]:", src)
         self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
         self.assertIn("first_frame = reader.get_data(0)", src)
-        self.assertIn("return fps, frame_count, first_frame", src)
+        self.assertIn("return fps, frame_count, frame_size, first_frame", src)
         self.assertNotIn("def __del__(self) -> None:", src)
         self.assertIn('self._btn_add_img = QPushButton("🖼  Add Images / GIFs")', src)
         self.assertIn("Add still image(s), animated GIFs, or other supported image files.", src)
@@ -8843,7 +8843,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         decode_idx = src.index("first_frame = reader.get_data(0)")
         self.assertLess(count_idx, duration_idx)
         self.assertGreater(decode_idx, count_idx)
-        self.assertIn("return fps, frame_count, first_frame", src)
+        self.assertIn("return fps, frame_count, frame_size, first_frame", src)
         self.assertIn("_VideoFrameGetter(path, frame_count, first_frame)", src)
 
     def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):

@@ -174,8 +174,8 @@ def _coerce_frame_size(value) -> Optional[tuple[int, int]]:
     return None
 
 
-def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
-    """Return (fps, frame_count, first_frame) for a video, tolerating weak metadata."""
+def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]], object | None]:
+    """Return (fps, frame_count, frame_size, first_frame) for a video."""
     reader = _open_video_reader(path)
     first_frame = None
     try:
@@ -218,13 +218,22 @@ def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
             except Exception:
                 first_frame = None
             if first_frame is not None:
+                try:
+                    frame_size = (int(first_frame.shape[1]), int(first_frame.shape[0]))
+                except Exception:
+                    frame_size = None
                 frame_count = 1
         elif frame_size is None:
             try:
                 first_frame = reader.get_data(0)
             except Exception:
                 first_frame = None
-        return fps, frame_count, first_frame
+            if first_frame is not None:
+                try:
+                    frame_size = (int(first_frame.shape[1]), int(first_frame.shape[0]))
+                except Exception:
+                    frame_size = None
+        return fps, frame_count, frame_size, first_frame
     finally:
         reader.close()
 
@@ -535,15 +544,9 @@ def _format_clip_label(clip: "_ClipEntry", path: str, icon: str) -> str:
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     try:
-        fps, frame_count, first_frame = _probe_video_clip(path)
+        fps, frame_count, frame_size, first_frame = _probe_video_clip(path)
         if frame_count <= 0:
             return None
-        frame_size = None
-        if first_frame is not None:
-            try:
-                frame_size = (int(first_frame.shape[1]), int(first_frame.shape[0]))
-            except Exception:
-                frame_size = None
         return _ClipEntry(
             path,
             frame_count,
