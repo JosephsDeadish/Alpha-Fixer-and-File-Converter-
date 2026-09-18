@@ -1431,8 +1431,8 @@ class AlphaFixerTab(QWidget):
         if self._atlas_detect_check.isChecked() and self._atlas_cells:
             before_img = self._draw_atlas_overlay(before_img)
             after_img = self._draw_atlas_overlay(after_img)
-        widget.set_before(before_img)
-        widget.set_after(after_img)
+        widget.set_before(before_img, store_raw=False, stop_movie=False)
+        widget.set_after(after_img, store_raw=False)
 
     def _draw_atlas_overlay(self, img: "QImage") -> "QImage":
         """Draw colored bounding boxes for detected atlas cells onto *img* (item 11)."""
@@ -1464,6 +1464,7 @@ class AlphaFixerTab(QWidget):
         try:
             import numpy as np
             from ..core.alpha_processor import detect_atlas_cells
+            self._atlas_cells = []
             src = raw.convertToFormat(QImage.Format.Format_ARGB32)
             w, h = src.width(), src.height()
             if w == 0 or h == 0:
@@ -1476,12 +1477,11 @@ class AlphaFixerTab(QWidget):
         except Exception:
             self._atlas_cells = []
         if not self._atlas_cells:
-            # Re-uncheck if nothing detected — show brief status message
             self._status_lbl.setText(
                 "🗺 No atlas cells detected. "
                 "Atlas detection requires transparent seam-lines between sprites."
             )
-            self._atlas_detect_check.setChecked(False)
+            self._apply_alpha_vis_to_compare()
             return
         n = len(self._atlas_cells)
         self._status_lbl.setText(f"🗺 Atlas detected: {n} sprite cell{'s' if n != 1 else ''} found.")

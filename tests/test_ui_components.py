@@ -433,6 +433,21 @@ class TestBeforeAfterWidget(unittest.TestCase):
         qi = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 200)))
         w.set_after(qi)
         self.assertIsNotNone(w._pix_after)
+        self.assertIsNotNone(w.after_image())
+
+    def test_display_only_updates_do_not_replace_raw_preview_images(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        before_raw = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 0, 0, 255)))
+        after_raw = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 255, 0, 255)))
+        before_overlay = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 255)))
+        after_overlay = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 255, 0, 255)))
+        w.store_raw_images(before_raw, after_raw)
+        w.set_before(before_overlay, store_raw=False)
+        w.set_after(after_overlay, store_raw=False)
+        self.assertEqual(w.before_image().pixelColor(0, 0).getRgb(), before_raw.pixelColor(0, 0).getRgb())
+        self.assertEqual(w.after_image().pixelColor(0, 0).getRgb(), after_raw.pixelColor(0, 0).getRgb())
 
     def test_set_loading_clears_after(self):
         from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage

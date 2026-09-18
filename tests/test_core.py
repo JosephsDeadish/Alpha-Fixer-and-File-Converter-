@@ -8717,15 +8717,18 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("and self._imageio_ffmpeg_available", src)
         self.assertIn("first_frame = None", src)
         self.assertIn("QApplication.processEvents()", src)
-        self.assertIn('if fmt == "gif":\n                from PIL import Image', src)
-        self.assertIn("gif_frames.append(filtered.copy())", src)
+        self.assertIn("_MP4_QUALITY = 8", src)
+        self.assertIn('if fmt == "gif":\n                pass', src)
+        self.assertIn("gif_frames.append(framed.copy())", src)
         self.assertIn('first.save(\n                    out_path,\n                    format="GIF"', src)
         self.assertIn("Unsupported Files Skipped", src)
         self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
+        self.assertIn("def _coerce_frame_size(value) -> Optional[tuple[int, int]]:", src)
         self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
         self.assertIn("first_frame = reader.get_data(0)", src)
         self.assertIn("return fps, frame_count, first_frame", src)
+        self.assertNotIn("def __del__(self) -> None:", src)
         self.assertIn('self._btn_add_img = QPushButton("🖼  Add Images / GIFs")', src)
         self.assertIn("Add still image(s), animated GIFs, or other supported image files.", src)
         self.assertIn('files_dropped = pyqtSignal(list, int)', src)
@@ -8733,7 +8736,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self.files_dropped.emit(paths, row)", src)
         self.assertIn('if ext == ".gif":', src)
         self.assertIn("durations.append(max(1, int(gif.info.get(\"duration\", 100) or 100)))", src)
-        self.assertIn("return _ClipEntry(path, total_frames, getter, fps)", src)
+        self.assertIn("return _ClipEntry(path, total_frames, getter, fps, frame_size=frames[0].size if frames else None)", src)
         self.assertIn("self._reader = _open_video_reader(self._path)", src)
         self.assertIn("self._trim_start_slider.setValue(clip.trim_start)", src)
         self.assertIn("self._trim_end_slider.setValue(clip.trim_end)", src)
@@ -8879,8 +8882,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("with self._lock:", src)
         self.assertIn("if filtered is not adjusted:", src)
         self.assertIn("adjusted.close()", src)
-        self.assertIn("get_frame_fn, _active_frames = clip_snapshot[ci]", src)
+        self.assertIn("get_frame_fn, _active_frames, _frame_size = clip_snapshot[ci]", src)
         self.assertIn("source_pil = get_frame_fn(fi)", src)
+        self.assertIn("size=canvas_size", src)
 
     def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
         src = self._src("ui/converter_tool.py")
@@ -9035,6 +9039,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._export_size_lbl = QLabel("Canvas: auto once clips are added")', src)
         self.assertIn("def _timeline_canvas_size(self, fmt: Optional[str] = None) -> Optional[tuple[int, int]]:", src)
         self.assertIn('detail = "Canvas: auto from the largest clip (rounded for MP4 compatibility)"', src)
+        self.assertIn("def _format_clip_label(clip: \"_ClipEntry\", path: str, icon: str) -> str:", src)
+        self.assertIn('size_text = f"{size[0]}×{size[1]}  •  " if size else ""', src)
 
     def test_tooltip_manager_has_video_and_gif_dialog_keys_in_all_modes(self):
         src = self._src("ui/tooltip_manager.py")
@@ -9152,6 +9158,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("fit_h = max(1, int(round(pix.height() * fit_ratio)))", src)
         self.assertIn("max(1, int(round(fit_w * zoom)))", src)
         self.assertIn("self._raw_before = qimg.copy()", src)
+        self.assertIn("def set_before(self, qimg: QImage, *, store_raw: bool = True, stop_movie: bool = True) -> None:", src)
+        self.assertIn("if store_raw:", src)
+        self.assertIn("self._raw_after = qimg.copy()", src)
+        self.assertIn("compare._raw_before = self._raw_before.copy()", src)
 
     def test_tutorial_dialog_keeps_navigation_shortcuts_alive(self):
         src = self._src("ui/tutorial_dialog.py")
@@ -9179,3 +9189,6 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('self._atlas_detect_check.setChecked(self._settings.get("alpha_preview_detect_atlas", False))', alpha_src)
         self.assertIn('atlas_chk = QCheckBox("🗺  Detect Atlas", row_w)', alpha_src)
         self.assertIn("def _apply_alpha_vis_to_widget(self, widget) -> None:", alpha_src)
+        self.assertIn('self._apply_alpha_vis_to_compare()', alpha_src)
+        no_cells_section = alpha_src.split("if not self._atlas_cells:", 1)[1].split("n = len(self._atlas_cells)", 1)[0]
+        self.assertNotIn('self._atlas_detect_check.setChecked(False)', no_cells_section)

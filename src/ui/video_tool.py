@@ -43,7 +43,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
-    QComboBox, QGroupBox, QGridLayout, QCheckBox,
+    QComboBox, QGroupBox, QGridLayout,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QScrollArea,
 )
@@ -75,6 +75,7 @@ _IMAGE_EXTS = {
 
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
+_MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
 
 _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
 
@@ -160,6 +161,19 @@ def _coerce_frame_count(value) -> int:
     return count if count > 0 else 0
 
 
+def _coerce_frame_size(value) -> Optional[tuple[int, int]]:
+    """Return a positive (width, height) tuple when metadata provides one."""
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        try:
+            width = int(value[0])
+            height = int(value[1])
+        except Exception:
+            return None
+        if width > 0 and height > 0:
+            return width, height
+    return None
+
+
 def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
     """Return (fps, frame_count, first_frame) for a video, tolerating weak metadata."""
     reader = _open_video_reader(path)
@@ -171,6 +185,10 @@ def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
         except Exception:
             fps = 25.0
         fps = fps if fps > 0 else 25.0
+        frame_size = (
+            _coerce_frame_size(meta.get("source_size"))
+            or _coerce_frame_size(meta.get("size"))
+        )
         frame_count = _coerce_frame_count(meta.get("nframes"))
         if frame_count <= 0:
             try:
@@ -201,6 +219,11 @@ def _probe_video_clip(path: str) -> tuple[float, int, object | None]:
                 first_frame = None
             if first_frame is not None:
                 frame_count = 1
+        elif frame_size is None:
+            try:
+                first_frame = reader.get_data(0)
+            except Exception:
+                first_frame = None
         return fps, frame_count, first_frame
     finally:
         reader.close()
@@ -461,9 +484,6 @@ class _VideoFrameGetter:
                 raise
         return Image.fromarray(frame).convert("RGBA")
 
-    def __del__(self) -> None:
-        self._close_reader()
-
     def __getstate__(self) -> dict:
         return {"_path": self._path, "_total_frames": self._total_frames}
 
@@ -502,6 +522,14 @@ class _ClipEntry:
         close_fn = getattr(self._get_frame, "_close_reader", None)
         if callable(close_fn):
             close_fn()
+
+
+def _format_clip_label(clip: "_ClipEntry", path: str, icon: str) -> str:
+    size = clip.frame_size
+    size_text = f"{size[0]}×{size[1]}  •  " if size else ""
+    if clip.total_frames > 1:
+        return f"{icon}  {Path(path).name}  [{size_text}{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+    return f"{icon}  {Path(path).name}  [{size_text}still]"
 
 
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
@@ -1098,17 +1126,14 @@ class VideoToolDialog(QDialog):
                         "and check that the file is a supported, non-corrupt video."
                     )
                     continue
-                label = f"🎞  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+                label = _format_clip_label(clip, path, "🎞")
                 next_row = self._insert_clip(clip, label, next_row)
             elif ext in _IMAGE_EXTS:
                 clip = _load_image_as_clip(path)
                 if clip is None:
                     skipped.append(Path(path).name)
                     continue
-                if clip.total_frames > 1:
-                    label = f"🖼  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
-                else:
-                    label = f"🖼  {Path(path).name}"
+                label = _format_clip_label(clip, path, "🖼")
                 next_row = self._insert_clip(clip, label, next_row)
             else:
                 skipped.append(Path(path).name)
@@ -1144,7 +1169,7 @@ class VideoToolDialog(QDialog):
                     "and check that the file is a supported, non-corrupt video."
                 )
                 continue
-            label = f"🎞  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+            label = _format_clip_label(clip, path, "🎞")
             next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
@@ -1164,9 +1189,7 @@ class VideoToolDialog(QDialog):
             clip = _load_image_as_clip(path)
             if clip is None:
                 continue
-            label = f"🖼  {Path(path).name}"
-            if clip.total_frames > 1:
-                label = f"🖼  {Path(path).name}  [{clip.total_frames} fr @ {clip.fps:.1f} fps]"
+            label = _format_clip_label(clip, path, "🖼")
             next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
@@ -1214,7 +1237,9 @@ class VideoToolDialog(QDialog):
         self._trim_start_slider.blockSignals(False)
         self._trim_end_slider.blockSignals(False)
         self._clip_info_lbl.setText(
-            f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
+            f"{clip.total_frames} total  •  {clip.active_frames} active  •  "
+            f"{clip.fps:.1f} fps"
+            + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
         )
 
     def _on_trim_start_changed(self, val: int) -> None:
@@ -1227,7 +1252,9 @@ class VideoToolDialog(QDialog):
             self._trim_start_slider.blockSignals(False)
             self._trim_start_lbl.setText(str(clip.trim_start))
             self._clip_info_lbl.setText(
-                f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
+                f"{clip.total_frames} total  •  {clip.active_frames} active  •  "
+                f"{clip.fps:.1f} fps"
+                + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
             )
             self._update_scrubber()
         else:
@@ -1243,7 +1270,9 @@ class VideoToolDialog(QDialog):
             self._trim_end_slider.blockSignals(False)
             self._trim_end_lbl.setText(str(clip.trim_end))
             self._clip_info_lbl.setText(
-                f"{clip.total_frames} total  •  {clip.active_frames} active  •  {clip.fps:.1f} fps"
+                f"{clip.total_frames} total  •  {clip.active_frames} active  •  "
+                f"{clip.fps:.1f} fps"
+                + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
             )
             self._update_scrubber()
         else:
@@ -1427,16 +1456,16 @@ class VideoToolDialog(QDialog):
         np = None
         try:
             if fmt == "gif":
-                from PIL import Image  # noqa: F401
+                pass
             else:
                 import imageio
                 import numpy as np
-                _MP4_QUALITY = 8  # 1–10 scale; 10 = best quality / largest file
                 writer = imageio.get_writer(
                     out_path,
                     fps=fps,
                     codec="libx264",
                     quality=_MP4_QUALITY,
+                    size=canvas_size,
                 )
             for i in range(total):
                 progress.setValue(i)

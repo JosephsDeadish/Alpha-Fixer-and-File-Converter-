@@ -486,13 +486,13 @@ class BeforeAfterWidget(QWidget):
         compare = BeforeAfterWidget(dlg)
         _mirror_movie_frame = None
         if self._pix_before is not None:
-            compare._pix_before = self._pix_before
+            compare._pix_before = self._pix_before.copy()
         if self._pix_after is not None:
-            compare._pix_after = self._pix_after
+            compare._pix_after = self._pix_after.copy()
         if self._raw_before is not None:
-            compare._raw_before = self._raw_before
+            compare._raw_before = self._raw_before.copy()
         if self._raw_after is not None:
-            compare._raw_after = self._raw_after
+            compare._raw_after = self._raw_after.copy()
         compare._divider_color = self._divider_color
         compare._stats_before = self._stats_before
         compare._stats_after = self._stats_after
@@ -598,16 +598,20 @@ class BeforeAfterWidget(QWidget):
         self._pan_y = max(-max_py, min(max_py, self._pan_y))
 
 
-    def set_before(self, qimg: QImage) -> None:
+    def set_before(self, qimg: QImage, *, store_raw: bool = True, stop_movie: bool = True) -> None:
         """Set the 'before' (original) side."""
-        self._stop_movie()
-        self._raw_before = qimg.copy()
+        if stop_movie:
+            self._stop_movie()
+        if store_raw:
+            self._raw_before = qimg.copy()
         self._pix_before = QPixmap.fromImage(qimg)
         self._loading = False
         self.update()
 
-    def set_after(self, qimg: QImage) -> None:
+    def set_after(self, qimg: QImage, *, store_raw: bool = True) -> None:
         """Set the 'after' (processed) side."""
+        if store_raw:
+            self._raw_after = qimg.copy()
         self._pix_after = QPixmap.fromImage(qimg)
         self._loading = False
         self.update()
