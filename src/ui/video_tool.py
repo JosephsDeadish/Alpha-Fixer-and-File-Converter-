@@ -638,7 +638,6 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
     """Wrap a still image or animated GIF file as a clip."""
     try:
         from PIL import Image
-        from ..core.alpha_processor import load_image
 
         ext = Path(path).suffix.lower()
         if ext == ".gif":
@@ -706,6 +705,7 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
                 clip_type="gif",
             )
 
+        from ..core.alpha_processor import load_image
         img = load_image(path)
         return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0, frame_size=img.size, clip_type="image")
     except Exception:
@@ -1766,6 +1766,7 @@ class VideoToolDialog(QDialog):
             speed = max(0.1, speed_percent / 100.0)
             active_frames = max(1, int(round(base_active_frames / speed))) if base_active_frames > 0 else 0
         timeline_seconds = active_frames / max(0.1, output_fps) if active_frames > 0 else 0.0
+        source_duration_seconds = base_active_frames / max(0.1, clip.fps) if base_active_frames > 0 else 0.0
         get_source_frame = clip._get_frame
 
         def _get_snapshot_frame(output_idx: int):
@@ -1787,6 +1788,7 @@ class VideoToolDialog(QDialog):
             "clip_fps": clip.fps,
             "base_active_frames": base_active_frames,
             "timeline_seconds": timeline_seconds,
+            "source_duration_seconds": source_duration_seconds,
             "has_audio": clip_type == "video" and _video_has_audio_stream(clip.path),
         }
 
@@ -1818,14 +1820,15 @@ class VideoToolDialog(QDialog):
             active_frames = max(0, int(clip["active_frames"]))
             if active_frames <= 0:
                 continue
-            duration = float(clip["timeline_seconds"])
+            output_duration = float(clip["timeline_seconds"])
             label = f"a{clip_idx}"
             if clip["clip_type"] == "video" and clip["has_audio"]:
                 cmd.extend(["-i", str(clip["path"])])
                 trim_start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
                 trim_end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
-                source_duration = max(0.001, trim_end - trim_start)
-                tempo_factor = max(0.01, source_duration / max(0.001, duration))
+                source_duration = max(0.001, float(clip["source_duration_seconds"]) or (trim_end - trim_start))
+                duration_ratio = max(0.001, output_duration) / source_duration
+                tempo_factor = max(0.01, 1.0 / duration_ratio)
                 filters = [
                     f"[{input_index}:a]atrim=start={trim_start:.6f}:end={trim_end:.6f}",
                     "asetpts=PTS-STARTPTS",
@@ -1835,11 +1838,11 @@ class VideoToolDialog(QDialog):
             else:
                 cmd.extend([
                     "-f", "lavfi",
-                    "-t", f"{duration:.6f}",
+                    "-t", f"{output_duration:.6f}",
                     "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
                 ])
                 filter_parts.append(
-                    f"[{input_index}:a]atrim=end={duration:.6f},asetpts=PTS-STARTPTS[{label}]"
+                    f"[{input_index}:a]atrim=end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"
                 )
             concat_inputs.append(f"[{label}]")
             input_index += 1
