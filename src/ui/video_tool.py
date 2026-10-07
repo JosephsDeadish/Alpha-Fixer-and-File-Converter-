@@ -75,6 +75,7 @@ _IMAGE_EXTS = {
     ".pcx", ".avif", ".qoi", ".svg", ".jp2", ".j2k", ".j2c",
     ".jfif", ".jpe", ".xnb", ".tim",
 }
+_KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
 
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
@@ -2066,17 +2067,17 @@ class VideoToolDialog(QDialog):
         target_suffix = ".gif" if fmt == "gif" else ".mp4"
         current_suffix = Path(out_path).suffix.lower()
         if current_suffix != target_suffix:
-            known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
+            # known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
+            known_media_suffixes = _KNOWN_MEDIA_SUFFIXES
             if current_suffix in known_media_suffixes:
                 out_path = str(Path(out_path).with_suffix(target_suffix))
             else:
                 out_path = f"{out_path}{target_suffix}"
         out_path_existed = Path(out_path).exists()
 
-        progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
+        progress = QProgressDialog("Rendering and saving output…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
-        progress.setLabelText("Rendering and saving output…")
         progress.show()
         QApplication.processEvents()
         brightness = self._brightness_slider.value() / 100.0
@@ -2246,10 +2247,11 @@ class VideoToolDialog(QDialog):
             gif_frames.clear()
 
         if canceled or not wrote_frames:
-            try:
-                Path(out_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+            if not out_path_existed:
+                try:
+                    Path(out_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
             if temp_mp4 is not None:
                 try:
                     Path(temp_mp4).unlink(missing_ok=True)

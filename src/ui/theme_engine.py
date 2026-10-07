@@ -2133,7 +2133,7 @@ THEME_STATUS_MESSAGES = {
     # Animal themes
     "Purrfect Cats":     "🐱  Purrfect Cats — Meow, your pixels look great.",
     "Good Dog":          "🐶  Good Dog — Such image. Very convert. Wow.",
-    # Newest preset themes
+    # Hidden anime-style themes
     "Anime":             "🌸  Anime — Kawaii conversions unlocked!",
     "Waifu":             "💖  Waifu — Your perfect pixel companion.",
     # Latest hidden themes
