@@ -2388,6 +2388,9 @@ class VideoToolDialog(QDialog):
             "files": files,
             "first_file": str(clip_snapshot[0].get("source_path") or clip_snapshot[0].get("path") or "") if clip_snapshot else "",
             "sources": _summarize_clip_types(clip_snapshot),
+            "filter": str(self._filter_combo.currentData() or "none"),
+            "audio": "kept" if self._should_mux_audio(fmt, clip_snapshot) else "off",
+            "fps": str(int(self._fps_slider.value())),
         }
         recovered = [
             (
@@ -2404,8 +2407,9 @@ class VideoToolDialog(QDialog):
             if str(clip.get("load_note") or "").strip()
         ]
         notes = [
-            f"filter={self._filter_combo.currentData() or 'none'}",
-            f"audio={'kept' if self._should_mux_audio(fmt, clip_snapshot) else 'off'}",
+            f"filter={entry['filter']}",
+            f"audio={entry['audio']}",
+            f"fps={entry['fps']}",
         ]
         if entry["sources"]:
             notes.append(f"sources={entry['sources']}")

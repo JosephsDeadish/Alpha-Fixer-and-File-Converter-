@@ -836,14 +836,26 @@ class GifBuilderDialog(QDialog):
             for entry in self._frames
             if ("A" in entry._pil.getbands()) or ("transparency" in getattr(entry._pil, "info", {}))
         )
+        largest_frame = (0, 0)
+        for entry in self._frames:
+            try:
+                width, height = entry._pil.size
+            except Exception:
+                continue
+            if width * height > largest_frame[0] * largest_frame[1]:
+                largest_frame = (width, height)
+        alpha_summary = f"{alpha_frames}/{len(self._frames)}" if self._frames else "0/0"
+        resize_summary = (
+            f"≤{resize[0] if resize[0] > 0 else 'auto'}×{resize[1] if resize[1] > 0 else 'auto'}"
+            if resize[0] > 0 or resize[1] > 0 else
+            "original"
+        )
         notes = [
             f"loop={'∞' if loop == 0 else loop}",
             f"optimize={'on' if optimize else 'off'}",
         ]
         if resize[0] > 0 or resize[1] > 0:
-            notes.append(
-                f"resize≤{resize[0] if resize[0] > 0 else 'auto'}×{resize[1] if resize[1] > 0 else 'auto'}"
-            )
+            notes.append(f"resize{resize_summary}")
         if source_summary:
             notes.append(f"sources={source_summary}")
         if alpha_frames:
@@ -857,6 +869,11 @@ class GifBuilderDialog(QDialog):
             "files": files,
             "first_file": _frame_source_path(self._frames[0]) if self._frames else "",
             "sources": source_summary,
+            "largest_frame": f"{largest_frame[0]}×{largest_frame[1]}" if largest_frame[0] > 0 and largest_frame[1] > 0 else "",
+            "alpha_summary": alpha_summary,
+            "loop": "∞" if loop == 0 else str(loop),
+            "optimize": "on" if optimize else "off",
+            "resize": resize_summary,
             "notes": "; ".join(notes),
         }
         try:
