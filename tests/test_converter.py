@@ -90,6 +90,31 @@ def _make_raw_dds(
         f.write(pixel_data)
 
 
+def _make_compressed_dds(
+    path: str,
+    width: int,
+    height: int,
+    fourcc: bytes,
+    pixel_data: bytes,
+):
+    def dword(n: int) -> bytes:
+        return int(n).to_bytes(4, "little")
+
+    header = bytearray(128)
+    header[0:4] = b"DDS "
+    header[4:8] = dword(124)
+    header[8:12] = dword(0x000A1007)
+    header[12:16] = dword(height)
+    header[16:20] = dword(width)
+    header[76:80] = dword(32)
+    header[80:84] = dword(0x4)
+    header[84:88] = fourcc[:4].ljust(4, b"\x00")
+    header[108:112] = dword(0x1000)
+    with open(path, "wb") as f:
+        f.write(bytes(header))
+        f.write(pixel_data)
+
+
 class TestBuildOutputPath(unittest.TestCase):
 
     def test_same_dir(self):
@@ -628,6 +653,25 @@ class TestConvertFile(unittest.TestCase):
             img = _load_dds_raw(src)
             try:
                 self.assertEqual(img.getpixel((0, 0)), (10, 20, 30, 40))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_dxt3_blocks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dxt3.dds")
+            alpha_block = bytes([0xFF] * 8)
+            color0 = (0xF800).to_bytes(2, "little")  # red in RGB565
+            color1 = (0x0000).to_bytes(2, "little")
+            indices = (0).to_bytes(4, "little")
+            _make_compressed_dds(src, 4, 4, b"DXT3", alpha_block + color0 + color1 + indices)
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.mode, "RGBA")
+                self.assertEqual(img.size, (4, 4))
+                self.assertGreaterEqual(img.getpixel((0, 0))[0], 240)
+                self.assertEqual(img.getpixel((0, 0))[3], 255)
             finally:
                 img.close()
 

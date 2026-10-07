@@ -1847,6 +1847,18 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(frame_size, (1, 1))
         self.assertIsNone(first_frame)
 
+    def test_video_load_failure_hint_mentions_experimental_disc_images(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with patch.object(vt, "_video_io_diagnostics", return_value="Missing: ffmpeg executable."):
+            hint = vt._video_load_failure_hint("/tmp/game.iso")
+        self.assertIn("experimental", hint)
+        self.assertIn("ffmpeg can demux", hint)
+        self.assertIn("Missing: ffmpeg executable.", hint)
+
     def test_mp4_export_size_rounds_up_to_even_dimensions(self):
         try:
             from src.ui import video_tool as vt

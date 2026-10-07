@@ -24,6 +24,20 @@ fi
 echo "Installing runtime dependencies from requirements.txt…"
 python -m pip install -r requirements.txt
 
+python - <<'PY'
+import importlib.util
+import os
+
+has_wand = importlib.util.find_spec("wand") is not None
+magick_home = os.environ.get("MAGICK_HOME") or os.environ.get("IMAGEMAGICK_HOME")
+print("Build capability audit:")
+print("  - imageio/imageio-ffmpeg runtime support will be bundled by the PyInstaller spec.")
+if has_wand and magick_home:
+    print(f"  - DDS compressed variants can be bundled for out-of-box builds (wand + MAGICK_HOME={magick_home}).")
+else:
+    print("  - NOTE: Full bundled DDS compression support needs wand plus MAGICK_HOME/IMAGEMAGICK_HOME set at build time.")
+PY
+
 # ── 3. Clean previous build artefacts ────────────────────────────────────────
 rm -rf build dist __pycache__
 

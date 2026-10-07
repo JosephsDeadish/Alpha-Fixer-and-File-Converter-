@@ -8884,8 +8884,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         bat_src = self._src("../scripts/build_exe.bat")
         self.assertIn("Installing runtime dependencies from requirements.txt", sh_src)
         self.assertIn("python -m pip install -r requirements.txt", sh_src)
+        self.assertIn("Build capability audit:", sh_src)
+        self.assertIn("MAGICK_HOME", sh_src)
         self.assertIn("Installing runtime dependencies from requirements.txt", bat_src)
         self.assertIn("python -m pip install -r requirements.txt", bat_src)
+        self.assertIn("Build capability audit:", bat_src)
+        self.assertIn("MAGICK_HOME", bat_src)
 
     def test_pyinstaller_specs_bundle_imageio_and_ffmpeg_metadata(self):
         folder_src = self._src("../alpha_fixer.spec")
@@ -8895,6 +8899,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             self.assertIn('copy_metadata("imageio")', src)
             self.assertIn('collect_data_files("imageio_ffmpeg")', src)
             self.assertIn('copy_metadata("imageio_ffmpeg")', src)
+            self.assertIn("def _optional_wand_bundle():", src)
+            self.assertIn('os.environ.get("MAGICK_HOME")', src)
+            self.assertIn('collect_data_files("wand")', src)
 
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")
@@ -9440,6 +9447,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         )
         self.assertIn("def _video_io_diagnostics() -> str:", src)
         self.assertIn("self._video_io_diagnostics = _video_io_diagnostics()", src)
+
+    def test_converter_preview_clear_closes_undocked_popout(self):
+        src = self._src("ui/converter_tool.py")
+        self.assertIn("def _clear_preview_state(self) -> None:", src)
+        self.assertIn("self._compare.close_popout_dialog()", src)
+
+    def test_preview_pane_closeevent_closes_popout_dialog(self):
+        src = self._src("ui/preview_pane.py")
+        self.assertIn("def close_popout_dialog(self) -> None:", src)
+        self.assertIn("self.close_popout_dialog()", src)
 
     def test_alpha_preview_helpers_persist_and_show_in_popout(self):
         settings_src = self._src("core/settings_manager.py")

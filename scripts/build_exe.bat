@@ -21,6 +21,7 @@ if errorlevel 1 (
 REM ── 2. Sync runtime dependencies ────────────────────────────────────────────
 echo Installing runtime dependencies from requirements.txt…
 python -m pip install -r requirements.txt
+python -c "import importlib.util, os; has_wand = importlib.util.find_spec('wand') is not None; magick_home = os.environ.get('MAGICK_HOME') or os.environ.get('IMAGEMAGICK_HOME'); print('Build capability audit:'); print('  - imageio/imageio-ffmpeg runtime support will be bundled by the PyInstaller spec.'); print(f'  - DDS compressed variants can be bundled for out-of-box builds (wand + MAGICK_HOME={magick_home}).' if has_wand and magick_home else '  - NOTE: Full bundled DDS compression support needs wand plus MAGICK_HOME/IMAGEMAGICK_HOME set at build time.')"
 
 REM ── 3. Clean previous build artefacts ───────────────────────────────────────
 if exist build   rmdir /s /q build

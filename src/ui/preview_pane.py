@@ -1266,7 +1266,17 @@ class ImagePreviewPane(QWidget):
         self._set_placeholder()
         self._meta_label.setText("Select a file to preview")
 
+    def close_popout_dialog(self) -> None:
+        dlg = self._popout_dialog
+        if dlg is None:
+            return
+        try:
+            dlg.close()
+        except RuntimeError:
+            self._popout_dialog = None
+
     def closeEvent(self, event):
+        self.close_popout_dialog()
         self._stop_loader()
         super().closeEvent(event)
 

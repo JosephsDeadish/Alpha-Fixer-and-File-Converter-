@@ -186,6 +186,21 @@ def _video_io_diagnostics() -> str:
     return f"{summary} ffmpeg: {ffmpeg_text}. ffprobe: {ffprobe_text}."
 
 
+def _video_load_failure_hint(path: str) -> str:
+    ext = Path(path).suffix.lower()
+    base = (
+        "Ensure imageio-ffmpeg or a bundled/system ffmpeg binary is available,\n"
+        "and check that the file is a supported, non-corrupt video."
+    )
+    if ext in {".iso", ".umd", ".bin"}:
+        return (
+            f"{base}\n"
+            "Disc-image video inputs are experimental and only work when ffmpeg can demux a playable stream from the image.\n"
+            f"{_video_io_diagnostics()}"
+        )
+    return f"{base}\n{_video_io_diagnostics()}"
+
+
 def _open_video_reader(path: str):
     """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
     import imageio
@@ -1478,8 +1493,7 @@ class VideoToolDialog(QDialog):
                     QMessageBox.warning(
                         self, "Load Error",
                         f"Could not open video:\n{Path(path).name}\n"
-                        "Ensure imageio-ffmpeg or a system ffmpeg binary is available,\n"
-                        "and check that the file is a supported, non-corrupt video."
+                        f"{_video_load_failure_hint(path)}"
                     )
                     continue
                 label = _format_clip_label(clip, path, "🎞")
@@ -1513,8 +1527,7 @@ class VideoToolDialog(QDialog):
                 QMessageBox.warning(
                     self, "Load Error",
                     f"Could not open video:\n{Path(path).name}\n"
-                    "Ensure imageio-ffmpeg or a system ffmpeg binary is available,\n"
-                    "and check that the file is a supported, non-corrupt video."
+                    f"{_video_load_failure_hint(path)}"
                 )
                 continue
             label = _format_clip_label(clip, path, "🎞")

@@ -878,6 +878,7 @@ class ConverterTab(QWidget):
         self._stop_preview_loader()
         self._current_preview_path = ""
         self._before_is_animated = False
+        self._compare.close_popout_dialog()
         self._compare.clear()
         self._source_info_lbl.setText("")
         self._output_info_lbl.setText("")

@@ -11,9 +11,11 @@ For a single-file build use:
 Requires:  pip install pyinstaller
 """
 
+import importlib.util
+import os
 import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata, collect_dynamic_libs
 
 # Pull the authoritative version from src/version.py without importing Qt
 _version_ns: dict = {}
@@ -60,10 +62,42 @@ hidden = [
     "src.version",
 ]
 
+
+def _optional_wand_bundle():
+    datas = []
+    binaries = []
+    hiddenimports = []
+    if importlib.util.find_spec("wand") is None:
+        return datas, binaries, hiddenimports
+
+    hiddenimports.extend(["wand", "wand.api", "wand.image", "wand.resource"])
+    datas += collect_data_files("wand")
+    try:
+        datas += copy_metadata("wand")
+    except Exception:
+        pass
+    try:
+        binaries += collect_dynamic_libs("wand")
+    except Exception:
+        pass
+
+    magick_home = os.environ.get("MAGICK_HOME") or os.environ.get("IMAGEMAGICK_HOME")
+    if magick_home:
+        for base in (Path(magick_home), Path(magick_home) / "bin", Path(magick_home) / "lib"):
+            if not base.exists():
+                continue
+            for pattern in ("*.dll", "*.dylib", "*.so", "*.so.*"):
+                for candidate in base.glob(pattern):
+                    binaries.append((str(candidate), "."))
+    return datas, binaries, hiddenimports
+
+
+_wand_datas, _wand_binaries, _wand_hidden = _optional_wand_bundle()
+
 a = Analysis(
     ["main.py"],
     pathex=[str(Path(".").resolve())],
-    binaries=[],
+    binaries=_wand_binaries,
     datas=[
         # Bundle all SVG theme files and the generated icon into the app.
         ("src/assets/svg", "src/assets/svg"),
@@ -72,8 +106,9 @@ a = Analysis(
     + collect_data_files("imageio")
     + copy_metadata("imageio")
     + collect_data_files("imageio_ffmpeg")
-    + copy_metadata("imageio_ffmpeg"),
-    hiddenimports=hidden,
+    + copy_metadata("imageio_ffmpeg")
+    + _wand_datas,
+    hiddenimports=hidden + _wand_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
