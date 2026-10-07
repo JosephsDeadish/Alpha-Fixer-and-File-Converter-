@@ -194,6 +194,85 @@ class TestDropFileList(unittest.TestCase):
         )
 
 
+class _ConverterTabSettingsStub:
+    def __init__(self):
+        self._store = {}
+        self._history = []
+
+    def get(self, key, fallback=None):
+        return self._store.get(key, fallback)
+
+    def set(self, key, value):
+        self._store[key] = value
+
+    def get_shortcut_binding(self, shortcut_id, default):
+        return default
+
+    def add_converter_history(self, entry):
+        self._history.append(entry)
+
+
+class TestConverterTab(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from src.ui.converter_tool import ConverterTab
+        self._settings = _ConverterTabSettingsStub()
+        self._widget = ConverterTab(self._settings)
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_close_event_cleans_up_preview_collect_and_gif_temp_state(self):
+        self._widget._preview_debounce.start()
+        preview_loader = MagicMock()
+        collect_thread = MagicMock()
+        collect_thread.isRunning.return_value = True
+        gif_tmp = MagicMock()
+        worker = MagicMock()
+        self._widget._preview_loader = preview_loader
+        self._widget._collect_thread = collect_thread
+        self._widget._gif_temp_dir = gif_tmp
+        self._widget._worker = worker
+        self._widget.close()
+        self.assertIsNone(self._widget._preview_loader)
+        self.assertIsNone(self._widget._collect_thread)
+        self.assertIsNone(self._widget._gif_temp_dir)
+        preview_loader.stop.assert_called_once()
+        collect_thread.stop.assert_called_once()
+        collect_thread.wait.assert_called_once_with(200)
+        gif_tmp.cleanup.assert_called_once()
+        worker.stop.assert_called_once()
+        worker.wait.assert_called_once_with(200)
+        self.assertFalse(self._widget._preview_debounce.isActive())
+
+    def test_run_falls_back_to_png_when_selected_target_is_unavailable(self):
+        from src.ui.converter_tool import ConverterTab
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            with open(src, "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n")
+            self._widget._file_list.addItem(src)
+            self._widget._file_list.setCurrentRow(0)
+            idx = self._widget._fmt_combo.findText("AVIF", Qt.MatchFlag.MatchContains)
+            self.assertGreaterEqual(idx, 0)
+            self._widget._fmt_combo.setCurrentIndex(idx)
+            with patch("src.ui.converter_tool.collect_files", return_value=[src]):
+                with patch("src.ui.converter_tool.output_format_unavailable_reason", return_value="AVIF export needs Pillow built with libavif support."):
+                    with patch("src.ui.converter_tool.QMessageBox.information") as info_mock:
+                        with patch.object(ConverterTab, "_expand_gif_frames", return_value=([src], {})):
+                            with patch("src.ui.converter_tool.ConverterWorker") as worker_cls:
+                                worker = MagicMock()
+                                worker_cls.return_value = worker
+                                self._widget._run()
+            info_mock.assert_called_once()
+            self.assertIn("falling back to PNG", self._widget._log.toPlainText())
+            kwargs = worker_cls.call_args.kwargs
+            self.assertEqual(kwargs["target_format"], "PNG")
+            self.assertEqual(kwargs["target_ext"], ".png")
+
+
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys
 # ---------------------------------------------------------------------------

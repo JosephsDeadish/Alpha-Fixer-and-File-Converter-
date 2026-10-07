@@ -23,6 +23,7 @@ from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.file_converter import (
     OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, DDS_VARIANT_OPTIONS,
     dds_compression_available, get_gif_frame_count,
+    output_format_unavailable_reason,
 )
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
@@ -405,6 +406,12 @@ class ConverterTab(QWidget):
         for i, (name, ext) in enumerate(OUTPUT_FORMAT_LIST):
             self._fmt_combo.addItem(f"{name}  ({ext})", userData=(name, ext))
             desc = FORMAT_DESCRIPTIONS.get(name, "")
+            unavailable_reason = output_format_unavailable_reason(name)
+            if unavailable_reason:
+                desc = (
+                    f"{desc}\n\nUnavailable in this build:\n{unavailable_reason}"
+                    if desc else unavailable_reason
+                )
             if desc:
                 self._fmt_combo.setItemData(i, desc, Qt.ItemDataRole.ToolTipRole)
         gf_layout.addWidget(self._fmt_combo, 0, 1)
@@ -749,6 +756,8 @@ class ConverterTab(QWidget):
         if item:
             self._refresh_preview(item.text())
         else:
+            self._preview_debounce.stop()
+            self._stop_preview_loader()
             self._compare.clear()
             self._source_info_lbl.setText("")
             self._output_info_lbl.setText("")
@@ -762,7 +771,11 @@ class ConverterTab(QWidget):
         dds_selected = fmt == "DDS"
         self._lbl_dds_variant.setVisible(dds_selected)
         self._dds_variant_combo.setVisible(dds_selected)
-        if dds_selected and not self._dds_compression_available:
+        format_unavailable = output_format_unavailable_reason(fmt)
+        if format_unavailable:
+            self._status_lbl.setText(f"Ready. {fmt} export unavailable here — batch will fall back to PNG.")
+            self._fmt_combo.setToolTip(format_unavailable)
+        elif dds_selected and not self._dds_compression_available:
             self._dds_variant_combo.setToolTip(
                 "Compressed DDS variants require ImageMagick/wand.\n"
                 "Auto, RGB, and RGBA DDS output still work without it."
@@ -870,6 +883,7 @@ class ConverterTab(QWidget):
         effect of the chosen format and quality before committing.
         """
         if not path or not os.path.isfile(path):
+            self._stop_preview_loader()
             self._current_preview_path = ""
             self._before_is_animated = False
             self._compare.clear()
@@ -880,13 +894,7 @@ class ConverterTab(QWidget):
 
         # Disconnect any stale previous loader to prevent it from overwriting
         # the current preview after the selection or format has changed.
-        if self._preview_loader is not None:
-            self._preview_loader.stop()
-            try:
-                self._preview_loader.ready.disconnect()
-                self._preview_loader.failed.disconnect()
-            except RuntimeError:
-                pass
+        self._stop_preview_loader()
 
         fmt_data = self._fmt_combo.currentData()
         target_fmt = fmt_data[0] if fmt_data else "PNG"
@@ -1031,11 +1039,13 @@ class ConverterTab(QWidget):
     ) -> None:
         if request_id != self._preview_request_id or expected_path != self._current_preview_path:
             return
+        self._preview_loader = None
         self._on_preview_ready(src_qi, out_qi, src_meta, out_meta)
 
     def _on_preview_failed_if_current(self, request_id: int, expected_path: str, err: str) -> None:
         if request_id != self._preview_request_id or expected_path != self._current_preview_path:
             return
+        self._preview_loader = None
         self._on_preview_failed(err)
 
     @pyqtSlot(str, str)
@@ -1070,6 +1080,19 @@ class ConverterTab(QWidget):
         if not fmt_data:
             return
         target_format, target_ext = fmt_data
+        actual_target_format = target_format
+        actual_target_ext = target_ext
+        format_unavailable = output_format_unavailable_reason(target_format)
+        if format_unavailable:
+            actual_target_format = "PNG"
+            actual_target_ext = ".png"
+            QMessageBox.information(
+                self,
+                "Output Format Fallback",
+                f"{target_format} export is unavailable in this build.\n"
+                f"{format_unavailable}\n\n"
+                "This batch will be saved as PNG instead.",
+            )
 
         supported_exts = self._supported_input_exts()
         expanded = collect_files(
@@ -1087,7 +1110,7 @@ class ConverterTab(QWidget):
         # compose a proper animated GIF from the selected files.  Pre-populate
         # it with the files already in the queue.
         # ------------------------------------------------------------------
-        if target_format == "GIF":
+        if actual_target_format == "GIF":
             self._open_gif_builder(expanded)
             return
 
@@ -1095,7 +1118,7 @@ class ConverterTab(QWidget):
         suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
         dds_variant = self._dds_variant_combo.currentData() or "auto"
-        if target_format == "DDS" and dds_variant in {"dxt1", "dxt5"} and not self._dds_compression_available:
+        if actual_target_format == "DDS" and dds_variant in {"dxt1", "dxt5"} and not self._dds_compression_available:
             QMessageBox.warning(
                 self,
                 "DDS Compression Unavailable",
@@ -1134,12 +1157,16 @@ class ConverterTab(QWidget):
 
         # Remember for history
         self._last_run_files = expanded
-        self._last_run_format = target_format
+        self._last_run_format = actual_target_format
         # Remember where output files will go for the completion message.
         self._last_run_out_dir = out_dir or None
 
         self._log.clear()
         self._batch_error_reasons.clear()
+        if format_unavailable:
+            self._log_msg(
+                f"⚠ {target_format} export unavailable — falling back to PNG for this batch."
+            )
         self._progress.setValue(0)
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
@@ -1154,18 +1181,12 @@ class ConverterTab(QWidget):
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
         # run → stop → run cycles in a long session.
-        if self._worker is not None:
-            try:
-                self._worker.progress.disconnect()
-                self._worker.file_done.disconnect()
-                self._worker.finished.disconnect()
-            except RuntimeError:
-                pass  # already disconnected
+        self._disconnect_worker_signals()
 
         self._worker = ConverterWorker(
             files=expanded,
-            target_format=target_format,
-            target_ext=target_ext,
+            target_format=actual_target_format,
+            target_ext=actual_target_ext,
             output_dir=out_dir or None,
             input_root=input_root,
             quality=quality,
@@ -1318,6 +1339,48 @@ class ConverterTab(QWidget):
             self._worker.stop()
             self._status_lbl.setText("Stopping…")
 
+    def _stop_preview_loader(self) -> None:
+        loader = self._preview_loader
+        if loader is None:
+            return
+        self._preview_loader = None
+        loader.stop()
+        try:
+            loader.ready.disconnect()
+            loader.failed.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
+    def _stop_collect_thread(self) -> None:
+        thread = self._collect_thread
+        if thread is None:
+            return
+        self._collect_thread = None
+        if thread.isRunning():
+            thread.stop()
+            thread.wait(200)
+
+    def _cleanup_gif_temp_dir(self) -> None:
+        temp_dir = self._gif_temp_dir
+        if temp_dir is None:
+            return
+        self._gif_temp_dir = None
+        try:
+            temp_dir.cleanup()
+        except Exception:
+            pass
+
+    def _disconnect_worker_signals(self) -> None:
+        worker = self._worker
+        if worker is None:
+            return
+        try:
+            worker.progress.disconnect()
+            worker.file_done.disconnect()
+            worker.finished.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
     # ------------------------------------------------------------------
     # Worker slots
     # ------------------------------------------------------------------
@@ -1435,6 +1498,20 @@ class ConverterTab(QWidget):
                 self._offer_delete_originals(self._last_run_files, success)
         if errors > 0:
             self.processing_error.emit(errors)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._preview_debounce.stop()
+        self._stop_preview_loader()
+        self._stop_collect_thread()
+        self._cleanup_gif_temp_dir()
+        if self._worker is not None:
+            self._worker.stop()
+            self._disconnect_worker_signals()
+            try:
+                self._worker.wait(200)
+            except RuntimeError:
+                pass
+        super().closeEvent(event)
 
     _LOG_MAX_LINES = 2_000
 

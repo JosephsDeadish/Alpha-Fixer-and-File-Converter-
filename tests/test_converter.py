@@ -19,6 +19,8 @@ from src.core.file_converter import (
     SUPPORTED_OUTPUT_FORMATS,
     DDS_VARIANT_OPTIONS,
     _flatten_alpha,
+    output_format_available,
+    output_format_unavailable_reason,
 )
 from src.core.alpha_processor import SUPPORTED_WRITE, save_image
 from src.core.worker import AlphaWorker, ConverterWorker
@@ -149,6 +151,17 @@ class TestConverterWorkerSizing(unittest.TestCase):
 
 
 class TestConvertFile(unittest.TestCase):
+    def test_output_format_available_uses_pillow_save_registry(self):
+        with mock.patch.object(Image, "registered_extensions", return_value={".avif": "AVIF"}):
+            with mock.patch.dict(Image.SAVE, {"AVIF": object()}, clear=False):
+                self.assertTrue(output_format_available("AVIF"))
+                self.assertEqual(output_format_unavailable_reason("AVIF"), "")
+
+    def test_output_format_unavailable_reason_reports_missing_avif_support(self):
+        with mock.patch.object(Image, "registered_extensions", return_value={}):
+            with mock.patch.dict(Image.SAVE, {}, clear=True):
+                self.assertIn("libavif", output_format_unavailable_reason("AVIF"))
+                self.assertFalse(output_format_available("AVIF"))
 
     def test_png_to_jpeg(self):
         with tempfile.TemporaryDirectory() as tmpdir:

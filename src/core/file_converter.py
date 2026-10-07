@@ -74,6 +74,40 @@ def dds_compression_available() -> bool:
     """Return True when compressed DDS save variants are available."""
     return _has_wand()
 
+
+_CUSTOM_OUTPUT_FORMATS = {"DDS", "SVG", "TIM", "XNB"}
+_FORMAT_UNAVAILABLE_HINTS = {
+    "AVIF": "AVIF export needs Pillow built with libavif support.",
+    "JPEG2000": "JPEG2000 export needs Pillow built with OpenJPEG support.",
+    "QOI": "QOI export needs a Pillow build with QOI support.",
+    "WEBP": "WEBP export needs Pillow built with WebP support.",
+}
+
+
+def output_format_unavailable_reason(target_format: str) -> str:
+    """Return a human-readable reason when *target_format* cannot be written."""
+    if target_format in _CUSTOM_OUTPUT_FORMATS:
+        return ""
+    ext = SUPPORTED_OUTPUT_FORMATS.get(target_format)
+    if not ext:
+        return f"{target_format} export is not supported."
+    try:
+        Image.init()
+        pil_format = Image.registered_extensions().get(ext.lower())
+        if pil_format and pil_format in Image.SAVE:
+            return ""
+    except Exception:
+        pass
+    return _FORMAT_UNAVAILABLE_HINTS.get(
+        target_format,
+        f"{target_format} export is unavailable in this Pillow build.",
+    )
+
+
+def output_format_available(target_format: str) -> bool:
+    """Return True when *target_format* can be written in this environment."""
+    return not output_format_unavailable_reason(target_format)
+
 # Human-readable descriptions for each output format, shown as combo tooltips
 FORMAT_DESCRIPTIONS = {
     "AVIF": (

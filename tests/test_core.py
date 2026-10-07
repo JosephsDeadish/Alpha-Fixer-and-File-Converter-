@@ -2124,8 +2124,10 @@ class TestCrashHangLagPrevention(unittest.TestCase):
         refresh_pos = src.find("def _refresh_preview(")
         next_method = src.find("\n    def ", refresh_pos + 1)
         refresh_section = src[refresh_pos:next_method]
-        self.assertIn(".stop()", refresh_section,
-                      "_refresh_preview() must call stop() on the old preview loader")
+        self.assertTrue(
+            ".stop()" in refresh_section or "_stop_preview_loader()" in refresh_section,
+            "_refresh_preview() must stop the old preview loader before replacing it",
+        )
 
     # ── closeEvent cleanup ────────────────────────────────────────────────────
 
@@ -2732,8 +2734,10 @@ class TestRound3Hardening(unittest.TestCase):
         creating a new worker to prevent signal connection table growth."""
         src = self._converter_tool_source()
         run_src = self._run_method_source(src)
-        self.assertIn(".disconnect()", run_src,
-                      "ConverterTool._run() must call .disconnect() on old worker signals")
+        self.assertTrue(
+            ".disconnect()" in run_src or "_disconnect_worker_signals()" in run_src,
+            "ConverterTool._run() must disconnect old worker signals before replacement",
+        )
 
 
 # ---------------------------------------------------------------------------
