@@ -814,6 +814,7 @@ class GifBuilderDialog(QDialog):
     def _record_export_history(
         self,
         out_path: str,
+        delay_ms: int,
         loop: int,
         optimize: bool,
         resize: tuple[int, int],
@@ -852,7 +853,10 @@ class GifBuilderDialog(QDialog):
             if resize[0] > 0 or resize[1] > 0 else
             "original"
         )
+        delay_summary = f"{max(1, int(delay_ms))} ms"
+        approx_fps = 1000.0 / max(1, int(delay_ms))
         notes = [
+            f"delay={delay_summary}",
             f"loop={'∞' if loop == 0 else loop}",
             f"optimize={'on' if optimize else 'off'}",
         ]
@@ -873,6 +877,8 @@ class GifBuilderDialog(QDialog):
             "sources": source_summary,
             "largest_frame": f"{largest_frame[0]}×{largest_frame[1]}" if largest_frame[0] > 0 and largest_frame[1] > 0 else "",
             "alpha_summary": alpha_summary,
+            "delay": delay_summary,
+            "fps": f"{approx_fps:.2f}".rstrip("0").rstrip("."),
             "loop": "∞" if loop == 0 else str(loop),
             "optimize": "on" if optimize else "off",
             "resize": resize_summary,
@@ -1359,6 +1365,7 @@ class GifBuilderDialog(QDialog):
         self.exported.emit(out_path)
         self._record_export_history(
             out_path,
+            delay_ms=global_delay,
             loop=loop,
             optimize=optimize,
             resize=(max_w, max_h),

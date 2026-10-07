@@ -2431,6 +2431,7 @@ class VideoToolDialog(QDialog):
         success: int,
         errors: int,
         *,
+        canvas_size: Optional[tuple[int, int]] = None,
         audio_mode_override: Optional[str] = None,
         extra_notes: Optional[list[str]] = None,
     ) -> None:
@@ -2452,6 +2453,14 @@ class VideoToolDialog(QDialog):
             "audio": audio_mode_override or ("kept" if self._should_mux_audio(fmt, clip_snapshot) else "off"),
             "fps": str(int(self._fps_slider.value())),
         }
+        if canvas_size and len(canvas_size) == 2:
+            try:
+                width = max(0, int(canvas_size[0]))
+                height = max(0, int(canvas_size[1]))
+            except Exception:
+                width = height = 0
+            if width > 0 and height > 0:
+                entry["canvas"] = f"{width}×{height}"
         recovered = [
             (
                 os.path.basename(str(clip.get("source_path") or clip.get("path") or "")),
@@ -2471,6 +2480,8 @@ class VideoToolDialog(QDialog):
             f"audio={entry['audio']}",
             f"fps={entry['fps']}",
         ]
+        if entry.get("canvas"):
+            notes.append(f"canvas={entry['canvas']}")
         if entry["sources"]:
             notes.append(f"sources={entry['sources']}")
         if entry["recovery"] and entry["recovery"] != "direct only":
@@ -3313,6 +3324,7 @@ class VideoToolDialog(QDialog):
             clip_snapshot,
             len(clip_snapshot),
             export_issue_count,
+            canvas_size=canvas_size,
             audio_mode_override=history_audio_mode_override,
             extra_notes=history_extra_notes,
         )

@@ -3026,8 +3026,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(entry["output"], "/tmp/video-history-test.mp4")
         self.assertEqual(entry["files"], ["game.iso"])
         self.assertEqual(entry["format"], "MP4")
+        self.assertEqual(entry["canvas"], "2×2")
         self.assertEqual(entry["sources"], "unknown ×1")
         self.assertEqual(entry["recovery"], "remux ×1")
+        self.assertIn("canvas=2×2", entry["notes"])
         self.assertIn("remux fallback", entry["notes"])
         self.assertIn("audio=off", entry["notes"])
 
@@ -3077,10 +3079,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertEqual(entry["sources"], "image ×1")
         self.assertEqual(entry["largest_frame"], "4×4")
         self.assertEqual(entry["alpha_summary"], "1/1")
+        self.assertEqual(entry["delay"], "100 ms")
+        self.assertEqual(entry["fps"], "10")
         self.assertEqual(entry["loop"], "∞")
         self.assertEqual(entry["optimize"], "on")
         self.assertEqual(entry["resize"], "original")
         self.assertIn("optimize=on", entry["notes"])
+        self.assertIn("delay=100 ms", entry["notes"])
         self.assertIn("loop=∞", entry["notes"])
         self.assertIn("sources=image ×1", entry["notes"])
         self.assertIn("alpha", entry["notes"])
@@ -3572,6 +3577,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "success": 3,
                 "errors": 0,
                 "files": ["a.png"],
+                "delay": "80 ms",
+                "loop": "∞",
+                "resize": "≤320×auto",
+                "fps": "12.5",
                 "sources": "image ×1",
                 "largest_frame": "64×64",
                 "alpha_summary": "2/3",
@@ -3586,6 +3595,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "clip_count": 2,
                 "success": 2,
                 "errors": 0,
+                "fps": "24",
+                "canvas": "640×480",
                 "filter": "sepia",
                 "audio": "off",
                 "recovery": "transcode ×1",
@@ -3596,17 +3607,24 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         )
         tab = HistoryTab(settings)
         try:
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(3), "image ×1")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(4), "64×64")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "2/3")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(8), "OK")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(9), "optimize=on")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(3), "80 ms")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(4), "∞")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "≤320×auto")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "image ×1")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(7), "64×64")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(8), "2/3")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(11), "OK")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(12), "optimize=on")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(2), "MP4")
-            self.assertEqual(tab._vid_tree.topLevelItem(0).text(4), "sepia")
-            self.assertEqual(tab._vid_tree.topLevelItem(0).text(5), "off")
-            self.assertEqual(tab._vid_tree.topLevelItem(0).text(6), "transcode ×1")
-            self.assertEqual(tab._vid_tree.topLevelItem(0).text(10), "Recovery")
-            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(11))
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(4), "24")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(5), "640×480")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(6), "sepia")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(7), "off")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(8), "transcode ×1")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(12), "Recovery")
+            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(13))
+            self.assertIn("OK 1", tab._gif_summary.text())
+            self.assertIn("Recovery 1", tab._vid_summary.text())
         finally:
             tab.close()
             tab.deleteLater()
@@ -3660,6 +3678,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "fps:30")
             self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "canvas:1920")
+            self.assertTrue(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "size:640")
+            self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "source:image")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "file:a.iso")
@@ -3693,6 +3715,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "sources": "image ×1",
                 "largest_frame": "320×240",
                 "alpha_summary": "4/12",
+                "delay": "100 ms",
+                "fps": "10",
                 "loop": "∞",
                 "optimize": "on",
                 "resize": "≤640×auto",
@@ -3710,6 +3734,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._gif_tree, "largest:320×240")
             self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "delay:100")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "fps:10")
+            self.assertFalse(item.isHidden())
             tab._apply_filter(tab._gif_tree, "alpha:4/12")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._gif_tree, "loop:∞")
@@ -3717,6 +3745,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab._apply_filter(tab._gif_tree, "optimize:on")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._gif_tree, "resize:640")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "size:320")
             self.assertFalse(item.isHidden())
         finally:
             tab.close()
