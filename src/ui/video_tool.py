@@ -441,7 +441,7 @@ def _video_load_failure_hint(path: str) -> str:
                 "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip from this disc image."
             )
         lines.append(
-            "If direct loading fails, the app also tries temporary ffmpeg remux and transcode recovery fallbacks for compatible streams."
+            "If direct loading fails, the app also tries temporary ffmpeg remux, transcode, and still-frame recovery fallbacks for compatible streams."
         )
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
@@ -457,7 +457,7 @@ def _video_load_failure_hint(path: str) -> str:
         )
     elif probe and bool(probe.get("selected_video_attached_pic")):
         lines.append(
-            "ffprobe only exposed an attached-picture/cover-art stream, so this source cannot be treated as a normal video clip until it is remuxed or replaced."
+            "ffprobe only exposed an attached-picture/cover-art stream, so this source can only be imported when still-frame extraction succeeds."
         )
     elif probe and str(probe.get("format_name") or "").strip() and not bool(probe.get("has_video")):
         lines.append(
@@ -501,7 +501,7 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
         )
     if bool(details.get("selected_video_attached_pic")):
         guidance.append(
-            "ffprobe selected an attached-picture/cover-art stream instead of a live video stream; this source may be audio-only metadata or may need a manual stream-selection remux."
+            "ffprobe selected an attached-picture/cover-art stream instead of a live video stream; this source may be audio-only metadata, or the builder may only be able to salvage it as a single still frame."
         )
     elif int(details.get("video_attached_pic_count") or 0) > 0:
         guidance.append(
@@ -510,7 +510,7 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
     video_codec = str(details.get("video_codec") or "").lower()
     if video_codec in {"mjpeg", "jpeg2000", "png"}:
         guidance.append(
-            "Still-image or intra-frame-only video codecs can behave like cover-art or slideshow streams; a full transcode may be required before timeline playback is reliable."
+            "Still-image or intra-frame-only video codecs can behave like cover-art or slideshow streams; a full transcode or single-frame fallback may be required before timeline playback is reliable."
         )
     elif video_codec in {"hevc", "h265", "av1"}:
         guidance.append(
@@ -581,6 +581,69 @@ def _remux_video_source(path: str, details: Optional[dict[str, object]] = None) 
         pass
     _unlink_file_safely(remux_path)
     return None
+
+
+def _visual_still_fallback_note(details: Optional[dict[str, object]]) -> str:
+    if details and bool(details.get("selected_video_attached_pic")):
+        return "temporary cover-art still-frame fallback active"
+    if details and int(details.get("video_attached_pic_count") or 0) > 0:
+        return "temporary visual still-frame fallback active"
+    video_codec = str(details.get("video_codec") or "").lower() if details else ""
+    if video_codec in {"mjpeg", "jpeg2000", "png"}:
+        return "temporary slideshow still-frame fallback active"
+    return "temporary single-frame salvage fallback active"
+
+
+def _extract_visual_still_frame(path: str, details: Optional[dict[str, object]] = None):
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        return None
+    if details is not None and not bool(details.get("has_video")) and not bool(details.get("selected_video_attached_pic")):
+        return None
+    temp_file = tempfile.NamedTemporaryFile(
+        prefix="alpha_fixer_video_still_",
+        suffix=".png",
+        delete=False,
+    )
+    still_path = temp_file.name
+    temp_file.close()
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_exe,
+                "-y",
+                "-v",
+                "error",
+                "-fflags",
+                "+discardcorrupt",
+                "-err_detect",
+                "ignore_err",
+                "-i",
+                path,
+                *(_ffmpeg_stream_maps(details)[:2] if details else ["-map", "0:v:0"]),
+                "-an",
+                "-dn",
+                "-sn",
+                "-frames:v",
+                "1",
+                still_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode != 0 or not Path(still_path).is_file() or Path(still_path).stat().st_size <= 0:
+            return None
+        from PIL import Image
+
+        with Image.open(still_path) as still:
+            return still.convert("RGBA")
+    except Exception:
+        return None
+    finally:
+        _unlink_file_safely(still_path)
 
 
 def _transcode_video_source(path: str, details: Optional[dict[str, object]] = None) -> Optional[str]:
@@ -676,7 +739,7 @@ def _video_capability_summary() -> str:
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
-            + "Audio-only or cover-art-only containers still cannot be added as video clips, and partial/corrupt containers may still need manual repair or remuxing."
+            + "Audio-only containers still cannot be added as video clips, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds. Partial/corrupt containers may still need manual repair or remuxing."
         )
     return (
         "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
@@ -714,7 +777,7 @@ def _video_failure_guidance(category: str) -> str:
         "audio-only container": "The Video Builder only accepts clips with playable video frames; audio-only files cannot be added to the timeline.",
         "no playable video stream": "The container was recognized, but ffprobe could not expose a playable video stream for the builder.",
         "partial / malformed video": "The file appears incomplete or malformed; re-copying, remuxing, or re-encoding the source may be required.",
-        "recovery exhausted": "Direct load plus ffmpeg remux/transcode recovery could not produce a playable clip from this source.",
+        "recovery exhausted": "Direct load plus ffmpeg remux/transcode/still-frame recovery could not produce a usable visual clip from this source.",
         "video decode": "The source looks like a video, but the current decode path still could not open it reliably.",
         "video import": "The source could not be imported as a supported video clip.",
     }
@@ -723,6 +786,8 @@ def _video_failure_guidance(category: str) -> str:
 
 def _video_recovery_bucket(note: str) -> str:
     lower = note.lower()
+    if "still-frame" in lower or "single-frame" in lower:
+        return "still-frame"
     if "transcode" in lower:
         return "transcode"
     if "remux" in lower:
@@ -1320,27 +1385,49 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     except Exception:
         probe = _probe_media_details(path)
     recovered_path, recovery_note = _attempt_video_recovery(path, probe)
-    if not recovered_path:
+    if recovered_path:
+        try:
+            fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
+            if frame_count <= 0:
+                _unlink_file_safely(recovered_path)
+                recovered_path = None
+            else:
+                return _ClipEntry(
+                    recovered_path,
+                    frame_count,
+                    _VideoFrameGetter(recovered_path, frame_count, first_frame, cleanup_paths=[recovered_path]),
+                    fps,
+                    frame_size=frame_size,
+                    clip_type="video",
+                    has_audio=_video_has_audio_stream(recovered_path),
+                    source_path=path,
+                    load_note=recovery_note,
+                    load_strategy=recovery_note,
+                )
+        except Exception:
+            _unlink_file_safely(recovered_path)
+            recovered_path = None
+    still_frame = _extract_visual_still_frame(path, probe)
+    if still_frame is None:
         return None
     try:
-        fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
-        if frame_count <= 0:
-            _unlink_file_safely(recovered_path)
-            return None
         return _ClipEntry(
-            recovered_path,
-            frame_count,
-            _VideoFrameGetter(recovered_path, frame_count, first_frame, cleanup_paths=[recovered_path]),
-            fps,
-            frame_size=frame_size,
-            clip_type="video",
-            has_audio=_video_has_audio_stream(recovered_path),
+            path,
+            1,
+            _ImageFrameGetter(still_frame),
+            25.0,
+            frame_size=still_frame.size,
+            clip_type="image",
+            has_audio=bool(probe.get("has_audio")) if probe else False,
             source_path=path,
-            load_note=recovery_note,
-            load_strategy=recovery_note,
+            load_note=_visual_still_fallback_note(probe),
+            load_strategy=_visual_still_fallback_note(probe),
         )
     except Exception:
-        _unlink_file_safely(recovered_path)
+        try:
+            still_frame.close()
+        except Exception:
+            pass
         return None
 
 

@@ -43,6 +43,7 @@ from PyQt6.QtWidgets import (
 from .video_tool import (
     _VIDEO_EXTS,
     _classify_video_import_failure,
+    _extract_visual_still_frame,
     _get_ffprobe_exe,
     _has_ffmpeg,
     _has_imageio,
@@ -53,6 +54,7 @@ from .video_tool import (
     _video_failure_guidance,
     _video_io_diagnostics,
     _video_load_failure_hint,
+    _visual_still_fallback_note,
 )
 
 # Supported image input extensions (what PIL can open directly)
@@ -161,7 +163,7 @@ def _gif_builder_capability_summary() -> str:
         return (
             "Ready now: images, animated GIFs, and video-source imports are available. Video clips are expanded into GIF frames automatically, audio is ignored during GIF import/export, and import summaries keep grouped failures plus per-frame diagnostics visible during preview."
             + odd_container_text
-            + " Audio-only or cover-art-only containers still cannot be imported as visual GIF frames."
+            + " Audio-only containers still cannot be imported as visual GIF frames, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds."
         )
     return (
         "Limited mode: images and animated GIFs are ready now, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
@@ -650,6 +652,7 @@ class GifBuilderDialog(QDialog):
         frame_size_counts: dict[str, int] = {}
         alpha_source_count = 0
         largest_frame: tuple[int, int] = (0, 0)
+        recovered_sources: list[tuple[str, str]] = []
         for i, path in enumerate(paths):
             progress.setValue(i)
             if progress.wasCanceled():
@@ -671,16 +674,28 @@ class GifBuilderDialog(QDialog):
                 if treat_as_video:
                     pil_frames, fps = _load_video_frames(path)
                     frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))
+                    recovery_note = ""
                 else:
                     pil_frames = _load_pillow_rgba(path)
                     frame_delay_ms = None
+                    recovery_note = ""
             except Exception as exc:
                 detail = str(exc)
                 if treat_as_video:
-                    hint = _video_load_failure_hint(path)
-                    detail = f"{detail}\n{hint}" if detail else hint
-                failures.append((Path(path).name, detail))
-                continue
+                    recovery_note = _visual_still_fallback_note(probe)
+                    still_frame = _extract_visual_still_frame(path, probe)
+                    if still_frame is not None:
+                        pil_frames = [still_frame]
+                        frame_delay_ms = None
+                        recovered_sources.append((Path(path).name, recovery_note))
+                    else:
+                        hint = _video_load_failure_hint(path)
+                        detail = f"{detail}\n{hint}" if detail else hint
+                        failures.append((Path(path).name, detail))
+                        continue
+                else:
+                    failures.append((Path(path).name, detail))
+                    continue
             loaded_sources += 1
             added_frames += len(pil_frames)
             source_kind = _frame_source_kind(path, len(pil_frames))
@@ -706,6 +721,8 @@ class GifBuilderDialog(QDialog):
                 source_note += f"  •  {frame_width}×{frame_height}"
             if frame_delay_ms is not None:
                 source_note += f" @ ~{frame_delay_ms} ms"
+            if recovery_note:
+                source_note += f"  •  {recovery_note}"
             loaded_details.append(source_note)
             for frame_idx, pil_frame in enumerate(pil_frames):
                 entry = _FrameEntry(
@@ -733,6 +750,7 @@ class GifBuilderDialog(QDialog):
             attempted=len(paths),
             loaded_sources=loaded_sources,
             added_frames=added_frames,
+            recovered=recovered_sources,
             failures=failures,
             skipped=skipped,
             loaded_details=loaded_details,
@@ -922,6 +940,7 @@ class GifBuilderDialog(QDialog):
         attempted: int,
         loaded_sources: int,
         added_frames: int,
+        recovered: list[tuple[str, str]],
         failures: list[tuple[str, str]],
         skipped: list[str],
         loaded_details: list[str],
@@ -939,6 +958,8 @@ class GifBuilderDialog(QDialog):
             f"Loaded {loaded_sources} source{'s' if loaded_sources != 1 else ''}",
             f"{added_frames} frame{'s' if added_frames != 1 else ''}",
         ]
+        if recovered:
+            parts.append(f"{len(recovered)} recovered")
         if failures:
             parts.append(f"{len(failures)} failed")
         if skipped:
@@ -951,6 +972,10 @@ class GifBuilderDialog(QDialog):
             parts.append(f"{alpha_source_count} alpha source{'s' if alpha_source_count != 1 else ''}")
         tone = "success" if loaded_sources and not failures and not skipped else "warning" if loaded_sources else "error"
         detail_lines = []
+        if recovered:
+            detail_lines.append(
+                "Recovery fallbacks used:\n  " + "\n  ".join(f"{name}: {note}" for name, note in recovered)
+            )
         if loaded_details:
             loaded_lines = loaded_details[:10]
             if len(loaded_details) > len(loaded_lines):

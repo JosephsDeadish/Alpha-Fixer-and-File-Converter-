@@ -2082,7 +2082,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
                 hint = vt._video_load_failure_hint("/tmp/weird.vob")
         self.assertIn("still could not produce a playable clip", hint)
-        self.assertIn("temporary ffmpeg remux and transcode recovery", hint)
+        self.assertIn("temporary ffmpeg remux, transcode, and still-frame recovery", hint)
 
     def test_video_load_failure_hint_mentions_transport_stream_guidance(self):
         try:
@@ -2161,9 +2161,30 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                     with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
                         summary = vt._video_capability_summary()
         self.assertIn("Ready now", summary)
-        self.assertIn("Audio-only or cover-art-only containers", summary)
+        self.assertIn("Audio-only containers", summary)
+        self.assertIn("single-frame fallbacks", summary)
         self.assertIn("preferred-stream selection", summary)
         self.assertIn("partial/corrupt containers", summary)
+
+    def test_load_video_clip_uses_still_frame_fallback_when_recovery_paths_fail(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        with patch.object(vt, "_probe_video_clip", side_effect=RuntimeError("primary open failed")):
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": True, "has_audio": True, "selected_video_attached_pic": True}):
+                with patch.object(vt, "_attempt_video_recovery", return_value=(None, "")):
+                    with patch.object(vt, "_extract_visual_still_frame", return_value=Image.new("RGBA", (8, 6), (255, 0, 0, 255))):
+                        clip = vt._load_video_clip("/tmp/album.bin")
+        self.assertIsNotNone(clip)
+        self.assertEqual(clip.clip_type, "image")
+        self.assertEqual(clip.source_path, "/tmp/album.bin")
+        self.assertTrue(clip.has_audio)
+        self.assertIn("still-frame fallback", clip.load_note)
+        clip.close()
 
     def test_probe_media_details_prefers_non_attached_pic_stream(self):
         try:
@@ -2960,6 +2981,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 attempted=3,
                 loaded_sources=2,
                 added_frames=9,
+                recovered=[],
                 failures=[],
                 skipped=["skip.txt"],
                 loaded_details=["clip.mp4: 6 frames  •  video  •  320×240 @ ~42 ms", "anim.gif: 3 frames  •  animated gif  •  64×64"],
@@ -3106,8 +3128,32 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertTrue(dialog._capability_lbl.text())
             self.assertIn("Ready", dialog._capability_lbl.text())
             self.assertIn("audio is ignored", dialog._capability_lbl.text())
-            self.assertIn("Audio-only or cover-art-only containers", dialog._capability_lbl.text())
+            self.assertIn("Audio-only containers", dialog._capability_lbl.text())
+            self.assertIn("single-frame fallbacks", dialog._capability_lbl.text())
         finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_uses_still_frame_fallback_for_visual_video_sources(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            with patch.object(gb, "_load_video_frames", side_effect=RuntimeError("decode failed")):
+                with patch.object(gb, "_extract_visual_still_frame", return_value=Image.new("RGBA", (12, 10), (0, 255, 0, 255))):
+                    dialog._add_paths(["/tmp/sample.vob"])
+            self.assertEqual(len(dialog._frames), 1)
+            self.assertIn("1 recovered", dialog._import_status_lbl.text())
+            self.assertIn("still-frame fallback", dialog._import_detail_box.toPlainText())
+        finally:
+            for entry in list(dialog._frames):
+                entry.close()
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
