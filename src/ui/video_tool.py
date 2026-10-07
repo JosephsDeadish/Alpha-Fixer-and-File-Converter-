@@ -211,7 +211,7 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
                 "-v", "error",
                 "-print_format", "json",
                 "-show_entries",
-                "format=format_name,duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate",
+                "format=format_name,duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,bit_rate,duration,disposition=attached_pic:stream_tags=language,title",
                 path,
             ],
             stdout=subprocess.PIPE,
@@ -243,7 +243,16 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         except Exception:
             return 999999
 
-    def _video_rank(stream: dict[str, object]) -> tuple[int, float, int]:
+    def _stream_flag(stream: dict[str, object], key: str) -> int:
+        disposition = stream.get("disposition")
+        if not isinstance(disposition, dict):
+            return 0
+        try:
+            return 1 if int(disposition.get(key) or 0) else 0
+        except Exception:
+            return 0
+
+    def _video_rank(stream: dict[str, object]) -> tuple[int, int, float, float, float, int]:
         try:
             width = max(0, int(stream.get("width") or 0))
             height = max(0, int(stream.get("height") or 0))
@@ -254,7 +263,17 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
             _parse_ffprobe_rate(stream.get("avg_frame_rate")),
             _parse_ffprobe_rate(stream.get("r_frame_rate")),
         )
-        return area, fps, -_stream_index(stream)
+        try:
+            bit_rate = max(0.0, float(stream.get("bit_rate") or 0.0))
+        except Exception:
+            bit_rate = 0.0
+        try:
+            duration = max(0.0, float(stream.get("duration") or 0.0))
+        except Exception:
+            duration = 0.0
+        live_video = 1 if area > 0 or fps > 0.5 else 0
+        attached_pic = _stream_flag(stream, "attached_pic")
+        return 1 - attached_pic, live_video, area, fps, bit_rate, duration - (_stream_index(stream) / 1_000_000.0)
 
     video_stream = max(video_streams, key=_video_rank, default=None)
     audio_stream = audio_streams[0] if audio_streams else None
@@ -277,6 +296,13 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
             video_stream_index = int(video_stream.get("index"))
         except Exception:
             video_stream_index = None
+    video_attached_pic_count = sum(_stream_flag(stream, "attached_pic") for stream in video_streams)
+    selected_video_attached_pic = _stream_flag(video_stream, "attached_pic") if isinstance(video_stream, dict) else 0
+    stream_tags = video_stream.get("tags") if isinstance(video_stream, dict) else {}
+    if not isinstance(stream_tags, dict):
+        stream_tags = {}
+    selected_video_language = str(stream_tags.get("language") or "").strip()
+    selected_video_title = str(stream_tags.get("title") or "").strip()
     audio_codec = ""
     audio_stream_index: Optional[int] = None
     if isinstance(audio_stream, dict):
@@ -303,6 +329,10 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         "audio_stream_index": audio_stream_index,
         "video_stream_count": len(video_streams),
         "audio_stream_count": len(audio_streams),
+        "video_attached_pic_count": video_attached_pic_count,
+        "selected_video_attached_pic": bool(selected_video_attached_pic),
+        "selected_video_language": selected_video_language,
+        "selected_video_title": selected_video_title,
     }
 
 
@@ -318,6 +348,9 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
     video_stream_count = max(0, int(details.get("video_stream_count") or 0))
     audio_stream_count = max(0, int(details.get("audio_stream_count") or 0))
     video_stream_index = details.get("video_stream_index")
+    attached_pic_count = max(0, int(details.get("video_attached_pic_count") or 0))
+    selected_language = str(details.get("selected_video_language") or "").strip()
+    selected_title = str(details.get("selected_video_title") or "").strip()
     parts = [f"Probe: container={format_name}", f"video={video_codec}"]
     if width > 0 and height > 0:
         parts.append(f"size={width}x{height}")
@@ -329,6 +362,12 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
         parts.append(f"video-streams={video_stream_count}{choice}")
     if audio_stream_count > 1:
         parts.append(f"audio-streams={audio_stream_count}")
+    if attached_pic_count > 0:
+        parts.append(f"attached-pic-streams={attached_pic_count}")
+    if selected_language:
+        parts.append(f"lang={selected_language}")
+    if selected_title:
+        parts.append(f"title={selected_title}")
     return "; ".join(parts) + "."
 
 
@@ -409,10 +448,16 @@ def _video_load_failure_hint(path: str) -> str:
             "This odd container reports a video stream, but direct loading and ffmpeg recovery fallbacks still could not produce a playable clip."
         )
         if int(probe.get("video_stream_count") or 0) > 1:
-            lines.append("Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.")
+            lines.append("Multiple video streams were detected; recovery will prefer the largest non-cover-art probe-detected video stream.")
+        if bool(probe.get("selected_video_attached_pic")):
+            lines.append("The currently selected stream looks like attached cover art instead of continuous video frames.")
     elif probe and bool(probe.get("has_audio")) and not bool(probe.get("has_video")):
         lines.append(
             "ffprobe detected audio but no playable video stream, so this file cannot be added to the Video Builder as a video clip."
+        )
+    elif probe and bool(probe.get("selected_video_attached_pic")):
+        lines.append(
+            "ffprobe only exposed an attached-picture/cover-art stream, so this source cannot be treated as a normal video clip until it is remuxed or replaced."
         )
     elif probe and str(probe.get("format_name") or "").strip() and not bool(probe.get("has_video")):
         lines.append(
@@ -453,6 +498,23 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
     elif ext in {".rm", ".rmvb"} or "rm" in format_name or "realmedia" in format_name:
         guidance.append(
             "RealMedia / RMVB support is best-effort; older RealMedia files often require a clean remux or transcode before frame-accurate loading will work."
+        )
+    if bool(details.get("selected_video_attached_pic")):
+        guidance.append(
+            "ffprobe selected an attached-picture/cover-art stream instead of a live video stream; this source may be audio-only metadata or may need a manual stream-selection remux."
+        )
+    elif int(details.get("video_attached_pic_count") or 0) > 0:
+        guidance.append(
+            "Attached-picture/cover-art streams were also detected; recovery prefers a live video stream when possible, but some containers still need a manual remux to drop cover-art tracks."
+        )
+    video_codec = str(details.get("video_codec") or "").lower()
+    if video_codec in {"mjpeg", "jpeg2000", "png"}:
+        guidance.append(
+            "Still-image or intra-frame-only video codecs can behave like cover-art or slideshow streams; a full transcode may be required before timeline playback is reliable."
+        )
+    elif video_codec in {"hevc", "h265", "av1"}:
+        guidance.append(
+            "Modern high-efficiency codecs may decode inconsistently in odd containers; if direct loading fails, a clean MP4 remux or H.264 transcode is usually the safest fallback."
         )
     return guidance
 
@@ -585,6 +647,8 @@ def _attempt_video_recovery(path: str, probe: Optional[dict[str, object]] = None
     details = probe if probe is not None else _probe_media_details(path)
     if ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
         return None, ""
+    if details and bool(details.get("selected_video_attached_pic")) and int(details.get("video_attached_pic_count") or 0) >= int(details.get("video_stream_count") or 0):
+        return None, ""
     remux_path = _remux_video_source(path, details)
     if remux_path:
         strategy = "temporary ffmpeg remux fallback active"
@@ -612,7 +676,7 @@ def _video_capability_summary() -> str:
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
-            + "Audio-only containers still cannot be added as video clips, and partial/corrupt containers may still need manual repair or remuxing."
+            + "Audio-only or cover-art-only containers still cannot be added as video clips, and partial/corrupt containers may still need manual repair or remuxing."
         )
     return (
         "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
@@ -625,6 +689,8 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
     lower = detail.lower()
     if "multiple video streams were detected" in lower or "preferred-stream=" in lower:
         return "multi-stream container"
+    if "attached-picture/cover-art stream" in lower or "attached cover art" in lower:
+        return "cover-art stream"
     if "audio but no playable video stream" in lower:
         return "audio-only container"
     if "did not detect a playable video stream" in lower or "did not expose a playable video stream" in lower:
@@ -644,6 +710,7 @@ def _video_failure_guidance(category: str) -> str:
     guidance = {
         "video dependency": "Install or bundle imageio, imageio-ffmpeg, ffmpeg, and ffprobe for full video probing and import.",
         "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream, but a manual ffmpeg remux may still be needed.",
+        "cover-art stream": "This source exposed only cover-art style video metadata instead of continuous frames; dropping attached-picture streams with ffmpeg may help.",
         "audio-only container": "The Video Builder only accepts clips with playable video frames; audio-only files cannot be added to the timeline.",
         "no playable video stream": "The container was recognized, but ffprobe could not expose a playable video stream for the builder.",
         "partial / malformed video": "The file appears incomplete or malformed; re-copying, remuxing, or re-encoding the source may be required.",
@@ -661,6 +728,26 @@ def _video_recovery_bucket(note: str) -> str:
     if "remux" in lower:
         return "remux"
     return "recovery"
+
+
+def _summarize_recovery_notes(recovered: list[tuple[str, str]]) -> str:
+    recovery_counts: dict[str, int] = {}
+    for _name, note in recovered:
+        bucket = _video_recovery_bucket(note)
+        recovery_counts[bucket] = recovery_counts.get(bucket, 0) + 1
+    if not recovery_counts:
+        return "direct only"
+    return ", ".join(f"{bucket} ×{count}" for bucket, count in sorted(recovery_counts.items()))
+
+
+def _summarize_clip_types(clip_snapshot: list[dict[str, object]]) -> str:
+    counts: dict[str, int] = {}
+    for clip in clip_snapshot:
+        clip_type = str(clip.get("clip_type") or "unknown").strip().lower() or "unknown"
+        counts[clip_type] = counts.get(clip_type, 0) + 1
+    if not counts:
+        return ""
+    return ", ".join(f"{kind} ×{count}" for kind, count in sorted(counts.items()))
 
 
 def _open_video_reader(path: str):
@@ -698,7 +785,11 @@ def _is_probably_video_source(path: str, probe: Optional[dict[str, object]] = No
     if ext in _VIDEO_EXTS:
         return True
     details = probe if probe is not None else _probe_media_details(path)
-    return bool(details and details.get("has_video"))
+    if not details or not details.get("has_video"):
+        return False
+    if bool(details.get("selected_video_attached_pic")) and int(details.get("video_attached_pic_count") or 0) >= int(details.get("video_stream_count") or 0):
+        return False
+    return True
 
 
 def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]], object | None]:
@@ -1201,6 +1292,10 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
         fps, frame_count, frame_size, first_frame = _probe_video_clip(path)
         if frame_count <= 0:
             return None
+        if probe is None:
+            probe = _probe_media_details(path)
+        if probe and bool(probe.get("selected_video_attached_pic")):
+            raise RuntimeError("Attached-picture stream selected")
         return _ClipEntry(
             path,
             frame_count,
@@ -1974,11 +2069,7 @@ class VideoToolDialog(QDialog):
             return
         parts = [f"Added {added} clip{'s' if added != 1 else ''}"]
         if recovered:
-            recovery_counts: dict[str, int] = {}
-            for _name, note in recovered:
-                bucket = _video_recovery_bucket(note)
-                recovery_counts[bucket] = recovery_counts.get(bucket, 0) + 1
-            recovery_summary = ", ".join(f"{bucket} ×{count}" for bucket, count in sorted(recovery_counts.items()))
+            recovery_summary = _summarize_recovery_notes(recovered)
             parts.append(f"{len(recovered)} recovered")
             if recovery_summary:
                 parts.append(recovery_summary)
@@ -1989,13 +2080,8 @@ class VideoToolDialog(QDialog):
         tone = "success" if added and not failures and not skipped else "warning" if added else "error"
         detail_lines = []
         if recovered:
-            recovery_counts: dict[str, int] = {}
-            for _name, note in recovered:
-                bucket = _video_recovery_bucket(note)
-                recovery_counts[bucket] = recovery_counts.get(bucket, 0) + 1
             detail_lines.append(
-                "Recovery paths: "
-                + ", ".join(f"{bucket} ×{count}" for bucket, count in sorted(recovery_counts.items()))
+                "Recovery paths: " + _summarize_recovery_notes(recovered)
             )
             detail_lines.append(
                 "Recovery fallbacks used:\n  "
@@ -2203,14 +2289,34 @@ class VideoToolDialog(QDialog):
             "errors": errors,
             "files": files,
             "first_file": str(clip_snapshot[0].get("source_path") or clip_snapshot[0].get("path") or "") if clip_snapshot else "",
+            "sources": _summarize_clip_types(clip_snapshot),
         }
+        recovered = [
+            (
+                os.path.basename(str(clip.get("source_path") or clip.get("path") or "")),
+                str(clip.get("load_note") or "").strip(),
+            )
+            for clip in clip_snapshot
+            if str(clip.get("load_note") or "").strip()
+        ]
+        entry["recovery"] = _summarize_recovery_notes(recovered)
         noted = [
             f"{os.path.basename(str(clip.get('source_path') or clip.get('path') or ''))}: {clip.get('load_note')}"
             for clip in clip_snapshot
             if str(clip.get("load_note") or "").strip()
         ]
+        notes = [
+            f"filter={self._filter_combo.currentData() or 'none'}",
+            f"audio={'kept' if self._should_mux_audio(fmt, clip_snapshot) else 'off'}",
+        ]
+        if entry["sources"]:
+            notes.append(f"sources={entry['sources']}")
+        if entry["recovery"] and entry["recovery"] != "direct only":
+            notes.append(f"recovery={entry['recovery']}")
         if noted:
-            entry["notes"] = "; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")
+            notes.append("clips=" + ("; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")))
+        if notes:
+            entry["notes"] = " | ".join(notes)
         try:
             settings.add_video_builder_history(entry)
         except Exception:

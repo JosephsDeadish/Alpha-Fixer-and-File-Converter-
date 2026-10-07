@@ -2144,6 +2144,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             vt._classify_video_import_failure("odd.vob", "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip."),
             "recovery exhausted",
         )
+        self.assertEqual(
+            vt._classify_video_import_failure("album.m4a", "ffprobe only exposed an attached-picture/cover-art stream"),
+            "cover-art stream",
+        )
 
     def test_video_capability_summary_mentions_ready_state_and_audio_only_limit(self):
         try:
@@ -2157,9 +2161,79 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                     with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
                         summary = vt._video_capability_summary()
         self.assertIn("Ready now", summary)
-        self.assertIn("Audio-only containers still cannot be added", summary)
+        self.assertIn("Audio-only or cover-art-only containers", summary)
         self.assertIn("preferred-stream selection", summary)
         self.assertIn("partial/corrupt containers", summary)
+
+    def test_probe_media_details_prefers_non_attached_pic_stream(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        payload = {
+            "format": {"format_name": "matroska", "duration": "10.0"},
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec_name": "mjpeg",
+                    "width": 600,
+                    "height": 600,
+                    "avg_frame_rate": "0/0",
+                    "r_frame_rate": "0/0",
+                    "disposition": {"attached_pic": 1},
+                    "tags": {"title": "cover"},
+                },
+                {
+                    "index": 2,
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 320,
+                    "height": 240,
+                    "avg_frame_rate": "24/1",
+                    "r_frame_rate": "24/1",
+                    "bit_rate": "120000",
+                    "disposition": {"attached_pic": 0},
+                    "tags": {"language": "eng"},
+                },
+            ],
+        }
+        result = types.SimpleNamespace(returncode=0, stdout=__import__("json").dumps(payload))
+        with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+            with patch.object(vt.subprocess, "run", return_value=result):
+                details = vt._probe_media_details("/tmp/sample.mkv")
+        self.assertIsNotNone(details)
+        self.assertEqual(details["video_stream_index"], 2)
+        self.assertEqual(details["video_codec"], "h264")
+        self.assertEqual(details["video_attached_pic_count"], 1)
+        self.assertEqual(details["selected_video_language"], "eng")
+
+    def test_video_load_failure_hint_mentions_cover_art_streams(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mp3",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mjpeg",
+            "audio_codec": "mp3",
+            "width": 600,
+            "height": 600,
+            "fps": 0.0,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+            "selected_video_attached_pic": True,
+            "video_attached_pic_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/album.bin")
+        self.assertIn("attached-picture/cover-art stream", hint)
+        self.assertIn("cover-art or slideshow streams", hint)
 
     def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
         try:
@@ -2800,7 +2874,11 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         entry = settings._video_history[0]
         self.assertEqual(entry["output"], "/tmp/video-history-test.mp4")
         self.assertEqual(entry["files"], ["game.iso"])
+        self.assertEqual(entry["format"], "MP4")
+        self.assertEqual(entry["sources"], "unknown ×1")
+        self.assertEqual(entry["recovery"], "remux ×1")
         self.assertIn("remux fallback", entry["notes"])
+        self.assertIn("audio=off", entry["notes"])
 
 
 @unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
@@ -2845,8 +2923,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertEqual(entry["output"], out_path)
         self.assertEqual(entry["first_file"], "/tmp/frame.png")
         self.assertEqual(entry["files"], ["frame.png"])
+        self.assertEqual(entry["sources"], "image ×1")
         self.assertIn("optimize=on", entry["notes"])
         self.assertIn("loop=∞", entry["notes"])
+        self.assertIn("sources=image ×1", entry["notes"])
         self.assertIn("alpha", entry["notes"])
 
     def test_gif_import_failures_are_summarized_inline(self):
@@ -2987,6 +3067,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "success": 3,
                 "errors": 0,
                 "files": ["a.png"],
+                "sources": "image ×1",
                 "notes": "optimize=on",
             }
         )
@@ -2994,19 +3075,25 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             {
                 "timestamp": "2026-10-07T09:01:00",
                 "output": "/tmp/a.mp4",
+                "format": "MP4",
                 "clip_count": 2,
                 "success": 2,
                 "errors": 0,
+                "recovery": "transcode ×1",
+                "sources": "video ×2",
                 "files": ["a.iso"],
-                "notes": "sample.iso: temporary ffmpeg transcode fallback active",
+                "notes": "recovery=transcode ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
             }
         )
         tab = HistoryTab(settings)
         try:
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "OK")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "optimize=on")
-            self.assertEqual(tab._vid_tree.topLevelItem(0).text(5), "Recovery")
-            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(6))
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(3), "image ×1")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "OK")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(7), "optimize=on")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(2), "MP4")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(6), "transcode ×1")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(8), "Recovery")
+            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(9))
         finally:
             tab.close()
             tab.deleteLater()
@@ -3023,11 +3110,14 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             {
                 "timestamp": "2026-10-07T09:01:00",
                 "output": "/tmp/session-exports/nested/final-output.mp4",
+                "format": "MP4",
                 "clip_count": 2,
                 "success": 2,
                 "errors": 0,
+                "recovery": "transcode ×1",
+                "sources": "video ×1, image ×1",
                 "files": ["a.iso"],
-                "notes": "sample.iso: temporary ffmpeg transcode fallback active",
+                "notes": "recovery=transcode ×1 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
             }
         )
         tab = HistoryTab(settings)
@@ -3043,6 +3133,12 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab._apply_filter(tab._vid_tree, "output:session-exports")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "notes:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "format:mp4")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "recovery:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "source:image")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "file:a.iso")
             self.assertFalse(item.isHidden())

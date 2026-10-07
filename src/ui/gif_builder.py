@@ -726,6 +726,17 @@ class GifBuilderDialog(QDialog):
         if settings is None:
             return
         files = [os.path.basename(_frame_source_path(entry)) for entry in self._frames if _frame_source_path(entry)]
+        source_counts: dict[str, int] = {}
+        seen_sources: set[str] = set()
+        for entry in self._frames:
+            source_path = _frame_source_path(entry)
+            if not source_path or source_path in seen_sources:
+                continue
+            seen_sources.add(source_path)
+            source_frames = sum(1 for candidate in self._frames if _frame_source_path(candidate) == source_path)
+            kind = _frame_source_kind(source_path, source_frames)
+            source_counts[kind] = source_counts.get(kind, 0) + 1
+        source_summary = ", ".join(f"{kind} ×{count}" for kind, count in sorted(source_counts.items()))
         alpha_frames = sum(
             1
             for entry in self._frames
@@ -739,6 +750,8 @@ class GifBuilderDialog(QDialog):
             notes.append(
                 f"resize≤{resize[0] if resize[0] > 0 else 'auto'}×{resize[1] if resize[1] > 0 else 'auto'}"
             )
+        if source_summary:
+            notes.append(f"sources={source_summary}")
         if alpha_frames:
             notes.append(f"{alpha_frames}/{len(self._frames)} frame(s) carried alpha before quantizing")
         entry = {
@@ -749,6 +762,7 @@ class GifBuilderDialog(QDialog):
             "errors": 0,
             "files": files,
             "first_file": _frame_source_path(self._frames[0]) if self._frames else "",
+            "sources": source_summary,
             "notes": "; ".join(notes),
         }
         try:
