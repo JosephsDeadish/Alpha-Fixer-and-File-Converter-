@@ -860,6 +860,22 @@ class ConverterTab(QWidget):
             parts.append(self._thumbnail_failure_status_text(summary))
         return "  •  ".join(parts)
 
+    def get_status_bar_text(self) -> str:
+        fmt_data = self._fmt_combo.currentData()
+        fmt = fmt_data[0] if fmt_data else "output"
+        summary = self.get_queue_status_text() or "🔄 Converter ready"
+        extras = [f"output {fmt}"]
+        if self._preview_loader is not None:
+            extras.append("preview loading")
+        elif self._current_preview_path:
+            extras.append(f"preview {os.path.basename(self._current_preview_path)}")
+            if self._before_is_animated:
+                extras.append("animated source")
+        output_info = self._output_info_lbl.text().lower()
+        if "preview<br><b>unavailable</b>" in output_info:
+            extras.append("preview unavailable")
+        return summary + ("  •  " + "  •  ".join(extras) if extras else "")
+
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)
         categories = summary.get("failure_categories") or {}
@@ -911,6 +927,7 @@ class ConverterTab(QWidget):
             self._refresh_preview(item.text())
         else:
             self._clear_preview_state()
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(int)
     def _on_format_changed(self, _index: int):
@@ -953,6 +970,7 @@ class ConverterTab(QWidget):
             self._btn_run.setText("▶  Convert  [F5]")
             self._btn_run.setToolTip("")
         self._preview_debounce.start()
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(int)
     def _on_quality_changed(self, value: int):
@@ -998,6 +1016,7 @@ class ConverterTab(QWidget):
         self._compare.clear()
         self._source_info_lbl.setText("")
         self._output_info_lbl.setText("")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(int)
     def _on_width_changed(self, width: int) -> None:
@@ -1202,6 +1221,7 @@ class ConverterTab(QWidget):
         # out_meta: dims·mode \n fmt \n estsize        → all lines are data.
         self._source_info_lbl.setText(_info_text("SRC", src_meta, skip_first=True))
         self._output_info_lbl.setText(_info_text("OUT", out_meta, skip_first=False))
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(str)
     def _on_preview_failed(self, err: str):
@@ -1212,6 +1232,7 @@ class ConverterTab(QWidget):
         self._output_info_lbl.setText(
             f"<b>OUT</b><br>Preview<br><b>unavailable</b><br><b>{err_snippet}</b>"
         )
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _on_preview_ready_if_current(
         self,

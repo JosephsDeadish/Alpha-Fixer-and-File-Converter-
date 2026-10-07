@@ -1039,6 +1039,20 @@ class AlphaFixerTab(QWidget):
             parts.append(self._thumbnail_failure_status_text(summary))
         return "  •  ".join(parts)
 
+    def get_status_bar_text(self) -> str:
+        summary = self.get_queue_status_text() or "🎨 Alpha ready"
+        extras: list[str] = []
+        if self._preview_path:
+            extras.append(f"preview {os.path.basename(self._preview_path)}")
+        helper = self._preview_helper_lbl.text().strip() if hasattr(self, "_preview_helper_lbl") else ""
+        helper_lower = helper.lower()
+        if helper:
+            if helper.startswith("Preview helpers: "):
+                extras.append(helper[len("Preview helpers: "):].rstrip("."))
+            elif not helper_lower.startswith("preview helpers ready"):
+                extras.append(helper.rstrip("."))
+        return summary + ("  •  " + "  •  ".join(extras) if extras else "")
+
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)
         categories = summary.get("failure_categories") or {}
@@ -1091,6 +1105,7 @@ class AlphaFixerTab(QWidget):
             self._compare.clear()
             self._before_stats_lbl.setText("")
             self._after_stats_lbl.setText("")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     # ------------------------------------------------------------------
     # ROM / game folder detection
@@ -1389,6 +1404,7 @@ class AlphaFixerTab(QWidget):
             self._preview_helper_lbl.setText(
                 "Preview helpers ready: alpha heat-map and atlas overlays will update when a preview loads."
             )
+            self.queue_status_changed.emit(self.get_queue_status_text())
             return
         parts: list[str] = []
         if self._alpha_vis_check.isChecked():
@@ -1404,8 +1420,10 @@ class AlphaFixerTab(QWidget):
             self._preview_helper_lbl.setText(
                 "Preview helpers off: showing the raw before/after preview."
             )
+            self.queue_status_changed.emit(self.get_queue_status_text())
             return
         self._preview_helper_lbl.setText("Preview helpers: " + " • ".join(parts) + ".")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(bool)
     def _on_alpha_vis_toggled(self, _checked: bool) -> None:

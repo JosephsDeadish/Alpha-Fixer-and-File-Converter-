@@ -2674,6 +2674,10 @@ class MainWindow(QMainWindow):
         if self._queue_status_label is None:
             return
         tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
+        status_getter = getattr(tab, "get_status_bar_text", None)
+        if callable(status_getter):
+            self._queue_status_label.setText(status_getter())
+            return
         queue_getter = getattr(tab, "get_queue_status_text", None)
         if callable(queue_getter):
             self._queue_status_label.setText(queue_getter())

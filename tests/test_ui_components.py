@@ -3382,6 +3382,56 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_converter_status_bar_text_includes_output_and_preview_state(self):
+        try:
+            from src.ui.converter_tool import ConverterTab
+        except ImportError as exc:
+            self.skipTest(f"converter_tool import unavailable in test env: {exc}")
+
+        widget = ConverterTab(_ConverterTabSettingsStub())
+        try:
+            widget._file_list.addItem("/tmp/sample.png")
+            widget._update_count(1)
+            summary = widget.get_status_bar_text()
+            self.assertIn("output", summary)
+            widget._current_preview_path = "/tmp/sample.png"
+            widget._before_is_animated = True
+            summary = widget.get_status_bar_text()
+            self.assertIn("preview sample.png", summary)
+            self.assertIn("animated source", summary)
+            widget._output_info_lbl.setText("<b>OUT</b><br>Preview<br><b>unavailable</b>")
+            self.assertIn("preview unavailable", widget.get_status_bar_text())
+        finally:
+            widget.close()
+            widget.deleteLater()
+            self._app.processEvents()
+
+    def test_alpha_status_bar_text_includes_preview_and_helper_state(self):
+        try:
+            from src.core.settings_manager import SettingsManager
+            from src.core.presets import PresetManager
+            from src.ui.alpha_tool import AlphaFixerTab
+        except ImportError as exc:
+            self.skipTest(f"alpha_tool import unavailable in test env: {exc}")
+
+        settings = SettingsManager()
+        settings._qs = _FakeQSettings({})
+        presets = PresetManager(settings)
+        widget = AlphaFixerTab(presets, settings)
+        try:
+            widget._file_list.addItem("/tmp/sprite.png")
+            widget._update_file_count(1)
+            widget._preview_path = "/tmp/sprite.png"
+            widget._preview_helper_lbl.setText("Preview helpers: alpha heat-map on • atlas boxes on (4 cells).")
+            summary = widget.get_status_bar_text()
+            self.assertIn("preview sprite.png", summary)
+            self.assertIn("alpha heat-map on", summary)
+            self.assertIn("atlas boxes on (4 cells)", summary)
+        finally:
+            widget.close()
+            widget.deleteLater()
+            self._app.processEvents()
+
     def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
         try:
             from src.ui.history_tab import HistoryTab
