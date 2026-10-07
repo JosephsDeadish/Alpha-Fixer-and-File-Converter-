@@ -1226,6 +1226,8 @@ class MainWindow(QMainWindow):
         self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")
         self._alpha_tab.status_notice.connect(self._show_transient_status)
         self._converter_tab.status_notice.connect(self._show_transient_status)
+        self._alpha_tab.queue_status_changed.connect(self._update_queue_status)
+        self._converter_tab.queue_status_changed.connect(self._update_queue_status)
         self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
         self._tabs.addTab(self._converter_tab, "🔄 Converter")
         self._tabs.addTab(self._history_tab, "📋 History")
@@ -2668,6 +2670,10 @@ class MainWindow(QMainWindow):
         if self._queue_status_label is None:
             return
         tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
+        queue_getter = getattr(tab, "get_queue_status_text", None)
+        if callable(queue_getter):
+            self._queue_status_label.setText(queue_getter())
+            return
         file_list = getattr(tab, "_file_list", None)
         if file_list is None or not hasattr(file_list, "count"):
             self._queue_status_label.setText("")

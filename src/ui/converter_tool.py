@@ -72,6 +72,7 @@ class ConverterTab(QWidget):
     # Carries the new path string (empty string = same as source).
     output_dir_changed = pyqtSignal(str)
     status_notice = pyqtSignal(str, int)
+    queue_status_changed = pyqtSignal(str)
     SHORTCUT_DEFS = (
         ("converter_run", "F5", "Start conversion batch", "Converter"),
         ("converter_stop", "Escape", "Stop the current operation", "Converter"),
@@ -800,6 +801,23 @@ class ConverterTab(QWidget):
         if failed > 0:
             parts.append(self._thumbnail_failure_status_text(summary))
         self._file_count_lbl.setText("  |  ".join(parts))
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def get_queue_status_text(self) -> str:
+        count = int(self._file_list.count())
+        if count <= 0:
+            return ""
+        parts = [f"📁 {count} queued"]
+        summary = self._file_list.get_thumbnail_summary()
+        pending = int(summary.get("pending_count", 0) or 0)
+        failed = int(summary.get("failure_count", 0) or 0)
+        if bool(summary.get("auto_paused")):
+            parts.append("thumbnail previews paused")
+        elif pending > 0:
+            parts.append(f"{pending} preview{'s' if pending != 1 else ''} pending")
+        if failed > 0:
+            parts.append(self._thumbnail_failure_status_text(summary))
+        return "  •  ".join(parts)
 
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)

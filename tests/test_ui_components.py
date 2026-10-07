@@ -381,6 +381,24 @@ class TestConverterTab(unittest.TestCase):
         self._widget._on_batch_import_completed(2, 1, 3)
         self.assertEqual(received, [("Converter queue: Added 2 new files; skipped 1 duplicate.", 6000)])
 
+    def test_get_queue_status_text_includes_preview_state(self):
+        self._widget._file_list.addItem("a.png")
+        with patch.object(
+            self._widget._file_list,
+            "get_thumbnail_summary",
+            return_value={"pending_count": 2, "failure_count": 1, "failure_categories": {"decode": 1}},
+        ):
+            text = self._widget.get_queue_status_text()
+        self.assertEqual(text, "📁 1 queued  •  2 previews pending  •  1 preview failure (decode)")
+
+    def test_update_count_emits_queue_status_changed(self):
+        self._widget._file_list.addItem("a.png")
+        received = []
+        self._widget.queue_status_changed.connect(received.append)
+        with patch.object(self._widget, "get_queue_status_text", return_value="📁 1 queued  •  1 preview pending"):
+            self._widget._update_count(1)
+        self.assertEqual(received, ["📁 1 queued  •  1 preview pending"])
+
     def test_export_failure_report_writes_json(self):
         self._widget._last_run_format = "PNG"
         self._widget._last_run_files = ["/tmp/a.png"]
@@ -921,6 +939,24 @@ class TestAlphaPreviewHelpers(unittest.TestCase):
         self._widget.status_notice.connect(lambda message, timeout: received.append((message, timeout)))
         self._widget._on_batch_import_completed(2, 1, 3)
         self.assertEqual(received, [("Alpha queue: Added 2 new files; skipped 1 duplicate.", 6000)])
+
+    def test_get_queue_status_text_includes_preview_state(self):
+        self._widget._file_list.addItem("a.png")
+        with patch.object(
+            self._widget._file_list,
+            "get_thumbnail_summary",
+            return_value={"pending_count": 0, "failure_count": 2, "failure_categories": {"memory": 2}},
+        ):
+            text = self._widget.get_queue_status_text()
+        self.assertEqual(text, "📁 1 queued  •  2 preview failures (memory)")
+
+    def test_update_file_count_emits_queue_status_changed(self):
+        self._widget._file_list.addItem("a.png")
+        received = []
+        self._widget.queue_status_changed.connect(received.append)
+        with patch.object(self._widget, "get_queue_status_text", return_value="📁 1 queued  •  thumbnail previews paused"):
+            self._widget._update_file_count(1)
+        self.assertEqual(received, ["📁 1 queued  •  thumbnail previews paused"])
 
 
 class TestSettingsExportImport(unittest.TestCase):

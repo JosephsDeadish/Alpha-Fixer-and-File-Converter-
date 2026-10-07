@@ -8924,8 +8924,13 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_main_window_keeps_queue_status_bar_summary_hooks(self):
         src = self._src("ui/main_window.py")
         self.assertIn("self._queue_status_label = QLabel(\"\")", src)
+        self.assertIn("self._alpha_tab.queue_status_changed.connect(self._update_queue_status)", src)
+        self.assertIn("self._converter_tab.queue_status_changed.connect(self._update_queue_status)", src)
         self.assertIn("self._tabs.currentChanged.connect(self._update_queue_status)", src)
         self.assertIn("def _update_queue_status(self) -> None:", src)
+        self.assertIn('queue_getter = getattr(tab, "get_queue_status_text", None)', src)
+        self.assertIn("if callable(queue_getter):", src)
+        self.assertIn("self._queue_status_label.setText(queue_getter())", src)
         self.assertIn('self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")', src)
 
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
