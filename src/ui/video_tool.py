@@ -1330,6 +1330,14 @@ class VideoToolDialog(QDialog):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
 
+        self._import_status_lbl = QLabel(
+            "Ready: add videos, images, or animated GIFs. Recovery/import notes will appear here."
+        )
+        self._import_status_lbl.setWordWrap(True)
+        self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self._import_status_lbl)
+
         self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")
         self._timeline_summary_lbl.setWordWrap(True)
         self._timeline_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
@@ -1757,14 +1765,54 @@ class VideoToolDialog(QDialog):
         self._clip_list.setCurrentRow(insert_row)
         return insert_row + 1
 
-    def _show_skipped_files(self, skipped: list[str]) -> None:
-        if skipped:
-            QMessageBox.information(
-                self,
-                "Unsupported Files Skipped",
-                "These files are not supported by the Video Editor:\n"
-                + "\n".join(skipped),
+    def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
+        colors = {
+            "neutral": "gray",
+            "success": "#2e7d32",
+            "warning": "#b26a00",
+            "error": "#b00020",
+        }
+        self._import_status_lbl.setText(message)
+        self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
+        self._import_status_lbl.setToolTip(detail or message)
+
+    def _update_import_status(
+        self,
+        *,
+        added: int,
+        attempted: int,
+        recovered: list[str],
+        failures: list[tuple[str, str]],
+        skipped: list[str],
+    ) -> None:
+        if attempted <= 0:
+            self._set_import_status(
+                "Ready: add videos, images, or animated GIFs. Recovery/import notes will appear here."
             )
+            return
+        parts = [f"Added {added} clip{'s' if added != 1 else ''}"]
+        if recovered:
+            parts.append(f"{len(recovered)} via ffmpeg recovery")
+        if failures:
+            parts.append(f"{len(failures)} failed")
+        if skipped:
+            parts.append(f"{len(skipped)} skipped")
+        tone = "success" if added and not failures and not skipped else "warning" if added else "error"
+        detail_lines = []
+        if recovered:
+            detail_lines.append(
+                "Recovery fallbacks used:\n  "
+                + "\n  ".join(recovered)
+                + "\nOriginal source paths stay attached for labeling and export history."
+            )
+        if failures:
+            failure_lines = [f"{name}: {hint}" for name, hint in failures[:_MAX_VIDEO_LOAD_FAILURE_DETAILS]]
+            if len(failures) > len(failure_lines):
+                failure_lines.append(f"…and {len(failures) - len(failure_lines)} more file(s).")
+            detail_lines.append("Load failures:\n  " + "\n  ".join(failure_lines))
+        if skipped:
+            detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
+        self._set_import_status("Import summary: " + "  •  ".join(parts), detail="\n\n".join(detail_lines), tone=tone)
 
     def _format_clip_info_text(self, clip: "_ClipEntry") -> str:
         text = (
@@ -1844,6 +1892,7 @@ class VideoToolDialog(QDialog):
         fallback_loaded: list[str] = []
         failed_videos: list[tuple[str, str]] = []
         next_row = max(0, min(len(self._clips), insert_row))
+        added = 0
         for path in paths:
             ext = Path(path).suffix.lower()
             if ext in _VIDEO_EXTS:
@@ -1853,6 +1902,7 @@ class VideoToolDialog(QDialog):
                     continue
                 label = _format_clip_label(clip, path, "🎞")
                 next_row = self._insert_clip(clip, label, next_row)
+                added += 1
                 if clip.load_note:
                     fallback_loaded.append(Path(path).name)
             elif ext in _IMAGE_EXTS:
@@ -1862,6 +1912,7 @@ class VideoToolDialog(QDialog):
                     continue
                 label = _format_clip_label(clip, path, "🖼")
                 next_row = self._insert_clip(clip, label, next_row)
+                added += 1
             else:
                 probe = _probe_media_details(path)
                 if _is_probably_video_source(path, probe):
@@ -1871,6 +1922,7 @@ class VideoToolDialog(QDialog):
                         continue
                     label = _format_clip_label(clip, path, "🎞")
                     next_row = self._insert_clip(clip, label, next_row)
+                    added += 1
                     if clip.load_note:
                         fallback_loaded.append(Path(path).name)
                 elif probe:
@@ -1880,16 +1932,13 @@ class VideoToolDialog(QDialog):
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()
-        if fallback_loaded:
-            QMessageBox.information(
-                self,
-                "Experimental Video Loaded",
-                "Loaded via temporary ffmpeg recovery fallback:\n"
-                + "\n".join(fallback_loaded)
-                + "\n\nThe original source path stays attached for labeling and export history.",
-            )
-        self._show_video_load_failures(failed_videos)
-        self._show_skipped_files(skipped)
+        self._update_import_status(
+            added=added,
+            attempted=len(paths),
+            recovered=fallback_loaded,
+            failures=failed_videos,
+            skipped=skipped,
+        )
 
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -1902,6 +1951,7 @@ class VideoToolDialog(QDialog):
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         fallback_loaded: list[str] = []
         failed_videos: list[tuple[str, str]] = []
+        added = 0
         for path in paths:
             clip = _load_video_clip(path)
             if clip is None:
@@ -1909,37 +1959,19 @@ class VideoToolDialog(QDialog):
                 continue
             label = _format_clip_label(clip, path, "🎞")
             next_row = self._insert_clip(clip, label, next_row)
+            added += 1
             if clip.load_note:
                 fallback_loaded.append(Path(path).name)
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()
-        if fallback_loaded:
-            QMessageBox.information(
-                self,
-                "Experimental Video Loaded",
-                "Loaded via temporary ffmpeg recovery fallback:\n"
-                + "\n".join(fallback_loaded)
-                + "\n\nThe original source path stays attached for labeling and export history.",
-            )
-        self._show_video_load_failures(failed_videos)
-
-    def _show_video_load_failures(self, failures: list[tuple[str, str]]) -> None:
-        if not failures:
-            return
-        lines = []
-        for name, hint in failures[:_MAX_VIDEO_LOAD_FAILURE_DETAILS]:
-            lines.append(f"• {name}: {hint}")
-        remaining = len(failures) - len(lines)
-        detail = "\n".join(lines)
-        if remaining > 0:
-            detail += f"\n• …and {remaining} more file(s)."
-        summary = (
-            "Could not open the selected video file."
-            if len(failures) == 1
-            else f"Could not open {len(failures)} selected video files."
+        self._update_import_status(
+            added=added,
+            attempted=len(paths),
+            recovered=fallback_loaded,
+            failures=failed_videos,
+            skipped=[],
         )
-        QMessageBox.warning(self, "Load Error", f"{summary}\n\n{detail}")
 
     def _record_export_history(
         self,

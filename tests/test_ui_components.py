@@ -2092,12 +2092,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         with patch.object(dialog, "_update_scrubber"):
                             with patch.object(dialog, "_update_preview"):
                                 with patch.object(dialog, "_update_ui_state"):
-                                    with patch.object(dialog, "_show_video_load_failures") as failures_mock:
-                                        with patch.object(dialog, "_show_skipped_files") as skipped_mock:
-                                            dialog._on_files_dropped(["/tmp/weird.dat"], 0)
+                                    dialog._on_files_dropped(["/tmp/weird.dat"], 0)
             insert_mock.assert_called_once()
-            failures_mock.assert_called_once_with([])
-            skipped_mock.assert_called_once_with([])
+            self.assertIn("Import summary: Added 1 clip", dialog._import_status_lbl.text())
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -2118,11 +2115,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                     with patch.object(dialog, "_update_scrubber"):
                         with patch.object(dialog, "_update_preview"):
                             with patch.object(dialog, "_update_ui_state"):
-                                with patch.object(dialog, "_show_video_load_failures") as failures_mock:
-                                    with patch.object(dialog, "_show_skipped_files") as skipped_mock:
-                                        dialog._on_files_dropped(["/tmp/weird.dat"], 0)
-            failures_mock.assert_called_once_with([("weird.dat", "audio only")])
-            skipped_mock.assert_called_once_with([])
+                                dialog._on_files_dropped(["/tmp/weird.dat"], 0)
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("audio only", dialog._import_status_lbl.toolTip())
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -2177,7 +2172,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 self.assertEqual(clip.source_path, sample_path)
                 clip.close()
 
-    def test_load_video_paths_batches_failures_into_one_dialog(self):
+    def test_load_video_paths_summarizes_failures_inline(self):
         _require_qt_gui(self)
         self._app = _get_app()
         try:
@@ -2191,11 +2186,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 with patch.object(vt, "_video_load_failure_hint", side_effect=["hint one", "hint two"]):
                     with patch.object(vt.QMessageBox, "warning") as warn_mock:
                         dialog._load_video_paths(["/tmp/a.iso", "/tmp/b.bin"])
-            warn_mock.assert_called_once()
-            message = warn_mock.call_args.args[2]
-            self.assertIn("Could not open 2 selected video files.", message)
-            self.assertIn("a.iso: hint one", message)
-            self.assertIn("b.bin: hint two", message)
+            warn_mock.assert_not_called()
+            self.assertIn("2 failed", dialog._import_status_lbl.text())
+            self.assertIn("a.iso: hint one", dialog._import_status_lbl.toolTip())
+            self.assertIn("b.bin: hint two", dialog._import_status_lbl.toolTip())
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -2550,6 +2544,23 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertIn("optimize=on", entry["notes"])
         self.assertIn("loop=∞", entry["notes"])
         self.assertIn("alpha", entry["notes"])
+
+    def test_gif_import_failures_are_summarized_inline(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            with patch.object(gb, "_load_pillow_rgba", side_effect=RuntimeError("bad image")):
+                dialog._add_paths(["/tmp/bad.png"])
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("bad.png: bad image", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
 
     def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
         try:

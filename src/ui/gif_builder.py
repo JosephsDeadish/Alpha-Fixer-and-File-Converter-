@@ -337,6 +337,14 @@ class GifBuilderDialog(QDialog):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
 
+        self._import_status_lbl = QLabel(
+            "Ready: add images, GIFs, or videos. Import notes and failures will appear here."
+        )
+        self._import_status_lbl.setWordWrap(True)
+        self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self._import_status_lbl)
+
         # Frame grid
         self._frame_list = _FrameListWidget()
         self._frame_list.files_dropped.connect(self._add_paths)
@@ -519,12 +527,17 @@ class GifBuilderDialog(QDialog):
         progress = QProgressDialog("Loading media…", "Cancel", 0, len(paths), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(500)
+        loaded_sources = 0
+        added_frames = 0
+        failures: list[tuple[str, str]] = []
+        skipped: list[str] = []
         for i, path in enumerate(paths):
             progress.setValue(i)
             if progress.wasCanceled():
                 break
             ext = Path(path).suffix.lower()
             if ext not in _SUPPORTED_EXTS:
+                skipped.append(Path(path).name)
                 continue
             try:
                 if ext in _VIDEO_EXTS:
@@ -534,9 +547,10 @@ class GifBuilderDialog(QDialog):
                     pil_frames = _load_pillow_rgba(path)
                     frame_delay_ms = None
             except Exception as exc:
-                QMessageBox.warning(self, "Load Error",
-                                    f"Could not load {Path(path).name}:\n{exc}")
+                failures.append((Path(path).name, str(exc)))
                 continue
+            loaded_sources += 1
+            added_frames += len(pil_frames)
             for frame_idx, pil_frame in enumerate(pil_frames):
                 entry = _FrameEntry(path, frame_idx, pil_frame, delay_ms=frame_delay_ms)
                 self._frames.append(entry)
@@ -553,6 +567,13 @@ class GifBuilderDialog(QDialog):
         self._update_count()
         self._update_scrubber()
         self._update_preview_frame()
+        self._update_import_status(
+            attempted=len(paths),
+            loaded_sources=loaded_sources,
+            added_frames=added_frames,
+            failures=failures,
+            skipped=skipped,
+        )
 
     def _resolve_tooltip_mgr(self):
         if self._tooltip_mgr is not None:
@@ -698,6 +719,49 @@ class GifBuilderDialog(QDialog):
     def _update_count(self) -> None:
         n = len(self._frames)
         self._frame_count_lbl.setText(f"{n} frame{'s' if n != 1 else ''}")
+
+    def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
+        colors = {
+            "neutral": "gray",
+            "success": "#2e7d32",
+            "warning": "#b26a00",
+            "error": "#b00020",
+        }
+        self._import_status_lbl.setText(message)
+        self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
+        self._import_status_lbl.setToolTip(detail or message)
+
+    def _update_import_status(
+        self,
+        *,
+        attempted: int,
+        loaded_sources: int,
+        added_frames: int,
+        failures: list[tuple[str, str]],
+        skipped: list[str],
+    ) -> None:
+        if attempted <= 0:
+            self._set_import_status(
+                "Ready: add images, GIFs, or videos. Import notes and failures will appear here."
+            )
+            return
+        parts = [
+            f"Loaded {loaded_sources} source{'s' if loaded_sources != 1 else ''}",
+            f"{added_frames} frame{'s' if added_frames != 1 else ''}",
+        ]
+        if failures:
+            parts.append(f"{len(failures)} failed")
+        if skipped:
+            parts.append(f"{len(skipped)} skipped")
+        tone = "success" if loaded_sources and not failures and not skipped else "warning" if loaded_sources else "error"
+        detail_lines = []
+        if failures:
+            detail_lines.append(
+                "Import failures:\n  " + "\n  ".join(f"{name}: {detail}" for name, detail in failures)
+            )
+        if skipped:
+            detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
+        self._set_import_status("Import summary: " + "  •  ".join(parts), detail="\n\n".join(detail_lines), tone=tone)
 
     # ------------------------------------------------------------------
     # Per-frame delay override (slider-based)
