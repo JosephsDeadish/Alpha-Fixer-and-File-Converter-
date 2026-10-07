@@ -333,37 +333,9 @@ def _optional_qt_runtime_notice() -> str:
 
 
 def _optional_feature_readiness_notice() -> str:
-    try:
-        from src.core.file_converter import dds_compression_available, optional_pillow_output_limits
-        from src.ui.video_tool import _get_ffmpeg_exe, _get_ffprobe_exe, _has_imageio, _has_imageio_ffmpeg
-    except Exception as exc:
-        logger.debug("Optional feature audit unavailable: %s", exc)
-        return ""
-
-    limits: list[str] = []
-    missing_video_bits: list[str] = []
-    if not _has_imageio():
-        missing_video_bits.append("imageio")
-    if not _has_imageio_ffmpeg():
-        missing_video_bits.append("imageio-ffmpeg")
-    if not _get_ffmpeg_exe():
-        missing_video_bits.append("ffmpeg")
-    if missing_video_bits:
-        limits.append("video import/MP4 export unavailable: missing " + ", ".join(missing_video_bits))
-    elif not _get_ffprobe_exe():
-        limits.append("odd-container probing limited: ffprobe unavailable")
-    if not dds_compression_available():
-        limits.append("DDS compressed variants unavailable: ImageMagick/wand runtime missing")
-    unavailable_formats = optional_pillow_output_limits()
-    if unavailable_formats:
-        preview = ", ".join(name for name, _reason in unavailable_formats[:3])
-        extra = len(unavailable_formats) - min(len(unavailable_formats), 3)
-        if extra > 0:
-            preview = f"{preview} +{extra} more"
-        limits.append(f"optional image exports unavailable: {preview}")
-    if not limits:
-        return ""
-    return "⚠ Optional feature limits detected: " + "; ".join(limits) + ". See tool banners for details."
+    summary = _runtime_capability_summary()
+    notice = summary.get("feature_readiness_notice")
+    return str(notice or "")
 
 
 def _runtime_capability_summary() -> dict[str, object]:
@@ -391,6 +363,39 @@ def _runtime_capability_summary() -> dict[str, object]:
     ffmpeg_path = _get_ffmpeg_exe() or ""
     ffprobe_path = _get_ffprobe_exe() or ""
     unavailable_outputs = optional_pillow_output_limits()
+    missing_video_bits: list[str] = []
+    if not has_imageio:
+        missing_video_bits.append("imageio")
+    if not has_imageio_ffmpeg:
+        missing_video_bits.append("imageio-ffmpeg")
+    if not ffmpeg_path:
+        missing_video_bits.append("ffmpeg")
+    readiness_limits: list[str] = []
+    if missing_video_bits:
+        readiness_limits.append(
+            "video import/MP4 export unavailable: missing " + ", ".join(missing_video_bits)
+        )
+    elif not ffprobe_path:
+        readiness_limits.append(
+            "odd-container probing/detail guidance limited: ffprobe unavailable"
+        )
+    if not dds_compression_available():
+        readiness_limits.append(
+            "DDS compressed variants unavailable: ImageMagick/wand runtime missing"
+        )
+    if unavailable_outputs:
+        preview = ", ".join(name for name, _reason in unavailable_outputs[:3])
+        extra = len(unavailable_outputs) - min(len(unavailable_outputs), 3)
+        if extra > 0:
+            preview = f"{preview} +{extra} more"
+        readiness_limits.append(f"optional image exports unavailable: {preview}")
+    feature_readiness_notice = ""
+    if readiness_limits:
+        feature_readiness_notice = (
+            "⚠ Optional feature limits detected: "
+            + "; ".join(readiness_limits)
+            + ". Main-window readiness and tool banners show the current supported paths."
+        )
 
     summary.update({
         "has_imageio": has_imageio,
@@ -399,9 +404,10 @@ def _runtime_capability_summary() -> dict[str, object]:
         "ffprobe_path": ffprobe_path,
         "video_runtime_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path),
         "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path and ffprobe_path),
+        "missing_video_bits": missing_video_bits,
         "dds_compression_available": bool(dds_compression_available()),
         "optional_output_limits": unavailable_outputs,
-        "feature_readiness_notice": _optional_feature_readiness_notice(),
+        "feature_readiness_notice": feature_readiness_notice,
     })
     return summary
 
@@ -1068,24 +1074,28 @@ def main():
         )
         sys.exit(1)
 
+    runtime_capabilities = _runtime_capability_summary()
+    window.set_runtime_capability_summary(runtime_capabilities)
+
     # Close splash and reveal main window after the splash duration
     if splash is not None:
         QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
 
     window.show()
 
-    missing_runtime_libs = _missing_linux_runtime_libs() if getattr(sys, "frozen", False) else []
-    runtime_notice = _packaged_runtime_notice(missing_runtime_libs)
+    runtime_notice = str(runtime_capabilities.get("packaged_runtime_notice") or "")
     if runtime_notice:
         logger.warning(runtime_notice)
         QTimer.singleShot(900, lambda: window.statusBar().showMessage(runtime_notice, 12000))
 
     optional_qt_notice = _optional_qt_runtime_notice()
     if optional_qt_notice:
+        runtime_capabilities["optional_qt_notice"] = optional_qt_notice
+        window.set_runtime_capability_summary(runtime_capabilities)
         logger.info(optional_qt_notice)
         QTimer.singleShot(1400, lambda: window.statusBar().showMessage(optional_qt_notice, 12000))
 
-    capability_notice = _optional_feature_readiness_notice()
+    capability_notice = str(runtime_capabilities.get("feature_readiness_notice") or "")
     if capability_notice:
         logger.warning(capability_notice)
         QTimer.singleShot(1900, lambda: window.statusBar().showMessage(capability_notice, 12000))

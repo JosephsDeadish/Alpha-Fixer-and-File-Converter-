@@ -19,8 +19,8 @@ from PyQt6.QtWidgets import (
 from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab
-from .converter_tool import ConverterTab
-from .gif_builder import GifBuilderDialog
+from .converter_tool import ConverterTab, _converter_capability_details, _converter_capability_summary
+from .gif_builder import GifBuilderDialog, _gif_builder_capability_summary
 from .history_tab import HistoryTab
 from .selective_alpha_tool import SelectiveAlphaTool
 from .settings_dialog import SettingsDialog
@@ -29,7 +29,7 @@ from .theme_engine import (
     get_theme_svg_path, get_theme_status,
     get_theme_tab_labels, get_theme_icon,
 )
-from .video_tool import VideoToolDialog
+from .video_tool import VideoToolDialog, _video_capability_summary
 try:
     from ..version import __version__, APP_NAME
 except Exception:
@@ -753,6 +753,87 @@ class _ToastNotification(QWidget):
             self.setWindowOpacity(self._opacity)
 
 
+def _runtime_readiness_banner_text(summary: dict[str, object] | None) -> str:
+    if not summary:
+        return "🧭 Readiness: scanning video/export/runtime support…"
+    parts: list[str] = []
+    if bool(summary.get("video_runtime_ready")):
+        parts.append("video import/MP4 export ready")
+    else:
+        missing = summary.get("missing_video_bits") or []
+        if missing:
+            parts.append("video/MP4 limited (" + ", ".join(str(bit) for bit in missing) + ")")
+        else:
+            parts.append("video/MP4 limited")
+    if bool(summary.get("odd_container_probe_ready")):
+        parts.append("odd-container probing ready")
+    elif bool(summary.get("video_runtime_ready")):
+        parts.append("odd-container probing limited")
+    if bool(summary.get("dds_compression_available")):
+        parts.append("DDS compressed output ready")
+    else:
+        parts.append("DDS compressed output limited")
+    optional_output_limits = summary.get("optional_output_limits") or []
+    if optional_output_limits:
+        parts.append(f"{len(optional_output_limits)} optional image export limit(s)")
+    runtime_libs = summary.get("missing_linux_runtime_libs") or []
+    if runtime_libs:
+        parts.append(f"{len(runtime_libs)} Linux runtime lib(s) missing")
+    return "🧭 Readiness: " + "  •  ".join(parts)
+
+
+def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
+    lines = [
+        "Main-window readiness snapshot",
+        "",
+    ]
+    if not summary:
+        lines.append("Runtime capability checks have not been populated yet.")
+        return "\n".join(lines)
+    packaged_notice = str(summary.get("packaged_runtime_notice") or "").strip()
+    feature_notice = str(summary.get("feature_readiness_notice") or "").strip()
+    if packaged_notice:
+        lines.append(packaged_notice)
+    optional_qt_notice = str(summary.get("optional_qt_notice") or "").strip()
+    if optional_qt_notice:
+        lines.append(optional_qt_notice)
+    if feature_notice:
+        lines.append(feature_notice)
+    if packaged_notice or optional_qt_notice or feature_notice:
+        lines.append("")
+    lines.extend([
+        "Runtime component audit:",
+        f"• imageio: {'ready' if summary.get('has_imageio') else 'missing'}",
+        f"• imageio-ffmpeg: {'ready' if summary.get('has_imageio_ffmpeg') else 'missing'}",
+        f"• ffmpeg: {summary.get('ffmpeg_path') or 'missing'}",
+        f"• ffprobe: {summary.get('ffprobe_path') or 'missing'}",
+        "• DDS compressed output: "
+        + ("ready" if summary.get("dds_compression_available") else "limited (ImageMagick/wand unavailable)"),
+    ])
+    optional_output_limits = summary.get("optional_output_limits") or []
+    if optional_output_limits:
+        lines.append("• Optional image exports unavailable:")
+        for name, reason in optional_output_limits:
+            lines.append(f"    - {name}: {reason}")
+    else:
+        lines.append("• Optional image exports: ready")
+    missing_runtime_libs = summary.get("missing_linux_runtime_libs") or []
+    if missing_runtime_libs:
+        lines.append("• Missing Linux runtime libs: " + ", ".join(str(lib) for lib in missing_runtime_libs))
+    lines.extend([
+        "",
+        "Converter:",
+        _converter_capability_details(),
+        "",
+        "GIF Builder:",
+        _gif_builder_capability_summary(),
+        "",
+        "Video Builder:",
+        _video_capability_summary(),
+    ])
+    return "\n".join(lines)
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -990,6 +1071,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: SettingsManager):
         super().__init__()
         self._settings = settings
+        self._runtime_capability_summary: dict[str, object] = {}
         self._preset_mgr = PresetManager(settings)
         self._trail_overlay = None
         self._click_effects = None
@@ -1003,6 +1085,7 @@ class MainWindow(QMainWindow):
         self._toolbar_panda_lbl: "QLabel | None" = None
         self._status_bar = None
         self._queue_status_label = None
+        self._readiness_lbl = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         # Cursor animation state
@@ -1198,6 +1281,14 @@ class MainWindow(QMainWindow):
         cv.addWidget(banner_container)
         self._banner_lbl = banner_text  # kept for theme update compatibility
 
+        self._readiness_lbl = QLabel(_runtime_readiness_banner_text(self._runtime_capability_summary))
+        self._readiness_lbl.setObjectName("subheader")
+        self._readiness_lbl.setWordWrap(True)
+        self._readiness_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._readiness_lbl.setStyleSheet("color: #888; padding: 0 10px 6px 10px;")
+        self._readiness_lbl.setToolTip(_runtime_readiness_banner_tooltip(self._runtime_capability_summary))
+        cv.addWidget(self._readiness_lbl)
+
         self._tabs = QTabWidget()
         self._bg_tabs = self._tabs
         # Item 43: Never show scroll arrows — tabs must always be visible.
@@ -1320,6 +1411,25 @@ class MainWindow(QMainWindow):
         # Toolbar panda label no longer used (toolbar removed); keep None so
         # _refresh_toolbar_icon() early-returns without errors.
         self._toolbar_panda_lbl = None
+
+    def set_runtime_capability_summary(self, summary: dict[str, object] | None) -> None:
+        self._runtime_capability_summary = dict(summary or {})
+        if self._readiness_lbl is None:
+            return
+        text = _runtime_readiness_banner_text(self._runtime_capability_summary)
+        tooltip = _runtime_readiness_banner_tooltip(self._runtime_capability_summary)
+        self._readiness_lbl.setText(text)
+        self._readiness_lbl.setToolTip(tooltip)
+        has_limits = bool(
+            self._runtime_capability_summary.get("feature_readiness_notice")
+            or self._runtime_capability_summary.get("packaged_runtime_notice")
+            or self._runtime_capability_summary.get("optional_qt_notice")
+        )
+        self._readiness_lbl.setStyleSheet(
+            "color: #b26a00; padding: 0 10px 6px 10px;"
+            if has_limits else
+            "color: #2e7d32; padding: 0 10px 6px 10px;"
+        )
 
     # ------------------------------------------------------------------
     # Visual / audio effects (trail, cursor, sound, click effects, tooltips)

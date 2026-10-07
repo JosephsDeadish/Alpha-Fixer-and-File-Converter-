@@ -575,9 +575,11 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(summary["video_runtime_ready"])
         self.assertFalse(summary["odd_container_probe_ready"])
         self.assertFalse(summary["dds_compression_available"])
+        self.assertEqual(summary["missing_video_bits"], [])
         self.assertEqual(summary["missing_linux_runtime_libs"], ["libEGL.so.1"])
         self.assertIn("libEGL.so.1", summary["packaged_runtime_notice"])
-        self.assertIn("odd-container probing limited: ffprobe unavailable", summary["feature_readiness_notice"])
+        self.assertIn("odd-container probing/detail guidance limited: ffprobe unavailable", summary["feature_readiness_notice"])
+        self.assertIn("Main-window readiness and tool banners show", summary["feature_readiness_notice"])
 
     def test_runtime_capability_dump_emits_prefixed_json(self):
         import main
@@ -591,6 +593,40 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_CAPABILITIES="))
         parsed = json.loads(line.split("=", 1)[1])
         self.assertEqual(parsed, payload)
+
+    def test_main_window_runtime_readiness_helpers_surface_limits(self):
+        _require_qt_gui(self)
+        from src.ui import main_window as mw
+
+        summary = {
+            "video_runtime_ready": False,
+            "odd_container_probe_ready": False,
+            "missing_video_bits": ["imageio", "ffmpeg"],
+            "dds_compression_available": False,
+            "optional_output_limits": [("AVIF", "needs libavif")],
+            "missing_linux_runtime_libs": ["libEGL.so.1"],
+            "packaged_runtime_notice": "⚠ Optional Linux runtime libraries are missing: libEGL.so.1.",
+            "feature_readiness_notice": "⚠ Optional feature limits detected: video import/MP4 export unavailable.",
+            "optional_qt_notice": "⚠ Optional Linux multimedia backends unavailable: PipeWire.",
+            "has_imageio": False,
+            "has_imageio_ffmpeg": True,
+            "ffmpeg_path": "",
+            "ffprobe_path": "",
+        }
+
+        banner = mw._runtime_readiness_banner_text(summary)
+        tooltip = mw._runtime_readiness_banner_tooltip(summary)
+
+        self.assertIn("video/MP4 limited (imageio, ffmpeg)", banner)
+        self.assertIn("DDS compressed output limited", banner)
+        self.assertIn("optional image export limit", banner)
+        self.assertIn("Main-window readiness snapshot", tooltip)
+        self.assertIn("imageio: missing", tooltip)
+        self.assertIn("ffmpeg: missing", tooltip)
+        self.assertIn("DDS compressed output: limited", tooltip)
+        self.assertIn("Converter:", tooltip)
+        self.assertIn("GIF Builder:", tooltip)
+        self.assertIn("Video Builder:", tooltip)
 
 
 # ---------------------------------------------------------------------------
