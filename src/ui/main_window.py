@@ -2691,7 +2691,9 @@ class MainWindow(QMainWindow):
             dlg = getattr(self, attr, None)
             if dlg is None or not dlg.isVisible():
                 continue
-            getter = getattr(dlg, "get_queue_status_text", None)
+            getter = getattr(dlg, "get_status_bar_text", None)
+            if not callable(getter):
+                getter = getattr(dlg, "get_queue_status_text", None)
             if not callable(getter):
                 continue
             text = str(getter() or "").strip()

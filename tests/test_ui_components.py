@@ -3243,6 +3243,35 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_builder_status_bar_text_includes_preview_and_mode(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            with patch.object(gb, "_has_ffmpeg", return_value=False):
+                with patch.object(gb, "_has_imageio", return_value=True):
+                    with patch.object(gb, "_has_imageio_ffmpeg", return_value=False):
+                        self.assertIn("image/GIF mode", dialog.get_status_bar_text())
+            dialog._frames = [
+                types.SimpleNamespace(source_path="/tmp/a.png"),
+                types.SimpleNamespace(source_path="/tmp/b.png"),
+            ]
+            dialog._update_count()
+            dialog._preview_frame_lbl.setText("2 / 2")
+            self.assertIn("preview 2 / 2", dialog.get_status_bar_text())
+            dialog._preview_timer.start(25)
+            try:
+                self.assertIn("playing", dialog.get_status_bar_text())
+            finally:
+                dialog._preview_timer.stop()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_gif_builder_uses_still_frame_fallback_for_visual_video_sources(self):
         try:
             from src.ui import gif_builder as gb
@@ -3323,6 +3352,31 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("recovery fallback", queue_updates[-1])
             self.assertTrue(notices)
             self.assertIn("Video Builder: Import summary:", notices[-1][0])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_status_bar_text_includes_preview_and_mode(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._video_io_available = False
+            self.assertIn("image/GIF mode", dialog.get_status_bar_text())
+            dialog._clips = [
+                types.SimpleNamespace(active_frames=24, load_note=""),
+                types.SimpleNamespace(active_frames=12, load_note="temporary ffmpeg remux fallback active"),
+            ]
+            dialog._fps_slider.setValue(24)
+            dialog._update_timeline_summary()
+            dialog._pos_lbl.setText("5 / 36")
+            self.assertIn("preview 5 / 36", dialog.get_status_bar_text())
+            dialog._is_playing = True
+            self.assertIn("playing", dialog.get_status_bar_text())
         finally:
             dialog.close()
             dialog.deleteLater()

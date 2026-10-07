@@ -8986,6 +8986,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._builder_status_label = QLabel(\"\")", src)
         self.assertIn("def _visible_builder_status_text(self) -> str:", src)
         self.assertIn("for attr in (\"_gif_builder_dlg\", \"_video_tool_dlg\"):", src)
+        self.assertIn('getter = getattr(dlg, "get_status_bar_text", None)', src)
         self.assertIn("def _update_builder_status(self, *_args) -> None:", src)
         self.assertIn("def _connect_builder_status(self, dialog) -> None:", src)
         self.assertIn("dialog.status_notice.connect(self._show_transient_status)", src)

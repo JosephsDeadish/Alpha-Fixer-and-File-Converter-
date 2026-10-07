@@ -2242,6 +2242,21 @@ class VideoToolDialog(QDialog):
             summary = summary.split(":", 1)[1].strip()
         return "🎬 Video Builder: " + summary
 
+    def get_status_bar_text(self) -> str:
+        if not self._clips:
+            mode = "video + MP4 ready" if self._video_io_available else "image/GIF mode"
+            return f"🎬 Video Builder ready  •  {mode}"
+        summary = self.get_queue_status_text()
+        extras = []
+        preview = self._pos_lbl.text().strip()
+        if preview and preview != "0 / 0":
+            extras.append(f"preview {preview}")
+        if self._is_playing:
+            extras.append("playing")
+        if extras:
+            summary += "  •  " + "  •  ".join(extras)
+        return summary
+
     def _update_ui_state(self) -> None:
         has_clips = bool(self._clips)
         row = self._clip_list.currentRow()
@@ -2748,6 +2763,7 @@ class VideoToolDialog(QDialog):
         if total == 0 or not self._clips:
             self._preview_lbl.setText("Add clips to preview and export.")
             self._pos_lbl.setText("0 / 0")
+            self.queue_status_changed.emit(self.get_queue_status_text())
             return
         g = max(0, min(self._scrubber.value(), total - 1))
         ci, fi = self._global_frame_to_clip(g)
@@ -2784,6 +2800,7 @@ class VideoToolDialog(QDialog):
                 source.close()
 
         self._pos_lbl.setText(f"{g + 1} / {total}")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _refresh_preview_adjustments(self) -> None:
         self._update_preview()
@@ -2806,6 +2823,7 @@ class VideoToolDialog(QDialog):
         else:
             self._preview_timer.stop()
             self._btn_play.setText("▶  Play")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _advance_preview(self) -> None:
         total = self._total_preview_frames()

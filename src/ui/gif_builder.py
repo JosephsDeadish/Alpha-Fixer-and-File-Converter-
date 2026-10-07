@@ -951,6 +951,23 @@ class GifBuilderDialog(QDialog):
             parts.append(f"{source_count} source{'s' if source_count != 1 else ''}")
         return "🎞 GIF Builder: " + "  •  ".join(parts)
 
+    def get_status_bar_text(self) -> str:
+        summary = self.get_queue_status_text()
+        extras = []
+        if self._frames:
+            preview = self._preview_frame_lbl.text().strip()
+            if preview and preview != "0 / 0":
+                extras.append(f"preview {preview}")
+            if self._preview_timer.isActive():
+                extras.append("playing")
+        elif _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
+            extras.append("video imports available")
+        else:
+            extras.append("image/GIF mode")
+        if extras:
+            summary += "  •  " + "  •  ".join(extras)
+        return summary
+
     def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
         colors = {
             "neutral": "gray",
@@ -1175,6 +1192,7 @@ class GifBuilderDialog(QDialog):
         else:
             self._preview_timer.stop()
             self._btn_play.setText("▶  Play")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _advance_preview(self) -> None:
         if not self._frames:
@@ -1197,6 +1215,7 @@ class GifBuilderDialog(QDialog):
             self._preview_lbl.setText("(no frames yet)")
             self._preview_frame_lbl.setText("0 / 0")
             self._update_frame_diagnostics()
+            self.queue_status_changed.emit(self.get_queue_status_text())
             return
         self._preview_idx = max(0, min(self._preview_idx, total - 1))
         entry = self._frames[self._preview_idx]
@@ -1207,6 +1226,7 @@ class GifBuilderDialog(QDialog):
         self._preview_lbl.setPixmap(pix)
         self._preview_frame_lbl.setText(f"{self._preview_idx + 1} / {total}")
         self._update_frame_diagnostics()
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
