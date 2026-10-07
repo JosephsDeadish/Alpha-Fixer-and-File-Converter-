@@ -65,6 +65,9 @@ hidden = [
 ]
 
 _LINUX_RUNTIME_LIBS = [
+    "libEGL.so.1",
+    "libGL.so.1",
+    "libGLESv2.so.2",
     "libpulse.so.0",
     "libxcb-keysyms.so.1",
     "libxcb-image.so.0",

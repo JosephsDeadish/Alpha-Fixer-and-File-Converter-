@@ -27,15 +27,41 @@ python -m pip install -r requirements.txt
 python - <<'PY'
 import importlib.util
 import os
+import ctypes
 
 has_wand = importlib.util.find_spec("wand") is not None
 magick_home = os.environ.get("MAGICK_HOME") or os.environ.get("IMAGEMAGICK_HOME")
+runtime_libs = [
+    "libEGL.so.1",
+    "libGL.so.1",
+    "libGLESv2.so.2",
+    "libpulse.so.0",
+    "libxcb-cursor.so.0",
+    "libxcb-icccm.so.4",
+    "libxcb-image.so.0",
+    "libxcb-keysyms.so.1",
+    "libxcb-render-util.so.0",
+    "libxcb-util.so.1",
+    "libxcb-xkb.so.1",
+    "libxkbcommon-x11.so.0",
+]
+missing_runtime_libs = []
+for name in runtime_libs:
+    try:
+        ctypes.CDLL(name)
+    except OSError:
+        missing_runtime_libs.append(name)
 print("Build capability audit:")
 print("  - imageio/imageio-ffmpeg runtime support will be bundled by the PyInstaller spec.")
 if has_wand and magick_home:
     print(f"  - DDS compressed variants can be bundled for out-of-box builds (wand + MAGICK_HOME={magick_home}).")
 else:
     print("  - NOTE: Full bundled DDS compression support needs wand plus MAGICK_HOME/IMAGEMAGICK_HOME set at build time.")
+if missing_runtime_libs:
+    print("  - WARNING: Packaging host is missing Linux runtime libs needed for a fully launchable Qt build:")
+    for name in missing_runtime_libs:
+        print(f"      * {name}")
+    print("    Install them first with: bash scripts/install_linux_deps.sh")
 PY
 
 # ── 3. Clean previous build artefacts ────────────────────────────────────────

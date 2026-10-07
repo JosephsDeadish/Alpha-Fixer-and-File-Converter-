@@ -157,6 +157,21 @@ _LINUX_INSTALL = {
     },
 }
 
+_LINUX_RUNTIME_AUDIT_LIBS = (
+    "libEGL.so.1",
+    "libGL.so.1",
+    "libGLESv2.so.2",
+    "libpulse.so.0",
+    "libxcb-cursor.so.0",
+    "libxcb-icccm.so.4",
+    "libxcb-image.so.0",
+    "libxcb-keysyms.so.1",
+    "libxcb-render-util.so.0",
+    "libxcb-util.so.1",
+    "libxcb-xkb.so.1",
+    "libxkbcommon-x11.so.0",
+)
+
 
 def _detect_distro() -> str:
     """Return a simple distribution key for install command lookup."""
@@ -188,7 +203,7 @@ def _detect_distro() -> str:
 
 def _check_system_libs() -> bool:
     """
-    Try to import PyQt6's core module. If it fails due to a missing shared
+    Try to import the Qt widget stack. If it fails due to a missing shared
     library, print a clear error with distro-specific install commands and
     return False so the caller can exit cleanly.
     """
@@ -197,7 +212,7 @@ def _check_system_libs() -> bool:
         return True
 
     try:
-        from PyQt6.QtCore import QCoreApplication  # noqa: F401 – just a probe
+        from PyQt6.QtWidgets import QApplication  # noqa: F401 – just a probe
         return True
     except ImportError as exc:
         err = str(exc)
@@ -233,7 +248,7 @@ def _missing_linux_runtime_libs() -> list[str]:
     if sys.platform != "linux":
         return []
     missing = []
-    for lib_name in _LINUX_INSTALL:
+    for lib_name in _LINUX_RUNTIME_AUDIT_LIBS:
         try:
             ctypes.CDLL(lib_name)
         except OSError:
