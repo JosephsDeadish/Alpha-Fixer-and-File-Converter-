@@ -495,6 +495,7 @@ class BeforeAfterWidget(QWidget):
 
         # Stand-alone BeforeAfterWidget with the same images
         compare = BeforeAfterWidget(dlg)
+        connected_movie = None
         _mirror_movie_frame = None
         if self._pix_before is not None:
             compare._pix_before = self._pix_before.copy()
@@ -509,7 +510,6 @@ class BeforeAfterWidget(QWidget):
         compare._stats_after = self._stats_after
         if self._movie_path:
             compare._movie_path = self._movie_path
-            connected_movie = None
 
             def _mirror_movie_frame(_frame_no: int) -> None:
                 if connected_movie is None:

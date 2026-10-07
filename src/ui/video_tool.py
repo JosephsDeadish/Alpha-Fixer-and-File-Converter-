@@ -1965,7 +1965,7 @@ class VideoToolDialog(QDialog):
                 cmd.extend(["-i", str(clip["path"])])
                 trim_start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
                 trim_end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
-                source_duration = max(0.001, float(clip["source_duration_seconds"]) or (trim_end - trim_start))
+                source_duration = max(0.001, trim_end - trim_start)
                 duration_ratio = max(0.001, output_duration) / source_duration
                 tempo_factor = max(0.01, 1.0 / duration_ratio)
                 filters = [
@@ -1995,6 +1995,12 @@ class VideoToolDialog(QDialog):
         if abs(volume - 1.0) > 0.0001:
             filter_parts.append(f"[a_concat]volume={volume:.3f}[a_out]")
             output_label = "[a_out]"
+        total_duration = sum(max(0.0, float(clip["timeline_seconds"])) for clip in clip_snapshot)
+        if total_duration > 0:
+            filter_parts.append(
+                f"{output_label}apad=whole_dur={total_duration:.6f},atrim=end={total_duration:.6f}[a_final]"
+            )
+            output_label = "[a_final]"
 
         cmd.extend([
             "-filter_complex", ";".join(filter_parts),
@@ -2002,7 +2008,6 @@ class VideoToolDialog(QDialog):
             "-map", output_label,
             "-c:v", "copy",
             "-c:a", "aac",
-            "-shortest",
             out_path,
         ])
 
