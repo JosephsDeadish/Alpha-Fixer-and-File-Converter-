@@ -93,8 +93,19 @@ fi
 
 if [[ -x "$launch_target" ]]; then
     echo "Running packaged launch smoke test…"
+    set +e
     QT_QPA_PLATFORM=offscreen ALPHA_FIXER_SMOKE_TEST=1.5 timeout 25s "$launch_target"
-    echo "✅  Packaged app launch verified."
+    smoke_rc=$?
+    set -e
+    if [[ $smoke_rc -eq 0 ]]; then
+        echo "✅  Packaged app launch verified."
+    elif [[ $smoke_rc -eq 124 ]]; then
+        echo "❌  ERROR: Packaged launch smoke test timed out after 25 seconds."
+        exit 1
+    else
+        echo "❌  ERROR: Packaged launch smoke test failed with exit code $smoke_rc."
+        exit "$smoke_rc"
+    fi
 else
     echo "⚠️  Skipping packaged launch smoke test because executable was not found at $launch_target"
 fi

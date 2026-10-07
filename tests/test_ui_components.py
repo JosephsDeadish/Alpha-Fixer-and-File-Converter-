@@ -2117,6 +2117,54 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
         self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
 
+    def test_export_mux_failure_keeps_existing_output_file(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        class _FakeWriter:
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                return None
+
+        dialog = vt.VideoToolDialog()
+        dialog._mp4_export_available = True
+        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            "active_frames": 1,
+            "path": "/tmp/source.mp4",
+            "source_path": "/tmp/source.mp4",
+            "clip_type": "video",
+            "has_audio": True,
+        }
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: True
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "existing.mp4")
+                with open(out_path, "wb") as fh:
+                    fh.write(b"original")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", return_value=_FakeWriter()):
+                        with patch.object(dialog, "_mux_mp4_audio", side_effect=RuntimeError("mux failed")):
+                            with patch.object(vt.QMessageBox, "critical") as critical_mock:
+                                dialog._export()
+                critical_mock.assert_called_once()
+                with open(out_path, "rb") as fh:
+                    self.assertEqual(fh.read(), b"original")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_video_export_records_history_and_remux_notes(self):
         _require_qt_gui(self)
         self._app = _get_app()

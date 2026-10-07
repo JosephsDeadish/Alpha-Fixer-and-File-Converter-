@@ -757,10 +757,10 @@ class _VideoFrameGetter:
         self._last_frame = None
 
     def _release_resources(self) -> None:
-            self._close_reader()
-            for cleanup_path in self._cleanup_paths:
-                _unlink_file_safely(cleanup_path)
-            self._cleanup_paths.clear()
+        self._close_reader()
+        for cleanup_path in self._cleanup_paths:
+            _unlink_file_safely(cleanup_path)
+        self._cleanup_paths.clear()
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
         from PIL import Image
@@ -2436,6 +2436,7 @@ class VideoToolDialog(QDialog):
         wrote_frames = False
         render_path = out_path
         temp_mp4 = None
+        temp_mux_output = None
         export_stage = "render setup"
         try:
             if fmt != "gif":
@@ -2556,7 +2557,16 @@ class VideoToolDialog(QDialog):
                 export_stage = "audio muxing"
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
-                self._mux_mp4_audio(render_path, out_path, clip_snapshot, fps)
+                mux_file = tempfile.NamedTemporaryFile(
+                    prefix="alpha_fixer_muxed_",
+                    suffix=".mp4",
+                    delete=False,
+                )
+                temp_mux_output = mux_file.name
+                mux_file.close()
+                self._mux_mp4_audio(render_path, temp_mux_output, clip_snapshot, fps)
+                Path(temp_mux_output).replace(out_path)
+                temp_mux_output = None
             progress.setValue(total)
         except Exception as exc:
             if not out_path_existed:
@@ -2567,6 +2577,11 @@ class VideoToolDialog(QDialog):
             if temp_mp4 is not None:
                 try:
                     Path(temp_mp4).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            if temp_mux_output is not None:
+                try:
+                    Path(temp_mux_output).unlink(missing_ok=True)
                 except Exception:
                     pass
             progress.close()
@@ -2581,6 +2596,11 @@ class VideoToolDialog(QDialog):
             if temp_mp4 is not None:
                 try:
                     Path(temp_mp4).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            if temp_mux_output is not None:
+                try:
+                    Path(temp_mux_output).unlink(missing_ok=True)
                 except Exception:
                     pass
             for frame in gif_frames:
