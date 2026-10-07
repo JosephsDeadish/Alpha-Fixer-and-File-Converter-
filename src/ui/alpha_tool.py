@@ -283,6 +283,7 @@ class AlphaFixerTab(QWidget):
         self._worker = None
         # Background file-collection thread (avoids UI freeze on large folders)
         self._collect_thread: _FileCollectThread | None = None
+        self._last_thumb_pause_count = 0
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
@@ -804,6 +805,9 @@ class AlphaFixerTab(QWidget):
         self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
         self._file_list.thumbnail_failed.connect(self._on_thumbnail_failed)
+        self._file_list.thumbnail_status_changed.connect(self._on_thumbnail_status_changed)
+        self._file_list.thumbnails_auto_paused.connect(self._on_thumbnails_auto_paused)
+        self._file_list.batch_import_completed.connect(self._on_batch_import_completed)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label
@@ -1004,9 +1008,55 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int)
     def _update_file_count(self, n: int):
-        self._file_count_lbl.setText(
-            f"{n} file{'s' if n != 1 else ''}  |  F5 to process  |  Esc to stop"
+        parts = [f"{n} file{'s' if n != 1 else ''}", "F5 to process", "Esc to stop"]
+        summary = self._file_list.get_thumbnail_summary()
+        pending = int(summary.get("pending_count", 0) or 0)
+        failed = int(summary.get("failure_count", 0) or 0)
+        if bool(summary.get("auto_paused")):
+            parts.append("thumbnail previews paused")
+        elif pending > 0:
+            parts.append(f"{pending} preview{'s' if pending != 1 else ''} pending")
+        if failed > 0:
+            parts.append(self._thumbnail_failure_status_text(summary))
+        self._file_count_lbl.setText("  |  ".join(parts))
+
+    def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
+        failed = int(summary.get("failure_count", 0) or 0)
+        categories = summary.get("failure_categories") or {}
+        if isinstance(categories, dict):
+            if categories.get("decode"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (decode)"
+            if categories.get("memory"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (memory)"
+            if categories.get("missing"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (missing)"
+        return f"{failed} preview failure{'s' if failed != 1 else ''}"
+
+    @pyqtSlot(bool, int, int, int)
+    def _on_thumbnail_status_changed(self, _paused: bool, _pending: int, _failed: int, _loaded: int) -> None:
+        self._update_file_count(self._file_list.count())
+
+    @pyqtSlot(int, int)
+    def _on_thumbnails_auto_paused(self, item_count: int, threshold: int) -> None:
+        if item_count == self._last_thumb_pause_count:
+            return
+        self._last_thumb_pause_count = item_count
+        self._log_msg(
+            f"⚠ Thumbnail previews auto-paused for large queue — {item_count:,} queued (threshold {threshold:,})."
         )
+        self._update_file_count(self._file_list.count())
+
+    @pyqtSlot(int, int, int)
+    def _on_batch_import_completed(self, added: int, deduped: int, requested: int) -> None:
+        if requested <= 0:
+            return
+        note = (
+            f"Added {added} new file{'s' if added != 1 else ''}"
+            + (f"; skipped {deduped} duplicate{'s' if deduped != 1 else ''}" if deduped else "")
+            + "."
+        )
+        self._log_msg(f"📥 {note}")
+        self._update_file_count(self._file_list.count())
 
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):

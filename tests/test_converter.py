@@ -775,6 +775,32 @@ class TestConvertFile(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Truncated DDS block data"):
                 _load_dds_raw(src)
 
+    def test_load_dds_rejects_truncated_dx10_header(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_truncated_dx10.dds")
+            _make_compressed_dds(src, 4, 4, b"DX10", b"")
+            with self.assertRaisesRegex(ValueError, "DDS DX10 header truncated"):
+                _load_dds_raw(src)
+
+    def test_load_dds_supports_dxt4_alias_blocks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dxt4.dds")
+            alpha_block = bytes([255, 0]) + bytes(6)
+            color0 = (0xF800).to_bytes(2, "little")
+            color1 = (0x0000).to_bytes(2, "little")
+            indices = (0).to_bytes(4, "little")
+            _make_compressed_dds(src, 4, 4, b"DXT4", alpha_block + color0 + color1 + indices)
+            img = _load_dds_raw(src)
+            try:
+                self.assertGreaterEqual(img.getpixel((0, 0))[0], 240)
+                self.assertEqual(img.getpixel((0, 0))[3], 255)
+            finally:
+                img.close()
+
     def test_supported_output_formats_includes_png(self):
         self.assertIn("PNG", SUPPORTED_OUTPUT_FORMATS)
 

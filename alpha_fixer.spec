@@ -49,6 +49,7 @@ hidden = [
     "src.ui.alpha_tool",
     "src.ui.converter_tool",
     "src.ui.history_tab",
+    "src.ui.video_tool",
     "src.ui.preview_pane",
     "src.ui.selective_alpha_tool",
     "src.ui.settings_dialog",

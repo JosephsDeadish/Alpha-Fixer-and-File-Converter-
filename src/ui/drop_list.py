@@ -337,6 +337,26 @@ class DropFileList(QListWidget):
     def get_thumbnail_failures(self) -> dict[str, str]:
         return dict(self._thumb_failure_reasons)
 
+    @staticmethod
+    def _classify_thumbnail_failure(reason: str) -> str:
+        text = (reason or "").strip().lower()
+        if any(token in text for token in ("no such file", "not found", "missing")):
+            return "missing"
+        if any(token in text for token in ("memory", "too large", "megapixel")):
+            return "memory"
+        if any(token in text for token in ("unsupported", "format", "decoder", "decode")):
+            return "decode"
+        if any(token in text for token in ("permission", "denied")):
+            return "permission"
+        return "other"
+
+    def _thumbnail_failure_categories(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for reason in self._thumb_failure_reasons.values():
+            key = self._classify_thumbnail_failure(reason)
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
     def get_thumbnail_summary(self) -> dict[str, object]:
         return {
             "enabled": self._thumb_enabled,
@@ -345,6 +365,7 @@ class DropFileList(QListWidget):
             "loaded_count": len(self._thumb_cache),
             "auto_paused": self.count() > _THUMB_AUTO_DISABLE,
             "selected_count": len(self.selectedItems()),
+            "failure_categories": self._thumbnail_failure_categories(),
             "failures": [
                 {"path": path, "reason": reason}
                 for path, reason in self._thumb_failure_reasons.items()

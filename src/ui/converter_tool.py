@@ -322,6 +322,8 @@ class ConverterTab(QWidget):
         self._batch_error_files: dict[str, list[str]] = {}
         self._batch_failure_details: list[dict[str, str]] = []
         self._thumbnail_failure_log_count = 0
+        self._last_batch_import_note = ""
+        self._last_thumb_pause_count = 0
         self._dds_compression_available = dds_compression_available()
         speed_layout = QHBoxLayout(self._gif_speed_widget)
         speed_layout.setContentsMargins(4, 2, 4, 2)
@@ -589,6 +591,9 @@ class ConverterTab(QWidget):
         self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
         self._file_list.thumbnail_failed.connect(self._on_thumbnail_failed)
+        self._file_list.thumbnail_status_changed.connect(self._on_thumbnail_status_changed)
+        self._file_list.thumbnails_auto_paused.connect(self._on_thumbnails_auto_paused)
+        self._file_list.batch_import_completed.connect(self._on_batch_import_completed)
         self._file_list.list_cleared.connect(self._reset_thumbnail_failure_log)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
@@ -783,9 +788,55 @@ class ConverterTab(QWidget):
 
     @pyqtSlot(int)
     def _update_count(self, n: int):
-        self._file_count_lbl.setText(
-            f"{n} file{'s' if n != 1 else ''}  |  F5 to convert  |  Esc to stop"
+        parts = [f"{n} file{'s' if n != 1 else ''}", "F5 to convert", "Esc to stop"]
+        summary = self._file_list.get_thumbnail_summary()
+        pending = int(summary.get("pending_count", 0) or 0)
+        failed = int(summary.get("failure_count", 0) or 0)
+        if bool(summary.get("auto_paused")):
+            parts.append("thumbnail previews paused")
+        elif pending > 0:
+            parts.append(f"{pending} preview{'s' if pending != 1 else ''} pending")
+        if failed > 0:
+            parts.append(self._thumbnail_failure_status_text(summary))
+        self._file_count_lbl.setText("  |  ".join(parts))
+
+    def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
+        failed = int(summary.get("failure_count", 0) or 0)
+        categories = summary.get("failure_categories") or {}
+        if isinstance(categories, dict):
+            if categories.get("decode"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (decode)"
+            if categories.get("memory"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (memory)"
+            if categories.get("missing"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (missing)"
+        return f"{failed} preview failure{'s' if failed != 1 else ''}"
+
+    @pyqtSlot(bool, int, int, int)
+    def _on_thumbnail_status_changed(self, _paused: bool, _pending: int, _failed: int, _loaded: int) -> None:
+        self._update_count(self._file_list.count())
+
+    @pyqtSlot(int, int)
+    def _on_thumbnails_auto_paused(self, item_count: int, threshold: int) -> None:
+        if item_count == self._last_thumb_pause_count:
+            return
+        self._last_thumb_pause_count = item_count
+        self._log_msg(
+            f"⚠ Thumbnail previews auto-paused for large queue — {item_count:,} queued (threshold {threshold:,})."
         )
+        self._update_count(self._file_list.count())
+
+    @pyqtSlot(int, int, int)
+    def _on_batch_import_completed(self, added: int, deduped: int, requested: int) -> None:
+        if requested <= 0:
+            return
+        self._last_batch_import_note = (
+            f"Added {added} new file{'s' if added != 1 else ''}"
+            + (f"; skipped {deduped} duplicate{'s' if deduped != 1 else ''}" if deduped else "")
+            + "."
+        )
+        self._log_msg(f"📥 {self._last_batch_import_note}")
+        self._update_count(self._file_list.count())
 
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
@@ -872,6 +923,8 @@ class ConverterTab(QWidget):
 
     def _reset_thumbnail_failure_log(self) -> None:
         self._thumbnail_failure_log_count = 0
+        self._last_batch_import_note = ""
+        self._last_thumb_pause_count = 0
 
     def _clear_preview_state(self) -> None:
         self._preview_debounce.stop()

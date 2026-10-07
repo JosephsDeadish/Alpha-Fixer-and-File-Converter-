@@ -672,6 +672,7 @@ class HistoryTab(QWidget):
             n_clips = str(entry.get("clip_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
+            notes = str(entry.get("notes", "") or "").strip()
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = _HistoryItem([ts, output, n_clips, n_ok, n_err, files])
@@ -680,12 +681,13 @@ class HistoryTab(QWidget):
             preview_text = "Preview: first clip thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
                 item.setIcon(0, thumb)
+            note_text = f"\nNotes: {notes}" if notes else ""
             _set_builder_tooltip(
                 item,
                 6,
                 f"Built: {ts}\nOutput: {output}\n"
                 f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n"
-                f"{preview_text}",
+                f"{preview_text}{note_text}",
                 file_list,
             )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:

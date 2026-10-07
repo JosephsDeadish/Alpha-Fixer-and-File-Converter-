@@ -232,6 +232,7 @@ class _ConverterTabSettingsStub:
     def __init__(self):
         self._store = {}
         self._history = []
+        self._video_history = []
 
     def get(self, key, fallback=None):
         return self._store.get(key, fallback)
@@ -244,6 +245,9 @@ class _ConverterTabSettingsStub:
 
     def add_converter_history(self, entry):
         self._history.append(entry)
+
+    def add_video_builder_history(self, entry):
+        self._video_history.append(entry)
 
 
 class TestConverterTab(unittest.TestCase):
@@ -379,6 +383,20 @@ class TestConverterTab(unittest.TestCase):
         self.assertTrue(self._widget._btn_retry_failed.isEnabled())
         self.assertTrue(self._widget._btn_keep_failed.isEnabled())
         self.assertTrue(self._widget._btn_skip_failed.isEnabled())
+
+    def test_batch_import_summary_is_logged(self):
+        self._widget._file_list.addItem("/tmp/a.png")
+        self._widget._file_list.batch_import_completed.emit(2, 1, 3)
+        self.assertIn("Added 2 new files; skipped 1 duplicate", self._widget._log.toPlainText())
+
+    def test_file_count_label_surfaces_pending_and_failed_previews(self):
+        self._widget._file_list.addItem("/tmp/a.png")
+        self._widget._file_list._pending.add("/tmp/a.png")
+        self._widget._file_list._on_thumb_failed("/tmp/a.png", "decode failed")
+        self._widget._update_count(self._widget._file_list.count())
+        label = self._widget._file_count_lbl.text()
+        self.assertIn("1 preview pending", label)
+        self.assertIn("1 preview failure", label)
         self.assertIn("2 failed files", self._widget._failure_actions_lbl.text())
         self.assertIn("repeated issue group", self._widget._failure_actions_lbl.text())
 
@@ -2062,6 +2080,55 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self._app.processEvents()
         self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
         self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
+
+    def test_video_export_records_history_and_remux_notes(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            "active_frames": 1,
+            "path": "/tmp/remuxed.mkv",
+            "source_path": "/tmp/game.iso",
+            "load_note": "temporary ffmpeg remux fallback active",
+        }
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        try:
+            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-history-test.mp4", "")):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("imageio.get_writer", return_value=_FakeWriter()):
+                        dialog._export()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(len(settings._video_history), 1)
+        entry = settings._video_history[0]
+        self.assertEqual(entry["output"], "/tmp/video-history-test.mp4")
+        self.assertEqual(entry["files"], ["game.iso"])
+        self.assertIn("remux fallback", entry["notes"])
 
 
 # ---------------------------------------------------------------------------

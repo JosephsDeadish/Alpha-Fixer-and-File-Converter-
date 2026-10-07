@@ -45,9 +45,22 @@ rm -rf build dist __pycache__
 if [[ "$1" == "--onefile" ]]; then
     echo "Building single-file executable…"
     pyinstaller alpha_fixer_onefile.spec
+    artifact="dist/AlphaFixerConverter"
+    artifact_kind="file"
 else
     echo "Building one-folder application…"
     pyinstaller alpha_fixer.spec
+    artifact="dist/AlphaFixerConverter"
+    artifact_kind="dir"
+fi
+
+echo "Verifying build artifacts…"
+if [[ "$artifact_kind" == "file" ]]; then
+    [[ -f "$artifact" ]] || { echo "❌  ERROR: Expected executable not found at $artifact"; exit 1; }
+    echo "✅  Executable verified: $(du -h "$artifact" | cut -f1)"
+else
+    [[ -d "$artifact" ]] || { echo "❌  ERROR: Expected app folder not found at $artifact"; exit 1; }
+    echo "✅  App folder verified: $(du -sh "$artifact" | cut -f1)"
 fi
 
 echo ""

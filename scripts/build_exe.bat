@@ -31,9 +31,27 @@ REM ── 4. Run PyInstaller ────────────────�
 if "%1"=="--onefile" (
     echo Building single-file executable…
     pyinstaller alpha_fixer_onefile.spec
+    set "ARTIFACT=dist\AlphaFixerConverter.exe"
+    if not exist "!ARTIFACT!" set "ARTIFACT=dist\AlphaFixerConverter"
 ) else (
     echo Building one-folder application…
     pyinstaller alpha_fixer.spec
+    set "ARTIFACT=dist\AlphaFixerConverter"
+)
+
+echo Verifying build artifacts…
+if "%1"=="--onefile" (
+    if not exist "!ARTIFACT!" (
+        echo ERROR: Expected executable not found at !ARTIFACT!
+        exit /b 1
+    )
+    for %%I in ("!ARTIFACT!") do echo Executable verified: %%~zI bytes
+) else (
+    if not exist "!ARTIFACT!" (
+        echo ERROR: Expected app folder not found at !ARTIFACT!
+        exit /b 1
+    )
+    dir /-c "!ARTIFACT!"
 )
 
 echo.

@@ -28,6 +28,7 @@ Opening the dialog:
 """
 from __future__ import annotations
 
+import datetime
 from functools import lru_cache
 import json
 import os
@@ -1653,9 +1654,11 @@ class VideoToolDialog(QDialog):
         total_frames = self._total_preview_frames()
         fps = max(0.1, float(self._fps_slider.value()))
         seconds = total_frames / fps if total_frames else 0.0
+        remuxed = sum(1 for clip in self._clips if getattr(clip, "load_note", ""))
+        extra = f"  •  {remuxed} remux fallback{'s' if remuxed != 1 else ''}" if remuxed else ""
         self._timeline_summary_lbl.setText(
             f"Timeline: {len(self._clips)} clip{'s' if len(self._clips) != 1 else ''}  •  "
-            f"{seconds:.2f} s  •  {total_frames} frames"
+            f"{seconds:.2f} s  •  {total_frames} frames{extra}"
         )
 
     def _update_ui_state(self) -> None:
@@ -1712,6 +1715,7 @@ class VideoToolDialog(QDialog):
 
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
         skipped = []
+        fallback_loaded: list[str] = []
         next_row = max(0, min(len(self._clips), insert_row))
         for path in paths:
             ext = Path(path).suffix.lower()
@@ -1726,6 +1730,8 @@ class VideoToolDialog(QDialog):
                     continue
                 label = _format_clip_label(clip, path, "🎞")
                 next_row = self._insert_clip(clip, label, next_row)
+                if clip.load_note:
+                    fallback_loaded.append(Path(path).name)
             elif ext in _IMAGE_EXTS:
                 clip = _load_image_as_clip(path)
                 if clip is None:
@@ -1738,6 +1744,14 @@ class VideoToolDialog(QDialog):
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()
+        if fallback_loaded:
+            QMessageBox.information(
+                self,
+                "Experimental Video Loaded",
+                "Loaded via temporary ffmpeg remux fallback:\n"
+                + "\n".join(fallback_loaded)
+                + "\n\nThe original source path stays attached for labeling and export history.",
+            )
         self._show_skipped_files(skipped)
 
     def _add_video(self) -> None:
@@ -1749,6 +1763,7 @@ class VideoToolDialog(QDialog):
 
     def _load_video_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
+        fallback_loaded: list[str] = []
         for path in paths:
             clip = _load_video_clip(path)
             if clip is None:
@@ -1760,9 +1775,56 @@ class VideoToolDialog(QDialog):
                 continue
             label = _format_clip_label(clip, path, "🎞")
             next_row = self._insert_clip(clip, label, next_row)
+            if clip.load_note:
+                fallback_loaded.append(Path(path).name)
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()
+        if fallback_loaded:
+            QMessageBox.information(
+                self,
+                "Experimental Video Loaded",
+                "Loaded via temporary ffmpeg remux fallback:\n"
+                + "\n".join(fallback_loaded)
+                + "\n\nThe original source path stays attached for labeling and export history.",
+            )
+
+    def _record_export_history(
+        self,
+        out_path: str,
+        fmt: str,
+        clip_snapshot: list[dict[str, object]],
+        success: int,
+        errors: int,
+    ) -> None:
+        settings = self._resolve_settings()
+        if settings is None:
+            return
+        files = [os.path.basename(str(clip.get("source_path") or clip.get("path") or "")) for clip in clip_snapshot]
+        remuxed = [
+            os.path.basename(str(clip.get("source_path") or clip.get("path") or ""))
+            for clip in clip_snapshot
+            if bool(clip.get("load_note"))
+        ]
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "output": out_path,
+            "format": fmt.upper(),
+            "clip_count": len(clip_snapshot),
+            "success": success,
+            "errors": errors,
+            "files": files,
+            "first_file": str(clip_snapshot[0].get("source_path") or clip_snapshot[0].get("path") or "") if clip_snapshot else "",
+        }
+        if remuxed:
+            entry["notes"] = (
+                f"Loaded via remux fallback: {', '.join(remuxed[:3])}"
+                + ("…" if len(remuxed) > 3 else "")
+            )
+        try:
+            settings.add_video_builder_history(entry)
+        except Exception:
+            pass
 
     def _add_images(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -2157,6 +2219,7 @@ class VideoToolDialog(QDialog):
             "frame_size": frame_size,
             "clip_type": clip_type,
             "path": clip.path,
+            "source_path": clip.source_path,
             "trim_start": trim_start,
             "trim_end": trim_end,
             "clip_fps": clip.fps,
@@ -2165,6 +2228,7 @@ class VideoToolDialog(QDialog):
             "timeline_seconds": timeline_seconds,
             "source_duration_seconds": source_duration_seconds,
             "has_audio": clip_type == "video" and clip.has_audio,
+            "load_note": clip.load_note,
         }
 
     def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):
@@ -2523,6 +2587,7 @@ class VideoToolDialog(QDialog):
             return
 
         progress.close()
+        self._record_export_history(out_path, fmt, clip_snapshot, len(clip_snapshot), 0)
         QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
 
     # ------------------------------------------------------------------
