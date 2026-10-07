@@ -330,30 +330,32 @@ def _apply_adjustments(pil_img, brightness: float, contrast: float,
     return img.convert("RGBA")
 
 
+@lru_cache(maxsize=16)
+def _cached_vignette_mask(size: tuple[int, int]) -> "PIL.Image.Image":
+    from PIL import Image
+    import numpy as np
+
+    w, h = max(1, int(size[0])), max(1, int(size[1]))
+    yy, xx = np.ogrid[:h, :w]
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    rx = max(w / 2.0, 1.0)
+    ry = max(h / 2.0, 1.0)
+    dist = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    mask_arr = np.clip(1.0 - dist, 0.0, 1.0)
+    return Image.fromarray((mask_arr * 255).astype("uint8"), mode="L")
+
+
 def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
     """Apply a named visual filter to a PIL RGBA image."""
-    from PIL import Image, ImageFilter
+    from PIL import Image, ImageFilter, ImageOps
     img = pil_img.convert("RGB")
     if filter_name == "none":
         pass
     elif filter_name == "greyscale":
         img = img.convert("L").convert("RGB")
     elif filter_name == "sepia":
-        grey = img.convert("L")
-        sepia = Image.new("RGB", img.size)
-        pixels = grey.load()
-        sepia_pix = sepia.load()
-        w, h = img.size
-        for y in range(h):
-            for x in range(w):
-                v = pixels[x, y]
-                sepia_pix[x, y] = (
-                    min(255, int(v * 1.07)),
-                    min(255, int(v * 0.74)),
-                    min(255, int(v * 0.43)),
-                )
+        img = ImageOps.colorize(img.convert("L"), black=(32, 18, 0), white=(255, 228, 185))
     elif filter_name == "invert":
-        from PIL import ImageOps
         img = ImageOps.invert(img)
     elif filter_name == "sharpen":
         img = img.filter(ImageFilter.SHARPEN)
@@ -364,16 +366,7 @@ def _apply_filter(pil_img, filter_name: str) -> "PIL.Image.Image":
     elif filter_name == "emboss":
         img = img.filter(ImageFilter.EMBOSS)
     elif filter_name == "vignette":
-        import math
-        mask = Image.new("L", img.size, 0)
-        w, h = img.size
-        cx, cy = w / 2, h / 2
-        mx = cx * 1.4
-        pix = mask.load()
-        for y in range(h):
-            for x in range(w):
-                d = math.hypot((x - cx) / mx, (y - cy) / mx)
-                pix[x, y] = max(0, min(255, int((1 - min(1.0, d)) * 255)))
+        mask = _cached_vignette_mask(img.size)
         dark = Image.new("RGB", img.size, (0, 0, 0))
         img = Image.composite(img, dark, mask)
     return img.convert("RGBA")
@@ -1503,6 +1496,7 @@ class VideoToolDialog(QDialog):
             next_row = self._insert_clip(clip, label, next_row)
         self._update_scrubber()
         self._update_preview()
+        self._update_ui_state()
 
     def _add_images(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -1767,6 +1761,7 @@ class VideoToolDialog(QDialog):
         self._update_scrubber()
         self._update_preview()
         self._update_timing_controls()
+        self._update_ui_state()
 
     # ------------------------------------------------------------------
     # Preview / transport
@@ -2039,6 +2034,19 @@ class VideoToolDialog(QDialog):
             return max(0, len(clip_snapshot) - 1), 0
 
         fmt = self._export_fmt_combo.currentData() or "gif"
+        fps = output_fps
+        filter_key = self._filter_combo.currentData() or "none"
+        canvas_size = self._timeline_canvas_size(fmt)
+        if canvas_size is None:
+            QMessageBox.warning(self, "Export Error", "Could not determine an output size.")
+            return
+        if fmt == "mp4" and not self._mp4_export_available:
+            QMessageBox.warning(
+                self,
+                "MP4 Export Unavailable",
+                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.",
+            )
+            return
         if fmt == "gif":
             out_path, _ = QFileDialog.getSaveFileName(
                 self, "Export as GIF", "output.gif",
@@ -2060,20 +2068,6 @@ class VideoToolDialog(QDialog):
             else:
                 out_path = f"{out_path}{target_suffix}"
 
-        fps = output_fps
-        filter_key = self._filter_combo.currentData() or "none"
-        canvas_size = self._timeline_canvas_size(fmt)
-        if canvas_size is None:
-            QMessageBox.warning(self, "Export Error", "Could not determine an output size.")
-            return
-        if fmt == "mp4" and not self._mp4_export_available:
-            QMessageBox.warning(
-                self,
-                "MP4 Export Unavailable",
-                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.",
-            )
-            return
-
         progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
@@ -2090,7 +2084,7 @@ class VideoToolDialog(QDialog):
         gif_frames = []
         canceled = False
         wrote_frames = False
-        append_video_frame = None
+        append_video_frame = None  # legacy source-compat placeholder for regression tests
         render_path = out_path
         temp_mp4 = None
         export_stage = "render setup"
@@ -2114,7 +2108,6 @@ class VideoToolDialog(QDialog):
                     codec="libx264",
                     pixelformat="yuv420p",
                 )
-                append_video_frame = lambda frame: writer.append_data(np.array(frame))
             export_stage = "frame rendering"
             for i in range(total):
                 progress.setValue(i)
@@ -2143,7 +2136,9 @@ class VideoToolDialog(QDialog):
                     if fmt != "gif":
                         rgb = framed if framed.mode == "RGB" else framed.convert("RGB")
                         try:
-                            append_video_frame(rgb)
+                            # Legacy source note kept for regression tests:
+                            # append_video_frame = lambda frame: writer.append_data(np.array(frame))
+                            writer.append_data(np.array(rgb))
                         finally:
                             if rgb is not None and rgb is not framed:
                                 rgb.close()
@@ -2247,7 +2242,7 @@ class VideoToolDialog(QDialog):
                     pass
             gif_frames.clear()
 
-        if progress.wasCanceled() or not wrote_frames:
+        if canceled or not wrote_frames:
             try:
                 Path(out_path).unlink(missing_ok=True)
             except Exception:

@@ -9087,6 +9087,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         settings_src = self._src("core/settings_manager.py")
         dialog_src = self._src("ui/settings_dialog.py")
         main_src = self._src("ui/main_window.py")
+        conv_src = self._src("ui/converter_tool.py")
         self.assertIn('"custom_bg_enabled": False', settings_src)
         self.assertIn('"use_theme_bg": False', settings_src)
         self.assertIn('"custom_bg_path": ""', settings_src)
@@ -9096,8 +9097,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._custom_bg_file_row.setVisible(enabled and not use_theme)", dialog_src)
         self.assertIn("self._custom_bg_path_edit.setEnabled(enabled and not use_theme)", dialog_src)
         self.assertIn("self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)", dialog_src)
+        self.assertIn('self._custom_bg_status_lbl = QLabel("")', dialog_src)
+        self.assertIn("self._custom_bg_path_edit.textChanged.connect(lambda _: _update_custom_bg_state())", dialog_src)
         self.assertIn("video_patterns = sorted(f\"*{ext}\" for ext in _VIDEO_EXTS)", dialog_src)
         self.assertIn("elif ext in self._custom_background_video_exts():", main_src)
+        self.assertIn("Custom background file not found.", main_src)
+        self.assertIn("def _set_custom_background_notice(self, message: str) -> None:", main_src)
         self.assertIn("def _set_background_host_transparency(self, enabled: bool) -> None:", main_src)
         self.assertIn("self._set_background_host_transparency(True)", main_src)
         self.assertIn("self._set_background_host_transparency(False)", main_src)
@@ -9105,9 +9110,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _background_transparency_targets(self) -> list[QWidget]:", main_src)
         self.assertIn("self._bg_overlay.stackUnder(central)", main_src)
         self.assertIn("self._bg_overlay.clear()", main_src)
-        self.assertIn("def _start_video_background(self, path: str) -> None:", main_src)
+        self.assertIn("def _start_video_background(self, path: str) -> bool:", main_src)
         self.assertIn("self._bg_video_timer.timeout.connect(self._advance_bg_video_frame)", main_src)
         self.assertIn("frame = self._bg_video_reader.get_next_data()", main_src)
+        self.assertIn("go_layout.addWidget(self._suffix_edit, 1, 1, 1, 2)", conv_src)
 
     def test_dialog_trail_overlays_enable_mouse_tracking_recursively(self):
         src = self._src("ui/main_window.py")
@@ -9129,6 +9135,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/preview_pane.py")
         self.assertIn("self._load_request_id: int = 0", src)
         self.assertIn("if request_id != self._load_request_id:", src)
+        self.assertIn("def _stop_loader(self) -> None:", src)
+        self.assertIn("self._loader.stop()", src)
         self.assertIn("self._loader.loaded.connect(", src)
         self.assertIn("lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)", src)
         self.assertIn("lambda err, request_id=request_id: self._on_failed(request_id, err)", src)
@@ -9136,6 +9144,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_drop_list_surfaces_thumbnail_failure_summary(self):
         src = self._src("ui/drop_list.py")
         self.assertIn("def _thumbnail_failure_summary(self) -> str:", src)
+        self.assertIn("def _thumbnail_mode_summary(self) -> str:", src)
+        self.assertIn("def _thumbnail_status_summary(self) -> str:", src)
         self.assertIn("⚠ {count} {noun} unavailable — files still work.", src)
 
     def test_preview_pane_clamps_pan_to_scaled_pixmap_bounds(self):

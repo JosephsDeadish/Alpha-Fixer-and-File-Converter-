@@ -509,8 +509,6 @@ class BeforeAfterWidget(QWidget):
         compare._stats_after = self._stats_after
         if self._movie_path:
             compare._movie_path = self._movie_path
-            if self._pix_before is not None:
-                compare._pix_before = self._pix_before.copy()
 
             def _mirror_movie_frame(_frame_no: int) -> None:
                 if self._movie is None:
@@ -1248,7 +1246,8 @@ class ImagePreviewPane(QWidget):
                 self._loader.loaded.disconnect()
                 self._loader.failed.disconnect()
             except RuntimeError:
-                pass  # already disconnected
+                pass
+            self._loader = None
         self._meta_label.setText("Loading…")
         self._loader = loader
         self._loader.loaded.connect(
@@ -1261,17 +1260,26 @@ class ImagePreviewPane(QWidget):
 
     def clear(self):
         self._load_request_id += 1
-        if self._loader is not None:
-            self._loader.stop()
-            try:
-                self._loader.loaded.disconnect()
-                self._loader.failed.disconnect()
-            except RuntimeError:
-                pass
-            self._loader = None
+        self._stop_loader()
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText("Select a file to preview")
+
+    def closeEvent(self, event):
+        self._stop_loader()
+        super().closeEvent(event)
+
+    def _stop_loader(self) -> None:
+        loader = self._loader
+        if loader is None:
+            return
+        self._loader = None
+        loader.stop()
+        try:
+            loader.loaded.disconnect()
+            loader.failed.disconnect()
+        except RuntimeError:
+            pass
 
     # ------------------------------------------------------------------
     # Slots
@@ -1280,6 +1288,7 @@ class ImagePreviewPane(QWidget):
     def _on_loaded(self, request_id: int, qimg: QImage, meta: str):
         if request_id != self._load_request_id:
             return
+        self._loader = None
         # Store the full pixmap so _update_display_pix can re-scale it any
         # time the pane changes size (e.g., window resize or splitter drag).
         self._current_pix = QPixmap.fromImage(qimg)
@@ -1304,6 +1313,7 @@ class ImagePreviewPane(QWidget):
     def _on_failed(self, request_id: int, err: str):
         if request_id != self._load_request_id:
             return
+        self._loader = None
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText(f"Preview unavailable\n{err[:80]}")

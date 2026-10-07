@@ -12,6 +12,7 @@ import shutil
 import time
 import traceback
 import logging
+import concurrent.futures
 from pathlib import Path
 from typing import Optional
 
@@ -298,12 +299,9 @@ class ConverterWorker(QThread):
         # For large batches use a thread pool so multiple files are processed
         # concurrently (I/O-bound — benefits from parallelism even on the GIL).
         # Item 26: parallel conversion significantly reduces wall-clock time.
-        import concurrent.futures
-
         # Number of parallel workers: CPU count, capped at 8 to avoid too many
         # simultaneous open files (each PIL operation holds file handles briefly).
-        import os as _os
-        n_workers = min(8, max(1, (_os.cpu_count() or 1)))
+        n_workers = min(8, max(1, (os.cpu_count() or 1)))
 
         def _convert_one(idx: int, src: str) -> tuple[int, str, bool, str]:
             """Convert one file and return (index, src, ok, dest_or_error)."""
@@ -331,6 +329,7 @@ class ConverterWorker(QThread):
                 return idx, src, False, traceback.format_exc()
 
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_workers)
+        skip_wait_shutdown = False
         try:
             pending: "set[concurrent.futures.Future]" = set()
             next_idx = 0
@@ -363,7 +362,7 @@ class ConverterWorker(QThread):
                             try:
                                 self.progress.emit(order_idx, total, src_path)
                             except RuntimeError:
-                                pool.shutdown(wait=False, cancel_futures=True)
+                                skip_wait_shutdown = True
                                 return
                             last_progress_time = now
                         if ok:
@@ -372,7 +371,7 @@ class ConverterWorker(QThread):
                                 try:
                                     self.file_done.emit(src_path, True, dest_or_err)
                                 except RuntimeError:
-                                    pool.shutdown(wait=False, cancel_futures=True)
+                                    skip_wait_shutdown = True
                                     return
                         else:
                             errors += 1
@@ -380,15 +379,14 @@ class ConverterWorker(QThread):
                             try:
                                 self.file_done.emit(src_path, False, dest_or_err)
                             except RuntimeError:
-                                pool.shutdown(wait=False, cancel_futures=True)
+                                skip_wait_shutdown = True
                                 return
                         emit_idx += 1
                     while next_idx < total and len(pending) < n_workers and not self._abort:
                         pending.add(pool.submit(_convert_one, next_idx, self._files[next_idx]))
                         next_idx += 1
         finally:
-            if not self._abort:
-                pool.shutdown(wait=True, cancel_futures=False)
+            pool.shutdown(wait=not skip_wait_shutdown, cancel_futures=(self._abort or skip_wait_shutdown))
 
         try:
             self.finished.emit(success, errors)

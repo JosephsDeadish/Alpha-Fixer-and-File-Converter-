@@ -177,6 +177,22 @@ class TestDropFileList(unittest.TestCase):
             "⚠ 2 thumbnails unavailable — files still work.",
         )
 
+    def test_thumbnail_status_summary_includes_mode_and_failures(self):
+        self._widget.set_thumbnails_enabled(False)
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_status_summary(),
+            "🖼 Thumbnails off  •  ⚠ 1 thumbnail unavailable — files still work.",
+        )
+
+    def test_thumbnail_mode_summary_reports_large_list_pause(self):
+        for idx in range(3001):
+            self._widget.addItem(f"/tmp/{idx}.png")
+        self.assertEqual(
+            self._widget._thumbnail_mode_summary(),
+            "🖼 Thumbnail previews paused for large lists (3,000+ files)",
+        )
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys

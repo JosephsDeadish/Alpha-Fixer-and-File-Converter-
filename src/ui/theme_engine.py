@@ -3659,7 +3659,7 @@ QTabBar QToolButton:pressed {{
 QTabBar QToolButton:disabled {{
     background: {t['background']};
     border-color: {t['border']};
-    opacity: 0.4;
+    color: {t['text_secondary']};
 }}
 
 /* ===== Buttons ===== */

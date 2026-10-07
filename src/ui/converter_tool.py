@@ -207,7 +207,7 @@ class ConverterTab(QWidget):
         saved_suffix = self._settings.get("output_suffix", "")
         if saved_suffix:
             self._suffix_edit.setText(saved_suffix)
-        go_layout.addWidget(self._suffix_edit, 1, 1)
+        go_layout.addWidget(self._suffix_edit, 1, 1, 1, 2)
 
         lv.addWidget(grp_out)
 

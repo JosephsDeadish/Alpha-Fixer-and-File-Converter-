@@ -13,7 +13,7 @@ import logging
 from collections import OrderedDict
 
 from PyQt6.QtCore import (
-    Qt, QEvent, QEventLoop, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
+    Qt, QEvent, pyqtSignal, QTimer, QSize, QRunnable, QThreadPool,
     QObject, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QIcon, QPixmap, QImage, QPainter, QColor, QFont
@@ -282,7 +282,7 @@ class DropFileList(QListWidget):
             )
             painter.end()
             return
-        summary = self._thumbnail_failure_summary()
+        summary = self._thumbnail_status_summary()
         if summary:
             painter = QPainter(self.viewport())
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -405,6 +405,20 @@ class DropFileList(QListWidget):
             return ""
         noun = "thumbnail" if count == 1 else "thumbnails"
         return f"⚠ {count} {noun} unavailable — files still work."
+
+    def _thumbnail_mode_summary(self) -> str:
+        if not self._thumb_enabled:
+            return "🖼 Thumbnails off"
+        if self.count() > _THUMB_AUTO_DISABLE:
+            return f"🖼 Thumbnail previews paused for large lists ({_THUMB_AUTO_DISABLE:,}+ files)"
+        return ""
+
+    def _thumbnail_status_summary(self) -> str:
+        parts = [part for part in (
+            self._thumbnail_mode_summary(),
+            self._thumbnail_failure_summary(),
+        ) if part]
+        return "  •  ".join(parts)
 
     # ------------------------------------------------------------------
     # Public batch-add helper (avoids UI freeze for large imports)

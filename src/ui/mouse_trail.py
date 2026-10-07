@@ -158,8 +158,7 @@ class MouseTrailOverlay(QWidget):
         self._color = QColor(color)
 
     def set_style(self, style: str) -> None:
-        """Set trail style: 'dots', 'fairy', 'wave', 'sparkle', 'comet', 'ribbon',
-        'rainbow', 'noodle', or 'distortion'."""
+        """Set trail style to one of the names in ``_ALL_STYLES``."""
         self._style = style if style in _ALL_STYLES else "dots"
         self._trail.clear()
         if style == "noodle":

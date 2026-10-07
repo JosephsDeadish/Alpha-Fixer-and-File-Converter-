@@ -1021,6 +1021,7 @@ class MainWindow(QMainWindow):
         self._bg_video_timer: "QTimer | None" = None
         self._bg_host_widgets: list[QWidget] = []
         self._bg_tabs: "QTabWidget | None" = None
+        self._bg_notice: str = ""
         self._cursor_anim_idx: int = 0            # index of next frame to show
         self._banner_frames: list[str] = []
         self._banner_frame_idx: int = 0
@@ -2485,56 +2486,84 @@ class MainWindow(QMainWindow):
             self._bg_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             self._bg_overlay.lower()
 
-        if not enabled or use_theme or not path:
+        def _disable_custom_background(notice: str = "") -> None:
             self._stop_custom_background_media()
             self._set_background_host_transparency(False)
             self._bg_overlay.setVisible(False)
+            if notice:
+                self._set_custom_background_notice(notice)
+            else:
+                self._clear_custom_background_notice()
+
+        if not enabled or use_theme or not path:
+            _disable_custom_background()
             return
 
         if not os.path.isfile(path):
-            self._stop_custom_background_media()
-            self._set_background_host_transparency(False)
-            self._bg_overlay.setVisible(False)
+            _disable_custom_background("Custom background file not found.")
             return
 
         self._bg_overlay.setGeometry(self.rect())
-        self._set_background_host_transparency(True)
         ext = os.path.splitext(path)[1].lower()
-
-        if ext == ".gif":
-            # Use a QMovie for animated GIFs.
-            self._stop_custom_background_media(stop_movie=False)
-            if self._bg_movie is None or self._bg_movie.fileName() != path:
-                if self._bg_movie is not None:
+        applied = False
+        notice = ""
+        try:
+            if ext == ".gif":
+                # Use a QMovie for animated GIFs.
+                self._stop_custom_background_media(stop_movie=False)
+                if self._bg_movie is None or self._bg_movie.fileName() != path:
+                    if self._bg_movie is not None:
+                        try:
+                            self._bg_movie.stop()
+                        except Exception:
+                            pass
+                    from PyQt6.QtGui import QMovie
+                    self._bg_movie = QMovie(path, parent=self)
+                    self._bg_movie.setScaledSize(self.size())
+                    self._bg_overlay.setMovie(self._bg_movie)
+                    self._bg_movie.start()
+                applied = bool(self._bg_movie is not None and self._bg_movie.isValid())
+                if not applied:
+                    notice = "Custom background GIF could not be loaded."
+            elif ext in self._custom_background_video_exts():
+                applied = self._start_video_background(path)
+                if not applied:
+                    notice = "Custom background video could not be loaded."
+            else:
+                # Static image via pixmap.
+                self._stop_custom_background_media()
+                px = QPixmap(path)
+                if px.isNull():
                     try:
-                        self._bg_movie.stop()
+                        from PIL import Image as _PILImage
+                        from PIL.ImageQt import ImageQt as _IQt
+
+                        with _PILImage.open(path) as pil_img:
+                            rgba_img = pil_img.convert("RGBA")
+                            try:
+                                px = QPixmap.fromImage(_IQt(rgba_img))
+                            finally:
+                                rgba_img.close()
                     except Exception:
                         pass
-                from PyQt6.QtGui import QMovie
-                self._bg_movie = QMovie(path, parent=self)
-                self._bg_movie.setScaledSize(self.size())
-                self._bg_overlay.setMovie(self._bg_movie)
-                self._bg_movie.start()
-        elif ext in self._custom_background_video_exts():
-            self._start_video_background(path)
-        else:
-            # Static image via pixmap.
-            self._stop_custom_background_media()
-            px = QPixmap(path)
-            if px.isNull():
-                try:
-                    from PIL import Image as _PILImage
-                    from PIL.ImageQt import ImageQt as _IQt
-                    pil = _PILImage.open(path).convert("RGBA")
-                    px = QPixmap.fromImage(_IQt(pil))
-                except Exception:
-                    pass
-            if not px.isNull():
-                self._bg_overlay.setPixmap(px)
-                self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+                if not px.isNull():
+                    self._bg_overlay.setPixmap(px)
+                    self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+                    applied = True
+                else:
+                    notice = "Custom background image could not be loaded."
+        except Exception as exc:
+            applied = False
+            notice = str(exc).strip() or "Custom background could not be loaded."
 
+        if not applied:
+            _disable_custom_background(notice)
+            return
+
+        self._set_background_host_transparency(True)
         self._bg_overlay.setVisible(True)
         self._restack_background_overlay()
+        self._clear_custom_background_notice()
 
     def resizeEvent(self, event: "QResizeEvent") -> None:  # noqa: N802
         """Keep the background overlay and effect overlays in sync with window size."""
@@ -2608,6 +2637,16 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    def _set_custom_background_notice(self, message: str) -> None:
+        if not message or message == self._bg_notice:
+            return
+        self._bg_notice = message
+        if self._status_bar is not None:
+            self._status_bar.showMessage(message, 7000)
+
+    def _clear_custom_background_notice(self) -> None:
+        self._bg_notice = ""
+
     def _restack_background_overlay(self) -> None:
         if self._bg_overlay is None:
             return
@@ -2642,11 +2681,11 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-    def _start_video_background(self, path: str) -> None:
+    def _start_video_background(self, path: str) -> bool:
         from .video_tool import _open_video_reader
 
         if self._bg_overlay is None:
-            return
+            return False
         if self._bg_video_timer is None:
             self._bg_video_timer = QTimer(self)
             self._bg_video_timer.timeout.connect(self._advance_bg_video_frame)
@@ -2668,12 +2707,14 @@ class MainWindow(QMainWindow):
         fps = fps if fps > 0 else 25.0
         self._bg_video_timer.setInterval(max(15, int(round(1000.0 / fps))))
         self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
-        self._advance_bg_video_frame()
+        if not self._advance_bg_video_frame():
+            return False
         self._bg_video_timer.start()
+        return True
 
-    def _advance_bg_video_frame(self) -> None:
+    def _advance_bg_video_frame(self) -> bool:
         if self._bg_overlay is None or self._bg_video_reader is None:
-            return
+            return False
         frame = None
         for _ in range(2):
             try:
@@ -2689,15 +2730,16 @@ class MainWindow(QMainWindow):
                     self._bg_video_reader = _open_video_reader(self._bg_video_path)
                 except Exception:
                     self._stop_custom_background_media()
-                    return
+                    return False
         if frame is None:
-            return
+            return False
         pixmap = self._background_frame_to_pixmap(frame)
         if pixmap.isNull():
-            return
+            return False
         self._bg_overlay.setPixmap(pixmap)
         self._bg_overlay.setVisible(True)
         self._restack_background_overlay()
+        return True
 
     def _background_frame_to_pixmap(self, frame) -> QPixmap:
         try:

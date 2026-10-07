@@ -286,6 +286,11 @@ class SettingsDialog(QDialog):
         self._custom_bg_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
         self._custom_bg_theme_info_lbl.setVisible(False)
         _cbg_vl.addWidget(self._custom_bg_theme_info_lbl)
+        self._custom_bg_status_lbl = QLabel("")
+        self._custom_bg_status_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._custom_bg_status_lbl.setWordWrap(True)
+        self._custom_bg_status_lbl.setVisible(False)
+        _cbg_vl.addWidget(self._custom_bg_status_lbl)
         # File picker row (hidden when use-theme is on)
         self._custom_bg_file_row = QWidget()
         _cbg_file_hl = QHBoxLayout(self._custom_bg_file_row)
@@ -308,17 +313,38 @@ class SettingsDialog(QDialog):
         _cbg_vl.addWidget(self._custom_bg_file_row)
         custom_bg_layout.addWidget(self._custom_bg_sub)
 
+        def _background_status_text(enabled: bool, use_theme: bool, path: str) -> str:
+            if not enabled or use_theme:
+                return ""
+            if not path:
+                return "Choose an image, GIF, or video file to replace the solid theme background."
+            if not os.path.isfile(path):
+                return "Selected background file was not found."
+            ext = os.path.splitext(path)[1].lower()
+            if ext == ".gif":
+                kind = "Animated GIF"
+            elif ext in _VIDEO_EXTS:
+                kind = "Video"
+            else:
+                kind = "Image"
+            return f"{kind} selected: {os.path.basename(path)}"
+
         def _update_custom_bg_state():
             enabled = self._custom_bg_check.isChecked()
             use_theme = self._use_theme_bg_check.isChecked()
+            path = self._custom_bg_path_edit.text().strip()
             self._custom_bg_sub.setVisible(enabled)
             self._custom_bg_file_row.setVisible(enabled and not use_theme)
             self._custom_bg_theme_info_lbl.setVisible(enabled and use_theme)
             self._custom_bg_path_edit.setEnabled(enabled and not use_theme)
             self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)
+            status_text = _background_status_text(enabled, use_theme, path)
+            self._custom_bg_status_lbl.setText(status_text)
+            self._custom_bg_status_lbl.setVisible(bool(status_text))
 
         self._custom_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._use_theme_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
+        self._custom_bg_path_edit.textChanged.connect(lambda _: _update_custom_bg_state())
         self._custom_bg_sub.setVisible(False)  # hidden until enabled
 
         def _browse_bg_file():
