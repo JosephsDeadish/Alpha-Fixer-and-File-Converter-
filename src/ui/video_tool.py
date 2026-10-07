@@ -29,6 +29,7 @@ Opening the dialog:
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -76,6 +77,7 @@ _IMAGE_EXTS = {
     ".jfif", ".jpe", ".xnb", ".tim",
 }
 _KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
+_EXPERIMENTAL_DISC_VIDEO_EXTS = {".iso", ".umd", ".bin"}
 
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
@@ -167,6 +169,120 @@ def _get_ffprobe_exe() -> Optional[str]:
         return None
 
 
+def _unlink_file_safely(path: str) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _parse_ffprobe_rate(value) -> float:
+    text = str(value or "").strip()
+    if not text or text in {"0/0", "N/A"}:
+        return 0.0
+    if "/" in text:
+        num_text, den_text = text.split("/", 1)
+        try:
+            num = float(num_text)
+            den = float(den_text)
+        except Exception:
+            return 0.0
+        return num / den if den > 0 else 0.0
+    try:
+        parsed = float(text)
+    except Exception:
+        return 0.0
+    return parsed if parsed > 0 else 0.0
+
+
+def _probe_media_details(path: str) -> Optional[dict[str, object]]:
+    ffprobe_exe = _get_ffprobe_exe()
+    if not ffprobe_exe:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                ffprobe_exe,
+                "-v", "error",
+                "-print_format", "json",
+                "-show_entries",
+                "format=format_name,duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate",
+                path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            text=True,
+            timeout=30,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except Exception:
+        return None
+    streams = payload.get("streams")
+    if not isinstance(streams, list):
+        streams = []
+    format_info = payload.get("format")
+    if not isinstance(format_info, dict):
+        format_info = {}
+    video_stream = next((stream for stream in streams if stream.get("codec_type") == "video"), None)
+    audio_stream = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
+    fps = 0.0
+    width = height = 0
+    video_codec = ""
+    if isinstance(video_stream, dict):
+        fps = max(
+            _parse_ffprobe_rate(video_stream.get("avg_frame_rate")),
+            _parse_ffprobe_rate(video_stream.get("r_frame_rate")),
+        )
+        try:
+            width = max(0, int(video_stream.get("width") or 0))
+            height = max(0, int(video_stream.get("height") or 0))
+        except Exception:
+            width = height = 0
+        video_codec = str(video_stream.get("codec_name") or "").strip()
+    audio_codec = ""
+    if isinstance(audio_stream, dict):
+        audio_codec = str(audio_stream.get("codec_name") or "").strip()
+    try:
+        duration = float(format_info.get("duration") or 0.0)
+    except Exception:
+        duration = 0.0
+    return {
+        "format_name": str(format_info.get("format_name") or "").strip(),
+        "duration": duration if duration > 0 else 0.0,
+        "has_video": video_stream is not None,
+        "has_audio": audio_stream is not None,
+        "video_codec": video_codec,
+        "audio_codec": audio_codec,
+        "width": width,
+        "height": height,
+        "fps": fps,
+    }
+
+
+def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
+    if not details:
+        return ""
+    format_name = str(details.get("format_name") or "unknown")
+    video_codec = str(details.get("video_codec") or "none")
+    audio_codec = str(details.get("audio_codec") or "none")
+    width = max(0, int(details.get("width") or 0))
+    height = max(0, int(details.get("height") or 0))
+    fps = max(0.0, float(details.get("fps") or 0.0))
+    parts = [f"Probe: container={format_name}", f"video={video_codec}"]
+    if width > 0 and height > 0:
+        parts.append(f"size={width}x{height}")
+    if fps > 0:
+        parts.append(f"fps={fps:.3f}".rstrip("0").rstrip("."))
+    parts.append(f"audio={audio_codec}")
+    return "; ".join(parts) + "."
+
+
 def _video_io_diagnostics() -> str:
     """Return a human-readable summary of missing video I/O dependencies."""
     missing: list[str] = []
@@ -188,17 +304,74 @@ def _video_io_diagnostics() -> str:
 
 def _video_load_failure_hint(path: str) -> str:
     ext = Path(path).suffix.lower()
+    probe = _probe_media_details(path)
     base = (
         "Ensure imageio-ffmpeg or a bundled/system ffmpeg binary is available,\n"
         "and check that the file is a supported, non-corrupt video."
     )
-    if ext in {".iso", ".umd", ".bin"}:
-        return (
-            f"{base}\n"
-            "Disc-image video inputs are experimental and only work when ffmpeg can demux a playable stream from the image.\n"
-            f"{_video_io_diagnostics()}"
+    lines = [base]
+    if ext in _EXPERIMENTAL_DISC_VIDEO_EXTS:
+        lines.append(
+            "Disc-image video inputs are experimental and only work when ffmpeg can demux a playable stream from the image."
         )
-    return f"{base}\n{_video_io_diagnostics()}"
+        if probe and not bool(probe.get("has_video")):
+            lines.append("ffprobe did not detect a playable video stream in this disc image.")
+        lines.append(
+            "If direct loading fails, the app also tries a temporary ffmpeg remux fallback for compatible streams."
+        )
+    probe_summary = _format_media_probe_summary(probe)
+    if probe_summary:
+        lines.append(probe_summary)
+    lines.append(_video_io_diagnostics())
+    return "\n".join(lines)
+
+
+def _remux_video_source(path: str) -> Optional[str]:
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        return None
+    temp_file = tempfile.NamedTemporaryFile(
+        prefix="alpha_fixer_video_src_",
+        suffix=".mkv",
+        delete=False,
+    )
+    remux_path = temp_file.name
+    temp_file.close()
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_exe,
+                "-y",
+                "-v",
+                "error",
+                "-i",
+                path,
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
+                "-dn",
+                "-sn",
+                "-c",
+                "copy",
+                remux_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=180,
+        )
+    except Exception:
+        _unlink_file_safely(remux_path)
+        return None
+    try:
+        if result.returncode == 0 and Path(remux_path).is_file() and Path(remux_path).stat().st_size > 0:
+            return remux_path
+    except Exception:
+        pass
+    _unlink_file_safely(remux_path)
+    return None
 
 
 def _open_video_reader(path: str):
@@ -553,10 +726,17 @@ class _SequenceFrameGetter:
 class _VideoFrameGetter:
     """Picklable frame getter for a multi-frame video clip."""
 
-    def __init__(self, path: str, total_frames: int, first_frame=None) -> None:
+    def __init__(
+        self,
+        path: str,
+        total_frames: int,
+        first_frame=None,
+        cleanup_paths: Optional[list[str]] = None,
+    ) -> None:
         self._path = path
         self._total_frames = max(1, int(total_frames))
         self._prefetched_frame = first_frame
+        self._cleanup_paths = list(cleanup_paths or [])
         self._reader = None
         self._last_idx = -1
         self._last_frame = None
@@ -574,6 +754,12 @@ class _VideoFrameGetter:
             self._reader = None
         self._last_idx = -1
         self._last_frame = None
+
+    def _release_resources(self) -> None:
+            self._close_reader()
+            for cleanup_path in self._cleanup_paths:
+                _unlink_file_safely(cleanup_path)
+            self._cleanup_paths.clear()
 
     def __call__(self, idx: int) -> "PIL.Image.Image":
         from PIL import Image
@@ -605,12 +791,17 @@ class _VideoFrameGetter:
         return Image.fromarray(frame).convert("RGBA")
 
     def __getstate__(self) -> dict:
-        return {"_path": self._path, "_total_frames": self._total_frames}
+        return {
+            "_path": self._path,
+            "_total_frames": self._total_frames,
+            "_cleanup_paths": list(self._cleanup_paths),
+        }
 
     def __setstate__(self, state: dict) -> None:
         self._path = state["_path"]
         self._total_frames = max(1, int(state["_total_frames"]))
         self._prefetched_frame = None
+        self._cleanup_paths = list(state.get("_cleanup_paths") or [])
         self._reader = None
         self._last_idx = -1
         self._last_frame = None
@@ -624,14 +815,18 @@ class _ClipEntry:
                  get_frame_fn, fps: float = 25.0,
                  frame_size: Optional[tuple[int, int]] = None,
                  clip_type: str = "video",
-                 has_audio: bool = False):
+                 has_audio: bool = False,
+                 source_path: Optional[str] = None,
+                 load_note: str = ""):
         self.path = path
+        self.source_path = source_path or path
         self.total_frames = total_frames
         self.fps = fps
         self._get_frame = get_frame_fn   # callable(frame_idx) → PIL RGBA image
         self.frame_size = frame_size
         self.clip_type = clip_type
         self.has_audio = has_audio
+        self.load_note = load_note
         self.speed_percent: int = 100
         self.still_duration_frames: int = 25 if clip_type == "image" else 1
         self.trim_start: int = 0
@@ -678,6 +873,10 @@ class _ClipEntry:
         return self._get_frame(self.trim_start + self.output_index_to_source_offset(idx))
 
     def close(self) -> None:
+        close_fn = getattr(self._get_frame, "_release_resources", None)
+        if callable(close_fn):
+            close_fn()
+            return
         close_fn = getattr(self._get_frame, "_close_reader", None)
         if callable(close_fn):
             close_fn()
@@ -716,8 +915,33 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
             frame_size=frame_size,
             clip_type="video",
             has_audio=_video_has_audio_stream(path),
+            source_path=path,
         )
     except Exception:
+        pass
+    if Path(path).suffix.lower() not in _EXPERIMENTAL_DISC_VIDEO_EXTS:
+        return None
+    remux_path = _remux_video_source(path)
+    if not remux_path:
+        return None
+    try:
+        fps, frame_count, frame_size, first_frame = _probe_video_clip(remux_path)
+        if frame_count <= 0:
+            _unlink_file_safely(remux_path)
+            return None
+        return _ClipEntry(
+            remux_path,
+            frame_count,
+            _VideoFrameGetter(remux_path, frame_count, first_frame, cleanup_paths=[remux_path]),
+            fps,
+            frame_size=frame_size,
+            clip_type="video",
+            has_audio=_video_has_audio_stream(remux_path),
+            source_path=path,
+            load_note="temporary ffmpeg remux fallback active",
+        )
+    except Exception:
+        _unlink_file_safely(remux_path)
         return None
 
 
@@ -1024,6 +1248,7 @@ class VideoToolDialog(QDialog):
 
         self._clip_info_lbl = QLabel("")
         self._clip_info_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._clip_info_lbl.setWordWrap(True)
         trim_vl.addWidget(self._clip_info_lbl)
         left_layout.addWidget(grp_trim)
 
@@ -1415,11 +1640,14 @@ class VideoToolDialog(QDialog):
             )
 
     def _format_clip_info_text(self, clip: "_ClipEntry") -> str:
-        return (
+        text = (
             f"{clip.total_frames} total  •  {clip.active_frames} timeline  •  "
             f"{clip.fps:.1f} fps"
             + (f"  •  {clip.frame_size[0]}×{clip.frame_size[1]}" if clip.frame_size else "")
         )
+        if clip.load_note:
+            text += f"  •  {clip.load_note}"
+        return text
 
     def _update_timeline_summary(self) -> None:
         total_frames = self._total_preview_frames()
@@ -1467,13 +1695,13 @@ class VideoToolDialog(QDialog):
         if item is None:
             return
         icon = "🎞" if clip.clip_type == "video" else "🖼"
-        item.setText(_format_clip_label(clip, clip.path, icon))
+        item.setText(_format_clip_label(clip, clip.source_path, icon))
 
     def _reload_clip(self, clip: "_ClipEntry") -> Optional["_ClipEntry"]:
         if clip.clip_type == "video":
-            new_clip = _load_video_clip(clip.path)
+            new_clip = _load_video_clip(clip.source_path)
         else:
-            new_clip = _load_image_as_clip(clip.path)
+            new_clip = _load_image_as_clip(clip.source_path)
         if new_clip is None:
             return None
         new_clip.speed_percent = clip.speed_percent

@@ -205,6 +205,28 @@ class TestDropFileList(unittest.TestCase):
             "🖼 Thumbnail previews paused for large lists (3,001 queued; auto-pause at 3,000+)",
         )
 
+    def test_large_list_item_tooltip_mentions_thumbnail_pause(self):
+        for idx in range(3001):
+            self._widget.addItem(f"/tmp/{idx}.png")
+        self._widget._refresh_item_tooltips()
+        item = self._widget.item(0)
+        self.assertIsNotNone(item)
+        self.assertIn("paused because this queue is above the auto-preview limit", item.toolTip())
+
+    def test_batch_import_completed_reports_added_and_deduped_counts(self):
+        received = []
+        self._widget.batch_import_completed.connect(lambda added, deduped, requested: received.append((added, deduped, requested)))
+        added = self._widget.add_paths_batch(["/tmp/a.png", "/tmp/a.png", "/tmp/b.png"])
+        self.assertEqual(added, 2)
+        self.assertEqual(received[-1], (2, 1, 3))
+
+    def test_thumbnail_status_signal_reports_failures(self):
+        received = []
+        self._widget.thumbnail_status_changed.connect(lambda paused, pending, failed, loaded: received.append((paused, pending, failed, loaded)))
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertTrue(received)
+        self.assertEqual(received[-1], (False, 0, 1, 0))
+
 
 class _ConverterTabSettingsStub:
     def __init__(self):
@@ -1858,6 +1880,55 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("experimental", hint)
         self.assertIn("ffmpeg can demux", hint)
         self.assertIn("Missing: ffmpeg executable.", hint)
+
+    def test_video_load_failure_hint_includes_probe_summary_when_available(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "iso9660",
+            "has_video": False,
+            "video_codec": "",
+            "audio_codec": "mp2",
+            "width": 0,
+            "height": 0,
+            "fps": 0.0,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/game.iso")
+        self.assertIn("ffprobe did not detect a playable video stream", hint)
+        self.assertIn("Probe: container=iso9660; video=none; audio=mp2.", hint)
+
+    def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            remux_path = os.path.join(tmpdir, "remux.mkv")
+            with open(remux_path, "wb") as fh:
+                fh.write(b"remux")
+
+            def _probe(path: str):
+                if path.endswith(".iso"):
+                    raise RuntimeError("primary open failed")
+                return 24.0, 12, (320, 240), None
+
+            with patch.object(vt, "_probe_video_clip", side_effect=_probe):
+                with patch.object(vt, "_remux_video_source", return_value=remux_path):
+                    with patch.object(vt, "_video_has_audio_stream", return_value=True):
+                        clip = vt._load_video_clip("/tmp/game.iso")
+            self.assertIsNotNone(clip)
+            self.assertEqual(clip.source_path, "/tmp/game.iso")
+            self.assertEqual(clip.path, remux_path)
+            self.assertTrue(clip.has_audio)
+            self.assertIn("remux fallback", clip.load_note)
+            clip.close()
+            self.assertFalse(os.path.exists(remux_path))
 
     def test_mp4_export_size_rounds_up_to_even_dimensions(self):
         try:

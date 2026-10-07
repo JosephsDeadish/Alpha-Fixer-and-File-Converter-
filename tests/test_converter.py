@@ -115,6 +115,36 @@ def _make_compressed_dds(
         f.write(pixel_data)
 
 
+def _make_dx10_dds(
+    path: str,
+    width: int,
+    height: int,
+    dxgi_format: int,
+    pixel_data: bytes,
+):
+    def dword(n: int) -> bytes:
+        return int(n).to_bytes(4, "little")
+
+    header = bytearray(148)
+    header[0:4] = b"DDS "
+    header[4:8] = dword(124)
+    header[8:12] = dword(0x000A1007)
+    header[12:16] = dword(height)
+    header[16:20] = dword(width)
+    header[76:80] = dword(32)
+    header[80:84] = dword(0x4)
+    header[84:88] = b"DX10"
+    header[108:112] = dword(0x1000)
+    header[128:132] = dword(dxgi_format)
+    header[132:136] = dword(3)   # resource dimension = 2D
+    header[136:140] = dword(0)   # misc flag
+    header[140:144] = dword(1)   # array size
+    header[144:148] = dword(0)   # misc flags 2
+    with open(path, "wb") as f:
+        f.write(bytes(header))
+        f.write(pixel_data)
+
+
 class TestBuildOutputPath(unittest.TestCase):
 
     def test_same_dir(self):
@@ -674,6 +704,76 @@ class TestConvertFile(unittest.TestCase):
                 self.assertEqual(img.getpixel((0, 0))[3], 255)
             finally:
                 img.close()
+
+    def test_load_dds_supports_bc4_blocks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_bc4.dds")
+            _make_compressed_dds(src, 4, 4, b"ATI1", bytes([255, 0]) + bytes(6))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0)), (255, 0, 0, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_bc5_blocks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_bc5.dds")
+            block = (bytes([255, 0]) + bytes(6)) * 2
+            _make_compressed_dds(src, 4, 4, b"ATI2", block)
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0)), (255, 255, 0, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_dx10_bc4_blocks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dx10_bc4.dds")
+            _make_dx10_dds(src, 4, 4, 80, bytes([200, 0]) + bytes(6))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (200, 0, 0, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_bc7_returns_placeholder(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_bc7.dds")
+            _make_dx10_dds(src, 4, 4, 98, bytes(16))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0)), (128, 128, 128, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_rejects_unknown_dxgi_format(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_unknown_dxgi.dds")
+            _make_dx10_dds(src, 4, 4, 130, bytes(16))
+            with self.assertRaisesRegex(ValueError, "unknown/unsupported DXGI=130"):
+                _load_dds_raw(src)
+
+    def test_load_dds_rejects_truncated_compressed_blocks(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_truncated.dds")
+            _make_compressed_dds(src, 4, 4, b"DXT5", bytes(12))
+            with self.assertRaisesRegex(ValueError, "Truncated DDS block data"):
+                _load_dds_raw(src)
 
     def test_supported_output_formats_includes_png(self):
         self.assertIn("PNG", SUPPORTED_OUTPUT_FORMATS)

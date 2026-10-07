@@ -173,6 +173,9 @@ class DropFileList(QListWidget):
     list_cleared  = pyqtSignal()       # emitted when all items are cleared at once
     drag_entered  = pyqtSignal()       # emitted when files are first dragged over the list
     thumbnail_failed = pyqtSignal(str, str)  # path, reason
+    thumbnail_status_changed = pyqtSignal(bool, int, int, int)  # paused, pending, failed, loaded
+    thumbnails_auto_paused = pyqtSignal(int, int)  # item_count, threshold
+    batch_import_completed = pyqtSignal(int, int, int)  # added, deduped, requested
 
     # Icon shown in the centre of the list when no files have been added yet
     _EMPTY_STATE_ICON = "📂"
@@ -225,6 +228,7 @@ class DropFileList(QListWidget):
         self._load_tick.timeout.connect(self._load_visible_thumbs)
 
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        self.itemSelectionChanged.connect(self._on_selection_changed)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
         # Set icon size (logical pixels – Qt scales to physical automatically)
@@ -316,18 +320,61 @@ class DropFileList(QListWidget):
         else:
             self._load_tick.stop()
         self._update_dynamic_tooltip()
+        self._refresh_item_tooltips()
+        self._emit_thumbnail_status_changed()
 
     def _on_scroll(self, _value: int) -> None:
         if self._thumb_enabled:
             self._scroll_timer.start()  # restart debounce
 
+    def _on_selection_changed(self) -> None:
+        self._update_dynamic_tooltip()
+        self.viewport().update()
+
+    def get_pending_thumbnail_count(self) -> int:
+        return len(self._pending)
+
+    def get_thumbnail_failures(self) -> dict[str, str]:
+        return dict(self._thumb_failure_reasons)
+
+    def get_thumbnail_summary(self) -> dict[str, object]:
+        return {
+            "enabled": self._thumb_enabled,
+            "pending_count": len(self._pending),
+            "failure_count": len(self._reported_thumb_failures),
+            "loaded_count": len(self._thumb_cache),
+            "auto_paused": self.count() > _THUMB_AUTO_DISABLE,
+            "selected_count": len(self.selectedItems()),
+            "failures": [
+                {"path": path, "reason": reason}
+                for path, reason in self._thumb_failure_reasons.items()
+            ],
+        }
+
+    def _emit_thumbnail_status_changed(self) -> None:
+        try:
+            self.thumbnail_status_changed.emit(
+                self._thumb_enabled and self.count() > _THUMB_AUTO_DISABLE,
+                len(self._pending),
+                len(self._reported_thumb_failures),
+                len(self._thumb_cache),
+            )
+        except RuntimeError:
+            pass
+
     def _load_visible_thumbs(self) -> None:
         """Enqueue thumbnail loads for currently visible rows."""
         if not self._thumb_enabled:
+            self._emit_thumbnail_status_changed()
             return
         # Auto-disable thumbnails when list is very large to prevent RAM spikes
         if self.count() > _THUMB_AUTO_DISABLE:
             self._load_tick.stop()
+            try:
+                self.thumbnails_auto_paused.emit(self.count(), _THUMB_AUTO_DISABLE)
+            except RuntimeError:
+                pass
+            self._emit_thumbnail_status_changed()
             return
 
         rect = self.viewport().rect()
@@ -361,6 +408,7 @@ class DropFileList(QListWidget):
             self._load_tick.start()
         else:
             self._load_tick.stop()
+        self._emit_thumbnail_status_changed()
 
     @pyqtSlot(str, QImage)
     def _on_thumb_loaded(self, path: str, qimg: QImage) -> None:
@@ -393,9 +441,10 @@ class DropFileList(QListWidget):
             item = self.item(row)
             if item and item.text() == path:
                 item.setIcon(icon)
-                item.setToolTip(path)
+                item.setToolTip(self._build_item_tooltip(path))
                 item.setForeground(QColor())
                 break  # paths are unique
+        self._emit_thumbnail_status_changed()
 
     @pyqtSlot(str, str)
     def _on_thumb_failed(self, path: str, reason: str) -> None:
@@ -410,11 +459,10 @@ class DropFileList(QListWidget):
             self._thumb_failure_reasons.popitem(last=False)
         item = self._find_item_by_path(path)
         if item is not None:
-            item.setToolTip(
-                f"{path}\n\n⚠ Thumbnail preview unavailable\n{short_reason}"
-            )
+            item.setToolTip(self._build_item_tooltip(path))
             item.setForeground(QColor(214, 153, 52))
         self._update_dynamic_tooltip()
+        self._emit_thumbnail_status_changed()
         self.viewport().update()
         logger.warning("Thumbnail skipped for %s: %s", path, reason)
         try:
@@ -437,9 +485,11 @@ class DropFileList(QListWidget):
         if not self._thumb_enabled:
             return "🖼 Thumbnails off"
         if self.count() > _THUMB_AUTO_DISABLE:
+            selected = len(self.selectedItems())
+            selected_text = f"; {selected:,} selected" if selected else ""
             return (
                 f"🖼 Thumbnail previews paused for large lists "
-                f"({self.count():,} queued; auto-pause at {_THUMB_AUTO_DISABLE:,}+)"
+                f"({self.count():,} queued{selected_text}; auto-pause at {_THUMB_AUTO_DISABLE:,}+)"
             )
         return ""
 
@@ -456,6 +506,27 @@ class DropFileList(QListWidget):
             if item and item.text() == path:
                 return item
         return None
+
+    def _build_item_tooltip(self, path: str) -> str:
+        lines = [path]
+        failure = self._thumb_failure_reasons.get(path)
+        if failure:
+            lines.extend(["", "⚠ Thumbnail preview unavailable", failure])
+        elif not self._thumb_enabled:
+            lines.extend(["", "🖼 Thumbnail previews are turned off for this list."])
+        elif self.count() > _THUMB_AUTO_DISABLE:
+            lines.extend([
+                "",
+                "🖼 Thumbnail preview paused because this queue is above the auto-preview limit.",
+                f"Trim the list below {_THUMB_AUTO_DISABLE:,} files or toggle thumbnails back on after narrowing it.",
+            ])
+        return "\n".join(lines)
+
+    def _refresh_item_tooltips(self) -> None:
+        for row in range(self.count()):
+            item = self.item(row)
+            if item:
+                item.setToolTip(self._build_item_tooltip(item.text()))
 
     def _update_dynamic_tooltip(self) -> None:
         summary = self._thumbnail_status_summary()
@@ -477,8 +548,18 @@ class DropFileList(QListWidget):
         keeping the Stop button responsive.
         """
         existing = {self.item(i).text() for i in range(self.count())}
-        new_paths = [p for p in paths if p not in existing]
+        seen = set(existing)
+        new_paths: list[str] = []
+        for path in paths:
+            if path in seen:
+                continue
+            seen.add(path)
+            new_paths.append(path)
         if not new_paths:
+            try:
+                self.batch_import_completed.emit(0, len(paths), len(paths))
+            except RuntimeError:
+                pass
             return 0
         # Scale chunk size with import size so we don't call processEvents()
         # every 500 items when importing 500 000 files (item 25).
@@ -507,6 +588,12 @@ class DropFileList(QListWidget):
             self.count_changed.emit(self.count())
             if self._thumb_enabled and self.count() <= _THUMB_AUTO_DISABLE:
                 self._scroll_timer.start()
+        self._refresh_item_tooltips()
+        self._emit_thumbnail_status_changed()
+        try:
+            self.batch_import_completed.emit(added, max(0, len(paths) - added), len(paths))
+        except RuntimeError:
+            pass
         return added
 
     # ------------------------------------------------------------------
@@ -629,9 +716,10 @@ class DropFileList(QListWidget):
         for row in range(self.count()):
             item = self.item(row)
             if item:
-                item.setToolTip(item.text())
+                item.setToolTip(self._build_item_tooltip(item.text()))
                 item.setForeground(QColor())
         self._update_dynamic_tooltip()
+        self._emit_thumbnail_status_changed()
 
     # ------------------------------------------------------------------
     # Remove helpers (can also be called externally)
@@ -675,6 +763,7 @@ class DropFileList(QListWidget):
             self._thumb_failure_reasons.pop(path, None)
             self.takeItem(self.row(item))
         self._update_dynamic_tooltip()
+        self._emit_thumbnail_status_changed()
         self.viewport().update()
         self.count_changed.emit(self.count())
         self.file_removed.emit()
@@ -694,6 +783,7 @@ class DropFileList(QListWidget):
         self._cancel_event = threading.Event()
         super().clear()
         self._update_dynamic_tooltip()
+        self._emit_thumbnail_status_changed()
         self.viewport().update()
         self.count_changed.emit(0)
         self.list_cleared.emit()
@@ -712,5 +802,6 @@ class DropFileList(QListWidget):
         self._cancel_event = threading.Event()
         super().clear()
         self._update_dynamic_tooltip()
+        self._emit_thumbnail_status_changed()
         self.viewport().update()
         self.count_changed.emit(0)

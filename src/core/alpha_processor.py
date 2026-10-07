@@ -154,6 +154,12 @@ def _load_dds_raw(path: str) -> Image.Image:
             return _decompress_dds_blocks(
                 pixel_data, width, height, fourcc_str
             )
+        if dx10_dxgi_format:
+            raise ValueError(
+                f"Unsupported DDS compressed format (FourCC={pf_fourcc!r}, "
+                f"unknown/unsupported DXGI={dx10_dxgi_format}). "
+                "Install ImageMagick/wand to read this DDS variant."
+            )
         raise ValueError(
             f"Unsupported DDS compressed format (FourCC={pf_fourcc!r}, "
             f"DXGI={dx10_dxgi_format}). "
@@ -328,6 +334,8 @@ def _decompress_dds_blocks(
 
     for by in range(bh):
         for bx in range(bw):
+            if len(data) < offset + block_size:
+                raise ValueError("Truncated DDS block data")
             if fmt == "DXT1":
                 block_pixels = _decode_dxt1_block(data, offset)
                 rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4] = block_pixels
