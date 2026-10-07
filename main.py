@@ -331,6 +331,33 @@ def _optional_qt_runtime_notice() -> str:
     )
 
 
+def _optional_feature_readiness_notice() -> str:
+    try:
+        from src.core.file_converter import dds_compression_available, optional_pillow_output_limits
+        from src.ui.video_tool import _get_ffmpeg_exe, _get_ffprobe_exe, _has_imageio, _has_imageio_ffmpeg
+    except Exception as exc:
+        logger.debug("Optional feature audit unavailable: %s", exc)
+        return ""
+
+    limits: list[str] = []
+    if not (_has_imageio() and _has_imageio_ffmpeg() and _get_ffmpeg_exe()):
+        limits.append("video import/MP4 export unavailable")
+    elif not _get_ffprobe_exe():
+        limits.append("odd-container probing limited")
+    if not dds_compression_available():
+        limits.append("DDS compressed variants unavailable")
+    unavailable_formats = optional_pillow_output_limits()
+    if unavailable_formats:
+        preview = ", ".join(name for name, _reason in unavailable_formats[:3])
+        extra = len(unavailable_formats) - min(len(unavailable_formats), 3)
+        if extra > 0:
+            preview = f"{preview} +{extra} more"
+        limits.append(f"optional image exports unavailable: {preview}")
+    if not limits:
+        return ""
+    return "⚠ Optional feature limits detected: " + "; ".join(limits) + ". See tool banners for details."
+
+
 # ---------------------------------------------------------------------------
 # Qt environment setup (must be before QApplication)
 # ---------------------------------------------------------------------------
@@ -994,6 +1021,11 @@ def main():
     if optional_qt_notice:
         logger.info(optional_qt_notice)
         QTimer.singleShot(1400, lambda: window.statusBar().showMessage(optional_qt_notice, 12000))
+
+    capability_notice = _optional_feature_readiness_notice()
+    if capability_notice:
+        logger.warning(capability_notice)
+        QTimer.singleShot(1900, lambda: window.statusBar().showMessage(capability_notice, 12000))
 
     smoke_test_ms = _smoke_test_duration_ms()
     if smoke_test_ms > 0:

@@ -5,6 +5,7 @@ import re
 import sys
 import os
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -36,6 +37,53 @@ def make_rgba_image(w=4, h=4, alpha=128) -> Image.Image:
     arr[:, :, :3] = 200  # grey RGB
     arr[:, :, 3] = alpha
     return Image.fromarray(arr, "RGBA")
+
+
+class TestOptionalFeatureReadinessNotice(unittest.TestCase):
+    def test_notice_empty_when_optional_features_are_ready(self):
+        import main
+
+        video_stub = types.ModuleType("src.ui.video_tool")
+        video_stub._has_imageio = lambda: True
+        video_stub._has_imageio_ffmpeg = lambda: True
+        video_stub._get_ffmpeg_exe = lambda: "/tmp/ffmpeg"
+        video_stub._get_ffprobe_exe = lambda: "/tmp/ffprobe"
+
+        converter_stub = types.ModuleType("src.core.file_converter")
+        converter_stub.dds_compression_available = lambda: True
+        converter_stub.optional_pillow_output_limits = lambda: []
+
+        with mock.patch.dict(sys.modules, {
+            "src.ui.video_tool": video_stub,
+            "src.core.file_converter": converter_stub,
+        }):
+            self.assertEqual(main._optional_feature_readiness_notice(), "")
+
+    def test_notice_summarizes_missing_optional_features(self):
+        import main
+
+        video_stub = types.ModuleType("src.ui.video_tool")
+        video_stub._has_imageio = lambda: True
+        video_stub._has_imageio_ffmpeg = lambda: True
+        video_stub._get_ffmpeg_exe = lambda: "/tmp/ffmpeg"
+        video_stub._get_ffprobe_exe = lambda: None
+
+        converter_stub = types.ModuleType("src.core.file_converter")
+        converter_stub.dds_compression_available = lambda: False
+        converter_stub.optional_pillow_output_limits = lambda: [
+            ("AVIF", "needs libavif"),
+            ("JPEG2000", "needs OpenJPEG"),
+        ]
+
+        with mock.patch.dict(sys.modules, {
+            "src.ui.video_tool": video_stub,
+            "src.core.file_converter": converter_stub,
+        }):
+            notice = main._optional_feature_readiness_notice()
+
+        self.assertIn("odd-container probing limited", notice)
+        self.assertIn("DDS compressed variants unavailable", notice)
+        self.assertIn("AVIF", notice)
 
 
 # ---------------------------------------------------------------------------

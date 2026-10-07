@@ -9,6 +9,7 @@ Writable formats: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS, PBM, PGM,
 import os
 import io
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -36,11 +37,18 @@ SUPPORTED_READ = {
 SUPPORTED_WRITE = set(SUPPORTED_READ)
 
 
+@lru_cache(maxsize=1)
 def _has_wand() -> bool:
     try:
-        import wand.image  # noqa: F401
+        from wand.image import Image as WandImage
+        with WandImage(width=1, height=1) as probe:
+            probe.format = "png"
+            probe.make_blob()
         return True
     except ImportError:
+        return False
+    except Exception as exc:
+        logger.warning("ImageMagick/wand runtime unavailable: %s", exc)
         return False
 
 

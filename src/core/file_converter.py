@@ -71,10 +71,22 @@ DDS_VARIANT_OPTIONS: list[tuple[str, str]] = [
     ("BC3 / DXT5 compressed", "dxt5"),
 ]
 
+_OPTIONAL_PIL_OUTPUT_FORMATS = ("AVIF", "JPEG2000", "QOI", "WEBP")
+
 
 def dds_compression_available() -> bool:
     """Return True when compressed DDS save variants are available."""
     return _has_wand()
+
+
+def optional_pillow_output_limits() -> list[tuple[str, str]]:
+    """Return optional output formats that are unavailable in this build."""
+    limits: list[tuple[str, str]] = []
+    for target_format in _OPTIONAL_PIL_OUTPUT_FORMATS:
+        reason = output_format_unavailable_reason(target_format)
+        if reason:
+            limits.append((target_format, reason))
+    return limits
 
 
 _CUSTOM_OUTPUT_FORMATS = {"DDS", "SVG", "TIM", "XNB"}

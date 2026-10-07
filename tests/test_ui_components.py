@@ -381,6 +381,21 @@ class TestConverterTab(unittest.TestCase):
         if not self._widget._dds_compression_available:
             self.assertIn("BC2/DXT3", self._widget._status_lbl.text())
 
+    def test_converter_capability_summary_reports_optional_limits(self):
+        import src.ui.converter_tool as ct
+        with patch.object(ct, "optional_pillow_output_limits", return_value=[("AVIF", "needs libavif support")]):
+            with patch.object(ct, "dds_compression_available", return_value=False):
+                summary = ct._converter_capability_summary()
+                details = ct._converter_capability_details()
+        self.assertIn("Ready with limits:", summary)
+        self.assertIn("fall back to PNG", summary)
+        self.assertIn("ImageMagick/wand", details)
+        self.assertIn("AVIF", details)
+
+    def test_converter_capability_banner_is_visible(self):
+        self.assertTrue(hasattr(self._widget, "_capability_lbl"))
+        self.assertTrue(self._widget._capability_lbl.text().startswith("Ready"))
+
     def test_build_failure_report_text_groups_repeated_failures(self):
         self._widget._last_run_format = "DDS"
         self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
@@ -496,6 +511,37 @@ class TestConverterTab(unittest.TestCase):
         self.assertEqual(self._widget._file_list.item(0).text(), "/tmp/c.png")
         run_mock.assert_called_once_with()
         self.assertIn("Retrying 1 failed file", self._widget._log.toPlainText())
+
+
+class TestStartupCapabilityNotice(unittest.TestCase):
+    def test_optional_feature_readiness_notice_is_empty_when_everything_is_ready(self):
+        _require_qt_gui(self)
+        import main
+        with patch("src.ui.video_tool._has_imageio", return_value=True):
+            with patch("src.ui.video_tool._has_imageio_ffmpeg", return_value=True):
+                with patch("src.ui.video_tool._get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch("src.ui.video_tool._get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch("src.core.file_converter.dds_compression_available", return_value=True):
+                            with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
+                                self.assertEqual(main._optional_feature_readiness_notice(), "")
+
+    def test_optional_feature_readiness_notice_summarizes_limits(self):
+        _require_qt_gui(self)
+        import main
+        with patch("src.ui.video_tool._has_imageio", return_value=True):
+            with patch("src.ui.video_tool._has_imageio_ffmpeg", return_value=True):
+                with patch("src.ui.video_tool._get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch("src.ui.video_tool._get_ffprobe_exe", return_value=None):
+                        with patch("src.core.file_converter.dds_compression_available", return_value=False):
+                            with patch(
+                                "src.core.file_converter.optional_pillow_output_limits",
+                                return_value=[("AVIF", "needs libavif"), ("JPEG2000", "needs OpenJPEG")],
+                            ):
+                                notice = main._optional_feature_readiness_notice()
+        self.assertIn("odd-container probing limited", notice)
+        self.assertIn("DDS compressed variants unavailable", notice)
+        self.assertIn("AVIF", notice)
+        self.assertIn("See tool banners for details.", notice)
 
 
 # ---------------------------------------------------------------------------

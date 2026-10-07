@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.file_converter import (
     OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, DDS_VARIANT_OPTIONS,
-    dds_compression_available, get_gif_frame_count,
+    dds_compression_available, get_gif_frame_count, optional_pillow_output_limits,
     output_format_discards_alpha, output_format_unavailable_reason,
 )
 from ..core.worker import ConverterWorker
@@ -32,6 +32,41 @@ from .gif_frame_picker import GifFramePickerDialog
 from .gif_builder import GifBuilderDialog
 from .preview_pane import BeforeAfterWidget, _ConverterPreviewLoader
 from .video_tool import _VIDEO_EXTS
+
+
+def _converter_capability_summary() -> str:
+    unavailable = optional_pillow_output_limits()
+    compressed_dds = dds_compression_available()
+    parts: list[str] = []
+    if unavailable:
+        formats = ", ".join(name for name, _reason in unavailable)
+        parts.append(
+            f"Optional Pillow exports unavailable here: {formats}; selecting one will fall back to PNG."
+        )
+    if compressed_dds:
+        parts.append("DDS raw and compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants are ready.")
+    else:
+        parts.append(
+            "DDS raw variants are ready; BC1/DXT1, BC2/DXT3, and BC3/DXT5 compressed variants need ImageMagick/wand."
+        )
+    prefix = "Ready with limits:" if unavailable or not compressed_dds else "Ready:"
+    return prefix + " " + " ".join(parts)
+
+
+def _converter_capability_details() -> str:
+    unavailable = optional_pillow_output_limits()
+    lines = [_converter_capability_summary()]
+    if unavailable:
+        lines.append("")
+        lines.append("Unavailable optional exports in this Pillow build:")
+        for name, reason in unavailable:
+            lines.append(f"• {name}: {reason}")
+    if not dds_compression_available():
+        lines.append("")
+        lines.append(
+            "Compressed DDS output requires ImageMagick/wand runtime support; Auto, RGB, and RGBA DDS output still work."
+        )
+    return "\n".join(lines)
 
 
 def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
@@ -145,6 +180,12 @@ class ConverterTab(QWidget):
         hdr.setObjectName("header")
         self._hdr = hdr
         main_layout.addWidget(hdr)
+
+        self._capability_lbl = QLabel(_converter_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setToolTip(_converter_capability_details())
+        main_layout.addWidget(self._capability_lbl)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
