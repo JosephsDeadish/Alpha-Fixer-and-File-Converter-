@@ -538,10 +538,21 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                 return_value=[("AVIF", "needs libavif"), ("JPEG2000", "needs OpenJPEG")],
                             ):
                                 notice = main._optional_feature_readiness_notice()
-        self.assertIn("odd-container probing limited", notice)
-        self.assertIn("DDS compressed variants unavailable", notice)
+        self.assertIn("odd-container probing limited: ffprobe unavailable", notice)
+        self.assertIn("DDS compressed variants unavailable: ImageMagick/wand runtime missing", notice)
         self.assertIn("AVIF", notice)
         self.assertIn("See tool banners for details.", notice)
+
+    def test_optional_feature_readiness_notice_lists_missing_video_runtime_bits(self):
+        _require_qt_gui(self)
+        import main
+        with patch("src.ui.video_tool._has_imageio", return_value=False):
+            with patch("src.ui.video_tool._has_imageio_ffmpeg", return_value=True):
+                with patch("src.ui.video_tool._get_ffmpeg_exe", return_value=None):
+                    with patch("src.core.file_converter.dds_compression_available", return_value=True):
+                        with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
+                            notice = main._optional_feature_readiness_notice()
+        self.assertIn("video import/MP4 export unavailable: missing imageio, ffmpeg", notice)
 
 
 # ---------------------------------------------------------------------------
@@ -2568,6 +2579,61 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("Failure types:", dialog._import_status_lbl.toolTip())
             self.assertIn("a.iso: hint one", dialog._import_status_lbl.toolTip())
             self.assertIn("b.bin: hint two", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_load_video_paths_accepts_probe_detected_unknown_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        fake_clip = types.SimpleNamespace(
+            load_note="temporary ffmpeg transcode fallback active",
+            source_path="/tmp/weird.dat",
+            frame_size=(32, 24),
+            clip_type="video",
+            active_frames=12,
+            fps=24.0,
+            speed_percent=100,
+            close=lambda: None,
+        )
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": True}):
+                with patch.object(vt, "_load_video_clip", return_value=fake_clip):
+                    with patch.object(dialog, "_insert_clip", return_value=1) as insert_mock:
+                        with patch.object(dialog, "_update_scrubber"):
+                            with patch.object(dialog, "_update_preview"):
+                                with patch.object(dialog, "_update_ui_state"):
+                                    dialog._load_video_paths(["/tmp/weird.dat"])
+            insert_mock.assert_called_once()
+            self.assertIn("Added 1 clip", dialog._import_status_lbl.text())
+            self.assertIn("1 recovered", dialog._import_status_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_load_video_paths_reports_audio_only_unknown_extension_as_failure(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": False, "has_audio": True, "format_name": "ogg"}):
+                with patch.object(vt, "_video_load_failure_hint", return_value="audio only"):
+                    dialog._load_video_paths(["/tmp/odd.dat"])
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("audio only", dialog._import_status_lbl.toolTip())
         finally:
             dialog.close()
             dialog.deleteLater()

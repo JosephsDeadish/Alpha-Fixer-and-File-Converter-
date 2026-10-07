@@ -2378,7 +2378,7 @@ class VideoToolDialog(QDialog):
 
     def _add_video(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Add Video Files", "",
+            self, "Add Video / Odd-Container Files", "",
             _format_extension_filter("Video Files", _VIDEO_EXTS),
         )
         self._load_video_paths(paths, insert_row=self._next_insert_row())
@@ -2387,8 +2387,22 @@ class VideoToolDialog(QDialog):
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         fallback_loaded: list[tuple[str, str]] = []
         failed_videos: list[tuple[str, str]] = []
+        skipped: list[str] = []
         added = 0
         for path in paths:
+            ext = Path(path).suffix.lower()
+            if ext in _IMAGE_EXTS:
+                skipped.append(Path(path).name)
+                continue
+            probe = None
+            if ext not in _VIDEO_EXTS:
+                probe = _probe_media_details(path)
+                if not _is_probably_video_source(path, probe):
+                    if probe:
+                        failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
+                    else:
+                        skipped.append(Path(path).name)
+                    continue
             clip = _load_video_clip(path)
             if clip is None:
                 failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
@@ -2406,7 +2420,7 @@ class VideoToolDialog(QDialog):
             attempted=len(paths),
             recovered=fallback_loaded,
             failures=failed_videos,
-            skipped=[],
+            skipped=skipped,
         )
 
     def _record_export_history(

@@ -340,12 +340,19 @@ def _optional_feature_readiness_notice() -> str:
         return ""
 
     limits: list[str] = []
-    if not (_has_imageio() and _has_imageio_ffmpeg() and _get_ffmpeg_exe()):
-        limits.append("video import/MP4 export unavailable")
+    missing_video_bits: list[str] = []
+    if not _has_imageio():
+        missing_video_bits.append("imageio")
+    if not _has_imageio_ffmpeg():
+        missing_video_bits.append("imageio-ffmpeg")
+    if not _get_ffmpeg_exe():
+        missing_video_bits.append("ffmpeg")
+    if missing_video_bits:
+        limits.append("video import/MP4 export unavailable: missing " + ", ".join(missing_video_bits))
     elif not _get_ffprobe_exe():
-        limits.append("odd-container probing limited")
+        limits.append("odd-container probing limited: ffprobe unavailable")
     if not dds_compression_available():
-        limits.append("DDS compressed variants unavailable")
+        limits.append("DDS compressed variants unavailable: ImageMagick/wand runtime missing")
     unavailable_formats = optional_pillow_output_limits()
     if unavailable_formats:
         preview = ", ".join(name for name, _reason in unavailable_formats[:3])
