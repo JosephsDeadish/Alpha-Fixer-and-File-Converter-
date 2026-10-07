@@ -336,6 +336,49 @@ class TestConverterTab(unittest.TestCase):
                 content = f.read()
         self.assertIn('"reason": "decode failed"', content)
 
+    def test_finished_enables_failure_recovery_actions(self):
+        self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
+        self._widget._batch_error_reasons.update({"decode failed": 2})
+        self._widget._batch_error_files = {"decode failed": ["/tmp/a.png", "/tmp/c.png"]}
+        self._widget._batch_failure_details = [
+            {"source": "/tmp/a.png", "reason": "decode failed"},
+            {"source": "/tmp/c.png", "reason": "decode failed"},
+        ]
+        self._widget._on_finished(1, 2)
+        self.assertTrue(self._widget._btn_retry_failed.isEnabled())
+        self.assertTrue(self._widget._btn_keep_failed.isEnabled())
+        self.assertTrue(self._widget._btn_skip_failed.isEnabled())
+        self.assertIn("2 failed files", self._widget._failure_actions_lbl.text())
+        self.assertIn("repeated issue group", self._widget._failure_actions_lbl.text())
+
+    def test_keep_failed_only_rewrites_queue_to_failed_paths(self):
+        self._widget._file_list.add_paths_batch(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"])
+        self._widget._last_failed_files = ["/tmp/a.png", "/tmp/c.png"]
+        self._widget._keep_failed_only()
+        self.assertEqual(
+            [self._widget._file_list.item(i).text() for i in range(self._widget._file_list.count())],
+            ["/tmp/a.png", "/tmp/c.png"],
+        )
+        self.assertIn("Queue reduced to 2 failed files", self._widget._log.toPlainText())
+
+    def test_skip_failed_files_removes_failures_from_current_queue(self):
+        self._widget._file_list.add_paths_batch(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"])
+        self._widget._last_failed_files = ["/tmp/a.png", "/tmp/c.png"]
+        self._widget._skip_failed_files()
+        self.assertEqual(self._widget._file_list.count(), 1)
+        self.assertEqual(self._widget._file_list.item(0).text(), "/tmp/b.png")
+        self.assertIn("Removed 2 failed files", self._widget._log.toPlainText())
+
+    def test_retry_failed_batch_rewrites_queue_and_runs(self):
+        self._widget._file_list.add_paths_batch(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"])
+        self._widget._last_failed_files = ["/tmp/c.png"]
+        with patch.object(self._widget, "_run") as run_mock:
+            self._widget._retry_failed_batch()
+        self.assertEqual(self._widget._file_list.count(), 1)
+        self.assertEqual(self._widget._file_list.item(0).text(), "/tmp/c.png")
+        run_mock.assert_called_once_with()
+        self.assertIn("Retrying 1 failed file", self._widget._log.toPlainText())
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys

@@ -90,6 +90,7 @@ class ConverterTab(QWidget):
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
+        self._last_failed_files: list[str] = []
         # Cached aspect ratio (w, h) of the currently selected file
         # to avoid re-opening the image on every width spinbox tick.
         self._cached_aspect: tuple[int, int] | None = None
@@ -517,7 +518,28 @@ class ConverterTab(QWidget):
 
         # Log
         log_btn_row = QHBoxLayout()
-        log_btn_row.addStretch(1)
+        self._failure_actions_lbl = QLabel("")
+        self._failure_actions_lbl.setStyleSheet("color: #8ea0b6; font-size: 11px;")
+        self._failure_actions_lbl.setWordWrap(True)
+        log_btn_row.addWidget(self._failure_actions_lbl, 1)
+        self._btn_retry_failed = QPushButton("Retry Failed")
+        self._btn_retry_failed.setEnabled(False)
+        self._btn_retry_failed.setToolTip(
+            "Replace the current queue with only the files that failed in the last batch and rerun them."
+        )
+        log_btn_row.addWidget(self._btn_retry_failed)
+        self._btn_keep_failed = QPushButton("Keep Failed Only")
+        self._btn_keep_failed.setEnabled(False)
+        self._btn_keep_failed.setToolTip(
+            "Replace the current queue with only the files that failed in the last batch so you can continue working on them."
+        )
+        log_btn_row.addWidget(self._btn_keep_failed)
+        self._btn_skip_failed = QPushButton("Remove Failed")
+        self._btn_skip_failed.setEnabled(False)
+        self._btn_skip_failed.setToolTip(
+            "Remove the last batch's failed files from the current queue and keep the rest."
+        )
+        log_btn_row.addWidget(self._btn_skip_failed)
         self._btn_export_failures = QPushButton("Export Failure Report…")
         self._btn_export_failures.setEnabled(False)
         self._btn_export_failures.setToolTip(
@@ -546,6 +568,9 @@ class ConverterTab(QWidget):
         self._btn_clear.clicked.connect(self._file_list._clear_all)
         self._btn_run.clicked.connect(self._run)
         self._btn_stop.clicked.connect(self._stop)
+        self._btn_retry_failed.clicked.connect(self._retry_failed_batch)
+        self._btn_keep_failed.clicked.connect(self._keep_failed_only)
+        self._btn_skip_failed.clicked.connect(self._skip_failed_files)
         self._btn_export_failures.clicked.connect(self._export_failure_report)
         self._btn_out_dir.clicked.connect(self._browse_out_dir)
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
@@ -1195,10 +1220,11 @@ class ConverterTab(QWidget):
         self._last_run_out_dir = out_dir or None
 
         self._log.clear()
+        self._last_failed_files = []
         self._batch_error_reasons.clear()
         self._batch_error_files.clear()
         self._batch_failure_details.clear()
-        self._btn_export_failures.setEnabled(False)
+        self._reset_failure_actions()
         if format_unavailable:
             self._log_msg(
                 f"⚠ {target_format} export unavailable — falling back to PNG for this batch."
@@ -1236,6 +1262,102 @@ class ConverterTab(QWidget):
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    @staticmethod
+    def _ordered_unique_paths(paths: list[str]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for path in paths:
+            if path in seen:
+                continue
+            seen.add(path)
+            ordered.append(path)
+        return ordered
+
+    def _current_queue_paths(self) -> list[str]:
+        return [self._file_list.item(i).text() for i in range(self._file_list.count())]
+
+    def _failed_source_paths(self) -> list[str]:
+        if self._last_failed_files:
+            return list(self._last_failed_files)
+        return self._ordered_unique_paths([
+            entry["source"] for entry in self._batch_failure_details if entry.get("source")
+        ])
+
+    def _successful_source_paths(self) -> list[str]:
+        failed = set(self._failed_source_paths())
+        return [path for path in self._last_run_files if path not in failed]
+
+    def _reset_failure_actions(self) -> None:
+        self._failure_actions_lbl.setText("")
+        self._btn_retry_failed.setEnabled(False)
+        self._btn_keep_failed.setEnabled(False)
+        self._btn_skip_failed.setEnabled(False)
+        self._btn_export_failures.setEnabled(False)
+
+    def _refresh_failure_actions(self) -> None:
+        failed_files = self._failed_source_paths()
+        if not failed_files:
+            self._reset_failure_actions()
+            return
+        repeated_groups = sum(1 for count in self._batch_error_reasons.values() if count > 1)
+        top_reason = ""
+        if self._batch_error_reasons:
+            reason, count = self._batch_error_reasons.most_common(1)[0]
+            top_reason = f" Most common: {reason} ({count}×)."
+        repeat_text = (
+            f" {repeated_groups} repeated issue group{'s' if repeated_groups != 1 else ''}."
+            if repeated_groups else
+            ""
+        )
+        self._failure_actions_lbl.setText(
+            f"Recovery options ready: {len(failed_files)} failed file{'s' if len(failed_files) != 1 else ''}.{repeat_text}{top_reason}"
+        )
+        self._btn_retry_failed.setEnabled(True)
+        self._btn_keep_failed.setEnabled(True)
+        self._btn_skip_failed.setEnabled(True)
+        self._btn_export_failures.setEnabled(True)
+
+    def _replace_queue_paths(self, paths: list[str]) -> int:
+        deduped = self._ordered_unique_paths(paths)
+        self._file_list._clear_all()
+        if not deduped:
+            return 0
+        added = self._file_list.add_paths_batch(deduped)
+        if added:
+            self._file_list.setCurrentRow(0)
+            self.files_added.emit()
+        return added
+
+    def _keep_failed_only(self) -> None:
+        failed_files = self._failed_source_paths()
+        if not failed_files:
+            QMessageBox.information(self, "No Failed Files", "There are no failed files from the last batch to keep.")
+            return
+        kept = self._replace_queue_paths(failed_files)
+        self._status_lbl.setText(f"Kept {kept} failed file{'s' if kept != 1 else ''} in the queue.")
+        self._log_msg(f"↻ Queue reduced to {kept} failed file{'s' if kept != 1 else ''} for follow-up.")
+
+    def _skip_failed_files(self) -> None:
+        failed = set(self._failed_source_paths())
+        if not failed:
+            QMessageBox.information(self, "No Failed Files", "There are no failed files from the last batch to remove.")
+            return
+        current = self._current_queue_paths()
+        remaining = [path for path in current if path not in failed]
+        removed = len(current) - len(remaining)
+        self._replace_queue_paths(remaining)
+        self._status_lbl.setText(f"Removed {removed} failed file{'s' if removed != 1 else ''} from the queue.")
+        self._log_msg(f"⏭ Removed {removed} failed file{'s' if removed != 1 else ''} from the queue.")
+
+    def _retry_failed_batch(self) -> None:
+        failed_files = self._failed_source_paths()
+        if not failed_files:
+            QMessageBox.information(self, "No Failed Files", "There are no failed files from the last batch to retry.")
+            return
+        kept = self._replace_queue_paths(failed_files)
+        self._log_msg(f"↻ Retrying {kept} failed file{'s' if kept != 1 else ''} from the last batch.")
+        self._run()
 
     def _expand_gif_frames(self, files: list[str]) -> tuple[list[str] | None, dict[str, str]]:
         """
@@ -1482,13 +1604,20 @@ class ConverterTab(QWidget):
             summary_note = f" Most common issue: {top_reason} ({top_count} file{'s' if top_count != 1 else ''})."
         self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.{summary_note}")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        self._last_failed_files = self._failed_source_paths()
         if errors > 0 and self._batch_error_reasons:
             parts = [
                 f"{count}× {reason}"
                 for reason, count in self._batch_error_reasons.most_common(3)
             ]
             self._log_msg(f"Failure summary: {'  •  '.join(parts)}")
-            self._btn_export_failures.setEnabled(True)
+            successful = len(self._successful_source_paths())
+            self._log_msg(
+                f"Recovery actions ready: Retry Failed, Keep Failed Only, or Remove Failed. {successful} succeeded / {len(self._last_failed_files)} failed."
+            )
+            self._refresh_failure_actions()
+        else:
+            self._reset_failure_actions()
         # Restore the window title after processing
         try:
             from ..version import __version__, APP_NAME
