@@ -9150,7 +9150,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _thumbnail_failure_summary(self) -> str:", src)
         self.assertIn("def _thumbnail_mode_summary(self) -> str:", src)
         self.assertIn("def _thumbnail_status_summary(self) -> str:", src)
-        self.assertIn("⚠ {count} {noun} unavailable — files still work.", src)
+        self.assertIn("latest_name = os.path.basename(latest_path) or latest_path", src)
+        self.assertIn('return f"⚠ {count} {noun} unavailable — latest: {latest_name}"', src)
 
     def test_preview_pane_clamps_pan_to_scaled_pixmap_bounds(self):
         src = self._src("ui/preview_pane.py")

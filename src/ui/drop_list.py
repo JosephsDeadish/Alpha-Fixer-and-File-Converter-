@@ -192,6 +192,7 @@ class DropFileList(QListWidget):
         self._thumb_cache: OrderedDict[str, QIcon] = OrderedDict()
         self._pending: set[str] = set()   # paths currently being loaded
         self._reported_thumb_failures: set[str] = set()
+        self._thumb_failure_reasons: OrderedDict[str, str] = OrderedDict()
         self._pool = QThreadPool.globalInstance()
         self._pool.setMaxThreadCount(max(2, self._pool.maxThreadCount() // 2))
 
@@ -392,6 +393,11 @@ class DropFileList(QListWidget):
         if not path or path in self._reported_thumb_failures:
             return
         self._reported_thumb_failures.add(path)
+        short_reason = reason.splitlines()[0].strip() if reason else "thumbnail generation failed"
+        self._thumb_failure_reasons[path] = short_reason
+        self._thumb_failure_reasons.move_to_end(path)
+        while len(self._thumb_failure_reasons) > 5:
+            self._thumb_failure_reasons.popitem(last=False)
         self.viewport().update()
         logger.warning("Thumbnail skipped for %s: %s", path, reason)
         try:
@@ -404,7 +410,11 @@ class DropFileList(QListWidget):
         if count <= 0:
             return ""
         noun = "thumbnail" if count == 1 else "thumbnails"
-        return f"⚠ {count} {noun} unavailable — files still work."
+        latest_path, latest_reason = next(reversed(self._thumb_failure_reasons.items()))
+        latest_name = os.path.basename(latest_path) or latest_path
+        if count == 1:
+            return f"⚠ 1 {noun} unavailable — {latest_name}: {latest_reason}"
+        return f"⚠ {count} {noun} unavailable — latest: {latest_name}"
 
     def _thumbnail_mode_summary(self) -> str:
         if not self._thumb_enabled:
@@ -580,6 +590,7 @@ class DropFileList(QListWidget):
             self._thumb_cache.clear()
             self._pending.clear()
             self._reported_thumb_failures.clear()
+            self._thumb_failure_reasons.clear()
             self.viewport().update()
 
     # ------------------------------------------------------------------
@@ -621,6 +632,7 @@ class DropFileList(QListWidget):
             self._thumb_cache.pop(path, None)
             self._pending.discard(path)
             self._reported_thumb_failures.discard(path)
+            self._thumb_failure_reasons.pop(path, None)
             self.takeItem(self.row(item))
         self.viewport().update()
         self.count_changed.emit(self.count())
@@ -632,6 +644,7 @@ class DropFileList(QListWidget):
         self._thumb_cache.clear()
         self._pending.clear()
         self._reported_thumb_failures.clear()
+        self._thumb_failure_reasons.clear()
         self._load_tick.stop()
         # Cancel any runnables that are still queued or running so they don't
         # waste CPU decoding thumbnails for items that no longer exist.
@@ -650,6 +663,7 @@ class DropFileList(QListWidget):
         self._thumb_cache.clear()
         self._pending.clear()
         self._reported_thumb_failures.clear()
+        self._thumb_failure_reasons.clear()
         self._load_tick.stop()
         # Same cancellation as _clear_all for consistency.
         self._cancel_event.set()

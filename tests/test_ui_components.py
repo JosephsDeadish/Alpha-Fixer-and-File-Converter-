@@ -169,12 +169,12 @@ class TestDropFileList(unittest.TestCase):
         self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
         self.assertEqual(
             self._widget._thumbnail_failure_summary(),
-            "⚠ 1 thumbnail unavailable — files still work.",
+            "⚠ 1 thumbnail unavailable — a.png: decode failed",
         )
         self._widget._on_thumb_failed("/tmp/b.png", "decode failed")
         self.assertEqual(
             self._widget._thumbnail_failure_summary(),
-            "⚠ 2 thumbnails unavailable — files still work.",
+            "⚠ 2 thumbnails unavailable — latest: b.png",
         )
 
     def test_thumbnail_status_summary_includes_mode_and_failures(self):
@@ -182,7 +182,7 @@ class TestDropFileList(unittest.TestCase):
         self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
         self.assertEqual(
             self._widget._thumbnail_status_summary(),
-            "🖼 Thumbnails off  •  ⚠ 1 thumbnail unavailable — files still work.",
+            "🖼 Thumbnails off  •  ⚠ 1 thumbnail unavailable — a.png: decode failed",
         )
 
     def test_thumbnail_mode_summary_reports_large_list_pause(self):

@@ -378,6 +378,36 @@ def _save_dds(img: Image.Image, path: str, variant: str = "auto"):
     if variant in {"rgb", "rgba"}:
         _save_dds_raw(img, path, variant=variant)
         return
+    if variant in {"dxt1", "dxt5"}:
+        if not _has_wand():
+            raise RuntimeError(
+                f"DDS {variant.upper()} output requires ImageMagick/wand. "
+                "Install it or choose Auto, RGB, or RGBA."
+            )
+        buf = None
+        img_rgba = None
+        try:
+            from wand.image import Image as WandImage
+            img_rgba = img.convert("RGBA")
+            buf = io.BytesIO()
+            img_rgba.save(buf, format="PNG")
+            buf.seek(0)
+            with WandImage(blob=buf.read(), format="png") as wimg:
+                wimg.options["dds:compression"] = variant
+                wimg.format = "dds"
+                wimg.save(filename=path)
+            return
+        except MemoryError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not save DDS using {variant.upper()} compression — {exc}"
+            ) from exc
+        finally:
+            if img_rgba is not None:
+                img_rgba.close()
+            if buf is not None:
+                buf.close()
     img_rgba = None
     try:
         img_rgba = img.convert("RGBA")

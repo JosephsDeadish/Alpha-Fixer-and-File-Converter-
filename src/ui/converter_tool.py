@@ -5,6 +5,7 @@ import datetime
 import os
 import tempfile
 import time
+from collections import Counter
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
@@ -20,7 +21,8 @@ from PyQt6.QtWidgets import (
 
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.file_converter import (
-    OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, DDS_VARIANT_OPTIONS, get_gif_frame_count,
+    OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, DDS_VARIANT_OPTIONS,
+    dds_compression_available, get_gif_frame_count,
 )
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
@@ -313,6 +315,9 @@ class ConverterTab(QWidget):
         # animated GIF; hidden for all other file types.
         self._gif_speed_widget = QWidget()
         self._gif_speed_widget.setVisible(False)
+        self._batch_error_reasons: Counter[str] = Counter()
+        self._thumbnail_failure_log_count = 0
+        self._dds_compression_available = dds_compression_available()
         speed_layout = QHBoxLayout(self._gif_speed_widget)
         speed_layout.setContentsMargins(4, 2, 4, 2)
         speed_layout.setSpacing(8)
@@ -428,6 +433,13 @@ class ConverterTab(QWidget):
         self._dds_variant_combo.setMinimumHeight(28)
         for label, value in DDS_VARIANT_OPTIONS:
             self._dds_variant_combo.addItem(label, userData=value)
+            if value in {"dxt1", "dxt5"} and not self._dds_compression_available:
+                idx = self._dds_variant_combo.count() - 1
+                self._dds_variant_combo.setItemData(
+                    idx,
+                    f"{label} requires ImageMagick/wand; choose Auto/RGB/RGBA if unavailable.",
+                    Qt.ItemDataRole.ToolTipRole,
+                )
         saved_dds_variant = self._settings.get("last_converter_dds_variant", "auto")
         dds_idx = max(0, self._dds_variant_combo.findData(saved_dds_variant))
         self._dds_variant_combo.setCurrentIndex(dds_idx)
@@ -530,6 +542,7 @@ class ConverterTab(QWidget):
         self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
         self._file_list.thumbnail_failed.connect(self._on_thumbnail_failed)
+        self._file_list.list_cleared.connect(self._reset_thumbnail_failure_log)
         # Persist format/quality on change; also refresh live preview
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
@@ -749,6 +762,16 @@ class ConverterTab(QWidget):
         dds_selected = fmt == "DDS"
         self._lbl_dds_variant.setVisible(dds_selected)
         self._dds_variant_combo.setVisible(dds_selected)
+        if dds_selected and not self._dds_compression_available:
+            self._dds_variant_combo.setToolTip(
+                "Compressed DDS variants require ImageMagick/wand.\n"
+                "Auto, RGB, and RGBA DDS output still work without it."
+            )
+        elif dds_selected:
+            self._dds_variant_combo.setToolTip(
+                "Choose how DDS output should be written.\n"
+                "Compressed BC1/DXT1 and BC3/DXT5 variants are available."
+            )
         # When GIF is selected, the Process button opens the GIF Builder instead
         if fmt == "GIF":
             self._btn_run.setText("🎞  Open GIF Builder  [F5]")
@@ -774,6 +797,9 @@ class ConverterTab(QWidget):
         variant = self._dds_variant_combo.currentData()
         if variant:
             self._settings.set("last_converter_dds_variant", variant)
+
+    def _reset_thumbnail_failure_log(self) -> None:
+        self._thumbnail_failure_log_count = 0
 
     @pyqtSlot(int)
     def _on_width_changed(self, width: int) -> None:
@@ -1016,7 +1042,11 @@ class ConverterTab(QWidget):
     def _on_thumbnail_failed(self, path: str, reason: str) -> None:
         name = os.path.basename(path) or path
         short_reason = reason.splitlines()[0].strip() if reason else "thumbnail generation failed"
-        self._log_msg(f"⚠ Thumbnail skipped for {name} — {short_reason}")
+        if self._thumbnail_failure_log_count < 5:
+            self._log_msg(f"⚠ Thumbnail skipped for {name} — {short_reason}")
+        elif self._thumbnail_failure_log_count == 5:
+            self._log_msg("⚠ Additional thumbnail failures suppressed — see list overlay for the latest affected file.")
+        self._thumbnail_failure_log_count += 1
 
     def _save_format_setting(self):
         fmt_data = self._fmt_combo.currentData()
@@ -1064,6 +1094,15 @@ class ConverterTab(QWidget):
         out_dir = self._out_dir_edit.text().strip() or None
         suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
+        dds_variant = self._dds_variant_combo.currentData() or "auto"
+        if target_format == "DDS" and dds_variant in {"dxt1", "dxt5"} and not self._dds_compression_available:
+            QMessageBox.warning(
+                self,
+                "DDS Compression Unavailable",
+                "Compressed DDS output variants require ImageMagick/wand.\n"
+                "Install it or choose Auto, RGB, or RGBA in the DDS variant selector.",
+            )
+            return
         resize = None
         if self._resize_check.isChecked():
             resize = (self._width_spin.value(), self._height_spin.value())
@@ -1100,6 +1139,7 @@ class ConverterTab(QWidget):
         self._last_run_out_dir = out_dir or None
 
         self._log.clear()
+        self._batch_error_reasons.clear()
         self._progress.setValue(0)
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
@@ -1315,7 +1355,9 @@ class ConverterTab(QWidget):
             dest_name = Path(msg).name if msg else "?"
             self._log_msg(f"✔ {name}  →  {dest_name}")
         else:
-            self._log_msg(f"✘ {name}  →  {msg.splitlines()[-1] if msg else ''}")
+            reason = msg.splitlines()[-1].strip() if msg else "conversion failed"
+            self._batch_error_reasons[reason] += 1
+            self._log_msg(f"✘ {name}  →  {reason}")
 
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
@@ -1324,21 +1366,32 @@ class ConverterTab(QWidget):
         self._progress.setValue(100)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
-        self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
+        summary_note = ""
+        if errors > 0 and self._batch_error_reasons:
+            top_reason, top_count = self._batch_error_reasons.most_common(1)[0]
+            summary_note = f" Most common issue: {top_reason} ({top_count} file{'s' if top_count != 1 else ''})."
+        self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.{summary_note}")
         self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        if errors > 0 and self._batch_error_reasons:
+            parts = [
+                f"{count}× {reason}"
+                for reason, count in self._batch_error_reasons.most_common(3)
+            ]
+            self._log_msg(f"Failure summary: {'  •  '.join(parts)}")
         # Restore the window title after processing
         try:
-            from ..version import __version__
+            from ..version import __version__, APP_NAME
         except Exception:
             try:
-                from src.version import __version__  # type: ignore[no-redef]
+                from src.version import __version__, APP_NAME  # type: ignore[no-redef]
             except Exception:
                 __version__ = ""
+                APP_NAME = "FORMATOMANCER: Alpha & Media Alchemy"
         win = self.window()
         if win is not None:
             ver_str = f"  v{__version__}" if __version__ else ""
             win.setWindowTitle(
-                f"🐼 Alpha & RGBA Adjuster  |  File Converter{ver_str}"
+                f"🐼 {APP_NAME}{ver_str}"
             )
         # Tell the user where converted files were saved so they don't have to
         # hunt for them (especially when no output folder was explicitly set).

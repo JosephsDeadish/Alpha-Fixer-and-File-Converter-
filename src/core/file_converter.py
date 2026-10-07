@@ -31,7 +31,7 @@ from typing import Optional
 
 from PIL import Image
 
-from .alpha_processor import _save_dds, _load_dds
+from .alpha_processor import _save_dds, _load_dds, _has_wand
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,14 @@ DDS_VARIANT_OPTIONS: list[tuple[str, str]] = [
     ("Auto (RGB/RGBA by alpha)", "auto"),
     ("RGB 24-bit (discard alpha)", "rgb"),
     ("RGBA 32-bit (preserve alpha)", "rgba"),
+    ("BC1 / DXT1 compressed", "dxt1"),
+    ("BC3 / DXT5 compressed", "dxt5"),
 ]
+
+
+def dds_compression_available() -> bool:
+    """Return True when compressed DDS save variants are available."""
+    return _has_wand()
 
 # Human-readable descriptions for each output format, shown as combo tooltips
 FORMAT_DESCRIPTIONS = {

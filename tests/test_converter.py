@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from unittest import mock
+import types
 
 import numpy as np
 from PIL import Image
@@ -290,7 +291,7 @@ class TestConvertFile(unittest.TestCase):
     def test_dds_variant_options_include_auto_rgb_and_rgba(self):
         self.assertEqual(
             [value for _label, value in DDS_VARIANT_OPTIONS],
-            ["auto", "rgb", "rgba"],
+            ["auto", "rgb", "rgba", "dxt1", "dxt5"],
         )
 
     def test_convert_file_passes_dds_variant_to_writer(self):
@@ -343,6 +344,68 @@ class TestConvertFile(unittest.TestCase):
                 self.assertTrue(os.path.isfile(dst))
                 with Image.open(dst) as result:
                     self.assertEqual(result.size, (4, 4))
+        finally:
+            img.close()
+
+    def test_save_dds_dxt1_uses_wand_compression_option(self):
+        from src.core import alpha_processor as ap
+
+        calls: dict[str, object] = {}
+
+        class FakeWandImage:
+            def __init__(self, *args, **kwargs):
+                calls["init_kwargs"] = kwargs
+                self.options = {}
+                self.format = None
+
+            def __enter__(self):
+                calls["image"] = self
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def save(self, filename=None):
+                calls["filename"] = filename
+                with open(filename, "wb") as f:
+                    f.write(b"dds")
+
+        fake_wand_image_module = types.SimpleNamespace(Image=FakeWandImage)
+        fake_wand_module = types.SimpleNamespace(image=fake_wand_image_module)
+
+        img = Image.new("RGBA", (4, 4), (9, 8, 7, 6))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.dds")
+                with mock.patch.object(ap, "_has_wand", return_value=True):
+                    original_save = ap.Image.Image.save
+
+                    def _fake_save(image_self, fp, format=None, **kwargs):
+                        if format == "DDS":
+                            raise OSError("save failed")
+                        return original_save(image_self, fp, format=format, **kwargs)
+
+                    with mock.patch.object(ap.Image.Image, "save", autospec=True, side_effect=_fake_save):
+                        with mock.patch.dict(sys.modules, {
+                            "wand": fake_wand_module,
+                            "wand.image": fake_wand_image_module,
+                        }):
+                            ap._save_dds(img, dst, variant="dxt1")
+                self.assertEqual(calls["image"].options["dds:compression"], "dxt1")
+                self.assertEqual(calls["filename"], dst)
+        finally:
+            img.close()
+
+    def test_save_dds_dxt1_requires_wand(self):
+        from src.core import alpha_processor as ap
+
+        img = Image.new("RGBA", (4, 4), (9, 8, 7, 6))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.dds")
+                with mock.patch.object(ap, "_has_wand", return_value=False):
+                    with self.assertRaises(RuntimeError):
+                        ap._save_dds(img, dst, variant="dxt1")
         finally:
             img.close()
 
