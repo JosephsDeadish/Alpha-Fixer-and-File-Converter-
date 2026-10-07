@@ -288,6 +288,38 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
     return "; ".join(parts) + "."
 
 
+def _frame_dimensions(frame) -> Optional[tuple[int, int]]:
+    """Best-effort width/height extraction for imageio/numpy/PIL-like frames."""
+    shape = getattr(frame, "shape", None)
+    if isinstance(shape, (tuple, list)) and len(shape) >= 2:
+        try:
+            height = int(shape[0])
+            width = int(shape[1])
+        except Exception:
+            width = height = 0
+        if width > 0 and height > 0:
+            return width, height
+    size = getattr(frame, "size", None)
+    if isinstance(size, (tuple, list)) and len(size) >= 2:
+        try:
+            width = int(size[0])
+            height = int(size[1])
+        except Exception:
+            width = height = 0
+        if width > 0 and height > 0:
+            return width, height
+    if isinstance(frame, (list, tuple)) and frame:
+        try:
+            height = len(frame)
+            first_row = frame[0]
+            width = len(first_row) if isinstance(first_row, (list, tuple)) else 0
+        except Exception:
+            width = height = 0
+        if width > 0 and height > 0:
+            return width, height
+    return None
+
+
 def _video_io_diagnostics() -> str:
     """Return a human-readable summary of missing video I/O dependencies."""
     missing: list[str] = []
@@ -327,6 +359,14 @@ def _video_load_failure_hint(path: str) -> str:
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
             "This odd container reports a video stream; if direct loading fails the app will also try ffmpeg recovery fallbacks."
+        )
+    elif probe and bool(probe.get("has_audio")) and not bool(probe.get("has_video")):
+        lines.append(
+            "ffprobe detected audio but no playable video stream, so this file cannot be added to the Video Builder as a video clip."
+        )
+    elif probe and str(probe.get("format_name") or "").strip() and not bool(probe.get("has_video")):
+        lines.append(
+            "ffprobe recognized the container but did not expose a playable video stream for the Video Builder."
         )
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
@@ -486,6 +526,14 @@ def _coerce_frame_size(value) -> Optional[tuple[int, int]]:
     return None
 
 
+def _is_probably_video_source(path: str, probe: Optional[dict[str, object]] = None) -> bool:
+    ext = Path(path).suffix.lower()
+    if ext in _VIDEO_EXTS:
+        return True
+    details = probe if probe is not None else _probe_media_details(path)
+    return bool(details and details.get("has_video"))
+
+
 def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]], object | None]:
     """Return (fps, frame_count, frame_size, first_frame) for a video."""
     reader = _open_video_reader(path)
@@ -530,10 +578,7 @@ def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]],
             except Exception:
                 first_frame = None
             if first_frame is not None:
-                try:
-                    frame_size = (int(first_frame.shape[1]), int(first_frame.shape[0]))
-                except Exception:
-                    frame_size = None
+                frame_size = _frame_dimensions(first_frame)
                 frame_count = 1
         elif frame_size is None:
             try:
@@ -541,10 +586,7 @@ def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]],
             except Exception:
                 first_frame = None
             if first_frame is not None:
-                try:
-                    frame_size = (int(first_frame.shape[1]), int(first_frame.shape[0]))
-                except Exception:
-                    frame_size = None
+                frame_size = _frame_dimensions(first_frame)
         return fps, frame_count, frame_size, first_frame
     finally:
         reader.close()
@@ -1821,7 +1863,20 @@ class VideoToolDialog(QDialog):
                 label = _format_clip_label(clip, path, "🖼")
                 next_row = self._insert_clip(clip, label, next_row)
             else:
-                skipped.append(Path(path).name)
+                probe = _probe_media_details(path)
+                if _is_probably_video_source(path, probe):
+                    clip = _load_video_clip(path)
+                    if clip is None:
+                        failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
+                        continue
+                    label = _format_clip_label(clip, path, "🎞")
+                    next_row = self._insert_clip(clip, label, next_row)
+                    if clip.load_note:
+                        fallback_loaded.append(Path(path).name)
+                elif probe:
+                    failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
+                else:
+                    skipped.append(Path(path).name)
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()

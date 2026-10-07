@@ -1917,7 +1917,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(fps, 30.0)
         self.assertEqual(frame_count, 12)
         self.assertEqual(frame_size, (1, 1))
-        self.assertIsNone(first_frame)
+        self.assertEqual(first_frame, [[0]])
 
     def test_video_load_failure_hint_mentions_experimental_disc_images(self):
         try:
@@ -1951,6 +1951,28 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 hint = vt._video_load_failure_hint("/tmp/game.iso")
         self.assertIn("ffprobe did not detect a playable video stream", hint)
         self.assertIn("Probe: container=iso9660; video=none; audio=mp2.", hint)
+
+    def test_video_load_failure_hint_mentions_audio_only_odd_container(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "ogg",
+            "has_video": False,
+            "has_audio": True,
+            "video_codec": "",
+            "audio_codec": "vorbis",
+            "width": 0,
+            "height": 0,
+            "fps": 0.0,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/weird.dat")
+        self.assertIn("audio but no playable video stream", hint)
+        self.assertIn("container=ogg", hint)
 
     def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
         try:
@@ -2007,6 +2029,68 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("transcode fallback", clip.load_note)
             clip.close()
             self.assertFalse(os.path.exists(transcode_path))
+
+    def test_dropped_unknown_video_extension_uses_probe_detection(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        fake_clip = types.SimpleNamespace(
+            load_note="",
+            source_path="/tmp/weird.dat",
+            frame_size=(32, 24),
+            clip_type="video",
+            active_frames=12,
+            fps=24.0,
+            speed_percent=100,
+            close=lambda: None,
+        )
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": True}):
+                with patch.object(vt, "_load_video_clip", return_value=fake_clip):
+                    with patch.object(dialog, "_insert_clip", return_value=1) as insert_mock:
+                        with patch.object(dialog, "_update_scrubber"):
+                            with patch.object(dialog, "_update_preview"):
+                                with patch.object(dialog, "_update_ui_state"):
+                                    with patch.object(dialog, "_show_video_load_failures") as failures_mock:
+                                        with patch.object(dialog, "_show_skipped_files") as skipped_mock:
+                                            dialog._on_files_dropped(["/tmp/weird.dat"], 0)
+            insert_mock.assert_called_once()
+            failures_mock.assert_called_once_with([])
+            skipped_mock.assert_called_once_with([])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_dropped_audio_only_unknown_extension_reports_video_failure(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": False, "has_audio": True, "format_name": "ogg"}):
+                with patch.object(vt, "_video_load_failure_hint", return_value="audio only"):
+                    with patch.object(dialog, "_update_scrubber"):
+                        with patch.object(dialog, "_update_preview"):
+                            with patch.object(dialog, "_update_ui_state"):
+                                with patch.object(dialog, "_show_video_load_failures") as failures_mock:
+                                    with patch.object(dialog, "_show_skipped_files") as skipped_mock:
+                                        dialog._on_files_dropped(["/tmp/weird.dat"], 0)
+            failures_mock.assert_called_once_with([("weird.dat", "audio only")])
+            skipped_mock.assert_called_once_with([])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
 
     def test_real_media_sample_corpus_loads_under_iso_umd_bin_extensions(self):
         try:
@@ -2464,6 +2548,35 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         try:
             self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "optimize=on")
             self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(5))
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_matches_full_output_path_not_only_visible_basename(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/session-exports/nested/final-output.mp4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "files": ["a.iso"],
+                "notes": "sample.iso: temporary ffmpeg transcode fallback active",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._vid_tree.topLevelItem(0)
+            self.assertEqual(item.text(1), "final-output.mp4")
+            tab._apply_filter(tab._vid_tree, "session-exports")
+            self.assertFalse(item.isHidden())
         finally:
             tab.close()
             tab.deleteLater()

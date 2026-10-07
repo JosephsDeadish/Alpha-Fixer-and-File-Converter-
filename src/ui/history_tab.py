@@ -23,6 +23,7 @@ class _HistoryItem(QTreeWidgetItem):
     """Tree item that sorts the time column using stored raw timestamp data."""
 
     _SORT_ROLE = Qt.ItemDataRole.UserRole + 2
+    _FILTER_ROLE = Qt.ItemDataRole.UserRole + 3
 
     def __lt__(self, other) -> bool:
         tree = self.treeWidget()
@@ -129,6 +130,18 @@ def _fmt_ts(ts: str) -> str:
         return dt.strftime("%Y-%m-%d  %H:%M:%S")
     except (ValueError, TypeError):
         return ts
+
+
+def _set_filter_text(item: QTreeWidgetItem, *parts) -> None:
+    tokens: list[str] = []
+    for part in parts:
+        if isinstance(part, (list, tuple, set)):
+            tokens.extend(str(value) for value in part if str(value or "").strip())
+        else:
+            text = str(part or "").strip()
+            if text:
+                tokens.append(text)
+    item.setData(0, _HistoryItem._FILTER_ROLE, " ".join(tokens).lower())
 
 
 def _load_thumb(path: str) -> QIcon:
@@ -416,9 +429,11 @@ class HistoryTab(QWidget):
             if not needle:
                 item.setHidden(False)
                 continue
-            row_text = " ".join(
-                item.text(col) for col in range(tree.columnCount())
-            ).lower()
+            row_text = item.data(0, _HistoryItem._FILTER_ROLE)
+            if not row_text:
+                row_text = " ".join(
+                    item.text(col) for col in range(tree.columnCount())
+                ).lower()
             item.setHidden(needle not in row_text)
 
     # ------------------------------------------------------------------
@@ -502,6 +517,7 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, fmt, n_files, n_ok, n_err, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
+            _set_filter_text(item, ts, fmt, n_files, n_ok, n_err, file_list)
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
@@ -541,6 +557,7 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
+            _set_filter_text(item, ts, mode, n_files, n_ok, n_err, file_list)
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
@@ -585,6 +602,17 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
+            _set_filter_text(
+                item,
+                ts,
+                mode,
+                n_files,
+                n_ok,
+                n_err,
+                entry.get("source", ""),
+                entry.get("output", ""),
+                file_list,
+            )
             # Thumbnail icon from source image (item 9)
             thumb_path = entry.get("first_file", entry.get("source", ""))
             thumb = _load_thumb(thumb_path)
@@ -630,6 +658,17 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, output, n_frames, n_ok, n_err, notes, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
+            _set_filter_text(
+                item,
+                ts,
+                output,
+                output_path,
+                n_frames,
+                n_ok,
+                n_err,
+                notes,
+                file_list,
+            )
             # Use the output GIF for animated thumbnail (item 80); fall back to
             # the first input file for non-GIF outputs or missing files.
             gif_output = output_path if (output_path and output_path.lower().endswith(".gif")
@@ -681,6 +720,17 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, output, n_clips, n_ok, n_err, notes, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
+            _set_filter_text(
+                item,
+                ts,
+                output,
+                raw_output,
+                n_clips,
+                n_ok,
+                n_err,
+                notes,
+                file_list,
+            )
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first clip thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
             if not thumb.isNull():
