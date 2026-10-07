@@ -70,6 +70,31 @@ def _get_app():
     return app
 
 
+def _optional_corpus_roots(*env_names: str) -> list[str]:
+    roots: list[str] = []
+    for env_name in env_names:
+        raw = os.environ.get(env_name, "")
+        if not raw:
+            continue
+        for part in raw.split(os.pathsep):
+            candidate = part.strip()
+            if candidate and os.path.isdir(candidate):
+                roots.append(candidate)
+    return roots
+
+
+def _iter_corpus_files(roots: list[str], suffixes: tuple[str, ...], *, limit: int = 24) -> list[str]:
+    matches: list[str] = []
+    for root in roots:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for name in sorted(filenames):
+                if name.lower().endswith(suffixes):
+                    matches.append(os.path.join(dirpath, name))
+                    if len(matches) >= limit:
+                        return matches
+    return matches
+
+
 class TestDropFileList(unittest.TestCase):
     def setUp(self):
         self._app = _get_app()
@@ -2087,6 +2112,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         summary = vt._video_capability_summary()
         self.assertIn("Ready now", summary)
         self.assertIn("Audio-only containers still cannot be added", summary)
+        self.assertIn("preferred-stream selection", summary)
+        self.assertIn("partial/corrupt containers", summary)
 
     def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
         try:
@@ -2307,6 +2334,69 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
+
+    def test_video_import_status_summarizes_recovery_paths_and_guidance(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._update_import_status(
+                added=2,
+                attempted=4,
+                recovered=[
+                    ("a.iso", "temporary ffmpeg remux fallback active"),
+                    ("b.vob", "temporary ffmpeg transcode fallback active (preferred stream #3)"),
+                ],
+                failures=[
+                    ("c.vob", "Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.\nProbe: container=mpeg; preferred-stream=3."),
+                    ("d.ogg", "ffprobe detected audio but no playable video stream"),
+                ],
+                skipped=[],
+            )
+            self.assertIn("2 recovered", dialog._import_status_lbl.text())
+            self.assertIn("remux ×1", dialog._import_status_lbl.text())
+            self.assertIn("transcode ×1", dialog._import_status_lbl.text())
+            self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
+            self.assertIn("multi-stream container", dialog._import_status_lbl.toolTip())
+            self.assertIn("audio-only container", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_optional_real_video_corpus_samples_probe_and_explain_or_load(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        roots = _optional_corpus_roots("ALPHA_FIXER_REAL_VIDEO_CORPUS", "ALPHA_FIXER_VIDEO_CORPUS_DIR")
+        samples = _iter_corpus_files(roots, (".iso", ".umd", ".bin", ".vob", ".ts", ".mxf", ".asf", ".rmvb"))
+        if not samples:
+            self.skipTest("No optional real video corpus configured")
+
+        loaded = 0
+        explained = 0
+        for sample_path in samples:
+            details = vt._probe_media_details(sample_path)
+            hint = vt._video_load_failure_hint(sample_path)
+            self.assertTrue(hint)
+            clip = vt._load_video_clip(sample_path)
+            if clip is not None:
+                loaded += 1
+                self.assertEqual(clip.source_path, sample_path)
+                clip.close()
+                continue
+            if details is not None:
+                explained += 1
+                self.assertIn("ffmpeg", hint.lower())
+        self.assertGreaterEqual(loaded + explained, len(samples))
 
     def test_mp4_export_size_rounds_up_to_even_dimensions(self):
         try:
@@ -2678,6 +2768,33 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_import_status_summarizes_source_types_and_largest_frame(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            dialog._update_import_status(
+                attempted=3,
+                loaded_sources=2,
+                added_frames=9,
+                failures=[],
+                skipped=["skip.txt"],
+                loaded_details=["clip.mp4: 6 frames  •  video  •  320×240 @ ~42 ms", "anim.gif: 3 frames  •  animated gif  •  64×64"],
+                source_type_counts={"video": 1, "animated gif": 1},
+                largest_frame=(320, 240),
+            )
+            self.assertIn("Loaded 2 sources", dialog._import_status_lbl.text())
+            self.assertIn("1 skipped", dialog._import_status_lbl.text())
+            self.assertIn("Source types: animated gif ×1, video ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Largest imported frame: 320×240", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_gif_builder_updates_frame_diagnostics_for_selected_preview_frame(self):
         try:
             from src.ui import gif_builder as gb
@@ -2692,7 +2809,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             entry2 = gb._FrameEntry("/tmp/anim.gif", 1, Image.new("RGBA", (12, 8), (255, 0, 0, 128)), delay_ms=80)
             dialog._frames = [entry1, entry2]
             for item_entry in (entry1, entry2):
-                item = QListWidgetItem("anim")
+                item = gb.QListWidgetItem("anim")
                 item.setData(gb._ENTRY_ROLE, item_entry)
                 dialog._frame_list.addItem(item)
             dialog._frame_list.setCurrentRow(1)
@@ -2701,10 +2818,11 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog._update_scrubber()
             dialog._update_preview_frame()
             self.assertIn("anim.gif", dialog._frame_diag_lbl.text())
+            self.assertIn("animated gif source", dialog._frame_diag_lbl.text())
             self.assertIn("preview frame 2/2", dialog._frame_diag_lbl.text())
             self.assertIn("source frame 2/2", dialog._frame_diag_lbl.text())
             self.assertIn("12×8", dialog._frame_diag_lbl.text())
-            self.assertIn("80 ms", dialog._frame_diag_lbl.text())
+            self.assertIn("80 ms (source timing)", dialog._frame_diag_lbl.text())
             self.assertIn("/tmp/anim.gif", dialog._frame_diag_lbl.toolTip())
         finally:
             dialog.close()
@@ -2721,6 +2839,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         try:
             self.assertTrue(dialog._capability_lbl.text())
             self.assertIn("Ready", dialog._capability_lbl.text())
+            self.assertIn("audio is ignored", dialog._capability_lbl.text())
         finally:
             dialog.close()
             dialog.deleteLater()

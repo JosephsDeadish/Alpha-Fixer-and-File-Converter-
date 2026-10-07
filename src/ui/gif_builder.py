@@ -140,7 +140,7 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 def _gif_builder_capability_summary() -> str:
     if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
         return (
-            "Ready now: images, animated GIFs, and video-source imports are available. Video clips are expanded into GIF frames automatically, while import summaries group failures and per-frame diagnostics stay available during preview."
+            "Ready now: images, animated GIFs, and video-source imports are available. Video clips are expanded into GIF frames automatically, audio is ignored during GIF import/export, and import summaries keep grouped failures plus per-frame diagnostics visible during preview."
         )
     return (
         "Limited mode: images and animated GIFs are ready now, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
@@ -152,11 +152,13 @@ class _FrameEntry:
     """A single frame in the GIF builder's frame list."""
 
     def __init__(self, source_path: str, frame_index: int,
-                 pil_image: "PIL.Image.Image", delay_ms: Optional[int] = None):
+                 pil_image: "PIL.Image.Image", delay_ms: Optional[int] = None,
+                 source_delay_ms: Optional[int] = None):
         self.source_path = source_path
         self.frame_index = frame_index  # 0-based index within source (>0 for animated GIF)
         self._pil = pil_image           # RGBA PIL image; ownership transferred here
         self.delay_ms: Optional[int] = delay_ms  # None = use global delay
+        self.source_delay_ms: Optional[int] = source_delay_ms if source_delay_ms is not None else delay_ms
         self._thumb_cache: dict[tuple[int, int], QPixmap] = {}
 
     def thumbnail(self, w: int, h: int) -> QPixmap:
@@ -181,6 +183,15 @@ class _FrameEntry:
 
 def _frame_source_path(entry) -> str:
     return str(getattr(entry, "source_path", getattr(entry, "path", "")) or "")
+
+
+def _frame_source_kind(path: str, source_frames: int = 1) -> str:
+    ext = Path(path).suffix.lower()
+    if ext in _VIDEO_EXTS:
+        return "video"
+    if ext == ".gif" and source_frames > 1:
+        return "animated gif"
+    return "image"
 
 
 def _classify_import_failure(name: str, detail: str) -> str:
@@ -571,6 +582,8 @@ class GifBuilderDialog(QDialog):
         failures: list[tuple[str, str]] = []
         skipped: list[str] = []
         loaded_details: list[str] = []
+        source_type_counts: dict[str, int] = {}
+        largest_frame: tuple[int, int] = (0, 0)
         for i, path in enumerate(paths):
             progress.setValue(i)
             if progress.wasCanceled():
@@ -594,12 +607,33 @@ class GifBuilderDialog(QDialog):
                 continue
             loaded_sources += 1
             added_frames += len(pil_frames)
-            source_note = f"{Path(path).name}: {len(pil_frames)} frame{'s' if len(pil_frames) != 1 else ''}"
+            source_kind = _frame_source_kind(path, len(pil_frames))
+            source_type_counts[source_kind] = source_type_counts.get(source_kind, 0) + 1
+            frame_width = frame_height = 0
+            if pil_frames:
+                try:
+                    frame_width, frame_height = pil_frames[0].size
+                except Exception:
+                    frame_width = frame_height = 0
+            if frame_width * frame_height > largest_frame[0] * largest_frame[1]:
+                largest_frame = (frame_width, frame_height)
+            source_note = (
+                f"{Path(path).name}: {len(pil_frames)} frame{'s' if len(pil_frames) != 1 else ''}"
+                f"  •  {source_kind}"
+            )
+            if frame_width > 0 and frame_height > 0:
+                source_note += f"  •  {frame_width}×{frame_height}"
             if frame_delay_ms is not None:
                 source_note += f" @ ~{frame_delay_ms} ms"
             loaded_details.append(source_note)
             for frame_idx, pil_frame in enumerate(pil_frames):
-                entry = _FrameEntry(path, frame_idx, pil_frame, delay_ms=frame_delay_ms)
+                entry = _FrameEntry(
+                    path,
+                    frame_idx,
+                    pil_frame,
+                    delay_ms=frame_delay_ms,
+                    source_delay_ms=frame_delay_ms,
+                )
                 self._frames.append(entry)
                 item = QListWidgetItem()
                 item.setIcon(QIcon(entry.thumbnail(_THUMB_W, _THUMB_H)))
@@ -621,6 +655,8 @@ class GifBuilderDialog(QDialog):
             failures=failures,
             skipped=skipped,
             loaded_details=loaded_details,
+            source_type_counts=source_type_counts,
+            largest_frame=largest_frame,
         )
 
     def _resolve_tooltip_mgr(self):
@@ -790,6 +826,8 @@ class GifBuilderDialog(QDialog):
         failures: list[tuple[str, str]],
         skipped: list[str],
         loaded_details: list[str],
+        source_type_counts: dict[str, int],
+        largest_frame: tuple[int, int],
     ) -> None:
         if attempted <= 0:
             self._set_import_status(
@@ -811,6 +849,13 @@ class GifBuilderDialog(QDialog):
             if len(loaded_details) > len(loaded_lines):
                 loaded_lines.append(f"…and {len(loaded_details) - len(loaded_lines)} more source(s).")
             detail_lines.append("Loaded sources:\n  " + "\n  ".join(loaded_lines))
+        if source_type_counts:
+            detail_lines.append(
+                "Source types: "
+                + ", ".join(f"{kind} ×{count}" for kind, count in sorted(source_type_counts.items()))
+            )
+        if largest_frame[0] > 0 and largest_frame[1] > 0:
+            detail_lines.append(f"Largest imported frame: {largest_frame[0]}×{largest_frame[1]}")
         if failures:
             grouped: dict[str, int] = {}
             for name, detail in failures:
@@ -843,13 +888,22 @@ class GifBuilderDialog(QDialog):
         effective_delay = entry.delay_ms if entry.delay_ms is not None else self._delay_slider.value()
         alpha = "yes" if "A" in entry._pil.getbands() else "no"
         source_frames = sum(1 for candidate in self._frames if _frame_source_path(candidate) == source_path)
+        source_kind = _frame_source_kind(source_path, source_frames)
+        if entry.delay_ms is None:
+            timing_mode = "global timing"
+        elif entry.source_delay_ms is not None and entry.delay_ms == entry.source_delay_ms:
+            timing_mode = "source timing"
+        elif entry.source_delay_ms is None:
+            timing_mode = "per-frame override"
+        else:
+            timing_mode = "per-frame override"
         details = (
-            f"Frame diagnostics: {source_name}  •  preview frame {row + 1}/{total}  •  "
+            f"Frame diagnostics: {source_name}  •  {source_kind} source  •  preview frame {row + 1}/{total}  •  "
             f"source frame {entry.frame_index + 1}"
         )
         if source_frames > 1:
             details += f"/{source_frames}"
-        details += f"  •  {width}×{height}  •  {effective_delay} ms  •  alpha={alpha}"
+        details += f"  •  {width}×{height}  •  {effective_delay} ms ({timing_mode})  •  alpha={alpha}"
         self._frame_diag_lbl.setText(details)
         tooltip = details if not source_path else f"{source_path}\n{details}"
         self._frame_diag_lbl.setToolTip(tooltip)

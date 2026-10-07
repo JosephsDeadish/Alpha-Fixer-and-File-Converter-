@@ -29,6 +29,31 @@ from src.core.worker import AlphaWorker, ConverterWorker
 from src.version import APP_NAME
 
 
+def _optional_corpus_roots(*env_names: str) -> list[str]:
+    roots: list[str] = []
+    for env_name in env_names:
+        raw = os.environ.get(env_name, "")
+        if not raw:
+            continue
+        for part in raw.split(os.pathsep):
+            candidate = part.strip()
+            if candidate and os.path.isdir(candidate):
+                roots.append(candidate)
+    return roots
+
+
+def _iter_corpus_files(roots: list[str], suffixes: tuple[str, ...], *, limit: int = 32) -> list[str]:
+    matches: list[str] = []
+    for root in roots:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for name in sorted(filenames):
+                if name.lower().endswith(suffixes):
+                    matches.append(os.path.join(dirpath, name))
+                    if len(matches) >= limit:
+                        return matches
+    return matches
+
+
 def _make_png(path: str, w=8, h=8, alpha=200):
     arr = np.zeros((h, w, 4), dtype=np.uint8)
     arr[:, :, 0] = 200
@@ -172,6 +197,55 @@ class TestBuildOutputPath(unittest.TestCase):
             input_root="/src",
         )
         self.assertEqual(result, "/out/sub/file.jpg")
+
+
+class TestOptionalRealCorpus(unittest.TestCase):
+    def test_optional_real_dds_corpus_samples_decode_or_fail_clearly(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        roots = _optional_corpus_roots("ALPHA_FIXER_REAL_DDS_CORPUS", "ALPHA_FIXER_DDS_CORPUS_DIR")
+        samples = _iter_corpus_files(roots, (".dds",))
+        if not samples:
+            self.skipTest("No optional real DDS corpus configured")
+
+        decoded = 0
+        explained = 0
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for sample_path in samples:
+                try:
+                    img = _load_dds_raw(sample_path)
+                except Exception as exc:
+                    explained += 1
+                    detail = str(exc).lower()
+                    self.assertTrue(detail)
+                    self.assertTrue(
+                        any(
+                            token in detail
+                            for token in (
+                                "dds",
+                                "dxgi",
+                                "cubemap",
+                                "array",
+                                "volume",
+                                "mipmap",
+                                "truncated",
+                                "unsupported",
+                                "block",
+                            )
+                        ),
+                        msg=f"Unexpected DDS failure detail for {sample_path}: {exc}",
+                    )
+                    continue
+                decoded += 1
+                try:
+                    self.assertGreater(img.size[0], 0)
+                    self.assertGreater(img.size[1], 0)
+                    roundtrip_path = os.path.join(tmpdir, os.path.basename(sample_path) + ".png")
+                    img.save(roundtrip_path)
+                    self.assertTrue(os.path.exists(roundtrip_path))
+                finally:
+                    img.close()
+        self.assertGreaterEqual(decoded + explained, len(samples))
 
 
 class TestAlphaWorkerOutputCompatibility(unittest.TestCase):

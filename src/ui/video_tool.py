@@ -582,11 +582,11 @@ def _video_capability_summary() -> str:
         return (
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg. "
+                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with preferred-stream selection for multi-stream containers. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
-            + "Audio-only containers still cannot be added as video clips."
+            + "Audio-only containers still cannot be added as video clips, and partial/corrupt containers may still need manual repair or remuxing."
         )
     return (
         "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
@@ -597,8 +597,8 @@ def _video_capability_summary() -> str:
 def _classify_video_import_failure(name: str, detail: str) -> str:
     ext = Path(name).suffix.lower()
     lower = detail.lower()
-    if "missing:" in lower or "imageio" in lower or "ffmpeg executable" in lower or "ffprobe" in lower:
-        return "video dependency"
+    if "multiple video streams were detected" in lower or "preferred-stream=" in lower:
+        return "multi-stream container"
     if "audio but no playable video stream" in lower:
         return "audio-only container"
     if "did not detect a playable video stream" in lower or "did not expose a playable video stream" in lower:
@@ -607,9 +607,34 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
         return "partial / malformed video"
     if "recovery fallbacks still could not produce a playable clip" in lower:
         return "recovery exhausted"
+    if "missing:" in lower or "imageio" in lower or "ffmpeg executable" in lower or "ffprobe" in lower:
+        return "video dependency"
     if ext in _VIDEO_EXTS or "supported, non-corrupt video" in lower:
         return "video decode"
     return "video import"
+
+
+def _video_failure_guidance(category: str) -> str:
+    guidance = {
+        "video dependency": "Install or bundle imageio, imageio-ffmpeg, ffmpeg, and ffprobe for full video probing and import.",
+        "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream, but a manual ffmpeg remux may still be needed.",
+        "audio-only container": "The Video Builder only accepts clips with playable video frames; audio-only files cannot be added to the timeline.",
+        "no playable video stream": "The container was recognized, but ffprobe could not expose a playable video stream for the builder.",
+        "partial / malformed video": "The file appears incomplete or malformed; re-copying, remuxing, or re-encoding the source may be required.",
+        "recovery exhausted": "Direct load plus ffmpeg remux/transcode recovery could not produce a playable clip from this source.",
+        "video decode": "The source looks like a video, but the current decode path still could not open it reliably.",
+        "video import": "The source could not be imported as a supported video clip.",
+    }
+    return guidance.get(category, "The source could not be imported as a supported video clip.")
+
+
+def _video_recovery_bucket(note: str) -> str:
+    lower = note.lower()
+    if "transcode" in lower:
+        return "transcode"
+    if "remux" in lower:
+        return "remux"
+    return "recovery"
 
 
 def _open_video_reader(path: str):
@@ -1903,7 +1928,7 @@ class VideoToolDialog(QDialog):
         *,
         added: int,
         attempted: int,
-        recovered: list[str],
+        recovered: list[tuple[str, str]],
         failures: list[tuple[str, str]],
         skipped: list[str],
     ) -> None:
@@ -1914,7 +1939,14 @@ class VideoToolDialog(QDialog):
             return
         parts = [f"Added {added} clip{'s' if added != 1 else ''}"]
         if recovered:
-            parts.append(f"{len(recovered)} via ffmpeg recovery")
+            recovery_counts: dict[str, int] = {}
+            for _name, note in recovered:
+                bucket = _video_recovery_bucket(note)
+                recovery_counts[bucket] = recovery_counts.get(bucket, 0) + 1
+            recovery_summary = ", ".join(f"{bucket} ×{count}" for bucket, count in sorted(recovery_counts.items()))
+            parts.append(f"{len(recovered)} recovered")
+            if recovery_summary:
+                parts.append(recovery_summary)
         if failures:
             parts.append(f"{len(failures)} failed")
         if skipped:
@@ -1922,9 +1954,17 @@ class VideoToolDialog(QDialog):
         tone = "success" if added and not failures and not skipped else "warning" if added else "error"
         detail_lines = []
         if recovered:
+            recovery_counts: dict[str, int] = {}
+            for _name, note in recovered:
+                bucket = _video_recovery_bucket(note)
+                recovery_counts[bucket] = recovery_counts.get(bucket, 0) + 1
+            detail_lines.append(
+                "Recovery paths: "
+                + ", ".join(f"{bucket} ×{count}" for bucket, count in sorted(recovery_counts.items()))
+            )
             detail_lines.append(
                 "Recovery fallbacks used:\n  "
-                + "\n  ".join(recovered)
+                + "\n  ".join(f"{name}: {note}" for name, note in recovered)
                 + "\nOriginal source paths stay attached for labeling and export history."
             )
         if failures:
@@ -1935,6 +1975,10 @@ class VideoToolDialog(QDialog):
             detail_lines.append(
                 "Failure types: "
                 + ", ".join(f"{category} ×{count}" for category, count in grouped.items())
+            )
+            detail_lines.append(
+                "Failure guidance:\n  "
+                + "\n  ".join(f"{category}: {_video_failure_guidance(category)}" for category in grouped)
             )
             failure_lines = [f"{name}: {hint}" for name, hint in failures[:_MAX_VIDEO_LOAD_FAILURE_DETAILS]]
             if len(failures) > len(failure_lines):
@@ -2019,7 +2063,7 @@ class VideoToolDialog(QDialog):
 
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
         skipped = []
-        fallback_loaded: list[str] = []
+        fallback_loaded: list[tuple[str, str]] = []
         failed_videos: list[tuple[str, str]] = []
         next_row = max(0, min(len(self._clips), insert_row))
         added = 0
@@ -2034,7 +2078,7 @@ class VideoToolDialog(QDialog):
                 next_row = self._insert_clip(clip, label, next_row)
                 added += 1
                 if clip.load_note:
-                    fallback_loaded.append(Path(path).name)
+                    fallback_loaded.append((Path(path).name, clip.load_note))
             elif ext in _IMAGE_EXTS:
                 clip = _load_image_as_clip(path)
                 if clip is None:
@@ -2054,7 +2098,7 @@ class VideoToolDialog(QDialog):
                     next_row = self._insert_clip(clip, label, next_row)
                     added += 1
                     if clip.load_note:
-                        fallback_loaded.append(Path(path).name)
+                        fallback_loaded.append((Path(path).name, clip.load_note))
                 elif probe:
                     failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
                 else:
@@ -2079,7 +2123,7 @@ class VideoToolDialog(QDialog):
 
     def _load_video_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
-        fallback_loaded: list[str] = []
+        fallback_loaded: list[tuple[str, str]] = []
         failed_videos: list[tuple[str, str]] = []
         added = 0
         for path in paths:
@@ -2091,7 +2135,7 @@ class VideoToolDialog(QDialog):
             next_row = self._insert_clip(clip, label, next_row)
             added += 1
             if clip.load_note:
-                fallback_loaded.append(Path(path).name)
+                fallback_loaded.append((Path(path).name, clip.load_note))
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()
