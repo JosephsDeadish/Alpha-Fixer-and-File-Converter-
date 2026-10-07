@@ -2075,6 +2075,38 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self._app.processEvents()
         self.assertEqual(saved_paths, ["/tmp/video-output.gif"])
 
+    def test_export_gif_failure_keeps_existing_output_file(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "existing.gif")
+                with open(out_path, "wb") as fh:
+                    fh.write(b"original-gif")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch.object(vt.QMessageBox, "critical") as critical_mock:
+                        with patch("PIL.Image.Image.save", autospec=True, side_effect=RuntimeError("gif failed")):
+                            dialog._export()
+                critical_mock.assert_called_once()
+                with open(out_path, "rb") as fh:
+                    self.assertEqual(fh.read(), b"original-gif")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_export_rewrites_mismatched_mp4_extension(self):
         _require_qt_gui(self)
         self._app = _get_app()
@@ -2116,6 +2148,47 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self._app.processEvents()
         self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
         self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
+
+    def test_export_render_failure_keeps_existing_mp4_output_file(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        class _FailingWriter:
+            def append_data(self, data):
+                raise RuntimeError("encode failed")
+
+            def close(self):
+                return None
+
+        dialog = vt.VideoToolDialog()
+        dialog._mp4_export_available = True
+        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "existing.mp4")
+                with open(out_path, "wb") as fh:
+                    fh.write(b"original-mp4")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", return_value=_FailingWriter()):
+                        with patch.object(vt.QMessageBox, "critical") as critical_mock:
+                            dialog._export()
+                critical_mock.assert_called_once()
+                with open(out_path, "rb") as fh:
+                    self.assertEqual(fh.read(), b"original-mp4")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
 
     def test_export_mux_failure_keeps_existing_output_file(self):
         _require_qt_gui(self)

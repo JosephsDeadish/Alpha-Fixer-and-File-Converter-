@@ -79,6 +79,7 @@ _IMAGE_EXTS = {
 }
 _KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
 _EXPERIMENTAL_DISC_VIDEO_EXTS = {".iso", ".umd", ".bin"}
+_MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
@@ -1789,7 +1790,7 @@ class VideoToolDialog(QDialog):
         if not failures:
             return
         lines = []
-        for name, hint in failures[:3]:
+        for name, hint in failures[:_MAX_VIDEO_LOAD_FAILURE_DETAILS]:
             lines.append(f"• {name}: {hint}")
         remaining = len(failures) - len(lines)
         detail = "\n".join(lines)
@@ -2436,9 +2437,17 @@ class VideoToolDialog(QDialog):
         wrote_frames = False
         render_path = out_path
         temp_mp4 = None
-        temp_mux_output = None
+        temp_output_path = None
         export_stage = "render setup"
         try:
+            if fmt in {"gif", "mp4"}:
+                output_file = tempfile.NamedTemporaryFile(
+                    prefix="alpha_fixer_export_",
+                    suffix=target_suffix,
+                    delete=False,
+                )
+                temp_output_path = output_file.name
+                output_file.close()
             if fmt != "gif":
                 if self._should_mux_audio(fmt, clip_snapshot):
                     temp_file = tempfile.NamedTemporaryFile(
@@ -2449,6 +2458,8 @@ class VideoToolDialog(QDialog):
                     temp_mp4 = temp_file.name
                     temp_file.close()
                     render_path = temp_mp4
+                elif temp_output_path is not None:
+                    render_path = temp_output_path
                 import imageio
                 import numpy as np
                 writer = imageio.get_writer(
@@ -2530,7 +2541,7 @@ class VideoToolDialog(QDialog):
                 try:
                     if rest:
                         first.save(
-                            out_path,
+                            temp_output_path or out_path,
                             format="GIF",
                             save_all=True,
                             append_images=rest,
@@ -2540,7 +2551,7 @@ class VideoToolDialog(QDialog):
                         )
                     else:
                         first.save(
-                            out_path,
+                            temp_output_path or out_path,
                             format="GIF",
                             duration=max(1, int(round(1000.0 / fps))),
                             loop=0,
@@ -2553,20 +2564,20 @@ class VideoToolDialog(QDialog):
                         except Exception:
                             pass
                     gif_frames.clear()
+                if temp_output_path is not None:
+                    Path(temp_output_path).replace(out_path)
+                    temp_output_path = None
             elif fmt == "mp4" and not canceled and wrote_frames and temp_mp4 is not None:
                 export_stage = "audio muxing"
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
-                mux_file = tempfile.NamedTemporaryFile(
-                    prefix="alpha_fixer_muxed_",
-                    suffix=".mp4",
-                    delete=False,
-                )
-                temp_mux_output = mux_file.name
-                mux_file.close()
-                self._mux_mp4_audio(render_path, temp_mux_output, clip_snapshot, fps)
-                Path(temp_mux_output).replace(out_path)
-                temp_mux_output = None
+                self._mux_mp4_audio(render_path, temp_output_path or out_path, clip_snapshot, fps)
+                if temp_output_path is not None:
+                    Path(temp_output_path).replace(out_path)
+                    temp_output_path = None
+            elif fmt == "mp4" and not canceled and wrote_frames and temp_output_path is not None:
+                Path(temp_output_path).replace(out_path)
+                temp_output_path = None
             progress.setValue(total)
         except Exception as exc:
             if not out_path_existed:
@@ -2579,9 +2590,9 @@ class VideoToolDialog(QDialog):
                     Path(temp_mp4).unlink(missing_ok=True)
                 except Exception:
                     pass
-            if temp_mux_output is not None:
+            if temp_output_path is not None:
                 try:
-                    Path(temp_mux_output).unlink(missing_ok=True)
+                    Path(temp_output_path).unlink(missing_ok=True)
                 except Exception:
                     pass
             progress.close()
@@ -2598,9 +2609,9 @@ class VideoToolDialog(QDialog):
                     Path(temp_mp4).unlink(missing_ok=True)
                 except Exception:
                     pass
-            if temp_mux_output is not None:
+            if temp_output_path is not None:
                 try:
-                    Path(temp_mux_output).unlink(missing_ok=True)
+                    Path(temp_output_path).unlink(missing_ok=True)
                 except Exception:
                     pass
             for frame in gif_frames:
