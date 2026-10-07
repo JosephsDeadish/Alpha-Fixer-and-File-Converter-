@@ -106,6 +106,41 @@ if [[ -x "$launch_target" ]]; then
         echo "❌  ERROR: Packaged launch smoke test failed with exit code $smoke_rc."
         exit "$smoke_rc"
     fi
+
+    echo "Running packaged capability audit…"
+    set +e
+    capability_output="$(ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1 "$launch_target" 2>&1)"
+    capability_rc=$?
+    set -e
+    printf '%s\n' "$capability_output"
+    if [[ $capability_rc -ne 0 ]]; then
+        echo "❌  ERROR: Packaged capability audit failed with exit code $capability_rc."
+        exit "$capability_rc"
+    fi
+    capability_json="$(printf '%s\n' "$capability_output" | sed -n 's/^ALPHA_FIXER_RUNTIME_CAPABILITIES=//p' | tail -n 1)"
+    if [[ -z "$capability_json" ]]; then
+        echo "❌  ERROR: Packaged capability audit did not emit ALPHA_FIXER_RUNTIME_CAPABILITIES output."
+        exit 1
+    fi
+    python - "$capability_json" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if not payload.get("video_runtime_ready"):
+    raise SystemExit("Packaged runtime audit failed: video_runtime_ready=false")
+missing_libs = payload.get("missing_linux_runtime_libs") or []
+if missing_libs:
+    raise SystemExit(
+        "Packaged runtime audit failed: missing_linux_runtime_libs="
+        + ",".join(str(name) for name in missing_libs)
+    )
+if not payload.get("odd_container_probe_ready"):
+    print("⚠️  Packaged runtime audit: ffprobe unavailable, odd-container probing stays limited.")
+if not payload.get("dds_compression_available"):
+    print("⚠️  Packaged runtime audit: DDS compressed variants remain unavailable without bundled ImageMagick/wand.")
+print("✅  Packaged runtime capability audit verified.")
+PY
 else
     echo "⚠️  Skipping packaged launch smoke test because executable was not found at $launch_target"
 fi

@@ -8961,10 +8961,25 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('timeout 25s "$launch_target"', sh_src)
         self.assertIn('echo "✅  Packaged app launch verified."', sh_src)
 
+    def test_build_scripts_run_packaged_capability_audit(self):
+        sh_src = self._src("../scripts/build_exe.sh")
+        bat_src = self._src("../scripts/build_exe.bat")
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1', sh_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', sh_src)
+        self.assertIn('video_runtime_ready', sh_src)
+        self.assertIn('odd_container_probe_ready', sh_src)
+        self.assertIn('dds_compression_available', sh_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1', bat_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', bat_src)
+        self.assertIn('video_runtime_ready', bat_src)
+
     def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
         src = self._src("../main.py")
         self.assertIn("def _missing_linux_runtime_libs() -> list[str]:", src)
         self.assertIn("def _packaged_runtime_notice(missing_libs: list[str]) -> str:", src)
+        self.assertIn("def _runtime_capability_summary() -> dict[str, object]:", src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', src)
+        self.assertIn('os.environ.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", "").strip().lower()', src)
         self.assertIn('os.environ.get("ALPHA_FIXER_SMOKE_TEST", "").strip()', src)
         self.assertIn('QTimer.singleShot(smoke_test_ms, app.quit)', src)
         self.assertIn('window.statusBar().showMessage(runtime_notice, 12000)', src)

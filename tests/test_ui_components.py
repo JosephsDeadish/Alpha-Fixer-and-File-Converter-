@@ -3,6 +3,8 @@ Tests for new UI components: DropFileList, SoundEngine, MouseTrailOverlay,
 and the extended SettingsManager.
 """
 import os
+import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -553,6 +555,42 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
                             notice = main._optional_feature_readiness_notice()
         self.assertIn("video import/MP4 export unavailable: missing imageio, ffmpeg", notice)
+
+    def test_runtime_capability_summary_reports_runtime_bits(self):
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with patch.object(vt, "_has_imageio", return_value=True):
+            with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value=None):
+                        with patch.object(fc, "dds_compression_available", return_value=False):
+                            with patch.object(fc, "optional_pillow_output_limits", return_value=[("AVIF", "needs libavif")]):
+                                with patch.object(main, "_missing_linux_runtime_libs", return_value=["libEGL.so.1"]):
+                                    summary = main._runtime_capability_summary()
+        self.assertTrue(summary["has_imageio"])
+        self.assertTrue(summary["has_imageio_ffmpeg"])
+        self.assertEqual(summary["ffmpeg_path"], "/tmp/ffmpeg")
+        self.assertEqual(summary["ffprobe_path"], "")
+        self.assertTrue(summary["video_runtime_ready"])
+        self.assertFalse(summary["odd_container_probe_ready"])
+        self.assertFalse(summary["dds_compression_available"])
+        self.assertEqual(summary["missing_linux_runtime_libs"], ["libEGL.so.1"])
+        self.assertIn("libEGL.so.1", summary["packaged_runtime_notice"])
+        self.assertIn("odd-container probing limited: ffprobe unavailable", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_dump_emits_prefixed_json(self):
+        import main
+        payload = {"video_runtime_ready": True, "odd_container_probe_ready": True}
+        buffer = io.StringIO()
+        with patch.object(main, "_runtime_capability_summary", return_value=payload):
+            with patch("sys.stdout", buffer):
+                rc = main._emit_runtime_capability_dump()
+        self.assertEqual(rc, 0)
+        line = buffer.getvalue().strip()
+        self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_CAPABILITIES="))
+        parsed = json.loads(line.split("=", 1)[1])
+        self.assertEqual(parsed, payload)
 
 
 # ---------------------------------------------------------------------------

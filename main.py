@@ -17,6 +17,7 @@ import datetime
 import threading
 import time
 import ctypes
+import json
 from pathlib import Path
 
 
@@ -363,6 +364,58 @@ def _optional_feature_readiness_notice() -> str:
     if not limits:
         return ""
     return "⚠ Optional feature limits detected: " + "; ".join(limits) + ". See tool banners for details."
+
+
+def _runtime_capability_summary() -> dict[str, object]:
+    summary: dict[str, object] = {
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "platform": sys.platform,
+        "missing_linux_runtime_libs": _missing_linux_runtime_libs() if sys.platform == "linux" else [],
+    }
+    summary["packaged_runtime_notice"] = _packaged_runtime_notice(
+        list(summary["missing_linux_runtime_libs"])
+    )
+    try:
+        from src.core.file_converter import dds_compression_available, optional_pillow_output_limits
+        from src.ui.video_tool import _get_ffmpeg_exe, _get_ffprobe_exe, _has_imageio, _has_imageio_ffmpeg
+    except Exception as exc:
+        summary["runtime_audit_error"] = str(exc)
+        summary["video_runtime_ready"] = False
+        summary["dds_compression_available"] = False
+        summary["optional_output_limits"] = []
+        summary["feature_readiness_notice"] = ""
+        return summary
+
+    has_imageio = bool(_has_imageio())
+    has_imageio_ffmpeg = bool(_has_imageio_ffmpeg())
+    ffmpeg_path = _get_ffmpeg_exe() or ""
+    ffprobe_path = _get_ffprobe_exe() or ""
+    unavailable_outputs = optional_pillow_output_limits()
+
+    summary.update({
+        "has_imageio": has_imageio,
+        "has_imageio_ffmpeg": has_imageio_ffmpeg,
+        "ffmpeg_path": ffmpeg_path,
+        "ffprobe_path": ffprobe_path,
+        "video_runtime_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path),
+        "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path and ffprobe_path),
+        "dds_compression_available": bool(dds_compression_available()),
+        "optional_output_limits": unavailable_outputs,
+        "feature_readiness_notice": _optional_feature_readiness_notice(),
+    })
+    return summary
+
+
+def _runtime_capability_dump_requested() -> bool:
+    return os.environ.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", "").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+def _emit_runtime_capability_dump() -> int:
+    summary = _runtime_capability_summary()
+    print("ALPHA_FIXER_RUNTIME_CAPABILITIES=" + json.dumps(summary, sort_keys=True))
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -901,6 +954,9 @@ class _HangWatchdog:
 # ---------------------------------------------------------------------------
 
 def main():
+    if _runtime_capability_dump_requested():
+        sys.exit(_emit_runtime_capability_dump())
+
     # Run the pre-flight check before anything else
     if not _check_system_libs():
         sys.exit(1)
