@@ -2,6 +2,7 @@
 File Converter tab widget.
 """
 import datetime
+import json
 import os
 import tempfile
 import time
@@ -317,6 +318,8 @@ class ConverterTab(QWidget):
         self._gif_speed_widget = QWidget()
         self._gif_speed_widget.setVisible(False)
         self._batch_error_reasons: Counter[str] = Counter()
+        self._batch_error_files: dict[str, list[str]] = {}
+        self._batch_failure_details: list[dict[str, str]] = []
         self._thumbnail_failure_log_count = 0
         self._dds_compression_available = dds_compression_available()
         speed_layout = QHBoxLayout(self._gif_speed_widget)
@@ -513,6 +516,15 @@ class ConverterTab(QWidget):
         rv.addWidget(grp_resize)
 
         # Log
+        log_btn_row = QHBoxLayout()
+        log_btn_row.addStretch(1)
+        self._btn_export_failures = QPushButton("Export Failure Report…")
+        self._btn_export_failures.setEnabled(False)
+        self._btn_export_failures.setToolTip(
+            "Save the most recent batch failure details as a text or JSON report."
+        )
+        log_btn_row.addWidget(self._btn_export_failures)
+        rv.addLayout(log_btn_row)
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setMinimumHeight(80)
@@ -534,6 +546,7 @@ class ConverterTab(QWidget):
         self._btn_clear.clicked.connect(self._file_list._clear_all)
         self._btn_run.clicked.connect(self._run)
         self._btn_stop.clicked.connect(self._stop)
+        self._btn_export_failures.clicked.connect(self._export_failure_report)
         self._btn_out_dir.clicked.connect(self._browse_out_dir)
         self._resize_check.toggled.connect(self._width_spin.setEnabled)
         self._resize_check.toggled.connect(self._height_spin.setEnabled)
@@ -1183,6 +1196,9 @@ class ConverterTab(QWidget):
 
         self._log.clear()
         self._batch_error_reasons.clear()
+        self._batch_error_files.clear()
+        self._batch_failure_details.clear()
+        self._btn_export_failures.setEnabled(False)
         if format_unavailable:
             self._log_msg(
                 f"⚠ {target_format} export unavailable — falling back to PNG for this batch."
@@ -1446,6 +1462,11 @@ class ConverterTab(QWidget):
         else:
             reason = msg.splitlines()[-1].strip() if msg else "conversion failed"
             self._batch_error_reasons[reason] += 1
+            self._batch_error_files.setdefault(reason, []).append(src)
+            self._batch_failure_details.append({
+                "source": src,
+                "reason": reason,
+            })
             self._log_msg(f"✘ {name}  →  {reason}")
 
     @pyqtSlot(int, int)
@@ -1467,6 +1488,7 @@ class ConverterTab(QWidget):
                 for reason, count in self._batch_error_reasons.most_common(3)
             ]
             self._log_msg(f"Failure summary: {'  •  '.join(parts)}")
+            self._btn_export_failures.setEnabled(True)
         # Restore the window title after processing
         try:
             from ..version import __version__, APP_NAME
@@ -1524,6 +1546,76 @@ class ConverterTab(QWidget):
                 self._offer_delete_originals(self._last_run_files, success)
         if errors > 0:
             self.processing_error.emit(errors)
+
+    def _build_failure_report_payload(self) -> dict:
+        grouped = []
+        for reason, count in self._batch_error_reasons.most_common():
+            files = [Path(path).name for path in self._batch_error_files.get(reason, [])]
+            grouped.append({
+                "reason": reason,
+                "count": count,
+                "files": files,
+            })
+        return {
+            "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "format": self._last_run_format,
+            "total_files": len(self._last_run_files),
+            "error_count": sum(self._batch_error_reasons.values()),
+            "failure_groups": grouped,
+            "failures": list(self._batch_failure_details),
+        }
+
+    def _build_failure_report_text(self) -> str:
+        payload = self._build_failure_report_payload()
+        lines = [
+            "FORMATOMANCER Conversion Failure Report",
+            f"Generated: {payload['generated_at']}",
+            f"Target format: {payload['format'] or 'Unknown'}",
+            f"Batch size: {payload['total_files']}",
+            f"Failures: {payload['error_count']}",
+            "",
+            "Failure groups:",
+        ]
+        for group in payload["failure_groups"]:
+            lines.append(f"- {group['count']}× {group['reason']}")
+            for file_name in group["files"][:20]:
+                lines.append(f"    • {file_name}")
+            if len(group["files"]) > 20:
+                lines.append(f"    • … and {len(group['files']) - 20} more")
+        if payload["failures"]:
+            lines.extend(["", "Per-file failures:"])
+            for entry in payload["failures"]:
+                lines.append(f"- {Path(entry['source']).name}: {entry['reason']}")
+        return "\n".join(lines)
+
+    def _export_failure_report(self) -> None:
+        if not self._batch_failure_details:
+            QMessageBox.information(self, "No Failures", "There is no failure report to export yet.")
+            return
+        default_name = "formatomancer-failure-report.txt"
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export Failure Report",
+            default_name,
+            "Text Report (*.txt);;JSON Report (*.json)",
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith(".json") or "json" in selected_filter.lower():
+                payload = self._build_failure_report_payload()
+                if not path.lower().endswith(".json"):
+                    path = f"{path}.json"
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, indent=2)
+            else:
+                if not path.lower().endswith(".txt"):
+                    path = f"{path}.txt"
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self._build_failure_report_text())
+            self._log_msg(f"📁 Failure report exported: {path}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not save failure report:\n{exc}")
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._preview_debounce.stop()

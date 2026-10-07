@@ -185,6 +185,18 @@ class TestDropFileList(unittest.TestCase):
             "🖼 Thumbnails off  •  ⚠ 1 thumbnail unavailable — a.png: decode failed",
         )
 
+    def test_thumbnail_failure_marks_item_tooltip(self):
+        self._widget.addItem("/tmp/a.png")
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        item = self._widget.item(0)
+        self.assertIsNotNone(item)
+        self.assertIn("Thumbnail preview unavailable", item.toolTip())
+        self.assertIn("decode failed", item.toolTip())
+
+    def test_dynamic_tooltip_includes_thumbnail_summary(self):
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertIn("⚠ 1 thumbnail unavailable", self._widget.toolTip())
+
     def test_thumbnail_mode_summary_reports_large_list_pause(self):
         for idx in range(3001):
             self._widget.addItem(f"/tmp/{idx}.png")
@@ -288,6 +300,41 @@ class TestConverterTab(unittest.TestCase):
         self.assertGreaterEqual(idx, 0)
         self._widget._fmt_combo.setCurrentIndex(idx)
         self.assertIn("auto-saved as PNG", self._widget._status_lbl.text())
+
+    def test_build_failure_report_text_groups_repeated_failures(self):
+        self._widget._last_run_format = "DDS"
+        self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
+        self._widget._batch_error_reasons.update({"decode failed": 2, "out of memory": 1})
+        self._widget._batch_error_files = {
+            "decode failed": ["/tmp/a.png", "/tmp/b.png"],
+            "out of memory": ["/tmp/c.png"],
+        }
+        self._widget._batch_failure_details = [
+            {"source": "/tmp/a.png", "reason": "decode failed"},
+            {"source": "/tmp/b.png", "reason": "decode failed"},
+            {"source": "/tmp/c.png", "reason": "out of memory"},
+        ]
+        text = self._widget._build_failure_report_text()
+        self.assertIn("FORMATOMANCER Conversion Failure Report", text)
+        self.assertIn("- 2× decode failed", text)
+        self.assertIn("• a.png", text)
+        self.assertIn("Per-file failures:", text)
+
+    def test_export_failure_report_writes_json(self):
+        self._widget._last_run_format = "PNG"
+        self._widget._last_run_files = ["/tmp/a.png"]
+        self._widget._batch_error_reasons.update({"decode failed": 1})
+        self._widget._batch_error_files = {"decode failed": ["/tmp/a.png"]}
+        self._widget._batch_failure_details = [
+            {"source": "/tmp/a.png", "reason": "decode failed"},
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "report.json")
+            with patch("src.ui.converter_tool.QFileDialog.getSaveFileName", return_value=(target, "JSON Report (*.json)")):
+                self._widget._export_failure_report()
+            with open(target, "r", encoding="utf-8") as f:
+                content = f.read()
+        self.assertIn('"reason": "decode failed"', content)
 
 
 # ---------------------------------------------------------------------------
