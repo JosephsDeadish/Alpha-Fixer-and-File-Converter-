@@ -8794,7 +8794,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('(self._brightness_slider, _ADJUSTMENT_DEFAULT_VALUES["brightness"])', src)
         self.assertIn('f"Could not save output during {export_stage}:\\n{exc}"', src)
         self.assertIn("Unsupported Files Skipped", src)
-        self.assertIn("imageio-ffmpeg or a system ffmpeg binary is available", src)
+        self.assertIn("imageio-ffmpeg or a bundled/system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
         self.assertIn("def _coerce_frame_size(value) -> Optional[tuple[int, int]]:", src)
         self.assertIn("imageio_ffmpeg.count_frames_and_secs(path)", src)
