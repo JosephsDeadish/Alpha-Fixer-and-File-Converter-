@@ -38,7 +38,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
     QProgressDialog, QSplitter, QWidget,
-    QFrame, QSpinBox, QAbstractSpinBox,
+    QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox,
 )
 from .video_tool import _VIDEO_EXTS, _load_video_frames, _video_io_diagnostics, _has_ffmpeg, _has_imageio, _has_imageio_ffmpeg
 
@@ -382,6 +382,13 @@ class GifBuilderDialog(QDialog):
         self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
         self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._import_status_lbl)
+        self._import_detail_box = QPlainTextEdit()
+        self._import_detail_box.setReadOnly(True)
+        self._import_detail_box.setPlaceholderText("Detailed import diagnostics will appear here.")
+        self._import_detail_box.setMinimumHeight(70)
+        self._import_detail_box.setMaximumHeight(110)
+        self._import_detail_box.setVisible(False)
+        left_layout.addWidget(self._import_detail_box)
 
         self._capability_lbl = QLabel(_gif_builder_capability_summary())
         self._capability_lbl.setWordWrap(True)
@@ -816,6 +823,8 @@ class GifBuilderDialog(QDialog):
         self._import_status_lbl.setText(message)
         self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
         self._import_status_lbl.setToolTip(detail or message)
+        self._import_detail_box.setPlainText(detail)
+        self._import_detail_box.setVisible(bool(detail.strip()))
 
     def _update_import_status(
         self,

@@ -2084,6 +2084,52 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("still could not produce a playable clip", hint)
         self.assertIn("temporary ffmpeg remux and transcode recovery", hint)
 
+    def test_video_load_failure_hint_mentions_transport_stream_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpegts",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "aac",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/capture.ts")
+        self.assertIn("Transport-stream sources often contain discontinuities", hint)
+
+    def test_video_load_failure_hint_mentions_realmedia_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "rm,rmvb",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "rv40",
+            "audio_codec": "cook",
+            "width": 640,
+            "height": 360,
+            "fps": 24.0,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/legacy.rmvb")
+        self.assertIn("RealMedia / RMVB support is best-effort", hint)
+
     def test_classify_video_import_failure_distinguishes_audio_only_and_recovery(self):
         try:
             from src.ui import video_tool as vt
@@ -2311,6 +2357,57 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 self.assertEqual(clip.source_path, sample_path)
                 clip.close()
 
+    def test_generated_transport_stream_and_asf_samples_load_or_explain(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        ffmpeg_exe = vt._get_ffmpeg_exe()
+        ffprobe_exe = vt._get_ffprobe_exe()
+        if not ffmpeg_exe or not ffprobe_exe:
+            self.skipTest("ffmpeg/ffprobe unavailable for generated odd-container corpus test")
+
+        outputs = (
+            ("sample.ts", ["-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-f", "mpegts"]),
+            ("sample.asf", ["-c:v", "wmv2", "-pix_fmt", "yuv420p", "-f", "asf"]),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name, extra_args in outputs:
+                sample_path = os.path.join(tmpdir, name)
+                result = subprocess.run(
+                    [
+                        ffmpeg_exe,
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "testsrc=size=32x24:rate=6",
+                        "-t",
+                        "0.5",
+                        *extra_args,
+                        sample_path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode != 0:
+                    self.skipTest(f"Could not generate odd-container sample {name}: {result.stderr[:200]}")
+                details = vt._probe_media_details(sample_path)
+                self.assertIsNotNone(details)
+                self.assertTrue(details["has_video"])
+                hint = vt._video_load_failure_hint(sample_path)
+                self.assertTrue(hint)
+                clip = vt._load_video_clip(sample_path)
+                if clip is not None:
+                    self.assertEqual(clip.source_path, sample_path)
+                    clip.close()
+                else:
+                    self.assertIn("ffmpeg", hint.lower())
+
     def test_load_video_paths_summarizes_failures_inline(self):
         _require_qt_gui(self)
         self._app = _get_app()
@@ -2365,6 +2462,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
             self.assertIn("multi-stream container", dialog._import_status_lbl.toolTip())
             self.assertIn("audio-only container", dialog._import_status_lbl.toolTip())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_detail_box.toPlainText())
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -2790,6 +2889,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("1 skipped", dialog._import_status_lbl.text())
             self.assertIn("Source types: animated gif ×1, video ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("Largest imported frame: 320×240", dialog._import_status_lbl.toolTip())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            self.assertIn("Largest imported frame: 320×240", dialog._import_detail_box.toPlainText())
         finally:
             dialog.close()
             dialog.deleteLater()

@@ -50,7 +50,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
-    QFrame, QScrollArea,
+    QFrame, QPlainTextEdit, QScrollArea,
 )
 
 _VIDEO_EXTS = {
@@ -424,11 +424,37 @@ def _video_load_failure_hint(path: str) -> str:
         lines.append(
             "ffprobe found a video stream but could not resolve stable frame dimensions; the container may be partial, malformed, or use an unsupported stream layout."
         )
+    lines.extend(_video_container_guidance(path, probe))
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
         lines.append(probe_summary)
     lines.append(_video_io_diagnostics())
     return "\n".join(lines)
+
+
+def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -> list[str]:
+    if not details:
+        return []
+    ext = Path(path).suffix.lower()
+    format_name = str(details.get("format_name") or "").lower()
+    guidance: list[str] = []
+    if ext == ".vob" or ("mpeg" in format_name and ext in {".vob", ".pss", ".str"}):
+        guidance.append(
+            "DVD/console-program streams like VOB/PSS/STR may carry multiple program streams or broken navigation/index data; remux or transcode recovery may still be required."
+        )
+    elif "mpegts" in format_name or ext in {".ts", ".m2ts", ".mts"}:
+        guidance.append(
+            "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading."
+        )
+    elif "asf" in format_name or ext in {".asf", ".wmv"}:
+        guidance.append(
+            "ASF/WMV containers rely heavily on index metadata; damaged indexes often need a full transcode instead of direct loading."
+        )
+    elif ext in {".rm", ".rmvb"} or "rm" in format_name or "realmedia" in format_name:
+        guidance.append(
+            "RealMedia / RMVB support is best-effort; older RealMedia files often require a clean remux or transcode before frame-accurate loading will work."
+        )
+    return guidance
 
 
 def _ffmpeg_stream_maps(details: Optional[dict[str, object]]) -> list[str]:
@@ -1484,6 +1510,13 @@ class VideoToolDialog(QDialog):
         self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
         self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._import_status_lbl)
+        self._import_detail_box = QPlainTextEdit()
+        self._import_detail_box.setReadOnly(True)
+        self._import_detail_box.setPlaceholderText("Detailed import diagnostics will appear here.")
+        self._import_detail_box.setMinimumHeight(70)
+        self._import_detail_box.setMaximumHeight(110)
+        self._import_detail_box.setVisible(False)
+        left_layout.addWidget(self._import_detail_box)
 
         self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")
         self._timeline_summary_lbl.setWordWrap(True)
@@ -1922,6 +1955,8 @@ class VideoToolDialog(QDialog):
         self._import_status_lbl.setText(message)
         self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
         self._import_status_lbl.setToolTip(detail or message)
+        self._import_detail_box.setPlainText(detail)
+        self._import_detail_box.setVisible(bool(detail.strip()))
 
     def _update_import_status(
         self,
