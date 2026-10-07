@@ -140,10 +140,10 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 def _gif_builder_capability_summary() -> str:
     if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
         return (
-            "Ready: images and animated GIFs import directly, and video sources can also be expanded into GIF frames."
+            "Ready for images, animated GIFs, and video-source imports. Video clips are expanded into GIF frames automatically."
         )
     return (
-        "Ready for images and animated GIFs. Video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
+        "Limited mode: images and animated GIFs are ready now, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
         + _video_io_diagnostics()
     )
 
@@ -177,6 +177,22 @@ class _FrameEntry:
             self._pil.close()
         except Exception:
             pass
+
+
+def _frame_source_path(entry) -> str:
+    return str(getattr(entry, "source_path", getattr(entry, "path", "")) or "")
+
+
+def _classify_import_failure(name: str, detail: str) -> str:
+    ext = Path(name).suffix.lower()
+    lower = detail.lower()
+    if ext in _VIDEO_EXTS:
+        if "ffmpeg" in lower or "imageio" in lower:
+            return "video dependency"
+        return "video decode"
+    if "truncated" in lower or "corrupt" in lower or "cannot identify image file" in lower:
+        return "image decode"
+    return "image import"
 
 
 class _FrameListWidget(QListWidget):
@@ -509,6 +525,11 @@ class GifBuilderDialog(QDialog):
         pv_ctrl.addStretch()
         pv_layout.addLayout(pv_ctrl)
 
+        self._frame_diag_lbl = QLabel("Frame diagnostics: add or select media to inspect frame size, source, and timing.")
+        self._frame_diag_lbl.setWordWrap(True)
+        self._frame_diag_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        pv_layout.addWidget(self._frame_diag_lbl)
+
         right_layout.addWidget(grp_preview, 1)
 
         # Export row
@@ -660,7 +681,7 @@ class GifBuilderDialog(QDialog):
         settings = self._resolve_settings()
         if settings is None:
             return
-        files = [os.path.basename(entry.path) for entry in self._frames]
+        files = [os.path.basename(_frame_source_path(entry)) for entry in self._frames if _frame_source_path(entry)]
         alpha_frames = sum(
             1
             for entry in self._frames
@@ -683,7 +704,7 @@ class GifBuilderDialog(QDialog):
             "success": len(self._frames),
             "errors": 0,
             "files": files,
-            "first_file": self._frames[0].path if self._frames else "",
+            "first_file": _frame_source_path(self._frames[0]) if self._frames else "",
             "notes": "; ".join(notes),
         }
         try:
@@ -744,7 +765,9 @@ class GifBuilderDialog(QDialog):
 
     def _update_count(self) -> None:
         n = len(self._frames)
-        self._frame_count_lbl.setText(f"{n} frame{'s' if n != 1 else ''}")
+        source_count = len({path for path in (_frame_source_path(entry) for entry in self._frames) if path})
+        extra = f"  •  {source_count} source{'s' if source_count != 1 else ''}" if source_count else ""
+        self._frame_count_lbl.setText(f"{n} frame{'s' if n != 1 else ''}{extra}")
 
     def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
         colors = {
@@ -783,14 +806,52 @@ class GifBuilderDialog(QDialog):
         tone = "success" if loaded_sources and not failures and not skipped else "warning" if loaded_sources else "error"
         detail_lines = []
         if loaded_details:
-            detail_lines.append("Loaded sources:\n  " + "\n  ".join(loaded_details[:10]))
+            loaded_lines = loaded_details[:10]
+            if len(loaded_details) > len(loaded_lines):
+                loaded_lines.append(f"…and {len(loaded_details) - len(loaded_lines)} more source(s).")
+            detail_lines.append("Loaded sources:\n  " + "\n  ".join(loaded_lines))
         if failures:
+            grouped: dict[str, int] = {}
+            for name, detail in failures:
+                category = _classify_import_failure(name, detail)
+                grouped[category] = grouped.get(category, 0) + 1
+            detail_lines.append(
+                "Failure types: "
+                + ", ".join(f"{category} ×{count}" for category, count in grouped.items())
+            )
             detail_lines.append(
                 "Import failures:\n  " + "\n  ".join(f"{name}: {detail}" for name, detail in failures)
             )
         if skipped:
             detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
         self._set_import_status("Import summary: " + "  •  ".join(parts), detail="\n\n".join(detail_lines), tone=tone)
+
+    def _update_frame_diagnostics(self) -> None:
+        total = len(self._frames)
+        if total <= 0:
+            self._frame_diag_lbl.setText(
+                "Frame diagnostics: add or select media to inspect frame size, source, and timing."
+            )
+            self._frame_diag_lbl.setToolTip(self._frame_diag_lbl.text())
+            return
+        row = max(0, min(self._preview_idx, total - 1))
+        entry = self._frames[row]
+        source_path = _frame_source_path(entry)
+        source_name = os.path.basename(source_path) if source_path else "unknown source"
+        width, height = entry._pil.size
+        effective_delay = entry.delay_ms if entry.delay_ms is not None else self._delay_slider.value()
+        alpha = "yes" if "A" in entry._pil.getbands() else "no"
+        source_frames = sum(1 for candidate in self._frames if _frame_source_path(candidate) == source_path)
+        details = (
+            f"Frame diagnostics: {source_name}  •  preview frame {row + 1}/{total}  •  "
+            f"source frame {entry.frame_index + 1}"
+        )
+        if source_frames > 1:
+            details += f"/{source_frames}"
+        details += f"  •  {width}×{height}  •  {effective_delay} ms  •  alpha={alpha}"
+        self._frame_diag_lbl.setText(details)
+        tooltip = details if not source_path else f"{source_path}\n{details}"
+        self._frame_diag_lbl.setToolTip(tooltip)
 
     # ------------------------------------------------------------------
     # Per-frame delay override (slider-based)
@@ -802,6 +863,7 @@ class GifBuilderDialog(QDialog):
             self._pf_check.setChecked(False)
             self._pf_check.blockSignals(False)
             self._pf_slider.setEnabled(False)
+            self._update_frame_diagnostics()
             return
         # Show the selected frame in the preview when playback is not running (item 39)
         if not self._preview_timer.isActive():
@@ -818,18 +880,21 @@ class GifBuilderDialog(QDialog):
         self._pf_slider.setEnabled(delay is not None)
         self._pf_check.blockSignals(False)
         self._pf_slider.blockSignals(False)
+        self._update_frame_diagnostics()
 
     def _on_pf_check(self, checked: bool) -> None:
         self._pf_slider.setEnabled(checked)
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames):
             self._frames[row].delay_ms = self._pf_slider.value() if checked else None
+        self._update_frame_diagnostics()
 
     def _on_pf_slider_changed(self, value: int) -> None:
         self._pf_val_lbl.setText(f"{value} ms")
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames) and self._pf_check.isChecked():
             self._frames[row].delay_ms = value
+        self._update_frame_diagnostics()
 
     # ------------------------------------------------------------------
     # Global delay slider
@@ -839,6 +904,7 @@ class GifBuilderDialog(QDialog):
         self._delay_val_lbl.setText(f"{value} ms")
         if self._preview_timer.isActive():
             self._preview_timer.setInterval(max(10, value))
+        self._update_frame_diagnostics()
 
     # ------------------------------------------------------------------
     # Preview / transport
@@ -891,6 +957,7 @@ class GifBuilderDialog(QDialog):
         if total == 0:
             self._preview_lbl.setText("(no frames yet)")
             self._preview_frame_lbl.setText("0 / 0")
+            self._update_frame_diagnostics()
             return
         self._preview_idx = max(0, min(self._preview_idx, total - 1))
         entry = self._frames[self._preview_idx]
@@ -900,6 +967,7 @@ class GifBuilderDialog(QDialog):
         )
         self._preview_lbl.setPixmap(pix)
         self._preview_frame_lbl.setText(f"{self._preview_idx + 1} / {total}")
+        self._update_frame_diagnostics()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

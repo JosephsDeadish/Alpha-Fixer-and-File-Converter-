@@ -2110,6 +2110,7 @@ class VideoToolDialog(QDialog):
     def _load_image_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
         skipped = []
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
+        added = 0
         for path in paths:
             clip = _load_image_as_clip(path)
             if clip is None:
@@ -2117,10 +2118,17 @@ class VideoToolDialog(QDialog):
                 continue
             label = _format_clip_label(clip, path, "🖼")
             next_row = self._insert_clip(clip, label, next_row)
+            added += 1
         self._update_scrubber()
         self._update_preview()
         self._update_ui_state()
-        self._show_skipped_files(skipped)
+        self._update_import_status(
+            added=added,
+            attempted=len(paths),
+            recovered=[],
+            failures=[],
+            skipped=skipped,
+        )
 
     def _remove_selected(self) -> None:
         row = self._clip_list.currentRow()

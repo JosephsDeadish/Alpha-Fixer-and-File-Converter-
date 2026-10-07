@@ -2582,7 +2582,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         parent._settings = settings
         dialog = gb.GifBuilderDialog(parent=parent)
         source = Image.new("RGBA", (4, 4), (255, 0, 0, 128))
-        dialog._frames = [types.SimpleNamespace(path="/tmp/frame.png", _pil=source, delay_ms=80, close=lambda: None)]
+        dialog._frames = [gb._FrameEntry("/tmp/frame.png", 0, source.copy(), delay_ms=80)]
         dialog._loop_slider.setValue(0)
         dialog._optimize_check.setChecked(True)
         try:
@@ -2600,6 +2600,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertEqual(len(settings._gif_history), 1)
         entry = settings._gif_history[0]
         self.assertEqual(entry["output"], out_path)
+        self.assertEqual(entry["first_file"], "/tmp/frame.png")
+        self.assertEqual(entry["files"], ["frame.png"])
         self.assertIn("optimize=on", entry["notes"])
         self.assertIn("loop=∞", entry["notes"])
         self.assertIn("alpha", entry["notes"])
@@ -2615,7 +2617,41 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             with patch.object(gb, "_load_pillow_rgba", side_effect=RuntimeError("bad image")):
                 dialog._add_paths(["/tmp/bad.png"])
             self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("Failure types: image import ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("bad.png: bad image", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_updates_frame_diagnostics_for_selected_preview_frame(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            entry1 = gb._FrameEntry("/tmp/anim.gif", 0, Image.new("RGBA", (12, 8), (255, 0, 0, 128)), delay_ms=80)
+            entry2 = gb._FrameEntry("/tmp/anim.gif", 1, Image.new("RGBA", (12, 8), (255, 0, 0, 128)), delay_ms=80)
+            dialog._frames = [entry1, entry2]
+            for item_entry in (entry1, entry2):
+                item = QListWidgetItem("anim")
+                item.setData(gb._ENTRY_ROLE, item_entry)
+                dialog._frame_list.addItem(item)
+            dialog._frame_list.setCurrentRow(1)
+            dialog._preview_idx = 1
+            dialog._update_count()
+            dialog._update_scrubber()
+            dialog._update_preview_frame()
+            self.assertIn("anim.gif", dialog._frame_diag_lbl.text())
+            self.assertIn("preview frame 2/2", dialog._frame_diag_lbl.text())
+            self.assertIn("source frame 2/2", dialog._frame_diag_lbl.text())
+            self.assertIn("12×8", dialog._frame_diag_lbl.text())
+            self.assertIn("80 ms", dialog._frame_diag_lbl.text())
+            self.assertIn("/tmp/anim.gif", dialog._frame_diag_lbl.toolTip())
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -2632,6 +2668,32 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertTrue(dialog._capability_lbl.text())
             self.assertIn("Ready", dialog._capability_lbl.text())
         finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_image_imports_use_inline_status_not_popup(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        good_clip = vt._ClipEntry("/tmp/good.png", 1, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="image")
+        try:
+            with patch.object(vt, "_load_image_as_clip", side_effect=[good_clip, None]):
+                with patch.object(vt.QMessageBox, "information") as info_mock:
+                    dialog._load_image_paths(["/tmp/good.png", "/tmp/bad.png"])
+            info_mock.assert_not_called()
+            self.assertIn("Added 1 clip", dialog._import_status_lbl.text())
+            self.assertIn("1 skipped", dialog._import_status_lbl.text())
+            self.assertIn("Skipped unsupported files:\n  bad.png", dialog._import_status_lbl.toolTip())
+        finally:
+            good_clip.close()
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
