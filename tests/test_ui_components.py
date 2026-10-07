@@ -568,7 +568,18 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         with patch.object(fc, "dds_compression_available", return_value=False):
                             with patch.object(fc, "optional_pillow_output_limits", return_value=[("AVIF", "needs libavif")]):
                                 with patch.object(main, "_missing_linux_runtime_libs", return_value=["libEGL.so.1"]):
-                                    summary = main._runtime_capability_summary()
+                                    with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                        "qt_svg_ready": True,
+                                        "default_theme_svg_path": "/tmp/panda_dark.svg",
+                                        "default_theme_svg_ready": True,
+                                        "theme_svg_missing_count": 0,
+                                    }):
+                                        with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                            "wand_runtime_ready": False,
+                                            "magick_home_path": "/tmp/magick",
+                                            "imagemagick_home_path": "",
+                                        }):
+                                            summary = main._runtime_capability_summary()
         self.assertTrue(summary["has_imageio"])
         self.assertTrue(summary["has_imageio_ffmpeg"])
         self.assertEqual(summary["ffmpeg_path"], "/tmp/ffmpeg")
@@ -580,7 +591,11 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(summary["missing_linux_runtime_libs"], ["libEGL.so.1"])
         self.assertIn("libEGL.so.1", summary["packaged_runtime_notice"])
         self.assertIn("odd-container probing/detail guidance limited: ffprobe unavailable", summary["feature_readiness_notice"])
-        self.assertIn("Main-window readiness and tool banners show", summary["feature_readiness_notice"])
+        self.assertIn("See tool banners for details.", summary["feature_readiness_notice"])
+        self.assertTrue(summary["qt_svg_ready"])
+        self.assertEqual(summary["default_theme_svg_path"], "/tmp/panda_dark.svg")
+        self.assertFalse(summary["wand_runtime_ready"])
+        self.assertEqual(summary["magick_home_path"], "/tmp/magick")
 
     def test_runtime_capability_dump_emits_prefixed_json(self):
         import main
@@ -625,6 +640,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("imageio: missing", tooltip)
         self.assertIn("ffmpeg: missing", tooltip)
         self.assertIn("DDS compressed output: limited", tooltip)
+        self.assertIn("ImageMagick/wand runtime: limited", tooltip)
+        self.assertIn("Qt SVG renderer:", tooltip)
+        self.assertIn("Alpha & RGBA:", tooltip)
         self.assertIn("Converter:", tooltip)
         self.assertIn("GIF Builder:", tooltip)
         self.assertIn("Video Builder:", tooltip)
@@ -2780,6 +2798,36 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 self.assertIn("ffmpeg", hint.lower())
         self.assertGreaterEqual(loaded + explained, len(samples))
 
+    def test_optional_real_disc_video_corpus_samples_probe_and_explain_or_load(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        roots = _optional_corpus_roots(
+            "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS",
+            "ALPHA_FIXER_REAL_VIDEO_CORPUS",
+            "ALPHA_FIXER_VIDEO_CORPUS_DIR",
+        )
+        samples = _iter_corpus_files(roots, (".iso", ".umd", ".bin"))
+        if not samples:
+            self.skipTest("No optional real disc-video corpus configured")
+
+        loaded = 0
+        explained = 0
+        for sample_path in samples:
+            hint = vt._video_load_failure_hint(sample_path)
+            self.assertIn("Disc-image video inputs are experimental", hint)
+            clip = vt._load_video_clip(sample_path)
+            if clip is not None:
+                loaded += 1
+                self.assertEqual(clip.source_path, sample_path)
+                clip.close()
+                continue
+            explained += 1
+            self.assertIn("ffmpeg", hint.lower())
+        self.assertGreaterEqual(loaded + explained, len(samples))
+
     def test_mp4_export_size_rounds_up_to_even_dimensions(self):
         try:
             from src.ui import video_tool as vt
@@ -3347,6 +3395,23 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         finally:
             dialog.close()
             dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_alpha_tab_shows_capability_summary(self):
+        try:
+            from src.ui.alpha_tool import AlphaFixerTab
+        except ImportError as exc:
+            self.skipTest(f"alpha_tool import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        widget = AlphaFixerTab(MagicMock(), settings)
+        try:
+            self.assertTrue(hasattr(widget, "_capability_lbl"))
+            self.assertTrue(widget._capability_lbl.text().startswith("Ready now:"))
+            self.assertIn("SVG inputs", widget._capability_lbl.text())
+        finally:
+            widget.close()
+            widget.deleteLater()
             self._app.processEvents()
 
     def test_gif_builder_emits_status_notice_and_queue_summary(self):

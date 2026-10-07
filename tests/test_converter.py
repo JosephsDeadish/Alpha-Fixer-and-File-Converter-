@@ -247,6 +247,45 @@ class TestOptionalRealCorpus(unittest.TestCase):
                     img.close()
         self.assertGreaterEqual(decoded + explained, len(samples))
 
+    def test_optional_real_dx10_dds_corpus_samples_decode_or_fail_clearly(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        roots = _optional_corpus_roots(
+            "ALPHA_FIXER_REAL_DDS_DX10_CORPUS",
+            "ALPHA_FIXER_REAL_DDS_CORPUS",
+            "ALPHA_FIXER_DDS_CORPUS_DIR",
+        )
+        samples = _iter_corpus_files(roots, (".dds",))
+        if not samples:
+            self.skipTest("No optional real DX10 DDS corpus configured")
+
+        matched = 0
+        for sample_path in samples:
+            lower_name = os.path.basename(sample_path).lower()
+            if not any(token in lower_name for token in ("dx10", "bc6", "bc7", "cubemap", "array", "volume", "mip")):
+                continue
+            matched += 1
+            try:
+                img = _load_dds_raw(sample_path)
+            except Exception as exc:
+                detail = str(exc).lower()
+                self.assertTrue(
+                    any(
+                        token in detail
+                        for token in ("dxgi", "bc6h", "bc7", "cubemap", "array", "volume", "mip", "unsupported")
+                    ),
+                    msg=f"Unexpected DX10 DDS failure detail for {sample_path}: {exc}",
+                )
+                continue
+            else:
+                try:
+                    self.assertGreater(img.size[0], 0)
+                    self.assertGreater(img.size[1], 0)
+                finally:
+                    img.close()
+        if matched == 0:
+            self.skipTest("No DX10/BC6H/BC7-style DDS samples found in optional corpus")
+
 
 class TestAlphaWorkerOutputCompatibility(unittest.TestCase):
 

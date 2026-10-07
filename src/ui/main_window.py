@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 
 from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI
 from ..core.presets import PresetManager
-from .alpha_tool import AlphaFixerTab
+from .alpha_tool import AlphaFixerTab, _alpha_capability_details
 from .converter_tool import ConverterTab, _converter_capability_details, _converter_capability_summary
 from .gif_builder import GifBuilderDialog, _gif_builder_capability_summary
 from .history_tab import HistoryTab
@@ -805,11 +805,28 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         "Runtime component audit:",
         f"• imageio: {'ready' if summary.get('has_imageio') else 'missing'}",
         f"• imageio-ffmpeg: {'ready' if summary.get('has_imageio_ffmpeg') else 'missing'}",
-        f"• ffmpeg: {summary.get('ffmpeg_path') or 'missing'}",
-        f"• ffprobe: {summary.get('ffprobe_path') or 'missing'}",
+        f"• ffmpeg: {summary.get('ffmpeg_path') or 'missing'}"
+        + (" (path missing)" if summary.get("ffmpeg_path") and not summary.get("ffmpeg_path_exists") else ""),
+        f"• ffprobe: {summary.get('ffprobe_path') or 'missing'}"
+        + (" (path missing)" if summary.get("ffprobe_path") and not summary.get("ffprobe_path_exists") else ""),
         "• DDS compressed output: "
         + ("ready" if summary.get("dds_compression_available") else "limited (ImageMagick/wand unavailable)"),
+        "• ImageMagick/wand runtime: "
+        + ("ready" if summary.get("wand_runtime_ready") else "limited"),
+        "• Qt SVG renderer: "
+        + ("ready" if summary.get("qt_svg_ready") else "limited"),
+        "• Default theme SVG asset: "
+        + (str(summary.get("default_theme_svg_path") or "missing") if summary.get("default_theme_svg_ready") else "missing"),
     ])
+    theme_svg_missing_count = int(summary.get("theme_svg_missing_count") or 0)
+    if theme_svg_missing_count > 0:
+        lines.append(f"• Theme SVG assets missing: {theme_svg_missing_count}")
+    magick_home = str(summary.get("magick_home_path") or "").strip()
+    imagemagick_home = str(summary.get("imagemagick_home_path") or "").strip()
+    if magick_home:
+        lines.append(f"• MAGICK_HOME: {magick_home}")
+    if imagemagick_home:
+        lines.append(f"• IMAGEMAGICK_HOME: {imagemagick_home}")
     optional_output_limits = summary.get("optional_output_limits") or []
     if optional_output_limits:
         lines.append("• Optional image exports unavailable:")
@@ -821,6 +838,9 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
     if missing_runtime_libs:
         lines.append("• Missing Linux runtime libs: " + ", ".join(str(lib) for lib in missing_runtime_libs))
     lines.extend([
+        "",
+        "Alpha & RGBA:",
+        _alpha_capability_details(),
         "",
         "Converter:",
         _converter_capability_details(),

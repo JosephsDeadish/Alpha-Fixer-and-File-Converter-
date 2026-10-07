@@ -18,6 +18,7 @@ import threading
 import time
 import ctypes
 import json
+import shutil
 from pathlib import Path
 
 
@@ -338,6 +339,64 @@ def _optional_feature_readiness_notice() -> str:
     return str(notice or "")
 
 
+def _normalized_existing_path(path_text: str) -> str:
+    candidate = str(path_text or "").strip()
+    if not candidate:
+        return ""
+    try:
+        resolved = Path(candidate).expanduser().resolve()
+    except Exception:
+        resolved = Path(candidate).expanduser()
+    return str(resolved) if resolved.exists() else ""
+
+
+def _qt_svg_runtime_ready() -> bool:
+    try:
+        from PyQt6.QtSvg import QSvgRenderer  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _theme_svg_runtime_details() -> dict[str, object]:
+    details: dict[str, object] = {
+        "qt_svg_ready": False,
+        "default_theme_svg_path": "",
+        "default_theme_svg_ready": False,
+        "theme_svg_missing_count": 0,
+    }
+    try:
+        from src.ui.theme_engine import get_theme_svg_path, THEME_SVG
+    except Exception:
+        return details
+    details["qt_svg_ready"] = _qt_svg_runtime_ready()
+    default_svg_path = get_theme_svg_path("Panda Dark")
+    details["default_theme_svg_path"] = default_svg_path
+    details["default_theme_svg_ready"] = bool(default_svg_path)
+    missing = 0
+    for theme_name in THEME_SVG:
+        if not get_theme_svg_path(theme_name):
+            missing += 1
+    details["theme_svg_missing_count"] = missing
+    return details
+
+
+def _imagemagick_runtime_details() -> dict[str, object]:
+    details: dict[str, object] = {
+        "wand_runtime_ready": False,
+        "magick_home_path": "",
+        "imagemagick_home_path": "",
+    }
+    try:
+        from src.core.alpha_processor import _has_wand
+    except Exception:
+        return details
+    details["wand_runtime_ready"] = bool(_has_wand())
+    details["magick_home_path"] = _normalized_existing_path(os.environ.get("MAGICK_HOME", ""))
+    details["imagemagick_home_path"] = _normalized_existing_path(os.environ.get("IMAGEMAGICK_HOME", ""))
+    return details
+
+
 def _runtime_capability_summary() -> dict[str, object]:
     summary: dict[str, object] = {
         "frozen": bool(getattr(sys, "frozen", False)),
@@ -362,7 +421,13 @@ def _runtime_capability_summary() -> dict[str, object]:
     has_imageio_ffmpeg = bool(_has_imageio_ffmpeg())
     ffmpeg_path = _get_ffmpeg_exe() or ""
     ffprobe_path = _get_ffprobe_exe() or ""
+    ffmpeg_path_exists = bool(ffmpeg_path and Path(ffmpeg_path).is_file())
+    ffprobe_path_exists = bool(ffprobe_path and Path(ffprobe_path).is_file())
+    ffmpeg_on_path = bool(shutil.which("ffmpeg"))
+    ffprobe_on_path = bool(shutil.which("ffprobe"))
     unavailable_outputs = optional_pillow_output_limits()
+    svg_details = _theme_svg_runtime_details()
+    imagemagick_details = _imagemagick_runtime_details()
     missing_video_bits: list[str] = []
     if not has_imageio:
         missing_video_bits.append("imageio")
@@ -379,10 +444,21 @@ def _runtime_capability_summary() -> dict[str, object]:
         readiness_limits.append(
             "odd-container probing/detail guidance limited: ffprobe unavailable"
         )
+    if ffmpeg_path and not ffmpeg_path_exists:
+        readiness_limits.append("ffmpeg path invalid")
+    if ffprobe_path and not ffprobe_path_exists:
+        readiness_limits.append("ffprobe path invalid")
     if not dds_compression_available():
         readiness_limits.append(
             "DDS compressed variants unavailable: ImageMagick/wand runtime missing"
         )
+    if not bool(svg_details.get("qt_svg_ready")):
+        readiness_limits.append("Qt SVG renderer unavailable")
+    if not bool(svg_details.get("default_theme_svg_ready")):
+        readiness_limits.append("default theme SVG asset missing")
+    missing_svg_count = int(svg_details.get("theme_svg_missing_count") or 0)
+    if missing_svg_count > 0:
+        readiness_limits.append(f"{missing_svg_count} theme SVG asset(s) missing")
     if unavailable_outputs:
         preview = ", ".join(name for name, _reason in unavailable_outputs[:3])
         extra = len(unavailable_outputs) - min(len(unavailable_outputs), 3)
@@ -394,7 +470,7 @@ def _runtime_capability_summary() -> dict[str, object]:
         feature_readiness_notice = (
             "⚠ Optional feature limits detected: "
             + "; ".join(readiness_limits)
-            + ". Main-window readiness and tool banners show the current supported paths."
+            + ". See tool banners for details."
         )
 
     summary.update({
@@ -402,12 +478,18 @@ def _runtime_capability_summary() -> dict[str, object]:
         "has_imageio_ffmpeg": has_imageio_ffmpeg,
         "ffmpeg_path": ffmpeg_path,
         "ffprobe_path": ffprobe_path,
+        "ffmpeg_path_exists": ffmpeg_path_exists,
+        "ffprobe_path_exists": ffprobe_path_exists,
+        "ffmpeg_on_path": ffmpeg_on_path,
+        "ffprobe_on_path": ffprobe_on_path,
         "video_runtime_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path),
         "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path and ffprobe_path),
         "missing_video_bits": missing_video_bits,
         "dds_compression_available": bool(dds_compression_available()),
         "optional_output_limits": unavailable_outputs,
         "feature_readiness_notice": feature_readiness_notice,
+        **svg_details,
+        **imagemagick_details,
     })
     return summary
 

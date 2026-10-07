@@ -23,10 +23,40 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.presets import PresetManager
-from ..core.alpha_processor import collect_files, SUPPORTED_READ
+from ..core.alpha_processor import collect_files, SUPPORTED_READ, _has_wand
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
 from .preview_pane import BeforeAfterWidget
+from ..core.file_converter import _has_cairosvg, _has_svglib
+
+
+def _alpha_capability_summary() -> str:
+    svg_ready = _has_cairosvg() or _has_svglib()
+    parts = [
+        "Ready now: standard raster alpha/RGBA processing and preview tools are available.",
+    ]
+    if svg_ready:
+        parts.append("SVG inputs are ready.")
+    else:
+        parts.append("SVG inputs need cairosvg or svglib.")
+    if _has_wand():
+        parts.append("DDS inspection and compressed DDS helpers can use ImageMagick/wand when needed.")
+    else:
+        parts.append("Complex DDS variants and compressed DDS helpers stay limited until ImageMagick/wand is available.")
+    return " ".join(parts)
+
+
+def _alpha_capability_details() -> str:
+    lines = [
+        _alpha_capability_summary(),
+        "",
+        "Optional alpha-path dependencies:",
+        "• SVG input: "
+        + ("ready" if (_has_cairosvg() or _has_svglib()) else "limited (install cairosvg or svglib)"),
+        "• ImageMagick/wand: "
+        + ("ready" if _has_wand() else "limited (complex DDS inspection / compressed DDS helpers unavailable)"),
+    ]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +352,12 @@ class AlphaFixerTab(QWidget):
         hdr.setObjectName("header")
         self._hdr = hdr
         main_layout.addWidget(hdr)
+
+        self._capability_lbl = QLabel(_alpha_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setToolTip(_alpha_capability_details())
+        main_layout.addWidget(self._capability_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
         outer_splitter.setChildrenCollapsible(False)
