@@ -557,6 +557,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("video import/MP4 export unavailable: missing imageio, ffmpeg", notice)
 
     def test_runtime_capability_summary_reports_runtime_bits(self):
+        _require_qt_gui(self)
         import main
         import src.ui.video_tool as vt
         import src.core.file_converter as fc
