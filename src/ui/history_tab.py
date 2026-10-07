@@ -327,13 +327,14 @@ class HistoryTab(QWidget):
         self._gif_search = self._make_search_field("gif")
         gif_layout.addWidget(self._gif_search)
         self._gif_tree = _make_tree(
-            ["Time", "Output", "Frames", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Output", "Frames", "✔ OK", "✘ Err", "Notes", "File names"],
             col_tips=[
                 "When the GIF was built.",
                 "Output file path.",
                 "Total number of frames included.",
                 "Frames processed successfully.",
                 "Frames that had errors.",
+                "Export settings / diagnostics notes recorded for this build.",
                 "Input filenames used in this build.",
             ],
         )
@@ -353,13 +354,14 @@ class HistoryTab(QWidget):
         self._vid_search = self._make_search_field("video")
         vid_layout.addWidget(self._vid_search)
         self._vid_tree = _make_tree(
-            ["Time", "Output", "Clips", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Output", "Clips", "✔ OK", "✘ Err", "Notes", "File names"],
             col_tips=[
                 "When the video was built.",
                 "Output file path.",
                 "Total number of clips included.",
                 "Clips processed successfully.",
                 "Clips that had errors.",
+                "Recovery / export notes recorded for this build.",
                 "Input filenames used in this build.",
             ],
         )
@@ -400,7 +402,7 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
-        field.setPlaceholderText("🔍  Filter by time, format, file name…")
+        field.setPlaceholderText("🔍  Filter by time, output, notes, file name…")
         field.setClearButtonEnabled(True)
         return field
 
@@ -623,9 +625,10 @@ class HistoryTab(QWidget):
             n_frames = str(entry.get("frame_count", "?"))
             n_ok = str(entry.get("success", "?"))
             n_err = str(entry.get("errors", "?"))
+            notes = str(entry.get("notes", "") or "").strip()
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = _HistoryItem([ts, output, n_frames, n_ok, n_err, files])
+            item = _HistoryItem([ts, output, n_frames, n_ok, n_err, notes, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             # Use the output GIF for animated thumbnail (item 80); fall back to
             # the first input file for non-GIF outputs or missing files.
@@ -642,14 +645,15 @@ class HistoryTab(QWidget):
                     item.setIcon(0, thumb)
             _set_builder_tooltip(
                 item,
-                6,
+                7,
                 f"Built: {ts}\nOutput: {output}\n"
                 f"Frames: {n_frames}  OK: {n_ok}  Errors: {n_err}\n"
-                f"{preview_text}",
+                f"{preview_text}"
+                + (f"\nNotes: {notes}" if notes else ""),
                 file_list,
             )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
+                for col in range(7):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._gif_tree.addTopLevelItem(item)
         _apply_default_sort(self._gif_tree)
@@ -675,7 +679,7 @@ class HistoryTab(QWidget):
             notes = str(entry.get("notes", "") or "").strip()
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = _HistoryItem([ts, output, n_clips, n_ok, n_err, files])
+            item = _HistoryItem([ts, output, n_clips, n_ok, n_err, notes, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first clip thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
@@ -684,14 +688,14 @@ class HistoryTab(QWidget):
             note_text = f"\nNotes: {notes}" if notes else ""
             _set_builder_tooltip(
                 item,
-                6,
+                7,
                 f"Built: {ts}\nOutput: {output}\n"
                 f"Clips: {n_clips}  OK: {n_ok}  Errors: {n_err}\n"
                 f"{preview_text}{note_text}",
                 file_list,
             )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
+                for col in range(7):
                     item.setForeground(col, Qt.GlobalColor.yellow)
             self._vid_tree.addTopLevelItem(item)
         _apply_default_sort(self._vid_tree)
@@ -759,11 +763,11 @@ class HistoryTab(QWidget):
         elif tab_idx == 3:
             tree = self._gif_tree
             tab_name = "gif_builder"
-            headers = ["Time", "Output", "Frames", "OK", "Errors", "File names"]
+            headers = ["Time", "Output", "Frames", "OK", "Errors", "Notes", "File names"]
         else:
             tree = self._vid_tree
             tab_name = "video_builder"
-            headers = ["Time", "Output", "Clips", "OK", "Errors", "File names"]
+            headers = ["Time", "Output", "Clips", "OK", "Errors", "Notes", "File names"]
 
         path, selected_filter = QFileDialog.getSaveFileName(
             self,

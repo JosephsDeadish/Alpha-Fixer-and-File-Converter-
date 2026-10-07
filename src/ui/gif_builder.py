@@ -21,6 +21,8 @@ UX highlights (Round-90):
 """
 from __future__ import annotations
 
+import datetime
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -601,6 +603,47 @@ class GifBuilderDialog(QDialog):
         shortcut.activated.connect(slot)
         self._shortcut_objects[shortcut_id] = shortcut
 
+    def _record_export_history(
+        self,
+        out_path: str,
+        loop: int,
+        optimize: bool,
+        resize: tuple[int, int],
+    ) -> None:
+        settings = self._resolve_settings()
+        if settings is None:
+            return
+        files = [os.path.basename(entry.path) for entry in self._frames]
+        alpha_frames = sum(
+            1
+            for entry in self._frames
+            if ("A" in entry._pil.getbands()) or ("transparency" in getattr(entry._pil, "info", {}))
+        )
+        notes = [
+            f"loop={'∞' if loop == 0 else loop}",
+            f"optimize={'on' if optimize else 'off'}",
+        ]
+        if resize[0] > 0 or resize[1] > 0:
+            notes.append(
+                f"resize≤{resize[0] if resize[0] > 0 else 'auto'}×{resize[1] if resize[1] > 0 else 'auto'}"
+            )
+        if alpha_frames:
+            notes.append(f"{alpha_frames}/{len(self._frames)} frame(s) carried alpha before quantizing")
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "output": out_path,
+            "frame_count": len(self._frames),
+            "success": len(self._frames),
+            "errors": 0,
+            "files": files,
+            "first_file": self._frames[0].path if self._frames else "",
+            "notes": "; ".join(notes),
+        }
+        try:
+            settings.add_gif_builder_history(entry)
+        except Exception:
+            pass
+
     def register_tooltips(self, mgr) -> None:
         """Register dialog widgets with the shared TooltipManager."""
         self._tooltip_mgr = mgr
@@ -800,6 +843,7 @@ class GifBuilderDialog(QDialog):
         progress.setMinimumDuration(300)
 
         import time as _time
+        import datetime
         _build_start = _time.monotonic()
 
         pil_frames: list[Image.Image] = []
@@ -880,6 +924,12 @@ class GifBuilderDialog(QDialog):
                     pass
 
         self.exported.emit(out_path)
+        self._record_export_history(
+            out_path,
+            loop=loop,
+            optimize=optimize,
+            resize=(max_w, max_h),
+        )
         QMessageBox.information(
             self, "GIF Saved",
             f"Animated GIF saved to:\n{out_path}\n\n"

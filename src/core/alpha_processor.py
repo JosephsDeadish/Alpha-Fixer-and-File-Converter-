@@ -89,6 +89,8 @@ def _load_dds_raw(path: str) -> Image.Image:
         raise ValueError("Not a valid DDS file")
     height = int.from_bytes(data[12:16], "little")
     width = int.from_bytes(data[16:20], "little")
+    depth = int.from_bytes(data[24:28], "little")
+    mipmap_count = int.from_bytes(data[28:32], "little")
     # Pixel format structure at offset 76
     pf_flags = int.from_bytes(data[80:84], "little")
     pf_fourcc = data[84:88]
@@ -97,15 +99,45 @@ def _load_dds_raw(path: str) -> Image.Image:
     g_mask = int.from_bytes(data[96:100], "little")
     b_mask = int.from_bytes(data[100:104], "little")
     a_mask = int.from_bytes(data[104:108], "little")
+    caps2 = int.from_bytes(data[112:116], "little")
 
     # Check for DX10 extended header (FourCC = "DX10")
     dx10_dxgi_format = 0
     pixel_data_offset = 128
+    dx10_resource_dimension = 3
+    dx10_misc_flag = 0
+    dx10_array_size = 1
     if pf_fourcc == b"DX10":
         if len(data) < 148:
             raise ValueError("DDS DX10 header truncated")
         dx10_dxgi_format = int.from_bytes(data[128:132], "little")
+        dx10_resource_dimension = int.from_bytes(data[132:136], "little")
+        dx10_misc_flag = int.from_bytes(data[136:140], "little")
+        dx10_array_size = max(1, int.from_bytes(data[140:144], "little"))
         pixel_data_offset = 148
+
+    legacy_cubemap = bool(caps2 & 0x00000200)
+    legacy_volume = bool(caps2 & 0x00200000)
+    dx10_cubemap = bool(dx10_misc_flag & 0x4)
+    if dx10_array_size > 1:
+        raise ValueError(
+            f"Unsupported DDS texture array ({dx10_array_size} slices). "
+            "Install ImageMagick/wand to inspect non-2D DDS arrays."
+        )
+    if legacy_cubemap or dx10_cubemap:
+        raise ValueError(
+            "Unsupported DDS cubemap surface. Install ImageMagick/wand to inspect cubemap DDS textures."
+        )
+    if legacy_volume or dx10_resource_dimension == 4 or depth > 1:
+        raise ValueError(
+            "Unsupported DDS volume texture. Install ImageMagick/wand to inspect 3D DDS textures."
+        )
+    if mipmap_count > 1:
+        logger.warning(
+            "DDS %s contains %d mip levels; loading base level only.",
+            path,
+            mipmap_count,
+        )
 
     pixel_data = data[pixel_data_offset:]
 

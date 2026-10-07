@@ -172,6 +172,21 @@ _LINUX_RUNTIME_AUDIT_LIBS = (
     "libxkbcommon-x11.so.0",
 )
 
+_OPTIONAL_QT_WARNING_PATTERNS = (
+    ("Couldn't load pipewire-0.3 library", "PipeWire"),
+    ("Couldn't resolve pipewire-0.3 symbols", "PipeWire"),
+    ("Couldn't load va-x11 library", "VA-API"),
+    ("Couldn't resolve va-x11 symbols", "VA-API"),
+    ("Couldn't load va-drm library", "VA-API"),
+    ("Couldn't resolve va-drm symbols", "VA-API"),
+    ("Couldn't load va library", "VA-API"),
+    ("Couldn't resolve va symbols", "VA-API"),
+    ("Couldn't load va(in plugin) library", "VA-API"),
+    ("Couldn't resolve va(in plugin) symbols", "VA-API"),
+    ("PulseAudioService: pa_context_connect() failed", "PulseAudio server"),
+)
+_qt_optional_warning_hits: dict[str, int] = {}
+
 
 def _detect_distro() -> str:
     """Return a simple distribution key for install command lookup."""
@@ -278,6 +293,42 @@ def _smoke_test_duration_ms() -> int:
     except ValueError:
         seconds = 1.5
     return max(250, int(seconds * 1000))
+
+
+def _classify_optional_qt_warning(message: str) -> str:
+    text = str(message or "").strip()
+    for needle, label in _OPTIONAL_QT_WARNING_PATTERNS:
+        if needle in text:
+            return label
+    return ""
+
+
+def _install_qt_message_filter(qInstallMessageHandler) -> None:
+    _qt_optional_warning_hits.clear()
+
+    def _handler(_mode, _context, message) -> None:
+        text = str(message or "").strip()
+        label = _classify_optional_qt_warning(text)
+        if label:
+            _qt_optional_warning_hits[label] = _qt_optional_warning_hits.get(label, 0) + 1
+            if _qt_optional_warning_hits[label] == 1:
+                logger.info("Optional Qt backend unavailable: %s", label)
+            return
+        if text:
+            print(text, file=sys.stderr)
+
+    qInstallMessageHandler(_handler)
+
+
+def _optional_qt_runtime_notice() -> str:
+    if not _qt_optional_warning_hits:
+        return ""
+    labels = sorted(_qt_optional_warning_hits)
+    return (
+        "⚠ Optional Linux multimedia backends unavailable: "
+        + ", ".join(labels)
+        + ". Playback/export should still fall back to bundled ffmpeg or software paths."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -829,7 +880,7 @@ def main():
         sys.path.insert(0, parent_dir)
 
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtCore import QCoreApplication, Qt, QTimer
+    from PyQt6.QtCore import QCoreApplication, Qt, QTimer, qInstallMessageHandler
     from PyQt6.QtGui import QFont
     from src.version import APP_INTERNAL_NAME, APP_NAME
 
@@ -843,6 +894,7 @@ def main():
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
 
+    _install_qt_message_filter(qInstallMessageHandler)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # Consistent baseline across all platforms
 
@@ -937,6 +989,11 @@ def main():
     if runtime_notice:
         logger.warning(runtime_notice)
         QTimer.singleShot(900, lambda: window.statusBar().showMessage(runtime_notice, 12000))
+
+    optional_qt_notice = _optional_qt_runtime_notice()
+    if optional_qt_notice:
+        logger.info(optional_qt_notice)
+        QTimer.singleShot(1400, lambda: window.statusBar().showMessage(optional_qt_notice, 12000))
 
     smoke_test_ms = _smoke_test_duration_ms()
     if smoke_test_ms > 0:

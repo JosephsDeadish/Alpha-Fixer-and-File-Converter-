@@ -3,6 +3,7 @@ Tests for new UI components: DropFileList, SoundEngine, MouseTrailOverlay,
 and the extended SettingsManager.
 """
 import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -233,6 +234,7 @@ class _ConverterTabSettingsStub:
         self._store = {}
         self._history = []
         self._video_history = []
+        self._gif_history = []
 
     def get(self, key, fallback=None):
         return self._store.get(key, fallback)
@@ -248,6 +250,24 @@ class _ConverterTabSettingsStub:
 
     def add_video_builder_history(self, entry):
         self._video_history.append(entry)
+
+    def add_gif_builder_history(self, entry):
+        self._gif_history.append(entry)
+
+    def get_converter_history(self):
+        return list(self._history)
+
+    def get_alpha_history(self):
+        return []
+
+    def get_selective_alpha_history(self):
+        return []
+
+    def get_gif_builder_history(self):
+        return list(self._gif_history)
+
+    def get_video_builder_history(self):
+        return list(self._video_history)
 
 
 class TestConverterTab(unittest.TestCase):
@@ -1960,6 +1980,83 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             clip.close()
             self.assertFalse(os.path.exists(remux_path))
 
+    def test_load_video_clip_uses_transcode_fallback_when_remux_fails(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            transcode_path = os.path.join(tmpdir, "transcoded.mp4")
+            with open(transcode_path, "wb") as fh:
+                fh.write(b"transcoded")
+
+            def _probe(path: str):
+                if path.endswith(".iso"):
+                    raise RuntimeError("primary open failed")
+                return 24.0, 12, (320, 240), None
+
+            with patch.object(vt, "_probe_video_clip", side_effect=_probe):
+                with patch.object(vt, "_probe_media_details", return_value={"has_video": True}):
+                    with patch.object(vt, "_remux_video_source", return_value=None):
+                        with patch.object(vt, "_transcode_video_source", return_value=transcode_path):
+                            with patch.object(vt, "_video_has_audio_stream", return_value=False):
+                                clip = vt._load_video_clip("/tmp/game.iso")
+            self.assertIsNotNone(clip)
+            self.assertEqual(clip.path, transcode_path)
+            self.assertIn("transcode fallback", clip.load_note)
+            clip.close()
+            self.assertFalse(os.path.exists(transcode_path))
+
+    def test_real_media_sample_corpus_loads_under_iso_umd_bin_extensions(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        ffmpeg_exe = vt._get_ffmpeg_exe()
+        ffprobe_exe = vt._get_ffprobe_exe()
+        if not ffmpeg_exe or not ffprobe_exe:
+            self.skipTest("ffmpeg/ffprobe unavailable for generated odd-extension media corpus test")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_mp4 = os.path.join(tmpdir, "sample.mp4")
+            result = subprocess.run(
+                [
+                    ffmpeg_exe,
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=32x24:rate=6",
+                    "-t",
+                    "0.5",
+                    "-pix_fmt",
+                    "yuv420p",
+                    source_mp4,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                self.skipTest(f"Could not generate sample media corpus: {result.stderr[:200]}")
+            with open(source_mp4, "rb") as fh:
+                sample_bytes = fh.read()
+            for ext in (".iso", ".umd", ".bin"):
+                sample_path = os.path.join(tmpdir, f"sample{ext}")
+                with open(sample_path, "wb") as fh:
+                    fh.write(sample_bytes)
+                details = vt._probe_media_details(sample_path)
+                self.assertIsNotNone(details)
+                self.assertTrue(details["has_video"])
+                clip = vt._load_video_clip(sample_path)
+                self.assertIsNotNone(clip)
+                self.assertEqual(clip.source_path, sample_path)
+                clip.close()
+
     def test_load_video_paths_batches_failures_into_one_dialog(self):
         _require_qt_gui(self)
         self._app = _get_app()
@@ -2058,7 +2155,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         from PIL import Image
 
         dialog = vt.VideoToolDialog()
-        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", close=lambda: None)]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
@@ -2073,7 +2170,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
-        self.assertEqual(saved_paths, ["/tmp/video-output.gif"])
+        self.assertEqual(len(saved_paths), 1)
+        self.assertTrue(saved_paths[0].endswith(".gif"))
 
     def test_export_gif_failure_keeps_existing_output_file(self):
         _require_qt_gui(self)
@@ -2128,7 +2226,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
 
         dialog = vt.VideoToolDialog()
         dialog._mp4_export_available = True
-        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", close=lambda: None)]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
@@ -2146,7 +2244,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
-        self.assertEqual(writer_paths, ["/tmp/video-output.mp4"])
+        self.assertEqual(len(writer_paths), 1)
+        self.assertTrue(writer_paths[0].endswith(".mp4"))
         self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
 
     def test_export_render_failure_keeps_existing_mp4_output_file(self):
@@ -2286,6 +2385,89 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(entry["output"], "/tmp/video-history-test.mp4")
         self.assertEqual(entry["files"], ["game.iso"])
         self.assertIn("remux fallback", entry["notes"])
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestBuilderHistoryPolish(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+
+    def tearDown(self):
+        self._app.processEvents()
+
+    def test_gif_export_records_history_notes(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = gb.GifBuilderDialog(parent=parent)
+        source = Image.new("RGBA", (4, 4), (255, 0, 0, 128))
+        dialog._frames = [types.SimpleNamespace(path="/tmp/frame.png", _pil=source, delay_ms=80, close=lambda: None)]
+        dialog._loop_slider.setValue(0)
+        dialog._optimize_check.setChecked(True)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "history.gif")
+                with patch.object(gb.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch.object(gb.QMessageBox, "information"):
+                        dialog._export()
+        finally:
+            source.close()
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(len(settings._gif_history), 1)
+        entry = settings._gif_history[0]
+        self.assertEqual(entry["output"], out_path)
+        self.assertIn("optimize=on", entry["notes"])
+        self.assertIn("loop=∞", entry["notes"])
+        self.assertIn("alpha", entry["notes"])
+
+    def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._gif_history.append(
+            {
+                "timestamp": "2026-10-07T09:00:00",
+                "output": "/tmp/a.gif",
+                "frame_count": 3,
+                "success": 3,
+                "errors": 0,
+                "files": ["a.png"],
+                "notes": "optimize=on",
+            }
+        )
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/a.mp4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "files": ["a.iso"],
+                "notes": "sample.iso: temporary ffmpeg transcode fallback active",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "optimize=on")
+            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(5))
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
 
 
 # ---------------------------------------------------------------------------

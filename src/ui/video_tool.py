@@ -79,6 +79,9 @@ _IMAGE_EXTS = {
 }
 _KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
 _EXPERIMENTAL_DISC_VIDEO_EXTS = {".iso", ".umd", ".bin"}
+_ODD_CONTAINER_RECOVERY_EXTS = _EXPERIMENTAL_DISC_VIDEO_EXTS | {
+    ".asf", ".divx", ".dv", ".flv", ".mov", ".rm", ".rmvb", ".ts", ".vob", ".yuv",
+}
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
@@ -319,7 +322,11 @@ def _video_load_failure_hint(path: str) -> str:
         if probe and not bool(probe.get("has_video")):
             lines.append("ffprobe did not detect a playable video stream in this disc image.")
         lines.append(
-            "If direct loading fails, the app also tries a temporary ffmpeg remux fallback for compatible streams."
+            "If direct loading fails, the app also tries temporary ffmpeg remux and transcode recovery fallbacks for compatible streams."
+        )
+    elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
+        lines.append(
+            "This odd container reports a video stream; if direct loading fails the app will also try ffmpeg recovery fallbacks."
         )
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
@@ -374,6 +381,79 @@ def _remux_video_source(path: str) -> Optional[str]:
         pass
     _unlink_file_safely(remux_path)
     return None
+
+
+def _transcode_video_source(path: str) -> Optional[str]:
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        return None
+    temp_file = tempfile.NamedTemporaryFile(
+        prefix="alpha_fixer_video_recode_",
+        suffix=".mp4",
+        delete=False,
+    )
+    transcode_path = temp_file.name
+    temp_file.close()
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_exe,
+                "-y",
+                "-v",
+                "error",
+                "-i",
+                path,
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
+                "-dn",
+                "-sn",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "20",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k",
+                transcode_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=180,
+        )
+    except Exception:
+        _unlink_file_safely(transcode_path)
+        return None
+    try:
+        if result.returncode == 0 and Path(transcode_path).is_file() and Path(transcode_path).stat().st_size > 0:
+            return transcode_path
+    except Exception:
+        pass
+    _unlink_file_safely(transcode_path)
+    return None
+
+
+def _attempt_video_recovery(path: str, probe: Optional[dict[str, object]] = None) -> tuple[Optional[str], str]:
+    ext = Path(path).suffix.lower()
+    details = probe if probe is not None else _probe_media_details(path)
+    if ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
+        return None, ""
+    remux_path = _remux_video_source(path)
+    if remux_path:
+        return remux_path, "temporary ffmpeg remux fallback active"
+    if details and bool(details.get("has_video")):
+        transcode_path = _transcode_video_source(path)
+        if transcode_path:
+            return transcode_path, "temporary ffmpeg transcode fallback active"
+    return None, ""
 
 
 def _open_video_reader(path: str):
@@ -819,7 +899,8 @@ class _ClipEntry:
                  clip_type: str = "video",
                  has_audio: bool = False,
                  source_path: Optional[str] = None,
-                 load_note: str = ""):
+                 load_note: str = "",
+                 load_strategy: str = ""):
         self.path = path
         self.source_path = source_path or path
         self.total_frames = total_frames
@@ -829,6 +910,7 @@ class _ClipEntry:
         self.clip_type = clip_type
         self.has_audio = has_audio
         self.load_note = load_note
+        self.load_strategy = load_strategy or ("direct" if not load_note else load_note)
         self.speed_percent: int = 100
         self.still_duration_frames: int = 25 if clip_type == "image" else 1
         self.trim_start: int = 0
@@ -905,6 +987,7 @@ _ADJUSTMENT_DEFAULT_VALUES = {
 
 def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
+    probe = None
     try:
         fps, frame_count, frame_size, first_frame = _probe_video_clip(path)
         if frame_count <= 0:
@@ -918,32 +1001,32 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
             clip_type="video",
             has_audio=_video_has_audio_stream(path),
             source_path=path,
+            load_strategy="direct",
         )
     except Exception:
-        pass
-    if Path(path).suffix.lower() not in _EXPERIMENTAL_DISC_VIDEO_EXTS:
-        return None
-    remux_path = _remux_video_source(path)
-    if not remux_path:
+        probe = _probe_media_details(path)
+    recovered_path, recovery_note = _attempt_video_recovery(path, probe)
+    if not recovered_path:
         return None
     try:
-        fps, frame_count, frame_size, first_frame = _probe_video_clip(remux_path)
+        fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
         if frame_count <= 0:
-            _unlink_file_safely(remux_path)
+            _unlink_file_safely(recovered_path)
             return None
         return _ClipEntry(
-            remux_path,
+            recovered_path,
             frame_count,
-            _VideoFrameGetter(remux_path, frame_count, first_frame, cleanup_paths=[remux_path]),
+            _VideoFrameGetter(recovered_path, frame_count, first_frame, cleanup_paths=[recovered_path]),
             fps,
             frame_size=frame_size,
             clip_type="video",
-            has_audio=_video_has_audio_stream(remux_path),
+            has_audio=_video_has_audio_stream(recovered_path),
             source_path=path,
-            load_note="temporary ffmpeg remux fallback active",
+            load_note=recovery_note,
+            load_strategy=recovery_note,
         )
     except Exception:
-        _unlink_file_safely(remux_path)
+        _unlink_file_safely(recovered_path)
         return None
 
 
@@ -1655,8 +1738,8 @@ class VideoToolDialog(QDialog):
         total_frames = self._total_preview_frames()
         fps = max(0.1, float(self._fps_slider.value()))
         seconds = total_frames / fps if total_frames else 0.0
-        remuxed = sum(1 for clip in self._clips if getattr(clip, "load_note", ""))
-        extra = f"  •  {remuxed} remux fallback{'s' if remuxed != 1 else ''}" if remuxed else ""
+        recovered = sum(1 for clip in self._clips if getattr(clip, "load_note", ""))
+        extra = f"  •  {recovered} recovery fallback{'s' if recovered != 1 else ''}" if recovered else ""
         self._timeline_summary_lbl.setText(
             f"Timeline: {len(self._clips)} clip{'s' if len(self._clips) != 1 else ''}  •  "
             f"{seconds:.2f} s  •  {total_frames} frames{extra}"
@@ -1746,7 +1829,7 @@ class VideoToolDialog(QDialog):
             QMessageBox.information(
                 self,
                 "Experimental Video Loaded",
-                "Loaded via temporary ffmpeg remux fallback:\n"
+                "Loaded via temporary ffmpeg recovery fallback:\n"
                 + "\n".join(fallback_loaded)
                 + "\n\nThe original source path stays attached for labeling and export history.",
             )
@@ -1780,7 +1863,7 @@ class VideoToolDialog(QDialog):
             QMessageBox.information(
                 self,
                 "Experimental Video Loaded",
-                "Loaded via temporary ffmpeg remux fallback:\n"
+                "Loaded via temporary ffmpeg recovery fallback:\n"
                 + "\n".join(fallback_loaded)
                 + "\n\nThe original source path stays attached for labeling and export history.",
             )
@@ -1815,11 +1898,6 @@ class VideoToolDialog(QDialog):
         if settings is None:
             return
         files = [os.path.basename(str(clip.get("source_path") or clip.get("path") or "")) for clip in clip_snapshot]
-        remuxed = [
-            os.path.basename(str(clip.get("source_path") or clip.get("path") or ""))
-            for clip in clip_snapshot
-            if bool(clip.get("load_note"))
-        ]
         entry = {
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             "output": out_path,
@@ -1830,11 +1908,13 @@ class VideoToolDialog(QDialog):
             "files": files,
             "first_file": str(clip_snapshot[0].get("source_path") or clip_snapshot[0].get("path") or "") if clip_snapshot else "",
         }
-        if remuxed:
-            entry["notes"] = (
-                f"Loaded via remux fallback: {', '.join(remuxed[:3])}"
-                + ("…" if len(remuxed) > 3 else "")
-            )
+        noted = [
+            f"{os.path.basename(str(clip.get('source_path') or clip.get('path') or ''))}: {clip.get('load_note')}"
+            for clip in clip_snapshot
+            if str(clip.get("load_note") or "").strip()
+        ]
+        if noted:
+            entry["notes"] = "; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")
         try:
             settings.add_video_builder_history(entry)
         except Exception:

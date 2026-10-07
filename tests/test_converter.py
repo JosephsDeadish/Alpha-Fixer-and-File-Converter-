@@ -121,6 +121,13 @@ def _make_dx10_dds(
     height: int,
     dxgi_format: int,
     pixel_data: bytes,
+    *,
+    array_size: int = 1,
+    resource_dimension: int = 3,
+    misc_flag: int = 0,
+    mipmap_count: int = 0,
+    caps2: int = 0,
+    depth: int = 0,
 ):
     def dword(n: int) -> bytes:
         return int(n).to_bytes(4, "little")
@@ -131,14 +138,17 @@ def _make_dx10_dds(
     header[8:12] = dword(0x000A1007)
     header[12:16] = dword(height)
     header[16:20] = dword(width)
+    header[24:28] = dword(depth)
+    header[28:32] = dword(mipmap_count)
     header[76:80] = dword(32)
     header[80:84] = dword(0x4)
     header[84:88] = b"DX10"
     header[108:112] = dword(0x1000)
+    header[112:116] = dword(caps2)
     header[128:132] = dword(dxgi_format)
-    header[132:136] = dword(3)   # resource dimension = 2D
-    header[136:140] = dword(0)   # misc flag
-    header[140:144] = dword(1)   # array size
+    header[132:136] = dword(resource_dimension)
+    header[136:140] = dword(misc_flag)
+    header[140:144] = dword(array_size)
     header[144:148] = dword(0)   # misc flags 2
     with open(path, "wb") as f:
         f.write(bytes(header))
@@ -800,6 +810,54 @@ class TestConvertFile(unittest.TestCase):
                 self.assertEqual(img.getpixel((0, 0))[3], 255)
             finally:
                 img.close()
+
+    def test_load_dds_ignores_extra_mip_levels_on_base_surface(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_mipmap.dds")
+            _make_dx10_dds(src, 4, 4, 80, bytes([180, 0]) + bytes(6), mipmap_count=3)
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0)), (180, 0, 0, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_rejects_dx10_texture_arrays(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_array.dds")
+            _make_dx10_dds(src, 4, 4, 80, bytes([180, 0]) + bytes(6), array_size=2)
+            with self.assertRaisesRegex(ValueError, "texture array"):
+                _load_dds_raw(src)
+
+    def test_load_dds_rejects_legacy_cubemaps(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_cubemap.dds")
+            _make_dx10_dds(src, 4, 4, 80, bytes([180, 0]) + bytes(6), caps2=0x00000200)
+            with self.assertRaisesRegex(ValueError, "cubemap"):
+                _load_dds_raw(src)
+
+    def test_load_dds_rejects_volume_textures(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_volume.dds")
+            _make_dx10_dds(
+                src,
+                4,
+                4,
+                80,
+                bytes([180, 0]) + bytes(6),
+                resource_dimension=4,
+                depth=2,
+            )
+            with self.assertRaisesRegex(ValueError, "volume texture"):
+                _load_dds_raw(src)
 
     def test_supported_output_formats_includes_png(self):
         self.assertIn("PNG", SUPPORTED_OUTPUT_FORMATS)
