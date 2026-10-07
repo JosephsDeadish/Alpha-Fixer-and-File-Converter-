@@ -503,6 +503,8 @@ def _save_dds_raw(img: Image.Image, path: str, variant: str = "auto"):
 def detect_atlas_cells(
     alpha: "np.ndarray",
     min_size: int = 4,
+    alpha_threshold: int = 8,
+    seam_tolerance: float = 0.985,
 ) -> list[tuple[int, int, int, int]]:
     """Detect sprite atlas cells from an alpha channel array.
 
@@ -517,6 +519,13 @@ def detect_atlas_cells(
     min_size:
         Minimum width and height in pixels for a cell to be included.
         Tiny cells (e.g. single-pixel gaps) are filtered out.
+    alpha_threshold:
+        Pixels at or below this alpha are treated as transparent for seam
+        detection. This helps with atlas gutters that contain faint
+        anti-aliased or compression-noise leftovers.
+    seam_tolerance:
+        Fraction of pixels in a row/column that must satisfy
+        ``alpha <= alpha_threshold`` to count as a transparent seam.
 
     Returns
     -------
@@ -527,9 +536,12 @@ def detect_atlas_cells(
     if h == 0 or w == 0:
         return []
 
-    # Row seams: rows where all pixels are fully transparent
-    row_empty = np.all(alpha == 0, axis=1)   # shape (h,)
-    col_empty = np.all(alpha == 0, axis=0)   # shape (w,)
+    threshold = max(0, min(255, int(alpha_threshold)))
+    tolerance = max(0.0, min(1.0, float(seam_tolerance)))
+
+    transparentish = alpha <= threshold
+    row_empty = np.mean(transparentish, axis=1) >= tolerance   # shape (h,)
+    col_empty = np.mean(transparentish, axis=0) >= tolerance   # shape (w,)
 
     def _spans(empty_mask: "np.ndarray") -> list[tuple[int, int]]:
         """Return list of (start, end) index pairs for contiguous non-empty runs."""

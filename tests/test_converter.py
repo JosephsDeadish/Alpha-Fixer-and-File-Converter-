@@ -23,7 +23,7 @@ from src.core.file_converter import (
     output_format_available,
     output_format_unavailable_reason,
 )
-from src.core.alpha_processor import SUPPORTED_WRITE, save_image
+from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_image
 from src.core.worker import AlphaWorker, ConverterWorker
 from src.version import APP_NAME
 
@@ -170,6 +170,24 @@ class TestConverterWorkerSizing(unittest.TestCase):
         with mock.patch.object(worker, "_source_has_meaningful_alpha", return_value=False):
             fmt, ext, note = worker._resolve_effective_target("/tmp/input.png")
         self.assertEqual((fmt, ext, note), ("JPEG", ".jpg", ""))
+
+
+class TestAtlasDetection(unittest.TestCase):
+
+    def test_detect_atlas_cells_tolerates_near_transparent_seams(self):
+        alpha = np.zeros((20, 20), dtype=np.uint8)
+        alpha[1:9, 1:9] = 255
+        alpha[1:9, 11:19] = 255
+        alpha[11:19, 1:9] = 255
+        alpha[11:19, 11:19] = 255
+        alpha[10, 5] = 6
+        alpha[14, 10] = 4
+        cells = detect_atlas_cells(alpha)
+        self.assertEqual(cells, [(1, 1, 8, 8), (11, 1, 8, 8), (1, 11, 8, 8), (11, 11, 8, 8)])
+
+    def test_detect_atlas_cells_still_returns_empty_without_seams(self):
+        alpha = np.full((16, 16), 255, dtype=np.uint8)
+        self.assertEqual(detect_atlas_cells(alpha), [])
 
 
 class TestConvertFile(unittest.TestCase):

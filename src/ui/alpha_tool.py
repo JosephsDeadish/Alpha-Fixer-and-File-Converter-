@@ -469,7 +469,7 @@ class AlphaFixerTab(QWidget):
         self._atlas_detect_check.setToolTip(
             "Detect sprite atlas cells in the preview image.\n"
             "Draws colored bounding boxes around each detected sprite region.\n"
-            "Works by finding rows/columns of fully transparent pixels that\n"
+            "Works by finding mostly transparent seam rows/columns that\n"
             "separate individual sprites in a texture atlas/sprite sheet.\n"
             "Works with or independently of 'Highlight Alpha Values'."
         )
@@ -477,9 +477,15 @@ class AlphaFixerTab(QWidget):
         preview_hint = QLabel(
             "Preview helpers only change the viewer, not the processed file."
         )
+        self._preview_hint_lbl = preview_hint
         preview_hint.setStyleSheet("color: gray; font-size: 11px;")
         preview_hint.setWordWrap(True)
         ca_layout.addWidget(preview_hint)
+        self._preview_helper_lbl = QLabel("Preview helpers idle.")
+        self._preview_helper_lbl.setObjectName("alphaPreviewHelperStatus")
+        self._preview_helper_lbl.setStyleSheet("color: #8ea0b6; font-size: 11px;")
+        self._preview_helper_lbl.setWordWrap(True)
+        ca_layout.addWidget(self._preview_helper_lbl)
         # Atlas region list for overlay drawing (updated when atlas detect is on)
         self._atlas_cells: list[tuple[int, int, int, int]] = []
 
@@ -835,6 +841,7 @@ class AlphaFixerTab(QWidget):
         self._atlas_detect_check.setChecked(self._settings.get("alpha_preview_detect_atlas", False))
         # Initialise the live params label
         self._refresh_finetune_label()
+        self._refresh_preview_helper_status()
 
     def _setup_shortcuts(self):
         self._shortcut_objects: dict[str, QShortcut] = {}
@@ -1140,20 +1147,21 @@ class AlphaFixerTab(QWidget):
     def _alpha_vis_overlay(qi: QImage) -> QImage:
         """
         Return a copy of *qi* (Format_ARGB32) with a false-colour heat-map
-        blended over the alpha channel, plus tiny text labels showing the
-        numeric alpha value sampled across the image on a sparse grid.
+        blended over the alpha channel, plus compact badges showing dominant
+        alpha values without flooding busy previews with overlapping labels.
 
         Colour key:
           α = 0   → vivid red    (fully transparent)
           α = 128 → yellow       (semi-transparent)
           α = 255 → vivid green  (fully opaque)
 
-        The heat-map is drawn at 70 % opacity so the underlying colours remain
-        visible while the alpha structure is clearly legible.  Text labels are
+        The heat-map is drawn with moderate opacity so the underlying colours
+        remain visible while the alpha structure stays legible. Text badges are
         omitted for images smaller than 32 × 32 pixels.
         """
         import numpy as np
-        from PyQt6.QtGui import QImage as _QI, QPainter, QColor, QFont, QPen
+        from PyQt6.QtCore import QRectF
+        from PyQt6.QtGui import QBrush, QImage as _QI, QPainter, QColor, QFont, QPen
 
         # Work in Format_ARGB32 so we have direct byte access
         src = qi.convertToFormat(_QI.Format.Format_ARGB32)
@@ -1185,8 +1193,9 @@ class AlphaFixerTab(QWidget):
                           255).astype(np.uint8)
         heat_b = np.zeros((h, w), dtype=np.uint8)
 
-        # Blend: out = heat * 0.70 + original * 0.30
-        blend = 0.70
+        # Blend: keep enough of the source visible that image structure does
+        # not disappear under the helper overlay.
+        blend = 0.58
         arr[:, :, 2] = np.clip(heat_r * blend + arr[:, :, 2] * (1 - blend), 0, 255).astype(np.uint8)
         arr[:, :, 1] = np.clip(heat_g * blend + arr[:, :, 1] * (1 - blend), 0, 255).astype(np.uint8)
         arr[:, :, 0] = np.clip(heat_b * blend + arr[:, :, 0] * (1 - blend), 0, 255).astype(np.uint8)
@@ -1200,19 +1209,16 @@ class AlphaFixerTab(QWidget):
         # Only add labels when the image is large enough to be legible.
         _MIN_LABEL_DIM = 32
         if w >= _MIN_LABEL_DIM and h >= _MIN_LABEL_DIM:
-            # Find each distinct alpha value and compute centroid(s) so labels
-            # are placed accurately *inside* each region rather than on a
-            # fixed grid that may sample the wrong value.
             total_px = w * h
-            min_fraction = 0.001  # skip values covering < 0.1% of pixels
+            min_fraction = 0.0025  # skip values covering < 0.25% of pixels
 
             # Pre-filter to only significant values to avoid O(256 * H*W) work
             # on gradient images.  Count pixels per value in one pass.
             val_counts = {int(v): int(c)
                          for v, c in zip(*np.unique(alpha_raw, return_counts=True))
                          if c >= max(1, int(total_px * min_fraction))}
-            # Cap at 40 most-dominant values to keep paint performance fast.
-            top_vals = sorted(val_counts, key=lambda v: -val_counts[v])[:40]
+            # Cap the number of values and badges so the overlay stays legible.
+            top_vals = sorted(val_counts, key=lambda v: (-val_counts[v], v))[:12]
 
             # Font size: scale with image size up to a legible cap
             px_size = max(8, min(18, min(w, h) // 12))
@@ -1220,70 +1226,121 @@ class AlphaFixerTab(QWidget):
             font.setPixelSize(px_size)
             font.setBold(True)
             painter = QPainter(out)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setFont(font)
             fm = painter.fontMetrics()
+            occupied: list[tuple[float, float, float, float]] = []
+
+            def _draw_badge(cx: int, cy: int, text: str, fill: QColor, *, alpha_text: int) -> bool:
+                tw = fm.horizontalAdvance(text)
+                th = fm.height()
+                pad_x = max(4, px_size // 3)
+                pad_y = max(2, px_size // 5)
+                left = float(max(2, min(w - (tw + pad_x * 2) - 2, cx - (tw + pad_x * 2) / 2)))
+                top = float(max(2, min(h - (th + pad_y * 2) - 2, cy - (th + pad_y * 2) / 2)))
+                right = left + tw + pad_x * 2
+                bottom = top + th + pad_y * 2
+                for ox1, oy1, ox2, oy2 in occupied:
+                    if not (right < ox1 or left > ox2 or bottom < oy1 or top > oy2):
+                        return False
+                occupied.append((left, top, right, bottom))
+                text_color = QColor(20, 24, 30) if alpha_text >= 168 else QColor(255, 255, 255)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(fill))
+                painter.drawRoundedRect(QRectF(left, top, right - left, bottom - top), 4.0, 4.0)
+                painter.setPen(QPen(QColor(0, 0, 0, 150), 1))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(QRectF(left, top, right - left, bottom - top), 4.0, 4.0)
+                painter.setPen(QPen(text_color))
+                painter.drawText(int(left + pad_x), int(top + pad_y + fm.ascent()), text)
+                return True
+
+            # Compact legend so the colour meaning stays visible after the
+            # numeric overlay was reduced.
+            legend = QRectF(6.0, 6.0, min(178.0, w - 12.0), 34.0)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(15, 18, 25, 150))
+            painter.drawRoundedRect(legend, 6.0, 6.0)
+            legend_items = (
+                ("α0", QColor(255, 74, 74, 225)),
+                ("α128", QColor(255, 211, 77, 225)),
+                ("α255", QColor(84, 224, 120, 225)),
+            )
+            lx = int(legend.left()) + 10
+            ly = int(legend.top()) + 10
+            swatch_size = 10
+            small_font = QFont(font)
+            small_font.setPixelSize(max(8, px_size - 2))
+            painter.setFont(small_font)
+            small_metrics = painter.fontMetrics()
+            for text, color in legend_items:
+                painter.setBrush(color)
+                painter.drawRoundedRect(QRectF(float(lx), float(ly + 2), swatch_size, swatch_size), 2.0, 2.0)
+                painter.setPen(QPen(QColor(245, 247, 250)))
+                painter.drawText(lx + swatch_size + 5, ly + small_metrics.ascent() + 1, text)
+                lx += swatch_size + 5 + small_metrics.horizontalAdvance(text) + 10
+            painter.setFont(font)
 
             for a_val in top_vals:
                 mask = alpha_raw == a_val
                 px_count = val_counts[a_val]
                 text = str(int(a_val))
-                tw = fm.horizontalAdvance(text)
-                th = fm.ascent()
-
                 ys, xs = np.where(mask)
-                # Centroid label — verify the centroid pixel is actually inside
-                # the region (concave shapes can have centroids outside).  If
-                # not, find the region pixel nearest to the centroid (item 12).
-                cx, cy = int(xs.mean()), int(ys.mean())
-                if not mask[cy, cx]:
-                    dists = (xs - cx) ** 2 + (ys - cy) ** 2
-                    nearest = int(dists.argmin())
-                    cx, cy = int(xs[nearest]), int(ys[nearest])
-                tx = cx - tw // 2
-                ty = cy + th // 2
-
-                # Black outline for contrast
-                painter.setPen(QPen(QColor(0, 0, 0, 200)))
-                for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    painter.drawText(tx + ox, ty + oy, text)
-                # White foreground text
-                painter.setPen(QPen(QColor(255, 255, 255, 230)))
-                painter.drawText(tx, ty, text)
-
-                # For large regions add a few extra sparse labels so the value
-                # is readable without needing to find the centroid.
-                if px_count > total_px * 0.05:
-                    step = max(24, min(w, h) // 6)
-                    half = step // 2
-                    shown = 0
-                    for gy in range(half, h, step):
-                        for gx in range(half, w, step):
-                            if not mask[gy, gx]:
-                                continue
-                            if shown >= 12:
-                                break
-                            stx = gx - tw // 2
-                            sty = gy + th // 2
-                            small_font = QFont()
-                            small_font.setPixelSize(max(6, px_size - 2))
-                            small_font.setBold(True)
-                            painter.setFont(small_font)
-                            painter.setPen(QPen(QColor(0, 0, 0, 160)))
-                            for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                                painter.drawText(stx + ox, sty + oy, text)
-                            painter.setPen(QPen(QColor(255, 255, 255, 180)))
-                            painter.drawText(stx, sty, text)
-                            painter.setFont(font)
-                            shown += 1
+                if xs.size == 0:
+                    continue
+                candidate_points = [(int(xs.mean()), int(ys.mean()))]
+                target_badges = 2 if px_count > total_px * 0.18 else 1
+                sample_count = min(xs.size, max(6, target_badges * 4))
+                if sample_count > 1:
+                    for idx in np.linspace(0, xs.size - 1, num=sample_count, dtype=int):
+                        candidate_points.append((int(xs[idx]), int(ys[idx])))
+                fill = QColor(
+                    255 if a_val < 128 else max(84, int((255 - a_val) * 2)),
+                    255 if a_val >= 128 else min(255, int(a_val * 2)),
+                    40,
+                    190,
+                )
+                shown = 0
+                for cx, cy in candidate_points:
+                    if 0 <= cy < h and 0 <= cx < w and mask[cy, cx] and _draw_badge(cx, cy, text, fill, alpha_text=a_val):
+                        shown += 1
+                        if shown >= target_badges:
+                           break
             painter.end()
 
         return out
+
+    def _refresh_preview_helper_status(self) -> None:
+        if not hasattr(self, "_preview_helper_lbl"):
+            return
+        if not self._compare.has_images():
+            self._preview_helper_lbl.setText(
+                "Preview helpers ready: alpha heat-map and atlas overlays will update when a preview loads."
+            )
+            return
+        parts: list[str] = []
+        if self._alpha_vis_check.isChecked():
+            parts.append("alpha heat-map on")
+        if self._atlas_detect_check.isChecked():
+            if self._atlas_cells:
+                parts.append(
+                    f"atlas boxes on ({len(self._atlas_cells)} cell{'s' if len(self._atlas_cells) != 1 else ''})"
+                )
+            else:
+                parts.append("atlas scan on (no separated cells found)")
+        if not parts:
+            self._preview_helper_lbl.setText(
+                "Preview helpers off: showing the raw before/after preview."
+            )
+            return
+        self._preview_helper_lbl.setText("Preview helpers: " + " • ".join(parts) + ".")
 
     @pyqtSlot(bool)
     def _on_alpha_vis_toggled(self, _checked: bool) -> None:
         """Re-apply (or remove) the alpha visualization when the toggle changes."""
         if self._compare.has_images():
             self._apply_alpha_vis_to_compare()
+        self._refresh_preview_helper_status()
 
     def _on_compare_popout(self) -> None:
         """Called when the ⤢ pop-out button is clicked on the compare widget.
@@ -1301,6 +1358,8 @@ class AlphaFixerTab(QWidget):
         self._compare_lbl.setVisible(False)
         self._alpha_vis_check.setVisible(False)
         self._atlas_detect_check.setVisible(False)
+        self._preview_hint_lbl.setVisible(False)
+        self._preview_helper_lbl.setVisible(False)
         self._before_stats_lbl.setVisible(False)
         self._after_stats_lbl.setVisible(False)
         self._btn_dock_back.setVisible(True)
@@ -1397,12 +1456,15 @@ class AlphaFixerTab(QWidget):
         self._compare_lbl.setVisible(True)
         self._alpha_vis_check.setVisible(True)
         self._atlas_detect_check.setVisible(True)
+        self._preview_hint_lbl.setVisible(True)
+        self._preview_helper_lbl.setVisible(True)
         self._before_stats_lbl.setVisible(True)
         self._after_stats_lbl.setVisible(True)
         self._btn_dock_back.setVisible(False)
         # Restore the splitter sizes so the compare panel is fully visible again.
         if hasattr(self, "_left_vsplit") and hasattr(self, "_left_vsplit_normal_sizes"):
             self._left_vsplit.setSizes(self._left_vsplit_normal_sizes)
+        self._refresh_preview_helper_status()
 
     def _on_dock_back_clicked(self) -> None:
         """Close the floating pop-out dialog and dock the preview back."""
@@ -1434,21 +1496,41 @@ class AlphaFixerTab(QWidget):
             after_img = self._draw_atlas_overlay(after_img)
         widget.set_before(before_img, store_raw=False, stop_movie=False)
         widget.set_after(after_img, store_raw=False)
+        self._refresh_preview_helper_status()
 
     def _draw_atlas_overlay(self, img: "QImage") -> "QImage":
         """Draw colored bounding boxes for detected atlas cells onto *img* (item 11)."""
-        from PyQt6.QtGui import QPainter, QPen, QColor
+        from PyQt6.QtCore import QRectF
+        from PyQt6.QtGui import QBrush, QPainter, QPen, QColor, QFont
         result = img.copy()
         painter = QPainter(result)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         # Cyan/teal boxes with a drop shadow for visibility
         shadow_pen = QPen(QColor(0, 0, 0, 100), 3)
         box_pen = QPen(QColor(0, 220, 255, 230), 2)
-        for (bx, by, bw, bh) in self._atlas_cells:
+        font = QFont()
+        font.setPixelSize(11)
+        font.setBold(True)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        for idx, (bx, by, bw, bh) in enumerate(self._atlas_cells, start=1):
             painter.setPen(shadow_pen)
             painter.drawRect(bx + 1, by + 1, bw, bh)
             painter.setPen(box_pen)
             painter.drawRect(bx, by, bw, bh)
+            label = f"#{idx}"
+            label_w = metrics.horizontalAdvance(label) + 10
+            label_h = metrics.height() + 4
+            label_rect = QRectF(float(bx + 3), float(max(3, by + 3)), float(label_w), float(label_h))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(0, 220, 255, 215)))
+            painter.drawRoundedRect(label_rect, 4.0, 4.0)
+            painter.setPen(QPen(QColor(14, 18, 24)))
+            painter.drawText(
+                int(label_rect.left()) + 5,
+                int(label_rect.top()) + 2 + metrics.ascent(),
+                label,
+            )
         painter.end()
         return result
 
@@ -1458,9 +1540,11 @@ class AlphaFixerTab(QWidget):
         if not checked:
             self._atlas_cells = []
             self._apply_alpha_vis_to_compare()
+            self._refresh_preview_helper_status()
             return
         raw = self._compare.before_image()
         if raw is None:
+            self._refresh_preview_helper_status()
             return
         try:
             import numpy as np
@@ -1474,19 +1558,21 @@ class AlphaFixerTab(QWidget):
             ptr.setsize(h * w * 4)
             bgra = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4))
             alpha = bgra[:, :, 3].copy()
-            self._atlas_cells = detect_atlas_cells(alpha)
+            self._atlas_cells = detect_atlas_cells(alpha, alpha_threshold=12, seam_tolerance=0.98)
         except Exception:
             self._atlas_cells = []
         if not self._atlas_cells:
             self._status_lbl.setText(
                 "🗺 No atlas cells detected. "
-                "Atlas detection requires transparent seam-lines between sprites."
+                "Try sheets with transparent gutters between sprites; tightly packed or overlapping art may not separate cleanly."
             )
             self._apply_alpha_vis_to_compare()
+            self._refresh_preview_helper_status()
             return
         n = len(self._atlas_cells)
         self._status_lbl.setText(f"🗺 Atlas detected: {n} sprite cell{'s' if n != 1 else ''} found.")
         self._apply_alpha_vis_to_compare()
+        self._refresh_preview_helper_status()
 
     def _on_compare_context_menu(self, pos) -> None:
         """Right-click on the compare preview: offer to copy detected alpha zones
@@ -1568,6 +1654,7 @@ class AlphaFixerTab(QWidget):
         if self._atlas_detect_check.isChecked():
             self._on_atlas_detect_toggled(True)
         self._apply_alpha_vis_to_compare()
+        self._refresh_preview_helper_status()
         # Notify main window so it can play the preview sound (opt-in, off by default)
         self.preview_refreshed.emit()
 
@@ -1595,6 +1682,8 @@ class AlphaFixerTab(QWidget):
         self._compare.clear()
         self._before_stats_lbl.setText("")
         self._after_stats_lbl.setText("")
+        self._atlas_cells = []
+        self._refresh_preview_helper_status()
         self._log_msg(f"⚠ Preview failed: {err.splitlines()[0]}")
 
     # ------------------------------------------------------------------

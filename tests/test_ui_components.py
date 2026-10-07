@@ -751,6 +751,52 @@ class TestAlphaPreviewLoader(unittest.TestCase):
         self.assertEqual(len(errors), 1)
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestAlphaPreviewHelpers(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from src.core.settings_manager import SettingsManager
+        from src.core.presets import PresetManager
+        from src.ui.alpha_tool import AlphaFixerTab
+
+        self._settings = SettingsManager()
+        self._settings._qs = _FakeQSettings({})
+        self._presets = PresetManager(self._settings)
+        self._widget = AlphaFixerTab(self._presets, self._settings)
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_helper_status_updates_for_alpha_and_atlas_overlays(self):
+        import numpy as np
+        from PIL import Image
+        from src.ui.preview_pane import _pil_to_qimage
+
+        arr = np.zeros((24, 24, 4), dtype=np.uint8)
+        arr[1:11, 1:11, :3] = 255
+        arr[1:11, 1:11, 3] = 255
+        arr[1:11, 13:23, :3] = 255
+        arr[1:11, 13:23, 3] = 255
+        arr[13:23, 1:11, :3] = 255
+        arr[13:23, 1:11, 3] = 255
+        arr[13:23, 13:23, :3] = 255
+        arr[13:23, 13:23, 3] = 255
+        arr[12, 6, 3] = 6
+        arr[18, 12, 3] = 4
+        img = Image.fromarray(arr, "RGBA")
+        qi = _pil_to_qimage(img)
+
+        self._widget._on_compare_ready(qi, qi)
+        self.assertIn("raw before/after preview", self._widget._preview_helper_lbl.text())
+
+        self._widget._alpha_vis_check.setChecked(True)
+        self.assertIn("alpha heat-map on", self._widget._preview_helper_lbl.text())
+
+        self._widget._atlas_detect_check.setChecked(True)
+        self.assertEqual(len(self._widget._atlas_cells), 4)
+        self.assertIn("atlas boxes on (4 cells)", self._widget._preview_helper_lbl.text())
 
 
 class TestSettingsExportImport(unittest.TestCase):
