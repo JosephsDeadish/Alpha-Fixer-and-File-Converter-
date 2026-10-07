@@ -459,15 +459,18 @@ def _video_has_audio_stream(path: str) -> bool:
 
 
 def _build_atempo_filters(speed_factor: float) -> list[str]:
+    def _fmt(value: float) -> str:
+        return f"{value:.6f}".rstrip("0").rstrip(".")
+
     remaining = max(0.01, float(speed_factor))
     filters: list[str] = []
     while remaining < 0.5:
-        filters.append("atempo=0.5")
+        filters.append(f"atempo={_fmt(0.5)}")
         remaining /= 0.5
     while remaining > 2.0:
-        filters.append("atempo=2.0")
+        filters.append(f"atempo={_fmt(2.0)}")
         remaining /= 2.0
-    filters.append(f"atempo={remaining:.6f}".rstrip("0").rstrip("."))
+    filters.append(f"atempo={_fmt(remaining)}")
     return filters
 
 
@@ -2068,6 +2071,7 @@ class VideoToolDialog(QDialog):
                 out_path = str(Path(out_path).with_suffix(target_suffix))
             else:
                 out_path = f"{out_path}{target_suffix}"
+        out_path_existed = Path(out_path).exists()
 
         progress = QProgressDialog("Rendering frames…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
@@ -2210,10 +2214,11 @@ class VideoToolDialog(QDialog):
                 self._mux_mp4_audio(render_path, out_path, clip_snapshot, fps)
             progress.setValue(total)
         except Exception as exc:
-            try:
-                Path(out_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+            if not out_path_existed:
+                try:
+                    Path(out_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
             if temp_mp4 is not None:
                 try:
                     Path(temp_mp4).unlink(missing_ok=True)

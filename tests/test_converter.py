@@ -164,36 +164,36 @@ class TestConvertFile(unittest.TestCase):
                 img.close()
 
     def test_save_dds_raw_uses_rgb_header_for_opaque_images(self):
-            from src.core.alpha_processor import _save_dds_raw
+        from src.core.alpha_processor import _save_dds_raw
 
-            with tempfile.TemporaryDirectory() as tmpdir:
-                dst = os.path.join(tmpdir, "opaque.dds")
-                img = Image.new("RGBA", (4, 4), (9, 8, 7, 255))
-                try:
-                    _save_dds_raw(img, dst)
-                finally:
-                    img.close()
-                with open(dst, "rb") as f:
-                    data = f.read(128)
-                self.assertEqual(int.from_bytes(data[80:84], "little"), 0x40)
-                self.assertEqual(int.from_bytes(data[88:92], "little"), 24)
-                self.assertEqual(int.from_bytes(data[104:108], "little"), 0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dst = os.path.join(tmpdir, "opaque.dds")
+            img = Image.new("RGBA", (4, 4), (9, 8, 7, 255))
+            try:
+                _save_dds_raw(img, dst)
+            finally:
+                img.close()
+            with open(dst, "rb") as f:
+                data = f.read(128)
+            self.assertEqual(int.from_bytes(data[80:84], "little"), 0x40)
+            self.assertEqual(int.from_bytes(data[88:92], "little"), 24)
+            self.assertEqual(int.from_bytes(data[104:108], "little"), 0)
 
     def test_save_dds_raw_keeps_rgba_header_when_alpha_present(self):
-            from src.core.alpha_processor import _save_dds_raw
+        from src.core.alpha_processor import _save_dds_raw
 
-            with tempfile.TemporaryDirectory() as tmpdir:
-                dst = os.path.join(tmpdir, "alpha.dds")
-                img = Image.new("RGBA", (4, 4), (9, 8, 7, 128))
-                try:
-                    _save_dds_raw(img, dst)
-                finally:
-                    img.close()
-                with open(dst, "rb") as f:
-                    data = f.read(128)
-                self.assertEqual(int.from_bytes(data[80:84], "little"), 0x41)
-                self.assertEqual(int.from_bytes(data[88:92], "little"), 32)
-                self.assertEqual(int.from_bytes(data[104:108], "little"), 0xFF000000)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dst = os.path.join(tmpdir, "alpha.dds")
+            img = Image.new("RGBA", (4, 4), (9, 8, 7, 128))
+            try:
+                _save_dds_raw(img, dst)
+            finally:
+                img.close()
+            with open(dst, "rb") as f:
+                data = f.read(128)
+            self.assertEqual(int.from_bytes(data[80:84], "little"), 0x41)
+            self.assertEqual(int.from_bytes(data[88:92], "little"), 32)
+            self.assertEqual(int.from_bytes(data[104:108], "little"), 0xFF000000)
 
     def test_png_to_tiff(self):
         with tempfile.TemporaryDirectory() as tmpdir:
