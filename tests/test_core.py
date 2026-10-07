@@ -8748,7 +8748,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('target_suffix = ".gif" if fmt == "gif" else ".mp4"', src)
         self.assertIn("current_suffix = Path(out_path).suffix.lower()", src)
         self.assertIn("if current_suffix in known_media_suffixes:", src)
-        self.assertIn("known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {\".gif\", \".mp4\"}", src)
+        self.assertIn("_KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {\".gif\", \".mp4\"}", src)
+        self.assertIn("known_media_suffixes = _KNOWN_MEDIA_SUFFIXES", src)
         self.assertIn('out_path = str(Path(out_path).with_suffix(target_suffix))', src)
         self.assertIn('out_path = f"{out_path}{target_suffix}"', src)
         self.assertIn("def _has_imageio() -> bool:", src)
@@ -8851,7 +8852,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._movie_path: str = \"\"", src)
         self.assertIn("def _mirror_movie_frame(_frame_no: int) -> None:", src)
         self.assertIn("self._movie.frameChanged.connect(_mirror_movie_frame)", src)
-        self.assertIn("self._movie.frameChanged.disconnect(_mirror_movie_frame)", src)
+        self.assertIn("connected_movie.frameChanged.disconnect(_mirror_movie_frame)", src)
         self.assertIn("compare._pix_before = self._pix_before.copy()", src)
 
     def test_gif_builder_closes_progress_dialog_on_cancel(self):

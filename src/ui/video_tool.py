@@ -2067,7 +2067,6 @@ class VideoToolDialog(QDialog):
         target_suffix = ".gif" if fmt == "gif" else ".mp4"
         current_suffix = Path(out_path).suffix.lower()
         if current_suffix != target_suffix:
-            # known_media_suffixes = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
             known_media_suffixes = _KNOWN_MEDIA_SUFFIXES
             if current_suffix in known_media_suffixes:
                 out_path = str(Path(out_path).with_suffix(target_suffix))
@@ -2252,17 +2251,6 @@ class VideoToolDialog(QDialog):
                     Path(out_path).unlink(missing_ok=True)
                 except Exception:
                     pass
-            if temp_mp4 is not None:
-                try:
-                    Path(temp_mp4).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            for frame in gif_frames:
-                try:
-                    frame.close()
-                except Exception:
-                    pass
-            gif_frames.clear()
             progress.close()
             return
 

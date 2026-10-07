@@ -11,7 +11,7 @@ The overlay supports fourteen trail styles:
   • "wave"        – ocean-themed bubbles and sea emoji (🫧💧🌊) for aquatic themes.
   • "sparkle"     – icy crystal sparkle emoji (✦❄✧💎) for arctic/ice themes.
   • "comet"       – a long tapered line-segment comet tail following the cursor.
-  • "ribbon"      – a smooth connected ribbon/noodle drawn between trail points.
+  • "ribbon"      – a smooth connected band drawn between trail points.
   • "rainbow"     – cycling full-spectrum hue dots, one revolution per trail length.
   • "noodle"      – a physics-simulated dangling chain: each segment lags behind the
                     cursor with spring + gravity forces, creating a realistic noodle

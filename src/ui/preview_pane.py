@@ -509,16 +509,18 @@ class BeforeAfterWidget(QWidget):
         compare._stats_after = self._stats_after
         if self._movie_path:
             compare._movie_path = self._movie_path
+            connected_movie = None
 
             def _mirror_movie_frame(_frame_no: int) -> None:
-                if self._movie is None:
+                if connected_movie is None:
                     return
-                pix = self._movie.currentPixmap()
+                pix = connected_movie.currentPixmap()
                 if not pix.isNull():
                     compare._pix_before = pix
                     compare.update()
 
             if self._movie is not None:
+                connected_movie = self._movie
                 self._movie.frameChanged.connect(_mirror_movie_frame)
         dlg_layout.addWidget(compare, 1)
 
@@ -530,9 +532,9 @@ class BeforeAfterWidget(QWidget):
 
         def _on_dialog_finished(_result=None) -> None:
             """Reset button and stored reference when dialog closes for any reason."""
-            if self._movie is not None and _mirror_movie_frame is not None:
+            if connected_movie is not None and _mirror_movie_frame is not None:
                 try:
-                    self._movie.frameChanged.disconnect(_mirror_movie_frame)
+                    connected_movie.frameChanged.disconnect(_mirror_movie_frame)
                 except (RuntimeError, TypeError):
                     pass
             self._popout_dialog = None
