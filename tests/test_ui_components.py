@@ -3186,6 +3186,46 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_builder_emits_status_notice_and_queue_summary(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        notices = []
+        queue_updates = []
+        dialog.status_notice.connect(lambda message, timeout: notices.append((message, timeout)))
+        dialog.queue_status_changed.connect(queue_updates.append)
+        try:
+            dialog._frames = [
+                types.SimpleNamespace(source_path="/tmp/a.png"),
+                types.SimpleNamespace(source_path="/tmp/b.png"),
+            ]
+            dialog._update_count()
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=2,
+                added_frames=2,
+                recovered=[],
+                failures=[],
+                skipped=[],
+                loaded_details=["a.png: 1 frame  •  image  •  16×16", "b.png: 1 frame  •  image  •  16×16"],
+                source_type_counts={"image": 2},
+                frame_size_counts={"16×16": 2},
+                alpha_source_count=0,
+                largest_frame=(16, 16),
+            )
+            self.assertTrue(queue_updates)
+            self.assertIn("GIF Builder", queue_updates[-1])
+            self.assertIn("2 frames", queue_updates[-1])
+            self.assertTrue(notices)
+            self.assertIn("GIF Builder: Import summary:", notices[-1][0])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_gif_builder_uses_still_frame_fallback_for_visual_video_sources(self):
         try:
             from src.ui import gif_builder as gb
@@ -3231,6 +3271,42 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Skipped unsupported files:\n  bad.png", dialog._import_status_lbl.toolTip())
         finally:
             good_clip.close()
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_emits_status_notice_and_queue_summary(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        notices = []
+        queue_updates = []
+        dialog.status_notice.connect(lambda message, timeout: notices.append((message, timeout)))
+        dialog.queue_status_changed.connect(queue_updates.append)
+        try:
+            dialog._clips = [
+                types.SimpleNamespace(active_frames=24, load_note=""),
+                types.SimpleNamespace(active_frames=12, load_note="temporary ffmpeg remux fallback active"),
+            ]
+            dialog._fps_slider.setValue(24)
+            dialog._update_timeline_summary()
+            dialog._update_import_status(
+                added=2,
+                attempted=3,
+                recovered=[("sample.iso", "temporary ffmpeg remux fallback active")],
+                failures=[("audio.ogg", "ffprobe detected audio but no playable video stream")],
+                skipped=[],
+            )
+            self.assertTrue(queue_updates)
+            self.assertIn("Video Builder", queue_updates[-1])
+            self.assertIn("2 clips", queue_updates[-1])
+            self.assertIn("recovery fallback", queue_updates[-1])
+            self.assertTrue(notices)
+            self.assertIn("Video Builder: Import summary:", notices[-1][0])
+        finally:
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()

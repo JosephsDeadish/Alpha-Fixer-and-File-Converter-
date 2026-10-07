@@ -350,6 +350,8 @@ class GifBuilderDialog(QDialog):
     """
 
     exported = pyqtSignal(str)  # emitted with output path on successful export
+    status_notice = pyqtSignal(str, int)
+    queue_status_changed = pyqtSignal(str)
     SHORTCUT_DEFS = (
         ("gif_remove_selected", "Delete", "Remove selected frame", "GIF Builder"),
         ("gif_export", "Ctrl+S", "Export GIF", "GIF Builder"),
@@ -937,6 +939,17 @@ class GifBuilderDialog(QDialog):
         source_count = len({path for path in (_frame_source_path(entry) for entry in self._frames) if path})
         extra = f"  •  {source_count} source{'s' if source_count != 1 else ''}" if source_count else ""
         self._frame_count_lbl.setText(f"{n} frame{'s' if n != 1 else ''}{extra}")
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def get_queue_status_text(self) -> str:
+        n = len(self._frames)
+        source_count = len({path for path in (_frame_source_path(entry) for entry in self._frames) if path})
+        if n <= 0:
+            return "🎞 GIF Builder ready"
+        parts = [f"{n} frame{'s' if n != 1 else ''}"]
+        if source_count:
+            parts.append(f"{source_count} source{'s' if source_count != 1 else ''}")
+        return "🎞 GIF Builder: " + "  •  ".join(parts)
 
     def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
         colors = {
@@ -950,6 +963,7 @@ class GifBuilderDialog(QDialog):
         self._import_status_lbl.setToolTip(detail or message)
         self._import_detail_box.setPlainText(detail)
         self._import_detail_box.setVisible(bool(detail.strip()))
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _update_import_status(
         self,
@@ -1029,7 +1043,9 @@ class GifBuilderDialog(QDialog):
             )
         if skipped:
             detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
-        self._set_import_status("Import summary: " + "  •  ".join(parts), detail="\n\n".join(detail_lines), tone=tone)
+        summary = "Import summary: " + "  •  ".join(parts)
+        self._set_import_status(summary, detail="\n\n".join(detail_lines), tone=tone)
+        self.status_notice.emit(f"GIF Builder: {summary}", 7000)
 
     def _update_frame_diagnostics(self) -> None:
         total = len(self._frames)
@@ -1314,11 +1330,23 @@ class GifBuilderDialog(QDialog):
             optimize=optimize,
             resize=(max_w, max_h),
         )
+        self.status_notice.emit(
+            f"GIF Builder export saved: {Path(out_path).name} ({len(self._frames)} frame{'s' if len(self._frames) != 1 else ''})",
+            8000,
+        )
         QMessageBox.information(
             self, "GIF Saved",
             f"Animated GIF saved to:\n{out_path}\n\n"
             f"{len(self._frames)} frame(s), loop={loop if loop > 0 else '∞'}",
         )
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.queue_status_changed.emit("")
 
     # ------------------------------------------------------------------
     # Cleanup

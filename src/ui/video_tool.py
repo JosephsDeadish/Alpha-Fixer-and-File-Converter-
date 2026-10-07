@@ -1579,6 +1579,8 @@ class VideoToolDialog(QDialog):
     ffmpeg executable. Still-image clips can still be assembled into
     animated GIF exports without those video dependencies.
     """
+    status_notice = pyqtSignal(str, int)
+    queue_status_changed = pyqtSignal(str)
     SHORTCUT_DEFS = (
         ("video_remove_selected", "Delete", "Remove selected clip", "Video Editor"),
         ("video_toggle_play", "Space", "Play or pause preview", "Video Editor"),
@@ -2149,6 +2151,7 @@ class VideoToolDialog(QDialog):
         self._import_status_lbl.setToolTip(detail or message)
         self._import_detail_box.setPlainText(detail)
         self._import_detail_box.setVisible(bool(detail.strip()))
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _update_import_status(
         self,
@@ -2205,7 +2208,9 @@ class VideoToolDialog(QDialog):
             detail_lines.append("Load failures:\n  " + "\n  ".join(failure_lines))
         if skipped:
             detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
-        self._set_import_status("Import summary: " + "  •  ".join(parts), detail="\n\n".join(detail_lines), tone=tone)
+        summary = "Import summary: " + "  •  ".join(parts)
+        self._set_import_status(summary, detail="\n\n".join(detail_lines), tone=tone)
+        self.status_notice.emit(f"Video Builder: {summary}", 7000)
 
     def _format_clip_info_text(self, clip: "_ClipEntry") -> str:
         text = (
@@ -2227,6 +2232,15 @@ class VideoToolDialog(QDialog):
             f"Timeline: {len(self._clips)} clip{'s' if len(self._clips) != 1 else ''}  •  "
             f"{seconds:.2f} s  •  {total_frames} frames{extra}"
         )
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def get_queue_status_text(self) -> str:
+        if not self._clips:
+            return "🎬 Video Builder ready"
+        summary = self._timeline_summary_lbl.text().strip()
+        if summary.lower().startswith("timeline:"):
+            summary = summary.split(":", 1)[1].strip()
+        return "🎬 Video Builder: " + summary
 
     def _update_ui_state(self) -> None:
         has_clips = bool(self._clips)
@@ -3217,7 +3231,19 @@ class VideoToolDialog(QDialog):
 
         progress.close()
         self._record_export_history(out_path, fmt, clip_snapshot, len(clip_snapshot), 0)
+        self.status_notice.emit(
+            f"Video Builder export saved: {Path(out_path).name} ({len(clip_snapshot)} clip{'s' if len(clip_snapshot) != 1 else ''}, {fmt.upper()})",
+            8000,
+        )
         QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.queue_status_changed.emit("")
 
     # ------------------------------------------------------------------
     # Misc

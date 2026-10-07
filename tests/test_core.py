@@ -8981,6 +8981,18 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._queue_status_label.setText(queue_getter())", src)
         self.assertIn('self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")', src)
 
+    def test_main_window_keeps_builder_status_bar_summary_hooks(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("self._builder_status_label = QLabel(\"\")", src)
+        self.assertIn("def _visible_builder_status_text(self) -> str:", src)
+        self.assertIn("for attr in (\"_gif_builder_dlg\", \"_video_tool_dlg\"):", src)
+        self.assertIn("def _update_builder_status(self, *_args) -> None:", src)
+        self.assertIn("def _connect_builder_status(self, dialog) -> None:", src)
+        self.assertIn("dialog.status_notice.connect(self._show_transient_status)", src)
+        self.assertIn("dialog.queue_status_changed.connect(self._update_builder_status)", src)
+        self.assertIn("self._connect_builder_status(self._gif_builder_dlg)", src)
+        self.assertIn("self._connect_builder_status(self._video_tool_dlg)", src)
+
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")
         self.assertIn('if fmt == "mp4" and not self._mp4_export_available:', src)

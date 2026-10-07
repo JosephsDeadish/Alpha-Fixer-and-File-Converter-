@@ -1310,7 +1310,11 @@ class MainWindow(QMainWindow):
         self._queue_status_label = QLabel("")
         self._queue_status_label.setObjectName("subheader")
         self._queue_status_label.setStyleSheet("color: #888; padding: 0 6px;")
+        self._builder_status_label = QLabel("")
+        self._builder_status_label.setObjectName("subheader")
+        self._builder_status_label.setStyleSheet("color: #888; padding: 0 6px;")
         self._status_bar.addPermanentWidget(self._queue_status_label, 0)
+        self._status_bar.addPermanentWidget(self._builder_status_label, 0)
         self._status_bar.addPermanentWidget(self._unlock_lbl, 0)
 
         # Toolbar panda label no longer used (toolbar removed); keep None so
@@ -2681,6 +2685,39 @@ class MainWindow(QMainWindow):
         count = int(file_list.count())
         self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")
 
+    def _visible_builder_status_text(self) -> str:
+        visible_dialogs = []
+        for attr in ("_gif_builder_dlg", "_video_tool_dlg"):
+            dlg = getattr(self, attr, None)
+            if dlg is None or not dlg.isVisible():
+                continue
+            getter = getattr(dlg, "get_queue_status_text", None)
+            if not callable(getter):
+                continue
+            text = str(getter() or "").strip()
+            if text:
+                visible_dialogs.append((dlg, text))
+        for dlg, text in visible_dialogs:
+            if dlg.isActiveWindow():
+                return text
+        return visible_dialogs[-1][1] if visible_dialogs else ""
+
+    def _update_builder_status(self, *_args) -> None:
+        if self._builder_status_label is None:
+            return
+        self._builder_status_label.setText(self._visible_builder_status_text())
+
+    def _connect_builder_status(self, dialog) -> None:
+        if dialog is None or getattr(dialog, "_status_bar_hooks_connected", False):
+            return
+        if hasattr(dialog, "status_notice"):
+            dialog.status_notice.connect(self._show_transient_status)
+        if hasattr(dialog, "queue_status_changed"):
+            dialog.queue_status_changed.connect(self._update_builder_status)
+        dialog.destroyed.connect(self._update_builder_status)
+        dialog._status_bar_hooks_connected = True
+        self._update_builder_status()
+
     def _clear_custom_background_notice(self) -> None:
         self._bg_notice = ""
 
@@ -4007,15 +4044,19 @@ class MainWindow(QMainWindow):
         if chosen is act_gif:
             if not hasattr(self, "_gif_builder_dlg") or self._gif_builder_dlg is None:
                 self._gif_builder_dlg = GifBuilderDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
+                self._connect_builder_status(self._gif_builder_dlg)
             self._gif_builder_dlg.show()
             self._gif_builder_dlg.raise_()
             self._gif_builder_dlg.activateWindow()
+            self._update_builder_status()
         elif chosen is act_video:
             if not hasattr(self, "_video_tool_dlg") or self._video_tool_dlg is None:
                 self._video_tool_dlg = VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
+                self._connect_builder_status(self._video_tool_dlg)
             self._video_tool_dlg.show()
             self._video_tool_dlg.raise_()
             self._video_tool_dlg.activateWindow()
+            self._update_builder_status()
         event.accept()
 
     def eventFilter(self, obj: "QObject", event: "QEvent") -> bool:
