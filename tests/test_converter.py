@@ -19,6 +19,7 @@ from src.core.file_converter import (
     SUPPORTED_OUTPUT_FORMATS,
     DDS_VARIANT_OPTIONS,
     _flatten_alpha,
+    output_format_discards_alpha,
     output_format_available,
     output_format_unavailable_reason,
 )
@@ -149,8 +150,33 @@ class TestConverterWorkerSizing(unittest.TestCase):
         )
         self.assertEqual(count, 2)
 
+    def test_worker_auto_falls_back_to_png_for_transparent_alpha_incompatible_targets(self):
+        worker = ConverterWorker(
+            files=["/tmp/input.png"],
+            target_format="JPEG",
+            target_ext=".jpg",
+        )
+        with mock.patch.object(worker, "_source_has_meaningful_alpha", return_value=True):
+            fmt, ext, note = worker._resolve_effective_target("/tmp/input.png")
+        self.assertEqual((fmt, ext), ("PNG", ".png"))
+        self.assertIn("auto-saved as PNG", note)
+
+    def test_worker_keeps_requested_target_when_source_is_opaque(self):
+        worker = ConverterWorker(
+            files=["/tmp/input.png"],
+            target_format="JPEG",
+            target_ext=".jpg",
+        )
+        with mock.patch.object(worker, "_source_has_meaningful_alpha", return_value=False):
+            fmt, ext, note = worker._resolve_effective_target("/tmp/input.png")
+        self.assertEqual((fmt, ext, note), ("JPEG", ".jpg", ""))
+
 
 class TestConvertFile(unittest.TestCase):
+    def test_output_format_discards_alpha_for_jpeg(self):
+        self.assertTrue(output_format_discards_alpha("JPEG"))
+        self.assertFalse(output_format_discards_alpha("PNG"))
+
     def test_output_format_available_uses_pillow_save_registry(self):
         with mock.patch.object(Image, "registered_extensions", return_value={".avif": "AVIF"}):
             with mock.patch.dict(Image.SAVE, {"AVIF": object()}, clear=False):

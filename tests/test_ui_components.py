@@ -272,6 +272,23 @@ class TestConverterTab(unittest.TestCase):
             self.assertEqual(kwargs["target_format"], "PNG")
             self.assertEqual(kwargs["target_ext"], ".png")
 
+    def test_unavailable_dds_compression_variants_are_disabled(self):
+        idx = self._widget._fmt_combo.findText("DDS", Qt.MatchFlag.MatchContains)
+        self.assertGreaterEqual(idx, 0)
+        self._widget._fmt_combo.setCurrentIndex(idx)
+        model = self._widget._dds_variant_combo.model()
+        dxt1_idx = self._widget._dds_variant_combo.findData("dxt1")
+        dxt5_idx = self._widget._dds_variant_combo.findData("dxt5")
+        if not self._widget._dds_compression_available:
+            self.assertFalse(model.item(dxt1_idx).isEnabled())
+            self.assertFalse(model.item(dxt5_idx).isEnabled())
+
+    def test_alpha_incompatible_format_sets_status_note(self):
+        idx = self._widget._fmt_combo.findText("JPEG", Qt.MatchFlag.MatchContains)
+        self.assertGreaterEqual(idx, 0)
+        self._widget._fmt_combo.setCurrentIndex(idx)
+        self.assertIn("auto-saved as PNG", self._widget._status_lbl.text())
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys

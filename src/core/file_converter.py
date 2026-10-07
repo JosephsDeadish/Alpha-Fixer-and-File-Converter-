@@ -76,6 +76,7 @@ def dds_compression_available() -> bool:
 
 
 _CUSTOM_OUTPUT_FORMATS = {"DDS", "SVG", "TIM", "XNB"}
+_ALPHA_UNSUPPORTED_OUTPUT_FORMATS = {"BMP", "JPEG", "PBM", "PGM", "PNM", "PPM", "PCX"}
 _FORMAT_UNAVAILABLE_HINTS = {
     "AVIF": "AVIF export needs Pillow built with libavif support.",
     "JPEG2000": "JPEG2000 export needs Pillow built with OpenJPEG support.",
@@ -108,6 +109,11 @@ def output_format_available(target_format: str) -> bool:
     """Return True when *target_format* can be written in this environment."""
     return not output_format_unavailable_reason(target_format)
 
+
+def output_format_discards_alpha(target_format: str) -> bool:
+    """Return True when *target_format* cannot preserve full alpha."""
+    return target_format in _ALPHA_UNSUPPORTED_OUTPUT_FORMATS
+
 # Human-readable descriptions for each output format, shown as combo tooltips
 FORMAT_DESCRIPTIONS = {
     "AVIF": (
@@ -118,7 +124,7 @@ FORMAT_DESCRIPTIONS = {
     "BMP": (
         "Windows Bitmap — uncompressed raster format.\n"
         "Large file size but lossless and universally supported.\n"
-        "No alpha channel support. Best for simple compatibility."
+        "No alpha channel support. Transparent sources are auto-saved as PNG to preserve alpha."
     ),
     "DDS": (
         "DirectDraw Surface — GPU-native texture format.\n"
@@ -129,7 +135,7 @@ FORMAT_DESCRIPTIONS = {
     "PBM": (
         "Portable Bitmap — simple 1-bit black-and-white image format.\n"
         "Best for masks, monochrome art, and legacy toolchains.\n"
-        "No greyscale or alpha; output is thresholded to pure black or white."
+        "No greyscale or alpha; transparent sources are auto-saved as PNG."
     ),
     "GIF": (
         "Graphics Interchange Format — 256-colour indexed format with animation.\n"
@@ -139,7 +145,7 @@ FORMAT_DESCRIPTIONS = {
     "PGM": (
         "Portable Graymap — simple greyscale image format.\n"
         "Useful for masks, heightmaps, scientific tools, and older pipelines.\n"
-        "Stores luminance only; alpha is flattened before saving."
+        "Stores luminance only; transparent sources are auto-saved as PNG."
     ),
     "ICO": (
         "Windows Icon format — multi-size icon bundle.\n"
@@ -148,7 +154,7 @@ FORMAT_DESCRIPTIONS = {
     ),
     "JPEG": (
         "Joint Photographic Experts Group — lossy compression for photos.\n"
-        "No alpha channel support; transparent pixels are composited onto white.\n"
+        "No alpha channel support; transparent sources are auto-saved as PNG.\n"
         "Quality 85–95 gives a good size/quality balance for photos."
     ),
     "JPEG2000": (
@@ -159,12 +165,14 @@ FORMAT_DESCRIPTIONS = {
     "PCX": (
         "PC Paintbrush format — old lossless format from the DOS era.\n"
         "Limited support in modern software. Use PNG or BMP instead where possible.\n"
-        "Still encountered in some legacy game assets and old CAD workflows."
+        "Still encountered in some legacy game assets and old CAD workflows.\n"
+        "Transparent sources are auto-saved as PNG."
     ),
     "PNM": (
         "Portable AnyMap — Netpbm family container (PBM/PGM/PPM).\n"
         "Simple interchange format for command-line tools and legacy pipelines.\n"
-        "This app saves color PNM output as a standard RGB pixmap."
+        "This app saves color PNM output as a standard RGB pixmap.\n"
+        "Transparent sources are auto-saved as PNG."
     ),
     "PNG": (
         "Portable Network Graphics — lossless compression with full alpha channel.\n"
@@ -174,7 +182,7 @@ FORMAT_DESCRIPTIONS = {
     "PPM": (
         "Portable Pixmap — simple, uncompressed text or binary RGB format.\n"
         "Very large files with no compression. Supported by most graphics tools.\n"
-        "No alpha channel. Mostly used in scientific and batch-pipeline workflows."
+        "No alpha channel. Transparent sources are auto-saved as PNG."
     ),
     "QOI": (
         "Quite OK Image Format — fast lossless compression with alpha support.\n"

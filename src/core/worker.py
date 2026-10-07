@@ -35,7 +35,7 @@ from .alpha_processor import (
     apply_manual_alpha,
     apply_rgba_adjust,
 )
-from .file_converter import convert_file, build_output_path
+from .file_converter import convert_file, build_output_path, output_format_discards_alpha
 from .presets import AlphaPreset
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ _ALPHA_PROMOTE_FORMATS = {
     ".jpg", ".jpeg", ".jfif", ".jpe", ".bmp",
     ".pbm", ".pgm", ".pnm", ".ppm", ".pcx",
 }
+_CONVERTER_ALPHA_FALLBACK_FORMAT = ("PNG", ".png")
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +321,39 @@ class ConverterWorker(QThread):
         self._abort = True
 
     @staticmethod
+    def _source_has_meaningful_alpha(path: str) -> bool:
+        img = load_image(path)
+        alpha_band = None
+        try:
+            if "A" not in img.getbands():
+                return False
+            alpha_band = img.getchannel("A")
+            extrema = alpha_band.getextrema()
+            if not extrema:
+                return False
+            return int(extrema[0]) < 255
+        finally:
+            if alpha_band is not None:
+                alpha_band.close()
+            img.close()
+
+    def _resolve_effective_target(self, src: str) -> tuple[str, str, str]:
+        if not output_format_discards_alpha(self._target_format):
+            return self._target_format, self._target_ext, ""
+        try:
+            has_alpha = self._source_has_meaningful_alpha(src)
+        except MemoryError:
+            raise
+        except Exception as exc:
+            logger.debug("Alpha fallback probe failed for %s: %s", src, exc)
+            return self._target_format, self._target_ext, ""
+        if not has_alpha:
+            return self._target_format, self._target_ext, ""
+        fmt, ext = _CONVERTER_ALPHA_FALLBACK_FORMAT
+        note = f"{self._target_format} cannot preserve transparency — auto-saved as {fmt}."
+        return fmt, ext, note
+
+    @staticmethod
     def _recommend_worker_count(
         total_files: int,
         file_sizes: list[int],
@@ -360,9 +394,10 @@ class ConverterWorker(QThread):
             """Convert one file and return (index, src, ok, dest_or_error)."""
             try:
                 logical_src = self._source_aliases.get(src, src)
+                actual_target_format, actual_target_ext, note = self._resolve_effective_target(src)
                 dest = build_output_path(
                     logical_src,
-                    self._target_ext,
+                    actual_target_ext,
                     output_dir=self._output_dir,
                     input_root=self._input_root,
                     suffix=self._suffix,
@@ -370,13 +405,13 @@ class ConverterWorker(QThread):
                 convert_file(
                     src,
                     dest,
-                    self._target_format,
+                    actual_target_format,
                     quality=self._quality,
                     resize=self._resize,
                     keep_metadata=self._keep_metadata,
                     dds_variant=self._dds_variant,
                 )
-                return idx, src, True, dest
+                return idx, src, True, f"{dest}\n{note}" if note else dest
             except MemoryError as exc:
                 return idx, src, False, f"Out of memory — {exc}"
             except Exception:

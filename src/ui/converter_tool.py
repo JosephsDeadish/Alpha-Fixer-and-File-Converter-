@@ -23,7 +23,7 @@ from ..core.alpha_processor import collect_files, SUPPORTED_READ
 from ..core.file_converter import (
     OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, DDS_VARIANT_OPTIONS,
     dds_compression_available, get_gif_frame_count,
-    output_format_unavailable_reason,
+    output_format_discards_alpha, output_format_unavailable_reason,
 )
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
@@ -450,6 +450,7 @@ class ConverterTab(QWidget):
         saved_dds_variant = self._settings.get("last_converter_dds_variant", "auto")
         dds_idx = max(0, self._dds_variant_combo.findData(saved_dds_variant))
         self._dds_variant_combo.setCurrentIndex(dds_idx)
+        self._sync_dds_variant_availability()
         self._dds_variant_combo.setToolTip(
             "Choose how DDS output should be written.\n"
             "Auto keeps opaque images as RGB DDS and images with transparency as RGBA DDS."
@@ -775,6 +776,10 @@ class ConverterTab(QWidget):
         if format_unavailable:
             self._status_lbl.setText(f"Ready. {fmt} export unavailable here — batch will fall back to PNG.")
             self._fmt_combo.setToolTip(format_unavailable)
+        elif output_format_discards_alpha(fmt):
+            self._status_lbl.setText(
+                f"Ready. Transparent sources will be auto-saved as PNG because {fmt} does not preserve alpha."
+            )
         elif dds_selected and not self._dds_compression_available:
             self._dds_variant_combo.setToolTip(
                 "Compressed DDS variants require ImageMagick/wand.\n"
@@ -810,6 +815,21 @@ class ConverterTab(QWidget):
         variant = self._dds_variant_combo.currentData()
         if variant:
             self._settings.set("last_converter_dds_variant", variant)
+
+    def _sync_dds_variant_availability(self) -> None:
+        model = self._dds_variant_combo.model()
+        disabled_selected = False
+        for idx in range(self._dds_variant_combo.count()):
+            value = self._dds_variant_combo.itemData(idx)
+            enabled = self._dds_compression_available or value not in {"dxt1", "dxt5"}
+            item = model.item(idx) if hasattr(model, "item") else None
+            if item is not None:
+                item.setEnabled(enabled)
+            if not enabled and self._dds_variant_combo.currentIndex() == idx:
+                disabled_selected = True
+        if disabled_selected:
+            auto_idx = max(0, self._dds_variant_combo.findData("auto"))
+            self._dds_variant_combo.setCurrentIndex(auto_idx)
 
     def _reset_thumbnail_failure_log(self) -> None:
         self._thumbnail_failure_log_count = 0
@@ -1415,8 +1435,14 @@ class ConverterTab(QWidget):
         if ok:
             # msg contains the destination path on success; show both names so
             # the user always knows where the converted file landed.
-            dest_name = Path(msg).name if msg else "?"
-            self._log_msg(f"✔ {name}  →  {dest_name}")
+            parts = msg.splitlines() if msg else []
+            dest_path = parts[0] if parts else ""
+            dest_name = Path(dest_path).name if dest_path else "?"
+            note = parts[-1].strip() if len(parts) > 1 else ""
+            if note:
+                self._log_msg(f"✔ {name}  →  {dest_name}  ({note})")
+            else:
+                self._log_msg(f"✔ {name}  →  {dest_name}")
         else:
             reason = msg.splitlines()[-1].strip() if msg else "conversion failed"
             self._batch_error_reasons[reason] += 1
