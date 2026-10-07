@@ -1245,7 +1245,7 @@ class ImagePreviewPane(QWidget):
             try:
                 self._loader.loaded.disconnect()
                 self._loader.failed.disconnect()
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
             self._loader = None
         self._meta_label.setText("Loading…")
@@ -1278,7 +1278,7 @@ class ImagePreviewPane(QWidget):
         try:
             loader.loaded.disconnect()
             loader.failed.disconnect()
-        except RuntimeError:
+        except (RuntimeError, TypeError):
             pass
 
     # ------------------------------------------------------------------

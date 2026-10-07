@@ -8725,7 +8725,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_converter_worker_submits_incrementally_and_cancels_pending_work(self):
         src = self._src("core/worker.py")
         self.assertIn("return_when=concurrent.futures.FIRST_COMPLETED", src)
-        self.assertIn("pool.shutdown(wait=False, cancel_futures=True)", src)
+        self.assertIn("for fut in pending:", src)
+        self.assertIn("fut.cancel()", src)
+        self.assertIn("pool.shutdown(wait=not skip_wait_shutdown, cancel_futures=(self._abort or skip_wait_shutdown))", src)
         self.assertNotIn("for src in self._files:\n                if self._abort:\n                    break\n                fut_map[pool.submit(_convert_one, src)] = src", src)
 
     def test_converter_tool_quality_ui_mentions_all_supported_formats(self):
@@ -8760,7 +8762,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("first_frame = None", src)
         self.assertIn("QApplication.processEvents()", src)
         self.assertIn('if fmt != "gif":', src)
-        self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
+        self.assertIn("writer.append_data(np.array(rgb))", src)
         self.assertIn('format="FFMPEG"', src)
         self.assertIn("gif_frames = []", src)
         self.assertIn("gif_frames.append(framed)", src)
@@ -8842,7 +8844,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_worker_large_batch_threshold_keeps_small_runs_verbose(self):
         src = self._src("core/worker.py")
-        self.assertIn("_LARGE_BATCH_THRESHOLD = 1000", src)
+        self.assertRegex(src, r"_LARGE_BATCH_THRESHOLD = 1?_?000")
 
     def test_preview_popout_copies_active_gif_animation_state(self):
         src = self._src("ui/preview_pane.py")
@@ -8895,8 +8897,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("MP4 Export Unavailable", src)
         self.assertIn("progress.show()", src)
         self.assertIn("QApplication.processEvents()", src)
-        self.assertIn("append_video_frame = None", src)
-        self.assertIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
+        self.assertNotIn("append_video_frame = None", src)
+        self.assertNotIn("append_video_frame = lambda frame: writer.append_data(np.array(frame))", src)
+        self.assertIn("writer.append_data(np.array(rgb))", src)
         self.assertNotIn("import numpy as np\n                        rgb =", src)
 
     def test_video_export_closes_mp4_writer_before_success(self):

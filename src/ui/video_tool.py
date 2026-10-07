@@ -1916,6 +1916,7 @@ class VideoToolDialog(QDialog):
     def _should_mux_audio(self, fmt: str, clip_snapshot: list[dict[str, object]]) -> bool:
         return (
             fmt == "mp4"
+            and self._audio_enable_check.isEnabled()
             and self._audio_enable_check.isChecked()
             and not self._audio_mute_check.isChecked()
             and self._audio_volume_slider.value() > 0
@@ -2084,7 +2085,6 @@ class VideoToolDialog(QDialog):
         gif_frames = []
         canceled = False
         wrote_frames = False
-        append_video_frame = None  # legacy source-compat placeholder for regression tests
         render_path = out_path
         temp_mp4 = None
         export_stage = "render setup"
@@ -2136,8 +2136,6 @@ class VideoToolDialog(QDialog):
                     if fmt != "gif":
                         rgb = framed if framed.mode == "RGB" else framed.convert("RGB")
                         try:
-                            # Legacy source note kept for regression tests:
-                            # append_video_frame = lambda frame: writer.append_data(np.array(frame))
                             writer.append_data(np.array(rgb))
                         finally:
                             if rgb is not None and rgb is not framed:
