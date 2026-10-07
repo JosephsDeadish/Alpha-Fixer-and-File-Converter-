@@ -40,7 +40,20 @@ from PyQt6.QtWidgets import (
     QProgressDialog, QSplitter, QWidget,
     QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox,
 )
-from .video_tool import _VIDEO_EXTS, _load_video_frames, _video_io_diagnostics, _has_ffmpeg, _has_imageio, _has_imageio_ffmpeg
+from .video_tool import (
+    _VIDEO_EXTS,
+    _classify_video_import_failure,
+    _get_ffprobe_exe,
+    _has_ffmpeg,
+    _has_imageio,
+    _has_imageio_ffmpeg,
+    _is_probably_video_source,
+    _load_video_frames,
+    _probe_media_details,
+    _video_failure_guidance,
+    _video_io_diagnostics,
+    _video_load_failure_hint,
+)
 
 # Supported image input extensions (what PIL can open directly)
 _IMAGE_EXTS = {
@@ -139,8 +152,16 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 
 def _gif_builder_capability_summary() -> str:
     if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
+        if _get_ffprobe_exe():
+            odd_container_text = (
+                " Best-effort odd-container probing is also available when ffprobe can expose a playable video stream."
+            )
+        else:
+            odd_container_text = " Odd-container probing detail stays limited until ffprobe is available."
         return (
             "Ready now: images, animated GIFs, and video-source imports are available. Video clips are expanded into GIF frames automatically, audio is ignored during GIF import/export, and import summaries keep grouped failures plus per-frame diagnostics visible during preview."
+            + odd_container_text
+            + " Audio-only or cover-art-only containers still cannot be imported as visual GIF frames."
         )
     return (
         "Limited mode: images and animated GIFs are ready now, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
@@ -197,13 +218,25 @@ def _frame_source_kind(path: str, source_frames: int = 1) -> str:
 def _classify_import_failure(name: str, detail: str) -> str:
     ext = Path(name).suffix.lower()
     lower = detail.lower()
-    if ext in _VIDEO_EXTS:
-        if "ffmpeg" in lower or "imageio" in lower:
-            return "video dependency"
-        return "video decode"
+    if (
+        ext in _VIDEO_EXTS
+        or "ffprobe" in lower
+        or "playable video stream" in lower
+        or "cover-art" in lower
+        or "non-corrupt video" in lower
+    ):
+        return _classify_video_import_failure(name, detail)
     if "truncated" in lower or "corrupt" in lower or "cannot identify image file" in lower:
         return "image decode"
     return "image import"
+
+
+def _import_failure_guidance(category: str) -> str:
+    if category == "image decode":
+        return "The image or animated GIF could not be decoded cleanly; the source may be corrupt, truncated, or unsupported by the current Pillow build."
+    if category == "image import":
+        return "The source could not be imported as a supported image, animated GIF, or video-expanded frame set."
+    return _video_failure_guidance(category)
 
 
 def _summarize_count_buckets(counts: dict[str, int], limit: int = 3) -> str:
@@ -276,7 +309,7 @@ class _FrameListWidget(QListWidget):
             paths = []
             for url in event.mimeData().urls():
                 p = url.toLocalFile()
-                if p and Path(p).suffix.lower() in _SUPPORTED_EXTS:
+                if p:
                     paths.append(p)
             if paths:
                 self.files_dropped.emit(paths)
@@ -398,7 +431,7 @@ class GifBuilderDialog(QDialog):
         left_layout.addWidget(hint)
 
         self._import_status_lbl = QLabel(
-            "Ready: add images, GIFs, or videos. Import notes, grouped failures, and skipped-file details will appear here."
+            "Ready: add images, GIFs, videos, or probe-detected odd containers. Import notes, grouped failures, and skipped-file details will appear here."
         )
         self._import_status_lbl.setWordWrap(True)
         self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
@@ -622,11 +655,20 @@ class GifBuilderDialog(QDialog):
             if progress.wasCanceled():
                 break
             ext = Path(path).suffix.lower()
-            if ext not in _SUPPORTED_EXTS:
-                skipped.append(Path(path).name)
-                continue
+            probe = None
+            treat_as_video = ext in _VIDEO_EXTS
+            if not treat_as_video and ext not in _IMAGE_EXTS:
+                probe = _probe_media_details(path)
+                if _is_probably_video_source(path, probe):
+                    treat_as_video = True
+                elif probe:
+                    failures.append((Path(path).name, _video_load_failure_hint(path)))
+                    continue
+                else:
+                    skipped.append(Path(path).name)
+                    continue
             try:
-                if ext in _VIDEO_EXTS:
+                if treat_as_video:
                     pil_frames, fps = _load_video_frames(path)
                     frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))
                 else:
@@ -634,8 +676,9 @@ class GifBuilderDialog(QDialog):
                     frame_delay_ms = None
             except Exception as exc:
                 detail = str(exc)
-                if ext in _VIDEO_EXTS:
-                    detail += "\n" + _video_io_diagnostics()
+                if treat_as_video:
+                    hint = _video_load_failure_hint(path)
+                    detail = f"{detail}\n{hint}" if detail else hint
                 failures.append((Path(path).name, detail))
                 continue
             loaded_sources += 1
@@ -889,7 +932,7 @@ class GifBuilderDialog(QDialog):
     ) -> None:
         if attempted <= 0:
             self._set_import_status(
-                "Ready: add images, GIFs, or videos. Import notes, grouped failures, and skipped-file details will appear here."
+                "Ready: add images, GIFs, videos, or probe-detected odd containers. Import notes, grouped failures, and skipped-file details will appear here."
             )
             return
         parts = [
@@ -934,6 +977,10 @@ class GifBuilderDialog(QDialog):
             detail_lines.append(
                 "Failure types: "
                 + ", ".join(f"{category} ×{count}" for category, count in grouped.items())
+            )
+            detail_lines.append(
+                "Failure guidance:\n  "
+                + "\n  ".join(f"{category}: {_import_failure_guidance(category)}" for category in grouped)
             )
             detail_lines.append(
                 "Import failures:\n  " + "\n  ".join(f"{name}: {detail}" for name, detail in failures)

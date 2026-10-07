@@ -2983,6 +2983,80 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_builder_probes_unknown_extension_video_sources(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            probe = {
+                "format_name": "mpeg",
+                "has_video": True,
+                "has_audio": True,
+                "video_codec": "mpeg2video",
+                "audio_codec": "ac3",
+                "width": 320,
+                "height": 240,
+                "fps": 25.0,
+                "selected_video_attached_pic": False,
+                "video_attached_pic_count": 0,
+                "video_stream_count": 1,
+            }
+            frames = [Image.new("RGBA", (16, 12), (255, 0, 0, 255))]
+            try:
+                with patch.object(gb, "_probe_media_details", return_value=probe):
+                    with patch.object(gb, "_load_video_frames", return_value=(frames, 25.0)):
+                        dialog._add_paths(["/tmp/odd_source.dat"])
+                self.assertEqual(len(dialog._frames), 1)
+                self.assertIn("Loaded 1 source", dialog._import_status_lbl.text())
+                self.assertIn("video ×1", dialog._import_status_lbl.toolTip())
+                self.assertIn("odd_source.dat: 1 frame  •  video", dialog._import_detail_box.toPlainText())
+            finally:
+                for frame in frames:
+                    try:
+                        frame.close()
+                    except Exception:
+                        pass
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_reports_audio_only_odd_container_inline(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            probe = {
+                "format_name": "ogg",
+                "has_video": False,
+                "has_audio": True,
+                "video_codec": "",
+                "audio_codec": "vorbis",
+                "width": 0,
+                "height": 0,
+                "fps": 0.0,
+            }
+            with patch.object(gb, "_probe_media_details", return_value=probe):
+                with patch.object(gb, "_video_load_failure_hint", return_value="ffprobe detected audio but no playable video stream"):
+                    dialog._add_paths(["/tmp/audio_payload.dat"])
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("audio-only container ×1", dialog._import_status_lbl.text())
+            self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
+            self.assertIn("audio-only container", dialog._import_detail_box.toPlainText())
+            self.assertIn("cannot be added", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_gif_builder_updates_frame_diagnostics_for_selected_preview_frame(self):
         try:
             from src.ui import gif_builder as gb
@@ -3032,6 +3106,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertTrue(dialog._capability_lbl.text())
             self.assertIn("Ready", dialog._capability_lbl.text())
             self.assertIn("audio is ignored", dialog._capability_lbl.text())
+            self.assertIn("Audio-only or cover-art-only containers", dialog._capability_lbl.text())
         finally:
             dialog.close()
             dialog.deleteLater()
