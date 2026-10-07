@@ -2010,6 +2010,31 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("audio but no playable video stream", hint)
         self.assertIn("container=ogg", hint)
 
+    def test_video_load_failure_hint_mentions_multi_stream_recovery_choice(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 2,
+            "audio_stream_count": 1,
+            "video_stream_index": 3,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/weird.vob")
+        self.assertIn("Multiple video streams were detected", hint)
+        self.assertIn("preferred-stream=3", hint)
+
     def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
         try:
             from src.ui import video_tool as vt
@@ -2065,6 +2090,40 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("transcode fallback", clip.load_note)
             clip.close()
             self.assertFalse(os.path.exists(transcode_path))
+
+    def test_recovery_prefers_probe_selected_stream_indexes(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "video_stream_index": 4,
+            "audio_stream_index": 7,
+        }
+        calls = []
+
+        def _fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            remux_path = os.path.join(tmpdir, "result.mkv")
+
+            def _fake_tempfile(**kwargs):
+                handle = open(remux_path, "wb")
+                handle.close()
+                return types.SimpleNamespace(name=remux_path, close=lambda: None)
+
+            with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                with patch.object(vt.tempfile, "NamedTemporaryFile", side_effect=_fake_tempfile):
+                    with patch.object(vt.subprocess, "run", side_effect=_fake_run):
+                        result = vt._remux_video_source("/tmp/sample.vob", details)
+
+        self.assertEqual(result, remux_path)
+        self.assertTrue(calls)
+        self.assertIn("0:4", calls[0])
+        self.assertIn("0:7?", calls[0])
 
     def test_dropped_unknown_video_extension_uses_probe_detection(self):
         _require_qt_gui(self)
@@ -2562,6 +2621,21 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_builder_shows_capability_summary(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            self.assertTrue(dialog._capability_lbl.text())
+            self.assertIn("Ready", dialog._capability_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
         try:
             from src.ui.history_tab import HistoryTab
@@ -2593,8 +2667,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         )
         tab = HistoryTab(settings)
         try:
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "optimize=on")
-            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(5))
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "OK")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "optimize=on")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(5), "Recovery")
+            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(6))
         finally:
             tab.close()
             tab.deleteLater()
@@ -2623,6 +2699,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             item = tab._vid_tree.topLevelItem(0)
             self.assertEqual(item.text(1), "final-output.mp4")
             tab._apply_filter(tab._vid_tree, "session-exports")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "recovery")
             self.assertFalse(item.isHidden())
         finally:
             tab.close()

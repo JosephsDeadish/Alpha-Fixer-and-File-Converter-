@@ -211,7 +211,7 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
                 "-v", "error",
                 "-print_format", "json",
                 "-show_entries",
-                "format=format_name,duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate",
+                "format=format_name,duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate",
                 path,
             ],
             stdout=subprocess.PIPE,
@@ -234,11 +234,34 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
     format_info = payload.get("format")
     if not isinstance(format_info, dict):
         format_info = {}
-    video_stream = next((stream for stream in streams if stream.get("codec_type") == "video"), None)
-    audio_stream = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
+    video_streams = [stream for stream in streams if isinstance(stream, dict) and stream.get("codec_type") == "video"]
+    audio_streams = [stream for stream in streams if isinstance(stream, dict) and stream.get("codec_type") == "audio"]
+
+    def _stream_index(stream: dict[str, object]) -> int:
+        try:
+            return int(stream.get("index"))
+        except Exception:
+            return 999999
+
+    def _video_rank(stream: dict[str, object]) -> tuple[int, float, int]:
+        try:
+            width = max(0, int(stream.get("width") or 0))
+            height = max(0, int(stream.get("height") or 0))
+        except Exception:
+            width = height = 0
+        area = width * height
+        fps = max(
+            _parse_ffprobe_rate(stream.get("avg_frame_rate")),
+            _parse_ffprobe_rate(stream.get("r_frame_rate")),
+        )
+        return area, fps, -_stream_index(stream)
+
+    video_stream = max(video_streams, key=_video_rank, default=None)
+    audio_stream = audio_streams[0] if audio_streams else None
     fps = 0.0
     width = height = 0
     video_codec = ""
+    video_stream_index: Optional[int] = None
     if isinstance(video_stream, dict):
         fps = max(
             _parse_ffprobe_rate(video_stream.get("avg_frame_rate")),
@@ -250,9 +273,18 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         except Exception:
             width = height = 0
         video_codec = str(video_stream.get("codec_name") or "").strip()
+        try:
+            video_stream_index = int(video_stream.get("index"))
+        except Exception:
+            video_stream_index = None
     audio_codec = ""
+    audio_stream_index: Optional[int] = None
     if isinstance(audio_stream, dict):
         audio_codec = str(audio_stream.get("codec_name") or "").strip()
+        try:
+            audio_stream_index = int(audio_stream.get("index"))
+        except Exception:
+            audio_stream_index = None
     try:
         duration = float(format_info.get("duration") or 0.0)
     except Exception:
@@ -267,6 +299,10 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         "width": width,
         "height": height,
         "fps": fps,
+        "video_stream_index": video_stream_index,
+        "audio_stream_index": audio_stream_index,
+        "video_stream_count": len(video_streams),
+        "audio_stream_count": len(audio_streams),
     }
 
 
@@ -279,12 +315,20 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
     width = max(0, int(details.get("width") or 0))
     height = max(0, int(details.get("height") or 0))
     fps = max(0.0, float(details.get("fps") or 0.0))
+    video_stream_count = max(0, int(details.get("video_stream_count") or 0))
+    audio_stream_count = max(0, int(details.get("audio_stream_count") or 0))
+    video_stream_index = details.get("video_stream_index")
     parts = [f"Probe: container={format_name}", f"video={video_codec}"]
     if width > 0 and height > 0:
         parts.append(f"size={width}x{height}")
     if fps > 0:
         parts.append(f"fps={fps:.3f}".rstrip("0").rstrip("."))
     parts.append(f"audio={audio_codec}")
+    if video_stream_count > 1:
+        choice = f" preferred-stream={video_stream_index}" if video_stream_index is not None else ""
+        parts.append(f"video-streams={video_stream_count}{choice}")
+    if audio_stream_count > 1:
+        parts.append(f"audio-streams={audio_stream_count}")
     return "; ".join(parts) + "."
 
 
@@ -360,6 +404,8 @@ def _video_load_failure_hint(path: str) -> str:
         lines.append(
             "This odd container reports a video stream; if direct loading fails the app will also try ffmpeg recovery fallbacks."
         )
+        if int(probe.get("video_stream_count") or 0) > 1:
+            lines.append("Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.")
     elif probe and bool(probe.get("has_audio")) and not bool(probe.get("has_video")):
         lines.append(
             "ffprobe detected audio but no playable video stream, so this file cannot be added to the Video Builder as a video clip."
@@ -368,6 +414,12 @@ def _video_load_failure_hint(path: str) -> str:
         lines.append(
             "ffprobe recognized the container but did not expose a playable video stream for the Video Builder."
         )
+    elif probe and bool(probe.get("has_video")) and not (
+        int(probe.get("width") or 0) > 0 and int(probe.get("height") or 0) > 0
+    ):
+        lines.append(
+            "ffprobe found a video stream but could not resolve stable frame dimensions; the container may be partial, malformed, or use an unsupported stream layout."
+        )
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
         lines.append(probe_summary)
@@ -375,7 +427,22 @@ def _video_load_failure_hint(path: str) -> str:
     return "\n".join(lines)
 
 
-def _remux_video_source(path: str) -> Optional[str]:
+def _ffmpeg_stream_maps(details: Optional[dict[str, object]]) -> list[str]:
+    maps: list[str] = []
+    video_index = details.get("video_stream_index") if details else None
+    audio_index = details.get("audio_stream_index") if details else None
+    if video_index is None:
+        maps.extend(["-map", "0:v:0"])
+    else:
+        maps.extend(["-map", f"0:{int(video_index)}"])
+    if audio_index is None:
+        maps.extend(["-map", "0:a?"])
+    else:
+        maps.extend(["-map", f"0:{int(audio_index)}?"])
+    return maps
+
+
+def _remux_video_source(path: str, details: Optional[dict[str, object]] = None) -> Optional[str]:
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
         return None
@@ -393,12 +460,13 @@ def _remux_video_source(path: str) -> Optional[str]:
                 "-y",
                 "-v",
                 "error",
+                "-fflags",
+                "+discardcorrupt",
+                "-err_detect",
+                "ignore_err",
                 "-i",
                 path,
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
+                *_ffmpeg_stream_maps(details),
                 "-dn",
                 "-sn",
                 "-c",
@@ -423,7 +491,7 @@ def _remux_video_source(path: str) -> Optional[str]:
     return None
 
 
-def _transcode_video_source(path: str) -> Optional[str]:
+def _transcode_video_source(path: str, details: Optional[dict[str, object]] = None) -> Optional[str]:
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
         return None
@@ -441,12 +509,13 @@ def _transcode_video_source(path: str) -> Optional[str]:
                 "-y",
                 "-v",
                 "error",
+                "-fflags",
+                "+discardcorrupt",
+                "-err_detect",
+                "ignore_err",
                 "-i",
                 path,
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
+                *_ffmpeg_stream_maps(details),
                 "-dn",
                 "-sn",
                 "-c:v",
@@ -486,14 +555,33 @@ def _attempt_video_recovery(path: str, probe: Optional[dict[str, object]] = None
     details = probe if probe is not None else _probe_media_details(path)
     if ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
         return None, ""
-    remux_path = _remux_video_source(path)
+    remux_path = _remux_video_source(path, details)
     if remux_path:
-        return remux_path, "temporary ffmpeg remux fallback active"
+        strategy = "temporary ffmpeg remux fallback active"
+        if int(details.get("video_stream_count") or 0) > 1 and details.get("video_stream_index") is not None:
+            strategy += f" (preferred stream #{int(details['video_stream_index'])})"
+        return remux_path, strategy
     if details and bool(details.get("has_video")):
-        transcode_path = _transcode_video_source(path)
+        transcode_path = _transcode_video_source(path, details)
         if transcode_path:
-            return transcode_path, "temporary ffmpeg transcode fallback active"
+            strategy = "temporary ffmpeg transcode fallback active"
+            if int(details.get("video_stream_count") or 0) > 1 and details.get("video_stream_index") is not None:
+                strategy += f" (preferred stream #{int(details['video_stream_index'])})"
+            return transcode_path, strategy
     return None, ""
+
+
+def _video_capability_summary() -> str:
+    deps_ok = _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg()
+    if deps_ok:
+        return (
+            "Ready: standard video import and MP4 export are available. "
+            "Images/GIFs can also be assembled, and odd containers/disc images use best-effort ffprobe + ffmpeg recovery."
+        )
+    return (
+        "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
+        "Odd containers/disc images stay unavailable until those dependencies are present."
+    )
 
 
 def _open_video_reader(path: str):
@@ -1267,6 +1355,11 @@ class VideoToolDialog(QDialog):
         title = QLabel("🎬  Video Editor")
         title.setObjectName("subheader")
         root.addWidget(title)
+
+        self._capability_lbl = QLabel(_video_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        root.addWidget(self._capability_lbl)
 
         if not self._video_io_available:
             warn = QLabel(

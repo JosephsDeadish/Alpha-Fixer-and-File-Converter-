@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QProgressDialog, QSplitter, QWidget,
     QFrame, QSpinBox, QAbstractSpinBox,
 )
-from .video_tool import _VIDEO_EXTS, _load_video_frames
+from .video_tool import _VIDEO_EXTS, _load_video_frames, _video_io_diagnostics, _has_ffmpeg, _has_imageio, _has_imageio_ffmpeg
 
 # Supported image input extensions (what PIL can open directly)
 _IMAGE_EXTS = {
@@ -135,6 +135,17 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
         return QPixmap.fromImage(qi)
     finally:
         rgba.close()
+
+
+def _gif_builder_capability_summary() -> str:
+    if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
+        return (
+            "Ready: images and animated GIFs import directly, and video sources can also be expanded into GIF frames."
+        )
+    return (
+        "Ready for images and animated GIFs. Video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
+        + _video_io_diagnostics()
+    )
 
 
 class _FrameEntry:
@@ -345,6 +356,12 @@ class GifBuilderDialog(QDialog):
         self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._import_status_lbl)
 
+        self._capability_lbl = QLabel(_gif_builder_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self._capability_lbl)
+
         # Frame grid
         self._frame_list = _FrameListWidget()
         self._frame_list.files_dropped.connect(self._add_paths)
@@ -531,6 +548,7 @@ class GifBuilderDialog(QDialog):
         added_frames = 0
         failures: list[tuple[str, str]] = []
         skipped: list[str] = []
+        loaded_details: list[str] = []
         for i, path in enumerate(paths):
             progress.setValue(i)
             if progress.wasCanceled():
@@ -547,10 +565,17 @@ class GifBuilderDialog(QDialog):
                     pil_frames = _load_pillow_rgba(path)
                     frame_delay_ms = None
             except Exception as exc:
-                failures.append((Path(path).name, str(exc)))
+                detail = str(exc)
+                if ext in _VIDEO_EXTS:
+                    detail += "\n" + _video_io_diagnostics()
+                failures.append((Path(path).name, detail))
                 continue
             loaded_sources += 1
             added_frames += len(pil_frames)
+            source_note = f"{Path(path).name}: {len(pil_frames)} frame{'s' if len(pil_frames) != 1 else ''}"
+            if frame_delay_ms is not None:
+                source_note += f" @ ~{frame_delay_ms} ms"
+            loaded_details.append(source_note)
             for frame_idx, pil_frame in enumerate(pil_frames):
                 entry = _FrameEntry(path, frame_idx, pil_frame, delay_ms=frame_delay_ms)
                 self._frames.append(entry)
@@ -573,6 +598,7 @@ class GifBuilderDialog(QDialog):
             added_frames=added_frames,
             failures=failures,
             skipped=skipped,
+            loaded_details=loaded_details,
         )
 
     def _resolve_tooltip_mgr(self):
@@ -739,6 +765,7 @@ class GifBuilderDialog(QDialog):
         added_frames: int,
         failures: list[tuple[str, str]],
         skipped: list[str],
+        loaded_details: list[str],
     ) -> None:
         if attempted <= 0:
             self._set_import_status(
@@ -755,6 +782,8 @@ class GifBuilderDialog(QDialog):
             parts.append(f"{len(skipped)} skipped")
         tone = "success" if loaded_sources and not failures and not skipped else "warning" if loaded_sources else "error"
         detail_lines = []
+        if loaded_details:
+            detail_lines.append("Loaded sources:\n  " + "\n  ".join(loaded_details[:10]))
         if failures:
             detail_lines.append(
                 "Import failures:\n  " + "\n  ".join(f"{name}: {detail}" for name, detail in failures)
