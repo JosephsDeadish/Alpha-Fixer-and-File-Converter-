@@ -2387,6 +2387,9 @@ class VideoToolDialog(QDialog):
         clip_snapshot: list[dict[str, object]],
         success: int,
         errors: int,
+        *,
+        audio_mode_override: Optional[str] = None,
+        extra_notes: Optional[list[str]] = None,
     ) -> None:
         settings = self._resolve_settings()
         if settings is None:
@@ -2403,7 +2406,7 @@ class VideoToolDialog(QDialog):
             "first_file": str(clip_snapshot[0].get("source_path") or clip_snapshot[0].get("path") or "") if clip_snapshot else "",
             "sources": _summarize_clip_types(clip_snapshot),
             "filter": str(self._filter_combo.currentData() or "none"),
-            "audio": "kept" if self._should_mux_audio(fmt, clip_snapshot) else "off",
+            "audio": audio_mode_override or ("kept" if self._should_mux_audio(fmt, clip_snapshot) else "off"),
             "fps": str(int(self._fps_slider.value())),
         }
         recovered = [
@@ -2431,6 +2434,8 @@ class VideoToolDialog(QDialog):
             notes.append(f"recovery={entry['recovery']}")
         if noted:
             notes.append("clips=" + ("; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")))
+        if extra_notes:
+            notes.extend(str(note).strip() for note in extra_notes if str(note).strip())
         if notes:
             entry["notes"] = " | ".join(notes)
         try:
@@ -3045,6 +3050,10 @@ class VideoToolDialog(QDialog):
         temp_mp4 = None
         temp_output_path = None
         export_stage = "render setup"
+        export_issue_count = 0
+        history_audio_mode_override = None
+        history_extra_notes: list[str] = []
+        completion_note = ""
         try:
             if fmt in {"gif", "mp4"}:
                 output_file = tempfile.NamedTemporaryFile(
@@ -3175,10 +3184,32 @@ class VideoToolDialog(QDialog):
                 export_stage = "audio muxing"
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
-                self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps)
-                if temp_output_path is not None:
-                    Path(temp_output_path).replace(out_path)
-                    temp_output_path = None
+                try:
+                    self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps)
+                    if temp_output_path is not None:
+                        Path(temp_output_path).replace(out_path)
+                        temp_output_path = None
+                except Exception as exc:
+                    silent_render = Path(render_path)
+                    if not silent_render.is_file() or silent_render.stat().st_size <= 0:
+                        raise
+                    if temp_output_path is not None:
+                        try:
+                            Path(temp_output_path).unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                        temp_output_path = None
+                    silent_render.replace(out_path)
+                    temp_mp4 = None
+                    export_issue_count += 1
+                    history_audio_mode_override = "off (mux failed)"
+                    history_extra_notes.extend([
+                        "audio-mux-fallback=silent",
+                        f"audio-mux-error={(str(exc).strip() or 'unknown mux failure')}",
+                    ])
+                    completion_note = (
+                        "Saved as a silent MP4 because source-audio muxing failed after video rendering."
+                    )
             elif fmt == "mp4" and not canceled and wrote_frames and temp_output_path is not None:
                 Path(temp_output_path).replace(out_path)
                 temp_output_path = None
@@ -3230,12 +3261,24 @@ class VideoToolDialog(QDialog):
             return
 
         progress.close()
-        self._record_export_history(out_path, fmt, clip_snapshot, len(clip_snapshot), 0)
+        self._record_export_history(
+            out_path,
+            fmt,
+            clip_snapshot,
+            len(clip_snapshot),
+            export_issue_count,
+            audio_mode_override=history_audio_mode_override,
+            extra_notes=history_extra_notes,
+        )
+        status_suffix = f" — {completion_note}" if completion_note else ""
         self.status_notice.emit(
-            f"Video Builder export saved: {Path(out_path).name} ({len(clip_snapshot)} clip{'s' if len(clip_snapshot) != 1 else ''}, {fmt.upper()})",
+            f"Video Builder export saved: {Path(out_path).name} ({len(clip_snapshot)} clip{'s' if len(clip_snapshot) != 1 else ''}, {fmt.upper()}){status_suffix}",
             8000,
         )
-        QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
+        final_message = f"Saved to:\n{out_path}"
+        if completion_note:
+            final_message += f"\n\n{completion_note}"
+        QMessageBox.information(self, "Export Complete", final_message)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

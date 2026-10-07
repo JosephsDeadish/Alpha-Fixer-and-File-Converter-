@@ -2847,7 +2847,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
-    def test_export_mux_failure_keeps_existing_output_file(self):
+    def test_export_mux_failure_falls_back_to_silent_mp4_and_records_history(self):
         _require_qt_gui(self)
         self._app = _get_app()
         try:
@@ -2855,15 +2855,24 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         except ImportError as exc:
             self.skipTest(f"video_tool import unavailable in test env: {exc}")
         from PIL import Image
+        from PyQt6.QtWidgets import QWidget
 
         class _FakeWriter:
+            def __init__(self, path):
+                self._path = path
+
             def append_data(self, data):
                 return None
 
             def close(self):
+                with open(self._path, "wb") as fh:
+                    fh.write(b"rendered-mp4")
                 return None
 
-        dialog = vt.VideoToolDialog()
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
         dialog._mp4_export_available = True
         dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True)]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
@@ -2883,16 +2892,24 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 with open(out_path, "wb") as fh:
                     fh.write(b"original")
                 with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
-                    with patch("imageio.get_writer", return_value=_FakeWriter()):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
                         with patch.object(dialog, "_mux_mp4_audio", side_effect=RuntimeError("mux failed")):
-                            with patch.object(vt.QMessageBox, "critical") as critical_mock:
+                            with patch.object(vt.QMessageBox, "information") as info_mock:
                                 dialog._export()
-                critical_mock.assert_called_once()
+                info_mock.assert_called_once()
+                self.assertIn("silent MP4", info_mock.call_args.args[2])
                 with open(out_path, "rb") as fh:
-                    self.assertEqual(fh.read(), b"original")
+                    self.assertEqual(fh.read(), b"rendered-mp4")
+                self.assertEqual(len(settings._video_history), 1)
+                entry = settings._video_history[0]
+                self.assertEqual(entry["audio"], "off (mux failed)")
+                self.assertEqual(entry["errors"], 1)
+                self.assertIn("audio-mux-fallback=silent", entry["notes"])
+                self.assertIn("audio-mux-error=mux failed", entry["notes"])
         finally:
             dialog.close()
             dialog.deleteLater()
+            parent.deleteLater()
             self._app.processEvents()
 
     def test_video_export_records_history_and_remux_notes(self):
