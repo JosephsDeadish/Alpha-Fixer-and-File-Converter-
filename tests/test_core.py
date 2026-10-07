@@ -8996,6 +8996,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("dialog.queue_status_changed.connect(self._update_builder_status)", src)
         self.assertIn("self._connect_builder_status(self._gif_builder_dlg)", src)
         self.assertIn("self._connect_builder_status(self._video_tool_dlg)", src)
+        self.assertIn("if obj in (getattr(self, \"_gif_builder_dlg\", None), getattr(self, \"_video_tool_dlg\", None)):", src)
+        self.assertIn("QEvent.Type.WindowActivate", src)
+        self.assertIn("QEvent.Type.WindowDeactivate", src)
+        self.assertIn("QTimer.singleShot(0, self._update_builder_status)", src)
 
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")

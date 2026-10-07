@@ -4070,6 +4070,14 @@ class MainWindow(QMainWindow):
         any new top-level window that appears while effects are enabled (item 2).
         Covers QDialog, QMainWindow, and bare QWidget top-level windows.
         """
+        if obj in (getattr(self, "_gif_builder_dlg", None), getattr(self, "_video_tool_dlg", None)):
+            if event.type() in {
+                QEvent.Type.Show,
+                QEvent.Type.Hide,
+                QEvent.Type.WindowActivate,
+                QEvent.Type.WindowDeactivate,
+            }:
+                QTimer.singleShot(0, self._update_builder_status)
         if event.type() == QEvent.Type.Show:
             try:
                 from PyQt6.QtWidgets import QWidget as _QW, QApplication as _QApp

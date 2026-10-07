@@ -3272,6 +3272,38 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_builder_status_bar_text_keeps_import_summary_without_frames(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=0,
+                added_frames=0,
+                recovered=[],
+                failures=[("broken.bin", "ffprobe detected audio but no playable video stream")],
+                skipped=["notes.txt"],
+                loaded_details=[],
+                source_type_counts={},
+                frame_size_counts={},
+                alpha_source_count=0,
+                largest_frame=(0, 0),
+            )
+            summary = dialog.get_status_bar_text()
+            self.assertIn("GIF Builder ready", summary)
+            self.assertIn("image/GIF mode", summary)
+            self.assertIn("import Loaded 0 sources", summary)
+            self.assertIn("1 failed", summary)
+            self.assertIn("1 skipped", summary)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_gif_builder_uses_still_frame_fallback_for_visual_video_sources(self):
         try:
             from src.ui import gif_builder as gb
@@ -3377,6 +3409,33 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("preview 5 / 36", dialog.get_status_bar_text())
             dialog._is_playing = True
             self.assertIn("playing", dialog.get_status_bar_text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_status_bar_text_keeps_import_summary_without_clips(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._video_io_available = False
+            dialog._update_import_status(
+                added=0,
+                attempted=2,
+                recovered=[],
+                failures=[("audio.ogg", "ffprobe detected audio but no playable video stream")],
+                skipped=["readme.txt"],
+            )
+            summary = dialog.get_status_bar_text()
+            self.assertIn("Video Builder ready", summary)
+            self.assertIn("image/GIF mode", summary)
+            self.assertIn("import Added 0 clips", summary)
+            self.assertIn("1 failed", summary)
+            self.assertIn("1 skipped", summary)
         finally:
             dialog.close()
             dialog.deleteLater()

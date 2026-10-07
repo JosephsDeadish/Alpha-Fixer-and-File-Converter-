@@ -2242,10 +2242,22 @@ class VideoToolDialog(QDialog):
             summary = summary.split(":", 1)[1].strip()
         return "🎬 Video Builder: " + summary
 
+    def _status_bar_import_summary(self) -> str:
+        text = self._import_status_lbl.text().strip()
+        if not text or text.lower().startswith("ready:"):
+            return ""
+        if text.startswith("Import summary: "):
+            return "import " + text[len("Import summary: "):]
+        return text
+
     def get_status_bar_text(self) -> str:
+        import_summary = self._status_bar_import_summary()
         if not self._clips:
             mode = "video + MP4 ready" if self._video_io_available else "image/GIF mode"
-            return f"🎬 Video Builder ready  •  {mode}"
+            summary = f"🎬 Video Builder ready  •  {mode}"
+            if import_summary:
+                summary += f"  •  {import_summary}"
+            return summary
         summary = self.get_queue_status_text()
         extras = []
         preview = self._pos_lbl.text().strip()
@@ -2253,6 +2265,8 @@ class VideoToolDialog(QDialog):
             extras.append(f"preview {preview}")
         if self._is_playing:
             extras.append("playing")
+        if import_summary:
+            extras.append(import_summary)
         if extras:
             summary += "  •  " + "  •  ".join(extras)
         return summary

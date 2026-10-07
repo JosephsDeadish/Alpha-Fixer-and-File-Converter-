@@ -951,19 +951,32 @@ class GifBuilderDialog(QDialog):
             parts.append(f"{source_count} source{'s' if source_count != 1 else ''}")
         return "🎞 GIF Builder: " + "  •  ".join(parts)
 
+    def _status_bar_import_summary(self) -> str:
+        text = self._import_status_lbl.text().strip()
+        if not text or text.lower().startswith("ready:"):
+            return ""
+        if text.startswith("Import summary: "):
+            return "import " + text[len("Import summary: "):]
+        return text
+
     def get_status_bar_text(self) -> str:
         summary = self.get_queue_status_text()
         extras = []
+        import_summary = self._status_bar_import_summary()
         if self._frames:
             preview = self._preview_frame_lbl.text().strip()
             if preview and preview != "0 / 0":
                 extras.append(f"preview {preview}")
             if self._preview_timer.isActive():
                 extras.append("playing")
+            if import_summary:
+                extras.append(import_summary)
         elif _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
             extras.append("video imports available")
         else:
             extras.append("image/GIF mode")
+        if import_summary and import_summary not in extras:
+            extras.append(import_summary)
         if extras:
             summary += "  •  " + "  •  ".join(extras)
         return summary
