@@ -36,6 +36,11 @@ from .presets import AlphaPreset
 
 logger = logging.getLogger(__name__)
 
+_ALPHA_PROMOTE_FORMATS = {
+    ".jpg", ".jpeg", ".jfif", ".jpe", ".bmp",
+    ".pbm", ".pgm", ".pnm", ".ppm", ".pcx",
+}
+
 
 # ---------------------------------------------------------------------------
 # Alpha Worker
@@ -167,18 +172,29 @@ class AlphaWorker(QThread):
                         )
                         img.close()
                         img = _tmp
-                    dest = self._resolve_output(src)
-                    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
                     ext = Path(src).suffix.lower()
-                    save_image(img, dest, ext)
+                    save_ext = self._effective_output_ext(src)
+                    dest = self._resolve_output(src, save_ext)
+                    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+                    save_image(img, dest, save_ext)
                     success += 1
                     # Warn when saving to a format that does not support alpha so
                     # the user knows their alpha changes were silently discarded.
                     warn = ""
-                    if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):
+                    if save_ext != ext:
+                        warn = (
+                            f"{ext[1:].upper()} does not preserve alpha — "
+                            f"saved as {save_ext[1:].upper()} to keep transparency."
+                        )
+                    elif ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):
                         warn = (
                             f"{ext[1:].upper()} does not support an alpha channel — "
                             "alpha changes were discarded. Save as PNG to preserve alpha."
+                        )
+                    elif ext in _ALPHA_PROMOTE_FORMATS:
+                        warn = (
+                            f"{ext[1:].upper()} does not preserve alpha reliably — "
+                            "save as PNG to preserve transparency."
                         )
                     # In large-batch mode suppress per-file success messages to keep
                     # the UI log from accumulating 50 000 lines, but always surface
@@ -217,9 +233,17 @@ class AlphaWorker(QThread):
         except RuntimeError:
             pass  # receiver destroyed during shutdown; nothing to do
 
-    def _resolve_output(self, src: str) -> str:
+    def _effective_output_ext(self, src: str) -> str:
+        ext = Path(src).suffix.lower()
+        in_place_overwrite = self._overwrite and not self._output_dir and not self._suffix
+        if ext in _ALPHA_PROMOTE_FORMATS and not in_place_overwrite:
+            return ".png"
+        return ext
+
+    def _resolve_output(self, src: str, out_ext: Optional[str] = None) -> str:
         p = Path(src)
-        name = p.stem + (self._suffix or "") + p.suffix
+        ext = out_ext or p.suffix
+        name = p.stem + (self._suffix or "") + ext
         # Always honour output_dir when the user has specified one, regardless
         # of whether overwrite mode is active (overwrite = no filename suffix,
         # not "write back to the source directory").

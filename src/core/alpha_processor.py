@@ -412,16 +412,29 @@ def _save_dds(img: Image.Image, path: str):
 
 
 def _save_dds_raw(img: Image.Image, path: str):
-    """Write a minimal uncompressed BGRA DDS file."""
+    """Write a minimal uncompressed RGB or BGRA DDS file."""
     img_rgba = img.convert("RGBA")
     try:
         w, h = img_rgba.size
         arr = np.array(img_rgba, dtype=np.uint8)
     finally:
         img_rgba.close()
-    # Convert RGBA → BGRA
-    bgra = arr[:, :, [2, 1, 0, 3]]
-    pixel_data = bgra.tobytes()
+    opaque = bool(np.all(arr[:, :, 3] == 255))
+    if opaque:
+        # Convert RGBA → BGR for broader compatibility with tools that expect
+        # opaque DDS textures without an alpha channel.
+        pixel_data = arr[:, :, [2, 1, 0]].tobytes()
+        pitch = w * 3
+        pf_flags = 0x40
+        bits = 24
+        a_mask = 0x00000000
+    else:
+        # Convert RGBA → BGRA
+        pixel_data = arr[:, :, [2, 1, 0, 3]].tobytes()
+        pitch = w * 4
+        pf_flags = 0x41
+        bits = 32
+        a_mask = 0xFF000000
 
     def dword(n):
         return n.to_bytes(4, "little")
@@ -432,14 +445,14 @@ def _save_dds_raw(img: Image.Image, path: str):
     header[8:12] = dword(0x000A1007)  # DDSD flags: caps|height|width|pixelformat|linearsize
     header[12:16] = dword(h)
     header[16:20] = dword(w)
-    header[20:24] = dword(w * 4)   # dwPitchOrLinearSize
+    header[20:24] = dword(pitch)   # dwPitchOrLinearSize
     header[76:80] = dword(32)      # ddspf.dwSize
-    header[80:84] = dword(0x41)    # ddspf.dwFlags: DDPF_ALPHAPIXELS | DDPF_RGB
-    header[88:92] = dword(32)      # ddspf.dwRGBBitCount
+    header[80:84] = dword(pf_flags)    # ddspf.dwFlags
+    header[88:92] = dword(bits)      # ddspf.dwRGBBitCount
     header[92:96] = dword(0x00FF0000)  # R mask
     header[96:100] = dword(0x0000FF00)  # G mask
     header[100:104] = dword(0x000000FF)  # B mask
-    header[104:108] = dword(0xFF000000)  # A mask
+    header[104:108] = dword(a_mask)  # A mask
     header[108:112] = dword(0x1000)  # dwCaps: DDSCAPS_TEXTURE
 
     with open(path, "wb") as f:

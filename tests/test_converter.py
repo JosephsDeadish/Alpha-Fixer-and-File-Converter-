@@ -19,6 +19,7 @@ from src.core.file_converter import (
     _flatten_alpha,
 )
 from src.core.alpha_processor import SUPPORTED_WRITE, save_image
+from src.core.worker import AlphaWorker
 
 
 def _make_png(path: str, w=8, h=8, alpha=200):
@@ -101,6 +102,30 @@ class TestBuildOutputPath(unittest.TestCase):
         self.assertEqual(result, "/out/sub/file.jpg")
 
 
+class TestAlphaWorkerOutputCompatibility(unittest.TestCase):
+
+    def test_alpha_worker_promotes_non_alpha_outputs_to_png_when_not_in_place(self):
+        worker = AlphaWorker(
+            files=["/tmp/input.jpg"],
+            manual_params={"threshold": 0},
+            output_dir="/tmp/out",
+            overwrite=True,
+            suffix="",
+        )
+        self.assertEqual(worker._effective_output_ext("/tmp/input.jpg"), ".png")
+        self.assertEqual(worker._resolve_output("/tmp/input.jpg", worker._effective_output_ext("/tmp/input.jpg")), "/tmp/out/input.png")
+
+    def test_alpha_worker_keeps_original_ext_for_in_place_non_alpha_overwrite(self):
+        worker = AlphaWorker(
+            files=["/tmp/input.jpg"],
+            manual_params={"threshold": 0},
+            output_dir=None,
+            overwrite=True,
+            suffix="",
+        )
+        self.assertEqual(worker._effective_output_ext("/tmp/input.jpg"), ".jpg")
+
+
 class TestConvertFile(unittest.TestCase):
 
     def test_png_to_jpeg(self):
@@ -137,6 +162,38 @@ class TestConvertFile(unittest.TestCase):
                 self.assertEqual(img.getpixel((0, 0))[3], 128)
             finally:
                 img.close()
+
+    def test_save_dds_raw_uses_rgb_header_for_opaque_images(self):
+            from src.core.alpha_processor import _save_dds_raw
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "opaque.dds")
+                img = Image.new("RGBA", (4, 4), (9, 8, 7, 255))
+                try:
+                    _save_dds_raw(img, dst)
+                finally:
+                    img.close()
+                with open(dst, "rb") as f:
+                    data = f.read(128)
+                self.assertEqual(int.from_bytes(data[80:84], "little"), 0x40)
+                self.assertEqual(int.from_bytes(data[88:92], "little"), 24)
+                self.assertEqual(int.from_bytes(data[104:108], "little"), 0)
+
+    def test_save_dds_raw_keeps_rgba_header_when_alpha_present(self):
+            from src.core.alpha_processor import _save_dds_raw
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "alpha.dds")
+                img = Image.new("RGBA", (4, 4), (9, 8, 7, 128))
+                try:
+                    _save_dds_raw(img, dst)
+                finally:
+                    img.close()
+                with open(dst, "rb") as f:
+                    data = f.read(128)
+                self.assertEqual(int.from_bytes(data[80:84], "little"), 0x41)
+                self.assertEqual(int.from_bytes(data[88:92], "little"), 32)
+                self.assertEqual(int.from_bytes(data[104:108], "little"), 0xFF000000)
 
     def test_png_to_tiff(self):
         with tempfile.TemporaryDirectory() as tmpdir:
