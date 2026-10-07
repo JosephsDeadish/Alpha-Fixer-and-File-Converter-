@@ -2035,6 +2035,59 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("Multiple video streams were detected", hint)
         self.assertIn("preferred-stream=3", hint)
 
+    def test_video_load_failure_hint_mentions_recovery_exhausted_for_odd_container(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/weird.vob")
+        self.assertIn("still could not produce a playable clip", hint)
+        self.assertIn("temporary ffmpeg remux and transcode recovery", hint)
+
+    def test_classify_video_import_failure_distinguishes_audio_only_and_recovery(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(
+            vt._classify_video_import_failure("odd.bin", "ffprobe detected audio but no playable video stream"),
+            "audio-only container",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("odd.vob", "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip."),
+            "recovery exhausted",
+        )
+
+    def test_video_capability_summary_mentions_ready_state_and_audio_only_limit(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with patch.object(vt, "_has_ffmpeg", return_value=True):
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        summary = vt._video_capability_summary()
+        self.assertIn("Ready now", summary)
+        self.assertIn("Audio-only containers still cannot be added", summary)
+
     def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
         try:
             from src.ui import video_tool as vt
@@ -2247,6 +2300,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         dialog._load_video_paths(["/tmp/a.iso", "/tmp/b.bin"])
             warn_mock.assert_not_called()
             self.assertIn("2 failed", dialog._import_status_lbl.text())
+            self.assertIn("Failure types:", dialog._import_status_lbl.toolTip())
             self.assertIn("a.iso: hint one", dialog._import_status_lbl.toolTip())
             self.assertIn("b.bin: hint two", dialog._import_status_lbl.toolTip())
         finally:
@@ -2764,6 +2818,16 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "recovery")
             self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "status:recovery")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "output:session-exports")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "notes:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "file:a.iso")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "status:issues")
+            self.assertTrue(item.isHidden())
         finally:
             tab.close()
             tab.deleteLater()

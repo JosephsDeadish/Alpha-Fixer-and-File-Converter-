@@ -24,6 +24,7 @@ class _HistoryItem(QTreeWidgetItem):
 
     _SORT_ROLE = Qt.ItemDataRole.UserRole + 2
     _FILTER_ROLE = Qt.ItemDataRole.UserRole + 3
+    _FILTER_FIELDS_ROLE = Qt.ItemDataRole.UserRole + 4
 
     def __lt__(self, other) -> bool:
         tree = self.treeWidget()
@@ -142,6 +143,18 @@ def _set_filter_text(item: QTreeWidgetItem, *parts) -> None:
             if text:
                 tokens.append(text)
     item.setData(0, _HistoryItem._FILTER_ROLE, " ".join(tokens).lower())
+
+
+def _set_filter_fields(item: QTreeWidgetItem, **fields) -> None:
+    normalized: dict[str, str] = {}
+    for key, value in fields.items():
+        if isinstance(value, (list, tuple, set)):
+            text = " ".join(str(part).strip() for part in value if str(part or "").strip())
+        else:
+            text = str(value or "").strip()
+        if text:
+            normalized[str(key).strip().lower()] = text.lower()
+    item.setData(0, _HistoryItem._FILTER_FIELDS_ROLE, normalized)
 
 
 def _load_thumb(path: str) -> QIcon:
@@ -440,7 +453,7 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
-        field.setPlaceholderText("🔍  Filter by time, output, status, notes, file name…")
+        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file or use status:, output:, notes:, file: …")
         field.setClearButtonEnabled(True)
         return field
 
@@ -448,6 +461,17 @@ class HistoryTab(QWidget):
     def _apply_filter(tree: QTreeWidget, text: str) -> None:
         """Show only rows whose text in any column contains *text* (case-insensitive)."""
         needle = text.strip().lower()
+        tokens = [token for token in needle.split() if token]
+        aliases = {
+            "out": "output",
+            "path": "output",
+            "note": "notes",
+            "files": "file",
+            "name": "file",
+            "kind": "type",
+            "err": "errors",
+            "error": "errors",
+        }
         root = tree.invisibleRootItem()
         for row in range(root.childCount()):
             item = root.child(row)
@@ -459,7 +483,23 @@ class HistoryTab(QWidget):
                 row_text = " ".join(
                     item.text(col) for col in range(tree.columnCount())
                 ).lower()
-            item.setHidden(needle not in row_text)
+            fields = item.data(0, _HistoryItem._FILTER_FIELDS_ROLE) or {}
+            visible = True
+            for token in tokens:
+                if ":" in token:
+                    raw_key, raw_value = token.split(":", 1)
+                    key = aliases.get(raw_key, raw_key)
+                    value = raw_value.strip()
+                    if not value:
+                        continue
+                    haystack = str(fields.get(key, ""))
+                    if value not in haystack:
+                        visible = False
+                        break
+                elif token not in row_text:
+                    visible = False
+                    break
+            item.setHidden(not visible)
 
     # ------------------------------------------------------------------
     # Tooltip registration
@@ -543,6 +583,14 @@ class HistoryTab(QWidget):
             item = _HistoryItem([ts, fmt, n_files, n_ok, n_err, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(item, ts, fmt, n_files, n_ok, n_err, file_list)
+            _set_filter_fields(
+                item,
+                time=ts,
+                format=fmt,
+                file=file_list,
+                status="issues" if str(n_err) not in {"0", "?"} else "ok",
+                errors=n_err,
+            )
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
@@ -583,6 +631,14 @@ class HistoryTab(QWidget):
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(item, ts, mode, n_files, n_ok, n_err, file_list)
+            _set_filter_fields(
+                item,
+                time=ts,
+                mode=mode,
+                file=file_list,
+                status="issues" if str(n_err) not in {"0", "?"} else "ok",
+                errors=n_err,
+            )
             # Thumbnail icon from first processed file (item 9)
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first file thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."
@@ -637,6 +693,16 @@ class HistoryTab(QWidget):
                 entry.get("source", ""),
                 entry.get("output", ""),
                 file_list,
+            )
+            _set_filter_fields(
+                item,
+                time=ts,
+                mode=mode,
+                source=entry.get("source", ""),
+                output=entry.get("output", ""),
+                file=file_list,
+                status="issues" if str(n_err) not in {"0", "?"} else "ok",
+                errors=n_err,
             )
             # Thumbnail icon from source image (item 9)
             thumb_path = entry.get("first_file", entry.get("source", ""))
@@ -695,6 +761,16 @@ class HistoryTab(QWidget):
                 status,
                 notes,
                 file_list,
+            )
+            _set_filter_fields(
+                item,
+                type="gif",
+                time=ts,
+                output=[output, output_path],
+                status=status,
+                notes=notes,
+                file=file_list,
+                errors=n_err,
             )
             # Use the output GIF for animated thumbnail (item 80); fall back to
             # the first input file for non-GIF outputs or missing files.
@@ -759,6 +835,17 @@ class HistoryTab(QWidget):
                 status,
                 notes,
                 file_list,
+            )
+            _set_filter_fields(
+                item,
+                type="video",
+                time=ts,
+                output=[output, raw_output],
+                status=status,
+                notes=notes,
+                file=file_list,
+                format=entry.get("format", ""),
+                errors=n_err,
             )
             thumb = _load_thumb(entry.get("first_file", ""))
             preview_text = "Preview: first clip thumbnail shown." if not thumb.isNull() else "Preview: no thumbnail available."

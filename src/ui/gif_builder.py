@@ -140,7 +140,7 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 def _gif_builder_capability_summary() -> str:
     if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
         return (
-            "Ready for images, animated GIFs, and video-source imports. Video clips are expanded into GIF frames automatically."
+            "Ready now: images, animated GIFs, and video-source imports are available. Video clips are expanded into GIF frames automatically, while import summaries group failures and per-frame diagnostics stay available during preview."
         )
     return (
         "Limited mode: images and animated GIFs are ready now, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
@@ -365,7 +365,7 @@ class GifBuilderDialog(QDialog):
         left_layout.addWidget(hint)
 
         self._import_status_lbl = QLabel(
-            "Ready: add images, GIFs, or videos. Import notes and failures will appear here."
+            "Ready: add images, GIFs, or videos. Import notes, grouped failures, and skipped-file details will appear here."
         )
         self._import_status_lbl.setWordWrap(True)
         self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
@@ -375,6 +375,7 @@ class GifBuilderDialog(QDialog):
         self._capability_lbl = QLabel(_gif_builder_capability_summary())
         self._capability_lbl.setWordWrap(True)
         self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setToolTip(_gif_builder_capability_summary())
         self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._capability_lbl)
 
@@ -792,7 +793,7 @@ class GifBuilderDialog(QDialog):
     ) -> None:
         if attempted <= 0:
             self._set_import_status(
-                "Ready: add images, GIFs, or videos. Import notes and failures will appear here."
+                "Ready: add images, GIFs, or videos. Import notes, grouped failures, and skipped-file details will appear here."
             )
             return
         parts = [

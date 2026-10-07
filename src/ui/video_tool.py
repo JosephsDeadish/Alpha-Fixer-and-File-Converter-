@@ -397,12 +397,16 @@ def _video_load_failure_hint(path: str) -> str:
         )
         if probe and not bool(probe.get("has_video")):
             lines.append("ffprobe did not detect a playable video stream in this disc image.")
+        elif probe and bool(probe.get("has_video")):
+            lines.append(
+                "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip from this disc image."
+            )
         lines.append(
             "If direct loading fails, the app also tries temporary ffmpeg remux and transcode recovery fallbacks for compatible streams."
         )
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
-            "This odd container reports a video stream; if direct loading fails the app will also try ffmpeg recovery fallbacks."
+            "This odd container reports a video stream, but direct loading and ffmpeg recovery fallbacks still could not produce a playable clip."
         )
         if int(probe.get("video_stream_count") or 0) > 1:
             lines.append("Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.")
@@ -573,15 +577,39 @@ def _attempt_video_recovery(path: str, probe: Optional[dict[str, object]] = None
 
 def _video_capability_summary() -> str:
     deps_ok = _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg()
+    ffprobe_ok = _get_ffprobe_exe() is not None
     if deps_ok:
         return (
-            "Ready: standard video import and MP4 export are available. "
-            "Images/GIFs can also be assembled, and odd containers/disc images use best-effort ffprobe + ffmpeg recovery."
+            "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
+            + (
+                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg. "
+                if ffprobe_ok else
+                "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
+            )
+            + "Audio-only containers still cannot be added as video clips."
         )
     return (
         "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
-        "Odd containers/disc images stay unavailable until those dependencies are present."
+        "Odd-container/disc-image recovery and detailed probing stay unavailable until those dependencies are present."
     )
+
+
+def _classify_video_import_failure(name: str, detail: str) -> str:
+    ext = Path(name).suffix.lower()
+    lower = detail.lower()
+    if "missing:" in lower or "imageio" in lower or "ffmpeg executable" in lower or "ffprobe" in lower:
+        return "video dependency"
+    if "audio but no playable video stream" in lower:
+        return "audio-only container"
+    if "did not detect a playable video stream" in lower or "did not expose a playable video stream" in lower:
+        return "no playable video stream"
+    if "could not resolve stable frame dimensions" in lower or "partial, malformed" in lower:
+        return "partial / malformed video"
+    if "recovery fallbacks still could not produce a playable clip" in lower:
+        return "recovery exhausted"
+    if ext in _VIDEO_EXTS or "supported, non-corrupt video" in lower:
+        return "video decode"
+    return "video import"
 
 
 def _open_video_reader(path: str):
@@ -1359,6 +1387,7 @@ class VideoToolDialog(QDialog):
         self._capability_lbl = QLabel(_video_capability_summary())
         self._capability_lbl.setWordWrap(True)
         self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setToolTip(_video_capability_summary() + "\n\n" + self._video_io_diagnostics)
         root.addWidget(self._capability_lbl)
 
         if not self._video_io_available:
@@ -1424,7 +1453,7 @@ class VideoToolDialog(QDialog):
         left_layout.addWidget(hint)
 
         self._import_status_lbl = QLabel(
-            "Ready: add videos, images, or animated GIFs. Recovery/import notes will appear here."
+            "Ready: add videos, images, or animated GIFs. Recovery notes, failure groups, and skipped-file details will appear here."
         )
         self._import_status_lbl.setWordWrap(True)
         self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
@@ -1880,7 +1909,7 @@ class VideoToolDialog(QDialog):
     ) -> None:
         if attempted <= 0:
             self._set_import_status(
-                "Ready: add videos, images, or animated GIFs. Recovery/import notes will appear here."
+                "Ready: add videos, images, or animated GIFs. Recovery notes, failure groups, and skipped-file details will appear here."
             )
             return
         parts = [f"Added {added} clip{'s' if added != 1 else ''}"]
@@ -1899,6 +1928,14 @@ class VideoToolDialog(QDialog):
                 + "\nOriginal source paths stay attached for labeling and export history."
             )
         if failures:
+            grouped: dict[str, int] = {}
+            for name, detail in failures:
+                category = _classify_video_import_failure(name, detail)
+                grouped[category] = grouped.get(category, 0) + 1
+            detail_lines.append(
+                "Failure types: "
+                + ", ".join(f"{category} ×{count}" for category, count in grouped.items())
+            )
             failure_lines = [f"{name}: {hint}" for name, hint in failures[:_MAX_VIDEO_LOAD_FAILURE_DETAILS]]
             if len(failures) > len(failure_lines):
                 failure_lines.append(f"…and {len(failures) - len(failure_lines)} more file(s).")
