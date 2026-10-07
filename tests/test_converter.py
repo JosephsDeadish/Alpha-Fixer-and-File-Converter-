@@ -18,6 +18,7 @@ from src.core.file_converter import (
     build_output_path,
     SUPPORTED_OUTPUT_FORMATS,
     DDS_VARIANT_OPTIONS,
+    _open_image_for_preview,
     _flatten_alpha,
     output_format_discards_alpha,
     output_format_available,
@@ -348,7 +349,7 @@ class TestConvertFile(unittest.TestCase):
     def test_dds_variant_options_include_auto_rgb_and_rgba(self):
         self.assertEqual(
             [value for _label, value in DDS_VARIANT_OPTIONS],
-            ["auto", "rgb", "rgba", "dxt1", "dxt5"],
+            ["auto", "rgb", "rgba", "dxt1", "dxt3", "dxt5"],
         )
 
     def test_convert_file_passes_dds_variant_to_writer(self):
@@ -465,6 +466,88 @@ class TestConvertFile(unittest.TestCase):
                         ap._save_dds(img, dst, variant="dxt1")
         finally:
             img.close()
+
+    def test_save_dds_dxt3_uses_wand_compression_option(self):
+        from src.core import alpha_processor as ap
+
+        calls: dict[str, object] = {}
+
+        class FakeWandImage:
+            def __init__(self, *args, **kwargs):
+                calls["init_kwargs"] = kwargs
+                self.options = {}
+                self.format = None
+
+            def __enter__(self):
+                calls["image"] = self
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def save(self, filename=None):
+                calls["filename"] = filename
+                with open(filename, "wb") as f:
+                    f.write(b"dds")
+
+        fake_wand_image_module = types.SimpleNamespace(Image=FakeWandImage)
+        fake_wand_module = types.SimpleNamespace(image=fake_wand_image_module)
+
+        img = Image.new("RGBA", (4, 4), (9, 8, 7, 6))
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dst = os.path.join(tmpdir, "output.dds")
+                with mock.patch.object(ap, "_has_wand", return_value=True):
+                    original_save = ap.Image.Image.save
+
+                    def _fake_save(image_self, fp, format=None, **kwargs):
+                        if format == "DDS":
+                            raise OSError("save failed")
+                        return original_save(image_self, fp, format=format, **kwargs)
+
+                    with mock.patch.object(ap.Image.Image, "save", autospec=True, side_effect=_fake_save):
+                        with mock.patch.dict(sys.modules, {
+                            "wand": fake_wand_module,
+                            "wand.image": fake_wand_image_module,
+                        }):
+                            ap._save_dds(img, dst, variant="dxt3")
+                self.assertEqual(calls["image"].options["dds:compression"], "dxt3")
+                self.assertEqual(calls["filename"], dst)
+        finally:
+            img.close()
+
+    def test_open_image_for_preview_reduces_large_images_before_full_decode(self):
+        class FakeImage:
+            def __init__(self):
+                self.mode = "RGB"
+                self.size = (8192, 8192)
+                self.draft_calls = []
+                self.reduce_calls = []
+                self.closed = False
+                self.loaded = False
+
+            def draft(self, mode, size):
+                self.draft_calls.append((mode, size))
+
+            def reduce(self, factor):
+                self.reduce_calls.append(factor)
+                reduced = FakeImage()
+                reduced.size = (1024, 1024)
+                return reduced
+
+            def load(self):
+                self.loaded = True
+
+            def close(self):
+                self.closed = True
+
+        opened = FakeImage()
+        with mock.patch("src.core.file_converter.Image.open", return_value=opened):
+            preview = _open_image_for_preview("/tmp/huge.png", 512)
+        self.assertEqual(opened.draft_calls, [(None, (1024, 1024))])
+        self.assertTrue(opened.reduce_calls)
+        self.assertTrue(opened.closed)
+        self.assertEqual(preview.size, (1024, 1024))
 
     def test_load_dds_supports_16bit_argb1555_masks(self):
         from src.core.alpha_processor import _load_dds_raw

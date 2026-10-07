@@ -167,6 +167,25 @@ def _get_ffprobe_exe() -> Optional[str]:
         return None
 
 
+def _video_io_diagnostics() -> str:
+    """Return a human-readable summary of missing video I/O dependencies."""
+    missing: list[str] = []
+    if not _has_imageio():
+        missing.append("imageio")
+    if not _has_imageio_ffmpeg():
+        missing.append("imageio-ffmpeg")
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe:
+        missing.append("ffmpeg executable")
+    ffprobe_exe = _get_ffprobe_exe()
+    summary = "All video dependencies are available."
+    if missing:
+        summary = "Missing: " + ", ".join(missing) + "."
+    ffmpeg_text = ffmpeg_exe or "not found"
+    ffprobe_text = ffprobe_exe or "not found"
+    return f"{summary} ffmpeg: {ffmpeg_text}. ffprobe: {ffprobe_text}."
+
+
 def _open_video_reader(path: str):
     """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
     import imageio
@@ -857,6 +876,7 @@ class VideoToolDialog(QDialog):
         self._ffmpeg_available = _has_ffmpeg()
         self._imageio_available = _has_imageio()
         self._imageio_ffmpeg_available = _has_imageio_ffmpeg()
+        self._video_io_diagnostics = _video_io_diagnostics()
         self._video_io_available = (
             self._ffmpeg_available
             and self._imageio_available
@@ -885,7 +905,8 @@ class VideoToolDialog(QDialog):
         if not self._video_io_available:
             warn = QLabel(
                 "⚠  Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.  "
-                "You can still add images/GIFs and export an animated GIF."
+                "You can still add images/GIFs and export an animated GIF.\n"
+                f"{self._video_io_diagnostics}"
             )
             warn.setWordWrap(True)
             warn.setStyleSheet("color: orange;")
@@ -2054,7 +2075,8 @@ class VideoToolDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "MP4 Export Unavailable",
-                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.",
+                "MP4 export requires imageio, imageio-ffmpeg, and a working ffmpeg executable. Animated GIF export is still available.\n\n"
+                f"{self._video_io_diagnostics}",
             )
             return
         if fmt == "gif":

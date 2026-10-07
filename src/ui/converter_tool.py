@@ -444,7 +444,7 @@ class ConverterTab(QWidget):
         self._dds_variant_combo.setMinimumHeight(28)
         for label, value in DDS_VARIANT_OPTIONS:
             self._dds_variant_combo.addItem(label, userData=value)
-            if value in {"dxt1", "dxt5"} and not self._dds_compression_available:
+            if value in {"dxt1", "dxt3", "dxt5"} and not self._dds_compression_available:
                 idx = self._dds_variant_combo.count() - 1
                 self._dds_variant_combo.setItemData(
                     idx,
@@ -457,7 +457,8 @@ class ConverterTab(QWidget):
         self._sync_dds_variant_availability()
         self._dds_variant_combo.setToolTip(
             "Choose how DDS output should be written.\n"
-            "Auto keeps opaque images as RGB DDS and images with transparency as RGBA DDS."
+            "Auto keeps opaque images as RGB DDS and images with transparency as RGBA DDS.\n"
+            "Compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants need ImageMagick/wand."
         )
         gf_layout.addWidget(self._dds_variant_combo, 2, 1)
 
@@ -795,11 +796,7 @@ class ConverterTab(QWidget):
         if item:
             self._refresh_preview(item.text())
         else:
-            self._preview_debounce.stop()
-            self._stop_preview_loader()
-            self._compare.clear()
-            self._source_info_lbl.setText("")
-            self._output_info_lbl.setText("")
+            self._clear_preview_state()
 
     @pyqtSlot(int)
     def _on_format_changed(self, _index: int):
@@ -814,6 +811,10 @@ class ConverterTab(QWidget):
         if format_unavailable:
             self._status_lbl.setText(f"Ready. {fmt} export unavailable here — batch will fall back to PNG.")
             self._fmt_combo.setToolTip(format_unavailable)
+        elif dds_selected and not self._dds_compression_available:
+            self._status_lbl.setText(
+                "Ready. DDS raw variants are available; BC1/DXT1, BC2/DXT3, and BC3/DXT5 need ImageMagick/wand."
+            )
         elif output_format_discards_alpha(fmt):
             self._status_lbl.setText(
                 f"Ready. Transparent sources will be auto-saved as PNG because {fmt} does not preserve alpha."
@@ -859,7 +860,7 @@ class ConverterTab(QWidget):
         disabled_selected = False
         for idx in range(self._dds_variant_combo.count()):
             value = self._dds_variant_combo.itemData(idx)
-            enabled = self._dds_compression_available or value not in {"dxt1", "dxt5"}
+            enabled = self._dds_compression_available or value not in {"dxt1", "dxt3", "dxt5"}
             item = model.item(idx) if hasattr(model, "item") else None
             if item is not None:
                 item.setEnabled(enabled)
@@ -871,6 +872,15 @@ class ConverterTab(QWidget):
 
     def _reset_thumbnail_failure_log(self) -> None:
         self._thumbnail_failure_log_count = 0
+
+    def _clear_preview_state(self) -> None:
+        self._preview_debounce.stop()
+        self._stop_preview_loader()
+        self._current_preview_path = ""
+        self._before_is_animated = False
+        self._compare.clear()
+        self._source_info_lbl.setText("")
+        self._output_info_lbl.setText("")
 
     @pyqtSlot(int)
     def _on_width_changed(self, width: int) -> None:
@@ -1176,7 +1186,7 @@ class ConverterTab(QWidget):
         suffix = self._suffix_edit.text().strip()
         quality = self._quality_spin.value()
         dds_variant = self._dds_variant_combo.currentData() or "auto"
-        if actual_target_format == "DDS" and dds_variant in {"dxt1", "dxt5"} and not self._dds_compression_available:
+        if actual_target_format == "DDS" and dds_variant in {"dxt1", "dxt3", "dxt5"} and not self._dds_compression_available:
             QMessageBox.warning(
                 self,
                 "DDS Compression Unavailable",
@@ -1322,6 +1332,7 @@ class ConverterTab(QWidget):
         deduped = self._ordered_unique_paths(paths)
         self._file_list._clear_all()
         if not deduped:
+            self._clear_preview_state()
             return 0
         added = self._file_list.add_paths_batch(deduped)
         if added:

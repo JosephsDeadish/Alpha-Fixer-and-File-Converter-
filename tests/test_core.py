@@ -9438,6 +9438,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             "Video import and MP4 export need imageio, imageio-ffmpeg, and a working ffmpeg executable.",
             src,
         )
+        self.assertIn("def _video_io_diagnostics() -> str:", src)
+        self.assertIn("self._video_io_diagnostics = _video_io_diagnostics()", src)
 
     def test_alpha_preview_helpers_persist_and_show_in_popout(self):
         settings_src = self._src("core/settings_manager.py")

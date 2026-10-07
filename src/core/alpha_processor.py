@@ -378,7 +378,7 @@ def _save_dds(img: Image.Image, path: str, variant: str = "auto"):
     if variant in {"rgb", "rgba"}:
         _save_dds_raw(img, path, variant=variant)
         return
-    if variant in {"dxt1", "dxt5"}:
+    if variant in {"dxt1", "dxt3", "dxt5"}:
         if not _has_wand():
             raise RuntimeError(
                 f"DDS {variant.upper()} output requires ImageMagick/wand. "

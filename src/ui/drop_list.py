@@ -95,8 +95,8 @@ class _ThumbRunnable(QRunnable):
         img = None
         try:
             from PIL import Image
-            from src.core.file_converter import _open_image
-            img = _open_image(self._path)
+            from src.core.file_converter import _open_image_for_preview
+            img = _open_image_for_preview(self._path, self._thumb_px)
             img.thumbnail((self._thumb_px, self._thumb_px), Image.LANCZOS)
             if img.mode == "RGBA":
                 data = img.tobytes("raw", "RGBA")
@@ -437,7 +437,10 @@ class DropFileList(QListWidget):
         if not self._thumb_enabled:
             return "🖼 Thumbnails off"
         if self.count() > _THUMB_AUTO_DISABLE:
-            return f"🖼 Thumbnail previews paused for large lists ({_THUMB_AUTO_DISABLE:,}+ files)"
+            return (
+                f"🖼 Thumbnail previews paused for large lists "
+                f"({self.count():,} queued; auto-pause at {_THUMB_AUTO_DISABLE:,}+)"
+            )
         return ""
 
     def _thumbnail_status_summary(self) -> str:

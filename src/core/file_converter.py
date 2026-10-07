@@ -25,6 +25,7 @@ import base64
 import io
 import os
 import logging
+import math
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -66,6 +67,7 @@ DDS_VARIANT_OPTIONS: list[tuple[str, str]] = [
     ("RGB 24-bit (discard alpha)", "rgb"),
     ("RGBA 32-bit (preserve alpha)", "rgba"),
     ("BC1 / DXT1 compressed", "dxt1"),
+    ("BC2 / DXT3 compressed", "dxt3"),
     ("BC3 / DXT5 compressed", "dxt5"),
 ]
 
@@ -130,7 +132,8 @@ FORMAT_DESCRIPTIONS = {
         "DirectDraw Surface — GPU-native texture format.\n"
         "Used by DirectX games and engines (Unreal, Unity, etc.).\n"
         "Supports GPU texture workflows and includes an output variant selector in the converter.\n"
-        "Choose automatic RGB/RGBA handling or force 24-bit RGB / 32-bit RGBA raw output."
+        "Choose automatic RGB/RGBA handling, force 24-bit RGB / 32-bit RGBA raw output,\n"
+        "or use BC1/DXT1, BC2/DXT3, or BC3/DXT5 compressed output when ImageMagick/wand is available."
     ),
     "PBM": (
         "Portable Bitmap — simple 1-bit black-and-white image format.\n"
@@ -386,6 +389,41 @@ def _open_image(path: str) -> Image.Image:
         img.close()
         raise MemoryError(
             f"Not enough memory to open {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels). Try a smaller file."
+        )
+    except Exception:
+        img.close()
+        raise
+    return img
+
+
+def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
+    """Open *path* for preview/thumbnail use, preferring lower-memory decoding."""
+    ext = Path(path).suffix.lower()
+    if ext in {".dds", ".svg", ".xnb", ".tim"}:
+        return _open_image(path)
+
+    img = Image.open(path)
+    try:
+        target = max(1, int(max_size))
+        longest = max(img.size) if img.size else 0
+        if longest > target * 2:
+            try:
+                img.draft(None, (target * 2, target * 2))
+            except Exception:
+                pass
+            current_longest = max(img.size) if img.size else longest
+            reduce_factor = max(1, int(math.floor(current_longest / max(target * 2, 1))))
+            if reduce_factor > 1:
+                reduced = img.reduce(reduce_factor)
+                img.close()
+                img = reduced
+        img.load()
+    except MemoryError:
+        w, h = img.size
+        img.close()
+        raise MemoryError(
+            f"Not enough memory to preview {w}×{h} image "
             f"({w * h / 1_000_000:.1f} megapixels). Try a smaller file."
         )
     except Exception:
