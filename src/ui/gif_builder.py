@@ -206,6 +206,28 @@ def _classify_import_failure(name: str, detail: str) -> str:
     return "image import"
 
 
+def _summarize_count_buckets(counts: dict[str, int], limit: int = 3) -> str:
+    if not counts:
+        return ""
+    parts = [f"{label} ×{count}" for label, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+    if len(parts) <= limit:
+        return ", ".join(parts)
+    remaining = len(parts) - limit
+    return ", ".join(parts[:limit]) + f", +{remaining} more"
+
+
+def _scaled_size_for_export(size: tuple[int, int], max_w: int, max_h: int) -> tuple[int, int]:
+    width, height = size
+    if width <= 0 or height <= 0:
+        return 0, 0
+    scale_w = (max_w / width) if max_w > 0 else 1.0
+    scale_h = (max_h / height) if max_h > 0 else 1.0
+    scale = min(scale_w, scale_h, 1.0)
+    if scale >= 1.0:
+        return width, height
+    return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+
+
 class _FrameListWidget(QListWidget):
     """Icon-grid list widget with drag-to-reorder AND external file drop support.
 
@@ -480,6 +502,7 @@ class GifBuilderDialog(QDialog):
         self._width_slider.valueChanged.connect(
             lambda v: self._width_val_lbl.setText("original" if v == 0 else f"{v} px")
         )
+        self._width_slider.valueChanged.connect(lambda _v: self._update_frame_diagnostics())
         w_row.addWidget(self._width_slider, 1)
         w_row.addWidget(self._width_val_lbl)
         gl.addLayout(w_row, 2, 1)
@@ -495,6 +518,7 @@ class GifBuilderDialog(QDialog):
         self._height_slider.valueChanged.connect(
             lambda v: self._height_val_lbl.setText("original" if v == 0 else f"{v} px")
         )
+        self._height_slider.valueChanged.connect(lambda _v: self._update_frame_diagnostics())
         h_row.addWidget(self._height_slider, 1)
         h_row.addWidget(self._height_val_lbl)
         gl.addLayout(h_row, 3, 1)
@@ -590,6 +614,8 @@ class GifBuilderDialog(QDialog):
         skipped: list[str] = []
         loaded_details: list[str] = []
         source_type_counts: dict[str, int] = {}
+        frame_size_counts: dict[str, int] = {}
+        alpha_source_count = 0
         largest_frame: tuple[int, int] = (0, 0)
         for i, path in enumerate(paths):
             progress.setValue(i)
@@ -624,6 +650,11 @@ class GifBuilderDialog(QDialog):
                     frame_width = frame_height = 0
             if frame_width * frame_height > largest_frame[0] * largest_frame[1]:
                 largest_frame = (frame_width, frame_height)
+            if frame_width > 0 and frame_height > 0:
+                size_key = f"{frame_width}×{frame_height}"
+                frame_size_counts[size_key] = frame_size_counts.get(size_key, 0) + 1
+            if any(("A" in frame.getbands()) or ("transparency" in getattr(frame, "info", {})) for frame in pil_frames):
+                alpha_source_count += 1
             source_note = (
                 f"{Path(path).name}: {len(pil_frames)} frame{'s' if len(pil_frames) != 1 else ''}"
                 f"  •  {source_kind}"
@@ -663,6 +694,8 @@ class GifBuilderDialog(QDialog):
             skipped=skipped,
             loaded_details=loaded_details,
             source_type_counts=source_type_counts,
+            frame_size_counts=frame_size_counts,
+            alpha_source_count=alpha_source_count,
             largest_frame=largest_frame,
         )
 
@@ -850,6 +883,8 @@ class GifBuilderDialog(QDialog):
         skipped: list[str],
         loaded_details: list[str],
         source_type_counts: dict[str, int],
+        frame_size_counts: dict[str, int],
+        alpha_source_count: int,
         largest_frame: tuple[int, int],
     ) -> None:
         if attempted <= 0:
@@ -865,6 +900,12 @@ class GifBuilderDialog(QDialog):
             parts.append(f"{len(failures)} failed")
         if skipped:
             parts.append(f"{len(skipped)} skipped")
+        if source_type_counts:
+            parts.append(_summarize_count_buckets(source_type_counts, limit=2))
+        if len(frame_size_counts) > 1:
+            parts.append(f"{len(frame_size_counts)} frame sizes")
+        if alpha_source_count > 0:
+            parts.append(f"{alpha_source_count} alpha source{'s' if alpha_source_count != 1 else ''}")
         tone = "success" if loaded_sources and not failures and not skipped else "warning" if loaded_sources else "error"
         detail_lines = []
         if loaded_details:
@@ -877,8 +918,14 @@ class GifBuilderDialog(QDialog):
                 "Source types: "
                 + ", ".join(f"{kind} ×{count}" for kind, count in sorted(source_type_counts.items()))
             )
+        if frame_size_counts:
+            detail_lines.append("Frame sizes: " + _summarize_count_buckets(frame_size_counts, limit=4))
         if largest_frame[0] > 0 and largest_frame[1] > 0:
             detail_lines.append(f"Largest imported frame: {largest_frame[0]}×{largest_frame[1]}")
+        if alpha_source_count > 0:
+            detail_lines.append(
+                f"Alpha-capable sources: {alpha_source_count} / {loaded_sources or max(1, alpha_source_count)}"
+            )
         if failures:
             grouped: dict[str, int] = {}
             for name, detail in failures:
@@ -912,6 +959,11 @@ class GifBuilderDialog(QDialog):
         alpha = "yes" if "A" in entry._pil.getbands() else "no"
         source_frames = sum(1 for candidate in self._frames if _frame_source_path(candidate) == source_path)
         source_kind = _frame_source_kind(source_path, source_frames)
+        export_w, export_h = _scaled_size_for_export(
+            (width, height),
+            self._width_slider.value(),
+            self._height_slider.value(),
+        )
         if entry.delay_ms is None:
             timing_mode = "global timing"
         elif entry.source_delay_ms is not None and entry.delay_ms == entry.source_delay_ms:
@@ -927,6 +979,10 @@ class GifBuilderDialog(QDialog):
         if source_frames > 1:
             details += f"/{source_frames}"
         details += f"  •  {width}×{height}  •  {effective_delay} ms ({timing_mode})  •  alpha={alpha}"
+        if export_w > 0 and export_h > 0:
+            details += f"  •  export {export_w}×{export_h}"
+            if (export_w, export_h) != (width, height):
+                details += " (resized)"
         self._frame_diag_lbl.setText(details)
         tooltip = details if not source_path else f"{source_path}\n{details}"
         self._frame_diag_lbl.setToolTip(tooltip)

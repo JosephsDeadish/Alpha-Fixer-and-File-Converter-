@@ -740,6 +740,16 @@ def _summarize_recovery_notes(recovered: list[tuple[str, str]]) -> str:
     return ", ".join(f"{bucket} ×{count}" for bucket, count in sorted(recovery_counts.items()))
 
 
+def _summarize_count_buckets(counts: dict[str, int], limit: int = 3) -> str:
+    if not counts:
+        return ""
+    parts = [f"{label} ×{count}" for label, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+    if len(parts) <= limit:
+        return ", ".join(parts)
+    remaining = len(parts) - limit
+    return ", ".join(parts[:limit]) + f", +{remaining} more"
+
+
 def _summarize_clip_types(clip_snapshot: list[dict[str, object]]) -> str:
     counts: dict[str, int] = {}
     for clip in clip_snapshot:
@@ -2074,7 +2084,12 @@ class VideoToolDialog(QDialog):
             if recovery_summary:
                 parts.append(recovery_summary)
         if failures:
+            grouped: dict[str, int] = {}
+            for name, detail in failures:
+                category = _classify_video_import_failure(name, detail)
+                grouped[category] = grouped.get(category, 0) + 1
             parts.append(f"{len(failures)} failed")
+            parts.append(_summarize_count_buckets(grouped, limit=2))
         if skipped:
             parts.append(f"{len(skipped)} skipped")
         tone = "success" if added and not failures and not skipped else "warning" if added else "error"
@@ -2089,10 +2104,6 @@ class VideoToolDialog(QDialog):
                 + "\nOriginal source paths stay attached for labeling and export history."
             )
         if failures:
-            grouped: dict[str, int] = {}
-            for name, detail in failures:
-                category = _classify_video_import_failure(name, detail)
-                grouped[category] = grouped.get(category, 0) + 1
             detail_lines.append(
                 "Failure types: "
                 + ", ".join(f"{category} ×{count}" for category, count in grouped.items())

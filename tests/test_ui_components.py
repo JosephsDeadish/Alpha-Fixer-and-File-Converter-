@@ -2532,6 +2532,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("2 recovered", dialog._import_status_lbl.text())
             self.assertIn("remux ×1", dialog._import_status_lbl.text())
             self.assertIn("transcode ×1", dialog._import_status_lbl.text())
+            self.assertIn("audio-only container ×1", dialog._import_status_lbl.text())
             self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
             self.assertIn("multi-stream container", dialog._import_status_lbl.toolTip())
@@ -2963,12 +2964,18 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 skipped=["skip.txt"],
                 loaded_details=["clip.mp4: 6 frames  •  video  •  320×240 @ ~42 ms", "anim.gif: 3 frames  •  animated gif  •  64×64"],
                 source_type_counts={"video": 1, "animated gif": 1},
+                frame_size_counts={"320×240": 1, "64×64": 1},
+                alpha_source_count=1,
                 largest_frame=(320, 240),
             )
             self.assertIn("Loaded 2 sources", dialog._import_status_lbl.text())
             self.assertIn("1 skipped", dialog._import_status_lbl.text())
+            self.assertIn("2 frame sizes", dialog._import_status_lbl.text())
+            self.assertIn("1 alpha source", dialog._import_status_lbl.text())
             self.assertIn("Source types: animated gif ×1, video ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Frame sizes: 320×240 ×1, 64×64 ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("Largest imported frame: 320×240", dialog._import_status_lbl.toolTip())
+            self.assertIn("Alpha-capable sources: 1 / 2", dialog._import_status_lbl.toolTip())
             self.assertFalse(dialog._import_detail_box.isHidden())
             self.assertIn("Largest imported frame: 320×240", dialog._import_detail_box.toPlainText())
         finally:
@@ -2995,6 +3002,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 dialog._frame_list.addItem(item)
             dialog._frame_list.setCurrentRow(1)
             dialog._preview_idx = 1
+            dialog._width_slider.setValue(6)
+            dialog._height_slider.setValue(6)
             dialog._update_count()
             dialog._update_scrubber()
             dialog._update_preview_frame()
@@ -3004,6 +3013,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("source frame 2/2", dialog._frame_diag_lbl.text())
             self.assertIn("12×8", dialog._frame_diag_lbl.text())
             self.assertIn("80 ms (source timing)", dialog._frame_diag_lbl.text())
+            self.assertIn("export 6×4", dialog._frame_diag_lbl.text())
+            self.assertIn("(resized)", dialog._frame_diag_lbl.text())
             self.assertIn("/tmp/anim.gif", dialog._frame_diag_lbl.toolTip())
         finally:
             dialog.close()
@@ -3142,8 +3153,45 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "file:a.iso")
             self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "ok:2")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "clip:2")
+            self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "status:issues")
             self.assertTrue(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_matches_gif_frame_and_success_aliases(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._gif_history.append(
+            {
+                "timestamp": "2026-10-07T09:00:00",
+                "output": "/tmp/a.gif",
+                "frame_count": 12,
+                "success": 12,
+                "errors": 0,
+                "files": ["a.png"],
+                "sources": "image ×1",
+                "notes": "optimize=on",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._gif_tree.topLevelItem(0)
+            tab._apply_filter(tab._gif_tree, "frame:12")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "ok:12")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "status:ok")
+            self.assertFalse(item.isHidden())
         finally:
             tab.close()
             tab.deleteLater()

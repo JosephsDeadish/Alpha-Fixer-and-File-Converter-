@@ -457,7 +457,7 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
-        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery or use status:, output:, notes:, file:, source:, format:, recovery: …")
+        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery or use status:, output:, notes:, file:, source:, format:, recovery:, ok:, errors:, frames:, clips: …")
         field.setClearButtonEnabled(True)
         return field
 
@@ -474,9 +474,14 @@ class HistoryTab(QWidget):
             "name": "file",
             "kind": "type",
             "sources": "source",
+            "src": "source",
             "err": "errors",
             "error": "errors",
+            "ok": "success",
+            "successes": "success",
             "fmt": "format",
+            "frame": "frames",
+            "clip": "clips",
         }
         root = tree.invisibleRootItem()
         for row in range(root.childCount()):
@@ -779,6 +784,8 @@ class HistoryTab(QWidget):
                 status=status,
                 notes=notes,
                 file=file_list,
+                frames=n_frames,
+                success=n_ok,
                 errors=n_err,
             )
             # Use the output GIF for animated thumbnail (item 80); fall back to
@@ -862,6 +869,8 @@ class HistoryTab(QWidget):
                 status=status,
                 notes=notes,
                 file=file_list,
+                clips=n_clips,
+                success=n_ok,
                 errors=n_err,
             )
             thumb = _load_thumb(entry.get("first_file", ""))
