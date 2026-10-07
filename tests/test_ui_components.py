@@ -3791,6 +3791,91 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab.deleteLater()
             self._app.processEvents()
 
+    def test_history_filter_supports_numeric_comparisons_and_grouped_field_ors(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/session-exports/nested/final-output.mp4",
+                "format": "MP4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "filter": "none",
+                "audio": "kept",
+                "fps": "30",
+                "canvas": "640×480",
+                "recovery": "transcode ×1",
+                "sources": "video ×1, image ×1",
+                "files": ["a.iso"],
+                "notes": "recovery=transcode ×1 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._vid_tree.topLevelItem(0)
+            tab._apply_filter(tab._vid_tree, "fps:>=24 errors:<1 clip:>1")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "audio:off|kept")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "recovery:remux recovery:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "size:480")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "fps:>60")
+            self.assertTrue(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_supports_wildcards_and_numeric_delay_ranges(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._gif_history.append(
+            {
+                "timestamp": "2026-10-07T09:00:00",
+                "output": "/tmp/exports/anim-final.gif",
+                "frame_count": 12,
+                "success": 12,
+                "errors": 0,
+                "files": ["a.png"],
+                "sources": "image ×1",
+                "largest_frame": "320×240",
+                "alpha_summary": "4/12",
+                "delay": "100 ms",
+                "fps": "10",
+                "loop": "∞",
+                "optimize": "on",
+                "resize": "≤640×auto",
+                "notes": "optimize=on",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._gif_tree.topLevelItem(0)
+            tab._apply_filter(tab._gif_tree, "output:*final.gif")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "delay:>=100 fps:<11")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "resize:*640*")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "delay:>100")
+            self.assertTrue(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

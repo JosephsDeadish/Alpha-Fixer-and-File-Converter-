@@ -3,9 +3,12 @@ History tab – shows recent converter and alpha-fixer runs with timestamps.
 """
 import csv
 import datetime
+import fnmatch
 import html
 import io
 import os
+import re
+import shlex
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot
@@ -155,6 +158,111 @@ def _set_filter_fields(item: QTreeWidgetItem, **fields) -> None:
         if text:
             normalized[str(key).strip().lower()] = text.lower()
     item.setData(0, _HistoryItem._FILTER_FIELDS_ROLE, normalized)
+
+
+_FILTER_FIELD_ALIASES = {
+    "out": "output",
+    "path": "output",
+    "note": "notes",
+    "files": "file",
+    "name": "file",
+    "kind": "type",
+    "sources": "source",
+    "src": "source",
+    "err": "errors",
+    "error": "errors",
+    "ok": "success",
+    "successes": "success",
+    "fmt": "format",
+    "frame": "frames",
+    "clip": "clips",
+    "largestframe": "largest",
+    "alphas": "alpha",
+    "resolution": "canvas",
+    "res": "canvas",
+    "dim": "canvas",
+    "ms": "delay",
+}
+_FILTER_COMPARATORS = (">=", "<=", ">", "<", "=")
+_FILTER_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _filter_tokens(text: str) -> list[str]:
+    try:
+        return [token.casefold() for token in shlex.split(text) if token.strip()]
+    except ValueError:
+        return [token.casefold() for token in text.split() if token.strip()]
+
+
+def _field_filter_groups(text: str) -> tuple[list[str], dict[str, list[str]]]:
+    free_text: list[str] = []
+    grouped: dict[str, list[str]] = {}
+    for token in _filter_tokens(text):
+        if ":" not in token:
+            free_text.append(token)
+            continue
+        raw_key, raw_value = token.split(":", 1)
+        key = _FILTER_FIELD_ALIASES.get(raw_key, raw_key)
+        value = raw_value.strip()
+        if not key or not value:
+            continue
+        grouped.setdefault(key, []).append(value)
+    return free_text, grouped
+
+
+def _numeric_filter_values(text: str) -> list[float]:
+    values: list[float] = []
+    for match in _FILTER_NUMBER_RE.findall(str(text or "")):
+        try:
+            values.append(float(match))
+        except ValueError:
+            continue
+    return values
+
+
+def _matches_numeric_filter(haystack: str, option: str) -> bool:
+    candidate_values = _numeric_filter_values(haystack)
+    if not candidate_values:
+        return False
+    operator = "="
+    operand = option.strip()
+    for prefix in _FILTER_COMPARATORS:
+        if operand.startswith(prefix):
+            operator = prefix
+            operand = operand[len(prefix):].strip()
+            break
+    query_values = _numeric_filter_values(operand)
+    if not query_values:
+        return False
+    query = query_values[0]
+    if operator == ">=":
+        return any(value >= query for value in candidate_values)
+    if operator == "<=":
+        return any(value <= query for value in candidate_values)
+    if operator == ">":
+        return any(value > query for value in candidate_values)
+    if operator == "<":
+        return any(value < query for value in candidate_values)
+    return any(abs(value - query) < 1e-9 for value in candidate_values)
+
+
+def _matches_field_filter(haystack: str, value: str) -> bool:
+    text = str(haystack or "")
+    for option in (part.strip() for part in value.split("|")):
+        if not option:
+            continue
+        if "*" in option or "?" in option:
+            if fnmatch.fnmatch(text, option):
+                return True
+            continue
+        if (
+            option[0] in "><="
+            or (_numeric_filter_values(option) and _numeric_filter_values(text))
+        ) and _matches_numeric_filter(text, option):
+            return True
+        if option in text:
+            return True
+    return False
 
 
 def _load_thumb(path: str) -> QIcon:
@@ -483,7 +591,7 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
-        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps: …")
+        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps:, wildcards (*.gif), ranges (>24, <=100), or field ORs (audio:off|kept) …")
         field.setClearButtonEnabled(True)
         return field
 
@@ -491,30 +599,7 @@ class HistoryTab(QWidget):
     def _apply_filter(tree: QTreeWidget, text: str) -> None:
         """Show only rows whose text in any column contains *text* (case-insensitive)."""
         needle = text.strip().lower()
-        tokens = [token for token in needle.split() if token]
-        aliases = {
-            "out": "output",
-            "path": "output",
-            "note": "notes",
-            "files": "file",
-            "name": "file",
-            "kind": "type",
-            "sources": "source",
-            "src": "source",
-            "err": "errors",
-            "error": "errors",
-            "ok": "success",
-            "successes": "success",
-            "fmt": "format",
-            "frame": "frames",
-            "clip": "clips",
-            "largestframe": "largest",
-            "alphas": "alpha",
-            "resolution": "canvas",
-            "res": "canvas",
-            "dim": "canvas",
-            "ms": "delay",
-        }
+        free_text, grouped_fields = _field_filter_groups(needle)
         root = tree.invisibleRootItem()
         for row in range(root.childCount()):
             item = root.child(row)
@@ -528,20 +613,16 @@ class HistoryTab(QWidget):
                 ).lower()
             fields = item.data(0, _HistoryItem._FILTER_FIELDS_ROLE) or {}
             visible = True
-            for token in tokens:
-                if ":" in token:
-                    raw_key, raw_value = token.split(":", 1)
-                    key = aliases.get(raw_key, raw_key)
-                    value = raw_value.strip()
-                    if not value:
-                        continue
-                    haystack = str(fields.get(key, ""))
-                    if value not in haystack:
-                        visible = False
-                        break
-                elif token not in row_text:
+            for token in free_text:
+                if token not in row_text:
                     visible = False
                     break
+            if visible:
+                for key, values in grouped_fields.items():
+                    haystack = str(fields.get(key, ""))
+                    if not haystack or not any(_matches_field_filter(haystack, value) for value in values):
+                        visible = False
+                        break
             item.setHidden(not visible)
 
     # ------------------------------------------------------------------
