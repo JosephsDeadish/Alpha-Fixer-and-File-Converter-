@@ -61,6 +61,12 @@ SUPPORTED_OUTPUT_FORMATS = {
 # Display list for UI combos (name → extension), alphabetical
 OUTPUT_FORMAT_LIST = sorted(SUPPORTED_OUTPUT_FORMATS.items())
 
+DDS_VARIANT_OPTIONS: list[tuple[str, str]] = [
+    ("Auto (RGB/RGBA by alpha)", "auto"),
+    ("RGB 24-bit (discard alpha)", "rgb"),
+    ("RGBA 32-bit (preserve alpha)", "rgba"),
+]
+
 # Human-readable descriptions for each output format, shown as combo tooltips
 FORMAT_DESCRIPTIONS = {
     "AVIF": (
@@ -76,7 +82,8 @@ FORMAT_DESCRIPTIONS = {
     "DDS": (
         "DirectDraw Surface — GPU-native texture format.\n"
         "Used by DirectX games and engines (Unreal, Unity, etc.).\n"
-        "Supports DXT/BC compressed formats. Required for many game modding workflows."
+        "Supports GPU texture workflows and includes an output variant selector in the converter.\n"
+        "Choose automatic RGB/RGBA handling or force 24-bit RGB / 32-bit RGBA raw output."
     ),
     "PBM": (
         "Portable Bitmap — simple 1-bit black-and-white image format.\n"
@@ -391,6 +398,7 @@ def convert_file(
     quality: int = 90,
     resize: Optional[tuple[int, int]] = None,
     keep_metadata: bool = False,
+    dds_variant: str = "auto",
 ) -> str:
     """
     Convert a single image file.
@@ -485,7 +493,7 @@ def convert_file(
             if ext == ".dds":
                 rgba = _ensure_rgba(img)
                 try:
-                    _save_dds(rgba, output_path)
+                    _save_dds(rgba, output_path, variant=dds_variant)
                 finally:
                     if rgba is not img:
                         rgba.close()

@@ -16,10 +16,12 @@ from src.core.file_converter import (
     convert_file,
     build_output_path,
     SUPPORTED_OUTPUT_FORMATS,
+    DDS_VARIANT_OPTIONS,
     _flatten_alpha,
 )
 from src.core.alpha_processor import SUPPORTED_WRITE, save_image
-from src.core.worker import AlphaWorker
+from src.core.worker import AlphaWorker, ConverterWorker
+from src.version import APP_NAME
 
 
 def _make_png(path: str, w=8, h=8, alpha=200):
@@ -126,6 +128,25 @@ class TestAlphaWorkerOutputCompatibility(unittest.TestCase):
         self.assertEqual(worker._effective_output_ext("/tmp/input.jpg"), ".jpg")
 
 
+class TestConverterWorkerSizing(unittest.TestCase):
+
+    def test_worker_count_drops_to_one_for_very_large_files(self):
+        count = ConverterWorker._recommend_worker_count(
+            2,
+            [300 * 1024 * 1024, 8 * 1024 * 1024],
+            cpu_count=8,
+        )
+        self.assertEqual(count, 1)
+
+    def test_worker_count_is_capped_for_heavy_batches(self):
+        count = ConverterWorker._recommend_worker_count(
+            12,
+            [200 * 1024 * 1024] * 6,
+            cpu_count=8,
+        )
+        self.assertEqual(count, 2)
+
+
 class TestConvertFile(unittest.TestCase):
 
     def test_png_to_jpeg(self):
@@ -195,6 +216,38 @@ class TestConvertFile(unittest.TestCase):
             self.assertEqual(int.from_bytes(data[88:92], "little"), 32)
             self.assertEqual(int.from_bytes(data[104:108], "little"), 0xFF000000)
 
+    def test_save_dds_raw_variant_rgb_discards_alpha(self):
+        from src.core.alpha_processor import _save_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dst = os.path.join(tmpdir, "forced_rgb.dds")
+            img = Image.new("RGBA", (4, 4), (9, 8, 7, 128))
+            try:
+                _save_dds_raw(img, dst, variant="rgb")
+            finally:
+                img.close()
+            with open(dst, "rb") as f:
+                data = f.read(128)
+            self.assertEqual(int.from_bytes(data[80:84], "little"), 0x40)
+            self.assertEqual(int.from_bytes(data[88:92], "little"), 24)
+            self.assertEqual(int.from_bytes(data[104:108], "little"), 0)
+
+    def test_save_dds_raw_variant_rgba_keeps_opaque_image_32bit(self):
+        from src.core.alpha_processor import _save_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dst = os.path.join(tmpdir, "forced_rgba.dds")
+            img = Image.new("RGBA", (4, 4), (9, 8, 7, 255))
+            try:
+                _save_dds_raw(img, dst, variant="rgba")
+            finally:
+                img.close()
+            with open(dst, "rb") as f:
+                data = f.read(128)
+            self.assertEqual(int.from_bytes(data[80:84], "little"), 0x41)
+            self.assertEqual(int.from_bytes(data[88:92], "little"), 32)
+            self.assertEqual(int.from_bytes(data[104:108], "little"), 0xFF000000)
+
     def test_png_to_tiff(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             src = os.path.join(tmpdir, "input.png")
@@ -233,6 +286,27 @@ class TestConvertFile(unittest.TestCase):
 
     def test_supported_output_formats_includes_dds(self):
         self.assertIn("DDS", SUPPORTED_OUTPUT_FORMATS)
+
+    def test_dds_variant_options_include_auto_rgb_and_rgba(self):
+        self.assertEqual(
+            [value for _label, value in DDS_VARIANT_OPTIONS],
+            ["auto", "rgb", "rgba"],
+        )
+
+    def test_convert_file_passes_dds_variant_to_writer(self):
+        from src.core import file_converter as fc
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            dst = os.path.join(tmpdir, "output.dds")
+            _make_png(src)
+            with mock.patch.object(fc, "_save_dds") as save_dds:
+                convert_file(src, dst, "DDS", dds_variant="rgba")
+            self.assertTrue(save_dds.called)
+            self.assertEqual(save_dds.call_args.kwargs["variant"], "rgba")
+
+    def test_app_name_has_new_branding(self):
+        self.assertEqual(APP_NAME, "FORMATOMANCER: Alpha & Media Alchemy")
 
     def test_dds_to_png_uses_native_loader_when_available(self):
         with tempfile.TemporaryDirectory() as tmpdir:

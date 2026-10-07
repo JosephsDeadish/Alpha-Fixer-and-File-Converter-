@@ -372,8 +372,12 @@ def _decompress_dds_blocks(
     return Image.fromarray(rgba[:height, :width], "RGBA")
 
 
-def _save_dds(img: Image.Image, path: str):
+def _save_dds(img: Image.Image, path: str, variant: str = "auto"):
     """Save a PIL Image as DDS via Pillow/Wand, or fall back to raw."""
+    variant = str(variant or "auto").lower()
+    if variant in {"rgb", "rgba"}:
+        _save_dds_raw(img, path, variant=variant)
+        return
     img_rgba = None
     try:
         img_rgba = img.convert("RGBA")
@@ -408,10 +412,10 @@ def _save_dds(img: Image.Image, path: str):
                 img_rgba.close()
             if buf is not None:
                 buf.close()
-    _save_dds_raw(img, path)
+    _save_dds_raw(img, path, variant=variant)
 
 
-def _save_dds_raw(img: Image.Image, path: str):
+def _save_dds_raw(img: Image.Image, path: str, variant: str = "auto"):
     """Write a minimal uncompressed RGB or BGRA DDS file."""
     img_rgba = img.convert("RGBA")
     try:
@@ -419,8 +423,10 @@ def _save_dds_raw(img: Image.Image, path: str):
         arr = np.array(img_rgba, dtype=np.uint8)
     finally:
         img_rgba.close()
+    variant = str(variant or "auto").lower()
     opaque = bool(np.all(arr[:, :, 3] == 255))
-    if opaque:
+    write_rgb = variant == "rgb" or (variant == "auto" and opaque)
+    if write_rgb:
         # Convert RGBA → BGR for broader compatibility with tools that expect
         # opaque DDS textures without an alpha channel.
         pixel_data = arr[:, :, [2, 1, 0]].tobytes()

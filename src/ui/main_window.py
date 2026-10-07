@@ -31,12 +31,13 @@ from .theme_engine import (
 )
 from .video_tool import VideoToolDialog
 try:
-    from ..version import __version__
+    from ..version import __version__, APP_NAME
 except Exception:
     try:
-        from src.version import __version__  # type: ignore[no-redef]
+        from src.version import __version__, APP_NAME  # type: ignore[no-redef]
     except Exception:
         __version__ = ""
+        APP_NAME = "FORMATOMANCER: Alpha & Media Alchemy"
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
@@ -1095,7 +1096,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(min_w, min_h)
 
     def _setup_window(self):
-        self.setWindowTitle(f"🐼 Alpha & RGBA Adjuster  |  File Converter  v{__version__}")
+        self.setWindowTitle(f"🐼 {APP_NAME}  v{__version__}")
         self._update_minimum_size()
         # Enable whole-window drag-and-drop (item 28).
         self.setAcceptDrops(True)
@@ -1183,7 +1184,7 @@ class MainWindow(QMainWindow):
         self._banner_emoji_left = _SpinningEmojiLabel("🐼", font_size=20)
         banner_layout.addWidget(self._banner_emoji_left)
 
-        banner_text = QLabel("Alpha & RGBA Adjuster  |  File Converter")
+        banner_text = QLabel(APP_NAME)
         banner_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         banner_text.setObjectName("header")
         banner_text.setStyleSheet("padding: 0; font-size: 20px; background: transparent; border: none;")
@@ -2396,7 +2397,7 @@ class MainWindow(QMainWindow):
             self._click_effects.set_banner_flock(False, icon, trail_color)
         # Keep static text label; update it to the theme banner (without emojis)
         if self._banner_lbl is not None:
-            self._banner_lbl.setText("Alpha & RGBA Adjuster  |  File Converter")
+            self._banner_lbl.setText(APP_NAME)
         # Stop any legacy animation timer (banner no longer cycles emojis)
         if self._anim_timer is not None:
             self._anim_timer.stop()
@@ -3804,7 +3805,7 @@ class MainWindow(QMainWindow):
         from PyQt6.QtCore import QSize
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("About 🐼 Alpha & RGBA Adjuster  |  File Converter")
+        dlg.setWindowTitle(f"About 🐼 {APP_NAME}")
         dlg.setSizeGripEnabled(True)
         # Set the app icon on the dialog (item 36)
         app_icon = self.windowIcon()
@@ -3838,7 +3839,7 @@ class MainWindow(QMainWindow):
         outer.setSpacing(8)
 
         content_lbl = QLabel(
-            f"<h2>🐼 Alpha &amp; RGBA Adjuster  |  File Converter  v{__version__}</h2>"
+            f"<h2>🐼 {APP_NAME.replace('&', '&amp;')}  v{__version__}</h2>"
             "<p>A powerful panda-themed tool for fixing alpha channels, converting image "
             "files, and painting custom alpha zones.</p>"
             "<ul>"

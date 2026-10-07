@@ -123,6 +123,7 @@ class SettingsManager:
         "last_alpha_preset": "",
         "last_converter_format": "PNG",
         "last_converter_quality": 90,
+        "last_converter_dds_variant": "auto",
         # Batch options
         "batch_recursive": True,
         "output_suffix": "",
@@ -652,6 +653,7 @@ class SettingsManager:
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
+        "last_converter_dds_variant",
         "custom_presets",
         # Selective Alpha Tool
         "sa_zone_alphas", "sa_zone_colors", "sa_brush_size", "sa_eraser_size",

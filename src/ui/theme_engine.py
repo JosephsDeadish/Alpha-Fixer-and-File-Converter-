@@ -4,6 +4,20 @@ and provides helper utilities.
 """
 from typing import Optional
 
+try:
+    from ..version import APP_NAME
+except Exception:
+    try:
+        from src.version import APP_NAME  # type: ignore[no-redef]
+    except Exception:
+        APP_NAME = "FORMATOMANCER: Alpha & Media Alchemy"
+
+_LEGACY_APP_BANNER = "Alpha & RGBA Adjuster  |  File Converter"
+
+
+def _brand_banner(text: str) -> str:
+    return text.replace(_LEGACY_APP_BANNER, APP_NAME)
+
 
 # Default panda-themed dark palette
 DEFAULT_THEME = {
@@ -2155,7 +2169,7 @@ THEME_STATUS_MESSAGES = {
 
 def get_theme_banner(theme_name: str) -> str:
     """Return the header banner text for *theme_name*, falling back to default."""
-    return THEME_BANNER.get(theme_name, "🐼  Alpha & RGBA Adjuster  |  File Converter")
+    return _brand_banner(THEME_BANNER.get(theme_name, f"🐼  {APP_NAME}"))
 
 
 # Single representative emoji for each theme — used for the animated banner icon.

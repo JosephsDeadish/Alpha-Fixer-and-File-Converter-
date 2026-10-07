@@ -1954,7 +1954,7 @@ class TestThemeBannerMessages(unittest.TestCase):
     def test_get_theme_banner_fallback(self):
         from src.ui.theme_engine import get_theme_banner
         result = get_theme_banner("NonExistentTheme12345")
-        self.assertIn("Alpha & RGBA Adjuster", result)
+        self.assertIn("FORMATOMANCER: Alpha & Media Alchemy", result)
 
     def test_get_theme_status_fallback(self):
         from src.ui.theme_engine import get_theme_status
@@ -2073,7 +2073,7 @@ class TestBannerAnimationFrames(unittest.TestCase):
         from src.ui.theme_engine import get_theme_banner_frames, get_theme_banner
         frames = get_theme_banner_frames("NoSuchTheme99")
         self.assertEqual(len(frames), 1)
-        self.assertIn("Alpha & RGBA Adjuster", frames[0])
+        self.assertIn("FORMATOMANCER: Alpha & Media Alchemy", frames[0])
         # The single frame must be consistent with get_theme_banner fallback
         self.assertEqual(frames[0], get_theme_banner("NoSuchTheme99"))
 

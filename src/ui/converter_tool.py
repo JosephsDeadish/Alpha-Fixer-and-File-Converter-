@@ -19,7 +19,9 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
-from ..core.file_converter import OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, get_gif_frame_count
+from ..core.file_converter import (
+    OUTPUT_FORMAT_LIST, FORMAT_DESCRIPTIONS, DDS_VARIANT_OPTIONS, get_gif_frame_count,
+)
 from ..core.worker import ConverterWorker
 from .drop_list import DropFileList
 from .gif_frame_picker import GifFramePickerDialog
@@ -419,6 +421,22 @@ class ConverterTab(QWidget):
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
         gf_layout.addWidget(self._quality_spin, 1, 1)
 
+        self._lbl_dds_variant = QLabel("DDS variant:")
+        self._lbl_dds_variant.setMinimumHeight(24)
+        gf_layout.addWidget(self._lbl_dds_variant, 2, 0)
+        self._dds_variant_combo = QComboBox()
+        self._dds_variant_combo.setMinimumHeight(28)
+        for label, value in DDS_VARIANT_OPTIONS:
+            self._dds_variant_combo.addItem(label, userData=value)
+        saved_dds_variant = self._settings.get("last_converter_dds_variant", "auto")
+        dds_idx = max(0, self._dds_variant_combo.findData(saved_dds_variant))
+        self._dds_variant_combo.setCurrentIndex(dds_idx)
+        self._dds_variant_combo.setToolTip(
+            "Choose how DDS output should be written.\n"
+            "Auto keeps opaque images as RGB DDS and images with transparency as RGBA DDS."
+        )
+        gf_layout.addWidget(self._dds_variant_combo, 2, 1)
+
         self._keep_metadata_check = QCheckBox("Preserve metadata (EXIF/ICC)")
         self._keep_metadata_check.setChecked(
             bool(self._settings.get("converter_keep_metadata", False))
@@ -427,7 +445,7 @@ class ConverterTab(QWidget):
             "Copy EXIF, ICC profile, and DPI data from the source file to the output.\n"
             "Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs."
         )
-        gf_layout.addWidget(self._keep_metadata_check, 2, 0, 1, 2)
+        gf_layout.addWidget(self._keep_metadata_check, 3, 0, 1, 2)
 
         rv.addWidget(grp_fmt)
 
@@ -516,6 +534,7 @@ class ConverterTab(QWidget):
         self._fmt_combo.currentIndexChanged.connect(self._save_format_setting)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
         self._quality_spin.valueChanged.connect(self._on_quality_changed)
+        self._dds_variant_combo.currentIndexChanged.connect(self._on_dds_variant_changed)
         self._keep_metadata_check.toggled.connect(
             lambda v: self._settings.set("converter_keep_metadata", v)
         )
@@ -727,6 +746,9 @@ class ConverterTab(QWidget):
         fmt_data = self._fmt_combo.currentData()
         fmt = fmt_data[0] if fmt_data else ""
         self._quality_spin.setEnabled(fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"))
+        dds_selected = fmt == "DDS"
+        self._lbl_dds_variant.setVisible(dds_selected)
+        self._dds_variant_combo.setVisible(dds_selected)
         # When GIF is selected, the Process button opens the GIF Builder instead
         if fmt == "GIF":
             self._btn_run.setText("🎞  Open GIF Builder  [F5]")
@@ -746,6 +768,12 @@ class ConverterTab(QWidget):
         fmt = fmt_data[0] if fmt_data else ""
         if fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"):
             self._preview_debounce.start()
+
+    @pyqtSlot(int)
+    def _on_dds_variant_changed(self, _index: int):
+        variant = self._dds_variant_combo.currentData()
+        if variant:
+            self._settings.set("last_converter_dds_variant", variant)
 
     @pyqtSlot(int)
     def _on_width_changed(self, width: int) -> None:
@@ -1103,6 +1131,7 @@ class ConverterTab(QWidget):
             quality=quality,
             resize=resize,
             keep_metadata=self._keep_metadata_check.isChecked(),
+            dds_variant=self._dds_variant_combo.currentData() or "auto",
             suffix=suffix,
             source_aliases=logical_sources,
         )

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Alpha Fixer & File Converter – Entry Point.
+FORMATOMANCER: Alpha & Media Alchemy – Entry Point.
 
 Includes:
   • Pre-flight system-library check (libEGL, libGL) with clear install instructions
@@ -779,8 +779,9 @@ def main():
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtCore import QCoreApplication, Qt
     from PyQt6.QtGui import QFont
+    from src.version import APP_INTERNAL_NAME, APP_NAME
 
-    QCoreApplication.setApplicationName("AlphaFixerConverter")
+    QCoreApplication.setApplicationName(APP_INTERNAL_NAME)
     QCoreApplication.setOrganizationName("PandaTools")
     # AA_UseHighDpiPixmaps was removed in Qt6; high-DPI pixmaps are always
     # enabled by default in Qt6/PyQt6 so no setAttribute call is needed.
@@ -799,7 +800,7 @@ def main():
     # The returned lock object MUST stay alive until the process exits.
     _instance_lock = _acquire_single_instance_lock()  # noqa: F841 – must stay alive
 
-    logger.info("Starting Alpha Fixer & File Converter")
+    logger.info("Starting %s", APP_NAME)
 
     # Import application modules.  Any ImportError here typically means a
     # required library (numpy, Pillow, etc.) is not installed.  Log clearly.

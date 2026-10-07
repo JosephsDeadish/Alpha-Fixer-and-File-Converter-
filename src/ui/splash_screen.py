@@ -13,6 +13,7 @@ from typing import Optional
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QRadialGradient, QLinearGradient, QPen
 from PyQt6.QtWidgets import QSplashScreen, QApplication
+from ..version import APP_NAME
 
 try:
     from PyQt6.QtSvgWidgets import QSvgWidget as _QSvgWidget
@@ -174,7 +175,7 @@ class ThemeSplashScreen(QSplashScreen):
         title_font = QFont("Segoe UI", 22, QFont.Weight.Bold)
         p.setFont(title_font)
         p.setPen(self._text)
-        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Alpha & RGBA Adjuster  |  File Converter")
+        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, APP_NAME)
 
         # Theme banner / subtitle
         sub_font = QFont("Segoe UI", 11)

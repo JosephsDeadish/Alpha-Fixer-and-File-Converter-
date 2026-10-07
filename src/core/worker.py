@@ -12,6 +12,7 @@ import shutil
 import time
 import traceback
 import logging
+import gc
 import concurrent.futures
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,9 @@ from PyQt6.QtCore import QThread, pyqtSignal
 _LARGE_BATCH_THRESHOLD = 1_000
 # Minimum seconds between consecutive progress signal emissions in large-batch mode.
 _PROGRESS_MIN_INTERVAL = 0.1   # 100 ms
+_LARGE_FILE_BYTES = 256 * 1024 * 1024
+_HEAVY_BATCH_BYTES = 1024 * 1024 * 1024
+_GC_CLEANUP_INTERVAL = 32
 
 from .alpha_processor import (
     load_image,
@@ -293,6 +297,7 @@ class ConverterWorker(QThread):
         quality: int = 90,
         resize: Optional[tuple[int, int]] = None,
         keep_metadata: bool = False,
+        dds_variant: str = "auto",
         suffix: str = "",
         source_aliases: Optional[dict[str, str]] = None,
         parent=None,
@@ -306,12 +311,30 @@ class ConverterWorker(QThread):
         self._quality = quality
         self._resize = resize
         self._keep_metadata = keep_metadata
+        self._dds_variant = dds_variant
         self._suffix = suffix
         self._source_aliases = dict(source_aliases or {})
         self._abort = False
 
     def stop(self):
         self._abort = True
+
+    @staticmethod
+    def _recommend_worker_count(
+        total_files: int,
+        file_sizes: list[int],
+        cpu_count: Optional[int] = None,
+    ) -> int:
+        base_workers = min(8, max(1, (cpu_count or os.cpu_count() or 1)))
+        if not file_sizes:
+            return base_workers
+        largest = max(file_sizes)
+        total_bytes = sum(file_sizes)
+        if largest >= _LARGE_FILE_BYTES:
+            return 1
+        if total_bytes >= _HEAVY_BATCH_BYTES and total_files > 1:
+            return min(base_workers, 2)
+        return base_workers
 
     def run(self):
         total = len(self._files)
@@ -325,7 +348,13 @@ class ConverterWorker(QThread):
         # Item 26: parallel conversion significantly reduces wall-clock time.
         # Number of parallel workers: CPU count, capped at 8 to avoid too many
         # simultaneous open files (each PIL operation holds file handles briefly).
-        n_workers = min(8, max(1, (os.cpu_count() or 1)))
+        file_sizes: list[int] = []
+        for src in self._files:
+            try:
+                file_sizes.append(max(0, os.path.getsize(src)))
+            except OSError:
+                file_sizes.append(0)
+        n_workers = self._recommend_worker_count(total, file_sizes)
 
         def _convert_one(idx: int, src: str) -> tuple[int, str, bool, str]:
             """Convert one file and return (index, src, ok, dest_or_error)."""
@@ -345,6 +374,7 @@ class ConverterWorker(QThread):
                     quality=self._quality,
                     resize=self._resize,
                     keep_metadata=self._keep_metadata,
+                    dds_variant=self._dds_variant,
                 )
                 return idx, src, True, dest
             except MemoryError as exc:
@@ -352,6 +382,7 @@ class ConverterWorker(QThread):
             except Exception:
                 return idx, src, False, traceback.format_exc()
 
+        gc.collect()
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_workers)
         skip_wait_shutdown = False
         try:
@@ -408,6 +439,8 @@ class ConverterWorker(QThread):
                                 skip_wait_shutdown = True
                                 return
                         emit_idx += 1
+                        if emit_idx % _GC_CLEANUP_INTERVAL == 0 and (large_batch or n_workers <= 2):
+                            gc.collect()
                     while next_idx < total and len(pending) < n_workers and not self._abort:
                         pending.add(pool.submit(_convert_one, next_idx, self._files[next_idx]))
                         next_idx += 1

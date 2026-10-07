@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 _TUTORIAL_STEPS = [
     {
         "icon": "🐼",
-        "title": "Welcome to Alpha Fixer & File Converter!",
+        "title": "Welcome to FORMATOMANCER: Alpha & Media Alchemy!",
         "body": (
             "This app lets you <b>convert images between formats</b>, "
             "<b>fix or adjust transparency (alpha channels)</b>, and "
