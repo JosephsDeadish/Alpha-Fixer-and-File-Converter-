@@ -1716,17 +1716,14 @@ class VideoToolDialog(QDialog):
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
         skipped = []
         fallback_loaded: list[str] = []
+        failed_videos: list[tuple[str, str]] = []
         next_row = max(0, min(len(self._clips), insert_row))
         for path in paths:
             ext = Path(path).suffix.lower()
             if ext in _VIDEO_EXTS:
                 clip = _load_video_clip(path)
                 if clip is None:
-                    QMessageBox.warning(
-                        self, "Load Error",
-                        f"Could not open video:\n{Path(path).name}\n"
-                        f"{_video_load_failure_hint(path)}"
-                    )
+                    failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
                     continue
                 label = _format_clip_label(clip, path, "🎞")
                 next_row = self._insert_clip(clip, label, next_row)
@@ -1752,6 +1749,7 @@ class VideoToolDialog(QDialog):
                 + "\n".join(fallback_loaded)
                 + "\n\nThe original source path stays attached for labeling and export history.",
             )
+        self._show_video_load_failures(failed_videos)
         self._show_skipped_files(skipped)
 
     def _add_video(self) -> None:
@@ -1764,14 +1762,11 @@ class VideoToolDialog(QDialog):
     def _load_video_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         fallback_loaded: list[str] = []
+        failed_videos: list[tuple[str, str]] = []
         for path in paths:
             clip = _load_video_clip(path)
             if clip is None:
-                QMessageBox.warning(
-                    self, "Load Error",
-                    f"Could not open video:\n{Path(path).name}\n"
-                    f"{_video_load_failure_hint(path)}"
-                )
+                failed_videos.append((Path(path).name, _video_load_failure_hint(path)))
                 continue
             label = _format_clip_label(clip, path, "🎞")
             next_row = self._insert_clip(clip, label, next_row)
@@ -1788,6 +1783,24 @@ class VideoToolDialog(QDialog):
                 + "\n".join(fallback_loaded)
                 + "\n\nThe original source path stays attached for labeling and export history.",
             )
+        self._show_video_load_failures(failed_videos)
+
+    def _show_video_load_failures(self, failures: list[tuple[str, str]]) -> None:
+        if not failures:
+            return
+        lines = []
+        for name, hint in failures[:3]:
+            lines.append(f"• {name}: {hint}")
+        remaining = len(failures) - len(lines)
+        detail = "\n".join(lines)
+        if remaining > 0:
+            detail += f"\n• …and {remaining} more file(s)."
+        summary = (
+            "Could not open the selected video file."
+            if len(failures) == 1
+            else f"Could not open {len(failures)} selected video files."
+        )
+        QMessageBox.warning(self, "Load Error", f"{summary}\n\n{detail}")
 
     def _record_export_history(
         self,

@@ -71,6 +71,7 @@ class ConverterTab(QWidget):
     # Emitted when the output directory is changed (browse or typed).
     # Carries the new path string (empty string = same as source).
     output_dir_changed = pyqtSignal(str)
+    status_notice = pyqtSignal(str, int)
     SHORTCUT_DEFS = (
         ("converter_run", "F5", "Start conversion batch", "Converter"),
         ("converter_stop", "Escape", "Stop the current operation", "Converter"),
@@ -821,9 +822,11 @@ class ConverterTab(QWidget):
         if item_count == self._last_thumb_pause_count:
             return
         self._last_thumb_pause_count = item_count
-        self._log_msg(
+        message = (
             f"⚠ Thumbnail previews auto-paused for large queue — {item_count:,} queued (threshold {threshold:,})."
         )
+        self._log_msg(message)
+        self.status_notice.emit(message, 10000)
         self._update_count(self._file_list.count())
 
     @pyqtSlot(int, int, int)
@@ -836,6 +839,7 @@ class ConverterTab(QWidget):
             + "."
         )
         self._log_msg(f"📥 {self._last_batch_import_note}")
+        self.status_notice.emit(f"Converter queue: {self._last_batch_import_note}", 6000)
         self._update_count(self._file_list.count())
 
     @pyqtSlot(int)

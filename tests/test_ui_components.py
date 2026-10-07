@@ -355,6 +355,12 @@ class TestConverterTab(unittest.TestCase):
         self.assertIn("• a.png", text)
         self.assertIn("Per-file failures:", text)
 
+    def test_batch_import_completed_emits_status_notice(self):
+        received = []
+        self._widget.status_notice.connect(lambda message, timeout: received.append((message, timeout)))
+        self._widget._on_batch_import_completed(2, 1, 3)
+        self.assertEqual(received, [("Converter queue: Added 2 new files; skipped 1 duplicate.", 6000)])
+
     def test_export_failure_report_writes_json(self):
         self._widget._last_run_format = "PNG"
         self._widget._last_run_files = ["/tmp/a.png"]
@@ -889,6 +895,12 @@ class TestAlphaPreviewHelpers(unittest.TestCase):
         self._widget._atlas_detect_check.setChecked(True)
         self.assertEqual(len(self._widget._atlas_cells), 4)
         self.assertIn("atlas boxes on (4 cells)", self._widget._preview_helper_lbl.text())
+
+    def test_batch_import_completed_emits_status_notice(self):
+        received = []
+        self._widget.status_notice.connect(lambda message, timeout: received.append((message, timeout)))
+        self._widget._on_batch_import_completed(2, 1, 3)
+        self.assertEqual(received, [("Alpha queue: Added 2 new files; skipped 1 duplicate.", 6000)])
 
 
 class TestSettingsExportImport(unittest.TestCase):
@@ -1947,6 +1959,30 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("remux fallback", clip.load_note)
             clip.close()
             self.assertFalse(os.path.exists(remux_path))
+
+    def test_load_video_paths_batches_failures_into_one_dialog(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            with patch.object(vt, "_load_video_clip", return_value=None):
+                with patch.object(vt, "_video_load_failure_hint", side_effect=["hint one", "hint two"]):
+                    with patch.object(vt.QMessageBox, "warning") as warn_mock:
+                        dialog._load_video_paths(["/tmp/a.iso", "/tmp/b.bin"])
+            warn_mock.assert_called_once()
+            message = warn_mock.call_args.args[2]
+            self.assertIn("Could not open 2 selected video files.", message)
+            self.assertIn("a.iso: hint one", message)
+            self.assertIn("b.bin: hint two", message)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
 
     def test_mp4_export_size_rounds_up_to_even_dimensions(self):
         try:

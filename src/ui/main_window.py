@@ -1002,6 +1002,7 @@ class MainWindow(QMainWindow):
         self._banner_emoji_right: "_SpinningEmojiLabel | None" = None
         self._toolbar_panda_lbl: "QLabel | None" = None
         self._status_bar = None
+        self._queue_status_label = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         # Cursor animation state
@@ -1223,12 +1224,15 @@ class MainWindow(QMainWindow):
         self._register_shortcut_provider(self._selective_alpha_tab)
         self._register_shortcut_provider(GifBuilderDialog, owner_attr="_gif_builder_dlg")
         self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")
+        self._alpha_tab.status_notice.connect(self._show_transient_status)
+        self._converter_tab.status_notice.connect(self._show_transient_status)
         self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
         self._tabs.addTab(self._converter_tab, "🔄 Converter")
         self._tabs.addTab(self._history_tab, "📋 History")
         self._tabs.addTab(self._selective_alpha_tab, "🎨 Selective α")
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
+        self._tabs.currentChanged.connect(self._update_queue_status)
         cv.addWidget(self._tabs, 1)
 
         # Tab-switching shortcuts are set up in _setup_keyboard_shortcuts.
@@ -1301,6 +1305,10 @@ class MainWindow(QMainWindow):
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
         self._status_bar.showMessage("Ready  🐼")
+        self._queue_status_label = QLabel("")
+        self._queue_status_label.setObjectName("subheader")
+        self._queue_status_label.setStyleSheet("color: #888; padding: 0 6px;")
+        self._status_bar.addPermanentWidget(self._queue_status_label, 0)
         self._status_bar.addPermanentWidget(self._unlock_lbl, 0)
 
         # Toolbar panda label no longer used (toolbar removed); keep None so
@@ -1359,12 +1367,18 @@ class MainWindow(QMainWindow):
         # File-add sounds
         self._alpha_tab.files_added.connect(self._on_files_added)
         self._converter_tab.files_added.connect(self._on_files_added)
+        self._alpha_tab.files_added.connect(self._update_queue_status)
+        self._converter_tab.files_added.connect(self._update_queue_status)
         # File-remove sounds
         self._alpha_tab.files_removed.connect(self._on_files_removed)
         self._converter_tab.files_removed.connect(self._on_files_removed)
+        self._alpha_tab.files_removed.connect(self._update_queue_status)
+        self._converter_tab.files_removed.connect(self._update_queue_status)
         # List-cleared sound (dog bark)
         self._alpha_tab.list_cleared.connect(self._on_list_cleared)
         self._converter_tab.list_cleared.connect(self._on_list_cleared)
+        self._alpha_tab.list_cleared.connect(self._update_queue_status)
+        self._converter_tab.list_cleared.connect(self._update_queue_status)
         # Drag-enter sounds
         self._alpha_tab.drag_entered.connect(self._on_drag_entered)
         self._converter_tab.drag_entered.connect(self._on_drag_entered)
@@ -2644,6 +2658,22 @@ class MainWindow(QMainWindow):
         self._bg_notice = message
         if self._status_bar is not None:
             self._status_bar.showMessage(message, 7000)
+
+    def _show_transient_status(self, message: str, timeout_ms: int = 7000) -> None:
+        if not message or self._status_bar is None:
+            return
+        self._status_bar.showMessage(message, max(1000, int(timeout_ms)))
+
+    def _update_queue_status(self) -> None:
+        if self._queue_status_label is None:
+            return
+        tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
+        file_list = getattr(tab, "_file_list", None)
+        if file_list is None or not hasattr(file_list, "count"):
+            self._queue_status_label.setText("")
+            return
+        count = int(file_list.count())
+        self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")
 
     def _clear_custom_background_notice(self) -> None:
         self._bg_notice = ""

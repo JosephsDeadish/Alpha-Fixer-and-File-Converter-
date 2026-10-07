@@ -269,6 +269,7 @@ class AlphaFixerTab(QWidget):
     # Emitted when the output directory is changed (browse or typed).
     # Carries the new path string (empty string = same as source).
     output_dir_changed = pyqtSignal(str)
+    status_notice = pyqtSignal(str, int)
     SHORTCUT_DEFS = (
         ("alpha_run", "F5", "Start processing batch", "Alpha & RGBA"),
         ("alpha_stop", "Escape", "Stop the current operation", "Alpha & RGBA"),
@@ -1041,9 +1042,11 @@ class AlphaFixerTab(QWidget):
         if item_count == self._last_thumb_pause_count:
             return
         self._last_thumb_pause_count = item_count
-        self._log_msg(
+        message = (
             f"⚠ Thumbnail previews auto-paused for large queue — {item_count:,} queued (threshold {threshold:,})."
         )
+        self._log_msg(message)
+        self.status_notice.emit(message, 10000)
         self._update_file_count(self._file_list.count())
 
     @pyqtSlot(int, int, int)
@@ -1056,6 +1059,7 @@ class AlphaFixerTab(QWidget):
             + "."
         )
         self._log_msg(f"📥 {note}")
+        self.status_notice.emit(f"Alpha queue: {note}", 6000)
         self._update_file_count(self._file_list.count())
 
     @pyqtSlot(int)

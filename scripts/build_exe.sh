@@ -47,11 +47,13 @@ if [[ "$1" == "--onefile" ]]; then
     pyinstaller alpha_fixer_onefile.spec
     artifact="dist/AlphaFixerConverter"
     artifact_kind="file"
+    launch_target="$artifact"
 else
     echo "Building one-folder application…"
     pyinstaller alpha_fixer.spec
     artifact="dist/AlphaFixerConverter"
     artifact_kind="dir"
+    launch_target="$artifact/AlphaFixerConverter"
 fi
 
 echo "Verifying build artifacts…"
@@ -61,6 +63,14 @@ if [[ "$artifact_kind" == "file" ]]; then
 else
     [[ -d "$artifact" ]] || { echo "❌  ERROR: Expected app folder not found at $artifact"; exit 1; }
     echo "✅  App folder verified: $(du -sh "$artifact" | cut -f1)"
+fi
+
+if [[ -x "$launch_target" ]]; then
+    echo "Running packaged launch smoke test…"
+    QT_QPA_PLATFORM=offscreen ALPHA_FIXER_SMOKE_TEST=1.5 timeout 25s "$launch_target"
+    echo "✅  Packaged app launch verified."
+else
+    echo "⚠️  Skipping packaged launch smoke test because executable was not found at $launch_target"
 fi
 
 echo ""

@@ -16,6 +16,7 @@ import logging
 import datetime
 import threading
 import time
+import ctypes
 from pathlib import Path
 
 
@@ -226,6 +227,42 @@ def _check_system_libs() -> bool:
         print(f"  Full error logged to: {log_file}")
         print("=" * 62 + "\n")
         return False
+
+
+def _missing_linux_runtime_libs() -> list[str]:
+    if sys.platform != "linux":
+        return []
+    missing = []
+    for lib_name in _LINUX_INSTALL:
+        try:
+            ctypes.CDLL(lib_name)
+        except OSError:
+            missing.append(lib_name)
+    return missing
+
+
+def _packaged_runtime_notice(missing_libs: list[str]) -> str:
+    if not missing_libs:
+        return ""
+    preview = ", ".join(missing_libs[:3])
+    extra = len(missing_libs) - min(len(missing_libs), 3)
+    if extra > 0:
+        preview = f"{preview} +{extra} more"
+    return (
+        f"⚠ Optional Linux runtime libraries are missing: {preview}. "
+        "Some video/audio or X11 features may be limited."
+    )
+
+
+def _smoke_test_duration_ms() -> int:
+    raw = os.environ.get("ALPHA_FIXER_SMOKE_TEST", "").strip()
+    if not raw:
+        return 0
+    try:
+        seconds = float(raw)
+    except ValueError:
+        seconds = 1.5
+    return max(250, int(seconds * 1000))
 
 
 # ---------------------------------------------------------------------------
@@ -777,7 +814,7 @@ def main():
         sys.path.insert(0, parent_dir)
 
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtCore import QCoreApplication, Qt
+    from PyQt6.QtCore import QCoreApplication, Qt, QTimer
     from PyQt6.QtGui import QFont
     from src.version import APP_INTERNAL_NAME, APP_NAME
 
@@ -875,11 +912,21 @@ def main():
         sys.exit(1)
 
     # Close splash and reveal main window after the splash duration
-    from PyQt6.QtCore import QTimer
     if splash is not None:
         QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
 
     window.show()
+
+    missing_runtime_libs = _missing_linux_runtime_libs() if getattr(sys, "frozen", False) else []
+    runtime_notice = _packaged_runtime_notice(missing_runtime_libs)
+    if runtime_notice:
+        logger.warning(runtime_notice)
+        QTimer.singleShot(900, lambda: window.statusBar().showMessage(runtime_notice, 12000))
+
+    smoke_test_ms = _smoke_test_duration_ms()
+    if smoke_test_ms > 0:
+        logger.info("Smoke-test launch mode enabled; auto-exiting after %d ms", smoke_test_ms)
+        QTimer.singleShot(smoke_test_ms, app.quit)
 
     # Start the hang watchdog after the window is visible so normal startup
     # I/O (settings load, theme apply, etc.) doesn't trigger false positives.

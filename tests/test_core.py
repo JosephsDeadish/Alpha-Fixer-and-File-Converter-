@@ -8895,6 +8895,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         folder_src = self._src("../alpha_fixer.spec")
         onefile_src = self._src("../alpha_fixer_onefile.spec")
         for src in (folder_src, onefile_src):
+            self.assertIn('_LINUX_RUNTIME_LIBS = [', src)
+            self.assertIn('collect_dynamic_libs("PyQt6")', src)
+            self.assertIn('collect_data_files("PyQt6")', src)
+            self.assertIn('copy_metadata("PyQt6")', src)
             self.assertIn('collect_data_files("imageio")', src)
             self.assertIn('copy_metadata("imageio")', src)
             self.assertIn('collect_data_files("imageio_ffmpeg")', src)
@@ -8902,6 +8906,27 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             self.assertIn("def _optional_wand_bundle():", src)
             self.assertIn('os.environ.get("MAGICK_HOME")', src)
             self.assertIn('collect_data_files("wand")', src)
+
+    def test_build_script_runs_packaged_launch_smoke_test(self):
+        sh_src = self._src("../scripts/build_exe.sh")
+        self.assertIn('ALPHA_FIXER_SMOKE_TEST=1.5', sh_src)
+        self.assertIn('timeout 25s "$launch_target"', sh_src)
+        self.assertIn('echo "✅  Packaged app launch verified."', sh_src)
+
+    def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
+        src = self._src("../main.py")
+        self.assertIn("def _missing_linux_runtime_libs() -> list[str]:", src)
+        self.assertIn("def _packaged_runtime_notice(missing_libs: list[str]) -> str:", src)
+        self.assertIn('os.environ.get("ALPHA_FIXER_SMOKE_TEST", "").strip()', src)
+        self.assertIn('QTimer.singleShot(smoke_test_ms, app.quit)', src)
+        self.assertIn('window.statusBar().showMessage(runtime_notice, 12000)', src)
+
+    def test_main_window_keeps_queue_status_bar_summary_hooks(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("self._queue_status_label = QLabel(\"\")", src)
+        self.assertIn("self._tabs.currentChanged.connect(self._update_queue_status)", src)
+        self.assertIn("def _update_queue_status(self) -> None:", src)
+        self.assertIn('self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")', src)
 
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")

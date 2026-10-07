@@ -13,6 +13,7 @@ Requires:  pip install pyinstaller
 
 import importlib.util
 import os
+import subprocess
 import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata, collect_dynamic_libs
@@ -63,6 +64,73 @@ hidden = [
     "src.version",
 ]
 
+_LINUX_RUNTIME_LIBS = [
+    "libpulse.so.0",
+    "libxcb-keysyms.so.1",
+    "libxcb-image.so.0",
+    "libxcb-icccm.so.4",
+    "libxcb-xkb.so.1",
+    "libxcb-shape.so.0",
+    "libxcb-cursor.so.0",
+    "libxcb-render-util.so.0",
+    "libxkbcommon-x11.so.0",
+    "libxcb-util.so.1",
+]
+
+
+def _resolve_linux_shared_lib(lib_name: str) -> str | None:
+    try:
+        proc = subprocess.run(
+            ["ldconfig", "-p"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.stdout:
+            for line in proc.stdout.splitlines():
+                if lib_name not in line or "=>" not in line:
+                    continue
+                resolved = Path(line.rsplit("=>", 1)[-1].strip())
+                if resolved.exists():
+                    return str(resolved)
+    except Exception:
+        pass
+
+    search_dirs = [
+        Path("/lib"),
+        Path("/lib64"),
+        Path("/usr/lib"),
+        Path("/usr/lib64"),
+        Path("/usr/local/lib"),
+        Path("/lib/x86_64-linux-gnu"),
+        Path("/usr/lib/x86_64-linux-gnu"),
+        Path("/lib/aarch64-linux-gnu"),
+        Path("/usr/lib/aarch64-linux-gnu"),
+    ]
+    for raw_dir in os.environ.get("LD_LIBRARY_PATH", "").split(":"):
+        if raw_dir:
+            search_dirs.insert(0, Path(raw_dir))
+    for base in search_dirs:
+        candidate = base / lib_name
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def _optional_linux_runtime_bundle():
+    binaries = []
+    if sys.platform != "linux":
+        return binaries
+
+    seen: set[str] = set()
+    for lib_name in _LINUX_RUNTIME_LIBS:
+        resolved = _resolve_linux_shared_lib(lib_name)
+        if not resolved or resolved in seen:
+            continue
+        binaries.append((resolved, "."))
+        seen.add(resolved)
+    return binaries
+
 
 def _optional_wand_bundle():
     datas = []
@@ -94,16 +162,20 @@ def _optional_wand_bundle():
 
 
 _wand_datas, _wand_binaries, _wand_hidden = _optional_wand_bundle()
+_linux_runtime_binaries = _optional_linux_runtime_bundle()
+_pyqt_binaries = collect_dynamic_libs("PyQt6")
 
 a = Analysis(
     ["main.py"],
     pathex=[str(Path(".").resolve())],
-    binaries=_wand_binaries,
+    binaries=_wand_binaries + _linux_runtime_binaries + _pyqt_binaries,
     datas=[
         # Bundle all SVG theme files and the generated icon into the app.
         ("src/assets/svg", "src/assets/svg"),
         ("src/assets/icon.ico", "src/assets"),
     ]
+    + collect_data_files("PyQt6")
+    + copy_metadata("PyQt6")
     + collect_data_files("imageio")
     + copy_metadata("imageio")
     + collect_data_files("imageio_ffmpeg")
