@@ -2525,14 +2525,12 @@ class VideoToolDialog(QDialog):
                         source_pil.close()
                     except Exception:
                         pass
-            if canceled and writer is not None:
+            if writer is not None:
                 try:
                     writer.close()
                 except Exception:
-                    pass
-                writer = None
-            if not canceled and writer is not None:
-                writer.close()
+                    if not canceled:
+                        raise
                 writer = None
             if fmt == "gif" and not canceled and gif_frames:
                 export_stage = "GIF assembly"
@@ -2571,7 +2569,7 @@ class VideoToolDialog(QDialog):
                 export_stage = "audio muxing"
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
-                self._mux_mp4_audio(render_path, temp_output_path or out_path, clip_snapshot, fps)
+                self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps)
                 if temp_output_path is not None:
                     Path(temp_output_path).replace(out_path)
                     temp_output_path = None
@@ -2580,11 +2578,6 @@ class VideoToolDialog(QDialog):
                 temp_output_path = None
             progress.setValue(total)
         except Exception as exc:
-            if not out_path_existed:
-                try:
-                    Path(out_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
             if temp_mp4 is not None:
                 try:
                     Path(temp_mp4).unlink(missing_ok=True)
