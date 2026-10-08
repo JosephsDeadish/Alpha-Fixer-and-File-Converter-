@@ -2552,14 +2552,14 @@ _NORMAL: dict[str, list[str]] = {
         "Tool, zone, brush size, zoom level. Four pieces of info in one small line.",
     ],
     "video_media_add": [
-        "Add video clips, animated GIFs, or still images to the Video Editor timeline.",
+        "Add video clips, animated GIFs, or still images to the Video Builder timeline.",
         "Still images now stay on screen for a configurable duration instead of flashing by for one frame.",
         "Use Split at Playhead on a video clip, then insert an image between the two halves.",
         "Drag media files into the timeline too — you do not have to use the file picker.",
         "If a video reports weak metadata, the loader now probes frames directly before giving up.",
     ],
     "video_timeline": [
-        "This is the clip timeline for the Video Editor.",
+        "This is the clip timeline for the Video Builder.",
         "Drag clips to reorder them; playback and export follow the order shown here.",
         "Use the insert-position menu to decide whether new media lands before, after, or at the end of the timeline.",
         "Split at Playhead lets you cut one loaded video clip into two parts so an image can sit in the middle.",
@@ -2583,7 +2583,7 @@ _NORMAL: dict[str, list[str]] = {
         "Rewind jumps back to the first frame of the assembled timeline.",
     ],
     "video_filter": [
-        "Choose a visual filter for the whole Video Editor timeline.",
+        "Choose a visual filter for the whole Video Builder timeline.",
         "Filters are previewed live before export so you can compare them quickly.",
         "Use None to keep only the manual brightness/contrast/levels adjustments.",
         "Filters apply on top of the clip frames after they are decoded.",
@@ -4669,7 +4669,7 @@ _DUMBED: dict[str, list[str]] = {
         "Tool, zone, brush size, zoom level. Four pieces of info in one small line.",
     ],
     "video_media_add": [
-        "This is where you feed the Video Editor its precious clips.",
+        "This is where you feed the Video Builder its precious clips.",
         "Yes, it takes actual video files now. MP4s too. Also GIFs and still images.",
         "Still images can hang around for a custom duration now instead of blinking past like a bad joke.",
         "Split a clip at the playhead first if you want to jam an image into the middle of a video.",

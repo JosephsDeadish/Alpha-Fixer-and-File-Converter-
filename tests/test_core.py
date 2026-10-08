@@ -8876,7 +8876,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_tutorial_video_step_matches_current_ui(self):
         src = self._src("ui/tutorial_dialog.py")
-        self.assertIn('"title": "Video Editor"', src)
+        self.assertIn('"title": "Video Builder"', src)
         self.assertIn("MP4 or GIF", src)
         self.assertIn("combine video clips and ", src)
         self.assertIn("still images or GIFs into a single export", src)
@@ -8884,6 +8884,22 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("Video import and MP4 export need imageio, imageio-ffmpeg, and ", src)
         self.assertIn("GIF export from images/GIFs still works", src)
         self.assertNotIn("WebM", src)
+
+    def test_video_builder_copy_is_consistent_in_main_window_and_tooltips(self):
+        main_src = self._src("ui/main_window.py")
+        tips_src = self._src("ui/tooltip_manager.py")
+        video_src = self._src("ui/video_tool.py")
+        self.assertIn("Open Video Builder", main_src)
+        self.assertIn("GIF Builder &amp; Video Builder", main_src)
+        self.assertIn("Video Builder timeline", tips_src)
+        self.assertIn('self.setWindowTitle("🎬 Video Builder")', video_src)
+        self.assertIn('title = QLabel("🎬  Video Builder")', video_src)
+
+    def test_notification_settings_copy_mentions_overlay_and_status_bar(self):
+        src = self._src("ui/settings_dialog.py")
+        self.assertIn("Achievement && Unlock Notifications", src)
+        self.assertIn("Enable floating notification overlay", src)
+        self.assertIn("status-bar summary", src)
 
     def test_video_tool_no_longer_claims_image_sequence_fallback(self):
         src = self._src("ui/video_tool.py")

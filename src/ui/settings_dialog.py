@@ -904,15 +904,16 @@ class SettingsDialog(QDialog):
         tv.addWidget(grp_bg_drip)
 
         # ---- Notifications & Pop-ups Overlay GroupBox (item 66) ----
-        grp_notif = QGroupBox("Achievement Notifications && Pop-ups Overlay")
+        grp_notif = QGroupBox("Achievement && Unlock Notifications")
         notif_layout = QVBoxLayout(grp_notif)
         notif_layout.setSpacing(6)
         self._notif_overlay_check = QCheckBox(
-            "Enable achievement notifications overlay (on by default)"
+            "Enable floating notification overlay (on by default)"
         )
         self._notif_overlay_check.setToolTip(
-            "When enabled, unlock and achievement notifications appear as a\n"
-            "transparent overlay banner.  Uncheck to disable all pop-up banners."
+            "When enabled, achievement and unlock notifications appear as a\n"
+            "floating overlay banner above the main window.\n"
+            "A short status-bar summary is still shown separately so notifications do not compete with the tab row."
         )
         self._notif_overlay_check.setChecked(True)
         notif_layout.addWidget(self._notif_overlay_check)
@@ -925,14 +926,14 @@ class SettingsDialog(QDialog):
             "Use theme notification style  (auto-style per active theme)"
         )
         self._use_theme_notif_check.setToolTip(
-            "When enabled the notification banner style (colors, emoji) is chosen\n"
+            "When enabled the floating notification style (colors, emoji) is chosen\n"
             "automatically to match the active theme.\n"
             "Uncheck to use the default notification style regardless of theme."
         )
         self._use_theme_notif_check.setChecked(True)
         _notif_sub_vl.addWidget(self._use_theme_notif_check)
         # Info label shown when "Use theme" is ON
-        self._notif_theme_info_lbl = QLabel("Using theme notification style")
+        self._notif_theme_info_lbl = QLabel("Using theme styling for floating notifications")
         self._notif_theme_info_lbl.setStyleSheet(
             "color: #aaa; font-size: 10px; margin-left: 4px;"
         )

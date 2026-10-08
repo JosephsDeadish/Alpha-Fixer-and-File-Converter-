@@ -96,9 +96,9 @@ _TUTORIAL_STEPS = [
     },
     {
         "icon": "🎬",
-        "title": "Video Editor",
+        "title": "Video Builder",
         "body": (
-            "The <b>Video Editor</b> dialog lets you combine video clips and "
+            "The <b>Video Builder</b> dialog lets you combine video clips and "
             "still images or GIFs into a single export.\n\n"
             "• Add source clips, split a moving clip at the playhead, and insert media between the halves.\n"
             "• Adjust per-clip speed for videos/GIFs or how long still images stay on screen.\n"

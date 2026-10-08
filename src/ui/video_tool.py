@@ -1,7 +1,7 @@
 """
-Video Tool Dialog.
+Video Builder Dialog.
 
-Provides a lightweight video editor that lets the user:
+Provides a lightweight video builder that lets the user:
   • Add one or more video clips (via imageio + imageio-ffmpeg + ffmpeg)
   • Drag clips in the list to reorder them (no Up/Down buttons)
   • Trim clips with start/end sliders
@@ -24,7 +24,7 @@ UX highlights (Round-90):
   • Live preview refreshes immediately on any slider change.
 
 Opening the dialog:
-  • Right-clicking anywhere on the main window → "Open Video Editor"
+  • Right-clicking anywhere on the main window → "Open Video Builder"
 """
 from __future__ import annotations
 
@@ -2865,15 +2865,15 @@ class VideoToolDialog(QDialog):
     status_notice = pyqtSignal(str, int)
     queue_status_changed = pyqtSignal(str)
     SHORTCUT_DEFS = (
-        ("video_remove_selected", "Delete", "Remove selected clip", "Video Editor"),
-        ("video_toggle_play", "Space", "Play or pause preview", "Video Editor"),
-        ("video_export", "Ctrl+S", "Export video or GIF", "Video Editor"),
-        ("video_split_clip", "Ctrl+E", "Split clip at playhead", "Video Editor"),
+        ("video_remove_selected", "Delete", "Remove selected clip", "Video Builder"),
+        ("video_toggle_play", "Space", "Play or pause preview", "Video Builder"),
+        ("video_export", "Ctrl+S", "Export video or GIF", "Video Builder"),
+        ("video_split_clip", "Ctrl+E", "Split clip at playhead", "Video Builder"),
     )
 
     def __init__(self, parent=None, tooltip_mgr=None):
         super().__init__(parent)
-        self.setWindowTitle("🎬 Video Editor")
+        self.setWindowTitle("🎬 Video Builder")
         self.setMinimumSize(1120, 760)
         self.resize(1320, 820)
         self.setModal(False)
@@ -2911,7 +2911,7 @@ class VideoToolDialog(QDialog):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
 
-        title = QLabel("🎬  Video Editor")
+        title = QLabel("🎬  Video Builder")
         title.setObjectName("subheader")
         root.addWidget(title)
 

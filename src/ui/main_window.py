@@ -2184,10 +2184,11 @@ class MainWindow(QMainWindow):
                            timeout_ms: int = 5000) -> None:
         """Show a themed floating toast notification (item 56/66).
 
-        Also updates the legacy header unlock label for backward compatibility.
-        The toast is only shown when the notification overlay is enabled in settings.
+        Also mirrors the message into the dedicated status-bar unlock label so
+        progress stays visible without competing with the tab row. The toast is
+        only shown when the notification overlay is enabled in settings.
         """
-        # Update the legacy unlock label (header bar)
+        # Mirror the message into the status-bar unlock label.
         if self._unlock_lbl is not None:
             try:
                 self._unlock_lbl.setText(f"{icon}  {message}")
@@ -4167,7 +4168,7 @@ class MainWindow(QMainWindow):
             "<tr><td><i>Alpha Painter (Canvas)</i></td><td><b>Ctrl+Wheel</b></td><td>Zoom in / out</td></tr>"
             "<tr><td></td><td><b>Middle-drag / Alt+drag</b></td><td>Pan canvas</td></tr>"
             "<tr><td><i>Right-click window</i></td><td><b>Right-click</b></td>"
-            "<td>Open GIF Builder, Video Editor, or Settings</td></tr>"
+            "<td>Open GIF Builder, Video Builder, or Settings</td></tr>"
             "</table>"
         )
         ref_lbl.setWordWrap(True)
@@ -4236,7 +4237,7 @@ class MainWindow(QMainWindow):
             "<li><b>Alpha Painter:</b> paint alpha zones on images (up to 40 zones), "
             "freehand / line / rectangle / ellipse / fill / polygon / eraser / transform tools, "
             "keyboard shortcuts (B/E/L/R/X/F/P/T), copy/paste zones, clipboard slots</li>"
-            "<li><b>GIF Builder &amp; Video Editor:</b> create animated GIFs and videos from "
+            "<li><b>GIF Builder &amp; Video Builder:</b> create animated GIFs and videos from "
             "images, GIFs, and video clips with drag-based reordering and trim controls</li>"
             "<li>Processing history with search, filter, and multi-format export</li>"
             "<li>50+ preset themes + hidden unlockable themes (keep clicking!)</li>"
@@ -4346,9 +4347,9 @@ class MainWindow(QMainWindow):
         act_gif.setToolTip(
             "Open the GIF Builder to compose animated GIFs from any images."
         )
-        act_video = menu.addAction("🎬  Open Video Editor")
+        act_video = menu.addAction("🎬  Open Video Builder")
         act_video.setToolTip(
-            "Open the Video Editor to merge, trim and adjust video clips."
+            "Open the Video Builder to merge, trim and adjust video clips."
         )
         menu.addSeparator()
         act_settings = menu.addAction("⚙  Settings")
