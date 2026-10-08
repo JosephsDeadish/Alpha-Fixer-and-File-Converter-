@@ -923,7 +923,7 @@ def _video_load_failure_hint(
                 "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip from this disc image."
             )
         lines.append(
-            "If direct loading fails, the app also tries temporary ffmpeg concat repair, remux, transcode, alternate-audio, audio-drop, and still-frame recovery fallbacks for compatible streams."
+            "If direct loading fails, the app also tries temporary ffmpeg concat repair, remux, transcode, timestamp-rebuild, alternate-audio, audio-drop, and still-frame recovery fallbacks for compatible streams."
         )
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
@@ -942,6 +942,10 @@ def _video_load_failure_hint(
                 lines.append(f"Automatic selection active: {audio_note}.")
         if bool(probe.get("selected_video_attached_pic")):
             lines.append("The currently selected stream looks like attached cover art instead of continuous video frames.")
+        if _timestamp_rebuild_needed(path, probe):
+            lines.append(
+                "This container family often fails because of broken timestamps or damaged index metadata; recovery also retries timestamp-rebuild remux/transcode passes when needed."
+            )
     elif probe and bool(probe.get("has_audio")) and not bool(probe.get("has_video")):
         lines.append(
             "ffprobe detected audio but no playable video stream, so this file cannot be added to the Video Builder as a video clip."
@@ -994,23 +998,23 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
         )
     elif "asf" in format_name or ext in {".asf", ".wmv"}:
         guidance.append(
-            "ASF/WMV containers rely heavily on index metadata; damaged indexes often need a full transcode instead of direct loading."
+            "ASF/WMV containers rely heavily on index metadata; damaged indexes often need a timestamp-rebuild remux or full transcode instead of direct loading."
         )
     elif "matroska" in format_name or "webm" in format_name or ext in {".mkv", ".webm"}:
         guidance.append(
             "Matroska/WebM files can carry multiple alternate video/audio programs; if one stream fails, the builder will prefer the strongest detected video stream but manual stream reloads may still help."
         )
-    elif "mov" in format_name or ext in {".mov", ".qt", ".m4v"}:
+    elif "mov" in format_name or ext in {".mov", ".qt", ".m4v", ".3gp", ".3g2"}:
         guidance.append(
-            "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode recovery is often needed when direct indexing is incomplete."
+            "QuickTime/MOV/3GP-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode or timestamp-rebuild recovery is often needed when direct indexing is incomplete."
         )
     elif "avi" in format_name or ext in {".avi", ".divx"}:
         guidance.append(
-            "AVI/DivX files often depend on legacy indexes; broken or missing index chunks can require a clean remux or transcode before timeline playback is reliable."
+            "AVI/DivX files often depend on legacy indexes; broken or missing index chunks can require a clean remux, timestamp rebuild, or transcode before timeline playback is reliable."
         )
     elif "mxf" in format_name or ext == ".mxf":
         guidance.append(
-            "MXF containers can expose multiple essence streams and metadata tracks; alternate-stream retries or a clean editorial transcode may be required."
+            "MXF containers can expose multiple essence streams and metadata tracks; alternate-stream retries, timestamp rebuild, or a clean editorial transcode may be required."
         )
     elif ext == ".dv" or video_codec in {"dvvideo", "dnxhd"}:
         guidance.append(
@@ -1019,6 +1023,14 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
     elif ext in {".rm", ".rmvb"} or "rm" in format_name or "realmedia" in format_name:
         guidance.append(
             "RealMedia / RMVB support is best-effort; older RealMedia files often require a clean remux or transcode before frame-accurate loading will work."
+        )
+    elif "flv" in format_name or ext in {".flv", ".f4v"}:
+        guidance.append(
+            "FLV/F4V containers can carry brittle keyframe indexes or timestamp jumps; remux, timestamp rebuild, or a full transcode may be required before the clip loads reliably."
+        )
+    elif "ogg" in format_name or "ogv" in format_name or ext in {".ogg", ".ogv"}:
+        guidance.append(
+            "Ogg/OGV containers may be chained or carry granule-position timing quirks; alternate-stream retries, timestamp rebuild, or a clean transcode may be required."
         )
     if bool(details.get("selected_video_attached_pic")):
         guidance.append(
@@ -1097,6 +1109,21 @@ def _video_codec_guidance(path: str, details: Optional[dict[str, object]]) -> li
             f"The currently preferred audio track looks like {'/'.join(labels)} audio; if the wrong track was chosen, reload with another audio stream before exporting."
         )
     return guidance
+
+
+def _timestamp_rebuild_needed(path: str, details: Optional[dict[str, object]]) -> bool:
+    ext = Path(path).suffix.lower()
+    format_name = str(details.get("format_name") or "").lower() if details else ""
+    return (
+        "mpegts" in format_name
+        or "asf" in format_name
+        or "avi" in format_name
+        or "mov" in format_name
+        or "mxf" in format_name
+        or "flv" in format_name
+        or "ogg" in format_name
+        or ext in {".ts", ".m2ts", ".mts", ".asf", ".wmv", ".avi", ".divx", ".mov", ".qt", ".m4v", ".3gp", ".3g2", ".mxf", ".flv", ".f4v", ".ogv", ".ogg"}
+    )
 
 
 def _ffmpeg_stream_maps(details: Optional[dict[str, object]]) -> list[str]:
@@ -1264,6 +1291,7 @@ def _remux_video_source(
     details: Optional[dict[str, object]] = None,
     *,
     include_audio: bool = True,
+    rebuild_timestamps: bool = False,
 ) -> Optional[str]:
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
@@ -1283,7 +1311,7 @@ def _remux_video_source(
                 "-v",
                 "error",
                 "-fflags",
-                "+discardcorrupt",
+                "+genpts+igndts+discardcorrupt" if rebuild_timestamps else "+discardcorrupt",
                 "-err_detect",
                 "ignore_err",
                 *_FFMPEG_DEEP_ANALYSIS_ARGS,
@@ -1294,6 +1322,7 @@ def _remux_video_source(
                 "-sn",
                 "-c",
                 "copy",
+                *(["-avoid_negative_ts", "make_zero", "-muxpreload", "0", "-muxdelay", "0"] if rebuild_timestamps else []),
                 remux_path,
             ],
             stdout=subprocess.DEVNULL,
@@ -1346,7 +1375,7 @@ def _extract_visual_still_frame(path: str, details: Optional[dict[str, object]] 
                 "-v",
                 "error",
                 "-fflags",
-                "+discardcorrupt",
+                "+genpts+igndts+discardcorrupt" if rebuild_timestamps else "+discardcorrupt",
                 "-err_detect",
                 "ignore_err",
                 *_FFMPEG_DEEP_ANALYSIS_ARGS,
@@ -1383,6 +1412,7 @@ def _transcode_video_source(
     details: Optional[dict[str, object]] = None,
     *,
     include_audio: bool = True,
+    rebuild_timestamps: bool = False,
 ) -> Optional[str]:
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
@@ -1420,6 +1450,7 @@ def _transcode_video_source(
                 "-crf",
                 "20",
                 *(["-an"] if not include_audio else ["-c:a", "aac", "-b:a", "160k"]),
+                *(["-avoid_negative_ts", "make_zero"] if rebuild_timestamps else []),
                 transcode_path,
             ],
             stdout=subprocess.DEVNULL,
@@ -1542,6 +1573,50 @@ def _attempt_video_recovery(
                     if note_parts:
                         strategy += f" ({'; '.join(note_parts)})"
                     return transcode_path, strategy, candidate
+            if _timestamp_rebuild_needed(path, candidate):
+                remux_path = _remux_video_source(
+                    path,
+                    candidate,
+                    include_audio=include_audio,
+                    rebuild_timestamps=True,
+                )
+                if remux_path:
+                    strategy = "temporary ffmpeg timestamp-rebuild remux fallback active"
+                    note_parts = []
+                    selection_note = _recovery_selection_note(
+                        candidate,
+                        primary_video_index=primary_video_index,
+                        primary_audio_index=primary_audio_index,
+                    )
+                    if selection_note:
+                        note_parts.append(selection_note)
+                    note_parts.append("timestamp/index rebuild")
+                    if mode_label:
+                        note_parts.append(mode_label)
+                    strategy += f" ({'; '.join(note_parts)})"
+                    return remux_path, strategy, candidate
+                if candidate and bool(candidate.get("has_video")):
+                    transcode_path = _transcode_video_source(
+                        path,
+                        candidate,
+                        include_audio=include_audio,
+                        rebuild_timestamps=True,
+                    )
+                    if transcode_path:
+                        strategy = "temporary ffmpeg timestamp-rebuild transcode fallback active"
+                        note_parts = []
+                        selection_note = _recovery_selection_note(
+                            candidate,
+                            primary_video_index=primary_video_index,
+                            primary_audio_index=primary_audio_index,
+                        )
+                        if selection_note:
+                            note_parts.append(selection_note)
+                        note_parts.append("timestamp/index rebuild")
+                        if mode_label:
+                            note_parts.append(mode_label)
+                        strategy += f" ({'; '.join(note_parts)})"
+                        return transcode_path, strategy, candidate
     return None, "", details
 
 
@@ -1553,6 +1628,7 @@ def _video_capability_summary() -> str:
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
                 "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, cue/bin sidecar retries for disc layouts, audio-drop retries for broken source audio, and manual video/audio stream pickers for multi-stream containers. "
+                "When timestamp/index metadata is damaged, recovery can also retry timestamp-rebuild remux/transcode passes for TS/WMV/AVI/MOV/MXF/FLV/Ogg-style containers. "
                 "Recovery also retries alternate audio tracks when multi-audio containers expose a bad default program. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
@@ -1578,7 +1654,7 @@ def _video_capability_details() -> str:
             "",
             "Current behavior:",
             "• Standard video import and MP4 export are available.",
-            "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, retry matching cue/bin sidecars, or salvage a still frame when ffmpeg can expose usable video data.",
+            "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, rebuild damaged timestamps/indexes, retry matching cue/bin sidecars, or salvage a still frame when ffmpeg can expose usable video data.",
             "• Multipart/segmented sources like clip.part1.vob + clip.part2.vob or movie.vob.001 + movie.vob.002 can also be concat-repaired automatically when all parts are present together.",
             "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from manually chosen video and audio streams.",
             "• Audio-only containers still cannot be added as timeline video clips.",
@@ -1613,6 +1689,8 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
         return "quicktime metadata"
     if "asf/wmv containers rely heavily on index metadata" in lower or "avi/divx files often depend on legacy indexes" in lower:
         return "legacy index container"
+    if "flv/f4v containers can carry brittle keyframe indexes or timestamp jumps" in lower or "ogg/ogv containers may be chained or carry granule-position timing quirks" in lower:
+        return "timestamp-sensitive container"
     if "realmedia / rmvb support is best-effort" in lower:
         return "realmedia container"
     if "multiple video streams were detected" in lower or "preferred-stream=" in lower:
@@ -1661,6 +1739,7 @@ def _video_failure_guidance(category: str) -> str:
         "matroska/webm program": "Matroska/WebM containers may carry alternate video/audio programs or attachments; if the preferred stream still fails, retry a different stream selection or remux only the needed streams.",
         "quicktime metadata": "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata that direct indexing can miss; a clean remux or transcode is often the safest fallback.",
         "legacy index container": "Legacy AVI/DivX/ASF/WMV indexes are brittle; when the index is damaged or incomplete, rebuilding the file with ffmpeg is usually more reliable than direct loading.",
+        "timestamp-sensitive container": "This container family often fails because of timestamp jumps, missing granule positions, or brittle keyframe indexes; timestamp-rebuild remux/transcode passes are usually safer than direct indexing.",
         "realmedia container": "Older RealMedia/RMVB files are best handled with a full ffmpeg transcode because direct indexing and partial-stream recovery are often unreliable.",
         "disc sidecar": "BIN/CUE-style disc images often need their matching companion metadata files kept together so the track layout can be recovered correctly.",
         "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream and the Selected Stream panel can retry a manual override, but a manual ffmpeg remux may still be needed.",
@@ -1687,6 +1766,10 @@ def _video_recovery_bucket(note: str) -> str:
     lower = note.lower()
     if "still-frame" in lower or "single-frame" in lower:
         return "still-frame"
+    if "timestamp-rebuild" in lower and "transcode" in lower:
+        return "timestamp-transcode"
+    if "timestamp-rebuild" in lower and "remux" in lower:
+        return "timestamp-remux"
     if "transcode" in lower:
         return "transcode"
     if "remux" in lower:
@@ -4592,94 +4675,128 @@ class VideoToolDialog(QDialog):
         out_path: str,
         clip_snapshot: list[dict[str, object]],
         output_fps: float,
-    ) -> None:
+    ) -> list[str]:
         ffmpeg_exe = _get_ffmpeg_exe()
         if not ffmpeg_exe:
             raise RuntimeError("FFmpeg is unavailable for MP4 audio export.")
-
-        cmd = [ffmpeg_exe, "-y", "-v", "error", "-i", silent_video_path]
-        filter_parts: list[str] = []
-        concat_inputs: list[str] = []
-        input_index = 1
         needs_silence = any(
             max(0, int(clip["active_frames"])) > 0
             and not (clip["clip_type"] == "video" and clip["has_audio"])
             for clip in clip_snapshot
         )
-        silence_input_index = None
-        if needs_silence:
-            cmd.extend([
-                "-f", "lavfi",
-                "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-            ])
-            silence_input_index = input_index
-            input_index += 1
-        for clip_idx, clip in enumerate(clip_snapshot):
-            active_frames = max(0, int(clip["active_frames"]))
-            if active_frames <= 0:
-                continue
-            output_duration = float(clip["timeline_seconds"])
-            label = f"a{clip_idx}"
-            if clip["clip_type"] == "video" and clip["has_audio"]:
-                cmd.extend(["-i", str(clip["path"])])
-                trim_start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
-                trim_end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
-                source_duration = max(0.001, trim_end - trim_start)
-                duration_ratio = max(0.001, output_duration) / source_duration
-                tempo_factor = max(0.01, 1.0 / duration_ratio)
-                filters = [
-                    f"[{input_index}:a]atrim=start={trim_start:.6f}:end={trim_end:.6f}",
-                    "asetpts=PTS-STARTPTS",
-                    *_build_atempo_filters(tempo_factor),
-                ]
-                filter_parts.append(",".join(filters) + f"[{label}]")
-            else:
-                if silence_input_index is None:
-                    raise RuntimeError("FFmpeg silence source is unavailable for MP4 audio export.")
-                filter_parts.append(
-                    f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"
-                )
-            concat_inputs.append(f"[{label}]")
-            if clip["clip_type"] == "video" and clip["has_audio"]:
+
+        def _build_mux_command(*, normalize_audio: bool) -> list[str]:
+            cmd = [ffmpeg_exe, "-y", "-v", "error", "-i", silent_video_path]
+            filter_parts: list[str] = []
+            concat_inputs: list[str] = []
+            input_index = 1
+            silence_input_index = None
+            if needs_silence:
+                cmd.extend([
+                    "-f", "lavfi",
+                    "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                ])
+                silence_input_index = input_index
                 input_index += 1
+            normalize_filters = [
+                "aresample=async=1:first_pts=0:min_hard_comp=0.100",
+                "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp",
+            ] if normalize_audio else []
+            for clip_idx, clip in enumerate(clip_snapshot):
+                active_frames = max(0, int(clip["active_frames"]))
+                if active_frames <= 0:
+                    continue
+                output_duration = float(clip["timeline_seconds"])
+                label = f"a{clip_idx}"
+                if clip["clip_type"] == "video" and clip["has_audio"]:
+                    cmd.extend(["-i", str(clip["path"])])
+                    trim_start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
+                    trim_end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
+                    source_duration = max(0.001, trim_end - trim_start)
+                    duration_ratio = max(0.001, output_duration) / source_duration
+                    tempo_factor = max(0.01, 1.0 / duration_ratio)
+                    filters = [
+                        f"[{input_index}:a]atrim=start={trim_start:.6f}:end={trim_end:.6f}",
+                        "asetpts=PTS-STARTPTS",
+                        *_build_atempo_filters(tempo_factor),
+                        *normalize_filters,
+                    ]
+                    filter_parts.append(",".join(filters) + f"[{label}]")
+                else:
+                    if silence_input_index is None:
+                        raise RuntimeError("FFmpeg silence source is unavailable for MP4 audio export.")
+                    filters = [
+                        f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f}",
+                        "asetpts=PTS-STARTPTS",
+                        *normalize_filters,
+                    ]
+                    filter_parts.append(",".join(filters) + f"[{label}]")
+                concat_inputs.append(f"[{label}]")
+                if clip["clip_type"] == "video" and clip["has_audio"]:
+                    input_index += 1
 
-        if not concat_inputs:
-            raise RuntimeError("No audio segments were available for MP4 export.")
+            if not concat_inputs:
+                raise RuntimeError("No audio segments were available for MP4 export.")
 
-        filter_parts.append(
-            "".join(concat_inputs) + f"concat=n={len(concat_inputs)}:v=0:a=1[a_concat]"
-        )
-        volume = max(0.0, self._audio_volume_slider.value() / 100.0)
-        output_label = "[a_concat]"
-        if abs(volume - 1.0) > 0.0001:
-            filter_parts.append(f"[a_concat]volume={volume:.3f}[a_out]")
-            output_label = "[a_out]"
-        total_duration = sum(max(0.0, float(clip["timeline_seconds"])) for clip in clip_snapshot)
-        if total_duration > 0:
             filter_parts.append(
-                f"{output_label}apad=whole_dur={total_duration:.6f},atrim=end={total_duration:.6f}[a_final]"
+                "".join(concat_inputs) + f"concat=n={len(concat_inputs)}:v=0:a=1[a_concat]"
             )
-            output_label = "[a_final]"
+            volume = max(0.0, self._audio_volume_slider.value() / 100.0)
+            output_label = "[a_concat]"
+            if abs(volume - 1.0) > 0.0001:
+                filter_parts.append(f"[a_concat]volume={volume:.3f}[a_out]")
+                output_label = "[a_out]"
+            if normalize_audio:
+                filter_parts.append(
+                    f"{output_label}aresample=async=1:first_pts=0:min_hard_comp=0.100,"
+                    "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp[a_norm]"
+                )
+                output_label = "[a_norm]"
+            total_duration = sum(max(0.0, float(clip["timeline_seconds"])) for clip in clip_snapshot)
+            if total_duration > 0:
+                filter_parts.append(
+                    f"{output_label}apad=whole_dur={total_duration:.6f},atrim=end={total_duration:.6f}[a_final]"
+                )
+                output_label = "[a_final]"
 
-        cmd.extend([
-            "-filter_complex", ";".join(filter_parts),
-            "-map", "0:v:0",
-            "-map", output_label,
-            "-c:v", "copy",
-            "-c:a", "aac",
-            out_path,
-        ])
+            cmd.extend([
+                "-filter_complex", ";".join(filter_parts),
+                "-map", "0:v:0",
+                "-map", output_label,
+                "-c:v", "copy",
+                "-c:a", "aac",
+                out_path,
+            ])
+            return cmd
 
+        first_cmd = _build_mux_command(normalize_audio=False)
         result = subprocess.run(
-            cmd,
+            first_cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             check=False,
             text=True,
             timeout=180,
         )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "FFmpeg audio mux failed.")
+        if result.returncode == 0:
+            return []
+        first_error = result.stderr.strip() or "FFmpeg audio mux failed."
+        second_cmd = _build_mux_command(normalize_audio=True)
+        retry_result = subprocess.run(
+            second_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=180,
+        )
+        if retry_result.returncode == 0:
+            return [
+                "audio-mux-retry=normalized",
+                f"audio-mux-first-error={first_error}",
+            ]
+        second_error = retry_result.stderr.strip() or "FFmpeg normalized audio mux failed."
+        raise RuntimeError(f"{first_error} | normalized retry failed: {second_error}")
 
     def _export(self) -> None:
         output_fps = max(0.1, float(self._fps_slider.value()))
@@ -4895,7 +5012,13 @@ class VideoToolDialog(QDialog):
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
                 try:
-                    self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps)
+                    mux_notes = self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps) or []
+                    if mux_notes:
+                        history_extra_notes.extend(mux_notes)
+                        if any(str(note).startswith("audio-mux-retry=normalized") for note in mux_notes):
+                            completion_note = (
+                                "Saved after retrying MP4 audio muxing with normalized stereo/48 kHz audio."
+                            )
                     if temp_output_path is not None:
                         Path(temp_output_path).replace(out_path)
                         temp_output_path = None

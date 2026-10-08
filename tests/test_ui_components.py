@@ -4052,6 +4052,69 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(transcode_calls, [(True, 9)])
         self.assertIn("alternate audio #5", note)
 
+    def test_attempt_video_recovery_retries_timestamp_rebuild_for_transport_streams(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "has_video": True,
+            "has_audio": True,
+            "format_name": "mpegts",
+            "video_stream_index": 0,
+            "audio_stream_index": 1,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+        }
+        remux_calls = []
+        transcode_calls = []
+
+        def _fake_remux(path, candidate=None, include_audio=True, rebuild_timestamps=False):
+            remux_calls.append((include_audio, rebuild_timestamps))
+            if include_audio and rebuild_timestamps:
+                return "/tmp/recovered-reindexed.mkv"
+            return None
+
+        def _fake_transcode(path, candidate=None, include_audio=True, rebuild_timestamps=False):
+            transcode_calls.append((include_audio, rebuild_timestamps))
+            return None
+
+        with patch.object(vt, "_remux_video_source", side_effect=_fake_remux):
+            with patch.object(vt, "_transcode_video_source", side_effect=_fake_transcode):
+                recovered_path, note, recovered_probe = vt._attempt_video_recovery("/tmp/capture.ts", details)
+        self.assertEqual(recovered_path, "/tmp/recovered-reindexed.mkv")
+        self.assertEqual(recovered_probe, details)
+        self.assertEqual(remux_calls, [(True, False), (True, True)])
+        self.assertEqual(transcode_calls, [(True, False)])
+        self.assertIn("timestamp-rebuild remux fallback", note)
+        self.assertIn("timestamp/index rebuild", note)
+
+    def test_video_load_failure_hint_mentions_timestamp_rebuild_for_transport_streams(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "has_video": True,
+            "has_audio": True,
+            "format_name": "mpegts",
+            "video_stream_index": 0,
+            "audio_stream_index": 1,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/capture.ts")
+        self.assertIn("timestamp-rebuild", hint)
+        self.assertIn("broken timestamps or damaged index metadata", hint)
+
     def test_audio_stream_choice_rank_prefers_default_original_non_commentary_tracks(self):
         try:
             from src.ui import video_tool as vt
@@ -5085,6 +5148,122 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 self.assertIn("audio-silent-still-sections=1", entry["notes"])
                 self.assertIn("audio-dropped-recovery-clips=1", entry["notes"])
                 self.assertIn("audio-manual-stream-overrides=1", entry["notes"])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_mux_mp4_audio_retries_with_normalized_audio(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PyQt6.QtWidgets import QWidget
+
+        parent = QWidget()
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._audio_volume_slider.setValue(100)
+        clip_snapshot = [{
+            "active_frames": 10,
+            "timeline_seconds": 0.5,
+            "path": "/tmp/source-audio.ts",
+            "clip_type": "video",
+            "has_audio": True,
+            "trim_start": 0,
+            "trim_end": 9,
+            "clip_fps": 20.0,
+        }]
+        commands = []
+
+        def _fake_run(cmd, **kwargs):
+            commands.append(cmd)
+            if len(commands) == 1:
+                return types.SimpleNamespace(returncode=1, stderr="Non-monotonic DTS")
+            return types.SimpleNamespace(returncode=0, stderr="")
+
+        try:
+            with patch.object(vt, "_get_ffmpeg_exe", return_value="/usr/bin/ffmpeg"):
+                with patch.object(vt.subprocess, "run", side_effect=_fake_run):
+                    notes = dialog._mux_mp4_audio("/tmp/silent.mp4", "/tmp/out.mp4", clip_snapshot, 20.0)
+            self.assertEqual(len(commands), 2)
+            self.assertNotIn("aresample=async=1:first_pts=0:min_hard_comp=0.100", " ".join(commands[0]))
+            self.assertIn("aresample=async=1:first_pts=0:min_hard_comp=0.100", " ".join(commands[1]))
+            self.assertIn("channel_layouts=stereo", " ".join(commands[1]))
+            self.assertIn("audio-mux-retry=normalized", notes)
+            self.assertIn("audio-mux-first-error=Non-monotonic DTS", notes)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_export_records_audio_mux_retry_notes(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def __init__(self, path):
+                self._path = path
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                with open(self._path, "wb") as fh:
+                    fh.write(b"rendered-mp4")
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            "active_frames": 1,
+            "timeline_seconds": 0.1,
+            "path": "/tmp/source.mp4",
+            "source_path": "/tmp/source.ts",
+            "clip_type": "video",
+            "has_audio": True,
+            "trim_start": 0,
+            "trim_end": 0,
+            "clip_fps": 10.0,
+            "load_note": "",
+            "preferred_audio_stream_index": None,
+        }
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: True
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "normalized.mp4")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
+                        with patch.object(dialog, "_mux_mp4_audio", return_value=[
+                            "audio-mux-retry=normalized",
+                            "audio-mux-first-error=Non-monotonic DTS",
+                        ]):
+                            with patch.object(vt.QMessageBox, "information") as info_mock:
+                                dialog._export()
+                info_mock.assert_called_once()
+                self.assertIn("normalized stereo/48 kHz audio", info_mock.call_args.args[2])
+                self.assertEqual(len(settings._video_history), 1)
+                entry = settings._video_history[0]
+                self.assertIn("audio-mux-retry=normalized", entry["notes"])
+                self.assertIn("audio-mux-first-error=Non-monotonic DTS", entry["notes"])
+                self.assertEqual(entry["audio"], "kept")
         finally:
             dialog.close()
             dialog.deleteLater()
