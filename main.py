@@ -25,8 +25,11 @@ from pathlib import Path
 
 from src.core.runtime_validation import (
     execute_dds_manifest,
+    execute_dds_manifest_report,
     execute_disc_video_manifest,
+    execute_disc_video_manifest_report,
     execute_format_matrix_manifest,
+    execute_format_matrix_manifest_report,
     load_manifest_entries_from_env,
     manifest_grouped_entries,
     manifest_sample_limit_from_env,
@@ -1232,68 +1235,92 @@ def _emit_runtime_selftest_dump() -> int:
 
         disc_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST")
         if disc_manifest:
-            ok, detail = execute_disc_video_manifest(disc_manifest, vt, limit=manifest_limit)
-            _record_check("external_disc_video_manifest", ok, detail)
+            manifest_results = summary.setdefault("manifest_results", {})
+            if isinstance(manifest_results, dict):
+                disc_report = execute_disc_video_manifest_report(disc_manifest, vt, limit=manifest_limit)
+                manifest_results["disc_video"] = disc_report
+            else:
+                disc_report = {"ok": False, "detail": "manifest_results storage unavailable"}
+            _record_check("external_disc_video_manifest", bool(disc_report.get("ok")), str(disc_report.get("detail") or ""))
             if _env_truthy("ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"):
+                grouped_reports: dict[str, object] = {}
                 for suffix, label, grouped_entries in manifest_grouped_entries(
                     disc_manifest,
                     "platform",
                     "system",
                     "group",
                 ):
-                    group_ok, group_detail = execute_disc_video_manifest(
+                    group_report = execute_disc_video_manifest_report(
                         grouped_entries,
                         vt,
                         limit=manifest_limit,
                     )
+                    grouped_reports[suffix] = {"label": label, **group_report}
                     _record_check(
                         f"external_disc_video_manifest_{suffix}",
-                        group_ok,
-                        f"{label}: {group_detail}",
+                        bool(group_report.get("ok")),
+                        f"{label}: {group_report.get('detail') or ''}".rstrip(),
                     )
+                if isinstance(manifest_results, dict) and grouped_reports:
+                    manifest_results["disc_video_groups"] = grouped_reports
 
         dds_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DDS_MANIFEST")
         if dds_manifest:
-            ok, detail = execute_dds_manifest(dds_manifest, _load_dds, limit=manifest_limit)
-            _record_check("external_dds_manifest", ok, detail)
+            manifest_results = summary.setdefault("manifest_results", {})
+            if isinstance(manifest_results, dict):
+                dds_report = execute_dds_manifest_report(dds_manifest, _load_dds, limit=manifest_limit)
+                manifest_results["dds"] = dds_report
+            else:
+                dds_report = {"ok": False, "detail": "manifest_results storage unavailable"}
+            _record_check("external_dds_manifest", bool(dds_report.get("ok")), str(dds_report.get("detail") or ""))
             if _env_truthy("ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"):
+                grouped_reports: dict[str, object] = {}
                 for suffix, label, grouped_entries in manifest_grouped_entries(
                     dds_manifest,
                     "group",
                     "platform",
                     "family",
                 ):
-                    group_ok, group_detail = execute_dds_manifest(
+                    group_report = execute_dds_manifest_report(
                         grouped_entries,
                         _load_dds,
                         limit=manifest_limit,
                     )
+                    grouped_reports[suffix] = {"label": label, **group_report}
                     _record_check(
                         f"external_dds_manifest_{suffix}",
-                        group_ok,
-                        f"{label}: {group_detail}",
+                        bool(group_report.get("ok")),
+                        f"{label}: {group_report.get('detail') or ''}".rstrip(),
                     )
+                if isinstance(manifest_results, dict) and grouped_reports:
+                    manifest_results["dds_groups"] = grouped_reports
 
         format_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST")
         if format_manifest:
-            ok, detail = execute_format_matrix_manifest(
-                format_manifest,
-                convert_file=convert_file,
-                load_dds=_load_dds,
-                image_module=Image,
-                output_formats=SUPPORTED_OUTPUT_FORMATS,
-                tmpdir=tmpdir,
-                limit=manifest_limit,
-            )
-            _record_check("external_format_matrix_manifest", ok, detail)
+            manifest_results = summary.setdefault("manifest_results", {})
+            if isinstance(manifest_results, dict):
+                format_report = execute_format_matrix_manifest_report(
+                    format_manifest,
+                    convert_file=convert_file,
+                    load_dds=_load_dds,
+                    image_module=Image,
+                    output_formats=SUPPORTED_OUTPUT_FORMATS,
+                    tmpdir=tmpdir,
+                    limit=manifest_limit,
+                )
+                manifest_results["format_matrix"] = format_report
+            else:
+                format_report = {"ok": False, "detail": "manifest_results storage unavailable"}
+            _record_check("external_format_matrix_manifest", bool(format_report.get("ok")), str(format_report.get("detail") or ""))
             if _env_truthy("ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"):
+                grouped_reports: dict[str, object] = {}
                 for suffix, label, grouped_entries in manifest_grouped_entries(
                     format_manifest,
                     "target_format",
                     "output_format",
                     "format",
                 ):
-                    group_ok, group_detail = execute_format_matrix_manifest(
+                    group_report = execute_format_matrix_manifest_report(
                         grouped_entries,
                         convert_file=convert_file,
                         load_dds=_load_dds,
@@ -1302,11 +1329,14 @@ def _emit_runtime_selftest_dump() -> int:
                         tmpdir=tmpdir,
                         limit=manifest_limit,
                     )
+                    grouped_reports[suffix] = {"label": label, **group_report}
                     _record_check(
                         f"external_format_matrix_manifest_{suffix}",
-                        group_ok,
-                        f"{label}: {group_detail}",
+                        bool(group_report.get("ok")),
+                        f"{label}: {group_report.get('detail') or ''}".rstrip(),
                     )
+                if isinstance(manifest_results, dict) and grouped_reports:
+                    manifest_results["format_matrix_groups"] = grouped_reports
 
     peak_rss_mb = _runtime_selftest_peak_rss_mb()
     if peak_rss_mb is not None:

@@ -757,16 +757,104 @@ def materialize_manifest_entries(
     ]
 
 
-def execute_disc_video_manifest(
+def _manifest_sample_stub(
+    entry: dict[str, object],
+    sample_path: str,
+    *,
+    label: str = "",
+    expected: str = "",
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "label": label or _entry_label(entry, sample_path),
+        "path": sample_path,
+        "sample_id": str(entry.get("sample_id") or "").strip(),
+        "expected": expected or str(entry.get("expect") or "").strip().lower(),
+    }
+    group = str(entry.get("group") or entry.get("family") or "").strip()
+    if group:
+        result["group"] = group
+    platform = str(entry.get("platform") or entry.get("system") or "").strip()
+    if platform:
+        result["platform"] = platform
+    return result
+
+
+def _disc_manifest_report_detail(report: dict[str, object]) -> str:
+    group_counts = dict(report.get("group_counts") or {})
+    platform_counts = dict(report.get("platform_counts") or {})
+    recovery_counts = dict(report.get("recovery_counts") or {})
+    detail = (
+        f"entries={int(report.get('exercised') or 0)} "
+        f"loaded={int(report.get('loaded') or 0)} "
+        f"expected_failures={int(report.get('expected_failures') or 0)} "
+        f"explained={int(report.get('explained') or 0)} "
+        f"missing={int(report.get('missing') or 0)}"
+    )
+    if group_counts:
+        detail += " groups=" + ",".join(f"{name}:{count}" for name, count in sorted(group_counts.items()))
+    if platform_counts:
+        detail += " platforms=" + ",".join(f"{name}:{count}" for name, count in sorted(platform_counts.items()))
+    if recovery_counts:
+        detail += " recoveries=" + ",".join(f"{name}:{count}" for name, count in sorted(recovery_counts.items()))
+    return detail
+
+
+def _dds_manifest_report_detail(report: dict[str, object]) -> str:
+    group_counts = dict(report.get("group_counts") or {})
+    detail = (
+        f"entries={int(report.get('exercised') or 0)} "
+        f"decoded={int(report.get('decoded') or 0)} "
+        f"expected_failures={int(report.get('expected_failures') or 0)} "
+        f"missing={int(report.get('missing') or 0)}"
+    )
+    if group_counts:
+        detail += " groups=" + ",".join(f"{name}:{count}" for name, count in sorted(group_counts.items()))
+    return detail
+
+
+def _format_manifest_report_detail(report: dict[str, object]) -> str:
+    format_counts = dict(report.get("format_counts") or {})
+    detail = (
+        f"entries={int(report.get('exercised') or 0)} "
+        f"converted={int(report.get('converted') or 0)} "
+        f"expected_failures={int(report.get('expected_failures') or 0)} "
+        f"missing={int(report.get('missing') or 0)}"
+    )
+    if format_counts:
+        detail += " formats=" + ",".join(f"{name}:{count}" for name, count in sorted(format_counts.items()))
+    return detail
+
+
+def execute_disc_video_manifest_report(
     entries: list[dict[str, object]],
     video_tool,
     *,
     limit: int = 0,
-) -> tuple[bool, str]:
-    exercised = loaded = explained = expected_failures = unavailable = 0
-    platform_counts: dict[str, int] = {}
-    group_counts: dict[str, int] = {}
-    recovery_counts: dict[str, int] = {}
+) -> dict[str, object]:
+    report: dict[str, object] = {
+        "kind": "disc_video",
+        "ok": True,
+        "detail": "",
+        "exercised": 0,
+        "loaded": 0,
+        "explained": 0,
+        "expected_failures": 0,
+        "missing": 0,
+        "group_counts": {},
+        "platform_counts": {},
+        "recovery_counts": {},
+        "sample_results": [],
+    }
+
+    def _fail(result: dict[str, object], stage: str, detail: str) -> dict[str, object]:
+        result["status"] = "failed"
+        result["stage"] = stage
+        result["detail"] = detail
+        report["sample_results"].append(result)
+        report["ok"] = False
+        report["detail"] = detail
+        return report
+
     for raw_entry in _limited_entries(entries, limit):
         try:
             entry = materialize_manifest_entry(
@@ -775,18 +863,23 @@ def execute_disc_video_manifest(
                 allow_download=manifest_downloads_enabled(),
             )
         except Exception as exc:
-            sample_label = Path(_entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample").name
-            return False, f"{sample_label}: manifest materialization failed: {exc}"
+            sample_path = _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or ""
+            result = _manifest_sample_stub(raw_entry, sample_path, label=Path(sample_path or "sample").name)
+            return _fail(result, "materialize", f"manifest materialization failed: {exc}")
         sample_path = _entry_source_path(entry)
+        expected = str(entry.get("expect") or "load_or_explain").strip().lower()
+        sample_label = _entry_label(entry, sample_path or _entry_source_path(raw_entry) or "sample")
+        result = _manifest_sample_stub(entry, sample_path, label=sample_label, expected=expected)
         if not sample_path or not os.path.isfile(sample_path):
             if _entry_bool(entry, "required"):
-                return False, f"{Path(sample_path or _entry_source_path(raw_entry) or 'sample').name}: required sample missing"
-            unavailable += 1
+                return _fail(result, "missing", "required sample missing")
+            result["status"] = "missing"
+            result["detail"] = "optional sample missing"
+            report["sample_results"].append(result)
+            report["missing"] = int(report.get("missing") or 0) + 1
             continue
         preferred_video = entry.get("preferred_video_stream_index")
         preferred_audio = entry.get("preferred_audio_stream_index")
-        expected = str(entry.get("expect") or "load_or_explain").strip().lower()
-        sample_label = _entry_label(entry, sample_path)
         probe = None
         probe_loader = getattr(video_tool, "_probe_media_details", None)
         if callable(probe_loader):
@@ -805,28 +898,36 @@ def execute_disc_video_manifest(
             preferred_video_stream_index=preferred_video,
             preferred_audio_stream_index=preferred_audio,
         )
-        exercised += 1
+        report["exercised"] = int(report.get("exercised") or 0) + 1
         platform = str(entry.get("platform") or entry.get("system") or "").strip()
         if platform:
+            platform_counts = dict(report.get("platform_counts") or {})
             platform_counts[platform] = platform_counts.get(platform, 0) + 1
+            report["platform_counts"] = platform_counts
         group = _disc_manifest_group(entry)
         if group:
+            group_counts = dict(report.get("group_counts") or {})
             group_counts[group] = group_counts.get(group, 0) + 1
+            report["group_counts"] = group_counts
         if expected == "load":
             if clip is None:
-                return False, f"{sample_label}: expected load, got failure hint: {hint}"
+                return _fail(result, "load", f"expected load, got failure hint: {hint}")
         elif expected == "fail":
             if clip is not None:
                 try:
                     clip.close()
                 finally:
-                    return False, f"{sample_label}: expected failure, but clip loaded"
-            expected_failures += 1
+                    return _fail(result, "load", "expected failure, but clip loaded")
+            result["status"] = "expected_failure"
+            result["detail"] = hint or "expected failure"
+            report["sample_results"].append(result)
+            report["expected_failures"] = int(report.get("expected_failures") or 0) + 1
+            continue
         elif clip is None and not str(hint).strip():
-            return False, f"{sample_label}: expected load_or_explain, but no clip or hint was produced"
+            return _fail(result, "hint", "expected load_or_explain, but no clip or hint was produced")
         for token in _entry_tokens(entry, "hint_contains"):
             if token not in hint:
-                return False, f"{sample_label}: missing required hint token: {token}"
+                return _fail(result, "hint", f"missing required hint token: {token}")
         if probe is not None:
             expected_probe_size = _entry_size(entry, "expect_probe_frame_size")
             if expected_probe_size is not None:
@@ -835,9 +936,7 @@ def execute_disc_video_manifest(
                     max(0, int(probe.get("height") or 0)),
                 )
                 if actual_probe_size != expected_probe_size:
-                    return False, (
-                        f"{sample_label}: expected probed size {expected_probe_size}, got {actual_probe_size}"
-                    )
+                    return _fail(result, "probe", f"expected probed size {expected_probe_size}, got {actual_probe_size}")
             for key, label in (
                 ("expect_video_stream_count", "video stream count"),
                 ("expect_audio_stream_count", "audio stream count"),
@@ -855,7 +954,7 @@ def execute_disc_video_manifest(
                 }[key]
                 actual_value = _entry_int(probe, probe_key)
                 if actual_value != expected_value:
-                    return False, f"{sample_label}: expected {label} {expected_value}, got {actual_value}"
+                    return _fail(result, "probe", f"expected {label} {expected_value}, got {actual_value}")
             for key, probe_key, label in (
                 ("expect_probe_has_video", "has_video", "probe video"),
                 ("expect_probe_has_audio", "has_audio", "probe audio"),
@@ -865,7 +964,7 @@ def execute_disc_video_manifest(
                 expected_value = _entry_bool(entry, key)
                 actual_value = bool(probe.get(probe_key))
                 if actual_value != expected_value:
-                    return False, f"{sample_label}: expected {label}={expected_value}, got {actual_value}"
+                    return _fail(result, "probe", f"expected {label}={expected_value}, got {actual_value}")
             for key, probe_key, label in (
                 ("expect_format_name_contains", "format_name", "format"),
                 ("expect_video_codec_contains", "video_codec", "video codec"),
@@ -873,44 +972,36 @@ def execute_disc_video_manifest(
             ):
                 for token in _entry_tokens(entry, key):
                     if token.lower() not in str(probe.get(probe_key) or "").lower():
-                        return False, f"{sample_label}: missing expected {label} token: {token}"
+                        return _fail(result, "probe", f"missing expected {label} token: {token}")
         if clip is not None:
             try:
                 if clip.source_path != sample_path:
-                    return False, f"{sample_label}: loaded clip lost original source path"
+                    return _fail(result, "load", "loaded clip lost original source path")
                 min_frames = _entry_int(entry, "min_frames")
                 if min_frames is not None and int(getattr(clip, "total_frames", 0) or 0) < min_frames:
-                    return False, (
-                        f"{sample_label}: expected at least {min_frames} frames, got {getattr(clip, 'total_frames', 0)}"
-                    )
+                    return _fail(result, "load", f"expected at least {min_frames} frames, got {getattr(clip, 'total_frames', 0)}")
                 min_duration = _entry_float(entry, "min_duration_seconds")
                 if min_duration is not None:
                     fps = max(0.0, float(getattr(clip, "fps", 0.0) or 0.0))
                     duration = (float(getattr(clip, "total_frames", 0) or 0) / fps) if fps > 0 else 0.0
                     if duration + 1e-9 < min_duration:
-                        return False, (
-                            f"{sample_label}: expected duration >= {min_duration}s, got {duration:.3f}s"
-                        )
+                        return _fail(result, "load", f"expected duration >= {min_duration}s, got {duration:.3f}s")
                 if "expect_has_audio" in entry:
                     expected_audio = _entry_bool(entry, "expect_has_audio")
                     if bool(getattr(clip, "has_audio", False)) != expected_audio:
-                        return False, (
-                            f"{sample_label}: expected has_audio={expected_audio}, got {bool(getattr(clip, 'has_audio', False))}"
-                        )
+                        return _fail(result, "load", f"expected has_audio={expected_audio}, got {bool(getattr(clip, 'has_audio', False))}")
                 expected_size = _entry_size(entry, "expect_frame_size")
                 if expected_size is not None and tuple(getattr(clip, "frame_size", ()) or ()) != expected_size:
-                    return False, (
-                        f"{sample_label}: expected frame size {expected_size}, got {getattr(clip, 'frame_size', None)}"
-                    )
+                    return _fail(result, "load", f"expected frame size {expected_size}, got {getattr(clip, 'frame_size', None)}")
                 if _entry_bool(entry, "require_recovery") and not str(getattr(clip, "load_note", "") or "").strip():
-                    return False, f"{sample_label}: expected a recovery path, but clip loaded directly"
+                    return _fail(result, "load", "expected a recovery path, but clip loaded directly")
                 for key, source_attr, label in (
                     ("expect_load_note_contains", "load_note", "load note"),
                     ("expect_load_strategy_contains", "load_strategy", "load strategy"),
                 ):
                     for token in _entry_tokens(entry, key):
                         if token.lower() not in str(getattr(clip, source_attr, "") or "").lower():
-                            return False, f"{sample_label}: missing expected {label} token: {token}"
+                            return _fail(result, "load", f"missing expected {label} token: {token}")
                 for key, attr_name, label in (
                     ("expect_preferred_video_stream_index", "preferred_video_stream_index", "preferred video stream"),
                     ("expect_preferred_audio_stream_index", "preferred_audio_stream_index", "preferred audio stream"),
@@ -920,46 +1011,71 @@ def execute_disc_video_manifest(
                         continue
                     actual_value = _entry_int({key: getattr(clip, attr_name, None)}, key)
                     if actual_value != expected_value:
-                        return False, f"{sample_label}: expected {label} {expected_value}, got {actual_value}"
-                recovery_bucket = _disc_recovery_bucket(getattr(clip, "load_note", "") or "")
+                        return _fail(result, "load", f"expected {label} {expected_value}, got {actual_value}")
+                recovery_note = str(getattr(clip, "load_note", "") or "").strip()
+                recovery_bucket = _disc_recovery_bucket(recovery_note)
                 if recovery_bucket:
+                    recovery_counts = dict(report.get("recovery_counts") or {})
                     recovery_counts[recovery_bucket] = recovery_counts.get(recovery_bucket, 0) + 1
-                loaded += 1
+                    report["recovery_counts"] = recovery_counts
+                result["status"] = "loaded"
+                result["detail"] = f"frames={getattr(clip, 'total_frames', 0)} fps={float(getattr(clip, 'fps', 0.0) or 0.0):.3f}".rstrip("0").rstrip(".")
+                if recovery_note:
+                    result["load_note"] = recovery_note
+                report["sample_results"].append(result)
+                report["loaded"] = int(report.get("loaded") or 0) + 1
             finally:
                 clip.close()
-        elif expected != "fail":
-            explained += 1
-    if exercised == 0:
-        return False, f"no available samples matched manifest (missing={unavailable})"
-    group_summary = ""
-    if group_counts:
-        group_summary = " groups=" + ",".join(
-            f"{name}:{count}" for name, count in sorted(group_counts.items())
-        )
-    platform_summary = ""
-    if platform_counts:
-        platform_summary = " platforms=" + ",".join(
-            f"{name}:{count}" for name, count in sorted(platform_counts.items())
-        )
-    recovery_summary = ""
-    if recovery_counts:
-        recovery_summary = " recoveries=" + ",".join(
-            f"{name}:{count}" for name, count in sorted(recovery_counts.items())
-        )
-    return True, (
-        f"entries={exercised} loaded={loaded} expected_failures={expected_failures} "
-        f"explained={explained} missing={unavailable}{group_summary}{platform_summary}{recovery_summary}"
-    )
+        else:
+            result["status"] = "explained"
+            result["detail"] = hint
+            report["sample_results"].append(result)
+            report["explained"] = int(report.get("explained") or 0) + 1
+    if int(report.get("exercised") or 0) == 0:
+        report["ok"] = False
+        report["detail"] = f"no available samples matched manifest (missing={int(report.get('missing') or 0)})"
+        return report
+    report["detail"] = _disc_manifest_report_detail(report)
+    return report
 
 
-def execute_dds_manifest(
+def execute_disc_video_manifest(
+    entries: list[dict[str, object]],
+    video_tool,
+    *,
+    limit: int = 0,
+) -> tuple[bool, str]:
+    report = execute_disc_video_manifest_report(entries, video_tool, limit=limit)
+    return bool(report.get("ok")), str(report.get("detail") or "")
+
+
+def execute_dds_manifest_report(
     entries: list[dict[str, object]],
     load_dds_raw,
     *,
     limit: int = 0,
-) -> tuple[bool, str]:
-    exercised = decoded = failed_as_expected = unavailable = 0
-    sample_groups: dict[str, int] = {}
+) -> dict[str, object]:
+    report: dict[str, object] = {
+        "kind": "dds",
+        "ok": True,
+        "detail": "",
+        "exercised": 0,
+        "decoded": 0,
+        "expected_failures": 0,
+        "missing": 0,
+        "group_counts": {},
+        "sample_results": [],
+    }
+
+    def _fail(result: dict[str, object], stage: str, detail: str) -> dict[str, object]:
+        result["status"] = "failed"
+        result["stage"] = stage
+        result["detail"] = detail
+        report["sample_results"].append(result)
+        report["ok"] = False
+        report["detail"] = detail
+        return report
+
     for raw_entry in _limited_entries(entries, limit):
         try:
             entry = materialize_manifest_entry(
@@ -968,55 +1084,74 @@ def execute_dds_manifest(
                 allow_download=manifest_downloads_enabled(),
             )
         except Exception as exc:
-            sample_label = Path(_entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample").name
-            return False, f"{sample_label}: manifest materialization failed: {exc}"
+            sample_path = _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or ""
+            result = _manifest_sample_stub(raw_entry, sample_path, label=Path(sample_path or "sample").name)
+            return _fail(result, "materialize", f"manifest materialization failed: {exc}")
         sample_path = _entry_source_path(entry)
+        expected = str(entry.get("expect") or "load_or_fail_clearly").strip().lower()
+        sample_label = _entry_label(entry, sample_path or _entry_source_path(raw_entry) or "sample")
+        result = _manifest_sample_stub(entry, sample_path, label=sample_label, expected=expected)
         if not sample_path or not os.path.isfile(sample_path):
             if _entry_bool(entry, "required"):
-                return False, f"{Path(sample_path or _entry_source_path(raw_entry) or 'sample').name}: required sample missing"
-            unavailable += 1
+                return _fail(result, "missing", "required sample missing")
+            result["status"] = "missing"
+            result["detail"] = "optional sample missing"
+            report["sample_results"].append(result)
+            report["missing"] = int(report.get("missing") or 0) + 1
             continue
-        expected = str(entry.get("expect") or "load_or_fail_clearly").strip().lower()
-        sample_label = _entry_label(entry, sample_path)
-        exercised += 1
+        report["exercised"] = int(report.get("exercised") or 0) + 1
         group = str(entry.get("group") or entry.get("platform") or entry.get("family") or "").strip()
         if group:
-            sample_groups[group] = sample_groups.get(group, 0) + 1
+            group_counts = dict(report.get("group_counts") or {})
+            group_counts[group] = group_counts.get(group, 0) + 1
+            report["group_counts"] = group_counts
         try:
             img = load_dds_raw(sample_path)
         except Exception as exc:
             detail = str(exc)
             if expected == "load":
-                return False, f"{sample_label}: expected decode, got: {detail}"
+                return _fail(result, "decode", f"expected decode, got: {detail}")
             for token in _entry_tokens(entry, "detail_contains"):
                 if token.lower() not in detail.lower():
-                    return False, f"{sample_label}: missing DDS failure token: {token}"
-            failed_as_expected += 1
+                    return _fail(result, "decode", f"missing DDS failure token: {token}")
+            result["status"] = "expected_failure"
+            result["detail"] = detail
+            report["sample_results"].append(result)
+            report["expected_failures"] = int(report.get("expected_failures") or 0) + 1
             continue
         try:
             if img.size[0] <= 0 or img.size[1] <= 0:
-                return False, f"{sample_label}: decoded image had invalid size {img.size}"
+                return _fail(result, "decode", f"decoded image had invalid size {img.size}")
             if expected == "fail":
-                return False, f"{sample_label}: expected failure, but DDS decoded"
+                return _fail(result, "decode", "expected failure, but DDS decoded")
             expected_size = _entry_size(entry, "expect_size")
             if expected_size is not None and tuple(img.size) != expected_size:
-                return False, f"{sample_label}: expected decoded size {expected_size}, got {img.size}"
-            decoded += 1
+                return _fail(result, "decode", f"expected decoded size {expected_size}, got {img.size}")
+            result["status"] = "decoded"
+            result["detail"] = f"size={img.size}"
+            report["sample_results"].append(result)
+            report["decoded"] = int(report.get("decoded") or 0) + 1
         finally:
             img.close()
-    if exercised == 0:
-        return False, f"no available samples matched manifest (missing={unavailable})"
-    group_summary = ""
-    if sample_groups:
-        group_summary = " groups=" + ",".join(
-            f"{name}:{count}" for name, count in sorted(sample_groups.items())
-        )
-    return True, (
-        f"entries={exercised} decoded={decoded} expected_failures={failed_as_expected} missing={unavailable}{group_summary}"
-    )
+    if int(report.get("exercised") or 0) == 0:
+        report["ok"] = False
+        report["detail"] = f"no available samples matched manifest (missing={int(report.get('missing') or 0)})"
+        return report
+    report["detail"] = _dds_manifest_report_detail(report)
+    return report
 
 
-def execute_format_matrix_manifest(
+def execute_dds_manifest(
+    entries: list[dict[str, object]],
+    load_dds_raw,
+    *,
+    limit: int = 0,
+) -> tuple[bool, str]:
+    report = execute_dds_manifest_report(entries, load_dds_raw, limit=limit)
+    return bool(report.get("ok")), str(report.get("detail") or "")
+
+
+def execute_format_matrix_manifest_report(
     entries: list[dict[str, object]],
     *,
     convert_file,
@@ -1025,8 +1160,28 @@ def execute_format_matrix_manifest(
     output_formats: dict[str, str],
     tmpdir: str,
     limit: int = 0,
-) -> tuple[bool, str]:
-    exercised = converted = expected_failures = unavailable = 0
+) -> dict[str, object]:
+    report: dict[str, object] = {
+        "kind": "format_matrix",
+        "ok": True,
+        "detail": "",
+        "exercised": 0,
+        "converted": 0,
+        "expected_failures": 0,
+        "missing": 0,
+        "format_counts": {},
+        "sample_results": [],
+    }
+
+    def _fail(result: dict[str, object], stage: str, detail: str) -> dict[str, object]:
+        result["status"] = "failed"
+        result["stage"] = stage
+        result["detail"] = detail
+        report["sample_results"].append(result)
+        report["ok"] = False
+        report["detail"] = detail
+        return report
+
     for index, raw_entry in enumerate(_limited_entries(entries, limit), start=1):
         try:
             entry = materialize_manifest_entry(
@@ -1035,18 +1190,30 @@ def execute_format_matrix_manifest(
                 allow_download=manifest_downloads_enabled(),
             )
         except Exception as exc:
-            sample_label = Path(_entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample").name
-            return False, f"{sample_label}: manifest materialization failed: {exc}"
+            sample_path = _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or ""
+            result = _manifest_sample_stub(raw_entry, sample_path, label=Path(sample_path or "sample").name)
+            return _fail(result, "materialize", f"manifest materialization failed: {exc}")
         input_path = _entry_source_path(entry)
-        if not input_path or not os.path.isfile(input_path):
-            unavailable += 1
-            continue
         target_format = str(entry.get("target_format") or entry.get("output_format") or entry.get("format") or "").strip().upper()
+        result = _manifest_sample_stub(
+            entry,
+            input_path,
+            label=_entry_label(entry, input_path or _entry_source_path(raw_entry) or "sample"),
+            expected=str(entry.get("expect") or "convert").strip().lower(),
+        )
+        if target_format:
+            result["target_format"] = target_format
+        if not input_path or not os.path.isfile(input_path):
+            result["status"] = "missing"
+            result["detail"] = "sample missing"
+            report["sample_results"].append(result)
+            report["missing"] = int(report.get("missing") or 0) + 1
+            continue
         if not target_format:
-            return False, f"{Path(input_path).name}: manifest entry missing target_format/output_format"
+            return _fail(result, "manifest", f"{Path(input_path).name}: manifest entry missing target_format/output_format")
         output_ext = str(entry.get("output_ext") or output_formats.get(target_format) or "").strip()
         if not output_ext:
-            return False, f"{Path(input_path).name}: unsupported target format {target_format}"
+            return _fail(result, "manifest", f"{Path(input_path).name}: unsupported target format {target_format}")
         quality = int(entry.get("quality") or 90)
         keep_metadata = bool(entry.get("keep_metadata"))
         dds_variant = str(entry.get("dds_variant") or "auto")
@@ -1054,10 +1221,14 @@ def execute_format_matrix_manifest(
         if isinstance(resize, list):
             resize = tuple(resize)
         if resize is not None and not isinstance(resize, tuple):
-            return False, f"{Path(input_path).name}: invalid resize value {resize!r}"
+            return _fail(result, "manifest", f"{Path(input_path).name}: invalid resize value {resize!r}")
         expected = str(entry.get("expect") or "convert").strip().lower()
+        result["expected"] = expected
         output_path = os.path.join(tmpdir, f"matrix_{index}{output_ext}")
-        exercised += 1
+        report["exercised"] = int(report.get("exercised") or 0) + 1
+        format_counts = dict(report.get("format_counts") or {})
+        format_counts[target_format] = format_counts.get(target_format, 0) + 1
+        report["format_counts"] = format_counts
         try:
             result_path = convert_file(
                 input_path,
@@ -1073,28 +1244,59 @@ def execute_format_matrix_manifest(
             if expected == "fail":
                 for token in _entry_tokens(entry, "detail_contains"):
                     if token.lower() not in detail.lower():
-                        return False, f"{Path(input_path).name}: missing conversion failure token: {token}"
-                expected_failures += 1
+                        return _fail(result, "convert", f"{Path(input_path).name}: missing conversion failure token: {token}")
+                result["status"] = "expected_failure"
+                result["detail"] = detail
+                report["sample_results"].append(result)
+                report["expected_failures"] = int(report.get("expected_failures") or 0) + 1
                 continue
-            return False, f"{Path(input_path).name}: conversion to {target_format} failed: {detail}"
+            return _fail(result, "convert", f"{Path(input_path).name}: conversion to {target_format} failed: {detail}")
         if expected == "fail":
-            return False, f"{Path(input_path).name}: expected failure, but conversion to {target_format} succeeded"
+            return _fail(result, "convert", f"{Path(input_path).name}: expected failure, but conversion to {target_format} succeeded")
         result_text = str(result_path)
         if not os.path.isfile(result_text) or os.path.getsize(result_text) <= 0:
-            return False, f"{Path(input_path).name}: conversion to {target_format} produced no output file"
+            return _fail(result, "convert", f"{Path(input_path).name}: conversion to {target_format} produced no output file")
         if output_ext.lower() == ".dds":
             img = load_dds(result_text)
             try:
                 if img.size[0] <= 0 or img.size[1] <= 0:
-                    return False, f"{Path(input_path).name}: DDS output had invalid size {img.size}"
+                    return _fail(result, "verify", f"{Path(input_path).name}: DDS output had invalid size {img.size}")
             finally:
                 img.close()
         elif output_ext.lower() not in {".xnb", ".tim", ".svg"}:
             with image_module.open(result_text) as img:
                 img.load()
                 if img.size[0] <= 0 or img.size[1] <= 0:
-                    return False, f"{Path(input_path).name}: converted image had invalid size {img.size}"
-        converted += 1
-    if exercised == 0:
-        return False, f"no available samples matched manifest (missing={unavailable})"
-    return True, f"entries={exercised} converted={converted} expected_failures={expected_failures} missing={unavailable}"
+                    return _fail(result, "verify", f"{Path(input_path).name}: converted image had invalid size {img.size}")
+        result["status"] = "converted"
+        result["detail"] = f"output={target_format}"
+        report["sample_results"].append(result)
+        report["converted"] = int(report.get("converted") or 0) + 1
+    if int(report.get("exercised") or 0) == 0:
+        report["ok"] = False
+        report["detail"] = f"no available samples matched manifest (missing={int(report.get('missing') or 0)})"
+        return report
+    report["detail"] = _format_manifest_report_detail(report)
+    return report
+
+
+def execute_format_matrix_manifest(
+    entries: list[dict[str, object]],
+    *,
+    convert_file,
+    load_dds,
+    image_module,
+    output_formats: dict[str, str],
+    tmpdir: str,
+    limit: int = 0,
+) -> tuple[bool, str]:
+    report = execute_format_matrix_manifest_report(
+        entries,
+        convert_file=convert_file,
+        load_dds=load_dds,
+        image_module=image_module,
+        output_formats=output_formats,
+        tmpdir=tmpdir,
+        limit=limit,
+    )
+    return bool(report.get("ok")), str(report.get("detail") or "")

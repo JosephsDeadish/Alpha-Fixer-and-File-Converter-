@@ -988,9 +988,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     "failures": [],
                 }):
                     with patch.object(main, "load_manifest_entries_from_env", side_effect=_fake_manifest_env):
-                        with patch.object(main, "execute_disc_video_manifest", side_effect=lambda entries, *_args, **_kwargs: (True, f"disc={len(entries)}")):
-                            with patch.object(main, "execute_dds_manifest", side_effect=lambda entries, *_args, **_kwargs: (True, f"dds={len(entries)}")):
-                                with patch.object(main, "execute_format_matrix_manifest", side_effect=lambda entries, **_kwargs: (True, f"matrix={len(entries)}")):
+                        with patch.object(main, "execute_disc_video_manifest_report", side_effect=lambda entries, *_args, **_kwargs: {"ok": True, "detail": f"disc={len(entries)}", "sample_results": []}):
+                            with patch.object(main, "execute_dds_manifest_report", side_effect=lambda entries, *_args, **_kwargs: {"ok": True, "detail": f"dds={len(entries)}", "sample_results": []}):
+                                with patch.object(main, "execute_format_matrix_manifest_report", side_effect=lambda entries, **_kwargs: {"ok": True, "detail": f"matrix={len(entries)}", "sample_results": []}):
                                     with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
                                         tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
                                         tmpdir_cls.return_value.__exit__.return_value = False
@@ -1025,6 +1025,10 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("external_dds_manifest_array", checks)
         self.assertIn("external_format_matrix_manifest_png", checks)
         self.assertIn("external_format_matrix_manifest_dds", checks)
+        self.assertIn("manifest_results", parsed)
+        self.assertIn("disc_video_groups", parsed["manifest_results"])
+        self.assertIn("dds_groups", parsed["manifest_results"])
+        self.assertIn("format_matrix_groups", parsed["manifest_results"])
 
     def test_runtime_selftest_peak_rss_mb_uses_windows_fallback_when_available(self):
         import main
@@ -1132,7 +1136,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
             selftest_payloads = iter(
                 [
                     'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 120.0, "checks": {"generated_mp4_load": {"ok": true}}}\n',
-                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 132.5, "checks": {"generated_mp4_load": {"ok": true}}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 132.5, "checks": {"generated_mp4_load": {"ok": true}}, "manifest_results": {"disc_video": {"ok": true, "detail": "disc ok", "sample_results": []}}}\n',
                 ]
             )
 
@@ -1173,6 +1177,10 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_values"], [120.0, 132.5])
         self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_growth"], 12.5)
         self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_spread"], 12.5)
+        self.assertIn("manifest_inputs", payload)
+        self.assertFalse(payload["manifest_inputs"]["disc_video"]["provided"])
+        self.assertIn("runtime_selftest", payload)
+        self.assertEqual(payload["runtime_selftest"]["manifest_results"]["disc_video"]["detail"], "disc ok")
 
     def test_verify_packaged_app_repeat_selftest_runs_can_fail_rss_growth_limit(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
@@ -1972,9 +1980,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                             [{"path": "/tmp/sample.dds"}],
                             [{"input": "/tmp/sample.png", "target_format": "PNG"}],
                         ]
-                        with patch.object(main, "execute_disc_video_manifest", return_value=(True, "disc ok")):
-                            with patch.object(main, "execute_dds_manifest", return_value=(True, "dds ok")):
-                                with patch.object(main, "execute_format_matrix_manifest", return_value=(True, "matrix ok")):
+                        with patch.object(main, "execute_disc_video_manifest_report", return_value={"ok": True, "detail": "disc ok", "sample_results": []}):
+                            with patch.object(main, "execute_dds_manifest_report", return_value={"ok": True, "detail": "dds ok", "sample_results": []}):
+                                with patch.object(main, "execute_format_matrix_manifest_report", return_value={"ok": True, "detail": "matrix ok", "sample_results": []}):
                                     with patch.dict(
                                         sys.modules,
                                         {
@@ -1994,6 +2002,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("external_dds_manifest", parsed["checks"])
         self.assertIn("external_format_matrix_manifest", parsed["checks"])
         self.assertTrue(parsed["checks"]["external_disc_video_manifest"]["ok"])
+        self.assertEqual(parsed["manifest_results"]["disc_video"]["detail"], "disc ok")
+        self.assertEqual(parsed["manifest_results"]["dds"]["detail"], "dds ok")
+        self.assertEqual(parsed["manifest_results"]["format_matrix"]["detail"], "matrix ok")
 
     def test_main_window_runtime_readiness_helpers_surface_limits(self):
         _require_qt_gui(self)

@@ -163,6 +163,21 @@ def _manifest_group_requirement_checks(raw_manifest: str | None, base_check: str
     ]
 
 
+def _manifest_input_summary(raw_manifest: str | None, *group_keys: str) -> dict[str, object]:
+    entries = load_manifest_entries(raw_manifest or "")
+    summary: dict[str, object] = {
+        "provided": bool(raw_manifest),
+        "entry_count": len(entries),
+    }
+    grouped = manifest_grouped_entries(entries, *group_keys) if entries and group_keys else []
+    if grouped:
+        summary["groups"] = [
+            {"suffix": suffix, "label": label, "entry_count": len(group_entries)}
+            for suffix, label, group_entries in grouped
+        ]
+    return summary
+
+
 def _print_selftest_check_summary(checks: dict[str, object]) -> None:
     if not isinstance(checks, dict) or not checks:
         return
@@ -180,6 +195,56 @@ def _print_selftest_check_summary(checks: dict[str, object]) -> None:
         if detail:
             line += f" ({detail})"
         print(line)
+
+
+def _print_manifest_result_summary(manifest_results: dict[str, object]) -> None:
+    if not isinstance(manifest_results, dict) or not manifest_results:
+        return
+    print("Manifest result summary:")
+    for base_key, group_key in (
+        ("disc_video", "disc_video_groups"),
+        ("dds", "dds_groups"),
+        ("format_matrix", "format_matrix_groups"),
+    ):
+        report = manifest_results.get(base_key)
+        if isinstance(report, dict):
+            detail = str(report.get("detail") or "").strip()
+            line = f"  - {base_key}: {'ok' if report.get('ok') else 'failed'}"
+            if detail:
+                line += f" ({detail})"
+            print(line)
+        grouped = manifest_results.get(group_key)
+        if isinstance(grouped, dict):
+            for suffix in sorted(grouped):
+                group_report = grouped.get(suffix)
+                if not isinstance(group_report, dict):
+                    continue
+                label = str(group_report.get("label") or suffix)
+                detail = str(group_report.get("detail") or "").strip()
+                line = f"    * {label}: {'ok' if group_report.get('ok') else 'failed'}"
+                if detail:
+                    line += f" ({detail})"
+                print(line)
+    interesting: list[str] = []
+    for base_key in ("disc_video", "dds", "format_matrix"):
+        report = manifest_results.get(base_key)
+        if not isinstance(report, dict):
+            continue
+        for sample in report.get("sample_results") or []:
+            if not isinstance(sample, dict):
+                continue
+            status = str(sample.get("status") or "").strip().lower()
+            if status not in {"failed", "explained", "expected_failure"}:
+                continue
+            label = str(sample.get("label") or sample.get("path") or "sample").strip()
+            detail = str(sample.get("detail") or "").strip()
+            interesting.append(f"  - {base_key} [{status}] {label}" + (f": {detail}" if detail else ""))
+    if interesting:
+        print("Manifest sample outcomes:")
+        for line in interesting[:12]:
+            print(line)
+        if len(interesting) > 12:
+            print(f"  - …and {len(interesting) - 12} more")
 
 
 def _selftest_peak_rss_series(payloads: list[dict[str, object]]) -> list[float]:
@@ -329,6 +394,13 @@ def main(argv: list[str] | None = None) -> int:
     require_disc_group_checks = args.require_disc_manifest_group_checks or args.require_public_manifest_group_checks
     require_dds_group_checks = args.require_dds_manifest_group_checks or args.require_public_manifest_group_checks
     require_format_group_checks = args.require_format_manifest_group_checks or args.require_public_manifest_group_checks
+    manifest_inputs = {
+        "disc_video": _manifest_input_summary(merged_disc_manifest, "platform", "system", "group"),
+        "dds": _manifest_input_summary(merged_dds_manifest, "group", "platform", "family"),
+        "format_matrix": _manifest_input_summary(merged_format_manifest, "target_format", "output_format", "format"),
+        "used_public_sample_manifests": bool(args.use_public_sample_manifests),
+        "used_private_local_manifests": bool(args.use_private_local_manifests),
+    }
     if require_disc_group_checks:
         disc_group_checks = _manifest_group_requirement_checks(
             merged_disc_manifest,
@@ -543,6 +615,9 @@ def main(argv: list[str] | None = None) -> int:
             if not isinstance(checks, dict):
                 checks = {}
             _print_selftest_check_summary(checks)
+            manifest_results = selftest_payload.get("manifest_results")
+            if isinstance(manifest_results, dict):
+                _print_manifest_result_summary(manifest_results)
             for check_name in required_checks:
                 check = checks.get(check_name)
                 if not isinstance(check, dict) or not check.get("ok"):
@@ -581,6 +656,7 @@ def main(argv: list[str] | None = None) -> int:
         json_out = Path(args.json_out)
         json_out.parent.mkdir(parents=True, exist_ok=True)
         final_payload = dict(payload)
+        final_payload["manifest_inputs"] = manifest_inputs
         final_payload["smoke_repeat_summary"] = smoke_summary
         final_payload["smoke_runs"] = smoke_runs
         if selftest_payload is not None:
