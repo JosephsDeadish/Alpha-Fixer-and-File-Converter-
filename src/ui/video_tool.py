@@ -87,6 +87,7 @@ _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 _PREVIEW_MAX_W = 420
 _PREVIEW_MAX_H = 320
 _CLIP_ROLE = Qt.ItemDataRole.UserRole  # stores _ClipEntry in list item
+_KEEP_STREAM_SELECTION = object()
 
 
 def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
@@ -200,7 +201,119 @@ def _parse_ffprobe_rate(value) -> float:
     return parsed if parsed > 0 else 0.0
 
 
-def _probe_media_details(path: str) -> Optional[dict[str, object]]:
+def _coerce_optional_stream_index(value) -> Optional[int]:
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _stream_flag(stream: dict[str, object], key: str) -> int:
+    disposition = stream.get("disposition")
+    if not isinstance(disposition, dict):
+        return 0
+    try:
+        return 1 if int(disposition.get(key) or 0) else 0
+    except Exception:
+        return 0
+
+
+def _stream_detail_payload(stream: dict[str, object]) -> dict[str, object]:
+    tags = stream.get("tags")
+    if not isinstance(tags, dict):
+        tags = {}
+    try:
+        width = max(0, int(stream.get("width") or 0))
+        height = max(0, int(stream.get("height") or 0))
+    except Exception:
+        width = height = 0
+    try:
+        bit_rate = max(0.0, float(stream.get("bit_rate") or 0.0))
+    except Exception:
+        bit_rate = 0.0
+    try:
+        duration = max(0.0, float(stream.get("duration") or 0.0))
+    except Exception:
+        duration = 0.0
+    return {
+        "index": _coerce_optional_stream_index(stream.get("index")),
+        "codec_type": str(stream.get("codec_type") or "").strip(),
+        "codec_name": str(stream.get("codec_name") or "").strip(),
+        "width": width,
+        "height": height,
+        "fps": max(
+            _parse_ffprobe_rate(stream.get("avg_frame_rate")),
+            _parse_ffprobe_rate(stream.get("r_frame_rate")),
+        ),
+        "bit_rate": bit_rate,
+        "duration": duration,
+        "attached_pic": bool(_stream_flag(stream, "attached_pic")),
+        "language": str(tags.get("language") or "").strip(),
+        "title": str(tags.get("title") or "").strip(),
+    }
+
+
+def _describe_stream_choice(stream_info: Optional[dict[str, object]]) -> str:
+    if not isinstance(stream_info, dict):
+        return ""
+    parts = []
+    index = _coerce_optional_stream_index(stream_info.get("index"))
+    if index is not None:
+        parts.append(f"stream #{index}")
+    codec = str(stream_info.get("codec_name") or "").strip()
+    if codec:
+        parts.append(codec)
+    width = max(0, int(stream_info.get("width") or 0))
+    height = max(0, int(stream_info.get("height") or 0))
+    if width > 0 and height > 0:
+        parts.append(f"{width}×{height}")
+    fps = max(0.0, float(stream_info.get("fps") or 0.0))
+    if fps > 0:
+        parts.append(f"{fps:.3f}".rstrip("0").rstrip(".") + " fps")
+    language = str(stream_info.get("language") or "").strip()
+    if language:
+        parts.append(language)
+    title = str(stream_info.get("title") or "").strip()
+    if title:
+        parts.append(title)
+    if bool(stream_info.get("attached_pic")):
+        parts.append("cover art")
+    return " • ".join(parts)
+
+
+def _stream_selection_note(
+    details: Optional[dict[str, object]],
+    *,
+    manual: bool = False,
+) -> str:
+    if not details:
+        return ""
+    video_index = _coerce_optional_stream_index(details.get("video_stream_index"))
+    video_count = max(0, int(details.get("video_stream_count") or 0))
+    if video_index is None or (not manual and video_count <= 1):
+        return ""
+    choices = details.get("video_stream_choices")
+    stream_info = None
+    if isinstance(choices, list):
+        stream_info = next(
+            (
+                choice for choice in choices
+                if isinstance(choice, dict) and _coerce_optional_stream_index(choice.get("index")) == video_index
+            ),
+            None,
+        )
+    prefix = "manual stream" if manual else "preferred stream"
+    summary = _describe_stream_choice(stream_info) or f"stream #{video_index}"
+    if summary.startswith("stream #"):
+        return f"{prefix} {summary[len('stream '):]}"
+    return f"{prefix} #{video_index} • {summary}"
+
+
+def _probe_media_details(
+    path: str,
+    preferred_video_stream_index: Optional[int] = None,
+    preferred_audio_stream_index: Optional[int] = None,
+) -> Optional[dict[str, object]]:
     ffprobe_exe = _get_ffprobe_exe()
     if not ffprobe_exe:
         return None
@@ -243,15 +356,6 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         except Exception:
             return 999999
 
-    def _stream_flag(stream: dict[str, object], key: str) -> int:
-        disposition = stream.get("disposition")
-        if not isinstance(disposition, dict):
-            return 0
-        try:
-            return 1 if int(disposition.get(key) or 0) else 0
-        except Exception:
-            return 0
-
     def _video_rank(stream: dict[str, object]) -> tuple[int, int, float, float, float, int]:
         try:
             width = max(0, int(stream.get("width") or 0))
@@ -275,8 +379,26 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         attached_pic = _stream_flag(stream, "attached_pic")
         return 1 - attached_pic, live_video, area, fps, bit_rate, duration - (_stream_index(stream) / 1_000_000.0)
 
-    video_stream = max(video_streams, key=_video_rank, default=None)
-    audio_stream = audio_streams[0] if audio_streams else None
+    selected_video_index = _coerce_optional_stream_index(preferred_video_stream_index)
+    selected_audio_index = _coerce_optional_stream_index(preferred_audio_stream_index)
+    video_stream = next(
+        (
+            stream for stream in video_streams
+            if _coerce_optional_stream_index(stream.get("index")) == selected_video_index
+        ),
+        None,
+    ) if selected_video_index is not None else None
+    if video_stream is None:
+        video_stream = max(video_streams, key=_video_rank, default=None)
+    audio_stream = next(
+        (
+            stream for stream in audio_streams
+            if _coerce_optional_stream_index(stream.get("index")) == selected_audio_index
+        ),
+        None,
+    ) if selected_audio_index is not None else None
+    if audio_stream is None:
+        audio_stream = audio_streams[0] if audio_streams else None
     fps = 0.0
     width = height = 0
     video_codec = ""
@@ -315,6 +437,8 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         duration = float(format_info.get("duration") or 0.0)
     except Exception:
         duration = 0.0
+    video_stream_choices = [_stream_detail_payload(stream) for stream in video_streams]
+    audio_stream_choices = [_stream_detail_payload(stream) for stream in audio_streams]
     return {
         "format_name": str(format_info.get("format_name") or "").strip(),
         "duration": duration if duration > 0 else 0.0,
@@ -333,6 +457,8 @@ def _probe_media_details(path: str) -> Optional[dict[str, object]]:
         "selected_video_attached_pic": bool(selected_video_attached_pic),
         "selected_video_language": selected_video_language,
         "selected_video_title": selected_video_title,
+        "video_stream_choices": video_stream_choices,
+        "audio_stream_choices": audio_stream_choices,
     }
 
 
@@ -422,9 +548,17 @@ def _video_io_diagnostics() -> str:
     return f"{summary} ffmpeg: {ffmpeg_text}. ffprobe: {ffprobe_text}."
 
 
-def _video_load_failure_hint(path: str) -> str:
+def _video_load_failure_hint(
+    path: str,
+    preferred_video_stream_index: Optional[int] = None,
+    preferred_audio_stream_index: Optional[int] = None,
+) -> str:
     ext = Path(path).suffix.lower()
-    probe = _probe_media_details(path)
+    probe = _probe_media_details(
+        path,
+        preferred_video_stream_index=preferred_video_stream_index,
+        preferred_audio_stream_index=preferred_audio_stream_index,
+    )
     base = (
         "Ensure imageio-ffmpeg or a bundled/system ffmpeg binary is available,\n"
         "and check that the file is a supported, non-corrupt video."
@@ -469,6 +603,10 @@ def _video_load_failure_hint(path: str) -> str:
         lines.append(
             "ffprobe found a video stream but could not resolve stable frame dimensions; the container may be partial, malformed, or use an unsupported stream layout."
         )
+    if preferred_video_stream_index is not None:
+        selection_note = _stream_selection_note(probe, manual=True)
+        if selection_note:
+            lines.append(f"Manual selection active: {selection_note}.")
     lines.extend(_video_container_guidance(path, probe))
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
@@ -705,17 +843,22 @@ def _transcode_video_source(path: str, details: Optional[dict[str, object]] = No
     return None
 
 
-def _attempt_video_recovery(path: str, probe: Optional[dict[str, object]] = None) -> tuple[Optional[str], str]:
+def _attempt_video_recovery(
+    path: str,
+    probe: Optional[dict[str, object]] = None,
+    *,
+    force_recovery: bool = False,
+) -> tuple[Optional[str], str]:
     ext = Path(path).suffix.lower()
     details = probe if probe is not None else _probe_media_details(path)
-    if ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
+    if not force_recovery and ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
         return None, ""
     if details and bool(details.get("selected_video_attached_pic")) and int(details.get("video_attached_pic_count") or 0) >= int(details.get("video_stream_count") or 0):
         return None, ""
     remux_path = _remux_video_source(path, details)
     if remux_path:
         strategy = "temporary ffmpeg remux fallback active"
-        if int(details.get("video_stream_count") or 0) > 1 and details.get("video_stream_index") is not None:
+        if details and int(details.get("video_stream_count") or 0) > 1 and details.get("video_stream_index") is not None:
             strategy += f" (preferred stream #{int(details['video_stream_index'])})"
         return remux_path, strategy
     if details and bool(details.get("has_video")):
@@ -735,11 +878,11 @@ def _video_capability_summary() -> str:
         return (
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with preferred-stream selection for multi-stream containers. "
+                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection and a manual stream picker for multi-stream containers. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
-            + "Audio-only containers still cannot be added as video clips, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds. Partial/corrupt containers may still need manual repair or remuxing."
+            + "Audio-only containers still cannot be added as video clips, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds. partial/corrupt containers may still need manual repair or remuxing."
         )
     return (
         "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
@@ -761,7 +904,7 @@ def _video_capability_details() -> str:
             "Current behavior:",
             "• Standard video import and MP4 export are available.",
             "• Odd-container/disc-image recovery can remux, transcode, or salvage a still frame when ffmpeg can expose usable video data.",
-            "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, but a manual stream picker is not available yet.",
+            "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from a manually chosen video stream.",
             "• Audio-only containers still cannot be added as timeline video clips.",
         ])
         if ffprobe_exe:
@@ -774,7 +917,7 @@ def _video_capability_details() -> str:
             "Limited mode details:",
             "• Images and animated GIFs can still be added to the timeline.",
             "• MP4 export, video-source import, odd-container probing, and recovery fallbacks need imageio, imageio-ffmpeg, and ffmpeg.",
-            "• Manual multi-stream selection is not available yet.",
+            "• Manual multi-stream selection appears only after ffprobe can inspect a loaded multi-stream clip.",
         ])
     return "\n".join(lines)
 
@@ -1307,7 +1450,10 @@ class _ClipEntry:
                  has_audio: bool = False,
                  source_path: Optional[str] = None,
                  load_note: str = "",
-                 load_strategy: str = ""):
+                 load_strategy: str = "",
+                 source_probe: Optional[dict[str, object]] = None,
+                 preferred_video_stream_index: Optional[int] = None,
+                 preferred_audio_stream_index: Optional[int] = None):
         self.path = path
         self.source_path = source_path or path
         self.total_frames = total_frames
@@ -1318,6 +1464,9 @@ class _ClipEntry:
         self.has_audio = has_audio
         self.load_note = load_note
         self.load_strategy = load_strategy or ("direct" if not load_note else load_note)
+        self.source_probe = source_probe
+        self.preferred_video_stream_index = _coerce_optional_stream_index(preferred_video_stream_index)
+        self.preferred_audio_stream_index = _coerce_optional_stream_index(preferred_audio_stream_index)
         self.speed_percent: int = 100
         self.still_duration_frames: int = 25 if clip_type == "image" else 1
         self.trim_start: int = 0
@@ -1392,31 +1541,48 @@ _ADJUSTMENT_DEFAULT_VALUES = {
 }
 
 
-def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
+def _load_video_clip(
+    path: str,
+    *,
+    preferred_video_stream_index: Optional[int] = None,
+    preferred_audio_stream_index: Optional[int] = None,
+) -> Optional["_ClipEntry"]:
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
-    probe = None
-    try:
-        fps, frame_count, frame_size, first_frame = _probe_video_clip(path)
-        if frame_count <= 0:
-            return None
-        if probe is None:
-            probe = _probe_media_details(path)
-        if probe and bool(probe.get("selected_video_attached_pic")):
-            raise RuntimeError("Attached-picture stream selected")
-        return _ClipEntry(
-            path,
-            frame_count,
-            _VideoFrameGetter(path, frame_count, first_frame),
-            fps,
-            frame_size=frame_size,
-            clip_type="video",
-            has_audio=_video_has_audio_stream(path),
-            source_path=path,
-            load_strategy="direct",
-        )
-    except Exception:
-        probe = _probe_media_details(path)
-    recovered_path, recovery_note = _attempt_video_recovery(path, probe)
+    preferred_video_stream_index = _coerce_optional_stream_index(preferred_video_stream_index)
+    preferred_audio_stream_index = _coerce_optional_stream_index(preferred_audio_stream_index)
+    probe = _probe_media_details(
+        path,
+        preferred_video_stream_index=preferred_video_stream_index,
+        preferred_audio_stream_index=preferred_audio_stream_index,
+    )
+    allow_direct_open = preferred_video_stream_index is None and preferred_audio_stream_index is None
+    if allow_direct_open:
+        try:
+            fps, frame_count, frame_size, first_frame = _probe_video_clip(path)
+            if frame_count <= 0:
+                return None
+            if probe and bool(probe.get("selected_video_attached_pic")):
+                raise RuntimeError("Attached-picture stream selected")
+            return _ClipEntry(
+                path,
+                frame_count,
+                _VideoFrameGetter(path, frame_count, first_frame),
+                fps,
+                frame_size=frame_size,
+                clip_type="video",
+                has_audio=_video_has_audio_stream(path),
+                source_path=path,
+                load_strategy="direct",
+                source_probe=probe,
+            )
+        except Exception:
+            probe = _probe_media_details(
+                path,
+                preferred_video_stream_index=preferred_video_stream_index,
+                preferred_audio_stream_index=preferred_audio_stream_index,
+            )
+    manual_stream_note = _stream_selection_note(probe, manual=preferred_video_stream_index is not None)
+    recovered_path, recovery_note = _attempt_video_recovery(path, probe, force_recovery=not allow_direct_open)
     if recovered_path:
         try:
             fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
@@ -1433,8 +1599,11 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
                     clip_type="video",
                     has_audio=_video_has_audio_stream(recovered_path),
                     source_path=path,
-                    load_note=recovery_note,
-                    load_strategy=recovery_note,
+                    load_note=f"{manual_stream_note}; {recovery_note}" if manual_stream_note and recovery_note else (manual_stream_note or recovery_note),
+                    load_strategy=f"{manual_stream_note}; {recovery_note}" if manual_stream_note and recovery_note else (manual_stream_note or recovery_note),
+                    source_probe=probe,
+                    preferred_video_stream_index=preferred_video_stream_index,
+                    preferred_audio_stream_index=preferred_audio_stream_index,
                 )
         except Exception:
             _unlink_file_safely(recovered_path)
@@ -1452,8 +1621,11 @@ def _load_video_clip(path: str) -> Optional["_ClipEntry"]:
             clip_type="image",
             has_audio=bool(probe.get("has_audio")) if probe else False,
             source_path=path,
-            load_note=_visual_still_fallback_note(probe),
-            load_strategy=_visual_still_fallback_note(probe),
+            load_note=f"{manual_stream_note}; {_visual_still_fallback_note(probe)}" if manual_stream_note else _visual_still_fallback_note(probe),
+            load_strategy=f"{manual_stream_note}; {_visual_still_fallback_note(probe)}" if manual_stream_note else _visual_still_fallback_note(probe),
+            source_probe=probe,
+            preferred_video_stream_index=preferred_video_stream_index,
+            preferred_audio_stream_index=preferred_audio_stream_index,
         )
     except Exception:
         try:
@@ -1797,6 +1969,36 @@ class VideoToolDialog(QDialog):
         trim_vl.addWidget(self._clip_info_lbl)
         left_layout.addWidget(grp_trim)
 
+        grp_stream = QGroupBox("Selected Stream")
+        stream_vl = QVBoxLayout(grp_stream)
+        stream_vl.setSpacing(6)
+        self._stream_summary_lbl = QLabel("Select a loaded video clip to inspect its available video streams.")
+        self._stream_summary_lbl.setWordWrap(True)
+        self._stream_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        stream_vl.addWidget(self._stream_summary_lbl)
+        stream_row = QHBoxLayout()
+        stream_row.addWidget(QLabel("Video stream:"))
+        self._stream_picker_combo = QComboBox()
+        self._stream_picker_combo.setToolTip(
+            "Choose which detected video stream to reload for the selected clip.\n"
+            "Auto keeps the probe-preferred stream; explicit picks force a remux/transcode path when needed."
+        )
+        self._stream_picker_combo.currentIndexChanged.connect(self._on_stream_picker_changed)
+        stream_row.addWidget(self._stream_picker_combo, 1)
+        stream_vl.addLayout(stream_row)
+        self._btn_apply_stream = QPushButton("Reload Selected Stream")
+        self._btn_apply_stream.setToolTip(
+            "Reload the selected clip from the chosen video stream while preserving trim and timing settings when possible."
+        )
+        self._btn_apply_stream.clicked.connect(self._apply_selected_stream_choice)
+        stream_vl.addWidget(self._btn_apply_stream)
+        self._stream_hint_lbl = QLabel("Audio track selection still stays automatic; this panel only overrides the video stream.")
+        self._stream_hint_lbl.setWordWrap(True)
+        self._stream_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        stream_vl.addWidget(self._stream_hint_lbl)
+        left_layout.addWidget(grp_stream)
+        self._stream_group = grp_stream
+
         grp_timing = QGroupBox("Selected Clip Timing")
         timing_vl = QVBoxLayout(grp_timing)
         timing_vl.setSpacing(6)
@@ -2077,6 +2279,7 @@ class VideoToolDialog(QDialog):
         splitter.addWidget(right_scroll)
         splitter.setSizes([240, 420, 260])
         self._update_audio_controls()
+        self._refresh_stream_controls()
         self._update_ui_state()
 
     def _resolve_tooltip_mgr(self):
@@ -2258,6 +2461,187 @@ class VideoToolDialog(QDialog):
             text += f"  •  {clip.load_note}"
         return text
 
+    def _set_stream_controls_state(
+        self,
+        summary: str,
+        hint: str,
+        *,
+        enable_picker: bool = False,
+        enable_apply: bool = False,
+    ) -> None:
+        self._stream_picker_combo.blockSignals(True)
+        self._stream_picker_combo.clear()
+        self._stream_picker_combo.addItem("Auto")
+        self._stream_picker_combo.setEnabled(enable_picker)
+        self._stream_picker_combo.blockSignals(False)
+        self._btn_apply_stream.setEnabled(enable_apply)
+        self._stream_summary_lbl.setText(summary)
+        self._stream_hint_lbl.setText(hint)
+        self._stream_group.setEnabled(enable_picker or enable_apply)
+
+    def _refresh_stream_controls(self, row: Optional[int] = None) -> None:
+        row = self._clip_list.currentRow() if row is None else row
+        if row < 0 or row >= len(self._clips):
+            self._set_stream_controls_state(
+                "Select a loaded video clip to inspect its available video streams.",
+                "Audio track selection still stays automatic; this panel only overrides the video stream.",
+            )
+            return
+        clip = self._clips[row]
+        if clip.clip_type != "video":
+            self._set_stream_controls_state(
+                "Still images and GIF clips only expose a single visual source frame sequence.",
+                "Manual stream selection applies only to imported video clips.",
+            )
+            return
+        details = clip.source_probe if isinstance(clip.source_probe, dict) else None
+        if details is None:
+            details = _probe_media_details(
+                clip.source_path,
+                preferred_video_stream_index=clip.preferred_video_stream_index,
+                preferred_audio_stream_index=clip.preferred_audio_stream_index,
+            )
+        if not details:
+            self._set_stream_controls_state(
+                "ffprobe details are unavailable for this clip, so manual stream selection cannot be offered here.",
+                "Install or bundle ffprobe to inspect multi-stream containers inside the Video Builder.",
+            )
+            return
+        clip.source_probe = details
+        video_choices = details.get("video_stream_choices")
+        if not isinstance(video_choices, list):
+            video_choices = []
+        video_count = max(0, int(details.get("video_stream_count") or 0))
+        audio_count = max(0, int(details.get("audio_stream_count") or 0))
+        auto_index = _coerce_optional_stream_index(details.get("video_stream_index"))
+        auto_choice = next(
+            (
+                choice for choice in video_choices
+                if isinstance(choice, dict) and _coerce_optional_stream_index(choice.get("index")) == auto_index
+            ),
+            None,
+        )
+        auto_label = "Auto"
+        auto_desc = _describe_stream_choice(auto_choice)
+        if auto_desc:
+            auto_label = f"Auto — {auto_desc}"
+        elif auto_index is not None:
+            auto_label = f"Auto — stream #{auto_index}"
+        self._stream_picker_combo.blockSignals(True)
+        self._stream_picker_combo.clear()
+        self._stream_picker_combo.addItem(auto_label, userData=None)
+        for choice in video_choices:
+            if not isinstance(choice, dict):
+                continue
+            index = _coerce_optional_stream_index(choice.get("index"))
+            if index is None:
+                continue
+            label = _describe_stream_choice(choice) or f"stream #{index}"
+            self._stream_picker_combo.addItem(label if label.lower().startswith("stream #") else f"Stream #{index} — {label}", userData=index)
+        target_index = clip.preferred_video_stream_index
+        match = 0
+        for combo_index in range(self._stream_picker_combo.count()):
+            if _coerce_optional_stream_index(self._stream_picker_combo.itemData(combo_index)) == target_index:
+                match = combo_index
+                break
+        self._stream_picker_combo.setCurrentIndex(match)
+        self._stream_picker_combo.blockSignals(False)
+        enable_picker = video_count > 1
+        selected_label = _stream_selection_note(details, manual=target_index is not None)
+        summary = "This clip exposes a single detected video stream."
+        if video_count > 1:
+            summary = f"{video_count} video streams detected."
+            if selected_label:
+                summary += f" Active override: {selected_label}."
+            elif auto_desc:
+                summary += f" Auto currently prefers {auto_desc}."
+        hint_parts = []
+        if audio_count > 1:
+            hint_parts.append(f"{audio_count} audio streams detected; audio stays automatic for now.")
+        else:
+            hint_parts.append("Audio track selection still stays automatic; this panel only overrides the video stream.")
+        if bool(details.get("selected_video_attached_pic")):
+            hint_parts.append("The currently selected stream looks like cover art, so still-frame fallback may be the only usable path.")
+        elif int(details.get("video_attached_pic_count") or 0) > 0:
+            hint_parts.append("Cover-art style streams were also detected alongside the playable video choices.")
+        self._stream_summary_lbl.setText(summary)
+        self._stream_hint_lbl.setText(" ".join(hint_parts))
+        self._stream_picker_combo.setEnabled(enable_picker)
+        self._btn_apply_stream.setEnabled(enable_picker and target_index != _coerce_optional_stream_index(self._stream_picker_combo.currentData()))
+        self._stream_group.setEnabled(enable_picker)
+
+    def _on_stream_picker_changed(self, _index: int) -> None:
+        row = self._clip_list.currentRow()
+        if row < 0 or row >= len(self._clips):
+            self._btn_apply_stream.setEnabled(False)
+            return
+        clip = self._clips[row]
+        if clip.clip_type != "video":
+            self._btn_apply_stream.setEnabled(False)
+            return
+        self._btn_apply_stream.setEnabled(
+            self._stream_picker_combo.isEnabled()
+            and clip.preferred_video_stream_index != _coerce_optional_stream_index(self._stream_picker_combo.currentData())
+        )
+
+    def _apply_selected_stream_choice(self) -> None:
+        row = self._clip_list.currentRow()
+        if row < 0 or row >= len(self._clips):
+            return
+        clip = self._clips[row]
+        if clip.clip_type != "video":
+            return
+        selected_index = _coerce_optional_stream_index(self._stream_picker_combo.currentData())
+        if selected_index == clip.preferred_video_stream_index:
+            self._btn_apply_stream.setEnabled(False)
+            return
+        new_clip = self._reload_clip(clip, preferred_video_stream_index=selected_index)
+        if new_clip is None:
+            detail = _video_load_failure_hint(
+                clip.source_path,
+                preferred_video_stream_index=selected_index,
+                preferred_audio_stream_index=clip.preferred_audio_stream_index,
+            )
+            selected_text = "auto stream choice" if selected_index is None else f"stream #{selected_index}"
+            self._set_import_status(
+                f"Stream reload failed for {Path(clip.source_path).name} ({selected_text}).",
+                detail=detail,
+                tone="error",
+            )
+            self.status_notice.emit(f"Video Builder: stream reload failed for {Path(clip.source_path).name}", 7000)
+            self._refresh_stream_controls(row)
+            return
+        old_clip = clip
+        self._clips[row] = new_clip
+        item = self._clip_list.item(row)
+        if item is not None:
+            item.setData(_CLIP_ROLE, new_clip)
+        self._refresh_clip_item(row)
+        try:
+            old_clip.close()
+        except Exception:
+            pass
+        self._clip_list.setCurrentRow(row)
+        self._update_scrubber()
+        self._update_preview()
+        self._update_ui_state()
+        self._refresh_stream_controls(row)
+        selected_text = _stream_selection_note(new_clip.source_probe, manual=selected_index is not None)
+        if not selected_text:
+            selected_text = "auto stream choice restored" if selected_index is None else f"manual stream #{selected_index}"
+        detail_lines = [f"Reloaded from {selected_text}."]
+        probe_summary = _format_media_probe_summary(new_clip.source_probe)
+        if probe_summary:
+            detail_lines.append(probe_summary)
+        if new_clip.load_note:
+            detail_lines.append(f"Load note: {new_clip.load_note}")
+        self._set_import_status(
+            f"Reloaded {Path(new_clip.source_path).name} from {selected_text}.",
+            detail="\n\n".join(detail_lines),
+            tone="success",
+        )
+        self.status_notice.emit(f"Video Builder: reloaded {Path(new_clip.source_path).name} from {selected_text}", 7000)
+
     def _update_timeline_summary(self) -> None:
         total_frames = self._total_preview_frames()
         fps = max(0.1, float(self._fps_slider.value()))
@@ -2346,9 +2730,29 @@ class VideoToolDialog(QDialog):
         icon = "🎞" if clip.clip_type == "video" else "🖼"
         item.setText(_format_clip_label(clip, clip.source_path, icon))
 
-    def _reload_clip(self, clip: "_ClipEntry") -> Optional["_ClipEntry"]:
+    def _reload_clip(
+        self,
+        clip: "_ClipEntry",
+        *,
+        preferred_video_stream_index=_KEEP_STREAM_SELECTION,
+        preferred_audio_stream_index=_KEEP_STREAM_SELECTION,
+    ) -> Optional["_ClipEntry"]:
         if clip.clip_type == "video":
-            new_clip = _load_video_clip(clip.source_path)
+            video_index = (
+                clip.preferred_video_stream_index
+                if preferred_video_stream_index is _KEEP_STREAM_SELECTION
+                else preferred_video_stream_index
+            )
+            audio_index = (
+                clip.preferred_audio_stream_index
+                if preferred_audio_stream_index is _KEEP_STREAM_SELECTION
+                else preferred_audio_stream_index
+            )
+            new_clip = _load_video_clip(
+                clip.source_path,
+                preferred_video_stream_index=video_index,
+                preferred_audio_stream_index=audio_index,
+            )
         else:
             new_clip = _load_image_as_clip(clip.source_path)
         if new_clip is None:
@@ -2511,6 +2915,11 @@ class VideoToolDialog(QDialog):
             for clip in clip_snapshot
             if str(clip.get("load_note") or "").strip()
         ]
+        selected_streams = [
+            f"{os.path.basename(str(clip.get('source_path') or clip.get('path') or ''))}: stream #{int(clip.get('preferred_video_stream_index'))}"
+            for clip in clip_snapshot
+            if _coerce_optional_stream_index(clip.get("preferred_video_stream_index")) is not None
+        ]
         notes = [
             f"filter={entry['filter']}",
             f"audio={entry['audio']}",
@@ -2524,6 +2933,8 @@ class VideoToolDialog(QDialog):
             notes.append(f"recovery={entry['recovery']}")
         if noted:
             notes.append("clips=" + ("; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")))
+        if selected_streams:
+            notes.append("streams=" + ("; ".join(selected_streams[:3]) + (" …" if len(selected_streams) > 3 else "")))
         if extra_notes:
             notes.extend(str(note).strip() for note in extra_notes if str(note).strip())
         if notes:
@@ -2598,6 +3009,7 @@ class VideoToolDialog(QDialog):
             self._trim_start_slider.blockSignals(False)
             self._trim_end_slider.blockSignals(False)
             self._update_timing_controls()
+            self._refresh_stream_controls(row)
             self._update_ui_state()
             return
         clip = self._clips[row]
@@ -2614,6 +3026,7 @@ class VideoToolDialog(QDialog):
         self._trim_end_slider.blockSignals(False)
         self._clip_info_lbl.setText(self._format_clip_info_text(clip))
         self._update_timing_controls()
+        self._refresh_stream_controls(row)
         self._update_ui_state()
 
     def _on_trim_start_changed(self, val: int) -> None:
@@ -2947,6 +3360,7 @@ class VideoToolDialog(QDialog):
             "source_duration_seconds": source_duration_seconds,
             "has_audio": clip_type == "video" and clip.has_audio,
             "load_note": clip.load_note,
+            "preferred_video_stream_index": clip.preferred_video_stream_index,
         }
 
     def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):

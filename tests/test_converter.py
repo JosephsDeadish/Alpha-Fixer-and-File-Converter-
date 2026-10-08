@@ -3,6 +3,7 @@ Tests for file converter utilities.
 """
 import sys
 import os
+import json
 import tempfile
 import unittest
 from unittest import mock
@@ -52,6 +53,19 @@ def _iter_corpus_files(roots: list[str], suffixes: tuple[str, ...], *, limit: in
                     if len(matches) >= limit:
                         return matches
     return matches
+
+
+def _optional_manifest_entries(env_name: str) -> list[dict[str, object]]:
+    raw = os.environ.get(env_name, "").strip()
+    if not raw:
+        return []
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [entry for entry in payload if isinstance(entry, dict) and str(entry.get("path") or "").strip()]
 
 
 def _make_png(path: str, w=8, h=8, alpha=200):
@@ -285,6 +299,42 @@ class TestOptionalRealCorpus(unittest.TestCase):
                     img.close()
         if matched == 0:
             self.skipTest("No DX10/BC6H/BC7-style DDS samples found in optional corpus")
+
+    def test_optional_real_dx10_dds_manifest_samples_match_expected_support(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        manifest = _optional_manifest_entries("ALPHA_FIXER_REAL_DDS_DX10_MANIFEST")
+        if not manifest:
+            self.skipTest("No optional real DX10 DDS manifest configured")
+
+        exercised = 0
+        for entry in manifest:
+            sample_path = str(entry.get("path") or "").strip()
+            if not os.path.isfile(sample_path):
+                continue
+            expected = str(entry.get("expect") or "load_or_fail_clearly").strip().lower()
+            exercised += 1
+            try:
+                img = _load_dds_raw(sample_path)
+            except Exception as exc:
+                if expected == "load":
+                    self.fail(f"Expected {sample_path} to decode, but failed with: {exc}")
+                detail = str(exc)
+                required_tokens = entry.get("detail_contains") or []
+                if isinstance(required_tokens, str):
+                    required_tokens = [required_tokens]
+                for token in required_tokens:
+                    self.assertIn(str(token).lower(), detail.lower(), msg=f"Missing DDS failure token for {sample_path}: {token}")
+            else:
+                try:
+                    self.assertGreater(img.size[0], 0)
+                    self.assertGreater(img.size[1], 0)
+                    if expected == "fail":
+                        self.fail(f"Expected {sample_path} to fail, but it decoded successfully")
+                finally:
+                    img.close()
+        if exercised == 0:
+            self.skipTest("Configured real DX10 DDS manifest paths were unavailable")
 
 
 class TestAlphaWorkerOutputCompatibility(unittest.TestCase):

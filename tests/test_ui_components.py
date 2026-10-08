@@ -97,6 +97,19 @@ def _iter_corpus_files(roots: list[str], suffixes: tuple[str, ...], *, limit: in
     return matches
 
 
+def _optional_manifest_entries(env_name: str) -> list[dict[str, object]]:
+    raw = os.environ.get(env_name, "").strip()
+    if not raw:
+        return []
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [entry for entry in payload if isinstance(entry, dict) and str(entry.get("path") or "").strip()]
+
+
 class TestDropFileList(unittest.TestCase):
     def setUp(self):
         self._app = _get_app()
@@ -2416,7 +2429,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
                             details = vt._video_capability_details()
         self.assertIn("All video dependencies are available.", details)
-        self.assertIn("manual stream picker is not available yet", details)
+        self.assertIn("Selected Stream panel can reload a clip from a manually chosen video stream", details)
         self.assertIn("ffprobe detail/probing ready", details)
 
     def test_load_video_clip_uses_still_frame_fallback_when_recovery_paths_fail(self):
@@ -2482,6 +2495,49 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(details["video_codec"], "h264")
         self.assertEqual(details["video_attached_pic_count"], 1)
         self.assertEqual(details["selected_video_language"], "eng")
+
+    def test_probe_media_details_honors_explicit_video_stream_selection(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        payload = {
+            "format": {"format_name": "mpeg", "duration": "10.0"},
+            "streams": [
+                {
+                    "index": 1,
+                    "codec_type": "video",
+                    "codec_name": "mpeg2video",
+                    "width": 320,
+                    "height": 240,
+                    "avg_frame_rate": "24/1",
+                    "r_frame_rate": "24/1",
+                    "disposition": {"attached_pic": 0},
+                    "tags": {"title": "main"},
+                },
+                {
+                    "index": 7,
+                    "codec_type": "video",
+                    "codec_name": "mpeg1video",
+                    "width": 160,
+                    "height": 120,
+                    "avg_frame_rate": "15/1",
+                    "r_frame_rate": "15/1",
+                    "disposition": {"attached_pic": 0},
+                    "tags": {"language": "jpn", "title": "bonus"},
+                },
+            ],
+        }
+        result = types.SimpleNamespace(returncode=0, stdout=json.dumps(payload))
+        with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+            with patch.object(vt.subprocess, "run", return_value=result):
+                details = vt._probe_media_details("/tmp/sample.vob", preferred_video_stream_index=7)
+        self.assertIsNotNone(details)
+        self.assertEqual(details["video_stream_index"], 7)
+        self.assertEqual(details["video_codec"], "mpeg1video")
+        self.assertEqual(details["selected_video_language"], "jpn")
+        self.assertEqual(len(details["video_stream_choices"]), 2)
 
     def test_video_load_failure_hint_mentions_cover_art_streams(self):
         try:
@@ -2579,6 +2635,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
 
         def _fake_run(cmd, **kwargs):
             calls.append(cmd)
+            with open(remux_path, "wb") as fh:
+                fh.write(b"remuxed")
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2598,6 +2656,88 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertTrue(calls)
         self.assertIn("0:4", calls[0])
         self.assertIn("0:7?", calls[0])
+
+    def test_video_builder_manual_stream_picker_reloads_selected_clip(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        try:
+            clip = vt._ClipEntry(
+                "/tmp/multi.vob",
+                12,
+                lambda _idx: Image.new("RGBA", (8, 6), (255, 0, 0, 255)),
+                24.0,
+                frame_size=(320, 240),
+                clip_type="video",
+                source_path="/tmp/multi.vob",
+                source_probe={
+                    "video_stream_index": 3,
+                    "audio_stream_index": 1,
+                    "video_stream_count": 2,
+                    "audio_stream_count": 2,
+                    "video_attached_pic_count": 0,
+                    "selected_video_attached_pic": False,
+                    "video_stream_choices": [
+                        {"index": 3, "codec_name": "mpeg2video", "width": 320, "height": 240, "fps": 24.0, "language": "eng", "title": "main", "attached_pic": False},
+                        {"index": 7, "codec_name": "mpeg1video", "width": 160, "height": 120, "fps": 15.0, "language": "jpn", "title": "bonus", "attached_pic": False},
+                    ],
+                },
+            )
+            dialog._clips = [clip]
+            item = vt.QListWidgetItem("clip")
+            item.setData(vt._CLIP_ROLE, clip)
+            dialog._clip_list.addItem(item)
+            dialog._clip_list.setCurrentRow(0)
+            dialog._on_clip_selected(0)
+            self.assertTrue(dialog._stream_picker_combo.isEnabled())
+            self.assertIn("2 video streams detected", dialog._stream_summary_lbl.text())
+            picker_index = next(
+                idx for idx in range(dialog._stream_picker_combo.count())
+                if dialog._stream_picker_combo.itemData(idx) == 7
+            )
+            dialog._stream_picker_combo.setCurrentIndex(picker_index)
+            new_clip = vt._ClipEntry(
+                "/tmp/multi_bonus.mkv",
+                8,
+                lambda _idx: Image.new("RGBA", (8, 6), (0, 255, 0, 255)),
+                15.0,
+                frame_size=(160, 120),
+                clip_type="video",
+                source_path="/tmp/multi.vob",
+                load_note="manual stream #7; temporary ffmpeg remux fallback active",
+                source_probe={
+                    "video_stream_index": 7,
+                    "audio_stream_index": 1,
+                    "video_stream_count": 2,
+                    "audio_stream_count": 2,
+                    "video_attached_pic_count": 0,
+                    "selected_video_attached_pic": False,
+                    "video_stream_choices": [
+                        {"index": 3, "codec_name": "mpeg2video", "width": 320, "height": 240, "fps": 24.0, "language": "eng", "title": "main", "attached_pic": False},
+                        {"index": 7, "codec_name": "mpeg1video", "width": 160, "height": 120, "fps": 15.0, "language": "jpn", "title": "bonus", "attached_pic": False},
+                    ],
+                },
+                preferred_video_stream_index=7,
+            )
+            with patch.object(dialog, "_reload_clip", return_value=new_clip) as reload_mock:
+                with patch.object(dialog, "_update_preview"):
+                    with patch.object(dialog, "_update_scrubber"):
+                        dialog._apply_selected_stream_choice()
+            reload_mock.assert_called_once()
+            self.assertEqual(dialog._clips[0], new_clip)
+            self.assertIn("Reloaded multi.vob", dialog._import_status_lbl.text())
+            self.assertIn("manual stream #7", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
 
     def test_dropped_unknown_video_extension_uses_probe_detection(self):
         _require_qt_gui(self)
@@ -2930,6 +3070,43 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             explained += 1
             self.assertIn("ffmpeg", hint.lower())
         self.assertGreaterEqual(loaded + explained, len(samples))
+
+    def test_optional_real_disc_video_manifest_samples_match_expectations(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        manifest = _optional_manifest_entries("ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST")
+        if not manifest:
+            self.skipTest("No optional real disc-video manifest configured")
+
+        exercised = 0
+        for entry in manifest:
+            sample_path = str(entry.get("path") or "").strip()
+            if not os.path.isfile(sample_path):
+                continue
+            expected = str(entry.get("expect") or "load_or_explain").strip().lower()
+            preferred_stream = entry.get("preferred_video_stream_index")
+            clip = vt._load_video_clip(sample_path, preferred_video_stream_index=preferred_stream)
+            hint = vt._video_load_failure_hint(sample_path, preferred_video_stream_index=preferred_stream)
+            exercised += 1
+            if expected == "load":
+                self.assertIsNotNone(clip, msg=f"Expected {sample_path} to load, but got hint:\n{hint}")
+            elif expected == "fail":
+                self.assertIsNone(clip, msg=f"Expected {sample_path} to fail import")
+            if clip is not None:
+                try:
+                    self.assertEqual(clip.source_path, sample_path)
+                finally:
+                    clip.close()
+            required_tokens = entry.get("hint_contains") or []
+            if isinstance(required_tokens, str):
+                required_tokens = [required_tokens]
+            for token in required_tokens:
+                self.assertIn(str(token), hint, msg=f"Missing hint token for {sample_path}: {token}")
+        if exercised == 0:
+            self.skipTest("Configured real disc-video manifest paths were unavailable")
 
     def test_mp4_export_size_rounds_up_to_even_dimensions(self):
         try:
