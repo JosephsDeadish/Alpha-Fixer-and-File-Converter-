@@ -812,6 +812,51 @@ class TestCorpusHelperInputs(unittest.TestCase):
             self.assertEqual(Path(payload["base_dir"]).resolve(), Path(cache_dir).resolve())
             self.assertTrue(os.path.isfile(payload["entries"][0]["path"]))
 
+    def test_populate_sample_manifest_script_can_emit_private_local_discovery_manifests(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "populate_sample_manifest.py")
+        spec = importlib.util.spec_from_file_location("populate_sample_manifest", module_path)
+        script = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(script)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            disc_out = os.path.join(tmpdir, "disc.json")
+            odd_out = os.path.join(tmpdir, "odd.json")
+            dds_out = os.path.join(tmpdir, "dds.json")
+            summary_out = os.path.join(tmpdir, "summary.json")
+            fake_private = {
+                "disc_video": [{"platform": "PSP", "path": "/samples/psp/sample.iso"}],
+                "odd_video": [{"group": "legacy container", "path": "/samples/odd/sample.wmv"}],
+                "dds": [{"group": "cubemap", "path": "/samples/dds/cube.dds"}],
+            }
+            with mock.patch.object(script, "build_private_local_manifests_from_env", return_value=fake_private):
+                rc = script.main(
+                    [
+                        "--discover-private-local",
+                        "--private-limit",
+                        "9",
+                        "--output-disc-manifest",
+                        disc_out,
+                        "--output-odd-video-manifest",
+                        odd_out,
+                        "--output-dds-manifest",
+                        dds_out,
+                        "--output-manifest",
+                        summary_out,
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            disc_payload = json.loads(Path(disc_out).read_text(encoding="utf-8"))
+            odd_payload = json.loads(Path(odd_out).read_text(encoding="utf-8"))
+            dds_payload = json.loads(Path(dds_out).read_text(encoding="utf-8"))
+            summary_payload = json.loads(Path(summary_out).read_text(encoding="utf-8"))
+            self.assertEqual(len(disc_payload["entries"]), 1)
+            self.assertEqual(len(odd_payload["entries"]), 1)
+            self.assertEqual(len(dds_payload["entries"]), 1)
+            self.assertEqual(summary_payload["summary"]["disc_video_entries"], 1)
+            self.assertEqual(summary_payload["summary"]["odd_video_entries"], 1)
+            self.assertEqual(summary_payload["summary"]["dds_entries"], 1)
+
     def test_populate_private_manifests_script_writes_generated_files(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "populate_private_manifests.py")
         spec = importlib.util.spec_from_file_location("populate_private_manifests", module_path)

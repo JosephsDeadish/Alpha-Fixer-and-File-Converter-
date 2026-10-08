@@ -1026,6 +1026,31 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("external_format_matrix_manifest_png", checks)
         self.assertIn("external_format_matrix_manifest_dds", checks)
 
+    def test_runtime_selftest_peak_rss_mb_uses_windows_fallback_when_available(self):
+        import main
+
+        class _FakeGetProcessMemoryInfo:
+            def __call__(self, _proc, counter_ptr, _size):
+                counter = getattr(counter_ptr, "_obj", None)
+                if counter is not None:
+                    counter.PeakWorkingSetSize = 32 * 1024 * 1024
+                return 1
+
+        fake_psapi = types.SimpleNamespace(GetProcessMemoryInfo=_FakeGetProcessMemoryInfo())
+        fake_kernel32 = types.SimpleNamespace(GetCurrentProcess=lambda: 123)
+
+        def _fake_windll(name, use_last_error=True):
+            if name == "psapi":
+                return fake_psapi
+            if name == "kernel32":
+                return fake_kernel32
+            raise AssertionError(name)
+
+        with patch.object(main.sys, "platform", "win32"):
+            with patch.object(main.ctypes, "WinDLL", side_effect=_fake_windll, create=True):
+                peak = main._runtime_selftest_peak_rss_mb()
+        self.assertEqual(peak, 32.0)
+
     def test_verify_packaged_app_parses_selftest_payload(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
