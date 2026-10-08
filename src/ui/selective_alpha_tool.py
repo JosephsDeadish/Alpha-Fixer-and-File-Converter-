@@ -2206,15 +2206,14 @@ class SelectiveAlphaTool(QWidget):
         # RGBA Adjuster tab and selects "Copy zones → Alpha Painter tool",
         # the zone data is deposited here so the user can import it into the
         # painting canvas with a single button click.
-        import_box = QGroupBox("Import Zones from Alpha Tool")
+        import_box = QGroupBox("Import Zones from Alpha & RGBA Adjuster")
         iv = QVBoxLayout(import_box)
         iv.setSpacing(4)
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
-            "1. Enable 'Highlight Alpha Values' in the Alpha & RGBA Adjuster.\n"
-            "2. Right-click the compare preview → 'Copy zones → Alpha Painter'.\n"
-            "3. Use the buttons below to import the shared zones or save them into slots."
+            "Copy detected zones from the Alpha & RGBA Adjuster preview, then import them here\n"
+            "to paint on the canvas directly or save them into layout slots for reuse."
         )
         import_note.setWordWrap(True)
         import_note.setStyleSheet("color: #999; font-size: 11px;")
@@ -2324,7 +2323,7 @@ class SelectiveAlphaTool(QWidget):
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(2)
         rv.addWidget(self._canvas, 1)
-        self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px  |  🖱 Hold scroll-button to pan  |  Ctrl+scroll to zoom")
+        self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px  |  Zoom: 100%")
         self._status_lbl.setStyleSheet(
             "color: #999; font-size: 10px; padding: 2px 4px;"
         )
@@ -2614,7 +2613,6 @@ class SelectiveAlphaTool(QWidget):
         zoom_pct = int(round(self._canvas._zoom * 100))
         self._status_lbl.setText(
             f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}  |  Zoom: {zoom_pct}%"
-            "  |  🖱 Hold scroll-button to pan  |  Ctrl+scroll to zoom"
         )
         self._refresh_session_status()
 

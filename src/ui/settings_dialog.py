@@ -1644,9 +1644,9 @@ class SettingsDialog(QDialog):
         self._tooltip_mode_combo = QComboBox()
         _TOOLTIP_MODE_TIPS = {
             "Normal":       "Standard helpful tooltips. Clear, informative, and professional.",
-            "Off":          "Tooltips are disabled. Hover over anything: silence. Pure, blessed silence.",
-            "Dumbed Down":  "Tips written as if you've never seen software before. Condescending but thorough.",
-            "No Filter 🤬": "Extremely vulgar, extremely funny, very sweary — but still actually helpful. The best mode.",
+            "Off":          "Disables tooltip popups throughout the application.",
+            "Dumbed Down":  "Simplified, more sarcastic tips for users who prefer the joke-heavy variant.",
+            "No Filter 🤬": "Highly profane, joke-heavy tips that still explain the controls accurately.",
         }
         for mode in TOOLTIP_MODES:
             self._tooltip_mode_combo.addItem(mode)
@@ -1656,11 +1656,11 @@ class SettingsDialog(QDialog):
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
-            "No Filter 🤬 is the best mode – trust us."
+            "Mode changes the wording; Tooltip Style below changes the popup appearance."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
-        misc_gl.addWidget(QLabel("Tooltip Popups Style:"), 2, 0)
+        misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
         self._tooltip_style_combo = QComboBox()
         _TOOLTIP_STYLE_ENTRIES = [
             ("Auto (follow theme)",  "Tooltip style follows the active theme automatically."),
@@ -1682,6 +1682,12 @@ class SettingsDialog(QDialog):
         )
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        tooltip_note = QLabel(
+            "ℹ  Tooltip Mode changes the writing style. Tooltip Style changes the box appearance."
+        )
+        tooltip_note.setWordWrap(True)
+        tooltip_note.setStyleSheet("color: #999; font-size: 10px;")
+        misc_gl.addWidget(tooltip_note, 3, 0, 1, 2)
 
         gv.addWidget(grp_misc)
 
