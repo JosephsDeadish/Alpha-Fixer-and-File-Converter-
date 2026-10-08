@@ -165,7 +165,9 @@ class ConverterTab(QWidget):
         self._spinner_idx = 0
         self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
+        self.queue_status_changed.connect(self._refresh_session_status)
         self._setup_shortcuts()
+        self._refresh_session_status()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -194,6 +196,11 @@ class ConverterTab(QWidget):
         )
         self._capability_lbl.setToolTip(_converter_capability_details())
         main_layout.addWidget(self._capability_lbl)
+        self._session_status_lbl = QLabel("")
+        self._session_status_lbl.setWordWrap(True)
+        self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        main_layout.addWidget(self._session_status_lbl)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -884,6 +891,12 @@ class ConverterTab(QWidget):
             extras.append("preview unavailable")
         return summary + ("  •  " + "  •  ".join(extras) if extras else "")
 
+    def _refresh_session_status(self, *_args) -> None:
+        status = self.get_status_bar_text().strip()
+        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        self._session_status_lbl.setText(text)
+        self._session_status_lbl.setToolTip(status or text)
+
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)
         categories = summary.get("failure_categories") or {}
@@ -1102,6 +1115,7 @@ class ConverterTab(QWidget):
             self._source_info_lbl.setText("")
             self._output_info_lbl.setText("")
             self._gif_speed_widget.setVisible(False)
+            self.queue_status_changed.emit(self.get_queue_status_text())
             return
 
         # Disconnect any stale previous loader to prevent it from overwriting
@@ -1170,6 +1184,7 @@ class ConverterTab(QWidget):
             self._on_preview_failed_if_current(rid, expected_path, err)
         )
         self._preview_loader.start()
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _browse_out_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")

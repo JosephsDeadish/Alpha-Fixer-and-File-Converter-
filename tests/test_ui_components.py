@@ -5452,6 +5452,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertTrue(hasattr(widget, "_capability_lbl"))
             self.assertTrue(widget._capability_lbl.text().startswith("Ready now:"))
             self.assertIn("SVG inputs", widget._capability_lbl.text())
+            self.assertIn("What works here right now:", widget._session_status_lbl.text())
+            self.assertIn("Alpha ready", widget._session_status_lbl.text())
         finally:
             widget.close()
             widget.deleteLater()
@@ -5784,6 +5786,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("animated source", summary)
             widget._output_info_lbl.setText("<b>OUT</b><br>Preview<br><b>unavailable</b>")
             self.assertIn("preview unavailable", widget.get_status_bar_text())
+            widget._refresh_session_status()
+            self.assertIn("What works here right now:", widget._session_status_lbl.text())
+            self.assertIn("Converter ready", widget._session_status_lbl.text())
+            self.assertIn("preview sample.png", widget._session_status_lbl.text())
         finally:
             widget.close()
             widget.deleteLater()
@@ -5810,6 +5816,9 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("preview sprite.png", summary)
             self.assertIn("alpha heat-map on", summary)
             self.assertIn("atlas boxes on (4 cells)", summary)
+            widget._refresh_session_status()
+            self.assertIn("What works here right now:", widget._session_status_lbl.text())
+            self.assertIn("preview sprite.png", widget._session_status_lbl.text())
         finally:
             widget.close()
             widget.deleteLater()

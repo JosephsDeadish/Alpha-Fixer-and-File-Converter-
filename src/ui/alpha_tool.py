@@ -338,7 +338,9 @@ class AlphaFixerTab(QWidget):
         self._spinner_idx = 0
         self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
+        self.queue_status_changed.connect(self._refresh_session_status)
         self._setup_shortcuts()
+        self._refresh_session_status()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -366,6 +368,11 @@ class AlphaFixerTab(QWidget):
         )
         self._capability_lbl.setToolTip(_alpha_capability_details())
         main_layout.addWidget(self._capability_lbl)
+        self._session_status_lbl = QLabel("")
+        self._session_status_lbl.setWordWrap(True)
+        self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        main_layout.addWidget(self._session_status_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
         outer_splitter.setChildrenCollapsible(False)
@@ -1096,6 +1103,12 @@ class AlphaFixerTab(QWidget):
             elif not helper_lower.startswith("preview helpers ready"):
                 extras.append(helper.rstrip("."))
         return summary + ("  •  " + "  •  ".join(extras) if extras else "")
+
+    def _refresh_session_status(self, *_args) -> None:
+        status = self.get_status_bar_text().strip()
+        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        self._session_status_lbl.setText(text)
+        self._session_status_lbl.setToolTip(status or text)
 
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)
