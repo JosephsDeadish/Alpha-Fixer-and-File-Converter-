@@ -59,7 +59,16 @@ if "%1"=="--onefile" (
 if exist "!LAUNCH_TARGET!" (
     echo Running packaged validation...
     if not exist dist\validation-reports mkdir dist\validation-reports
-    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-bundled-ffmpeg --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json
+    if "%ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS%"=="1" (
+        if not defined ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT set "ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT=4"
+        if not defined ALPHA_FIXER_SAMPLE_CACHE_DIR set "ALPHA_FIXER_SAMPLE_CACHE_DIR=%CD%\.sample-cache"
+        if not exist "!ALPHA_FIXER_SAMPLE_CACHE_DIR!" mkdir "!ALPHA_FIXER_SAMPLE_CACHE_DIR!"
+        set "VERIFY_DDS_ARGS="
+        if "%ALPHA_FIXER_REQUIRE_DDS_SELFTEST%"=="1" set "VERIFY_DDS_ARGS=--require-dds-selftest-checks --require-wand-runtime"
+        python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-bundled-ffmpeg --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json --run-selftest --selftest-iterations 2 --selftest-sample-limit !ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT! --require-selftest-pass --use-public-sample-manifests --require-video-selftest-checks --require-public-manifest-checks --allow-sample-downloads --sample-cache-dir "!ALPHA_FIXER_SAMPLE_CACHE_DIR!" !VERIFY_DDS_ARGS!
+    ) else (
+        python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-bundled-ffmpeg --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json
+    )
     if errorlevel 1 (
         exit /b 1
     )

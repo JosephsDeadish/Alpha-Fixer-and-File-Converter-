@@ -53,8 +53,13 @@ jobs:
             --timeout 45 \
             --run-selftest \
             --selftest-iterations 6 \
+            --selftest-sample-limit 4 \
             --require-selftest-pass \
             --require-video-selftest-checks \
+            --require-public-manifest-checks \
+            --use-public-sample-manifests \
+            --allow-sample-downloads \
+            --sample-cache-dir artifacts/sample-cache \
             --require-video-runtime \
             --require-ffmpeg-selfcheck \
             --require-bundled-ffmpeg \
@@ -73,8 +78,13 @@ jobs:
             --timeout 45 `
             --run-selftest `
             --selftest-iterations 6 `
+            --selftest-sample-limit 4 `
             --require-selftest-pass `
             --require-video-selftest-checks `
+            --require-public-manifest-checks `
+            --use-public-sample-manifests `
+            --allow-sample-downloads `
+            --sample-cache-dir artifacts/sample-cache `
             --require-video-runtime `
             --require-ffmpeg-selfcheck `
             --require-bundled-ffmpeg `
