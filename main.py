@@ -28,6 +28,7 @@ from src.core.runtime_validation import (
     execute_disc_video_manifest,
     execute_format_matrix_manifest,
     load_manifest_entries_from_env,
+    manifest_grouped_entries,
     manifest_sample_limit_from_env,
 )
 
@@ -786,6 +787,10 @@ def _runtime_selftest_peak_rss_mb() -> float | None:
     return round(float(usage) / 1024.0, 2)
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _emit_runtime_selftest_dump() -> int:
     from PIL import Image
     from src.core.alpha_processor import _load_dds
@@ -965,11 +970,45 @@ def _emit_runtime_selftest_dump() -> int:
         if disc_manifest:
             ok, detail = execute_disc_video_manifest(disc_manifest, vt, limit=manifest_limit)
             _record_check("external_disc_video_manifest", ok, detail)
+            if _env_truthy("ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"):
+                for suffix, label, grouped_entries in manifest_grouped_entries(
+                    disc_manifest,
+                    "platform",
+                    "system",
+                    "group",
+                ):
+                    group_ok, group_detail = execute_disc_video_manifest(
+                        grouped_entries,
+                        vt,
+                        limit=manifest_limit,
+                    )
+                    _record_check(
+                        f"external_disc_video_manifest_{suffix}",
+                        group_ok,
+                        f"{label}: {group_detail}",
+                    )
 
         dds_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DDS_MANIFEST")
         if dds_manifest:
             ok, detail = execute_dds_manifest(dds_manifest, _load_dds, limit=manifest_limit)
             _record_check("external_dds_manifest", ok, detail)
+            if _env_truthy("ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"):
+                for suffix, label, grouped_entries in manifest_grouped_entries(
+                    dds_manifest,
+                    "group",
+                    "platform",
+                    "family",
+                ):
+                    group_ok, group_detail = execute_dds_manifest(
+                        grouped_entries,
+                        _load_dds,
+                        limit=manifest_limit,
+                    )
+                    _record_check(
+                        f"external_dds_manifest_{suffix}",
+                        group_ok,
+                        f"{label}: {group_detail}",
+                    )
 
         format_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST")
         if format_manifest:
@@ -983,6 +1022,27 @@ def _emit_runtime_selftest_dump() -> int:
                 limit=manifest_limit,
             )
             _record_check("external_format_matrix_manifest", ok, detail)
+            if _env_truthy("ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"):
+                for suffix, label, grouped_entries in manifest_grouped_entries(
+                    format_manifest,
+                    "target_format",
+                    "output_format",
+                    "format",
+                ):
+                    group_ok, group_detail = execute_format_matrix_manifest(
+                        grouped_entries,
+                        convert_file=convert_file,
+                        load_dds=_load_dds,
+                        image_module=Image,
+                        output_formats=SUPPORTED_OUTPUT_FORMATS,
+                        tmpdir=tmpdir,
+                        limit=manifest_limit,
+                    )
+                    _record_check(
+                        f"external_format_matrix_manifest_{suffix}",
+                        group_ok,
+                        f"{label}: {group_detail}",
+                    )
 
     peak_rss_mb = _runtime_selftest_peak_rss_mb()
     if peak_rss_mb is not None:

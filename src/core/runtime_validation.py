@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -115,6 +116,43 @@ def _limited_entries(entries: list[dict[str, object]], limit: int) -> list[dict[
     if limit <= 0:
         return list(entries)
     return list(entries[:limit])
+
+
+def manifest_group_check_suffix(label: object) -> str:
+    tokens = re.findall(r"[A-Za-z0-9]+", str(label or "").strip().lower())
+    return "_".join(token for token in tokens if token) or "group"
+
+
+def manifest_grouped_entries(
+    entries: list[dict[str, object]],
+    *keys: str,
+) -> list[tuple[str, str, list[dict[str, object]]]]:
+    grouped: dict[str, dict[str, object]] = {}
+    ordered_suffixes: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        label = ""
+        for key in keys:
+            candidate = str(entry.get(key) or "").strip()
+            if candidate:
+                label = candidate
+                break
+        if not label:
+            continue
+        suffix = manifest_group_check_suffix(label)
+        if suffix not in grouped:
+            grouped[suffix] = {"label": label, "entries": []}
+            ordered_suffixes.append(suffix)
+        grouped[suffix]["entries"].append(entry)
+    return [
+        (
+            suffix,
+            str(grouped[suffix].get("label") or suffix),
+            list(grouped[suffix].get("entries") or []),
+        )
+        for suffix in ordered_suffixes
+    ]
 
 
 def _entry_source_path(entry: dict[str, object]) -> str:

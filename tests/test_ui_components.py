@@ -942,6 +942,82 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("png_to_dds_dxt5", parsed["checks"])
         self.assertFalse(parsed["passed"])
 
+    def test_runtime_selftest_dump_emits_grouped_manifest_checks_when_requested(self):
+        import main
+        buffer = io.StringIO()
+        fake_image_instance = MagicMock()
+        fake_image_instance.size = (32, 24)
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        fake_dds = MagicMock()
+        fake_dds.size = (32, 24)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_fc = types.SimpleNamespace(
+            SUPPORTED_OUTPUT_FORMATS={"PNG": ".png", "DDS": ".dds"},
+            convert_file=MagicMock(return_value=None),
+            dds_compression_available=MagicMock(return_value=False),
+        )
+        fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
+        fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
+        disc_manifest = [{"platform": "PSP", "path": "/tmp/psp.iso"}, {"platform": "PS1", "path": "/tmp/ps1.bin"}]
+        dds_manifest = [{"group": "cubemap", "path": "/tmp/cube.dds"}, {"group": "array", "path": "/tmp/array.dds"}]
+        format_manifest = [{"input": "/tmp/a.png", "target_format": "PNG"}, {"input": "/tmp/b.png", "target_format": "DDS"}]
+
+        def _fake_manifest_env(name):
+            return {
+                "ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST": disc_manifest,
+                "ALPHA_FIXER_RUNTIME_DDS_MANIFEST": dds_manifest,
+                "ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST": format_manifest,
+            }.get(name, [])
+
+        with patch.object(main, "_runtime_selftest_iterations", return_value=1):
+            with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=None):
+                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                    "available": False,
+                    "ready": False,
+                    "detail": "skipped: ImageMagick/wand runtime unavailable",
+                    "variants": {},
+                    "failures": [],
+                }):
+                    with patch.object(main, "load_manifest_entries_from_env", side_effect=_fake_manifest_env):
+                        with patch.object(main, "execute_disc_video_manifest", side_effect=lambda entries, *_args, **_kwargs: (True, f"disc={len(entries)}")):
+                            with patch.object(main, "execute_dds_manifest", side_effect=lambda entries, *_args, **_kwargs: (True, f"dds={len(entries)}")):
+                                with patch.object(main, "execute_format_matrix_manifest", side_effect=lambda entries, **_kwargs: (True, f"matrix={len(entries)}")):
+                                    with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                                        tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                                        tmpdir_cls.return_value.__exit__.return_value = False
+                                        with patch.dict(
+                                            os.environ,
+                                            {
+                                                "ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS": "1",
+                                                "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS": "1",
+                                                "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS": "1",
+                                            },
+                                            clear=False,
+                                        ):
+                                            with patch.dict(
+                                                sys.modules,
+                                                {
+                                                    "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                                    "PIL.Image": fake_pil_image,
+                                                    "src.core.alpha_processor": fake_alpha,
+                                                    "src.core.file_converter": fake_fc,
+                                                    "src.ui": fake_ui_pkg,
+                                                    "src.ui.video_tool": fake_vt,
+                                                },
+                                                clear=False,
+                                            ):
+                                                with patch("sys.stdout", buffer):
+                                                    main._emit_runtime_selftest_dump()
+        parsed = json.loads(buffer.getvalue().strip().split("=", 1)[1])
+        checks = parsed["checks"]
+        self.assertIn("external_disc_video_manifest_psp", checks)
+        self.assertIn("external_disc_video_manifest_ps1", checks)
+        self.assertIn("external_dds_manifest_cubemap", checks)
+        self.assertIn("external_dds_manifest_array", checks)
+        self.assertIn("external_format_matrix_manifest_png", checks)
+        self.assertIn("external_format_matrix_manifest_dds", checks)
+
     def test_verify_packaged_app_parses_selftest_payload(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
@@ -1123,6 +1199,92 @@ class TestStartupCapabilityNotice(unittest.TestCase):
             with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
                 rc = verify.main([target, "--run-selftest", "--require-video-selftest-checks"])
         self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_manifest_group_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            disc_manifest = os.path.join(tmpdir, "disc.json")
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            matrix_manifest = os.path.join(tmpdir, "matrix.json")
+            with open(disc_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"platform": "PSP", "path": "/tmp/psp.iso"}, {"platform": "PS1", "path": "/tmp/ps1.bin"}]}, handle)
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "cubemap", "path": "/tmp/cube.dds"}, {"group": "array", "path": "/tmp/array.dds"}]}, handle)
+            with open(matrix_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"input": "/tmp/in.png", "target_format": "PNG"}, {"input": "/tmp/in.webp", "target_format": "DDS"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest_psp": {"ok": true}, "external_disc_video_manifest_ps1": {"ok": true}, "external_dds_manifest_cubemap": {"ok": true}, "external_dds_manifest_array": {"ok": true}, "external_format_matrix_manifest_png": {"ok": true}, "external_format_matrix_manifest_dds": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        disc_manifest,
+                        "--dds-manifest",
+                        dds_manifest,
+                        "--format-matrix-manifest",
+                        matrix_manifest,
+                        "--require-disc-manifest-group-checks",
+                        "--require-dds-manifest-group-checks",
+                        "--require-format-manifest-group-checks",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        selftest_env = calls[-1]["env"]
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"], "1")
+
+    def test_verify_packaged_app_manifest_group_checks_require_grouped_manifest(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            plain_manifest = os.path.join(tmpdir, "plain.json")
+            with open(plain_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": "/tmp/sample.iso"}]}, handle)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        plain_manifest,
+                        "--require-disc-manifest-group-checks",
+                    ]
+                )
+        self.assertIn("platform/group labels", str(ctx.exception))
 
     def test_verify_packaged_app_grouped_dds_selftest_checks_need_run_selftest(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")

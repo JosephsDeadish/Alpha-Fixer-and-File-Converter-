@@ -40,6 +40,8 @@ from src.core.runtime_validation import (
     execute_disc_video_manifest,
     execute_format_matrix_manifest,
     load_manifest_entries,
+    manifest_group_check_suffix,
+    manifest_grouped_entries,
     materialize_manifest_entries,
 )
 from src.core.worker import AlphaWorker, ConverterWorker
@@ -192,6 +194,20 @@ class TestBuildOutputPath(unittest.TestCase):
 
 
 class TestCorpusHelperInputs(unittest.TestCase):
+    def test_manifest_group_helpers_slug_and_preserve_order(self):
+        entries = [
+            {"platform": "PSP", "path": "/tmp/a.iso"},
+            {"group": "BC7 mipmap", "path": "/tmp/a.dds"},
+            {"platform": "PS1", "path": "/tmp/b.bin"},
+            {"platform": "PSP", "path": "/tmp/c.iso"},
+        ]
+        self.assertEqual(manifest_group_check_suffix("PS1 / BIN+CUE"), "ps1_bin_cue")
+        grouped = manifest_grouped_entries(entries, "platform", "group")
+        self.assertEqual(
+            [(suffix, label, len(group_entries)) for suffix, label, group_entries in grouped],
+            [("psp", "PSP", 2), ("bc7_mipmap", "BC7 mipmap", 1), ("ps1", "PS1", 1)],
+        )
+
     def test_built_in_public_disc_video_manifest_loads(self):
         manifest_path = os.path.join(
             os.path.dirname(__file__),

@@ -10,7 +10,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.core.runtime_validation import load_manifest_entries
+from src.core.runtime_validation import load_manifest_entries, manifest_grouped_entries
 _PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
 _PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
 _PUBLIC_FORMAT_MATRIX_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_format_matrix_manifest.json"
@@ -114,6 +114,16 @@ def _required_selftest_checks(args) -> list[str]:
     return required
 
 
+def _manifest_group_requirement_checks(raw_manifest: str | None, base_check: str, *keys: str) -> list[str]:
+    if not raw_manifest:
+        return []
+    entries = load_manifest_entries(raw_manifest)
+    return [
+        f"{base_check}_{suffix}"
+        for suffix, _label, _entries in manifest_grouped_entries(entries, *keys)
+    ]
+
+
 def _print_selftest_check_summary(checks: dict[str, object]) -> None:
     if not isinstance(checks, dict) or not checks:
         return
@@ -159,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
     parser.add_argument("--require-dds-selftest-checks", action="store_true", help="Fail unless the built-in DDS self-test checks, including compressed DDS output when available, all report ok=true.")
     parser.add_argument("--require-public-manifest-checks", action="store_true", help="Fail unless the public disc-video, DDS/DX10, and format-matrix self-test checks all report ok=true.")
+    parser.add_argument("--require-disc-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every platform/group represented in the supplied disc-video manifest.")
+    parser.add_argument("--require-dds-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every group/family represented in the supplied DDS manifest.")
+    parser.add_argument("--require-format-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every target format represented in the supplied format-matrix manifest.")
     parser.add_argument("--disc-video-manifest", action="append", default=[], help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--dds-manifest", action="append", default=[], help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--format-matrix-manifest", action="append", default=[], help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
@@ -181,9 +194,47 @@ def main(argv: list[str] | None = None) -> int:
     merged_disc_manifest = _merged_manifest_arg(args.disc_video_manifest)
     merged_dds_manifest = _merged_manifest_arg(args.dds_manifest)
     merged_format_manifest = _merged_manifest_arg(args.format_matrix_manifest)
+    manifest_group_required_checks: list[str] = []
+    if args.require_disc_manifest_group_checks:
+        disc_group_checks = _manifest_group_requirement_checks(
+            merged_disc_manifest,
+            "external_disc_video_manifest",
+            "platform",
+            "system",
+            "group",
+        )
+        if not disc_group_checks:
+            raise SystemExit("Disc manifest group checks require a disc-video manifest with platform/group labels.")
+        manifest_group_required_checks.extend(disc_group_checks)
+    if args.require_dds_manifest_group_checks:
+        dds_group_checks = _manifest_group_requirement_checks(
+            merged_dds_manifest,
+            "external_dds_manifest",
+            "group",
+            "platform",
+            "family",
+        )
+        if not dds_group_checks:
+            raise SystemExit("DDS manifest group checks require a DDS manifest with group/family labels.")
+        for check_name in dds_group_checks:
+            if check_name not in manifest_group_required_checks:
+                manifest_group_required_checks.append(check_name)
+    if args.require_format_manifest_group_checks:
+        format_group_checks = _manifest_group_requirement_checks(
+            merged_format_manifest,
+            "external_format_matrix_manifest",
+            "target_format",
+            "output_format",
+            "format",
+        )
+        if not format_group_checks:
+            raise SystemExit("Format-manifest group checks require a format-matrix manifest with target_format/output_format labels.")
+        for check_name in format_group_checks:
+            if check_name not in manifest_group_required_checks:
+                manifest_group_required_checks.append(check_name)
     if (merged_disc_manifest or merged_dds_manifest or merged_format_manifest) and not args.run_selftest:
         raise SystemExit("External manifests require --run-selftest so the packaged app can execute them.")
-    if _required_selftest_checks(args) and not args.run_selftest:
+    if (_required_selftest_checks(args) or manifest_group_required_checks) and not args.run_selftest:
         raise SystemExit("Self-test check requirements need --run-selftest so the packaged app can execute them.")
 
     base_env = os.environ.copy()
@@ -268,10 +319,16 @@ def main(argv: list[str] | None = None) -> int:
             selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
         if merged_disc_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = merged_disc_manifest
+        if args.require_disc_manifest_group_checks:
+            selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"] = "1"
         if merged_dds_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = merged_dds_manifest
+        if args.require_dds_manifest_group_checks:
+            selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"] = "1"
         if merged_format_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = merged_format_manifest
+        if args.require_format_manifest_group_checks:
+            selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"] = "1"
         if args.allow_sample_downloads:
             selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
         if args.sample_cache_dir:
@@ -292,7 +349,11 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(checks, dict):
             checks = {}
         _print_selftest_check_summary(checks)
-        for check_name in _required_selftest_checks(args):
+        required_checks = _required_selftest_checks(args)
+        for check_name in manifest_group_required_checks:
+            if check_name not in required_checks:
+                required_checks.append(check_name)
+        for check_name in required_checks:
             check = checks.get(check_name)
             if not isinstance(check, dict) or not check.get("ok"):
                 raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")
