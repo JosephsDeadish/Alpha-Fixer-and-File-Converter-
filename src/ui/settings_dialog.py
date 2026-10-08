@@ -1814,7 +1814,7 @@ class SettingsDialog(QDialog):
         hist_gl.setVerticalSpacing(6)
 
         # Default max entries
-        hist_gl.addWidget(QLabel("Default max entries:"), 0, 0)
+        hist_gl.addWidget(QLabel("Default max entries per tool/builder:"), 0, 0)
         self._history_max_spin = QSpinBox()
         self._history_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._history_max_spin.setRange(10, 5000)
@@ -1831,7 +1831,7 @@ class SettingsDialog(QDialog):
         hist_gl.addWidget(self._history_max_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         # Per-tool max entries
-        per_lbl = QLabel("Per-tool limits (0 = use default above):")
+        per_lbl = QLabel("Per-tool / per-builder limits (0 = use default above):")
         per_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
         hist_gl.addWidget(per_lbl, 1, 0, 1, 2)
 
@@ -1859,7 +1859,7 @@ class SettingsDialog(QDialog):
         )
         hist_gl.addWidget(self._history_max_alpha_spin, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
-        hist_gl.addWidget(QLabel("  Alpha Painter:"), 4, 0)
+        hist_gl.addWidget(QLabel("  Selective Alpha Tool:"), 4, 0)
         self._history_max_sel_spin = QSpinBox()
         self._history_max_sel_spin.setRange(0, 5000)
         self._history_max_sel_spin.setSpecialValueText("default")
@@ -1867,43 +1867,81 @@ class SettingsDialog(QDialog):
         self._history_max_sel_spin.setSuffix("  entries")
         self._history_max_sel_spin.setMaximumWidth(130)
         self._history_max_sel_spin.setToolTip(
-            "Max history entries for Alpha Painter (0 = use default above)."
+            "Max history entries for the Selective Alpha Tool (0 = use default above)."
         )
         hist_gl.addWidget(self._history_max_sel_spin, 4, 1, Qt.AlignmentFlag.AlignLeft)
 
+        hist_gl.addWidget(QLabel("  GIF Builder:"), 5, 0)
+        self._history_max_gif_spin = QSpinBox()
+        self._history_max_gif_spin.setRange(0, 5000)
+        self._history_max_gif_spin.setSpecialValueText("default")
+        self._history_max_gif_spin.setValue(0)
+        self._history_max_gif_spin.setSuffix("  entries")
+        self._history_max_gif_spin.setMaximumWidth(130)
+        self._history_max_gif_spin.setToolTip(
+            "Max history entries for the GIF Builder (0 = use default above)."
+        )
+        hist_gl.addWidget(self._history_max_gif_spin, 5, 1, Qt.AlignmentFlag.AlignLeft)
+
+        hist_gl.addWidget(QLabel("  Video Builder:"), 6, 0)
+        self._history_max_video_spin = QSpinBox()
+        self._history_max_video_spin.setRange(0, 5000)
+        self._history_max_video_spin.setSpecialValueText("default")
+        self._history_max_video_spin.setValue(0)
+        self._history_max_video_spin.setSuffix("  entries")
+        self._history_max_video_spin.setMaximumWidth(130)
+        self._history_max_video_spin.setToolTip(
+            "Max history entries for the Video Builder (0 = use default above)."
+        )
+        hist_gl.addWidget(self._history_max_video_spin, 6, 1, Qt.AlignmentFlag.AlignLeft)
+
         # Track history checkboxes
-        track_lbl = QLabel("Track history for:")
+        track_lbl = QLabel("Track history for these tools and builders:")
         track_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
-        hist_gl.addWidget(track_lbl, 5, 0, 1, 2)
+        hist_gl.addWidget(track_lbl, 7, 0, 1, 2)
 
         self._chk_track_converter = QCheckBox("Converter")
         self._chk_track_converter.setChecked(True)
         self._chk_track_converter.setToolTip(
             "When checked, File Converter batches are saved to history."
         )
-        hist_gl.addWidget(self._chk_track_converter, 6, 0)
+        hist_gl.addWidget(self._chk_track_converter, 8, 0)
 
         self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
         self._chk_track_alpha.setChecked(True)
         self._chk_track_alpha.setToolTip(
             "When checked, Alpha & RGBA Adjuster batches are saved to history."
         )
-        hist_gl.addWidget(self._chk_track_alpha, 7, 0)
+        hist_gl.addWidget(self._chk_track_alpha, 9, 0)
 
-        self._chk_track_sel_alpha = QCheckBox("Alpha Painter")
+        self._chk_track_sel_alpha = QCheckBox("Selective Alpha Tool")
         self._chk_track_sel_alpha.setChecked(True)
         self._chk_track_sel_alpha.setToolTip(
-            "When checked, Alpha Painter saves are recorded in history."
+            "When checked, Selective Alpha Tool saves are recorded in history."
         )
-        hist_gl.addWidget(self._chk_track_sel_alpha, 8, 0)
+        hist_gl.addWidget(self._chk_track_sel_alpha, 10, 0)
+
+        self._chk_track_gif = QCheckBox("GIF Builder")
+        self._chk_track_gif.setChecked(True)
+        self._chk_track_gif.setToolTip(
+            "When checked, GIF Builder exports are saved to history."
+        )
+        hist_gl.addWidget(self._chk_track_gif, 8, 1)
+
+        self._chk_track_video = QCheckBox("Video Builder")
+        self._chk_track_video.setChecked(True)
+        self._chk_track_video.setToolTip(
+            "When checked, Video Builder exports are saved to history."
+        )
+        hist_gl.addWidget(self._chk_track_video, 9, 1)
 
         hist_note = QLabel(
-            "ℹ  Existing history entries are not trimmed immediately — limits "
-            "only apply to new entries going forward."
+            "ℹ  Existing history entries are not trimmed immediately — updated limits "
+            "only apply to new entries going forward, and disabling tracking does not delete entries already saved."
         )
         hist_note.setWordWrap(True)
         hist_note.setStyleSheet("color: #888; font-size: 10px;")
-        hist_gl.addWidget(hist_note, 9, 0, 1, 2)
+        hist_gl.addWidget(hist_note, 11, 0, 1, 2)
 
         gv.addWidget(grp_history)
 
@@ -2026,6 +2064,12 @@ class SettingsDialog(QDialog):
         self._history_max_sel_spin.valueChanged.connect(
             lambda v: self._settings.set("history_max_entries_selective_alpha", v)
         )
+        self._history_max_gif_spin.valueChanged.connect(
+            lambda v: self._settings.set("history_max_entries_gif_builder", v)
+        )
+        self._history_max_video_spin.valueChanged.connect(
+            lambda v: self._settings.set("history_max_entries_video_builder", v)
+        )
         self._chk_track_converter.toggled.connect(
             lambda v: self._settings.set("history_track_converter", v)
         )
@@ -2034,6 +2078,12 @@ class SettingsDialog(QDialog):
         )
         self._chk_track_sel_alpha.toggled.connect(
             lambda v: self._settings.set("history_track_selective_alpha", v)
+        )
+        self._chk_track_gif.toggled.connect(
+            lambda v: self._settings.set("history_track_gif_builder", v)
+        )
+        self._chk_track_video.toggled.connect(
+            lambda v: self._settings.set("history_track_video_builder", v)
         )
         self._click_effects_theme_check.toggled.connect(self._on_effects_enabled_changed)
         self._use_theme_effect_check.toggled.connect(self._on_use_theme_effect_changed)
@@ -2314,6 +2364,12 @@ class SettingsDialog(QDialog):
         self._history_max_sel_spin.setValue(
             int(self._settings.get("history_max_entries_selective_alpha", 0))
         )
+        self._history_max_gif_spin.setValue(
+            int(self._settings.get("history_max_entries_gif_builder", 0))
+        )
+        self._history_max_video_spin.setValue(
+            int(self._settings.get("history_max_entries_video_builder", 0))
+        )
         self._chk_track_converter.setChecked(
             bool(self._settings.get("history_track_converter", True))
         )
@@ -2322,6 +2378,12 @@ class SettingsDialog(QDialog):
         )
         self._chk_track_sel_alpha.setChecked(
             bool(self._settings.get("history_track_selective_alpha", True))
+        )
+        self._chk_track_gif.setChecked(
+            bool(self._settings.get("history_track_gif_builder", True))
+        )
+        self._chk_track_video.setChecked(
+            bool(self._settings.get("history_track_video_builder", True))
         )
         # Sync Theme-tab on/off + use-theme checkboxes with persisted values
         click_effects_enabled = self._settings.get("click_effects_enabled", False)
@@ -2608,9 +2670,13 @@ class SettingsDialog(QDialog):
         mgr.register(self._history_max_conv_spin, "history_max_conv_spin")
         mgr.register(self._history_max_alpha_spin, "history_max_alpha_spin")
         mgr.register(self._history_max_sel_spin, "history_max_sel_spin")
+        mgr.register(self._history_max_gif_spin, "history_max_gif_spin")
+        mgr.register(self._history_max_video_spin, "history_max_video_spin")
         mgr.register(self._chk_track_converter, "history_track_converter")
         mgr.register(self._chk_track_alpha, "history_track_alpha")
         mgr.register(self._chk_track_sel_alpha, "history_track_sel_alpha")
+        mgr.register(self._chk_track_gif, "history_track_gif")
+        mgr.register(self._chk_track_video, "history_track_video")
         mgr.register(self._click_effects_theme_check, "click_effects_check")
         mgr.register(self._use_theme_effect_check, "use_theme_effect")
         mgr.register(self._animated_banner_check, "animated_banner_check")

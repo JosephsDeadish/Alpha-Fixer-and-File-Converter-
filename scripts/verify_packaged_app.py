@@ -24,6 +24,10 @@ _VIDEO_SELFTEST_CHECKS = (
     "mpegts_load",
     "synthetic_bin_probe",
 )
+_STRESS_SELFTEST_CHECKS = (
+    "stress_image_session_batch",
+    "stress_video_session_batch",
+)
 _DDS_SELFTEST_CHECKS = (
     "png_to_dds_rgba",
     "png_to_dds_dxt1",
@@ -101,6 +105,7 @@ def _required_selftest_checks(args) -> list[str]:
     for attr_name, names in (
         ("require_core_selftest_checks", _CORE_SELFTEST_CHECKS),
         ("require_video_selftest_checks", _VIDEO_SELFTEST_CHECKS),
+        ("require_stress_selftest_checks", _STRESS_SELFTEST_CHECKS),
         ("require_dds_selftest_checks", _DDS_SELFTEST_CHECKS),
     ):
         if getattr(args, attr_name, False):
@@ -162,11 +167,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-selftest", action="store_true", help="Run the packaged executable's end-to-end runtime self-test after the capability audit.")
     parser.add_argument("--selftest-iterations", type=int, default=2, help="How many self-test iterations the packaged app should run when --run-selftest is set.")
     parser.add_argument("--selftest-sample-limit", type=int, default=0, help="Optional cap for external manifest entries exercised per packaged self-test run.")
+    parser.add_argument("--selftest-stress-loops", type=int, default=0, help="Optional number of larger generated media/session stress loops to run during packaged self-test.")
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
     parser.add_argument("--require-core-selftest-checks", action="store_true", help="Fail unless the built-in PNG/GIF/DDS and generated-video self-test checks all report ok=true.")
     parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
+    parser.add_argument("--require-stress-selftest-checks", action="store_true", help="Fail unless the packaged self-test stress batch checks report ok=true.")
     parser.add_argument("--require-dds-selftest-checks", action="store_true", help="Fail unless the built-in DDS self-test checks, including compressed DDS output when available, all report ok=true.")
     parser.add_argument("--require-public-manifest-checks", action="store_true", help="Fail unless the public disc-video, DDS/DX10, and format-matrix self-test checks all report ok=true.")
     parser.add_argument("--require-public-manifest-group-checks", action="store_true", help="Fail unless every platform/group/format subgroup represented in the loaded public manifests also reports ok=true.")
@@ -328,6 +335,8 @@ def main(argv: list[str] | None = None) -> int:
         selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"] = str(max(1, int(args.selftest_iterations)))
         if args.selftest_sample_limit:
             selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
+        if args.selftest_stress_loops:
+            selftest_env["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"] = str(max(1, int(args.selftest_stress_loops)))
         if merged_disc_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = merged_disc_manifest
         if require_disc_group_checks:

@@ -117,6 +117,8 @@ class SettingsManager:
         "history_track_converter": True,          # Record Converter history
         "history_track_alpha": True,              # Record Alpha & RGBA Adjuster history
         "history_track_selective_alpha": True,    # Record Selective Alpha Tool history
+        "history_track_gif_builder": True,        # Record GIF Builder history
+        "history_track_video_builder": True,      # Record Video Builder history
         # Last-used state
         "last_input_dir": "",
         "last_output_dir": "",
@@ -508,9 +510,12 @@ class SettingsManager:
             return []
 
     def add_gif_builder_history(self, entry: dict, max_entries: int = 50):
+        if not self.get("history_track_gif_builder", True):
+            return
         history = self.get_gif_builder_history()
         history.insert(0, entry)
-        limit = int(self.get("history_max_entries", max_entries))
+        per_tool = int(self.get("history_max_entries_gif_builder", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
         history = history[:limit]
         self._qs.setValue("gif_builder_history", json.dumps(history))
         self._qs.sync()
@@ -532,9 +537,12 @@ class SettingsManager:
             return []
 
     def add_video_builder_history(self, entry: dict, max_entries: int = 50):
+        if not self.get("history_track_video_builder", True):
+            return
         history = self.get_video_builder_history()
         history.insert(0, entry)
-        limit = int(self.get("history_max_entries", max_entries))
+        per_tool = int(self.get("history_max_entries_video_builder", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
         history = history[:limit]
         self._qs.setValue("video_builder_history", json.dumps(history))
         self._qs.sync()

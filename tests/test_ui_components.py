@@ -1063,6 +1063,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         "--run-selftest",
                         "--selftest-sample-limit",
                         "7",
+                        "--selftest-stress-loops",
+                        "3",
                         "--disc-video-manifest",
                         "/tmp/disc.json",
                         "--dds-manifest",
@@ -1082,6 +1084,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         selftest_env = calls[-1]["env"]
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"], "2")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"], "7")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"], "3")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"], "/tmp/disc.json")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"], "/tmp/dds.json")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"], "/tmp/matrix.json")
@@ -1242,6 +1245,39 @@ class TestStartupCapabilityNotice(unittest.TestCase):
             with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
                 rc = verify.main([target, "--run-selftest", "--require-video-selftest-checks"])
         self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_stress_selftest_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"stress_image_session_batch": {"ok": true}, "stress_video_session_batch": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main([target, "--run-selftest", "--selftest-stress-loops", "2", "--require-stress-selftest-checks"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls[-1]["env"]["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"], "2")
 
     def test_verify_packaged_app_can_require_manifest_group_checks(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
@@ -1749,6 +1785,31 @@ class TestSettingsManagerNewKeys(unittest.TestCase):
     def test_delete_nonexistent_named_theme(self):
         result = self._mgr.delete_named_theme("DoesNotExist")
         self.assertFalse(result)
+
+    def test_gif_builder_history_uses_track_flag_and_per_tool_limit(self):
+        self._mgr.set("history_max_entries", 10)
+        self._mgr.set("history_max_entries_gif_builder", 2)
+        self._mgr.add_gif_builder_history({"timestamp": "1"})
+        self._mgr.add_gif_builder_history({"timestamp": "2"})
+        self._mgr.add_gif_builder_history({"timestamp": "3"})
+        history = self._mgr.get_gif_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["3", "2"])
+        self._mgr.set("history_track_gif_builder", False)
+        self._mgr.add_gif_builder_history({"timestamp": "4"})
+        history = self._mgr.get_gif_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["3", "2"])
+
+    def test_video_builder_history_uses_track_flag_and_per_tool_limit(self):
+        self._mgr.set("history_max_entries", 10)
+        self._mgr.set("history_max_entries_video_builder", 1)
+        self._mgr.add_video_builder_history({"timestamp": "1"})
+        self._mgr.add_video_builder_history({"timestamp": "2"})
+        history = self._mgr.get_video_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["2"])
+        self._mgr.set("history_track_video_builder", False)
+        self._mgr.add_video_builder_history({"timestamp": "3"})
+        history = self._mgr.get_video_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["2"])
 
 
 # ---------------------------------------------------------------------------

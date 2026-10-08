@@ -787,6 +787,17 @@ def _runtime_selftest_peak_rss_mb() -> float | None:
     return round(float(usage) / 1024.0, 2)
 
 
+def _runtime_selftest_stress_loops() -> int:
+    raw = os.environ.get("ALPHA_FIXER_RUNTIME_STRESS_LOOPS", "").strip()
+    if not raw:
+        return 0
+    try:
+        loops = int(raw)
+    except ValueError:
+        loops = 0
+    return max(0, min(24, loops))
+
+
 def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -799,8 +810,10 @@ def _emit_runtime_selftest_dump() -> int:
 
     iterations = _runtime_selftest_iterations()
     manifest_limit = manifest_sample_limit_from_env()
+    stress_loops = _runtime_selftest_stress_loops()
     summary: dict[str, object] = {
         "iterations": iterations,
+        "stress_loops": stress_loops,
         "passed": True,
         "checks": {},
         "errors": [],
@@ -965,6 +978,104 @@ def _emit_runtime_selftest_dump() -> int:
                 _record_check("generated_mp4_load", False, "ffmpeg executable unavailable")
                 _record_check("mpegts_load", False, "ffmpeg executable unavailable")
                 _record_check("synthetic_bin_probe", False, "ffmpeg executable unavailable")
+
+        if stress_loops > 0:
+            image_successes = 0
+            image_expected = stress_loops * 2
+            for stress_idx in range(stress_loops):
+                stress_png = os.path.join(tmpdir, f"stress_{stress_idx:02d}.png")
+                stress_gif = os.path.join(tmpdir, f"stress_{stress_idx:02d}.gif")
+                stress_dds = os.path.join(tmpdir, f"stress_{stress_idx:02d}.dds")
+                width = 512 + (stress_idx % 4) * 128
+                height = 288 + (stress_idx % 3) * 96
+                Image.new(
+                    "RGBA",
+                    (width, height),
+                    ((32 + stress_idx * 17) % 255, (80 + stress_idx * 29) % 255, (160 + stress_idx * 37) % 255, 224),
+                ).save(stress_png)
+                convert_file(stress_png, stress_gif, "GIF")
+                with Image.open(stress_gif) as gif_img:
+                    gif_img.load()
+                    if gif_img.size == (width, height):
+                        image_successes += 1
+                convert_file(stress_png, stress_dds, "DDS", dds_variant="rgba")
+                dds_img = _load_dds(stress_dds)
+                try:
+                    if dds_img.size == (width, height):
+                        image_successes += 1
+                finally:
+                    dds_img.close()
+            _record_check(
+                "stress_image_session_batch",
+                image_successes == image_expected,
+                f"loops={stress_loops} completed={image_successes}/{image_expected}",
+            )
+
+            ffmpeg_exe = vt._get_ffmpeg_exe()
+            if ffmpeg_exe:
+                video_successes = 0
+                video_expected = stress_loops * 2
+                for stress_idx in range(stress_loops):
+                    stress_mp4 = os.path.join(tmpdir, f"stress_{stress_idx:02d}.mp4")
+                    stress_bin = os.path.join(tmpdir, f"stress_{stress_idx:02d}.bin")
+                    width = 640 + (stress_idx % 3) * 160
+                    height = 360 + (stress_idx % 2) * 90
+                    duration = 1.5 + (stress_idx % 3) * 0.25
+                    mp4_result = subprocess.run(
+                        [
+                            ffmpeg_exe,
+                            "-y",
+                            "-v",
+                            "error",
+                            "-f",
+                            "lavfi",
+                            "-i",
+                            f"testsrc=size={width}x{height}:rate=15",
+                            "-f",
+                            "lavfi",
+                            "-i",
+                            "sine=frequency=330:sample_rate=44100",
+                            "-shortest",
+                            "-t",
+                            f"{duration:.2f}",
+                            "-pix_fmt",
+                            "yuv420p",
+                            "-c:v",
+                            "libx264",
+                            "-c:a",
+                            "aac",
+                            stress_mp4,
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                        text=True,
+                        timeout=240,
+                    )
+                    if mp4_result.returncode != 0 or not os.path.isfile(stress_mp4):
+                        continue
+                    mp4_clip = vt._load_video_clip(stress_mp4)
+                    if mp4_clip is not None:
+                        try:
+                            if mp4_clip.total_frames > 0:
+                                video_successes += 1
+                        finally:
+                            mp4_clip.close()
+                    _copy_file(stress_mp4, stress_bin)
+                    odd_clip = vt._load_video_clip(stress_bin)
+                    if odd_clip is not None:
+                        try:
+                            if odd_clip.total_frames > 0:
+                                video_successes += 1
+                        finally:
+                            odd_clip.close()
+                _record_check(
+                    "stress_video_session_batch",
+                    video_successes == video_expected,
+                    f"loops={stress_loops} completed={video_successes}/{video_expected}",
+                )
+            else:
+                _record_check("stress_video_session_batch", True, "skipped: ffmpeg executable unavailable")
 
         disc_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST")
         if disc_manifest:
