@@ -1,0 +1,61 @@
+{
+  "base_dir": ".",
+  "entries": [
+    {
+      "group": "BC6H",
+      "sample_id": "bc6h-hdr",
+      "path": "dds/bc6h-hdr.dds",
+      "required": true,
+      "expect": "load_or_fail_clearly",
+      "detail_contains": [
+        "BC6H",
+        "ImageMagick/wand"
+      ],
+      "notes": "Point this at a real local BC6H HDR DDS sample. Add expect_size when you know the exact dimensions so the runtime self-test can validate successful decode size too."
+    },
+    {
+      "group": "mipmap",
+      "sample_id": "mipmap-chain",
+      "path": "dds/mipmap-chain.dds",
+      "required": true,
+      "expect": "load_or_fail_clearly",
+      "detail_contains": [
+        "mipmap"
+      ],
+      "notes": "Use a real DDS sample with multiple mip levels. The current loader should either decode the base level cleanly or fail with explicit mipmap guidance."
+    },
+    {
+      "group": "cubemap",
+      "sample_id": "cubemap-face-set",
+      "path": "dds/cubemap.dds",
+      "required": true,
+      "expect": "fail",
+      "detail_contains": [
+        "cubemap"
+      ],
+      "notes": "Use a real cubemap DDS sample here. The current loader should fail clearly unless a Wand/ImageMagick fallback is available in the runtime."
+    },
+    {
+      "group": "array",
+      "sample_id": "texture-array",
+      "path": "dds/texture-array.dds",
+      "required": true,
+      "expect": "fail",
+      "detail_contains": [
+        "array"
+      ],
+      "notes": "Use a real DDS texture-array sample here. The validator now supports clear expected-failure assertions for unsupported array surfaces."
+    },
+    {
+      "group": "volume",
+      "sample_id": "volume-texture",
+      "path": "dds/volume-texture.dds",
+      "required": true,
+      "expect": "fail",
+      "detail_contains": [
+        "volume texture"
+      ],
+      "notes": "Use a real 3D / volume DDS sample here. This helps verify that packaged and source runtimes continue to fail with clear unsupported-volume guidance."
+    }
+  ]
+}
