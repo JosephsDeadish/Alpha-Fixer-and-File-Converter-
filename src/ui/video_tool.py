@@ -102,7 +102,7 @@ _SEGMENTED_VIDEO_NAME_RE = re.compile(
     r"(?is)^(?P<base>.+?)(?:[._ -]?)(?P<label>part|pt|cd|disc|disk|segment|seg)(?:[._ -]?)(?P<index>\d+)$"
 )
 _CUE_FILE_RE = re.compile(r'^\s*FILE\s+(?:"(?P<quoted>[^"]+)"|(?P<plain>\S+))\s+\S+', re.IGNORECASE)
-_PROBE_FIELD_RE = re.compile(r"(?i)(?:^|[;\\n])\s*(container|video|audio|preferred-stream|video-streams|audio-streams)=([^;.\n]+)")
+_PROBE_FIELD_RE = re.compile(r"(?i)(?:^|[;\\n])\s*(container|video|audio|preferred-stream|preferred-audio-stream|video-streams|audio-streams)=([^;.\n]+)")
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
@@ -544,6 +544,34 @@ def _stream_selection_note(
     return f"{prefix} #{video_index} • {summary}"
 
 
+def _audio_stream_selection_note(
+    details: Optional[dict[str, object]],
+    *,
+    manual: bool = False,
+) -> str:
+    if not details:
+        return ""
+    audio_index = _coerce_optional_stream_index(details.get("audio_stream_index"))
+    audio_count = max(0, int(details.get("audio_stream_count") or 0))
+    if audio_index is None or (not manual and audio_count <= 1):
+        return ""
+    choices = details.get("audio_stream_choices")
+    stream_info = None
+    if isinstance(choices, list):
+        stream_info = next(
+            (
+                choice for choice in choices
+                if isinstance(choice, dict) and _coerce_optional_stream_index(choice.get("index")) == audio_index
+            ),
+            None,
+        )
+    prefix = "manual audio" if manual else "preferred audio"
+    summary = _describe_stream_choice(stream_info) or f"stream #{audio_index}"
+    if summary.startswith("stream #"):
+        return f"{prefix} {summary[len('stream '):]}"
+    return f"{prefix} #{audio_index} • {summary}"
+
+
 def _probe_media_details(
     path: str,
     preferred_video_stream_index: Optional[int] = None,
@@ -723,7 +751,8 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
         choice = f" preferred-stream={video_stream_index}" if video_stream_index is not None else ""
         parts.append(f"video-streams={video_stream_count}{choice}")
     if audio_stream_count > 1:
-        parts.append(f"audio-streams={audio_stream_count}")
+        choice = f" preferred-audio-stream={audio_stream_index}" if audio_stream_index is not None else ""
+        parts.append(f"audio-streams={audio_stream_count}{choice}")
     if attached_pic_count > 0:
         parts.append(f"attached-pic-streams={attached_pic_count}")
     if selected_language:
@@ -863,6 +892,10 @@ def _video_load_failure_hint(
         selection_note = _stream_selection_note(probe, manual=True)
         if selection_note:
             lines.append(f"Manual selection active: {selection_note}.")
+    if preferred_audio_stream_index is not None:
+        audio_selection_note = _audio_stream_selection_note(probe, manual=True)
+        if audio_selection_note:
+            lines.append(f"Manual selection active: {audio_selection_note}.")
     lines.extend(_video_container_guidance(path, probe))
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
@@ -1298,7 +1331,7 @@ def _video_capability_summary() -> str:
         return (
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, cue/bin sidecar retries for disc layouts, audio-drop retries for broken source audio, and a manual stream picker for multi-stream containers. "
+                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, cue/bin sidecar retries for disc layouts, audio-drop retries for broken source audio, and manual video/audio stream pickers for multi-stream containers. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
@@ -1325,7 +1358,7 @@ def _video_capability_details() -> str:
             "• Standard video import and MP4 export are available.",
             "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, retry matching cue/bin sidecars, or salvage a still frame when ffmpeg can expose usable video data.",
             "• Multipart/segmented sources like clip.part1.vob + clip.part2.vob or movie.vob.001 + movie.vob.002 can also be concat-repaired automatically when all parts are present together.",
-            "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from a manually chosen video stream.",
+            "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from manually chosen video and audio streams.",
             "• Audio-only containers still cannot be added as timeline video clips.",
         ])
         if ffprobe_exe:
@@ -2493,27 +2526,35 @@ class VideoToolDialog(QDialog):
         grp_stream = QGroupBox("Selected Stream")
         stream_vl = QVBoxLayout(grp_stream)
         stream_vl.setSpacing(6)
-        self._stream_summary_lbl = QLabel("Select a loaded video clip to inspect its available video streams.")
+        self._stream_summary_lbl = QLabel("Select a loaded video clip to inspect its available video/audio streams.")
         self._stream_summary_lbl.setWordWrap(True)
         self._stream_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
         stream_vl.addWidget(self._stream_summary_lbl)
-        stream_row = QHBoxLayout()
-        stream_row.addWidget(QLabel("Video stream:"))
+        stream_row = QGridLayout()
+        stream_row.addWidget(QLabel("Video stream:"), 0, 0)
         self._stream_picker_combo = QComboBox()
         self._stream_picker_combo.setToolTip(
             "Choose which detected video stream to reload for the selected clip.\n"
             "Auto keeps the probe-preferred stream; explicit picks force a remux/transcode path when needed."
         )
         self._stream_picker_combo.currentIndexChanged.connect(self._on_stream_picker_changed)
-        stream_row.addWidget(self._stream_picker_combo, 1)
+        stream_row.addWidget(self._stream_picker_combo, 0, 1)
+        stream_row.addWidget(QLabel("Audio stream:"), 1, 0)
+        self._audio_stream_picker_combo = QComboBox()
+        self._audio_stream_picker_combo.setToolTip(
+            "Choose which detected audio stream should stay attached to the selected clip.\n"
+            "Auto keeps the probe-preferred audio stream; explicit picks are preserved through reload/export when possible."
+        )
+        self._audio_stream_picker_combo.currentIndexChanged.connect(self._on_stream_picker_changed)
+        stream_row.addWidget(self._audio_stream_picker_combo, 1, 1)
         stream_vl.addLayout(stream_row)
-        self._btn_apply_stream = QPushButton("Reload Selected Stream")
+        self._btn_apply_stream = QPushButton("Reload Selected Streams")
         self._btn_apply_stream.setToolTip(
-            "Reload the selected clip from the chosen video stream while preserving trim and timing settings when possible."
+            "Reload the selected clip from the chosen video/audio stream combination while preserving trim and timing settings when possible."
         )
         self._btn_apply_stream.clicked.connect(self._apply_selected_stream_choice)
         stream_vl.addWidget(self._btn_apply_stream)
-        self._stream_hint_lbl = QLabel("Audio track selection still stays automatic; this panel only overrides the video stream.")
+        self._stream_hint_lbl = QLabel("Use Auto to keep the probe-preferred video/audio streams, or choose explicit streams to preserve a manual override.")
         self._stream_hint_lbl.setWordWrap(True)
         self._stream_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
         stream_vl.addWidget(self._stream_hint_lbl)
@@ -3002,6 +3043,11 @@ class VideoToolDialog(QDialog):
         self._stream_picker_combo.addItem("Auto")
         self._stream_picker_combo.setEnabled(enable_picker)
         self._stream_picker_combo.blockSignals(False)
+        self._audio_stream_picker_combo.blockSignals(True)
+        self._audio_stream_picker_combo.clear()
+        self._audio_stream_picker_combo.addItem("Auto")
+        self._audio_stream_picker_combo.setEnabled(enable_picker)
+        self._audio_stream_picker_combo.blockSignals(False)
         self._btn_apply_stream.setEnabled(enable_apply)
         self._stream_summary_lbl.setText(summary)
         self._stream_hint_lbl.setText(hint)
@@ -3011,8 +3057,8 @@ class VideoToolDialog(QDialog):
         row = self._clip_list.currentRow() if row is None else row
         if row < 0 or row >= len(self._clips):
             self._set_stream_controls_state(
-                "Select a loaded video clip to inspect its available video streams.",
-                "Audio track selection still stays automatic; this panel only overrides the video stream.",
+                "Select a loaded video clip to inspect its available video/audio streams.",
+                "Audio track selection becomes selectable here only after ffprobe inspects a loaded multi-stream clip.",
             )
             return
         clip = self._clips[row]
@@ -3042,6 +3088,7 @@ class VideoToolDialog(QDialog):
         video_count = max(0, int(details.get("video_stream_count") or 0))
         audio_count = max(0, int(details.get("audio_stream_count") or 0))
         auto_index = _coerce_optional_stream_index(details.get("video_stream_index"))
+        auto_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index"))
         auto_choice = next(
             (
                 choice for choice in video_choices
@@ -3074,29 +3121,81 @@ class VideoToolDialog(QDialog):
                 break
         self._stream_picker_combo.setCurrentIndex(match)
         self._stream_picker_combo.blockSignals(False)
-        enable_picker = video_count > 1
+        audio_choices = details.get("audio_stream_choices")
+        if not isinstance(audio_choices, list):
+            audio_choices = []
+        auto_audio_choice = next(
+            (
+                choice for choice in audio_choices
+                if isinstance(choice, dict) and _coerce_optional_stream_index(choice.get("index")) == auto_audio_index
+            ),
+            None,
+        )
+        auto_audio_label = "Auto"
+        auto_audio_desc = _describe_stream_choice(auto_audio_choice)
+        if auto_audio_desc:
+            auto_audio_label = f"Auto — {auto_audio_desc}"
+        elif auto_audio_index is not None:
+            auto_audio_label = f"Auto — stream #{auto_audio_index}"
+        self._audio_stream_picker_combo.blockSignals(True)
+        self._audio_stream_picker_combo.clear()
+        self._audio_stream_picker_combo.addItem(auto_audio_label, userData=None)
+        for choice in audio_choices:
+            if not isinstance(choice, dict):
+                continue
+            index = _coerce_optional_stream_index(choice.get("index"))
+            if index is None:
+                continue
+            label = _describe_stream_choice(choice) or f"stream #{index}"
+            self._audio_stream_picker_combo.addItem(label if label.lower().startswith("stream #") else f"Stream #{index} — {label}", userData=index)
+        target_audio_index = clip.preferred_audio_stream_index
+        audio_match = 0
+        for combo_index in range(self._audio_stream_picker_combo.count()):
+            if _coerce_optional_stream_index(self._audio_stream_picker_combo.itemData(combo_index)) == target_audio_index:
+                audio_match = combo_index
+                break
+        self._audio_stream_picker_combo.setCurrentIndex(audio_match)
+        self._audio_stream_picker_combo.blockSignals(False)
+        enable_video_picker = video_count > 1
+        enable_audio_picker = audio_count > 1
         selected_label = _stream_selection_note(details, manual=target_index is not None)
-        summary = "This clip exposes a single detected video stream."
+        selected_audio_label = _audio_stream_selection_note(details, manual=target_audio_index is not None)
+        summary_parts = []
         if video_count > 1:
-            summary = f"{video_count} video streams detected."
+            summary_parts.append(f"{video_count} video streams detected.")
             if selected_label:
-                summary += f" Active override: {selected_label}."
+                summary_parts.append(f"Video override: {selected_label}.")
             elif auto_desc:
-                summary += f" Auto currently prefers {auto_desc}."
+                summary_parts.append(f"Auto video currently prefers {auto_desc}.")
+        else:
+            summary_parts.append("This clip exposes a single detected video stream.")
+        if audio_count > 1:
+            summary_parts.append(f"{audio_count} audio streams detected.")
+            if selected_audio_label:
+                summary_parts.append(f"Audio override: {selected_audio_label}.")
+            elif auto_audio_desc:
+                summary_parts.append(f"Auto audio currently prefers {auto_audio_desc}.")
+        else:
+            summary_parts.append("A single audio stream is currently selected automatically." if bool(details.get("has_audio")) else "No source audio stream was detected for this clip.")
+        summary = " ".join(summary_parts)
         hint_parts = []
         if audio_count > 1:
-            hint_parts.append(f"{audio_count} audio streams detected; audio stays automatic for now.")
+            hint_parts.append("Audio overrides are preserved on reload and export history when possible.")
         else:
-            hint_parts.append("Audio track selection still stays automatic; this panel only overrides the video stream.")
+            hint_parts.append("Auto keeps the detected audio stream unless you choose an explicit override.")
         if bool(details.get("selected_video_attached_pic")):
             hint_parts.append("The currently selected stream looks like cover art, so still-frame fallback may be the only usable path.")
         elif int(details.get("video_attached_pic_count") or 0) > 0:
             hint_parts.append("Cover-art style streams were also detected alongside the playable video choices.")
         self._stream_summary_lbl.setText(summary)
         self._stream_hint_lbl.setText(" ".join(hint_parts))
-        self._stream_picker_combo.setEnabled(enable_picker)
-        self._btn_apply_stream.setEnabled(enable_picker and target_index != _coerce_optional_stream_index(self._stream_picker_combo.currentData()))
-        self._stream_group.setEnabled(enable_picker)
+        self._stream_picker_combo.setEnabled(enable_video_picker)
+        self._audio_stream_picker_combo.setEnabled(enable_audio_picker)
+        self._btn_apply_stream.setEnabled(
+            (enable_video_picker and target_index != _coerce_optional_stream_index(self._stream_picker_combo.currentData()))
+            or (enable_audio_picker and target_audio_index != _coerce_optional_stream_index(self._audio_stream_picker_combo.currentData()))
+        )
+        self._stream_group.setEnabled(enable_video_picker or enable_audio_picker)
 
     def _on_stream_picker_changed(self, _index: int) -> None:
         row = self._clip_list.currentRow()
@@ -3108,8 +3207,14 @@ class VideoToolDialog(QDialog):
             self._btn_apply_stream.setEnabled(False)
             return
         self._btn_apply_stream.setEnabled(
-            self._stream_picker_combo.isEnabled()
-            and clip.preferred_video_stream_index != _coerce_optional_stream_index(self._stream_picker_combo.currentData())
+            (
+                self._stream_picker_combo.isEnabled()
+                and clip.preferred_video_stream_index != _coerce_optional_stream_index(self._stream_picker_combo.currentData())
+            )
+            or (
+                self._audio_stream_picker_combo.isEnabled()
+                and clip.preferred_audio_stream_index != _coerce_optional_stream_index(self._audio_stream_picker_combo.currentData())
+            )
         )
 
     def _apply_selected_stream_choice(self) -> None:
@@ -3120,19 +3225,28 @@ class VideoToolDialog(QDialog):
         if clip.clip_type != "video":
             return
         selected_index = _coerce_optional_stream_index(self._stream_picker_combo.currentData())
-        if selected_index == clip.preferred_video_stream_index:
+        selected_audio_index = _coerce_optional_stream_index(self._audio_stream_picker_combo.currentData())
+        if (
+            selected_index == clip.preferred_video_stream_index
+            and selected_audio_index == clip.preferred_audio_stream_index
+        ):
             self._btn_apply_stream.setEnabled(False)
             return
-        new_clip = self._reload_clip(clip, preferred_video_stream_index=selected_index)
+        new_clip = self._reload_clip(
+            clip,
+            preferred_video_stream_index=selected_index,
+            preferred_audio_stream_index=selected_audio_index,
+        )
         if new_clip is None:
             detail = _video_load_failure_hint(
                 clip.source_path,
                 preferred_video_stream_index=selected_index,
-                preferred_audio_stream_index=clip.preferred_audio_stream_index,
+                preferred_audio_stream_index=selected_audio_index,
             )
-            selected_text = "auto stream choice" if selected_index is None else f"stream #{selected_index}"
+            selected_text = "auto stream choice" if selected_index is None else f"video stream #{selected_index}"
+            selected_audio_text = "auto audio choice" if selected_audio_index is None else f"audio stream #{selected_audio_index}"
             self._set_import_status(
-                f"Stream reload failed for {Path(clip.source_path).name} ({selected_text}).",
+                f"Stream reload failed for {Path(clip.source_path).name} ({selected_text}; {selected_audio_text}).",
                 detail=detail,
                 tone="error",
             )
@@ -3156,15 +3270,18 @@ class VideoToolDialog(QDialog):
         self._refresh_stream_controls(row)
         selected_text = _stream_selection_note(new_clip.source_probe, manual=selected_index is not None)
         if not selected_text:
-            selected_text = "auto stream choice restored" if selected_index is None else f"manual stream #{selected_index}"
-        detail_lines = [f"Reloaded from {selected_text}."]
+            selected_text = "auto video choice restored" if selected_index is None else f"manual video #{selected_index}"
+        selected_audio_text = _audio_stream_selection_note(new_clip.source_probe, manual=selected_audio_index is not None)
+        if not selected_audio_text:
+            selected_audio_text = "auto audio choice restored" if selected_audio_index is None else f"manual audio #{selected_audio_index}"
+        detail_lines = [f"Reloaded from {selected_text}.", f"Audio selection: {selected_audio_text}."]
         probe_summary = _format_media_probe_summary(new_clip.source_probe)
         if probe_summary:
             detail_lines.append(probe_summary)
         if new_clip.load_note:
             detail_lines.append(f"Load note: {new_clip.load_note}")
         self._set_import_status(
-            f"Reloaded {Path(new_clip.source_path).name} from {selected_text}.",
+            f"Reloaded {Path(new_clip.source_path).name} from {selected_text} with {selected_audio_text}.",
             detail="\n\n".join(detail_lines),
             tone="success",
         )

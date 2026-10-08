@@ -2630,6 +2630,36 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("Multiple video streams were detected", hint)
         self.assertIn("preferred-stream=3", hint)
 
+    def test_video_load_failure_hint_mentions_manual_audio_selection(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "matroska",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "h264",
+            "audio_codec": "aac",
+            "width": 1280,
+            "height": 720,
+            "fps": 23.976,
+            "video_stream_count": 1,
+            "audio_stream_count": 2,
+            "video_stream_index": 0,
+            "audio_stream_index": 4,
+            "audio_stream_choices": [
+                {"index": 2, "codec_name": "aac", "language": "eng", "title": "Main"},
+                {"index": 4, "codec_name": "aac", "language": "jpn", "title": "Commentary"},
+            ],
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/streamed.mkv", preferred_audio_stream_index=4)
+        self.assertIn("Manual selection active: manual audio #4", hint)
+        self.assertIn("preferred-audio-stream=4", hint)
+
     def test_video_load_failure_hint_mentions_recovery_exhausted_for_odd_container(self):
         try:
             from src.ui import video_tool as vt
@@ -2757,7 +2787,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
                             details = vt._video_capability_details()
         self.assertIn("All video dependencies are available.", details)
-        self.assertIn("Selected Stream panel can reload a clip from a manually chosen video stream", details)
+        self.assertIn("Selected Stream panel can reload a clip from manually chosen video and audio streams", details)
         self.assertIn("ffprobe detail/probing ready", details)
 
     def test_load_video_clip_uses_still_frame_fallback_when_recovery_paths_fail(self):
@@ -3250,6 +3280,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         {"index": 3, "codec_name": "mpeg2video", "width": 320, "height": 240, "fps": 24.0, "language": "eng", "title": "main", "attached_pic": False},
                         {"index": 7, "codec_name": "mpeg1video", "width": 160, "height": 120, "fps": 15.0, "language": "jpn", "title": "bonus", "attached_pic": False},
                     ],
+                    "audio_stream_choices": [
+                        {"index": 1, "codec_name": "ac3", "language": "eng", "title": "Stereo"},
+                        {"index": 9, "codec_name": "mp2", "language": "jpn", "title": "Dub"},
+                    ],
                 },
             )
             dialog._clips = [clip]
@@ -3259,12 +3293,19 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             dialog._clip_list.setCurrentRow(0)
             dialog._on_clip_selected(0)
             self.assertTrue(dialog._stream_picker_combo.isEnabled())
+            self.assertTrue(dialog._audio_stream_picker_combo.isEnabled())
             self.assertIn("2 video streams detected", dialog._stream_summary_lbl.text())
+            self.assertIn("2 audio streams detected", dialog._stream_summary_lbl.text())
             picker_index = next(
                 idx for idx in range(dialog._stream_picker_combo.count())
                 if dialog._stream_picker_combo.itemData(idx) == 7
             )
             dialog._stream_picker_combo.setCurrentIndex(picker_index)
+            audio_picker_index = next(
+                idx for idx in range(dialog._audio_stream_picker_combo.count())
+                if dialog._audio_stream_picker_combo.itemData(idx) == 9
+            )
+            dialog._audio_stream_picker_combo.setCurrentIndex(audio_picker_index)
             new_clip = vt._ClipEntry(
                 "/tmp/multi_bonus.mkv",
                 8,
@@ -3276,7 +3317,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 load_note="manual stream #7; temporary ffmpeg remux fallback active",
                 source_probe={
                     "video_stream_index": 7,
-                    "audio_stream_index": 1,
+                    "audio_stream_index": 9,
                     "video_stream_count": 2,
                     "audio_stream_count": 2,
                     "video_attached_pic_count": 0,
@@ -3285,17 +3326,27 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                         {"index": 3, "codec_name": "mpeg2video", "width": 320, "height": 240, "fps": 24.0, "language": "eng", "title": "main", "attached_pic": False},
                         {"index": 7, "codec_name": "mpeg1video", "width": 160, "height": 120, "fps": 15.0, "language": "jpn", "title": "bonus", "attached_pic": False},
                     ],
+                    "audio_stream_choices": [
+                        {"index": 1, "codec_name": "ac3", "language": "eng", "title": "Stereo"},
+                        {"index": 9, "codec_name": "mp2", "language": "jpn", "title": "Dub"},
+                    ],
                 },
                 preferred_video_stream_index=7,
+                preferred_audio_stream_index=9,
             )
             with patch.object(dialog, "_reload_clip", return_value=new_clip) as reload_mock:
                 with patch.object(dialog, "_update_preview"):
                     with patch.object(dialog, "_update_scrubber"):
                         dialog._apply_selected_stream_choice()
-            reload_mock.assert_called_once()
+            reload_mock.assert_called_once_with(
+                clip,
+                preferred_video_stream_index=7,
+                preferred_audio_stream_index=9,
+            )
             self.assertEqual(dialog._clips[0], new_clip)
             self.assertIn("Reloaded multi.vob", dialog._import_status_lbl.text())
             self.assertIn("manual stream #7", dialog._import_detail_box.toPlainText())
+            self.assertIn("manual audio #9", dialog._import_detail_box.toPlainText())
         finally:
             dialog.close()
             dialog.deleteLater()
