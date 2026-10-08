@@ -4,6 +4,7 @@ and the extended SettingsManager.
 """
 import os
 import io
+import importlib.util
 import json
 import subprocess
 import sys
@@ -638,6 +639,60 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_CAPABILITIES="))
         parsed = json.loads(line.split("=", 1)[1])
         self.assertEqual(parsed, payload)
+
+    def test_runtime_selftest_dump_emits_prefixed_json(self):
+        import main
+        buffer = io.StringIO()
+        fake_image_instance = MagicMock()
+        fake_image_instance.size = (32, 24)
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        fake_dds = MagicMock()
+        fake_dds.size = (32, 24)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_fc = types.SimpleNamespace(
+            convert_file=MagicMock(return_value=None),
+            dds_compression_available=MagicMock(return_value=False),
+        )
+        fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
+        fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
+        with patch.object(main, "_runtime_selftest_iterations", return_value=2):
+            with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=123.45):
+                with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                    tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                    tmpdir_cls.return_value.__exit__.return_value = False
+                    with patch.dict(
+                        sys.modules,
+                        {
+                            "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                            "PIL.Image": fake_pil_image,
+                            "src.core.alpha_processor": fake_alpha,
+                            "src.core.file_converter": fake_fc,
+                            "src.ui": fake_ui_pkg,
+                            "src.ui.video_tool": fake_vt,
+                        },
+                        clear=False,
+                    ):
+                        with patch("sys.stdout", buffer):
+                            rc = main._emit_runtime_selftest_dump()
+        self.assertEqual(rc, 1)
+        line = buffer.getvalue().strip()
+        self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_SELFTEST="))
+        parsed = json.loads(line.split("=", 1)[1])
+        self.assertEqual(parsed["iterations"], 2)
+        self.assertIn("peak_rss_mb", parsed)
+        self.assertIn("checks", parsed)
+        self.assertFalse(parsed["passed"])
+
+    def test_verify_packaged_app_parses_selftest_payload(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+        payload = verify._selftest_payload("hello\nALPHA_FIXER_RUNTIME_SELFTEST={\"passed\": true, \"iterations\": 3}\n")
+        self.assertTrue(payload["passed"])
+        self.assertEqual(payload["iterations"], 3)
 
     def test_main_window_runtime_readiness_helpers_surface_limits(self):
         _require_qt_gui(self)
@@ -2642,6 +2697,44 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("transcode fallback", clip.load_note)
             clip.close()
             self.assertFalse(os.path.exists(transcode_path))
+
+    def test_attempt_video_recovery_retries_without_audio_after_primary_failures(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "has_video": True,
+            "has_audio": True,
+            "video_stream_index": 2,
+            "audio_stream_index": 9,
+            "video_stream_count": 1,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+        }
+        remux_calls = []
+        transcode_calls = []
+
+        def _fake_remux(path, candidate=None, include_audio=True):
+            remux_calls.append(include_audio)
+            return None
+
+        def _fake_transcode(path, candidate=None, include_audio=True):
+            transcode_calls.append(include_audio)
+            if not include_audio:
+                return "/tmp/recovered-video-only.mp4"
+            return None
+
+        with patch.object(vt, "_remux_video_source", side_effect=_fake_remux):
+            with patch.object(vt, "_transcode_video_source", side_effect=_fake_transcode):
+                recovered_path, note, recovered_probe = vt._attempt_video_recovery("/tmp/broken-audio.vob", details)
+        self.assertEqual(recovered_path, "/tmp/recovered-video-only.mp4")
+        self.assertEqual(recovered_probe, details)
+        self.assertEqual(remux_calls, [True, False])
+        self.assertEqual(transcode_calls, [True, False])
+        self.assertIn("transcode fallback", note)
+        self.assertIn("source audio dropped", note)
 
     def test_recovery_prefers_probe_selected_stream_indexes(self):
         try:

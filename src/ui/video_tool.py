@@ -575,7 +575,7 @@ def _video_load_failure_hint(
                 "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip from this disc image."
             )
         lines.append(
-            "If direct loading fails, the app also tries temporary ffmpeg remux, transcode, and still-frame recovery fallbacks for compatible streams."
+            "If direct loading fails, the app also tries temporary ffmpeg remux, transcode, audio-drop, and still-frame recovery fallbacks for compatible streams."
         )
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
@@ -660,6 +660,14 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
 
 
 def _ffmpeg_stream_maps(details: Optional[dict[str, object]]) -> list[str]:
+    return _ffmpeg_stream_maps_with_audio(details, include_audio=True)
+
+
+def _ffmpeg_stream_maps_with_audio(
+    details: Optional[dict[str, object]],
+    *,
+    include_audio: bool,
+) -> list[str]:
     maps: list[str] = []
     video_index = details.get("video_stream_index") if details else None
     audio_index = details.get("audio_stream_index") if details else None
@@ -667,10 +675,11 @@ def _ffmpeg_stream_maps(details: Optional[dict[str, object]]) -> list[str]:
         maps.extend(["-map", "0:v:0"])
     else:
         maps.extend(["-map", f"0:{int(video_index)}"])
-    if audio_index is None:
-        maps.extend(["-map", "0:a?"])
-    else:
-        maps.extend(["-map", f"0:{int(audio_index)}?"])
+    if include_audio:
+        if audio_index is None:
+            maps.extend(["-map", "0:a?"])
+        else:
+            maps.extend(["-map", f"0:{int(audio_index)}?"])
     return maps
 
 
@@ -745,7 +754,12 @@ def _recovery_stream_note(
     return ""
 
 
-def _remux_video_source(path: str, details: Optional[dict[str, object]] = None) -> Optional[str]:
+def _remux_video_source(
+    path: str,
+    details: Optional[dict[str, object]] = None,
+    *,
+    include_audio: bool = True,
+) -> Optional[str]:
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
         return None
@@ -769,7 +783,7 @@ def _remux_video_source(path: str, details: Optional[dict[str, object]] = None) 
                 "ignore_err",
                 "-i",
                 path,
-                *_ffmpeg_stream_maps(details),
+                *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
                 "-dn",
                 "-sn",
                 "-c",
@@ -857,7 +871,12 @@ def _extract_visual_still_frame(path: str, details: Optional[dict[str, object]] 
         _unlink_file_safely(still_path)
 
 
-def _transcode_video_source(path: str, details: Optional[dict[str, object]] = None) -> Optional[str]:
+def _transcode_video_source(
+    path: str,
+    details: Optional[dict[str, object]] = None,
+    *,
+    include_audio: bool = True,
+) -> Optional[str]:
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
         return None
@@ -881,7 +900,7 @@ def _transcode_video_source(path: str, details: Optional[dict[str, object]] = No
                 "ignore_err",
                 "-i",
                 path,
-                *_ffmpeg_stream_maps(details),
+                *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
                 "-dn",
                 "-sn",
                 "-c:v",
@@ -892,10 +911,7 @@ def _transcode_video_source(path: str, details: Optional[dict[str, object]] = No
                 "veryfast",
                 "-crf",
                 "20",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "160k",
+                *(["-an"] if not include_audio else ["-c:a", "aac", "-b:a", "160k"]),
                 transcode_path,
             ],
             stdout=subprocess.DEVNULL,
@@ -931,21 +947,35 @@ def _attempt_video_recovery(
     for candidate in _recovery_probe_candidates(path, details, allow_alternate_streams=allow_alternate_streams) or [details]:
         if candidate and bool(candidate.get("selected_video_attached_pic")) and int(candidate.get("video_attached_pic_count") or 0) >= int(candidate.get("video_stream_count") or 0):
             continue
-        remux_path = _remux_video_source(path, candidate)
-        if remux_path:
-            strategy = "temporary ffmpeg remux fallback active"
-            stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
-            if stream_note:
-                strategy += f" ({stream_note})"
-            return remux_path, strategy, candidate
-        if candidate and bool(candidate.get("has_video")):
-            transcode_path = _transcode_video_source(path, candidate)
-            if transcode_path:
-                strategy = "temporary ffmpeg transcode fallback active"
+        has_audio = bool(candidate and candidate.get("has_audio"))
+        for include_audio, mode_label in ((True, ""), (False, "source audio dropped")):
+            if not include_audio and not has_audio:
+                continue
+            remux_path = _remux_video_source(path, candidate, include_audio=include_audio)
+            if remux_path:
+                strategy = "temporary ffmpeg remux fallback active"
+                note_parts = []
                 stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
                 if stream_note:
-                    strategy += f" ({stream_note})"
-                return transcode_path, strategy, candidate
+                    note_parts.append(stream_note)
+                if mode_label:
+                    note_parts.append(mode_label)
+                if note_parts:
+                    strategy += f" ({'; '.join(note_parts)})"
+                return remux_path, strategy, candidate
+            if candidate and bool(candidate.get("has_video")):
+                transcode_path = _transcode_video_source(path, candidate, include_audio=include_audio)
+                if transcode_path:
+                    strategy = "temporary ffmpeg transcode fallback active"
+                    note_parts = []
+                    stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
+                    if stream_note:
+                        note_parts.append(stream_note)
+                    if mode_label:
+                        note_parts.append(mode_label)
+                    if note_parts:
+                        strategy += f" ({'; '.join(note_parts)})"
+                    return transcode_path, strategy, candidate
     return None, "", details
 
 
@@ -956,7 +986,7 @@ def _video_capability_summary() -> str:
         return (
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection and a manual stream picker for multi-stream containers. "
+                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, audio-drop retries for broken source audio, and a manual stream picker for multi-stream containers. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
@@ -981,7 +1011,7 @@ def _video_capability_details() -> str:
             "",
             "Current behavior:",
             "• Standard video import and MP4 export are available.",
-            "• Odd-container/disc-image recovery can remux, transcode, or salvage a still frame when ffmpeg can expose usable video data.",
+            "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, or salvage a still frame when ffmpeg can expose usable video data.",
             "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from a manually chosen video stream.",
             "• Audio-only containers still cannot be added as timeline video clips.",
         ])

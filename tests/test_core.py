@@ -8969,6 +8969,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('verify_packaged_app.py', bat_src)
         self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP', verify_src)
         self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', verify_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_SELFTEST', verify_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_SELFTEST=', verify_src)
         self.assertIn('video_runtime_ready', verify_src)
         self.assertIn('odd_container_probe_ready', verify_src)
         self.assertIn('dds_compression_available', verify_src)
@@ -8982,6 +8984,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', src)
         self.assertIn('os.environ.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", "").strip().lower()', src)
         self.assertIn('os.environ.get("ALPHA_FIXER_SMOKE_TEST", "").strip()', src)
+        self.assertIn('os.environ.get("ALPHA_FIXER_RUNTIME_SELFTEST", "").strip()', src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_SELFTEST=', src)
         self.assertIn('QTimer.singleShot(smoke_test_ms, app.quit)', src)
         self.assertIn('window.statusBar().showMessage(runtime_notice, 12000)', src)
 

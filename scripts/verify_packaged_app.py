@@ -23,16 +23,31 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
 
 
 def _capability_payload(output: str) -> dict[str, object]:
-    prefix = "ALPHA_FIXER_RUNTIME_CAPABILITIES="
+    return _prefixed_payload(
+        output,
+        prefix="ALPHA_FIXER_RUNTIME_CAPABILITIES=",
+        missing_message="Packaged capability audit did not emit ALPHA_FIXER_RUNTIME_CAPABILITIES output.",
+    )
+
+
+def _selftest_payload(output: str) -> dict[str, object]:
+    return _prefixed_payload(
+        output,
+        prefix="ALPHA_FIXER_RUNTIME_SELFTEST=",
+        missing_message="Packaged runtime self-test did not emit ALPHA_FIXER_RUNTIME_SELFTEST output.",
+    )
+
+
+def _prefixed_payload(output: str, *, prefix: str, missing_message: str) -> dict[str, object]:
     payload_line = ""
     for raw_line in output.splitlines():
         if raw_line.startswith(prefix):
             payload_line = raw_line[len(prefix):]
     if not payload_line:
-        raise ValueError("Packaged capability audit did not emit ALPHA_FIXER_RUNTIME_CAPABILITIES output.")
+        raise ValueError(missing_message)
     payload = json.loads(payload_line)
     if not isinstance(payload, dict):
-        raise ValueError("Packaged capability audit emitted a non-object runtime capability payload.")
+        raise ValueError(f"{prefix[:-1]} emitted a non-object JSON payload.")
     return payload
 
 
@@ -45,6 +60,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-video-runtime", action="store_true", help="Fail if video import / MP4 export runtime bits are unavailable.")
     parser.add_argument("--require-odd-probe-ready", action="store_true", help="Fail if ffprobe-backed odd-container probing is unavailable.")
     parser.add_argument("--require-no-missing-libs", action="store_true", help="Fail if packaged runtime reports missing Linux shared libraries.")
+    parser.add_argument("--run-selftest", action="store_true", help="Run the packaged executable's end-to-end runtime self-test after the capability audit.")
+    parser.add_argument("--selftest-iterations", type=int, default=2, help="How many self-test iterations the packaged app should run when --run-selftest is set.")
+    parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
+    parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
+    parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
     args = parser.parse_args(argv)
 
@@ -89,10 +109,44 @@ def main(argv: list[str] | None = None) -> int:
         print("⚠️  Packaged runtime audit: ffprobe unavailable, odd-container probing stays limited.")
     if not payload.get("dds_compression_available"):
         print("⚠️  Packaged runtime audit: DDS compressed variants remain unavailable without bundled ImageMagick/wand.")
+
+    selftest_payload = None
+    if args.run_selftest:
+        print("Running packaged end-to-end self-test…")
+        selftest_env = dict(base_env)
+        selftest_env.pop("ALPHA_FIXER_SMOKE_TEST", None)
+        selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"] = str(max(1, int(args.selftest_iterations)))
+        selftest_result = _run_and_echo(command, env=selftest_env, timeout=max(30, int(args.timeout)))
+        if selftest_result.returncode not in (0, 1):
+            raise SystemExit(f"Packaged runtime self-test failed with exit code {selftest_result.returncode}.")
+        selftest_payload = _selftest_payload(selftest_result.stdout or "")
+        if args.require_selftest_pass and not selftest_payload.get("passed"):
+            raise SystemExit("Packaged runtime self-test reported passed=false")
+        if args.max_selftest_rss_mb is not None:
+            peak_rss = selftest_payload.get("peak_rss_mb")
+            if peak_rss is not None and float(peak_rss) > float(args.max_selftest_rss_mb):
+                raise SystemExit(
+                    f"Packaged runtime self-test exceeded RSS limit: {peak_rss} MiB > {args.max_selftest_rss_mb} MiB"
+                )
+        checks = selftest_payload.get("checks")
+        if not isinstance(checks, dict):
+            checks = {}
+        for check_name in args.require_selftest_check:
+            check = checks.get(check_name)
+            if not isinstance(check, dict) or not check.get("ok"):
+                raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")
+        errors = selftest_payload.get("errors") or []
+        if errors:
+            print("⚠️  Packaged runtime self-test reported issues:")
+            for entry in errors:
+                print(f"   - {entry}")
     if args.json_out:
         json_out = Path(args.json_out)
         json_out.parent.mkdir(parents=True, exist_ok=True)
-        json_out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        final_payload = dict(payload)
+        if selftest_payload is not None:
+            final_payload["runtime_selftest"] = selftest_payload
+        json_out.write_text(json.dumps(final_payload, indent=2, sort_keys=True), encoding="utf-8")
     print("✅  Packaged runtime capability audit verified.")
     return 0
 

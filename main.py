@@ -19,6 +19,7 @@ import time
 import ctypes
 import json
 import shutil
+import tempfile
 from pathlib import Path
 
 
@@ -584,6 +585,211 @@ def _emit_runtime_capability_dump() -> int:
     return 0
 
 
+def _runtime_selftest_iterations() -> int:
+    raw = os.environ.get("ALPHA_FIXER_RUNTIME_SELFTEST", "").strip()
+    if not raw:
+        return 0
+    try:
+        iterations = int(raw)
+    except ValueError:
+        iterations = 1
+    return max(1, min(64, iterations))
+
+
+def _runtime_selftest_peak_rss_mb() -> float | None:
+    try:
+        import resource
+    except Exception:
+        return None
+    try:
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except Exception:
+        return None
+    if usage <= 0:
+        return None
+    if sys.platform == "darwin":
+        return round(float(usage) / (1024.0 * 1024.0), 2)
+    return round(float(usage) / 1024.0, 2)
+
+
+def _emit_runtime_selftest_dump() -> int:
+    from PIL import Image
+    from src.core.alpha_processor import _load_dds
+    from src.core.file_converter import convert_file, dds_compression_available
+    from src.ui import video_tool as vt
+
+    iterations = _runtime_selftest_iterations()
+    summary: dict[str, object] = {
+        "iterations": iterations,
+        "passed": True,
+        "checks": {},
+        "errors": [],
+    }
+
+    def _record_check(name: str, ok: bool, detail: str) -> None:
+        checks = summary.setdefault("checks", {})
+        if isinstance(checks, dict):
+            checks[name] = {"ok": bool(ok), "detail": str(detail)}
+        if not ok:
+            summary["passed"] = False
+            errors = summary.setdefault("errors", [])
+            if isinstance(errors, list):
+                errors.append(f"{name}: {detail}")
+
+    def _copy_file(src: str, dst: str) -> None:
+        with open(src, "rb") as src_handle, open(dst, "wb") as dst_handle:
+            shutil.copyfileobj(src_handle, dst_handle)
+
+    with tempfile.TemporaryDirectory(prefix="alpha_fixer_runtime_selftest_") as tmpdir:
+        sample_png = os.path.join(tmpdir, "sample.png")
+        sample_gif = os.path.join(tmpdir, "sample.gif")
+        sample_dds = os.path.join(tmpdir, "sample.dds")
+        sample_dxt1 = os.path.join(tmpdir, "sample_dxt1.dds")
+        sample_mp4 = os.path.join(tmpdir, "sample.mp4")
+        sample_ts = os.path.join(tmpdir, "sample.ts")
+        sample_bin = os.path.join(tmpdir, "sample.bin")
+
+        Image.new("RGBA", (32, 24), (32, 160, 255, 192)).save(sample_png)
+
+        for _idx in range(iterations):
+            convert_file(sample_png, sample_gif, "GIF")
+            with Image.open(sample_gif) as gif_img:
+                gif_img.load()
+                _record_check("png_to_gif", gif_img.size == (32, 24), f"size={gif_img.size}")
+
+            convert_file(sample_png, sample_dds, "DDS", dds_variant="rgba")
+            dds_img = _load_dds(sample_dds)
+            try:
+                _record_check("png_to_dds_rgba", dds_img.size == (32, 24), f"size={dds_img.size}")
+            finally:
+                dds_img.close()
+
+            if dds_compression_available():
+                convert_file(sample_png, sample_dxt1, "DDS", dds_variant="dxt1")
+                dxt_img = _load_dds(sample_dxt1)
+                try:
+                    _record_check("png_to_dds_dxt1", dxt_img.size == (32, 24), f"size={dxt_img.size}")
+                finally:
+                    dxt_img.close()
+            else:
+                _record_check("png_to_dds_dxt1", True, "skipped: ImageMagick/wand runtime unavailable")
+
+            ffmpeg_exe = vt._get_ffmpeg_exe()
+            if ffmpeg_exe:
+                mp4_result = subprocess.run(
+                    [
+                        ffmpeg_exe,
+                        "-y",
+                        "-v",
+                        "error",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "testsrc=size=160x90:rate=12",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "sine=frequency=440:sample_rate=44100",
+                        "-shortest",
+                        "-t",
+                        "1.2",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-c:v",
+                        "libx264",
+                        "-c:a",
+                        "aac",
+                        sample_mp4,
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                    text=True,
+                    timeout=180,
+                )
+                if mp4_result.returncode == 0 and os.path.isfile(sample_mp4):
+                    mp4_clip = vt._load_video_clip(sample_mp4)
+                    if mp4_clip is None:
+                        _record_check("generated_mp4_load", False, vt._video_load_failure_hint(sample_mp4))
+                    else:
+                        try:
+                            _record_check(
+                                "generated_mp4_load",
+                                mp4_clip.total_frames > 0,
+                                f"frames={mp4_clip.total_frames} audio={mp4_clip.has_audio}",
+                            )
+                        finally:
+                            mp4_clip.close()
+
+                    ts_result = subprocess.run(
+                        [
+                            ffmpeg_exe,
+                            "-y",
+                            "-v",
+                            "error",
+                            "-i",
+                            sample_mp4,
+                            "-c",
+                            "copy",
+                            sample_ts,
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                        text=True,
+                        timeout=180,
+                    )
+                    if ts_result.returncode == 0 and os.path.isfile(sample_ts):
+                        ts_clip = vt._load_video_clip(sample_ts)
+                        if ts_clip is None:
+                            _record_check("mpegts_load", False, vt._video_load_failure_hint(sample_ts))
+                        else:
+                            try:
+                                _record_check(
+                                    "mpegts_load",
+                                    ts_clip.total_frames > 0,
+                                    f"frames={ts_clip.total_frames} note={ts_clip.load_note or 'direct'}",
+                                )
+                            finally:
+                                ts_clip.close()
+                    else:
+                        _record_check(
+                            "mpegts_load",
+                            False,
+                            f"ffmpeg copy failed: {ts_result.stderr.strip() or ts_result.stdout.strip() or 'unknown error'}",
+                        )
+
+                    _copy_file(sample_mp4, sample_bin)
+                    odd_clip = vt._load_video_clip(sample_bin)
+                    if odd_clip is None:
+                        hint = vt._video_load_failure_hint(sample_bin)
+                        _record_check("synthetic_bin_probe", bool(hint), hint or "missing odd-container hint")
+                    else:
+                        try:
+                            _record_check(
+                                "synthetic_bin_probe",
+                                odd_clip.total_frames > 0,
+                                f"frames={odd_clip.total_frames} note={odd_clip.load_note or 'direct'}",
+                            )
+                        finally:
+                            odd_clip.close()
+                else:
+                    detail = mp4_result.stderr.strip() or mp4_result.stdout.strip() or "ffmpeg sample generation failed"
+                    _record_check("generated_mp4_load", False, detail)
+                    _record_check("mpegts_load", False, "skipped: generated MP4 unavailable")
+                    _record_check("synthetic_bin_probe", False, "skipped: generated MP4 unavailable")
+            else:
+                _record_check("generated_mp4_load", False, "ffmpeg executable unavailable")
+                _record_check("mpegts_load", False, "ffmpeg executable unavailable")
+                _record_check("synthetic_bin_probe", False, "ffmpeg executable unavailable")
+
+    peak_rss_mb = _runtime_selftest_peak_rss_mb()
+    if peak_rss_mb is not None:
+        summary["peak_rss_mb"] = peak_rss_mb
+    print("ALPHA_FIXER_RUNTIME_SELFTEST=" + json.dumps(summary, sort_keys=True))
+    return 0 if bool(summary.get("passed")) else 1
+
+
 # ---------------------------------------------------------------------------
 # Qt environment setup (must be before QApplication)
 # ---------------------------------------------------------------------------
@@ -1123,10 +1329,6 @@ def main():
     if _runtime_capability_dump_requested():
         sys.exit(_emit_runtime_capability_dump())
 
-    # Run the pre-flight check before anything else
-    if not _check_system_libs():
-        sys.exit(1)
-
     # Add src to path so relative imports work when run directly
     src_dir = os.path.dirname(os.path.abspath(__file__))
     if src_dir not in sys.path:
@@ -1134,6 +1336,13 @@ def main():
     parent_dir = os.path.dirname(src_dir)
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
+
+    # Run the pre-flight check before anything else
+    if not _check_system_libs():
+        sys.exit(1)
+
+    if _runtime_selftest_iterations() > 0:
+        sys.exit(_emit_runtime_selftest_dump())
 
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtCore import QCoreApplication, Qt, QTimer, qInstallMessageHandler

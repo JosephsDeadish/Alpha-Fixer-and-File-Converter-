@@ -210,11 +210,16 @@ After copying a built app to another machine, you can rerun the same packaged sm
 python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
   --smoke-seconds 2 \
   --repeat 3 \
+  --run-selftest \
+  --selftest-iterations 4 \
+  --require-selftest-pass \
+  --require-selftest-check generated_mp4_load \
+  --require-selftest-check mpegts_load \
   --require-video-runtime \
   --require-no-missing-libs
 ```
 
-The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches.
+The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches. With `--run-selftest`, the packaged executable also generates a tiny built-in media/format matrix (GIF, DDS, MP4, MPEG-TS, and a synthetic odd-extension probe) so fresh-machine checks can validate more than just startup.
 
 ## Architecture
 
