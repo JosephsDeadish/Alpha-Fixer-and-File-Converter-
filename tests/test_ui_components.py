@@ -3241,6 +3241,33 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("preferred-audio-stream=4", hint)
         self.assertIn("try another audio stream or reload with source audio dropped", hint)
 
+    def test_video_load_failure_hint_mentions_alternate_audio_retries(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 2,
+            "audio_stream_count": 3,
+            "video_stream_index": 1,
+            "audio_stream_index": 4,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/feature.vob")
+        self.assertIn("Multiple video streams were detected", hint)
+        self.assertIn("Multiple audio streams were detected", hint)
+        self.assertIn("alternate audio tracks", hint)
+
     def test_video_load_failure_hint_mentions_recovery_exhausted_for_odd_container(self):
         try:
             from src.ui import video_tool as vt
@@ -3263,7 +3290,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
                 hint = vt._video_load_failure_hint("/tmp/weird.vob")
         self.assertIn("still could not produce a playable clip", hint)
-        self.assertIn("temporary ffmpeg remux, transcode, and still-frame recovery", hint)
+        self.assertIn("temporary ffmpeg remux, transcode", hint)
+        self.assertIn("audio-drop", hint)
+        self.assertIn("still-frame recovery", hint)
 
     def test_video_load_failure_hint_mentions_transport_stream_guidance(self):
         try:
@@ -3870,6 +3899,59 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(transcode_calls, [True, False])
         self.assertIn("transcode fallback", note)
         self.assertIn("source audio dropped", note)
+
+    def test_attempt_video_recovery_retries_alternate_audio_before_audio_drop(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "has_video": True,
+            "has_audio": True,
+            "video_stream_index": 2,
+            "audio_stream_index": 9,
+            "video_stream_count": 1,
+            "audio_stream_count": 2,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+            "audio_stream_choices": [
+                {"index": 9, "codec_name": "ac3", "bit_rate": 192000, "duration": 10.0, "language": "eng", "title": "Broken"},
+                {"index": 5, "codec_name": "mp2", "bit_rate": 256000, "duration": 10.0, "language": "jpn", "title": "Alt"},
+            ],
+        }
+        alternate_probe = {
+            **details,
+            "audio_stream_index": 5,
+            "audio_codec": "mp2",
+        }
+        remux_calls = []
+        transcode_calls = []
+
+        def _fake_probe(path, preferred_video_stream_index=None, preferred_audio_stream_index=None):
+            if preferred_audio_stream_index == 5:
+                return alternate_probe
+            return details
+
+        def _fake_remux(path, candidate=None, include_audio=True):
+            remux_calls.append((include_audio, None if candidate is None else candidate.get("audio_stream_index")))
+            if include_audio and candidate is alternate_probe:
+                return "/tmp/recovered-alt-audio.mkv"
+            return None
+
+        def _fake_transcode(path, candidate=None, include_audio=True):
+            transcode_calls.append((include_audio, None if candidate is None else candidate.get("audio_stream_index")))
+            return None
+
+        with patch.object(vt, "_probe_media_details", side_effect=_fake_probe):
+            with patch.object(vt, "_remux_video_source", side_effect=_fake_remux):
+                with patch.object(vt, "_transcode_video_source", side_effect=_fake_transcode):
+                    recovered_path, note, recovered_probe = vt._attempt_video_recovery("/tmp/broken-audio.vob", details)
+        self.assertEqual(recovered_path, "/tmp/recovered-alt-audio.mkv")
+        self.assertEqual(recovered_probe, alternate_probe)
+        self.assertEqual(remux_calls, [(True, 9), (True, 5)])
+        self.assertEqual(transcode_calls, [(True, 9)])
+        self.assertIn("alternate audio #5", note)
 
     def test_recovery_prefers_probe_selected_stream_indexes(self):
         try:

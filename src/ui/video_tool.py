@@ -858,7 +858,7 @@ def _video_load_failure_hint(
                 "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip from this disc image."
             )
         lines.append(
-            "If direct loading fails, the app also tries temporary ffmpeg concat repair, remux, transcode, audio-drop, and still-frame recovery fallbacks for compatible streams."
+            "If direct loading fails, the app also tries temporary ffmpeg concat repair, remux, transcode, alternate-audio, audio-drop, and still-frame recovery fallbacks for compatible streams."
         )
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
@@ -867,6 +867,10 @@ def _video_load_failure_hint(
         if int(probe.get("video_stream_count") or 0) > 1:
             lines.append(
                 "Multiple video streams were detected; recovery will prefer the largest non-cover-art probe-detected video stream and retry alternate non-cover-art streams when needed."
+            )
+        if int(probe.get("audio_stream_count") or 0) > 1:
+            lines.append(
+                "Multiple audio streams were detected; recovery will also retry alternate audio tracks and audio-drop mode when broken source audio blocks import."
             )
         if bool(probe.get("selected_video_attached_pic")):
             lines.append("The currently selected stream looks like attached cover art instead of continuous video frames.")
@@ -1051,29 +1055,66 @@ def _video_stream_choice_rank(stream_info: dict[str, object]) -> tuple[int, int,
     return attached_pic, live_video, area, fps, bit_rate, duration
 
 
+def _audio_stream_choice_rank(stream_info: dict[str, object]) -> tuple[float, float, int]:
+    bit_rate = max(0.0, float(stream_info.get("bit_rate") or 0.0))
+    duration = max(0.0, float(stream_info.get("duration") or 0.0))
+    index = _coerce_optional_stream_index(stream_info.get("index"))
+    normalized_index = -(index if index is not None else 999999)
+    return bit_rate, duration, normalized_index
+
+
 def _recovery_probe_candidates(
     path: str,
     details: Optional[dict[str, object]],
     *,
     allow_alternate_streams: bool = True,
+    allow_alternate_audio_streams: bool = True,
 ) -> list[dict[str, object]]:
     if not details:
         return []
     candidates = [details]
+    selected_video_index = _coerce_optional_stream_index(details.get("video_stream_index"))
+    selected_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index"))
+    seen_pairs = {(selected_video_index, selected_audio_index)}
+
+    def _append_candidate(video_index: Optional[int], audio_index: Optional[int]) -> None:
+        pair = (video_index, audio_index)
+        if pair in seen_pairs:
+            return
+        seen_pairs.add(pair)
+        candidate = _probe_media_details(
+            path,
+            preferred_video_stream_index=video_index,
+            preferred_audio_stream_index=audio_index,
+        )
+        if candidate and bool(candidate.get("has_video")):
+            candidates.append(candidate)
+
+    if allow_alternate_audio_streams:
+        audio_choices = details.get("audio_stream_choices")
+        if isinstance(audio_choices, list) and len(audio_choices) > 1:
+            alternates = [
+                choice
+                for choice in audio_choices
+                if isinstance(choice, dict)
+                and _coerce_optional_stream_index(choice.get("index")) is not None
+                and _coerce_optional_stream_index(choice.get("index")) != selected_audio_index
+            ]
+            alternates.sort(key=_audio_stream_choice_rank, reverse=True)
+            for choice in alternates:
+                _append_candidate(selected_video_index, _coerce_optional_stream_index(choice.get("index")))
+
     if not allow_alternate_streams:
         return candidates
     choices = details.get("video_stream_choices")
     if not isinstance(choices, list) or len(choices) <= 1:
         return candidates
-    selected_video_index = _coerce_optional_stream_index(details.get("video_stream_index"))
-    selected_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index"))
-    seen_indexes = {selected_video_index}
     alternates = [
         choice
         for choice in choices
         if isinstance(choice, dict)
         and _coerce_optional_stream_index(choice.get("index")) is not None
-        and _coerce_optional_stream_index(choice.get("index")) not in seen_indexes
+        and _coerce_optional_stream_index(choice.get("index")) != selected_video_index
         and not bool(choice.get("attached_pic"))
     ]
     alternates.sort(key=_video_stream_choice_rank, reverse=True)
@@ -1081,33 +1122,53 @@ def _recovery_probe_candidates(
         stream_index = _coerce_optional_stream_index(choice.get("index"))
         if stream_index is None:
             continue
-        seen_indexes.add(stream_index)
-        candidate = _probe_media_details(
-            path,
-            preferred_video_stream_index=stream_index,
-            preferred_audio_stream_index=selected_audio_index,
-        )
-        if candidate and bool(candidate.get("has_video")):
-            candidates.append(candidate)
+        _append_candidate(stream_index, selected_audio_index)
+        if allow_alternate_audio_streams:
+            audio_choices = details.get("audio_stream_choices")
+            if isinstance(audio_choices, list) and len(audio_choices) > 1:
+                alternates = [
+                    audio_choice
+                    for audio_choice in audio_choices
+                    if isinstance(audio_choice, dict)
+                    and _coerce_optional_stream_index(audio_choice.get("index")) is not None
+                    and _coerce_optional_stream_index(audio_choice.get("index")) != selected_audio_index
+                ]
+                alternates.sort(key=_audio_stream_choice_rank, reverse=True)
+                for audio_choice in alternates:
+                    _append_candidate(
+                        stream_index,
+                        _coerce_optional_stream_index(audio_choice.get("index")),
+                    )
     return candidates
 
 
-def _recovery_stream_note(
+def _recovery_selection_note(
     details: Optional[dict[str, object]],
     *,
     primary_video_index: Optional[int] = None,
+    primary_audio_index: Optional[int] = None,
 ) -> str:
     if not details:
         return ""
+    note_parts: list[str] = []
     selected_video_index = _coerce_optional_stream_index(details.get("video_stream_index"))
-    if selected_video_index is None:
-        return ""
-    video_stream_count = max(0, int(details.get("video_stream_count") or 0))
-    if primary_video_index is not None and selected_video_index != primary_video_index:
-        return f"alternate stream #{selected_video_index}"
-    if video_stream_count > 1:
-        return f"preferred stream #{selected_video_index}"
-    return ""
+    if selected_video_index is not None:
+        video_stream_count = max(0, int(details.get("video_stream_count") or 0))
+        if primary_video_index is not None and selected_video_index != primary_video_index:
+            note_parts.append(f"alternate stream #{selected_video_index}")
+        elif video_stream_count > 1:
+            note_parts.append(f"preferred stream #{selected_video_index}")
+    selected_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index"))
+    if selected_audio_index is not None:
+        audio_stream_count = max(0, int(details.get("audio_stream_count") or 0))
+        if primary_audio_index is not None and selected_audio_index != primary_audio_index:
+            audio_note = _audio_stream_selection_note(details, manual=True)
+            if audio_note.startswith("manual "):
+                audio_note = "alternate " + audio_note[len("manual "):]
+            note_parts.append(audio_note or f"alternate audio #{selected_audio_index}")
+        elif audio_stream_count > 1:
+            note_parts.append(_audio_stream_selection_note(details, manual=False) or f"preferred audio #{selected_audio_index}")
+    return "; ".join(part for part in note_parts if part)
 
 
 def _remux_video_source(
@@ -1304,7 +1365,13 @@ def _attempt_video_recovery(
     if not force_recovery and not segment_paths and ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
         return None, "", details
     primary_video_index = _coerce_optional_stream_index(details.get("video_stream_index")) if details else None
-    for candidate in _recovery_probe_candidates(path, details, allow_alternate_streams=allow_alternate_streams) or [details]:
+    primary_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index")) if details else None
+    for candidate in _recovery_probe_candidates(
+        path,
+        details,
+        allow_alternate_streams=allow_alternate_streams,
+        allow_alternate_audio_streams=True,
+    ) or [details]:
         if candidate and bool(candidate.get("selected_video_attached_pic")) and int(candidate.get("video_attached_pic_count") or 0) >= int(candidate.get("video_stream_count") or 0):
             continue
         has_audio = bool(candidate and candidate.get("has_audio"))
@@ -1321,9 +1388,13 @@ def _attempt_video_recovery(
                 if concat_remux_path:
                     strategy = "temporary segmented concat remux fallback active"
                     note_parts = [f"{len(segment_paths)} joined parts"]
-                    stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
-                    if stream_note:
-                        note_parts.append(stream_note)
+                    selection_note = _recovery_selection_note(
+                        candidate,
+                        primary_video_index=primary_video_index,
+                        primary_audio_index=primary_audio_index,
+                    )
+                    if selection_note:
+                        note_parts.append(selection_note)
                     if mode_label:
                         note_parts.append(mode_label)
                     strategy += f" ({'; '.join(note_parts)})"
@@ -1338,9 +1409,13 @@ def _attempt_video_recovery(
                     if concat_transcode_path:
                         strategy = "temporary segmented concat transcode fallback active"
                         note_parts = [f"{len(segment_paths)} joined parts"]
-                        stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
-                        if stream_note:
-                            note_parts.append(stream_note)
+                        selection_note = _recovery_selection_note(
+                            candidate,
+                            primary_video_index=primary_video_index,
+                            primary_audio_index=primary_audio_index,
+                        )
+                        if selection_note:
+                            note_parts.append(selection_note)
                         if mode_label:
                             note_parts.append(mode_label)
                         strategy += f" ({'; '.join(note_parts)})"
@@ -1349,9 +1424,13 @@ def _attempt_video_recovery(
             if remux_path:
                 strategy = "temporary ffmpeg remux fallback active"
                 note_parts = []
-                stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
-                if stream_note:
-                    note_parts.append(stream_note)
+                selection_note = _recovery_selection_note(
+                    candidate,
+                    primary_video_index=primary_video_index,
+                    primary_audio_index=primary_audio_index,
+                )
+                if selection_note:
+                    note_parts.append(selection_note)
                 if mode_label:
                     note_parts.append(mode_label)
                 if note_parts:
@@ -1362,9 +1441,13 @@ def _attempt_video_recovery(
                 if transcode_path:
                     strategy = "temporary ffmpeg transcode fallback active"
                     note_parts = []
-                    stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
-                    if stream_note:
-                        note_parts.append(stream_note)
+                    selection_note = _recovery_selection_note(
+                        candidate,
+                        primary_video_index=primary_video_index,
+                        primary_audio_index=primary_audio_index,
+                    )
+                    if selection_note:
+                        note_parts.append(selection_note)
                     if mode_label:
                         note_parts.append(mode_label)
                     if note_parts:
@@ -1381,6 +1464,7 @@ def _video_capability_summary() -> str:
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
                 "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, cue/bin sidecar retries for disc layouts, audio-drop retries for broken source audio, and manual video/audio stream pickers for multi-stream containers. "
+                "Recovery also retries alternate audio tracks when multi-audio containers expose a bad default program. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )

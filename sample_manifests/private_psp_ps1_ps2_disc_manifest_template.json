@@ -33,6 +33,19 @@
       "notes": "Optional raw .umd sample path for environments where the movie data is exposed as a .umd container instead of .iso. Use this to validate the extension-specific .umd probe/recovery path separately from .umd.iso images."
     },
     {
+      "platform": "PSP",
+      "group": "pmf movie asset",
+      "sample_id": "pmf-movie",
+      "path": "psp/sample.pmf",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional extracted PSP PMF movie asset. Use this when you have a legally shareable standalone PMF file so odd-container probing and recovery can be validated on the raw console-era asset itself, not only on whole-disc images."
+    },
+    {
       "platform": "PS1",
       "group": "bin/cue disc image",
       "sample_id": "bin-cue-stream",
@@ -70,6 +83,19 @@
     },
     {
       "platform": "PS2",
+      "group": "pss movie asset",
+      "sample_id": "pss-movie",
+      "path": "ps2/sample.pss",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional extracted PS2 PSS movie asset for validating the raw console program-stream file directly. Add expect_audio_codec_contains, require_recovery, or expect_load_note_contains when a real sample depends on alternate-track, audio-drop, or remux/transcode recovery."
+    },
+    {
+      "platform": "PS2",
       "group": "bin/cue disc image",
       "sample_id": "bin-cue-pss-stream",
       "path": "ps2/sample.bin",
@@ -86,6 +112,19 @@
         "Disc-image video inputs are experimental"
       ],
       "notes": "Optional PS2 BIN/CUE-style sample for validating .bin handling separately from DVD .iso files. Add expect_audio_codec_contains, require_recovery, and expect_load_note_contains when you want to confirm cue/bin or audio-drop recovery paths on a real sample."
+    },
+    {
+      "platform": "PS1",
+      "group": "str movie asset",
+      "sample_id": "str-movie",
+      "path": "ps1/sample.str",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional extracted PS1 STR movie asset for validating the raw console video file directly. Use expect_audio_codec_contains, require_recovery, and expect_load_note_contains when you want stricter assertions for alternate-track or audio-drop recovery on a real sample."
     }
   ]
 }
