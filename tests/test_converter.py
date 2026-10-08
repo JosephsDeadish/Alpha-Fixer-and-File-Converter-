@@ -891,6 +891,67 @@ class TestCorpusHelperInputs(unittest.TestCase):
             self.assertTrue(any(str(entry.get("group")) == "legacy container" for entry in odd_entries))
             self.assertTrue(any(str(entry.get("group")) == "BC7" for entry in dds_entries))
 
+    def test_run_private_packaged_validation_script_populates_and_invokes_verifier(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "run_private_packaged_validation.py")
+        spec = importlib.util.spec_from_file_location("run_private_packaged_validation", module_path)
+        script = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(script)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_root = os.path.join(tmpdir, "video")
+            dds_root = os.path.join(tmpdir, "dds")
+            out_dir = os.path.join(tmpdir, "out")
+            launch_target = os.path.join(tmpdir, "AlphaFixerConverter")
+            os.makedirs(os.path.join(video_root, "ps1"), exist_ok=True)
+            os.makedirs(dds_root, exist_ok=True)
+            Path(os.path.join(video_root, "ps1", "sample.bin")).write_bytes(b"bin")
+            Path(os.path.join(video_root, "ps1", "sample.cue")).write_text('FILE "sample.bin" BINARY\n', encoding="utf-8")
+            Path(os.path.join(dds_root, "sky_cubemap.dds")).write_bytes(b"dds")
+            Path(launch_target).write_text("stub", encoding="utf-8")
+            os.chmod(launch_target, 0o755)
+            captured = {}
+
+            def _fake_verify(argv):
+                captured["argv"] = list(argv)
+                return 0
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_VIDEO_CORPUS": video_root,
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": dds_root,
+                },
+                clear=False,
+            ), mock.patch.object(script.verify_packaged_app_script, "main", side_effect=_fake_verify):
+                rc = script.main(
+                    [
+                        launch_target,
+                        "--output-dir",
+                        out_dir,
+                        "--manifest-limit",
+                        "8",
+                        "--repeat",
+                        "2",
+                        "--repeat-selftest-runs",
+                        "3",
+                        "--selftest-stress-loops",
+                        "2",
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            self.assertTrue(os.path.isfile(os.path.join(out_dir, "manifests", "private_real_disc_video_manifest.json")))
+            self.assertTrue(os.path.isfile(os.path.join(out_dir, "manifests", "private_real_dds_complex_manifest.json")))
+            argv = captured["argv"]
+            self.assertEqual(argv[0], launch_target)
+            self.assertIn("--disc-video-manifest", argv)
+            self.assertIn("--dds-manifest", argv)
+            self.assertIn("--require-disc-manifest-group-checks", argv)
+            self.assertIn("--require-dds-manifest-group-checks", argv)
+            self.assertIn("--require-stress-selftest-checks", argv)
+            self.assertIn("--max-smoke-elapsed-growth-seconds", argv)
+            self.assertIn("--max-smoke-elapsed-spread-seconds", argv)
+
 
 class TestRuntimeFormatMatrixManifest(unittest.TestCase):
     def test_execute_format_matrix_manifest_validates_successful_output(self):

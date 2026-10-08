@@ -319,6 +319,19 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
   --require-dds-manifest-group-checks
 ```
 
+If you are on the machine that already has the private corpora, you can do the manifest-population plus packaged-validation flow in one step:
+
+```bash
+python scripts/run_private_packaged_validation.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --output-dir dist/private-runtime-validation \
+  --manifest-limit 24 \
+  --repeat 3 \
+  --repeat-selftest-runs 2 \
+  --selftest-stress-loops 4
+```
+
+That helper auto-populates private manifests from the configured `ALPHA_FIXER_REAL_*` corpus roots, writes them into the output directory, runs repeated smoke launches plus packaged self-tests, and records JSON timing / RSS summaries for relaunch and memory-trend baselining.
+
 BC6H / BC7 note: the public manifests above improve real external validation coverage, but they do **not** add pure in-repo BC6H / BC7 software decoding. Advanced BC6H / BC7 DDS inspection still depends on Pillow support or optional ImageMagick/wand decoding when available.
 
 Example packaged format-matrix manifest:

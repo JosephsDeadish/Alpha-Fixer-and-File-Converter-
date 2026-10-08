@@ -97,6 +97,9 @@ if [[ -x "$launch_target" ]]; then
         "$launch_target"
         --smoke-seconds 1.5
         --timeout 25
+        --max-smoke-elapsed-seconds 20
+        --max-smoke-elapsed-growth-seconds 8
+        --max-smoke-elapsed-spread-seconds 8
         --require-video-runtime
         --require-ffmpeg-selfcheck
         --require-ffprobe-selfcheck
@@ -115,6 +118,8 @@ if [[ -x "$launch_target" ]]; then
         private_stress_loops="${ALPHA_FIXER_PRIVATE_STRESS_LOOPS:-0}"
         private_rss_growth_limit="${ALPHA_FIXER_PRIVATE_MAX_SELFTEST_RSS_GROWTH_MB:-}"
         private_rss_spread_limit="${ALPHA_FIXER_PRIVATE_MAX_SELFTEST_RSS_SPREAD_MB:-}"
+        private_smoke_growth_limit="${ALPHA_FIXER_PRIVATE_MAX_SMOKE_ELAPSED_GROWTH_SECONDS:-}"
+        private_smoke_spread_limit="${ALPHA_FIXER_PRIVATE_MAX_SMOKE_ELAPSED_SPREAD_SECONDS:-}"
         mkdir -p "$private_cache_dir"
         verify_args+=(
             --run-selftest
@@ -146,6 +151,12 @@ if [[ -x "$launch_target" ]]; then
         if [[ -n "$private_rss_spread_limit" ]]; then
             verify_args+=(--max-selftest-rss-spread-mb "$private_rss_spread_limit")
         fi
+        if [[ -n "$private_smoke_growth_limit" ]]; then
+            verify_args+=(--max-smoke-elapsed-growth-seconds "$private_smoke_growth_limit")
+        fi
+        if [[ -n "$private_smoke_spread_limit" ]]; then
+            verify_args+=(--max-smoke-elapsed-spread-seconds "$private_smoke_spread_limit")
+        fi
     fi
     if [[ "${ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
         sample_limit="${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-4}"
@@ -153,6 +164,8 @@ if [[ -x "$launch_target" ]]; then
         public_selftest_repeat_runs="${ALPHA_FIXER_PUBLIC_SELFTEST_REPEAT_RUNS:-1}"
         public_rss_growth_limit="${ALPHA_FIXER_PUBLIC_MAX_SELFTEST_RSS_GROWTH_MB:-}"
         public_rss_spread_limit="${ALPHA_FIXER_PUBLIC_MAX_SELFTEST_RSS_SPREAD_MB:-}"
+        public_smoke_growth_limit="${ALPHA_FIXER_PUBLIC_MAX_SMOKE_ELAPSED_GROWTH_SECONDS:-}"
+        public_smoke_spread_limit="${ALPHA_FIXER_PUBLIC_MAX_SMOKE_ELAPSED_SPREAD_SECONDS:-}"
         mkdir -p "$sample_cache_dir"
         verify_args+=(
             --run-selftest
@@ -177,6 +190,12 @@ if [[ -x "$launch_target" ]]; then
         fi
         if [[ -n "$public_rss_spread_limit" ]]; then
             verify_args+=(--max-selftest-rss-spread-mb "$public_rss_spread_limit")
+        fi
+        if [[ -n "$public_smoke_growth_limit" ]]; then
+            verify_args+=(--max-smoke-elapsed-growth-seconds "$public_smoke_growth_limit")
+        fi
+        if [[ -n "$public_smoke_spread_limit" ]]; then
+            verify_args+=(--max-smoke-elapsed-spread-seconds "$public_smoke_spread_limit")
         fi
         if [[ "${ALPHA_FIXER_REQUIRE_DDS_SELFTEST:-0}" == "1" ]]; then
             verify_args+=(

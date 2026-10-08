@@ -1217,6 +1217,90 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     )
         self.assertIn("RSS growth exceeded limit", str(ctx.exception))
 
+    def test_verify_packaged_app_repeat_smoke_runs_writes_elapsed_summary(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            out_json = os.path.join(tmpdir, "runtime.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            call_index = {"value": 0}
+            monotonic_values = iter([0.0, 1.25, 2.0, 3.5, 4.0, 4.8])
+
+            def _fake_run(command, *, env, timeout):
+                call_index["value"] += 1
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run), patch.object(verify.time, "monotonic", side_effect=lambda: next(monotonic_values)):
+                rc = verify.main(
+                    [
+                        target,
+                        "--repeat",
+                        "2",
+                        "--max-smoke-elapsed-growth-seconds",
+                        "1.5",
+                        "--max-smoke-elapsed-spread-seconds",
+                        "1.5",
+                        "--json-out",
+                        out_json,
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            with open(out_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        self.assertEqual(call_index["value"], 3)
+        self.assertEqual(payload["smoke_repeat_summary"]["runs"], 2)
+        self.assertEqual(payload["smoke_repeat_summary"]["successful_runs"], 2)
+        self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_values"], [1.25, 1.5])
+        self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_growth"], 0.25)
+        self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_spread"], 0.25)
+
+    def test_verify_packaged_app_repeat_smoke_runs_can_fail_growth_limit(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            monotonic_values = iter([0.0, 1.0, 2.0, 5.5, 6.0, 6.4])
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run), patch.object(verify.time, "monotonic", side_effect=lambda: next(monotonic_values)):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main(
+                        [
+                            target,
+                            "--repeat",
+                            "2",
+                            "--max-smoke-elapsed-growth-seconds",
+                            "2",
+                        ]
+                    )
+        self.assertIn("smoke-launch elapsed-time growth exceeded limit", str(ctx.exception))
+
     def test_verify_packaged_app_use_public_sample_manifests_populates_defaults(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -208,12 +209,42 @@ def _selftest_repeat_summary(payloads: list[dict[str, object]]) -> dict[str, obj
     return summary
 
 
+def _smoke_repeat_summary(runs: list[dict[str, object]]) -> dict[str, object]:
+    elapsed_values: list[float] = []
+    exit_codes: list[int] = []
+    for run in runs:
+        try:
+            elapsed_values.append(round(float(run.get("elapsed_seconds") or 0.0), 3))
+        except Exception:
+            pass
+        try:
+            exit_codes.append(int(run.get("returncode") or 0))
+        except Exception:
+            pass
+    summary: dict[str, object] = {
+        "runs": len(runs),
+        "successful_runs": sum(1 for code in exit_codes if code == 0),
+        "exit_codes": exit_codes,
+        "elapsed_seconds_values": elapsed_values,
+    }
+    if elapsed_values:
+        summary["elapsed_seconds_min"] = round(min(elapsed_values), 3)
+        summary["elapsed_seconds_max"] = round(max(elapsed_values), 3)
+        summary["elapsed_seconds_spread"] = round(max(elapsed_values) - min(elapsed_values), 3)
+        summary["elapsed_seconds_growth"] = round(elapsed_values[-1] - elapsed_values[0], 3)
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
     parser.add_argument("--smoke-seconds", type=float, default=1.5, help="Seconds to keep each smoke-launch alive.")
     parser.add_argument("--repeat", type=int, default=1, help="How many smoke-launch cycles to run before auditing capabilities.")
+    parser.add_argument("--smoke-launch-delay-seconds", type=float, default=0.0, help="Optional pause between repeated smoke launches.")
     parser.add_argument("--timeout", type=int, default=25, help="Per-launch timeout in seconds.")
+    parser.add_argument("--max-smoke-elapsed-seconds", type=float, help="Optional upper bound for any single packaged smoke-launch elapsed time.")
+    parser.add_argument("--max-smoke-elapsed-growth-seconds", type=float, help="Optional upper bound for last-minus-first packaged smoke-launch elapsed time across repeated runs.")
+    parser.add_argument("--max-smoke-elapsed-spread-seconds", type=float, help="Optional upper bound for max-minus-min packaged smoke-launch elapsed time across repeated runs.")
     parser.add_argument("--require-video-runtime", action="store_true", help="Fail if video import / MP4 export runtime bits are unavailable.")
     parser.add_argument("--require-odd-probe-ready", action="store_true", help="Fail if ffprobe-backed odd-container probing is unavailable.")
     parser.add_argument("--require-ffmpeg-selfcheck", action="store_true", help="Fail if the packaged runtime cannot execute the resolved ffmpeg binary successfully.")
@@ -346,13 +377,56 @@ def main(argv: list[str] | None = None) -> int:
 
     command = [str(launch_target)]
     repeats = max(1, int(args.repeat))
+    smoke_runs: list[dict[str, object]] = []
     for attempt in range(1, repeats + 1):
         print(f"Smoke launch {attempt}/{repeats}…")
         smoke_env = dict(base_env)
         smoke_env["ALPHA_FIXER_SMOKE_TEST"] = str(max(0.25, float(args.smoke_seconds)))
+        started = time.monotonic()
         result = _run_and_echo(command, env=smoke_env, timeout=max(1, int(args.timeout)))
+        elapsed = round(max(0.0, time.monotonic() - started), 3)
+        smoke_runs.append(
+            {
+                "attempt": attempt,
+                "returncode": int(result.returncode),
+                "elapsed_seconds": elapsed,
+            }
+        )
         if result.returncode != 0:
             raise SystemExit(f"Packaged launch smoke test failed with exit code {result.returncode}.")
+        if args.max_smoke_elapsed_seconds is not None and elapsed > float(args.max_smoke_elapsed_seconds):
+            raise SystemExit(
+                f"Packaged smoke-launch elapsed time exceeded limit: {elapsed} s > {args.max_smoke_elapsed_seconds} s"
+            )
+        if float(args.smoke_launch_delay_seconds or 0.0) > 0 and attempt < repeats:
+            time.sleep(max(0.0, float(args.smoke_launch_delay_seconds)))
+    smoke_summary = _smoke_repeat_summary(smoke_runs)
+    smoke_elapsed_values = smoke_summary.get("elapsed_seconds_values") or []
+    if repeats > 1 and smoke_elapsed_values:
+        print(
+            "Repeated smoke-launch elapsed seconds: "
+            + ", ".join(f"{float(value):.3f}" for value in smoke_elapsed_values)
+            + f" (growth={float(smoke_summary.get('elapsed_seconds_growth') or 0.0):.3f}, "
+            + f"spread={float(smoke_summary.get('elapsed_seconds_spread') or 0.0):.3f})"
+        )
+    if args.max_smoke_elapsed_growth_seconds is not None:
+        if len(smoke_elapsed_values) < repeats:
+            raise SystemExit("Smoke-launch growth check needs elapsed seconds from every repeated run.")
+        growth = float(smoke_summary.get("elapsed_seconds_growth") or 0.0)
+        if growth > float(args.max_smoke_elapsed_growth_seconds):
+            raise SystemExit(
+                "Packaged smoke-launch elapsed-time growth exceeded limit: "
+                f"{growth} s > {args.max_smoke_elapsed_growth_seconds} s"
+            )
+    if args.max_smoke_elapsed_spread_seconds is not None:
+        if len(smoke_elapsed_values) < repeats:
+            raise SystemExit("Smoke-launch spread check needs elapsed seconds from every repeated run.")
+        spread = float(smoke_summary.get("elapsed_seconds_spread") or 0.0)
+        if spread > float(args.max_smoke_elapsed_spread_seconds):
+            raise SystemExit(
+                "Packaged smoke-launch elapsed-time spread exceeded limit: "
+                f"{spread} s > {args.max_smoke_elapsed_spread_seconds} s"
+            )
 
     print("Running packaged capability audit…")
     capability_env = dict(base_env)
@@ -507,6 +581,8 @@ def main(argv: list[str] | None = None) -> int:
         json_out = Path(args.json_out)
         json_out.parent.mkdir(parents=True, exist_ok=True)
         final_payload = dict(payload)
+        final_payload["smoke_repeat_summary"] = smoke_summary
+        final_payload["smoke_runs"] = smoke_runs
         if selftest_payload is not None:
             final_payload["runtime_selftest"] = selftest_payload
         if selftest_runs:

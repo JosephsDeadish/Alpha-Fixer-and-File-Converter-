@@ -50,7 +50,11 @@ jobs:
             dist/AlphaFixerConverter/AlphaFixerConverter \
             --smoke-seconds 2 \
             --repeat 3 \
+            --smoke-launch-delay-seconds 0.5 \
             --timeout 45 \
+            --max-smoke-elapsed-seconds 30 \
+            --max-smoke-elapsed-growth-seconds 10 \
+            --max-smoke-elapsed-spread-seconds 10 \
             --run-selftest \
             --selftest-iterations 6 \
             --selftest-sample-limit 4 \
@@ -86,7 +90,11 @@ jobs:
             dist\AlphaFixerConverter\AlphaFixerConverter.exe `
             --smoke-seconds 2 `
             --repeat 3 `
+            --smoke-launch-delay-seconds 0.5 `
             --timeout 45 `
+            --max-smoke-elapsed-seconds 30 `
+            --max-smoke-elapsed-growth-seconds 10 `
+            --max-smoke-elapsed-spread-seconds 10 `
             --run-selftest `
             --selftest-iterations 6 `
             --selftest-sample-limit 4 `
