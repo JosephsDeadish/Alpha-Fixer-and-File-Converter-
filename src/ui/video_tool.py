@@ -738,6 +738,7 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
     video_stream_count = max(0, int(details.get("video_stream_count") or 0))
     audio_stream_count = max(0, int(details.get("audio_stream_count") or 0))
     video_stream_index = details.get("video_stream_index")
+    audio_stream_index = details.get("audio_stream_index")
     attached_pic_count = max(0, int(details.get("video_attached_pic_count") or 0))
     selected_language = str(details.get("selected_video_language") or "").strip()
     selected_title = str(details.get("selected_video_title") or "").strip()
@@ -1366,16 +1367,17 @@ def _attempt_video_recovery(
         return None, "", details
     primary_video_index = _coerce_optional_stream_index(details.get("video_stream_index")) if details else None
     primary_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index")) if details else None
-    for candidate in _recovery_probe_candidates(
+    recovery_candidates = _recovery_probe_candidates(
         path,
         details,
         allow_alternate_streams=allow_alternate_streams,
         allow_alternate_audio_streams=True,
-    ) or [details]:
-        if candidate and bool(candidate.get("selected_video_attached_pic")) and int(candidate.get("video_attached_pic_count") or 0) >= int(candidate.get("video_stream_count") or 0):
-            continue
-        has_audio = bool(candidate and candidate.get("has_audio"))
-        for include_audio, mode_label in ((True, ""), (False, "source audio dropped")):
+    ) or [details]
+    for include_audio, mode_label in ((True, ""), (False, "source audio dropped")):
+        for candidate in recovery_candidates:
+            if candidate and bool(candidate.get("selected_video_attached_pic")) and int(candidate.get("video_attached_pic_count") or 0) >= int(candidate.get("video_stream_count") or 0):
+                continue
+            has_audio = bool(candidate and candidate.get("has_audio"))
             if not include_audio and not has_audio:
                 continue
             if len(segment_paths) > 1:

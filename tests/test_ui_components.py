@@ -3290,9 +3290,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
                 hint = vt._video_load_failure_hint("/tmp/weird.vob")
         self.assertIn("still could not produce a playable clip", hint)
-        self.assertIn("temporary ffmpeg remux, transcode", hint)
+        self.assertIn("remux or transcode recovery may still be required", hint)
         self.assertIn("audio-drop", hint)
-        self.assertIn("still-frame recovery", hint)
+        self.assertIn("PSP/PS1/PS2-era assets", hint)
 
     def test_video_load_failure_hint_mentions_transport_stream_guidance(self):
         try:

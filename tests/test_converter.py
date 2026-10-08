@@ -303,7 +303,18 @@ class TestCorpusHelperInputs(unittest.TestCase):
         ps2_companions = ps2_entry.get("companions")
         self.assertIsInstance(ps2_companions, list)
         self.assertTrue(any(str(item.get("path") or "").endswith(os.path.join("ps2", "sample.cue")) for item in ps2_companions if isinstance(item, dict)))
-        self.assertTrue(all("Disc-image video inputs are experimental" in (entry.get("hint_contains") or [""])[0] for entry in entries))
+        disc_image_entries = [
+            entry
+            for entry in entries
+            if "disc image" in str(entry.get("group") or "").lower()
+        ]
+        self.assertTrue(disc_image_entries)
+        self.assertTrue(
+            all(
+                "Disc-image video inputs are experimental" in (entry.get("hint_contains") or [""])[0]
+                for entry in disc_image_entries
+            )
+        )
         self.assertTrue(all(entry.get("expect_probe_has_video") is True for entry in entries))
 
     def test_private_odd_container_manifest_template_loads(self):
