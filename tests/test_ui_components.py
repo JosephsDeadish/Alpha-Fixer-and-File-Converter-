@@ -4562,6 +4562,13 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             "source_path": "/tmp/game.iso",
             "load_note": "temporary ffmpeg remux fallback active",
             "preferred_video_stream_index": 3,
+            "preferred_audio_stream_index": 1,
+            "source_probe": {
+                "video_stream_index": 3,
+                "audio_stream_index": 1,
+                "video_stream_count": 4,
+                "audio_stream_count": 2,
+            },
         }
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
         dialog._timeline_canvas_size = lambda fmt: (2, 2)
@@ -4584,11 +4591,14 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(entry["canvas"], "2×2")
         self.assertEqual(entry["sources"], "unknown ×1")
         self.assertEqual(entry["recovery"], "remux ×1")
-        self.assertEqual(entry["streams"], "game.iso: manual video #3")
+        self.assertEqual(entry["streams"], "game.iso: manual video #3, manual audio #1")
+        self.assertIn("manual video #3", entry["clips"])
+        self.assertIn("manual audio #1", entry["clips"])
         self.assertIn("canvas=2×2", entry["notes"])
         self.assertIn("remux fallback", entry["notes"])
         self.assertIn("audio=off", entry["notes"])
-        self.assertIn("streams=game.iso: manual video #3", entry["notes"])
+        self.assertIn("streams=game.iso: manual video #3, manual audio #1", entry["notes"])
+        self.assertIn("clips=game.iso: temporary ffmpeg remux fallback active | streams=manual video #3, manual audio #1", entry["notes"])
 
 
 @unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
@@ -5226,6 +5236,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "audio": "off",
                 "recovery": "transcode ×1",
                 "streams": "a.iso: stream #3",
+                "clips": "sample.iso: temporary ffmpeg transcode fallback active | streams=manual video #3, manual audio #1",
                 "sources": "video ×2",
                 "files": ["a.iso"],
                 "notes": "recovery=transcode ×1 | streams=a.iso: stream #3 | clips=sample.iso: temporary ffmpeg transcode fallback active",
@@ -5252,6 +5263,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(9), "a.iso: stream #3")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(13), "Recovery")
             self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(14))
+            self.assertIn("manual audio #1", tab._vid_tree.topLevelItem(0).toolTip(0))
             self.assertIn("OK 1", tab._gif_summary.text())
             self.assertIn("Recovery 1", tab._vid_summary.text())
         finally:
@@ -5279,6 +5291,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "fps": "30",
                 "recovery": "transcode ×1",
                 "streams": "sample.iso: stream #3",
+                "clips": "sample.iso: temporary ffmpeg transcode fallback active | streams=manual video #3, manual audio #1",
                 "sources": "video ×1, image ×1",
                 "files": ["a.iso"],
                 "notes": "recovery=transcode ×1 | streams=sample.iso: stream #3 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
@@ -5303,6 +5316,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab._apply_filter(tab._vid_tree, "recovery:transcode")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "streams:stream #3")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "clip:manual audio #1")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "audio:kept")
             self.assertFalse(item.isHidden())

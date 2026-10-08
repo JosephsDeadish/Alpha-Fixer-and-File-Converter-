@@ -1611,6 +1611,23 @@ def _clip_stream_history_detail(clip: dict[str, object]) -> str:
     return f"{source_name}: " + ", ".join(parts) if parts else ""
 
 
+def _clip_history_detail(clip: dict[str, object]) -> str:
+    source_name = os.path.basename(str(clip.get("source_path") or clip.get("path") or "")).strip()
+    if not source_name:
+        return ""
+    parts: list[str] = []
+    load_note = str(clip.get("load_note") or "").strip()
+    if load_note:
+        parts.append(load_note)
+    stream_detail = _clip_stream_history_detail(clip)
+    if stream_detail:
+        stream_text = stream_detail.split(": ", 1)[1] if ": " in stream_detail else stream_detail
+        parts.append(f"streams={stream_text}")
+    if not parts:
+        return ""
+    return f"{source_name}: " + " | ".join(parts)
+
+
 def _open_video_reader(path: str):
     """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
     import imageio
@@ -3648,10 +3665,15 @@ class VideoToolDialog(QDialog):
         selected_streams = [
             detail for detail in (_clip_stream_history_detail(clip) for clip in clip_snapshot) if detail
         ]
+        clip_details = [
+            detail for detail in (_clip_history_detail(clip) for clip in clip_snapshot) if detail
+        ]
         stream_summary = "manual" if selected_streams else ""
         if selected_streams:
             stream_summary = "; ".join(selected_streams[:3]) + (" …" if len(selected_streams) > 3 else "")
             entry["streams"] = stream_summary
+        if clip_details:
+            entry["clips"] = "; ".join(clip_details[:3]) + (" …" if len(clip_details) > 3 else "")
         notes = [
             f"filter={entry['filter']}",
             f"audio={entry['audio']}",
@@ -3663,7 +3685,9 @@ class VideoToolDialog(QDialog):
             notes.append(f"sources={entry['sources']}")
         if entry["recovery"] and entry["recovery"] != "direct only":
             notes.append(f"recovery={entry['recovery']}")
-        if noted:
+        if clip_details:
+            notes.append(f"clips={entry['clips']}")
+        elif noted:
             notes.append("clips=" + ("; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")))
         if stream_summary:
             notes.append("streams=" + stream_summary)
@@ -4092,7 +4116,9 @@ class VideoToolDialog(QDialog):
             "source_duration_seconds": source_duration_seconds,
             "has_audio": clip_type == "video" and clip.has_audio,
             "load_note": clip.load_note,
+            "source_probe": clip.source_probe,
             "preferred_video_stream_index": clip.preferred_video_stream_index,
+            "preferred_audio_stream_index": clip.preferred_audio_stream_index,
         }
 
     def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):

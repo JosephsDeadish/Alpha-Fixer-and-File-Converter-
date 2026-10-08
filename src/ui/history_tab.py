@@ -595,7 +595,7 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
-        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/streams/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, streams:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps:, wildcards (*.gif), ranges (>24, <=100), or field ORs (audio:off|kept) …")
+        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/streams/clip/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, streams:, clip:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps:, wildcards (*.gif), ranges (>24, <=100), or field ORs (audio:off|kept) …")
         field.setClearButtonEnabled(True)
         return field
 
@@ -985,6 +985,7 @@ class HistoryTab(QWidget):
             n_err = str(entry.get("errors", "?"))
             recovery = str(entry.get("recovery", "") or "").strip()
             streams = str(entry.get("streams", "") or "").strip()
+            clip_details = str(entry.get("clips", "") or "").strip()
             sources = str(entry.get("sources", "") or "").strip()
             notes = str(entry.get("notes", "") or "").strip()
             status = _video_history_status(entry.get("errors", 0), notes)
@@ -1008,6 +1009,7 @@ class HistoryTab(QWidget):
                 n_err,
                 recovery,
                 streams,
+                clip_details,
                 sources,
                 status,
                 notes,
@@ -1025,6 +1027,7 @@ class HistoryTab(QWidget):
                 audio=audio_mode,
                 recovery=recovery,
                 streams=streams,
+                clip=clip_details,
                 source=sources,
                 status=status,
                 notes=notes,
@@ -1039,12 +1042,13 @@ class HistoryTab(QWidget):
             if not thumb.isNull():
                 item.setIcon(0, thumb)
             note_text = f"\nNotes: {notes}" if notes else ""
+            clip_text = f"\nClip details: {clip_details}" if clip_details else ""
             _set_builder_tooltip(
                 item,
                 16,
                 f"Built: {ts}\nOutput: {output}\nFormat: {fmt or '?'}\n"
                 f"Clips: {n_clips}  FPS: {fps or 'n/a'}  Canvas: {canvas or 'auto'}  Filter: {filter_name or 'none'}  Audio: {audio_mode or 'n/a'}  Recovery: {recovery or 'direct only'}  Streams: {streams or 'auto/default'}  Sources: {sources or 'n/a'}  OK: {n_ok}  Errors: {n_err}  Status: {status}\n"
-                f"{preview_text}{note_text}",
+                f"{preview_text}{note_text}{clip_text}",
                 file_list,
             )
             if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
