@@ -9038,6 +9038,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('require-bundled-default-theme-svg', verify_src)
         self.assertIn('require-packaged-bundle-ready', verify_src)
         self.assertIn('repeat-selftest-runs', verify_src)
+        self.assertIn('selftest-timeout', verify_src)
         self.assertIn('max-selftest-rss-growth-mb', verify_src)
         self.assertIn('max-selftest-rss-spread-mb', verify_src)
         self.assertIn('require-core-selftest-checks', verify_src)

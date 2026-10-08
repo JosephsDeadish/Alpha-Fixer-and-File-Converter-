@@ -34,6 +34,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 from threading import Lock
@@ -173,6 +174,21 @@ def _get_ffmpeg_exe() -> Optional[str]:
         return shutil.which("ffmpeg")
     except Exception:
         return None
+
+
+def _ffmpeg_command_candidates() -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for raw in (_get_ffmpeg_exe(), shutil.which("ffmpeg")):
+        candidate = str(raw or "").strip()
+        if not candidate:
+            continue
+        normalized = os.path.normcase(os.path.realpath(candidate))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        candidates.append(candidate)
+    return candidates
 
 
 def _get_ffprobe_exe() -> Optional[str]:
@@ -1293,8 +1309,8 @@ def _remux_video_source(
     include_audio: bool = True,
     rebuild_timestamps: bool = False,
 ) -> Optional[str]:
-    ffmpeg_exe = _get_ffmpeg_exe()
-    if not ffmpeg_exe:
+    ffmpeg_candidates = _ffmpeg_command_candidates()
+    if not ffmpeg_candidates:
         return None
     temp_file = tempfile.NamedTemporaryFile(
         prefix="alpha_fixer_video_src_",
@@ -1303,42 +1319,44 @@ def _remux_video_source(
     )
     remux_path = temp_file.name
     temp_file.close()
-    try:
-        result = subprocess.run(
-            [
-                ffmpeg_exe,
-                "-y",
-                "-v",
-                "error",
-                "-fflags",
-                "+genpts+igndts+discardcorrupt" if rebuild_timestamps else "+discardcorrupt",
-                "-err_detect",
-                "ignore_err",
-                *_FFMPEG_DEEP_ANALYSIS_ARGS,
-                "-i",
-                path,
-                *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
-                "-dn",
-                "-sn",
-                "-c",
-                "copy",
-                *(["-avoid_negative_ts", "make_zero", "-muxpreload", "0", "-muxdelay", "0"] if rebuild_timestamps else []),
-                remux_path,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False,
-            text=True,
-            timeout=180,
-        )
-    except Exception:
+    for ffmpeg_exe in ffmpeg_candidates:
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg_exe,
+                    "-y",
+                    "-v",
+                    "error",
+                    "-fflags",
+                    "+genpts+igndts+discardcorrupt" if rebuild_timestamps else "+discardcorrupt",
+                    "-err_detect",
+                    "ignore_err",
+                    *_FFMPEG_DEEP_ANALYSIS_ARGS,
+                    "-i",
+                    path,
+                    *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
+                    "-dn",
+                    "-sn",
+                    "-c",
+                    "copy",
+                    *(["-avoid_negative_ts", "make_zero", "-muxpreload", "0", "-muxdelay", "0"] if rebuild_timestamps else []),
+                    remux_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+                text=True,
+                timeout=180,
+            )
+        except Exception:
+            _unlink_file_safely(remux_path)
+            continue
+        try:
+            if result.returncode == 0 and Path(remux_path).is_file() and Path(remux_path).stat().st_size > 0:
+                return remux_path
+        except Exception:
+            pass
         _unlink_file_safely(remux_path)
-        return None
-    try:
-        if result.returncode == 0 and Path(remux_path).is_file() and Path(remux_path).stat().st_size > 0:
-            return remux_path
-    except Exception:
-        pass
     _unlink_file_safely(remux_path)
     return None
 
@@ -1414,8 +1432,8 @@ def _transcode_video_source(
     include_audio: bool = True,
     rebuild_timestamps: bool = False,
 ) -> Optional[str]:
-    ffmpeg_exe = _get_ffmpeg_exe()
-    if not ffmpeg_exe:
+    ffmpeg_candidates = _ffmpeg_command_candidates()
+    if not ffmpeg_candidates:
         return None
     temp_file = tempfile.NamedTemporaryFile(
         prefix="alpha_fixer_video_recode_",
@@ -1424,49 +1442,51 @@ def _transcode_video_source(
     )
     transcode_path = temp_file.name
     temp_file.close()
-    try:
-        result = subprocess.run(
-            [
-                ffmpeg_exe,
-                "-y",
-                "-v",
-                "error",
-                "-fflags",
-                "+discardcorrupt",
-                "-err_detect",
-                "ignore_err",
-                *_FFMPEG_DEEP_ANALYSIS_ARGS,
-                "-i",
-                path,
-                *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
-                "-dn",
-                "-sn",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "20",
-                *(["-an"] if not include_audio else ["-c:a", "aac", "-b:a", "160k"]),
-                *(["-avoid_negative_ts", "make_zero"] if rebuild_timestamps else []),
-                transcode_path,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False,
-            text=True,
-            timeout=180,
-        )
-    except Exception:
+    for ffmpeg_exe in ffmpeg_candidates:
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg_exe,
+                    "-y",
+                    "-v",
+                    "error",
+                    "-fflags",
+                    "+discardcorrupt",
+                    "-err_detect",
+                    "ignore_err",
+                    *_FFMPEG_DEEP_ANALYSIS_ARGS,
+                    "-i",
+                    path,
+                    *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
+                    "-dn",
+                    "-sn",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "20",
+                    *(["-an"] if not include_audio else ["-c:a", "aac", "-b:a", "160k"]),
+                    *(["-avoid_negative_ts", "make_zero"] if rebuild_timestamps else []),
+                    transcode_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+                text=True,
+                timeout=180,
+            )
+        except Exception:
+            _unlink_file_safely(transcode_path)
+            continue
+        try:
+            if result.returncode == 0 and Path(transcode_path).is_file() and Path(transcode_path).stat().st_size > 0:
+                return transcode_path
+        except Exception:
+            pass
         _unlink_file_safely(transcode_path)
-        return None
-    try:
-        if result.returncode == 0 and Path(transcode_path).is_file() and Path(transcode_path).stat().st_size > 0:
-            return transcode_path
-    except Exception:
-        pass
     _unlink_file_safely(transcode_path)
     return None
 

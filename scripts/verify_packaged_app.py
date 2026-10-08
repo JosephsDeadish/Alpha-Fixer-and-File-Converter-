@@ -360,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selftest-sample-limit", type=int, default=0, help="Optional cap for external manifest entries exercised per packaged self-test run.")
     parser.add_argument("--selftest-stress-loops", type=int, default=0, help="Optional number of larger generated media/session stress loops to run during packaged self-test.")
     parser.add_argument("--repeat-selftest-runs", type=int, default=1, help="How many separate packaged self-test launches to run and compare.")
+    parser.add_argument("--selftest-timeout", type=int, default=120, help="Per-self-test-launch timeout in seconds.")
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
     parser.add_argument("--max-selftest-rss-growth-mb", type=float, help="Optional upper bound for last-minus-first peak RSS across repeated self-test runs.")
@@ -632,7 +633,13 @@ def main(argv: list[str] | None = None) -> int:
                 selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
             if args.sample_cache_dir:
                 selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"] = args.sample_cache_dir
-            selftest_result = _run_and_echo(command, env=selftest_env, timeout=max(30, int(args.timeout)))
+            selftest_timeout = max(30, int(args.selftest_timeout))
+            try:
+                selftest_result = _run_and_echo(command, env=selftest_env, timeout=selftest_timeout)
+            except subprocess.TimeoutExpired:
+                raise SystemExit(
+                    f"Packaged runtime self-test timed out after {selftest_timeout} seconds."
+                ) from None
             if selftest_result.returncode not in (0, 1):
                 raise SystemExit(f"Packaged runtime self-test failed with exit code {selftest_result.returncode}.")
             selftest_payload = _selftest_payload(selftest_result.stdout or "")

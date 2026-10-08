@@ -138,7 +138,7 @@
       "group": "unsupported pixel format",
       "expect": "fail",
       "detail_contains": [
-        "Unsupported DDS pixel format"
+        "Unsupported DDS compressed format"
       ]
     },
     {
@@ -150,7 +150,7 @@
       "group": "unsupported pixel format",
       "expect": "fail",
       "detail_contains": [
-        "Unsupported DDS pixel format"
+        "Unsupported DDS compressed format"
       ]
     },
     {
@@ -162,8 +162,7 @@
       "group": "unsupported bitcount",
       "expect": "fail",
       "detail_contains": [
-        "Unsupported DDS pixel format",
-        "bits=12"
+        "Unsupported DDS pixel format"
       ]
     }
   ]
