@@ -283,6 +283,68 @@ def _summarize_count_buckets(counts: dict[str, int], limit: int = 3) -> str:
     return ", ".join(parts[:limit]) + f", +{remaining} more"
 
 
+def _unique_summary_parts(parts: list[str], limit: int = 4) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in parts:
+        text = str(part or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        ordered.append(text)
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _gif_import_next_step_text(
+    *,
+    loaded_sources: int,
+    recovered: list[tuple[str, str]],
+    failures: list[tuple[str, str]],
+    skipped: list[str],
+) -> str:
+    steps: list[str] = []
+    grouped: dict[str, int] = {}
+    for name, detail in failures:
+        category = _classify_import_failure(name, detail)
+        grouped[category] = grouped.get(category, 0) + 1
+    video_runtime_ready = _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg()
+    if not video_runtime_ready:
+        steps.append("images and animated GIFs still work here; video-source expansion needs ffmpeg/imageio support")
+    if "audio-only container" in grouped:
+        steps.append("audio-only files cannot be added because GIF Builder needs visual frames")
+    if any(
+        category in grouped
+        for category in (
+            "transport stream timing",
+            "program stream layout",
+            "quicktime metadata",
+            "legacy index container",
+            "matroska/webm program",
+            "multi-stream container",
+            "still-image video",
+            "video codec",
+            "video decode",
+            "container codec mismatch",
+            "partial / malformed video",
+        )
+    ):
+        steps.append("retry the sample with Show details open so you can keep the grouped guidance with the asset")
+    if recovered:
+        steps.append("recovered sources already contributed frames, so you can keep arranging/exporting while reviewing failures")
+    if skipped:
+        steps.append("unsupported files were skipped; Show details lists exactly which ones")
+    if failures:
+        steps.append("use Show details or Copy details for grouped import guidance")
+    elif loaded_sources > 0:
+        steps.append("reorder frames, adjust timing, preview, or export when ready")
+    ready_steps = _unique_summary_parts(steps)
+    if not ready_steps:
+        return "Next step: add media to build a frame timeline, then preview or export."
+    return "Next step: " + "  •  ".join(ready_steps)
+
+
 def _scaled_size_for_export(size: tuple[int, int], max_w: int, max_h: int) -> tuple[int, int]:
     width, height = size
     if width <= 0 or height <= 0:
@@ -496,6 +558,11 @@ class GifBuilderDialog(QDialog):
         self._import_copy_btn.setVisible(False)
         import_detail_actions.addWidget(self._import_copy_btn)
         left_layout.addLayout(import_detail_actions)
+        self._next_step_lbl = QLabel("Next step: add media to build a frame timeline, then preview or export.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self._next_step_lbl)
 
         self._capability_lbl = QLabel(_gif_builder_capability_summary())
         self._capability_lbl.setWordWrap(True)
@@ -1047,8 +1114,11 @@ class GifBuilderDialog(QDialog):
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
         text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        next_text = self._next_step_lbl.text().strip()
+        if next_text:
+            text += f"\n{next_text}"
         self._session_status_lbl.setText(text)
-        self._session_status_lbl.setToolTip(status or text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 
     def _apply_import_detail_visibility(self) -> None:
         detail = self._import_detail_box.toPlainText().strip()
@@ -1094,6 +1164,19 @@ class GifBuilderDialog(QDialog):
         self._apply_import_detail_visibility()
         self.queue_status_changed.emit(self.get_queue_status_text())
 
+    def _set_next_step_text(self, text: str, *, tone: str = "neutral") -> None:
+        colors = {
+            "neutral": "#888",
+            "success": "#2e7d32",
+            "warning": "#b26a00",
+            "error": "#b00020",
+        }
+        rendered = str(text or "").strip() or "Next step: add media to build a frame timeline, then preview or export."
+        self._next_step_lbl.setText(rendered)
+        self._next_step_lbl.setToolTip(rendered)
+        self._next_step_lbl.setStyleSheet(f"color: {colors.get(tone, '#888')}; font-size: 11px;")
+        self._refresh_session_status()
+
     def _update_import_status(
         self,
         *,
@@ -1112,6 +1195,10 @@ class GifBuilderDialog(QDialog):
         if attempted <= 0:
             self._set_import_status(
                 "Ready: add images, GIFs, videos, or probe-detected odd containers. Import notes, grouped failures, and skipped-file details will appear here."
+            )
+            self._set_next_step_text(
+                "Next step: add media to build a frame timeline, then adjust timing, preview, or export.",
+                tone="neutral",
             )
             return
         parts = [
@@ -1174,6 +1261,15 @@ class GifBuilderDialog(QDialog):
             detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
         summary = "Import summary: " + "  •  ".join(parts)
         self._set_import_status(summary, detail="\n\n".join(detail_lines), tone=tone)
+        self._set_next_step_text(
+            _gif_import_next_step_text(
+                loaded_sources=loaded_sources,
+                recovered=recovered,
+                failures=failures,
+                skipped=skipped,
+            ),
+            tone=tone,
+        )
         self.status_notice.emit(f"GIF Builder: {summary}", 7000)
 
     def _update_frame_diagnostics(self) -> None:

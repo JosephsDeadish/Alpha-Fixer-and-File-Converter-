@@ -4483,6 +4483,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("Probe-detected audio codecs: ac3 ×1, vorbis ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("multi-stream container", dialog._import_status_lbl.toolTip())
             self.assertIn("audio-only container", dialog._import_status_lbl.toolTip())
+            self.assertIn("Selected Stream", dialog._next_step_lbl.text())
+            self.assertIn("recovered clips are already usable", dialog._next_step_lbl.text())
             self.assertFalse(dialog._import_detail_box.isHidden())
             self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_detail_box.toPlainText())
         finally:
@@ -5592,6 +5594,9 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Import summary:", self._app.clipboard().text())
             self.assertIn("broken.bin", self._app.clipboard().text())
             self.assertIn("1 failed", dialog._session_status_lbl.text())
+            self.assertIn("Next step:", dialog._session_status_lbl.text())
+            self.assertIn("audio-only files cannot be added", dialog._next_step_lbl.text())
+            self.assertIn("Show details or Copy details", dialog._next_step_lbl.text())
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -5762,6 +5767,9 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("audio.ogg", self._app.clipboard().text())
             self.assertIn("image/GIF mode", dialog._session_status_lbl.text())
             self.assertIn("1 failed", dialog._session_status_lbl.text())
+            self.assertIn("Next step:", dialog._session_status_lbl.text())
+            self.assertIn("audio-only files cannot be added", dialog._next_step_lbl.text())
+            self.assertIn("image/GIF clips and GIF export still work here", dialog._next_step_lbl.text())
         finally:
             dialog.close()
             dialog.deleteLater()

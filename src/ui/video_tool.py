@@ -1714,6 +1714,71 @@ def _summarize_count_buckets(counts: dict[str, int], limit: int = 3) -> str:
     return ", ".join(parts[:limit]) + f", +{remaining} more"
 
 
+def _unique_summary_parts(parts: list[str], limit: int = 4) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in parts:
+        text = str(part or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        ordered.append(text)
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _video_import_next_step_text(
+    *,
+    added: int,
+    recovered: list[tuple[str, str]],
+    failures: list[tuple[str, str]],
+    skipped: list[str],
+    video_io_available: bool,
+) -> str:
+    steps: list[str] = []
+    grouped: dict[str, int] = {}
+    for name, detail in failures:
+        category = _classify_video_import_failure(name, detail)
+        grouped[category] = grouped.get(category, 0) + 1
+    if not video_io_available:
+        steps.append("image/GIF clips and GIF export still work here even without video/MP4 runtime pieces")
+    if "multi-stream container" in grouped:
+        steps.append("use Selected Stream → Reload Selected Streams for alternate video/audio tracks")
+    if "disc sidecar" in grouped:
+        steps.append("keep matching cue/bin sidecars beside disc-image samples before retrying")
+    if "audio-only container" in grouped:
+        steps.append("audio-only files cannot be added because the timeline needs playable video frames")
+    if any(
+        category in grouped
+        for category in (
+            "transport stream timing",
+            "program stream layout",
+            "quicktime metadata",
+            "legacy index container",
+            "container codec mismatch",
+            "partial / malformed video",
+            "video codec",
+            "recovery exhausted",
+        )
+    ):
+        steps.append("remux/transcode damaged sources first, then keep the copied details with the sample for retesting")
+    if recovered and failures:
+        steps.append("recovered clips are already usable; you can keep editing/exporting while reviewing the failed files")
+    elif recovered:
+        steps.append("recovered clips loaded successfully and keep their original source paths in history")
+    if skipped:
+        steps.append("unsupported files were skipped; Show details lists exactly which ones")
+    if failures:
+        steps.append("use Show details or Copy details for grouped per-container guidance")
+    elif added:
+        steps.append("trim, choose streams, preview, or export when ready")
+    ready_steps = _unique_summary_parts(steps)
+    if not ready_steps:
+        return "Next step: add clips to start a timeline, then preview or export."
+    return "Next step: " + "  •  ".join(ready_steps)
+
+
 def _probe_fields_from_detail(detail: str) -> dict[str, str]:
     fields: dict[str, str] = {}
     for match in _PROBE_FIELD_RE.finditer(str(detail or "")):
@@ -2871,6 +2936,11 @@ class VideoToolDialog(QDialog):
         self._import_copy_btn.setVisible(False)
         import_detail_actions.addWidget(self._import_copy_btn)
         left_layout.addLayout(import_detail_actions)
+        self._next_step_lbl = QLabel("Next step: add clips to start a timeline, then preview or export.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self._next_step_lbl)
 
         self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")
         self._timeline_summary_lbl.setWordWrap(True)
@@ -3357,6 +3427,19 @@ class VideoToolDialog(QDialog):
         self._apply_import_detail_visibility()
         self.queue_status_changed.emit(self.get_queue_status_text())
 
+    def _set_next_step_text(self, text: str, *, tone: str = "neutral") -> None:
+        colors = {
+            "neutral": "#888",
+            "success": "#2e7d32",
+            "warning": "#b26a00",
+            "error": "#b00020",
+        }
+        rendered = str(text or "").strip() or "Next step: add clips to start a timeline, then preview or export."
+        self._next_step_lbl.setText(rendered)
+        self._next_step_lbl.setToolTip(rendered)
+        self._next_step_lbl.setStyleSheet(f"color: {colors.get(tone, '#888')}; font-size: 11px;")
+        self._refresh_session_status()
+
     def _update_import_status(
         self,
         *,
@@ -3369,6 +3452,10 @@ class VideoToolDialog(QDialog):
         if attempted <= 0:
             self._set_import_status(
                 "Ready: add videos, images, or animated GIFs. Recovery notes, failure groups, and skipped-file details will appear here."
+            )
+            self._set_next_step_text(
+                "Next step: add clips to start a timeline, then preview, trim, choose streams, or export.",
+                tone="neutral",
             )
             return
         parts = [f"Added {added} clip{'s' if added != 1 else ''}"]
@@ -3421,6 +3508,16 @@ class VideoToolDialog(QDialog):
             detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
         summary = "Import summary: " + "  •  ".join(parts)
         self._set_import_status(summary, detail="\n\n".join(detail_lines), tone=tone)
+        self._set_next_step_text(
+            _video_import_next_step_text(
+                added=added,
+                recovered=recovered,
+                failures=failures,
+                skipped=skipped,
+                video_io_available=self._video_io_available,
+            ),
+            tone=tone,
+        )
         self.status_notice.emit(f"Video Builder: {summary}", 7000)
 
     def _format_clip_info_text(self, clip: "_ClipEntry") -> str:
@@ -3742,8 +3839,12 @@ class VideoToolDialog(QDialog):
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
         text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        next_step = getattr(self, "_next_step_lbl", None)
+        next_text = next_step.text().strip() if next_step is not None else ""
+        if next_text:
+            text += f"\n{next_text}"
         self._session_status_lbl.setText(text)
-        self._session_status_lbl.setToolTip(status or text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 
     def _apply_import_detail_visibility(self) -> None:
         detail = self._import_detail_box.toPlainText().strip()
