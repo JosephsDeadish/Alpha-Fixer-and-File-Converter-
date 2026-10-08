@@ -6544,6 +6544,37 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Next step:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
 
+    def test_selective_alpha_slot_labels_explain_next_actions(self):
+        self.assertIn("Empty", self._widget._slot_info_lbl.text())
+        self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
+        self.assertIn("Empty", self._widget._az_slot_info_lbl.text())
+        self.assertIn("save all current zones here", self._widget._az_slot_info_lbl.text())
+
+        self._widget._mask_slots[0] = np.zeros((2, 2), dtype=np.uint8)
+        self._widget._mask_slot_info[0] = "Zone 1 – Red"
+        self._widget._on_slot_selected(0)
+        self.assertIn("Saved from:", self._widget._slot_info_lbl.text())
+        self.assertIn("paste into the active zone", self._widget._slot_info_lbl.text())
+
+        self._widget._az_slots[0] = [np.zeros((2, 2), dtype=np.uint8)]
+        self._widget._az_slot_info[0] = "all zones"
+        self._widget._on_az_slot_selected(0)
+        self.assertIn("Saved:", self._widget._az_slot_info_lbl.text())
+        self.assertIn("paste all zones onto the current image", self._widget._az_slot_info_lbl.text())
+
+    def test_selective_alpha_shared_zone_status_points_to_import_actions(self):
+        self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
+        self.assertIn("right-click the preview", self._widget._import_shared_status.text())
+
+        self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
+        text = self._widget._import_shared_status.text()
+        self.assertIn("1 zone(s) ready", text)
+        self.assertIn("Import Zones to Canvas", text)
+        self.assertIn("Paste Mask", text)
+        self.assertTrue(self._widget._btn_import_shared.isEnabled())
+        self.assertTrue(self._widget._btn_import_to_az_slot.isEnabled())
+        self.assertTrue(self._widget._btn_import_zone_to_clipboard.isEnabled())
+
     def test_fairy_garden_has_fairy_effect(self):
         from src.ui.theme_engine import FAIRY_THEME
         self.assertEqual(FAIRY_THEME["_effect"], "fairy")

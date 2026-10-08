@@ -1649,13 +1649,43 @@ class SelectiveAlphaTool(QWidget):
     def _next_step_text(src_path: str, has_shared_zones: bool, result_ready: bool) -> str:
         if not src_path:
             if has_shared_zones:
-                return "Next step: open an image, then review the shared zones and apply them to the source."
+                return "Next step: open an image, then use Import Zones to Canvas or save the shared zones into a Full Layout Slot."
             return "Next step: open an image or copy zones from the Alpha tab to begin editing."
         if result_ready:
-            return "Next step: save the current result or keep refining the mask before saving."
+            return "Next step: save the current result, or keep refining the mask and save again when ready."
         if has_shared_zones:
-            return "Next step: review the shared zones, refine the mask, then apply or save when ready."
+            return "Next step: import the shared zones, refine any masks you need, then save when the preview looks right."
         return "Next step: paint or refine your zones, then save when the preview looks right."
+
+    @staticmethod
+    def _shared_zone_import_instructions() -> str:
+        return (
+            "In Alpha & RGBA Adjuster: enable 'Highlight Alpha Values', right-click the preview, "
+            "then choose 'Copy zones → Alpha Painter tool'."
+        )
+
+    @classmethod
+    def _empty_single_zone_slot_text(cls) -> str:
+        return (
+            "Empty — save the active zone here, or bring in one shared zone and use "
+            "'Copy Single Zone → Clipboard' before pasting."
+        )
+
+    @classmethod
+    def _filled_single_zone_slot_text(cls, info: str) -> str:
+        detail = str(info or "saved mask").strip()
+        return f"Saved from: {detail} — paste into the active zone, rename for reuse, or clear this slot."
+
+    @classmethod
+    def _empty_full_layout_slot_text(cls) -> str:
+        return (
+            "Empty — save all current zones here, or store imported shared zones in this slot for reuse on another image."
+        )
+
+    @classmethod
+    def _filled_full_layout_slot_text(cls, info: str) -> str:
+        detail = str(info or "saved layout").strip()
+        return f"Saved: {detail} — paste all zones onto the current image, rename for reuse, or clear this slot."
 
     def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -2045,7 +2075,7 @@ class SelectiveAlphaTool(QWidget):
         sv.addLayout(slot_btn_row)
 
         # Status label for the selected slot
-        self._slot_info_lbl = QLabel("(empty)")
+        self._slot_info_lbl = QLabel(self._empty_single_zone_slot_text())
         self._slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
         self._slot_info_lbl.setWordWrap(True)
         sv.addWidget(self._slot_info_lbl)
@@ -2149,7 +2179,7 @@ class SelectiveAlphaTool(QWidget):
         az_slot_btn_row.addWidget(self._btn_az_slot_del)
         azv.addLayout(az_slot_btn_row)
 
-        self._az_slot_info_lbl = QLabel("(empty)")
+        self._az_slot_info_lbl = QLabel(self._empty_full_layout_slot_text())
         self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
         self._az_slot_info_lbl.setWordWrap(True)
         azv.addWidget(self._az_slot_info_lbl)
@@ -2212,14 +2242,17 @@ class SelectiveAlphaTool(QWidget):
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
-            "Copy detected zones from the Alpha & RGBA Adjuster preview, then import them here\n"
-            "to paint on the canvas directly or save them into layout slots for reuse."
+            "Bring detected zones here from Alpha & RGBA Adjuster, then either import them onto the canvas,\n"
+            "save the whole set into a Full Layout Slot, or copy one zone into the single-zone clipboard."
         )
         import_note.setWordWrap(True)
         import_note.setStyleSheet("color: #999; font-size: 11px;")
+        import_note.setToolTip(self._shared_zone_import_instructions())
         iv.addWidget(import_note)
 
-        self._import_shared_status = QLabel("No zones ready to import.")
+        self._import_shared_status = QLabel(
+            "No shared zones ready yet.\n" + self._shared_zone_import_instructions()
+        )
         self._import_shared_status.setWordWrap(True)
         self._import_shared_status.setStyleSheet("color: #888; font-size: 11px;")
         iv.addWidget(self._import_shared_status)
@@ -2227,9 +2260,8 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared = QPushButton("📥 Import Zones to Canvas")
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
-            "Populate the painting canvas with zone masks that were copied from\n"
-            "the Alpha & RGBA Adjuster's compare preview.\n\n"
-            "Each detected alpha value becomes a separate coloured zone."
+            "Load the shared Alpha & RGBA zones onto the Alpha Painter canvas.\n\n"
+            "Each detected alpha value becomes its own editable zone."
         )
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
         iv.addWidget(self._btn_import_shared)
@@ -2239,9 +2271,8 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_to_az_slot.setMinimumHeight(26)
         self._btn_import_to_az_slot.setEnabled(False)
         self._btn_import_to_az_slot.setToolTip(
-            "Save ALL imported zones from the Alpha & RGBA Adjuster directly\n"
-            "into the selected full-layout slot so they can\n"
-            "be restored on any image later without re-importing."
+            "Save every shared zone into the selected Full Layout Slot.\n\n"
+            "Use this when you want to reuse the whole zone layout on another image later."
         )
         self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
         iv.addWidget(self._btn_import_to_az_slot)
@@ -2251,10 +2282,9 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(
-            "Copy one imported zone into the single-zone clipboard.\n"
-            "If more than one zone was imported, a picker will appear\n"
-            "so you can choose which zone to copy.\n"
-            "The copied mask can then be pasted with the active zone controls below."
+            "Copy one shared zone into the single-zone clipboard.\n"
+            "If several zones are ready, you can pick which one to copy.\n\n"
+            "Then use 'Paste Mask' in the active zone controls below."
         )
         self._btn_import_zone_to_clipboard.clicked.connect(self._on_import_zone_to_clipboard)
         iv.addWidget(self._btn_import_zone_to_clipboard)
@@ -2799,11 +2829,13 @@ class SelectiveAlphaTool(QWidget):
         if idx < 0 or idx >= len(self._mask_slots):
             return
         if self._mask_slots[idx] is None:
-            self._slot_info_lbl.setText("(empty)")
+            self._slot_info_lbl.setText(self._empty_single_zone_slot_text())
             self._slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
             self._btn_slot_paste.setEnabled(False)
         else:
-            self._slot_info_lbl.setText(f"Saved from: {self._mask_slot_info[idx]}")
+            self._slot_info_lbl.setText(
+                self._filled_single_zone_slot_text(self._mask_slot_info[idx])
+            )
             self._slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
             self._btn_slot_paste.setEnabled(True)
 
@@ -2990,11 +3022,13 @@ class SelectiveAlphaTool(QWidget):
         if idx < 0 or idx >= len(self._az_slots):
             return
         if self._az_slots[idx] is None:
-            self._az_slot_info_lbl.setText("(empty)")
+            self._az_slot_info_lbl.setText(self._empty_full_layout_slot_text())
             self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
             self._btn_paste_all_zones.setEnabled(False)
         else:
-            self._az_slot_info_lbl.setText(f"Saved: {self._az_slot_info[idx]}")
+            self._az_slot_info_lbl.setText(
+                self._filled_full_layout_slot_text(self._az_slot_info[idx])
+            )
             self._az_slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
             self._btn_paste_all_zones.setEnabled(True)
 
@@ -3104,10 +3138,13 @@ class SelectiveAlphaTool(QWidget):
         else:
             clipboard_note = ""
 
+        next_actions = "Next: Import Zones to Canvas, Save All → Full Layout Slot, or Copy Single Zone → Clipboard."
+        if count == 1:
+            next_actions = "Next: open an image, use Import Zones to Canvas, or press Paste Mask to apply the pre-loaded clipboard zone."
         self._import_shared_status.setText(
             f"✅ {count} zone(s) ready"
             f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"
-            f"{clipboard_note}"
+            f"{clipboard_note}\n{next_actions}"
         )
         self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
         self._btn_import_shared.setEnabled(True)
@@ -3126,10 +3163,7 @@ class SelectiveAlphaTool(QWidget):
             QMessageBox.information(
                 self, "No zones to import",
                 "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
-                "In the Alpha & RGBA Adjuster tab:\n"
-                "1. Load an image with multiple alpha values.\n"
-                "2. Enable 'Highlight Alpha Values'.\n"
-                "3. Right-click the preview and choose 'Copy zones → Alpha Painter tool'."
+                + self._shared_zone_import_instructions()
             )
             return
         if not self._canvas.has_image():
@@ -3159,7 +3193,8 @@ class SelectiveAlphaTool(QWidget):
         # Update import status to reflect that zones have been applied.
         count = len(self._shared_zones)
         self._import_shared_status.setText(
-            f"✅ {count} zone(s) imported successfully."
+            f"✅ {count} zone(s) imported to the canvas.\n"
+            "Next: refine the masks, adjust zone alpha values, or save the current result."
         )
         self._refresh_session_status()
 
@@ -3188,7 +3223,8 @@ class SelectiveAlphaTool(QWidget):
         self._update_az_slot_combo_item(idx)
         self._on_az_slot_selected(idx)
         self._import_shared_status.setText(
-            f"✅ {num_z} zone(s) saved to Full Layout Slot {idx + 1}."
+            f"✅ {num_z} zone(s) saved to Full Layout Slot {idx + 1}.\n"
+            "Next: paste that saved layout onto another image later, rename the slot, or import the zones onto the canvas now."
         )
         if self._sound is not None:
             self._sound.play_mask_copy()
@@ -3224,7 +3260,8 @@ class SelectiveAlphaTool(QWidget):
         self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
         self._ze_paste_btn.setEnabled(True)
         self._import_shared_status.setText(
-            f"✅ Zone {zone_idx + 1} copied to clipboard — use 'Paste Mask' to apply."
+            f"✅ Zone {zone_idx + 1} copied to the single-zone clipboard.\n"
+            "Next: use 'Paste Mask' on the active zone, or save the full set into a Full Layout Slot first."
         )
         if self._sound is not None:
             self._sound.play_mask_copy()
