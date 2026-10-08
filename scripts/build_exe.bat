@@ -58,7 +58,8 @@ if "%1"=="--onefile" (
 
 if exist "!LAUNCH_TARGET!" (
     echo Running packaged validation...
-    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-no-missing-libs
+    if not exist dist\validation-reports mkdir dist\validation-reports
+    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-bundled-ffmpeg --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json
     if errorlevel 1 (
         exit /b 1
     )

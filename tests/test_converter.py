@@ -1304,6 +1304,68 @@ class TestConvertFile(unittest.TestCase):
             finally:
                 img.close()
 
+    def test_load_dds_supports_dx10_rgba8_unorm(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dx10_rgba8.dds")
+            _make_dx10_dds(src, 2, 1, 28, bytes([10, 20, 30, 40, 50, 60, 70, 80]))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (10, 20, 30, 40))
+                self.assertEqual(img.getpixel((1, 0)), (50, 60, 70, 80))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_dx10_bgra8_unorm(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dx10_bgra8.dds")
+            _make_dx10_dds(src, 2, 1, 87, bytes([30, 20, 10, 40, 90, 80, 70, 60]))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (10, 20, 30, 40))
+                self.assertEqual(img.getpixel((1, 0)), (70, 80, 90, 60))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_dx10_bgrx8_unorm_as_opaque(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dx10_bgrx8.dds")
+            _make_dx10_dds(src, 1, 1, 91, bytes([30, 20, 10, 0]))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (10, 20, 30, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_dx10_b5g6r5_unorm(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dx10_b5g6r5.dds")
+            _make_dx10_dds(src, 1, 1, 85, (0xF800).to_bytes(2, "little"))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (255, 0, 0, 255))
+            finally:
+                img.close()
+
+    def test_load_dds_supports_dx10_r8_unorm_as_greyscale(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_dx10_r8.dds")
+            _make_dx10_dds(src, 1, 1, 61, bytes([77]))
+            img = _load_dds_raw(src)
+            try:
+                self.assertEqual(img.getpixel((0, 0)), (77, 77, 77, 255))
+            finally:
+                img.close()
+
     def test_load_dds_bc7_requires_real_decoder(self):
         from src.core.alpha_processor import _load_dds_raw
 

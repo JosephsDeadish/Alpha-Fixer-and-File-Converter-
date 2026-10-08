@@ -92,12 +92,16 @@ else
 fi
 
 if [[ -x "$launch_target" ]]; then
+    mkdir -p dist/validation-reports
     verify_args=(
         "$launch_target"
         --smoke-seconds 1.5
         --timeout 25
         --require-video-runtime
+        --require-ffmpeg-selfcheck
+        --require-bundled-ffmpeg
         --require-no-missing-libs
+        --json-out "dist/validation-reports/packaged-runtime-audit.json"
     )
     if [[ "${ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
         sample_limit="${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-4}"
@@ -107,6 +111,7 @@ if [[ -x "$launch_target" ]]; then
             --run-selftest
             --selftest-iterations 2
             --selftest-sample-limit "$sample_limit"
+            --require-selftest-pass
             --use-public-sample-manifests
             --allow-sample-downloads
             --sample-cache-dir "$sample_cache_dir"

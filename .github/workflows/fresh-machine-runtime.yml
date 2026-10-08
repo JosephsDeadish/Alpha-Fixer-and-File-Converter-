@@ -58,7 +58,8 @@ jobs:
             --require-selftest-check mpegts_load \
             --require-selftest-check synthetic_bin_probe \
             --require-video-runtime \
-            --require-odd-probe-ready \
+            --require-ffmpeg-selfcheck \
+            --require-bundled-ffmpeg \
             --require-no-missing-libs \
             --json-out artifacts/runtime-validation-linux.json
 
@@ -79,7 +80,8 @@ jobs:
             --require-selftest-check mpegts_load `
             --require-selftest-check synthetic_bin_probe `
             --require-video-runtime `
-            --require-odd-probe-ready `
+            --require-ffmpeg-selfcheck `
+            --require-bundled-ffmpeg `
             --require-no-missing-libs `
             --json-out artifacts\runtime-validation-windows.json
 

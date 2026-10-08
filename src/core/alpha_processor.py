@@ -202,6 +202,21 @@ def _load_dds_raw(path: str) -> Image.Image:
     if dx10_dxgi_format and dx10_dxgi_format in _DXGI_TO_FOURCC:
         fourcc_str = _DXGI_TO_FOURCC[dx10_dxgi_format]
 
+    _DXGI_UNCOMPRESSED_LAYOUTS: dict[int, tuple[int, int, int, int, int, int]] = {
+        28: (0x41, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000),  # R8G8B8A8_UNORM
+        29: (0x41, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000),  # R8G8B8A8_UNORM_SRGB
+        61: (0x20000, 8, 0x000000FF, 0x00000000, 0x00000000, 0x00000000),  # R8_UNORM
+        85: (0x40, 16, 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000),  # B5G6R5_UNORM
+        86: (0x41, 16, 0x00007C00, 0x000003E0, 0x0000001F, 0x00008000),  # B5G5R5A1_UNORM
+        87: (0x41, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000),  # B8G8R8A8_UNORM
+        91: (0x40, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000),  # B8G8R8X8_UNORM
+        115: (0x41, 16, 0x00000F00, 0x000000F0, 0x0000000F, 0x0000F000),  # B4G4R4A4_UNORM
+    }
+    dx10_uncompressed_layout = False
+    if dx10_dxgi_format and dx10_dxgi_format in _DXGI_UNCOMPRESSED_LAYOUTS and bits == 0:
+        pf_flags, bits, r_mask, g_mask, b_mask, a_mask = _DXGI_UNCOMPRESSED_LAYOUTS[dx10_dxgi_format]
+        dx10_uncompressed_layout = True
+
     # Also map legacy FourCC aliases
     _FOURCC_ALIASES = {
         "DXT2": "DXT3",  # DXT2 = premultiplied alpha DXT3 – decode the same way
@@ -215,7 +230,7 @@ def _load_dds_raw(path: str) -> Image.Image:
     }
     fourcc_str = _FOURCC_ALIASES.get(fourcc_str, fourcc_str)
 
-    if pf_flags & _DDPF_FOURCC or pf_fourcc != b"\x00\x00\x00\x00":
+    if (pf_flags & _DDPF_FOURCC or pf_fourcc != b"\x00\x00\x00\x00") and not dx10_uncompressed_layout:
         if fourcc_str in ("DXT1", "DXT3", "DXT5", "BC4", "BC5", "BC6H", "BC7"):
             if fourcc_str in ("BC6H", "BC7"):
                 wand_img = _try_load_dds_via_wand(path, context=f"{fourcc_str} decode fallback")

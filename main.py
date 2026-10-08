@@ -20,6 +20,7 @@ import ctypes
 import json
 import shutil
 import tempfile
+import subprocess
 from pathlib import Path
 
 from src.core.runtime_validation import (

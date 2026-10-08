@@ -8967,6 +8967,13 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         verify_src = self._src("../scripts/verify_packaged_app.py")
         self.assertIn('verify_packaged_app.py', sh_src)
         self.assertIn('verify_packaged_app.py', bat_src)
+        self.assertIn('--require-ffmpeg-selfcheck', sh_src)
+        self.assertIn('--require-bundled-ffmpeg', sh_src)
+        self.assertIn('--json-out "dist/validation-reports/packaged-runtime-audit.json"', sh_src)
+        self.assertIn('--require-ffmpeg-selfcheck', bat_src)
+        self.assertIn('--require-bundled-ffmpeg', bat_src)
+        self.assertIn('dist\\validation-reports\\packaged-runtime-audit-windows.json', bat_src)
+        self.assertIn('sys.path.insert(0, str(_REPO_ROOT))', verify_src)
         self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP', verify_src)
         self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', verify_src)
         self.assertIn('ALPHA_FIXER_RUNTIME_SELFTEST', verify_src)
@@ -8985,6 +8992,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("--selftest-iterations 6", src)
         self.assertIn("generated_mp4_load", src)
         self.assertIn("synthetic_bin_probe", src)
+        self.assertIn("--require-ffmpeg-selfcheck", src)
+        self.assertIn("--require-bundled-ffmpeg", src)
 
     def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
         src = self._src("../main.py")
