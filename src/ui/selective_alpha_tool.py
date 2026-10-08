@@ -1593,6 +1593,7 @@ class _ZoneRow(QWidget):
 
 class SelectiveAlphaTool(QWidget):
     """Tab widget for the Selective Alpha editor."""
+    queue_status_changed = pyqtSignal(str)
 
     _MASK_SLOT_COUNT: int = 150  # Maximum number of saved-mask slots
     _MASK_SLOT_INIT:  int = 3    # Number of slots created on first launch
@@ -1682,6 +1683,11 @@ class SelectiveAlphaTool(QWidget):
         self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
+        self._session_status_lbl = QLabel("")
+        self._session_status_lbl.setWordWrap(True)
+        self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        wf_lay.addWidget(self._session_status_lbl)
 
         # Row 1b: Overlay opacity slider (item 16)
         _ov_row = QHBoxLayout()
@@ -2350,6 +2356,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_zone_editor(0)
         self._refresh_zone_combo_icons()
         self._setup_shortcuts()
+        self._refresh_session_status()
 
     def _setup_shortcuts(self) -> None:
         """Bind common keyboard shortcuts for the Selective Alpha editor."""
@@ -2558,6 +2565,40 @@ class SelectiveAlphaTool(QWidget):
             f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}  |  Zoom: {zoom_pct}%"
             "  |  🖱 Hold scroll-button to pan  |  Ctrl+scroll to zoom"
         )
+        self._refresh_session_status()
+
+    def get_status_bar_text(self) -> str:
+        summary = "🎨 Selective Alpha ready" if not self._src_path else f"🎨 Selective Alpha: {os.path.basename(self._src_path)}"
+        extras: list[str] = []
+        if self._src_path:
+            tool_names = {
+                "freehand": "brush",
+                "line": "line",
+                "rect": "rectangle",
+                "ellipse": "ellipse",
+                "fill": "fill",
+                "polygon": "polygon",
+                "eraser": "eraser",
+                "transform": "move",
+            }
+            extras.append(f"tool {tool_names.get(self._canvas._tool, self._canvas._tool)}")
+        if self._shared_zones:
+            extras.append(f"{len(self._shared_zones)} shared zone{'s' if len(self._shared_zones) != 1 else ''} ready")
+        if self._mask_clipboard is not None:
+            extras.append("mask clipboard ready")
+        filled_slots = sum(1 for slot in self._az_slots if slot)
+        if filled_slots:
+            extras.append(f"{filled_slots} all-zones slot{'s' if filled_slots != 1 else ''} saved")
+        if self._result_img is not None:
+            extras.append("result ready to save")
+        return summary + ("  •  " + "  •  ".join(extras) if extras else "")
+
+    def _refresh_session_status(self, *_args) -> None:
+        status = self.get_status_bar_text().strip()
+        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        self._session_status_lbl.setText(text)
+        self._session_status_lbl.setToolTip(status or text)
+        self.queue_status_changed.emit(status)
 
     def _set_btn_save_enabled(self, v: bool) -> None:
         self._btn_save.setEnabled(v)
@@ -3014,6 +3055,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared.setEnabled(True)
         self._btn_import_to_az_slot.setEnabled(True)
         self._btn_import_zone_to_clipboard.setEnabled(True)
+        self._refresh_session_status()
 
     def _on_import_shared_zones(self) -> None:
         """Import the zones previously received from the Alpha & RGBA Adjuster.
@@ -3061,6 +3103,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setText(
             f"✅ {count} zone(s) imported successfully."
         )
+        self._refresh_session_status()
 
     def _on_import_to_az_slot(self) -> None:
         """Save all shared zones to the currently selected all-zones slot (item 22).
@@ -3091,6 +3134,7 @@ class SelectiveAlphaTool(QWidget):
         )
         if self._sound is not None:
             self._sound.play_mask_copy()
+        self._refresh_session_status()
 
     def _on_import_zone_to_clipboard(self) -> None:
         """Copy one zone from shared zones to the single-zone clipboard (item 23).
@@ -3126,6 +3170,7 @@ class SelectiveAlphaTool(QWidget):
         )
         if self._sound is not None:
             self._sound.play_mask_copy()
+        self._refresh_session_status()
 
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -3193,6 +3238,7 @@ class SelectiveAlphaTool(QWidget):
                 "Auto-populate zones skipped after load error: %s", _exc
             )
             # Non-fatal: image is loaded; auto-detection just skipped
+        self._refresh_session_status()
 
     def _auto_populate_zones_from_image(self) -> None:
         """Auto-detect distinct alpha zones in the loaded image and populate them.
@@ -3364,6 +3410,7 @@ class SelectiveAlphaTool(QWidget):
                     self._result_history.pop(0).close()
             self._result_img = result
             result = None
+            self._refresh_session_status()
             return True
         except MemoryError:
             if result is not None:
@@ -3446,6 +3493,7 @@ class SelectiveAlphaTool(QWidget):
         if self._result_img is not None:
             self._result_img.close()
         self._result_img = self._result_history.pop()
+        self._refresh_session_status()
 
     @staticmethod
     def _make_zone_color_icon(r: int, g: int, b: int) -> QIcon:

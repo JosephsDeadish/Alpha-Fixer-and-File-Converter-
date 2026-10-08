@@ -11,7 +11,7 @@ import re
 import shlex
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -393,12 +393,14 @@ def _history_status_mix(statuses: list[str]) -> str:
 
 class HistoryTab(QWidget):
     """History view for Converter, Alpha, Selective Alpha, GIF Builder, and Video Builder runs."""
+    queue_status_changed = pyqtSignal(str)
 
     def __init__(self, settings_manager, parent=None):
         super().__init__(parent)
         self._settings = settings_manager
         self._setup_ui()
         self.refresh()
+        self._refresh_session_status()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -414,6 +416,12 @@ class HistoryTab(QWidget):
         hint = QLabel("⚙  History settings are in  Settings → General → History")
         hint.setStyleSheet("color: #888; font-size: 10px;")
         layout.addWidget(hint)
+
+        self._session_status_lbl = QLabel("")
+        self._session_status_lbl.setWordWrap(True)
+        self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self._session_status_lbl)
 
         btn_row = QHBoxLayout()
         self._btn_export = QPushButton("📤  Export History…")
@@ -574,18 +582,24 @@ class HistoryTab(QWidget):
         self._conv_search.textChanged.connect(
             lambda text: self._apply_filter(self._conv_tree, text)
         )
+        self._conv_search.textChanged.connect(self._refresh_session_status)
         self._alpha_search.textChanged.connect(
             lambda text: self._apply_filter(self._alpha_tree, text)
         )
+        self._alpha_search.textChanged.connect(self._refresh_session_status)
         self._sel_search.textChanged.connect(
             lambda text: self._apply_filter(self._sel_tree, text)
         )
+        self._sel_search.textChanged.connect(self._refresh_session_status)
         self._gif_search.textChanged.connect(
             lambda text: self._apply_filter(self._gif_tree, text)
         )
+        self._gif_search.textChanged.connect(self._refresh_session_status)
         self._vid_search.textChanged.connect(
             lambda text: self._apply_filter(self._vid_tree, text)
         )
+        self._vid_search.textChanged.connect(self._refresh_session_status)
+        self._sub_tabs.currentChanged.connect(self._refresh_session_status)
 
     # ------------------------------------------------------------------
     # Search / filter helpers
@@ -696,6 +710,45 @@ class HistoryTab(QWidget):
         self._apply_filter(self._sel_tree, self._sel_search.text())
         self._apply_filter(self._gif_tree, self._gif_search.text())
         self._apply_filter(self._vid_tree, self._vid_search.text())
+        self._refresh_session_status()
+
+    def _current_history_status(self) -> str:
+        mapping = {
+            0: ("Converter", self._conv_tree, self._conv_search, self._conv_summary),
+            1: ("Alpha & RGBA", self._alpha_tree, self._alpha_search, self._alpha_summary),
+            2: ("Selective Alpha", self._sel_tree, self._sel_search, self._sel_summary),
+            3: ("GIF Builder", self._gif_tree, self._gif_search, self._gif_summary),
+            4: ("Video Builder", self._vid_tree, self._vid_search, self._vid_summary),
+        }
+        label, tree, search, summary_lbl = mapping.get(
+            self._sub_tabs.currentIndex(),
+            ("History", self._conv_tree, self._conv_search, self._conv_summary),
+        )
+        total = tree.topLevelItemCount()
+        visible = sum(1 for row in range(total) if not tree.topLevelItem(row).isHidden())
+        parts = [label]
+        parts.append(
+            f"{visible}/{total} shown"
+            if total and visible != total
+            else (f"{total} item{'s' if total != 1 else ''}" if total else "no entries yet")
+        )
+        filter_text = search.text().strip()
+        if filter_text:
+            parts.append(f"filter {filter_text}")
+        summary_text = summary_lbl.text().strip()
+        if summary_text:
+            parts.append(summary_text)
+        return "📋 History: " + "  •  ".join(parts)
+
+    def get_status_bar_text(self) -> str:
+        return self._current_history_status()
+
+    def _refresh_session_status(self, *_args) -> None:
+        status = self.get_status_bar_text().strip()
+        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        self._session_status_lbl.setText(text)
+        self._session_status_lbl.setToolTip(status or text)
+        self.queue_status_changed.emit(status)
 
     def _refresh_converter(self):
         history = self._settings.get_converter_history()

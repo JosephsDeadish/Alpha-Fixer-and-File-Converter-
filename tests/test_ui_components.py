@@ -6117,6 +6117,47 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab.deleteLater()
             self._app.processEvents()
 
+    def test_history_tab_status_bar_text_tracks_current_subtab_and_filter(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/final-output.mp4",
+                "format": "MP4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "fps": "30",
+                "canvas": "640×480",
+                "filter": "sepia",
+                "audio": "kept",
+                "recovery": "transcode ×1",
+                "streams": "sample.iso: stream #3",
+                "sources": "video ×1",
+                "files": ["sample.iso"],
+                "notes": "recovery=transcode ×1",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            tab._sub_tabs.setCurrentIndex(4)
+            self.assertIn("What works here right now:", tab._session_status_lbl.text())
+            self.assertIn("History: Video Builder", tab.get_status_bar_text())
+            self.assertIn("1 item", tab.get_status_bar_text())
+            tab._vid_search.setText("transcode")
+            self.assertIn("filter transcode", tab.get_status_bar_text())
+            tab._vid_search.setText("missing")
+            self.assertIn("0/1 shown", tab.get_status_bar_text())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect
@@ -6147,6 +6188,23 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             self._widget._on_slot_add()
         self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_COUNT)
         self.assertFalse(self._widget._btn_slot_add.isEnabled())
+
+    def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
+        self.assertIn("What works here right now:", self._widget._session_status_lbl.text())
+        self.assertIn("Selective Alpha ready", self._widget.get_status_bar_text())
+        self._widget._src_path = "/tmp/sample.png"
+        self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
+        self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)
+        self._widget._az_slots[0] = [np.zeros((2, 2), dtype=np.uint8)]
+        self._widget._result_img = object()
+        self._widget._refresh_session_status()
+        summary = self._widget.get_status_bar_text()
+        self.assertIn("sample.png", summary)
+        self.assertIn("shared zone", summary)
+        self.assertIn("mask clipboard ready", summary)
+        self.assertIn("all-zones slot", summary)
+        self.assertIn("result ready to save", summary)
+        self.assertIn("sample.png", self._widget._session_status_lbl.text())
 
     def test_fairy_garden_has_fairy_effect(self):
         from src.ui.theme_engine import FAIRY_THEME

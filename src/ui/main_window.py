@@ -1383,6 +1383,8 @@ class MainWindow(QMainWindow):
         self._converter_tab.status_notice.connect(self._show_transient_status)
         self._alpha_tab.queue_status_changed.connect(self._update_queue_status)
         self._converter_tab.queue_status_changed.connect(self._update_queue_status)
+        self._history_tab.queue_status_changed.connect(self._update_queue_status)
+        self._selective_alpha_tab.queue_status_changed.connect(self._update_queue_status)
         self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
         self._tabs.addTab(self._converter_tab, "🔄 Converter")
         self._tabs.addTab(self._history_tab, "📋 History")
