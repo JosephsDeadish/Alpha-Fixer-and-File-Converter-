@@ -5838,6 +5838,34 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             widget.deleteLater()
             self._app.processEvents()
 
+    def test_main_window_status_helper_carries_next_step_and_capability_context(self):
+        try:
+            from src.ui.main_window import _status_summary_and_tooltip
+        except ImportError as exc:
+            self.skipTest(f"main_window import unavailable in test env: {exc}")
+
+        class _FakeLabel:
+            def __init__(self, text):
+                self._text = text
+
+            def text(self):
+                return self._text
+
+        source = types.SimpleNamespace(
+            get_status_bar_text=lambda: "🎬 Video Builder ready  •  image/GIF mode",
+            _next_step_lbl=_FakeLabel("Next step: add clips to start a timeline, then preview or export."),
+            _capability_lbl=_FakeLabel("Ready now: image/GIF clips work here; MP4 export needs ffmpeg."),
+            _session_status_lbl=_FakeLabel(
+                "What works here right now: 🎬 Video Builder ready  •  image/GIF mode\n"
+                "Next step: add clips to start a timeline, then preview or export."
+            ),
+        )
+        summary, tooltip = _status_summary_and_tooltip(source)
+        self.assertEqual(summary, "🎬 Video Builder ready  •  image/GIF mode")
+        self.assertIn("What works here right now:", tooltip)
+        self.assertIn("Next step: add clips", tooltip)
+        self.assertIn("Ready now: image/GIF clips work here", tooltip)
+
     def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
         try:
             from src.ui.history_tab import HistoryTab

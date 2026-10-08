@@ -898,6 +898,47 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
     return "\n".join(lines)
 
 
+def _label_text(widget) -> str:
+    if widget is None:
+        return ""
+    text_getter = getattr(widget, "text", None)
+    if callable(text_getter):
+        try:
+            return str(text_getter() or "").strip()
+        except Exception:
+            return ""
+    return str(getattr(widget, "text", "") or "").strip()
+
+
+def _status_summary_and_tooltip(source) -> tuple[str, str]:
+    if source is None:
+        return "", ""
+    summary = ""
+    status_getter = getattr(source, "get_status_bar_text", None)
+    if callable(status_getter):
+        try:
+            summary = str(status_getter() or "").strip()
+        except Exception:
+            summary = ""
+    next_text = _label_text(getattr(source, "_next_step_lbl", None))
+    capability_text = _label_text(getattr(source, "_capability_lbl", None))
+    session_text = _label_text(getattr(source, "_session_status_lbl", None))
+    tooltip_parts: list[str] = []
+    if session_text:
+        tooltip_parts.append(session_text)
+    elif summary:
+        tooltip_parts.append(f"What works here right now: {summary}")
+        if next_text:
+            tooltip_parts.append(next_text)
+    elif next_text:
+        tooltip_parts.append(next_text)
+    if capability_text:
+        existing = "\n\n".join(tooltip_parts).lower()
+        if capability_text.lower() not in existing:
+            tooltip_parts.append(capability_text)
+    return summary, "\n\n".join(part for part in tooltip_parts if part).strip()
+
+
 class MainWindow(QMainWindow):
     # Unlock table: (click_threshold, settings_key, banner_message).
     # Stored at class level so it is built once, not rebuilt on every click.
@@ -2847,55 +2888,68 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage(message, max(1000, int(timeout_ms)))
 
     @staticmethod
-    def _set_status_label_text(label, text: str) -> None:
+    def _set_status_label_text(label, text: str, tooltip: str = "") -> None:
         if label is None:
             return
         rendered = str(text or "").strip()
         label.setText(rendered)
-        label.setToolTip(rendered)
+        label.setToolTip(str(tooltip or rendered).strip())
 
     def _update_queue_status(self) -> None:
         if self._queue_status_label is None:
             return
         tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
-        status_getter = getattr(tab, "get_status_bar_text", None)
-        if callable(status_getter):
-            self._set_status_label_text(self._queue_status_label, status_getter())
+        summary, tooltip = _status_summary_and_tooltip(tab)
+        if summary:
+            self._set_status_label_text(self._queue_status_label, summary, tooltip)
             return
         queue_getter = getattr(tab, "get_queue_status_text", None)
         if callable(queue_getter):
-            self._set_status_label_text(self._queue_status_label, queue_getter())
+            summary = str(queue_getter() or "").strip()
+            tooltip = f"What works here right now: {summary}" if summary else ""
+            self._set_status_label_text(self._queue_status_label, summary, tooltip)
             return
         file_list = getattr(tab, "_file_list", None)
         if file_list is None or not hasattr(file_list, "count"):
-            self._set_status_label_text(self._queue_status_label, "")
+            self._set_status_label_text(self._queue_status_label, "", "")
             return
         count = int(file_list.count())
-        self._set_status_label_text(self._queue_status_label, f"📁 {count} queued" if count > 0 else "")
+        summary = f"📁 {count} queued" if count > 0 else ""
+        tooltip = f"What works here right now: {summary}" if summary else ""
+        self._set_status_label_text(self._queue_status_label, summary, tooltip)
 
     def _visible_builder_status_text(self) -> str:
+        text, _tooltip = self._visible_builder_status_context()
+        return text
+
+    def _visible_builder_status_context(self) -> tuple[str, str]:
         visible_dialogs = []
         for attr in ("_gif_builder_dlg", "_video_tool_dlg"):
             dlg = getattr(self, attr, None)
             if dlg is None or not dlg.isVisible():
                 continue
-            getter = getattr(dlg, "get_status_bar_text", None)
-            if not callable(getter):
+            summary, tooltip = _status_summary_and_tooltip(dlg)
+            if not summary:
                 getter = getattr(dlg, "get_queue_status_text", None)
-            if not callable(getter):
+                if callable(getter):
+                    summary = str(getter() or "").strip()
+                    tooltip = f"What works here right now: {summary}" if summary else ""
+            if not summary:
                 continue
-            text = str(getter() or "").strip()
-            if text:
-                visible_dialogs.append((dlg, text))
-        for dlg, text in visible_dialogs:
+            visible_dialogs.append((dlg, summary, tooltip))
+        for dlg, text, tooltip in visible_dialogs:
             if dlg.isActiveWindow():
-                return text
-        return visible_dialogs[-1][1] if visible_dialogs else ""
+                return text, tooltip
+        if visible_dialogs:
+            _dlg, text, tooltip = visible_dialogs[-1]
+            return text, tooltip
+        return "", ""
 
     def _update_builder_status(self, *_args) -> None:
         if self._builder_status_label is None:
             return
-        self._set_status_label_text(self._builder_status_label, self._visible_builder_status_text())
+        text, tooltip = self._visible_builder_status_context()
+        self._set_status_label_text(self._builder_status_label, text, tooltip)
 
     def _connect_builder_status(self, dialog) -> None:
         if dialog is None or getattr(dialog, "_status_bar_hooks_connected", False):

@@ -9066,6 +9066,15 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("QEvent.Type.WindowDeactivate", src)
         self.assertIn("QTimer.singleShot(0, self._update_builder_status)", src)
 
+    def test_main_window_status_tooltips_reuse_session_and_capability_context(self):
+        src = self._src("ui/main_window.py")
+        self.assertIn("def _status_summary_and_tooltip(source) -> tuple[str, str]:", src)
+        self.assertIn('capability_text = _label_text(getattr(source, "_capability_lbl", None))', src)
+        self.assertIn('session_text = _label_text(getattr(source, "_session_status_lbl", None))', src)
+        self.assertIn("def _visible_builder_status_context(self) -> tuple[str, str]:", src)
+        self.assertIn("self._set_status_label_text(self._queue_status_label, summary, tooltip)", src)
+        self.assertIn("self._set_status_label_text(self._builder_status_label, text, tooltip)", src)
+
     def test_video_export_shows_progress_before_frame_loop_and_reuses_numpy_import(self):
         src = self._src("ui/video_tool.py")
         self.assertIn('if fmt == "mp4" and not self._mp4_export_available:', src)
