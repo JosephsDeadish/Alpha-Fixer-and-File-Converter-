@@ -5917,6 +5917,42 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertEqual(created[0].activated, 2)
         self.assertEqual(len(updated), 2)
 
+    def test_main_window_current_tool_status_prefers_active_builder_else_tab(self):
+        try:
+            from src.ui import main_window as mw
+        except ImportError as exc:
+            self.skipTest(f"main_window import unavailable in test env: {exc}")
+
+        active_builder = types.SimpleNamespace(
+            isVisible=lambda: True,
+            isActiveWindow=lambda: True,
+            get_status_bar_text=lambda: "🎬 Video Builder: 2 clips  •  import 1 recovered",
+            _session_status_lbl=types.SimpleNamespace(text=lambda: "What works here right now: 🎬 Video Builder: 2 clips  •  import 1 recovered"),
+            _capability_lbl=types.SimpleNamespace(text=lambda: "Ready now: video import and MP4 export are available."),
+            _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: preview the recovered clip and export when ready."),
+        )
+        current_tab = types.SimpleNamespace(
+            get_status_bar_text=lambda: "📋 History: 3 items  •  filter status:partial",
+            _session_status_lbl=types.SimpleNamespace(text=lambda: "What works here right now: 📋 History: 3 items  •  filter status:partial"),
+            _capability_lbl=types.SimpleNamespace(text=lambda: ""),
+            _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: adjust the filter or export the visible rows."),
+        )
+        fake_self = types.SimpleNamespace(
+            _gif_builder_dlg=None,
+            _video_tool_dlg=active_builder,
+            _tabs=types.SimpleNamespace(currentWidget=lambda: current_tab),
+        )
+
+        text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
+        self.assertEqual(text, "Current tool: 🎬 Video Builder: 2 clips  •  import 1 recovered")
+        self.assertIn("What works here right now:", tooltip)
+        self.assertIn("preview the recovered clip", tooltip)
+
+        active_builder.isActiveWindow = lambda: False
+        text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
+        self.assertEqual(text, "Current tool: 📋 History: 3 items  •  filter status:partial")
+        self.assertIn("adjust the filter", tooltip)
+
     def test_converter_open_gif_builder_delegates_to_main_window_when_available(self):
         try:
             from src.ui.converter_tool import ConverterTab

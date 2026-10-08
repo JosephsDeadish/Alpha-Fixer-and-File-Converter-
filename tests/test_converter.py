@@ -367,15 +367,23 @@ class TestCorpusHelperInputs(unittest.TestCase):
             "private_odd_container_video_manifest_template.json",
         )
         entries = load_manifest_entries(manifest_path)
-        self.assertEqual(len(entries), 6)
+        self.assertEqual(len(entries), 11)
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "video_sample.dat")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "audio_only.wma")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "multi_stream.mkv")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "clip.001.vob")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "cover_art_container.mkv")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "sample.wmv")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "sample.asf")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "sample.vob")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "sample.mxf")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "edge_case.mov")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "edge_case.avi")) for entry in entries))
         self.assertTrue(any("audio but no playable video stream" in " ".join(entry.get("hint_contains") or []) for entry in entries))
         self.assertTrue(any("Multiple video streams were detected" in " ".join(entry.get("hint_contains") or []) for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "") == "program stream" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "") == "quicktime edge case" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "") == "legacy index container" for entry in entries))
 
     def test_optional_manifest_entries_accepts_manifest_file_and_resolves_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:

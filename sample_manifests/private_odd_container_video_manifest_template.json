@@ -68,6 +68,54 @@
       "expect": "load_or_explain",
       "expect_probe_has_video": true,
       "notes": "Use a real WMV/ASF- or MXF-style sample here when you want local corpus coverage for odd containers that may need remux/transcode recovery but are not disc-image specific."
+    },
+    {
+      "group": "legacy container",
+      "sample_id": "asf-stream",
+      "path": "odd/sample.asf",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real ASF sample for validating damaged-index or legacy-metadata handling separately from WMV files."
+    },
+    {
+      "group": "program stream",
+      "sample_id": "dvd-program-stream",
+      "path": "odd/sample.vob",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional real VOB program-stream sample for validating DVD/console-style program-stream handling outside full disc-image workflows."
+    },
+    {
+      "group": "odd container",
+      "sample_id": "editorial-mxf",
+      "path": "odd/sample.mxf",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real MXF sample for validating multi-essence or damaged-timestamp editorial containers on fresh machines."
+    },
+    {
+      "group": "quicktime edge case",
+      "sample_id": "edit-list-mov",
+      "path": "odd/edge_case.mov",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real MOV sample with edit lists, unusual timecode, or damaged metadata so the current recovery path can be checked against QuickTime-family edge cases."
+    },
+    {
+      "group": "legacy index container",
+      "sample_id": "broken-index-avi",
+      "path": "odd/edge_case.avi",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real AVI/DivX sample with broken or missing indexes so remux/transcode recovery can be validated against legacy-index failures."
     }
   ]
 }

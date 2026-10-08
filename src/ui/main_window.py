@@ -1191,6 +1191,7 @@ class MainWindow(QMainWindow):
         self._status_bar = None
         self._queue_status_label = None
         self._readiness_lbl = None
+        self._current_tool_lbl = None
         self._unlock_timer = None
         self._anim_timer = None    # kept for compatibility (no longer used for cycling)
         # Cursor animation state
@@ -1393,6 +1394,12 @@ class MainWindow(QMainWindow):
         self._readiness_lbl.setStyleSheet("color: #888; padding: 0 10px 6px 10px;")
         self._readiness_lbl.setToolTip(_runtime_readiness_banner_tooltip(self._runtime_capability_summary))
         cv.addWidget(self._readiness_lbl)
+        self._current_tool_lbl = QLabel("Current tool: loading status…")
+        self._current_tool_lbl.setObjectName("subheader")
+        self._current_tool_lbl.setWordWrap(True)
+        self._current_tool_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._current_tool_lbl.setStyleSheet("color: #888; padding: 0 10px 8px 10px;")
+        cv.addWidget(self._current_tool_lbl)
 
         self._tabs = QTabWidget()
         self._bg_tabs = self._tabs
@@ -1426,6 +1433,10 @@ class MainWindow(QMainWindow):
         self._converter_tab.queue_status_changed.connect(self._update_queue_status)
         self._history_tab.queue_status_changed.connect(self._update_queue_status)
         self._selective_alpha_tab.queue_status_changed.connect(self._update_queue_status)
+        self._alpha_tab.queue_status_changed.connect(self._update_current_tool_status)
+        self._converter_tab.queue_status_changed.connect(self._update_current_tool_status)
+        self._history_tab.queue_status_changed.connect(self._update_current_tool_status)
+        self._selective_alpha_tab.queue_status_changed.connect(self._update_current_tool_status)
         self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
         self._tabs.addTab(self._converter_tab, "🔄 Converter")
         self._tabs.addTab(self._history_tab, "📋 History")
@@ -1433,6 +1444,7 @@ class MainWindow(QMainWindow):
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         self._tabs.currentChanged.connect(self._update_queue_status)
+        self._tabs.currentChanged.connect(self._update_current_tool_status)
         cv.addWidget(self._tabs, 1)
 
         # Tab-switching shortcuts are set up in _setup_keyboard_shortcuts.
@@ -1514,6 +1526,7 @@ class MainWindow(QMainWindow):
         self._status_bar.addPermanentWidget(self._queue_status_label, 0)
         self._status_bar.addPermanentWidget(self._builder_status_label, 0)
         self._status_bar.addPermanentWidget(self._unlock_lbl, 0)
+        self._update_current_tool_status()
 
         # Toolbar panda label no longer used (toolbar removed); keep None so
         # _refresh_toolbar_icon() early-returns without errors.
@@ -2918,6 +2931,29 @@ class MainWindow(QMainWindow):
         tooltip = f"What works here right now: {summary}" if summary else ""
         self._set_status_label_text(self._queue_status_label, summary, tooltip)
 
+    def _current_tool_status_context(self) -> tuple[str, str]:
+        for attr in ("_gif_builder_dlg", "_video_tool_dlg"):
+            dlg = getattr(self, attr, None)
+            if dlg is None or not dlg.isVisible() or not dlg.isActiveWindow():
+                continue
+            summary, tooltip = _status_summary_and_tooltip(dlg)
+            if summary:
+                return f"Current tool: {summary}", tooltip
+        tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
+        summary, tooltip = _status_summary_and_tooltip(tab)
+        if summary:
+            return f"Current tool: {summary}", tooltip
+        return (
+            "Current tool: choose a tab or open a builder",
+            "What works here right now: choose a tab or open a builder",
+        )
+
+    def _update_current_tool_status(self, *_args) -> None:
+        if self._current_tool_lbl is None:
+            return
+        text, tooltip = self._current_tool_status_context()
+        self._set_status_label_text(self._current_tool_lbl, text, tooltip)
+
     def _visible_builder_status_text(self) -> str:
         text, _tooltip = self._visible_builder_status_context()
         return text
@@ -2950,6 +2986,7 @@ class MainWindow(QMainWindow):
             return
         text, tooltip = self._visible_builder_status_context()
         self._set_status_label_text(self._builder_status_label, text, tooltip)
+        self._update_current_tool_status()
 
     def _connect_builder_status(self, dialog) -> None:
         if dialog is None or getattr(dialog, "_status_bar_hooks_connected", False):
@@ -2958,7 +2995,9 @@ class MainWindow(QMainWindow):
             dialog.status_notice.connect(self._show_transient_status)
         if hasattr(dialog, "queue_status_changed"):
             dialog.queue_status_changed.connect(self._update_builder_status)
+            dialog.queue_status_changed.connect(self._update_current_tool_status)
         dialog.destroyed.connect(self._update_builder_status)
+        dialog.destroyed.connect(self._update_current_tool_status)
         dialog._status_bar_hooks_connected = True
         self._update_builder_status()
 
@@ -2974,6 +3013,7 @@ class MainWindow(QMainWindow):
         self._gif_builder_dlg.raise_()
         self._gif_builder_dlg.activateWindow()
         self._update_builder_status()
+        self._update_current_tool_status()
 
     def _open_or_focus_video_builder(self) -> None:
         if not hasattr(self, "_video_tool_dlg") or self._video_tool_dlg is None:
@@ -2983,6 +3023,7 @@ class MainWindow(QMainWindow):
         self._video_tool_dlg.raise_()
         self._video_tool_dlg.activateWindow()
         self._update_builder_status()
+        self._update_current_tool_status()
 
     def _clear_custom_background_notice(self) -> None:
         self._bg_notice = ""
@@ -4326,6 +4367,7 @@ class MainWindow(QMainWindow):
                 QEvent.Type.WindowDeactivate,
             }:
                 QTimer.singleShot(0, self._update_builder_status)
+                QTimer.singleShot(0, self._update_current_tool_status)
         if event.type() == QEvent.Type.Show:
             try:
                 from PyQt6.QtWidgets import QWidget as _QW, QApplication as _QApp
