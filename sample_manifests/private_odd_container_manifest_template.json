@@ -2,39 +2,56 @@
   "base_dir": ".",
   "entries": [
     {
+      "platform": "PSP",
+      "group": "pmf movie asset",
+      "sample_id": "psp-pmf",
+      "path": "video/sample.pmf",
+      "required": true,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Point this at a real PSP .pmf movie asset. Add expect_video_codec_contains, expect_audio_codec_contains, expect_frame_size, or require_recovery when you want stricter packaged-runtime validation for native PSP video assets."
+    },
+    {
+      "platform": "PS2",
       "group": "legacy program stream",
       "sample_id": "ps2-pss",
       "path": "video/sample.pss",
       "required": true,
       "expect": "load_or_explain",
+      "expect_probe_has_video": true,
       "hint_contains": [
         "supported, non-corrupt video"
       ],
       "notes": "Point this at a real PS2 .pss sample. Add expect_video_codec_contains, expect_audio_codec_contains, min_frames, expect_frame_size, or require_recovery when you want stricter validation."
     },
     {
+      "platform": "PS1",
       "group": "legacy stream",
       "sample_id": "ps1-str",
       "path": "video/sample.str",
       "required": true,
       "expect": "load_or_explain",
+      "expect_probe_has_video": true,
       "hint_contains": [
         "supported, non-corrupt video"
       ],
       "notes": "Point this at a real PlayStation .str sample. This is useful for validating legacy MPEG-style stream probing and any audio-drop or still-frame fallback behavior."
     },
     {
+      "platform": "PS2/DVD",
       "group": "dvd program stream",
       "sample_id": "vob-main",
       "path": "video/sample.vob",
       "required": true,
       "expect": "load_or_explain",
+      "expect_probe_has_video": true,
       "hint_contains": [
         "supported, non-corrupt video"
       ],
       "notes": "Use a real .vob sample here. Add require_recovery or expect_load_note_contains when you need to prove remux/transcode recovery stayed active."
     },
     {
+      "platform": "PS2/DVD",
       "group": "segmented container",
       "sample_id": "segmented-vob",
       "path": "video/movie.vob.001",
@@ -46,11 +63,43 @@
       "notes": "Use a multipart VOB set like movie.vob.001 + movie.vob.002 to exercise concat repair. Add companions or keep all parts together in the same directory."
     },
     {
+      "platform": "Windows legacy",
+      "group": "legacy container",
+      "sample_id": "sample-asf",
+      "path": "video/sample.asf",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real ASF sample for validating older index-heavy Windows media containers separately from WMV files."
+    },
+    {
+      "platform": "Windows legacy",
+      "group": "odd container",
+      "sample_id": "sample-wmv",
+      "path": "video/sample.wmv",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real WMV sample for validating packaged ffmpeg/ffprobe behavior on damaged-index or legacy Windows media assets."
+    },
+    {
+      "platform": "Editorial",
+      "group": "odd container",
+      "sample_id": "sample-mxf",
+      "path": "video/sample.mxf",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Optional real MXF sample for validating editorial/multi-essence containers that may need remux/transcode recovery on fresh machines."
+    },
+    {
+      "platform": "Odd extension",
       "group": "unknown extension",
       "sample_id": "probe-only-dat",
       "path": "video/sample.dat",
       "required": true,
       "expect": "load_or_explain",
+      "expect_probe_has_video": true,
       "notes": "Use a real video file under an odd or unknown extension to validate ffprobe-based unknown-extension detection and recovery hints."
     }
   ]

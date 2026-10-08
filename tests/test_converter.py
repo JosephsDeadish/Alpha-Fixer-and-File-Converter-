@@ -334,12 +334,20 @@ class TestCorpusHelperInputs(unittest.TestCase):
             "private_odd_container_manifest_template.json",
         )
         entries = load_manifest_entries(manifest_path)
-        self.assertEqual(len(entries), 5)
+        self.assertEqual(len(entries), 9)
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.pmf")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.pss")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.str")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.vob")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "movie.vob.001")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.asf")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.wmv")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.mxf")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.dat")) for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "pmf movie asset" for entry in entries))
+        self.assertTrue(any(str(entry.get("platform") or "").lower() == "psp" for entry in entries))
+        self.assertTrue(any(str(entry.get("platform") or "").lower() == "windows legacy" for entry in entries))
+        self.assertTrue(any(entry.get("expect_probe_has_video") is True for entry in entries))
         self.assertTrue(any("segmented / multipart video set" in " ".join(entry.get("hint_contains") or []) for entry in entries if isinstance(entry, dict)))
 
     def test_private_dds_complex_manifest_template_loads(self):

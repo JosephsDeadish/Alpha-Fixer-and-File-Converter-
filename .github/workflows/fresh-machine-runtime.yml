@@ -54,9 +54,11 @@ jobs:
             --run-selftest \
             --selftest-iterations 6 \
             --selftest-sample-limit 4 \
+            --selftest-stress-loops 3 \
             --require-selftest-pass \
             --require-core-selftest-checks \
             --require-video-selftest-checks \
+            --require-stress-selftest-checks \
             --require-public-manifest-checks \
             --require-public-manifest-group-checks \
             --use-public-sample-manifests \
@@ -83,9 +85,11 @@ jobs:
             --run-selftest `
             --selftest-iterations 6 `
             --selftest-sample-limit 4 `
+            --selftest-stress-loops 3 `
             --require-selftest-pass `
             --require-core-selftest-checks `
             --require-video-selftest-checks `
+            --require-stress-selftest-checks `
             --require-public-manifest-checks `
             --require-public-manifest-group-checks `
             --use-public-sample-manifests `

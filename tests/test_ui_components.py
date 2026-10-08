@@ -944,6 +944,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("png_to_dds_dxt5", parsed["checks"])
         self.assertIn("stress_image_session_batch", parsed["checks"])
         self.assertIn("stress_video_session_batch", parsed["checks"])
+        self.assertIn("stress_builder_dialog_cycles", parsed["checks"])
+        self.assertIn("stress_history_roundtrip", parsed["checks"])
+        self.assertIn("stress_peak_rss_growth", parsed["checks"])
         self.assertFalse(parsed["passed"])
 
     def test_runtime_selftest_dump_emits_grouped_manifest_checks_when_requested(self):
@@ -1274,7 +1277,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                 if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
                     return types.SimpleNamespace(
                         returncode=0,
-                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"stress_image_session_batch": {"ok": true}, "stress_video_session_batch": {"ok": true}}}\n',
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"stress_image_session_batch": {"ok": true}, "stress_video_session_batch": {"ok": true}, "stress_builder_dialog_cycles": {"ok": true}, "stress_history_roundtrip": {"ok": true}, "stress_peak_rss_growth": {"ok": true}}}\n',
                     )
                 return types.SimpleNamespace(returncode=0, stdout="")
 

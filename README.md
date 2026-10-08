@@ -169,8 +169,16 @@ Those built-in manifests intentionally use public sample files that are legally 
 There are also starter **private manifest templates** for local corpora you cannot redistribute publicly:
 
 - `sample_manifests/private_psp_ps1_ps2_disc_manifest_template.json`
+- `sample_manifests/private_odd_container_manifest_template.json`
 - `sample_manifests/private_odd_container_video_manifest_template.json`
 - `sample_manifests/private_dds_complex_manifest_template.json`
+
+Suggested split:
+
+- `private_psp_ps1_ps2_disc_manifest_template.json` – disc-image / cue-sheet / UMD / PMF / PSS / STR style console media
+- `private_odd_container_manifest_template.json` – console and legacy odd-container clips like `.pss`, `.str`, `.vob`, `.asf`, `.wmv`, `.mxf`, and odd-extension samples
+- `private_odd_container_video_manifest_template.json` – broader non-console edge cases such as multi-stream MKV, cover-art containers, odd MOV/AVI metadata, and audio-only misdrops
+- `private_dds_complex_manifest_template.json` – local cubemap / array / volume / mipmap / BC6H DDS corpora
 
 You can point the tests at external corpora with either directories or JSON manifest files:
 
@@ -213,9 +221,12 @@ To populate a manifest into a local cache directory before running tests or pack
 ```bash
 python scripts/populate_sample_manifest.py /path/to/disc_video_manifest.json \
   --cache-dir /tmp/alpha_fixer_corpus_cache \
+  --copy-local \
   --allow-downloads \
   --output-manifest /tmp/materialized_disc_video_manifest.json
 ```
+
+That `--copy-local` step is the easiest way to freeze a private local corpus into a clean test cache before packaging/fresh-machine runs. It also keeps sidecars (for example cue/bin companions) beside the copied primary sample when the manifest declares them.
 
 You can also opt into download-backed manifest entries directly during test/self-test runs:
 
@@ -245,14 +256,39 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
   --run-selftest \
   --selftest-iterations 8 \
   --selftest-sample-limit 12 \
+  --selftest-stress-loops 3 \
   --disc-video-manifest sample_manifests/public_disc_video_manifest.json \
   --format-matrix-manifest sample_manifests/public_format_matrix_manifest.json \
   --allow-sample-downloads \
   --sample-cache-dir /tmp/alpha_fixer_packaged_cache \
   --require-selftest-pass \
+  --require-stress-selftest-checks \
   --require-selftest-check external_disc_video_manifest \
   --require-selftest-check external_format_matrix_manifest
 ```
+
+For private local corpora, you can repeat manifest flags to merge multiple edge-case sets into one packaged self-test run:
+
+```bash
+python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --run-selftest \
+  --selftest-iterations 6 \
+  --selftest-sample-limit 16 \
+  --selftest-stress-loops 3 \
+  --disc-video-manifest /path/to/private_psp_ps1_ps2_disc_manifest.json \
+  --disc-video-manifest /path/to/private_odd_container_manifest.json \
+  --disc-video-manifest /path/to/private_odd_container_video_manifest.json \
+  --dds-manifest /path/to/private_dds_complex_manifest.json \
+  --allow-sample-downloads \
+  --sample-cache-dir /tmp/alpha_fixer_private_cache \
+  --require-selftest-pass \
+  --require-video-selftest-checks \
+  --require-stress-selftest-checks \
+  --require-disc-manifest-group-checks \
+  --require-dds-manifest-group-checks
+```
+
+That grouped-manifest mode is useful when you want separate pass/fail reporting for PSP vs PS1 vs PS2 clips, or for DDS groups like `cubemap`, `array`, and `volume`.
 
 BC6H / BC7 note: the public manifests above improve real external validation coverage, but they do **not** add pure in-repo BC6H / BC7 software decoding. Advanced BC6H / BC7 DDS inspection still depends on Pillow support or optional ImageMagick/wand decoding when available.
 
@@ -302,14 +338,39 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
   --run-selftest \
   --selftest-iterations 4 \
   --selftest-sample-limit 8 \
+  --selftest-stress-loops 2 \
   --require-selftest-pass \
   --require-selftest-check generated_mp4_load \
   --require-selftest-check mpegts_load \
+  --require-stress-selftest-checks \
   --require-video-runtime \
   --require-no-missing-libs
 ```
 
 The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches. With `--run-selftest`, the packaged executable also generates a tiny built-in media/format matrix (GIF, DDS, MP4, MPEG-TS, and a synthetic odd-extension probe) so fresh-machine checks can validate more than just startup. When you provide `--disc-video-manifest`, `--dds-manifest`, or `--format-matrix-manifest`, the packaged app also executes those external real-sample sets in-process and reports them as `external_disc_video_manifest`, `external_dds_manifest`, and `external_format_matrix_manifest` self-test checks.
+
+Windows packaged example:
+
+```powershell
+python scripts/verify_packaged_app.py dist\AlphaFixerConverter\AlphaFixerConverter.exe `
+  --smoke-seconds 2 `
+  --repeat 3 `
+  --timeout 45 `
+  --run-selftest `
+  --selftest-iterations 6 `
+  --selftest-stress-loops 3 `
+  --use-public-sample-manifests `
+  --allow-sample-downloads `
+  --sample-cache-dir artifacts\sample-cache `
+  --require-selftest-pass `
+  --require-video-selftest-checks `
+  --require-stress-selftest-checks `
+  --require-public-manifest-group-checks `
+  --require-ffmpeg-selfcheck `
+  --require-ffprobe-selfcheck `
+  --require-bundled-ffmpeg `
+  --require-bundled-ffprobe
+```
 
 The repository also includes a dedicated GitHub Actions workflow, `.github/workflows/fresh-machine-runtime.yml`, which runs the packaged verifier on hosted Ubuntu and Windows machines with repeated smoke launches and runtime self-tests.
 

@@ -27,6 +27,9 @@ _VIDEO_SELFTEST_CHECKS = (
 _STRESS_SELFTEST_CHECKS = (
     "stress_image_session_batch",
     "stress_video_session_batch",
+    "stress_builder_dialog_cycles",
+    "stress_history_roundtrip",
+    "stress_peak_rss_growth",
 )
 _DDS_SELFTEST_CHECKS = (
     "png_to_dds_rgba",

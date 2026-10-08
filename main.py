@@ -798,6 +798,12 @@ def _runtime_selftest_stress_loops() -> int:
     return max(0, min(24, loops))
 
 
+def _runtime_selftest_peak_rss_delta_mb(start_mb: float | None, end_mb: float | None) -> float | None:
+    if start_mb is None or end_mb is None:
+        return None
+    return round(float(end_mb) - float(start_mb), 2)
+
+
 def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -1076,6 +1082,113 @@ def _emit_runtime_selftest_dump() -> int:
                 )
             else:
                 _record_check("stress_video_session_batch", True, "skipped: ffmpeg executable unavailable")
+
+            app = None
+            try:
+                from PyQt6.QtWidgets import QApplication
+                app = QApplication.instance()
+            except Exception:
+                app = None
+            if app is None:
+                _record_check("stress_builder_dialog_cycles", True, "skipped: QApplication unavailable")
+                _record_check("stress_history_roundtrip", True, "skipped: QApplication unavailable")
+                _record_check("stress_peak_rss_growth", True, "skipped: QApplication unavailable")
+            else:
+                from unittest import mock as unittest_mock
+                from src.core import settings_manager as settings_module
+                from src.ui.gif_builder import GifBuilderDialog
+                from src.ui.history_tab import HistoryTab
+                from src.ui.video_tool import VideoToolDialog
+
+                rss_before = _runtime_selftest_peak_rss_mb()
+                builder_successes = 0
+                builder_expected = stress_loops * 2
+                history_success = 0
+                history_expected = stress_loops
+                settings_path = os.path.join(tmpdir, "stress_runtime_history.ini")
+                with unittest_mock.patch.object(settings_module, "_settings_ini_path", return_value=settings_path):
+                    stress_settings = settings_module.SettingsManager()
+                    stress_settings.clear_gif_builder_history()
+                    stress_settings.clear_video_builder_history()
+                    try:
+                        for stress_idx in range(stress_loops):
+                            gif_entry = {
+                                "timestamp": f"2026-01-01T00:00:{stress_idx:02d}",
+                                "output": os.path.join(tmpdir, f"stress_{stress_idx:02d}.gif"),
+                                "frame_count": 4 + stress_idx,
+                                "success": 1,
+                                "errors": 0,
+                                "files": [f"frame_{stress_idx:02d}.png"],
+                                "status": "ok",
+                                "notes": f"stress gif loop={stress_idx}",
+                            }
+                            video_entry = {
+                                "timestamp": f"2026-01-01T00:10:{stress_idx:02d}",
+                                "output": os.path.join(tmpdir, f"stress_{stress_idx:02d}.mp4"),
+                                "format": "MP4",
+                                "clip_count": 1,
+                                "success": 1,
+                                "errors": 0,
+                                "files": [f"clip_{stress_idx:02d}.mp4"],
+                                "status": "ok",
+                                "notes": f"stress video loop={stress_idx}",
+                                "filter": "none",
+                                "audio": "kept",
+                                "recovery": "direct only",
+                                "streams": "auto/default",
+                                "canvas": "auto",
+                            }
+                            stress_settings.add_gif_builder_history(gif_entry)
+                            stress_settings.add_video_builder_history(video_entry)
+                            history_tab = HistoryTab(stress_settings)
+                            try:
+                                history_tab.refresh_history()
+                                if (
+                                    history_tab._gif_tree.topLevelItemCount() > 0
+                                    and history_tab._vid_tree.topLevelItemCount() > 0
+                                ):
+                                    history_success += 1
+                            finally:
+                                history_tab.close()
+                                history_tab.deleteLater()
+                                app.processEvents()
+                            for dialog_cls in (GifBuilderDialog, VideoToolDialog):
+                                dialog = dialog_cls(parent=None)
+                                try:
+                                    dialog.show()
+                                    app.processEvents()
+                                    if str(dialog.get_status_bar_text() or "").strip():
+                                        builder_successes += 1
+                                finally:
+                                    dialog.hide()
+                                    dialog.close()
+                                    dialog.deleteLater()
+                                    app.processEvents()
+                    finally:
+                        stress_settings.clear_gif_builder_history()
+                        stress_settings.clear_video_builder_history()
+                        stress_settings.sync()
+                _record_check(
+                    "stress_builder_dialog_cycles",
+                    builder_successes == builder_expected,
+                    f"loops={stress_loops} completed={builder_successes}/{builder_expected}",
+                )
+                _record_check(
+                    "stress_history_roundtrip",
+                    history_success == history_expected,
+                    f"loops={stress_loops} completed={history_success}/{history_expected}",
+                )
+                rss_after = _runtime_selftest_peak_rss_mb()
+                rss_delta = _runtime_selftest_peak_rss_delta_mb(rss_before, rss_after)
+                if rss_delta is None:
+                    _record_check("stress_peak_rss_growth", True, "skipped: peak RSS unavailable")
+                else:
+                    rss_limit = max(128.0, float(stress_loops) * 24.0)
+                    _record_check(
+                        "stress_peak_rss_growth",
+                        rss_delta <= rss_limit,
+                        f"delta_mb={rss_delta:.2f} limit_mb={rss_limit:.2f}",
+                    )
 
         disc_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST")
         if disc_manifest:
