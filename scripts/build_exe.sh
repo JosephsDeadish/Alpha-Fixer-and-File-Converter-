@@ -118,6 +118,7 @@ if [[ -x "$launch_target" ]]; then
             --use-public-sample-manifests
             --require-video-selftest-checks
             --require-public-manifest-checks
+            --require-public-manifest-group-checks
             --allow-sample-downloads
             --sample-cache-dir "$sample_cache_dir"
         )

@@ -58,6 +58,7 @@ jobs:
             --require-core-selftest-checks \
             --require-video-selftest-checks \
             --require-public-manifest-checks \
+            --require-public-manifest-group-checks \
             --use-public-sample-manifests \
             --allow-sample-downloads \
             --sample-cache-dir artifacts/sample-cache \
@@ -86,6 +87,7 @@ jobs:
             --require-core-selftest-checks `
             --require-video-selftest-checks `
             --require-public-manifest-checks `
+            --require-public-manifest-group-checks `
             --use-public-sample-manifests `
             --allow-sample-downloads `
             --sample-cache-dir artifacts/sample-cache `
