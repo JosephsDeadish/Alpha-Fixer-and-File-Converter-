@@ -37,7 +37,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
-    QProgressDialog, QSplitter, QWidget,
+    QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox,
 )
 from .video_tool import (
@@ -396,17 +396,20 @@ class GifBuilderDialog(QDialog):
         self.setMinimumSize(860, 620)
         self.setModal(False)
         self._tooltip_mgr = tooltip_mgr
+        self._import_detail_expanded = False
         self._frames: list[_FrameEntry] = []
         self._preview_idx: int = 0
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._build_ui()
+        self.queue_status_changed.connect(self._refresh_session_status)
         mgr = self._resolve_tooltip_mgr()
         if mgr is not None:
             self.register_tooltips(mgr)
         if initial_files:
             self._add_paths(initial_files)
         self._setup_shortcuts()
+        self._refresh_session_status()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -480,6 +483,19 @@ class GifBuilderDialog(QDialog):
         self._import_detail_box.setMaximumHeight(110)
         self._import_detail_box.setVisible(False)
         left_layout.addWidget(self._import_detail_box)
+        import_detail_actions = QHBoxLayout()
+        import_detail_actions.addStretch()
+        self._import_detail_toggle_btn = QPushButton("Show details")
+        self._import_detail_toggle_btn.setToolTip("Show or hide the full grouped import diagnostics without opening a popup.")
+        self._import_detail_toggle_btn.clicked.connect(self._toggle_import_details)
+        self._import_detail_toggle_btn.setVisible(False)
+        import_detail_actions.addWidget(self._import_detail_toggle_btn)
+        self._import_copy_btn = QPushButton("Copy details")
+        self._import_copy_btn.setToolTip("Copy the current import summary and diagnostics to the clipboard.")
+        self._import_copy_btn.clicked.connect(self._copy_import_details)
+        self._import_copy_btn.setVisible(False)
+        import_detail_actions.addWidget(self._import_copy_btn)
+        left_layout.addLayout(import_detail_actions)
 
         self._capability_lbl = QLabel(_gif_builder_capability_summary())
         self._capability_lbl.setWordWrap(True)
@@ -491,6 +507,11 @@ class GifBuilderDialog(QDialog):
         self._capability_lbl.setToolTip(_gif_builder_capability_details())
         self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._capability_lbl)
+        self._session_status_lbl = QLabel("")
+        self._session_status_lbl.setWordWrap(True)
+        self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        left_layout.addWidget(self._session_status_lbl)
 
         # Frame grid
         self._frame_list = _FrameListWidget()
@@ -1023,6 +1044,37 @@ class GifBuilderDialog(QDialog):
             summary += "  •  " + "  •  ".join(extras)
         return summary
 
+    def _refresh_session_status(self, *_args) -> None:
+        status = self.get_status_bar_text().strip()
+        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        self._session_status_lbl.setText(text)
+        self._session_status_lbl.setToolTip(status or text)
+
+    def _apply_import_detail_visibility(self) -> None:
+        detail = self._import_detail_box.toPlainText().strip()
+        has_detail = bool(detail)
+        expanded = bool(has_detail and self._import_detail_expanded)
+        self._import_detail_box.setVisible(expanded)
+        self._import_detail_toggle_btn.setVisible(has_detail)
+        self._import_copy_btn.setVisible(has_detail)
+        self._import_copy_btn.setEnabled(has_detail)
+        self._import_detail_toggle_btn.setText("Hide details" if expanded else "Show details")
+
+    def _toggle_import_details(self) -> None:
+        if not self._import_detail_box.toPlainText().strip():
+            return
+        self._import_detail_expanded = not self._import_detail_expanded
+        self._apply_import_detail_visibility()
+
+    def _copy_import_details(self) -> None:
+        detail = self._import_detail_box.toPlainText().strip()
+        if not detail:
+            return
+        summary = self._import_status_lbl.text().strip()
+        payload = summary if not summary else f"{summary}\n\n{detail}"
+        QApplication.clipboard().setText(payload)
+        self.status_notice.emit("GIF Builder: copied import diagnostics", 4000)
+
     def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
         colors = {
             "neutral": "gray",
@@ -1033,8 +1085,13 @@ class GifBuilderDialog(QDialog):
         self._import_status_lbl.setText(message)
         self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
         self._import_status_lbl.setToolTip(detail or message)
+        detail = str(detail or "").strip()
         self._import_detail_box.setPlainText(detail)
-        self._import_detail_box.setVisible(bool(detail.strip()))
+        if not detail:
+            self._import_detail_expanded = False
+        elif tone in {"warning", "error"}:
+            self._import_detail_expanded = True
+        self._apply_import_detail_visibility()
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _update_import_status(

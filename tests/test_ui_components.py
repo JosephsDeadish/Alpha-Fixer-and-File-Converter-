@@ -5558,6 +5558,43 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_gif_builder_session_status_and_inline_detail_controls(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            self.assertIn("What works here right now:", dialog._session_status_lbl.text())
+            self.assertIn("GIF Builder ready", dialog._session_status_lbl.text())
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=0,
+                added_frames=0,
+                recovered=[],
+                failures=[("broken.bin", "ffprobe detected audio but no playable video stream")],
+                skipped=["notes.txt"],
+                loaded_details=[],
+                source_type_counts={},
+                frame_size_counts={},
+                alpha_source_count=0,
+                largest_frame=(0, 0),
+            )
+            self.assertFalse(dialog._import_detail_toggle_btn.isHidden())
+            self.assertFalse(dialog._import_copy_btn.isHidden())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            dialog._toggle_import_details()
+            self.assertTrue(dialog._import_detail_box.isHidden())
+            dialog._copy_import_details()
+            self.assertIn("Import summary:", self._app.clipboard().text())
+            self.assertIn("broken.bin", self._app.clipboard().text())
+            self.assertIn("1 failed", dialog._session_status_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_gif_builder_uses_still_frame_fallback_for_visual_video_sources(self):
         try:
             from src.ui import gif_builder as gb
@@ -5690,6 +5727,39 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("import Added 0 clips", summary)
             self.assertIn("1 failed", summary)
             self.assertIn("1 skipped", summary)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_session_status_and_inline_detail_controls(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            self.assertIn("What works here right now:", dialog._session_status_lbl.text())
+            self.assertIn("Video Builder ready", dialog._session_status_lbl.text())
+            dialog._video_io_available = False
+            dialog._update_import_status(
+                added=0,
+                attempted=2,
+                recovered=[],
+                failures=[("audio.ogg", "ffprobe detected audio but no playable video stream")],
+                skipped=["readme.txt"],
+            )
+            self.assertFalse(dialog._import_detail_toggle_btn.isHidden())
+            self.assertFalse(dialog._import_copy_btn.isHidden())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            dialog._toggle_import_details()
+            self.assertTrue(dialog._import_detail_box.isHidden())
+            dialog._copy_import_details()
+            self.assertIn("Import summary:", self._app.clipboard().text())
+            self.assertIn("audio.ogg", self._app.clipboard().text())
+            self.assertIn("image/GIF mode", dialog._session_status_lbl.text())
+            self.assertIn("1 failed", dialog._session_status_lbl.text())
         finally:
             dialog.close()
             dialog.deleteLater()
