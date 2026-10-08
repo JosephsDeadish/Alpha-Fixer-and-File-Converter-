@@ -757,18 +757,25 @@ def _runtime_readiness_banner_text(summary: dict[str, object] | None) -> str:
     if not summary:
         return "🧭 Readiness: scanning video/export/runtime support…"
     parts: list[str] = []
+    ffmpeg_runtime_ready = bool(summary.get("ffmpeg_runtime_ready"))
+    ffprobe_runtime_ready = bool(summary.get("ffprobe_runtime_ready"))
     if bool(summary.get("video_runtime_ready")):
         parts.append("video import/MP4 export ready")
     else:
         missing = summary.get("missing_video_bits") or []
         if missing:
             parts.append("video/MP4 limited (" + ", ".join(str(bit) for bit in missing) + ")")
+        elif summary.get("ffmpeg_path") and not ffmpeg_runtime_ready:
+            parts.append("video/MP4 limited (ffmpeg self-check failed)")
         else:
             parts.append("video/MP4 limited")
     if bool(summary.get("odd_container_probe_ready")):
         parts.append("odd-container probing ready")
     elif bool(summary.get("video_runtime_ready")):
-        parts.append("odd-container probing limited")
+        if summary.get("ffprobe_path") and not ffprobe_runtime_ready:
+            parts.append("odd-container probing limited (ffprobe self-check failed)")
+        else:
+            parts.append("odd-container probing limited")
     if bool(summary.get("dds_compression_available")):
         parts.append("DDS compressed output ready")
     else:
@@ -809,9 +816,19 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         f"• imageio: {'ready' if summary.get('has_imageio') else 'missing'}",
         f"• imageio-ffmpeg: {'ready' if summary.get('has_imageio_ffmpeg') else 'missing'}",
         f"• ffmpeg: {summary.get('ffmpeg_path') or 'missing'}"
-        + (" (path missing)" if summary.get("ffmpeg_path") and not summary.get("ffmpeg_path_exists") else ""),
+        + (" (path missing)" if summary.get("ffmpeg_path") and not summary.get("ffmpeg_path_exists") else "")
+        + (
+            f" (self-check failed: {summary.get('ffmpeg_runtime_detail')})"
+            if summary.get("ffmpeg_path") and summary.get("ffmpeg_path_exists") and not summary.get("ffmpeg_runtime_ready")
+            else " (self-check ok)" if summary.get("ffmpeg_runtime_ready") else ""
+        ),
         f"• ffprobe: {summary.get('ffprobe_path') or 'missing'}"
-        + (" (path missing)" if summary.get("ffprobe_path") and not summary.get("ffprobe_path_exists") else ""),
+        + (" (path missing)" if summary.get("ffprobe_path") and not summary.get("ffprobe_path_exists") else "")
+        + (
+            f" (self-check failed: {summary.get('ffprobe_runtime_detail')})"
+            if summary.get("ffprobe_path") and summary.get("ffprobe_path_exists") and not summary.get("ffprobe_runtime_ready")
+            else " (self-check ok)" if summary.get("ffprobe_runtime_ready") else ""
+        ),
         "• DDS compressed output: "
         + ("ready" if summary.get("dds_compression_available") else "limited (ImageMagick/wand unavailable)"),
         "• ImageMagick/wand runtime: "

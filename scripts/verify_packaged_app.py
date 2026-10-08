@@ -81,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=25, help="Per-launch timeout in seconds.")
     parser.add_argument("--require-video-runtime", action="store_true", help="Fail if video import / MP4 export runtime bits are unavailable.")
     parser.add_argument("--require-odd-probe-ready", action="store_true", help="Fail if ffprobe-backed odd-container probing is unavailable.")
+    parser.add_argument("--require-ffmpeg-selfcheck", action="store_true", help="Fail if the packaged runtime cannot execute the resolved ffmpeg binary successfully.")
+    parser.add_argument("--require-ffprobe-selfcheck", action="store_true", help="Fail if the packaged runtime cannot execute the resolved ffprobe binary successfully.")
+    parser.add_argument("--require-wand-runtime", action="store_true", help="Fail if the packaged runtime lacks a working ImageMagick/wand runtime.")
     parser.add_argument("--require-no-missing-libs", action="store_true", help="Fail if packaged runtime reports missing Linux shared libraries.")
     parser.add_argument("--run-selftest", action="store_true", help="Run the packaged executable's end-to-end runtime self-test after the capability audit.")
     parser.add_argument("--selftest-iterations", type=int, default=2, help="How many self-test iterations the packaged app should run when --run-selftest is set.")
@@ -140,13 +143,35 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Packaged runtime audit failed: video_runtime_ready=false")
     if args.require_odd_probe_ready and not payload.get("odd_container_probe_ready"):
         raise SystemExit("Packaged runtime audit failed: odd_container_probe_ready=false")
+    if args.require_ffmpeg_selfcheck and not payload.get("ffmpeg_runtime_ready"):
+        raise SystemExit(
+            "Packaged runtime audit failed: ffmpeg_runtime_ready=false"
+            + (f" ({payload.get('ffmpeg_runtime_detail')})" if payload.get("ffmpeg_runtime_detail") else "")
+        )
+    if args.require_ffprobe_selfcheck and not payload.get("ffprobe_runtime_ready"):
+        raise SystemExit(
+            "Packaged runtime audit failed: ffprobe_runtime_ready=false"
+            + (f" ({payload.get('ffprobe_runtime_detail')})" if payload.get("ffprobe_runtime_detail") else "")
+        )
+    if args.require_wand_runtime and not payload.get("wand_runtime_ready"):
+        raise SystemExit("Packaged runtime audit failed: wand_runtime_ready=false")
     missing_libs = payload.get("missing_linux_runtime_libs") or []
     if args.require_no_missing_libs and missing_libs:
         raise SystemExit(
             "Packaged runtime audit failed: missing_linux_runtime_libs="
             + ",".join(str(name) for name in missing_libs)
         )
-    if not payload.get("odd_container_probe_ready"):
+    if not payload.get("ffmpeg_runtime_ready"):
+        print(
+            "⚠️  Packaged runtime audit: ffmpeg failed its runtime self-check."
+            + (f" {payload.get('ffmpeg_runtime_detail')}" if payload.get("ffmpeg_runtime_detail") else "")
+        )
+    if payload.get("ffprobe_path") and not payload.get("ffprobe_runtime_ready"):
+        print(
+            "⚠️  Packaged runtime audit: ffprobe failed its runtime self-check."
+            + (f" {payload.get('ffprobe_runtime_detail')}" if payload.get("ffprobe_runtime_detail") else "")
+        )
+    elif not payload.get("odd_container_probe_ready"):
         print("⚠️  Packaged runtime audit: ffprobe unavailable, odd-container probing stays limited.")
     if not payload.get("dds_compression_available"):
         print("⚠️  Packaged runtime audit: DDS compressed variants remain unavailable without bundled ImageMagick/wand.")

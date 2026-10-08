@@ -102,6 +102,7 @@ _SEGMENTED_VIDEO_NAME_RE = re.compile(
     r"(?is)^(?P<base>.+?)(?:[._ -]?)(?P<label>part|pt|cd|disc|disk|segment|seg)(?:[._ -]?)(?P<index>\d+)$"
 )
 _CUE_FILE_RE = re.compile(r'^\s*FILE\s+(?:"(?P<quoted>[^"]+)"|(?P<plain>\S+))\s+\S+', re.IGNORECASE)
+_PROBE_FIELD_RE = re.compile(r"(?i)(?:^|[;\\n])\s*(container|video|audio|preferred-stream|video-streams|audio-streams)=([^;.\n]+)")
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
@@ -888,6 +889,26 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
         guidance.append(
             "ASF/WMV containers rely heavily on index metadata; damaged indexes often need a full transcode instead of direct loading."
         )
+    elif "matroska" in format_name or "webm" in format_name or ext in {".mkv", ".webm"}:
+        guidance.append(
+            "Matroska/WebM files can carry multiple alternate video/audio programs; if one stream fails, the builder will prefer the strongest detected video stream but manual stream reloads may still help."
+        )
+    elif "mov" in format_name or ext in {".mov", ".qt", ".m4v"}:
+        guidance.append(
+            "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode recovery is often needed when direct indexing is incomplete."
+        )
+    elif "avi" in format_name or ext in {".avi", ".divx"}:
+        guidance.append(
+            "AVI/DivX files often depend on legacy indexes; broken or missing index chunks can require a clean remux or transcode before timeline playback is reliable."
+        )
+    elif "mxf" in format_name or ext == ".mxf":
+        guidance.append(
+            "MXF containers can expose multiple essence streams and metadata tracks; alternate-stream retries or a clean editorial transcode may be required."
+        )
+    elif ext == ".dv" or video_codec in {"dvvideo", "dnxhd"}:
+        guidance.append(
+            "Broadcast/intermediate codecs like DV or DNxHD may arrive in wrappers with unusual fielding/timing metadata; remux or transcode recovery is often safer than direct decode."
+        )
     elif ext in {".rm", ".rmvb"} or "rm" in format_name or "realmedia" in format_name:
         guidance.append(
             "RealMedia / RMVB support is best-effort; older RealMedia files often require a clean remux or transcode before frame-accurate loading will work."
@@ -1325,12 +1346,18 @@ def _video_capability_details() -> str:
 def _classify_video_import_failure(name: str, detail: str) -> str:
     ext = Path(name).suffix.lower()
     lower = detail.lower()
+    if "segmented / multipart video set" in lower or "joined parts" in lower or "concat repair fallback" in lower:
+        return "segmented container"
     if "multiple video streams were detected" in lower or "preferred-stream=" in lower:
         return "multi-stream container"
     if "cue sidecar" in lower or "cue/bin companion" in lower or "disc sidecar files were detected" in lower:
         return "disc sidecar"
     if "attached-picture/cover-art stream" in lower or "attached cover art" in lower:
         return "cover-art stream"
+    if ("codec" in lower and "unsupported" in lower) or "unsupported pixel format" in lower or "could not determine codec parameters" in lower:
+        return "video codec"
+    if "invalid data found when processing input" in lower or "container may be partial, malformed" in lower:
+        return "container codec mismatch"
     if "audio but no playable video stream" in lower:
         return "audio-only container"
     if "did not detect a playable video stream" in lower or "did not expose a playable video stream" in lower:
@@ -1349,9 +1376,12 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
 def _video_failure_guidance(category: str) -> str:
     guidance = {
         "video dependency": "Install or bundle imageio, imageio-ffmpeg, ffmpeg, and ffprobe for full video probing and import.",
+        "segmented container": "Multipart or segmented sources need every part present together; if automatic concat repair still fails, try a manual ffmpeg concat/remux first.",
         "disc sidecar": "BIN/CUE-style disc images often need their matching companion metadata files kept together so the track layout can be recovered correctly.",
-        "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream, but a manual ffmpeg remux may still be needed.",
+        "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream and the Selected Stream panel can retry a manual override, but a manual ffmpeg remux may still be needed.",
         "cover-art stream": "This source exposed only cover-art style video metadata instead of continuous frames; dropping attached-picture streams with ffmpeg may help.",
+        "video codec": "The container exposed a video stream, but the codec or pixel format still could not be decoded reliably in this runtime. Remuxing or transcoding to H.264/AVC is usually the safest fallback.",
+        "container codec mismatch": "The container metadata and embedded stream data do not line up cleanly. A full ffmpeg remux/transcode often fixes these damaged index/timestamp mismatches.",
         "audio-only container": "The Video Builder only accepts clips with playable video frames; audio-only files cannot be added to the timeline.",
         "no playable video stream": "The container was recognized, but ffprobe could not expose a playable video stream for the builder.",
         "partial / malformed video": "The file appears incomplete or malformed; re-copying, remuxing, or re-encoding the source may be required.",
@@ -1393,6 +1423,34 @@ def _summarize_count_buckets(counts: dict[str, int], limit: int = 3) -> str:
     return ", ".join(parts[:limit]) + f", +{remaining} more"
 
 
+def _probe_fields_from_detail(detail: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for match in _PROBE_FIELD_RE.finditer(str(detail or "")):
+        key = str(match.group(1) or "").strip().lower()
+        value = str(match.group(2) or "").strip()
+        if key and value:
+            fields[key] = value
+    return fields
+
+
+def _summarize_failure_probe_fields(failures: list[tuple[str, str]]) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+    containers: dict[str, int] = {}
+    video_codecs: dict[str, int] = {}
+    audio_codecs: dict[str, int] = {}
+    for _name, detail in failures:
+        fields = _probe_fields_from_detail(detail)
+        container = str(fields.get("container") or "").strip().lower()
+        video_codec = str(fields.get("video") or "").strip().lower()
+        audio_codec = str(fields.get("audio") or "").strip().lower()
+        if container and container != "unknown":
+            containers[container] = containers.get(container, 0) + 1
+        if video_codec and video_codec != "none":
+            video_codecs[video_codec] = video_codecs.get(video_codec, 0) + 1
+        if audio_codec and audio_codec != "none":
+            audio_codecs[audio_codec] = audio_codecs.get(audio_codec, 0) + 1
+    return containers, video_codecs, audio_codecs
+
+
 def _summarize_clip_types(clip_snapshot: list[dict[str, object]]) -> str:
     counts: dict[str, int] = {}
     for clip in clip_snapshot:
@@ -1401,6 +1459,38 @@ def _summarize_clip_types(clip_snapshot: list[dict[str, object]]) -> str:
     if not counts:
         return ""
     return ", ".join(f"{kind} ×{count}" for kind, count in sorted(counts.items()))
+
+
+def _clip_stream_history_detail(clip: dict[str, object]) -> str:
+    source_name = os.path.basename(str(clip.get("source_path") or clip.get("path") or "")).strip()
+    if not source_name:
+        return ""
+    probe = clip.get("source_probe")
+    probe = probe if isinstance(probe, dict) else {}
+    preferred_video_index = _coerce_optional_stream_index(clip.get("preferred_video_stream_index"))
+    preferred_audio_index = _coerce_optional_stream_index(clip.get("preferred_audio_stream_index"))
+    selected_video_index = preferred_video_index
+    if selected_video_index is None:
+        selected_video_index = _coerce_optional_stream_index(probe.get("video_stream_index"))
+    selected_audio_index = preferred_audio_index
+    if selected_audio_index is None:
+        selected_audio_index = _coerce_optional_stream_index(probe.get("audio_stream_index"))
+    video_count = max(0, int(probe.get("video_stream_count") or 0))
+    audio_count = max(0, int(probe.get("audio_stream_count") or 0))
+    if preferred_video_index is None and preferred_audio_index is None and video_count <= 1 and audio_count <= 1:
+        return ""
+    parts = []
+    if selected_video_index is not None:
+        prefix = "manual" if preferred_video_index is not None else "auto"
+        parts.append(f"{prefix} video #{selected_video_index}")
+    elif video_count > 1:
+        parts.append(f"auto video ({video_count} streams)")
+    if selected_audio_index is not None and audio_count > 1:
+        prefix = "manual" if preferred_audio_index is not None else "auto"
+        parts.append(f"{prefix} audio #{selected_audio_index}")
+    elif audio_count > 1:
+        parts.append(f"auto audio ({audio_count} streams)")
+    return f"{source_name}: " + ", ".join(parts) if parts else ""
 
 
 def _open_video_reader(path: str):
@@ -2864,10 +2954,17 @@ class VideoToolDialog(QDialog):
                 + "\nOriginal source paths stay attached for labeling and export history."
             )
         if failures:
+            failure_containers, failure_video_codecs, failure_audio_codecs = _summarize_failure_probe_fields(failures)
             detail_lines.append(
                 "Failure types: "
                 + ", ".join(f"{category} ×{count}" for category, count in grouped.items())
             )
+            if failure_containers:
+                detail_lines.append("Probe-detected containers: " + _summarize_count_buckets(failure_containers))
+            if failure_video_codecs:
+                detail_lines.append("Probe-detected video codecs: " + _summarize_count_buckets(failure_video_codecs))
+            if failure_audio_codecs:
+                detail_lines.append("Probe-detected audio codecs: " + _summarize_count_buckets(failure_audio_codecs))
             detail_lines.append(
                 "Failure guidance:\n  "
                 + "\n  ".join(f"{category}: {_video_failure_guidance(category)}" for category in grouped)
@@ -3347,9 +3444,7 @@ class VideoToolDialog(QDialog):
             if str(clip.get("load_note") or "").strip()
         ]
         selected_streams = [
-            f"{os.path.basename(str(clip.get('source_path') or clip.get('path') or ''))}: stream #{int(clip.get('preferred_video_stream_index'))}"
-            for clip in clip_snapshot
-            if _coerce_optional_stream_index(clip.get("preferred_video_stream_index")) is not None
+            detail for detail in (_clip_stream_history_detail(clip) for clip in clip_snapshot) if detail
         ]
         stream_summary = "manual" if selected_streams else ""
         if selected_streams:

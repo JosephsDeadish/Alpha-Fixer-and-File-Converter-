@@ -429,6 +429,45 @@ def _imagemagick_runtime_details() -> dict[str, object]:
     return details
 
 
+def _executable_runtime_details(path_text: str, *, args: tuple[str, ...] = ("-version",), timeout: int = 20) -> dict[str, object]:
+    details: dict[str, object] = {
+        "path": str(path_text or "").strip(),
+        "exists": False,
+        "runtime_ready": False,
+        "detail": "",
+    }
+    path = str(path_text or "").strip()
+    if not path:
+        details["detail"] = "missing"
+        return details
+    try:
+        candidate = Path(path)
+    except Exception:
+        details["detail"] = "invalid path"
+        return details
+    exists = candidate.is_file()
+    details["exists"] = bool(exists)
+    if not exists:
+        details["detail"] = "path missing"
+        return details
+    try:
+        result = subprocess.run(
+            [path, *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+            timeout=max(1, int(timeout)),
+        )
+    except Exception as exc:
+        details["detail"] = str(exc).strip() or exc.__class__.__name__
+        return details
+    output_lines = [line.strip() for line in str(result.stdout or "").splitlines() if line.strip()]
+    details["detail"] = output_lines[0] if output_lines else (f"exit {result.returncode}" if result.returncode else "ok")
+    details["runtime_ready"] = result.returncode == 0
+    return details
+
+
 def _runtime_capability_summary() -> dict[str, object]:
     frozen = bool(getattr(sys, "frozen", False))
     bundle_dir = ""
@@ -461,8 +500,14 @@ def _runtime_capability_summary() -> dict[str, object]:
     has_imageio_ffmpeg = bool(_has_imageio_ffmpeg())
     ffmpeg_path = _get_ffmpeg_exe() or ""
     ffprobe_path = _get_ffprobe_exe() or ""
-    ffmpeg_path_exists = bool(ffmpeg_path and Path(ffmpeg_path).is_file())
-    ffprobe_path_exists = bool(ffprobe_path and Path(ffprobe_path).is_file())
+    ffmpeg_runtime = _executable_runtime_details(ffmpeg_path)
+    ffprobe_runtime = _executable_runtime_details(ffprobe_path)
+    ffmpeg_path_exists = bool(ffmpeg_runtime.get("exists"))
+    ffprobe_path_exists = bool(ffprobe_runtime.get("exists"))
+    ffmpeg_runtime_ready = bool(ffmpeg_runtime.get("runtime_ready"))
+    ffprobe_runtime_ready = bool(ffprobe_runtime.get("runtime_ready"))
+    ffmpeg_runtime_detail = str(ffmpeg_runtime.get("detail") or "")
+    ffprobe_runtime_detail = str(ffprobe_runtime.get("detail") or "")
     ffmpeg_on_path = bool(shutil.which("ffmpeg"))
     ffprobe_on_path = bool(shutil.which("ffprobe"))
     unavailable_outputs = optional_pillow_output_limits()
@@ -491,6 +536,8 @@ def _runtime_capability_summary() -> dict[str, object]:
         missing_video_bits.append("imageio-ffmpeg")
     if not ffmpeg_path:
         missing_video_bits.append("ffmpeg")
+    elif not ffmpeg_runtime_ready:
+        missing_video_bits.append("ffmpeg runtime")
     readiness_limits: list[str] = []
     if missing_video_bits:
         readiness_limits.append(
@@ -500,10 +547,25 @@ def _runtime_capability_summary() -> dict[str, object]:
         readiness_limits.append(
             "odd-container probing/detail guidance limited: ffprobe unavailable"
         )
+    elif not ffprobe_runtime_ready:
+        readiness_limits.append(
+            "odd-container probing/detail guidance limited: ffprobe self-check failed"
+            + (f" ({ffprobe_runtime_detail})" if ffprobe_runtime_detail else "")
+        )
     if ffmpeg_path and not ffmpeg_path_exists:
         readiness_limits.append("ffmpeg path invalid")
+    elif ffmpeg_path and not ffmpeg_runtime_ready:
+        readiness_limits.append(
+            "ffmpeg self-check failed"
+            + (f" ({ffmpeg_runtime_detail})" if ffmpeg_runtime_detail else "")
+        )
     if ffprobe_path and not ffprobe_path_exists:
         readiness_limits.append("ffprobe path invalid")
+    elif ffprobe_path and not ffprobe_runtime_ready:
+        readiness_limits.append(
+            "ffprobe self-check failed"
+            + (f" ({ffprobe_runtime_detail})" if ffprobe_runtime_detail else "")
+        )
     if not dds_compression_available():
         readiness_limits.append(
             "DDS compressed variants unavailable: ImageMagick/wand runtime missing"
@@ -527,12 +589,16 @@ def _runtime_capability_summary() -> dict[str, object]:
             packaged_asset_warnings.append("packaged ffmpeg binary missing")
         elif not ffmpeg_path_exists:
             packaged_asset_warnings.append("packaged ffmpeg path invalid")
+        elif not ffmpeg_runtime_ready:
+            packaged_asset_warnings.append("packaged ffmpeg binary failed self-check")
         elif not ffmpeg_bundled:
             packaged_asset_warnings.append("ffmpeg resolves outside the packaged app")
         if not ffprobe_path:
             packaged_asset_warnings.append("packaged ffprobe binary missing")
         elif not ffprobe_path_exists:
             packaged_asset_warnings.append("packaged ffprobe path invalid")
+        elif not ffprobe_runtime_ready:
+            packaged_asset_warnings.append("packaged ffprobe binary failed self-check")
         elif not ffprobe_bundled:
             packaged_asset_warnings.append("ffprobe resolves outside the packaged app")
         if not bool(svg_details.get("default_theme_svg_ready")):
@@ -562,12 +628,16 @@ def _runtime_capability_summary() -> dict[str, object]:
         "ffprobe_path": ffprobe_path,
         "ffmpeg_path_exists": ffmpeg_path_exists,
         "ffprobe_path_exists": ffprobe_path_exists,
+        "ffmpeg_runtime_ready": ffmpeg_runtime_ready,
+        "ffprobe_runtime_ready": ffprobe_runtime_ready,
+        "ffmpeg_runtime_detail": ffmpeg_runtime_detail,
+        "ffprobe_runtime_detail": ffprobe_runtime_detail,
         "ffmpeg_on_path": ffmpeg_on_path,
         "ffprobe_on_path": ffprobe_on_path,
         "ffmpeg_bundled": ffmpeg_bundled,
         "ffprobe_bundled": ffprobe_bundled,
-        "video_runtime_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path),
-        "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path and ffprobe_path),
+        "video_runtime_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_runtime_ready),
+        "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_runtime_ready and ffprobe_runtime_ready),
         "missing_video_bits": missing_video_bits,
         "dds_compression_available": bool(dds_compression_available()),
         "optional_output_limits": unavailable_outputs,

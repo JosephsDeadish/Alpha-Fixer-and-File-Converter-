@@ -560,11 +560,17 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                             "magick_home_path": "/tmp/magick",
                                             "imagemagick_home_path": "",
                                         }):
-                                            summary = main._runtime_capability_summary()
+                                            with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                {"path": "/tmp/ffmpeg", "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                {"path": "", "exists": False, "runtime_ready": False, "detail": "missing"},
+                                            ]):
+                                                summary = main._runtime_capability_summary()
         self.assertTrue(summary["has_imageio"])
         self.assertTrue(summary["has_imageio_ffmpeg"])
         self.assertEqual(summary["ffmpeg_path"], "/tmp/ffmpeg")
         self.assertEqual(summary["ffprobe_path"], "")
+        self.assertTrue(summary["ffmpeg_runtime_ready"])
+        self.assertEqual(summary["ffmpeg_runtime_detail"], "ffmpeg ok")
         self.assertTrue(summary["video_runtime_ready"])
         self.assertFalse(summary["odd_container_probe_ready"])
         self.assertFalse(summary["dds_compression_available"])
@@ -614,7 +620,11 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                             }):
                                                 with patch.object(main.sys, "frozen", True, create=True):
                                                     with patch.object(main.sys, "executable", executable_path):
-                                                        summary = main._runtime_capability_summary()
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": "", "exists": False, "runtime_ready": False, "detail": "missing"},
+                                                        ]):
+                                                            summary = main._runtime_capability_summary()
         self.assertTrue(summary["frozen"])
         self.assertEqual(summary["bundle_dir"], bundle_dir)
         self.assertFalse(summary["ffmpeg_bundled"])
@@ -626,6 +636,40 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("2 theme SVG asset(s) missing from package", summary["packaged_asset_warnings"])
         self.assertIn("packaged ImageMagick/wand runtime unavailable for DDS compressed output", summary["packaged_asset_warnings"])
         self.assertIn("packaged asset gaps:", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_summary_requires_ffmpeg_selfcheck_for_video_ready(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with patch.object(vt, "_has_imageio", return_value=True):
+            with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch.object(fc, "dds_compression_available", return_value=True):
+                            with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                    with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                        "qt_svg_ready": True,
+                                        "default_theme_svg_path": "/tmp/panda_dark.svg",
+                                        "default_theme_svg_ready": True,
+                                        "theme_svg_missing_count": 0,
+                                    }):
+                                        with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                            "wand_runtime_ready": True,
+                                            "magick_home_path": "",
+                                            "imagemagick_home_path": "",
+                                        }):
+                                            with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                {"path": "/tmp/ffmpeg", "exists": True, "runtime_ready": False, "detail": "permission denied"},
+                                                {"path": "/tmp/ffprobe", "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                            ]):
+                                                summary = main._runtime_capability_summary()
+        self.assertFalse(summary["video_runtime_ready"])
+        self.assertFalse(summary["odd_container_probe_ready"])
+        self.assertIn("ffmpeg runtime", summary["missing_video_bits"])
+        self.assertIn("ffmpeg self-check failed", summary["feature_readiness_notice"])
+        self.assertEqual(summary["ffmpeg_runtime_detail"], "permission denied")
 
     def test_runtime_capability_dump_emits_prefixed_json(self):
         import main
@@ -851,6 +895,32 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(len(merged_payload["entries"]), 2)
         self.assertEqual(merged_payload["entries"][0]["path"], "/tmp/psp.iso")
         self.assertEqual(merged_payload["entries"][1]["path"], "/tmp/ps1.bin")
+
+    def test_verify_packaged_app_can_require_ffmpeg_selfcheck(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": false, "odd_container_probe_ready": false, "missing_linux_runtime_libs": [], "dds_compression_available": true, "ffmpeg_runtime_ready": false, "ffmpeg_runtime_detail": "permission denied"}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main([target, "--require-ffmpeg-selfcheck"])
+        self.assertIn("ffmpeg_runtime_ready=false", str(ctx.exception))
 
     def test_runtime_selftest_dump_records_external_manifest_checks(self):
         import main
@@ -2648,6 +2718,14 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             vt._classify_video_import_failure("album.m4a", "ffprobe only exposed an attached-picture/cover-art stream"),
             "cover-art stream",
         )
+        self.assertEqual(
+            vt._classify_video_import_failure("clip.part1.vob", "This source looks like a segmented / multipart video set (2 parts detected)"),
+            "segmented container",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("strange.mxf", "Unsupported pixel format in codec pipeline"),
+            "video codec",
+        )
 
     def test_video_capability_summary_mentions_ready_state_and_audio_only_limit(self):
         try:
@@ -3477,8 +3555,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                     ("b.vob", "temporary ffmpeg transcode fallback active (preferred stream #3)"),
                 ],
                 failures=[
-                    ("c.vob", "Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.\nProbe: container=mpeg; preferred-stream=3."),
-                    ("d.ogg", "ffprobe detected audio but no playable video stream"),
+                    ("c.vob", "Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.\nProbe: container=mpeg; video=mpeg2video; audio=ac3; preferred-stream=3."),
+                    ("d.ogg", "ffprobe detected audio but no playable video stream\nProbe: container=ogg; video=none; audio=vorbis."),
                 ],
                 skipped=[],
             )
@@ -3488,6 +3566,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("audio-only container ×1", dialog._import_status_lbl.text())
             self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
+            self.assertIn("Probe-detected containers: mpeg ×1, ogg ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Probe-detected video codecs: mpeg2video ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Probe-detected audio codecs: ac3 ×1, vorbis ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("multi-stream container", dialog._import_status_lbl.toolTip())
             self.assertIn("audio-only container", dialog._import_status_lbl.toolTip())
             self.assertFalse(dialog._import_detail_box.isHidden())
@@ -3917,11 +3998,11 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(entry["canvas"], "2×2")
         self.assertEqual(entry["sources"], "unknown ×1")
         self.assertEqual(entry["recovery"], "remux ×1")
-        self.assertEqual(entry["streams"], "game.iso: stream #3")
+        self.assertEqual(entry["streams"], "game.iso: manual video #3")
         self.assertIn("canvas=2×2", entry["notes"])
         self.assertIn("remux fallback", entry["notes"])
         self.assertIn("audio=off", entry["notes"])
-        self.assertIn("streams=game.iso: stream #3", entry["notes"])
+        self.assertIn("streams=game.iso: manual video #3", entry["notes"])
 
 
 @unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
