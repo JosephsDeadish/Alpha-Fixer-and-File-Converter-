@@ -252,9 +252,15 @@ class TestCorpusHelperInputs(unittest.TestCase):
             "public_format_matrix_manifest.json",
         )
         entries = load_manifest_entries(manifest_path)
-        self.assertGreaterEqual(len(entries), 3)
+        self.assertGreaterEqual(len(entries), 8)
         self.assertTrue(all(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
-        self.assertEqual({str(entry.get("target_format") or "").upper() for entry in entries}, {"DDS", "PNG", "BMP"})
+        self.assertEqual(
+            {str(entry.get("target_format") or "").upper() for entry in entries},
+            {"DDS", "GIF", "ICO", "PNG", "JPEG", "TIFF", "BMP", "TGA"},
+        )
+        self.assertTrue(any(str(entry.get("input") or "").endswith("sample.png") for entry in entries))
+        self.assertTrue(any(str(entry.get("input") or "").endswith("sample.jpg") for entry in entries))
+        self.assertTrue(any(str(entry.get("input") or "").endswith("sample.webp") for entry in entries))
 
     def test_built_in_public_dds_dx10_manifest_loads(self):
         manifest_path = os.path.join(
