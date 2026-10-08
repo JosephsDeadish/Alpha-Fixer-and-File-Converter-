@@ -22,6 +22,14 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from src.core.runtime_validation import (
+    execute_dds_manifest,
+    execute_disc_video_manifest,
+    execute_format_matrix_manifest,
+    load_manifest_entries_from_env,
+    manifest_sample_limit_from_env,
+)
+
 
 # ---------------------------------------------------------------------------
 # Logging configuration  (done early so even pre-Qt errors are logged)
@@ -615,10 +623,11 @@ def _runtime_selftest_peak_rss_mb() -> float | None:
 def _emit_runtime_selftest_dump() -> int:
     from PIL import Image
     from src.core.alpha_processor import _load_dds
-    from src.core.file_converter import convert_file, dds_compression_available
+    from src.core.file_converter import SUPPORTED_OUTPUT_FORMATS, convert_file, dds_compression_available
     from src.ui import video_tool as vt
 
     iterations = _runtime_selftest_iterations()
+    manifest_limit = manifest_sample_limit_from_env()
     summary: dict[str, object] = {
         "iterations": iterations,
         "passed": True,
@@ -782,6 +791,29 @@ def _emit_runtime_selftest_dump() -> int:
                 _record_check("generated_mp4_load", False, "ffmpeg executable unavailable")
                 _record_check("mpegts_load", False, "ffmpeg executable unavailable")
                 _record_check("synthetic_bin_probe", False, "ffmpeg executable unavailable")
+
+        disc_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST")
+        if disc_manifest:
+            ok, detail = execute_disc_video_manifest(disc_manifest, vt, limit=manifest_limit)
+            _record_check("external_disc_video_manifest", ok, detail)
+
+        dds_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DDS_MANIFEST")
+        if dds_manifest:
+            ok, detail = execute_dds_manifest(dds_manifest, _load_dds, limit=manifest_limit)
+            _record_check("external_dds_manifest", ok, detail)
+
+        format_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST")
+        if format_manifest:
+            ok, detail = execute_format_matrix_manifest(
+                format_manifest,
+                convert_file=convert_file,
+                load_dds=_load_dds,
+                image_module=Image,
+                output_formats=SUPPORTED_OUTPUT_FORMATS,
+                tmpdir=tmpdir,
+                limit=manifest_limit,
+            )
+            _record_check("external_format_matrix_manifest", ok, detail)
 
     peak_rss_mb = _runtime_selftest_peak_rss_mb()
     if peak_rss_mb is not None:

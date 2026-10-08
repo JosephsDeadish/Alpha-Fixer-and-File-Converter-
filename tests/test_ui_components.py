@@ -651,6 +651,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         fake_dds.size = (32, 24)
         fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
         fake_fc = types.SimpleNamespace(
+            SUPPORTED_OUTPUT_FORMATS={"PNG": ".png"},
             convert_file=MagicMock(return_value=None),
             dds_compression_available=MagicMock(return_value=False),
         )
@@ -693,6 +694,113 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         payload = verify._selftest_payload("hello\nALPHA_FIXER_RUNTIME_SELFTEST={\"passed\": true, \"iterations\": 3}\n")
         self.assertTrue(payload["passed"])
         self.assertEqual(payload["iterations"], 3)
+
+    def test_verify_packaged_app_passes_external_manifests_into_selftest_env(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}, "external_format_matrix_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--selftest-sample-limit",
+                        "7",
+                        "--disc-video-manifest",
+                        "/tmp/disc.json",
+                        "--dds-manifest",
+                        "/tmp/dds.json",
+                        "--format-matrix-manifest",
+                        "/tmp/matrix.json",
+                        "--require-selftest-pass",
+                        "--require-selftest-check",
+                        "external_disc_video_manifest",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 3)
+        selftest_env = calls[-1]["env"]
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"], "2")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"], "7")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"], "/tmp/disc.json")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"], "/tmp/dds.json")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"], "/tmp/matrix.json")
+
+    def test_runtime_selftest_dump_records_external_manifest_checks(self):
+        import main
+
+        buffer = io.StringIO()
+        fake_image_instance = MagicMock()
+        fake_image_instance.size = (32, 24)
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        fake_dds = MagicMock()
+        fake_dds.size = (32, 24)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_fc = types.SimpleNamespace(
+            SUPPORTED_OUTPUT_FORMATS={"PNG": ".png"},
+            convert_file=MagicMock(return_value="/tmp/out.png"),
+            dds_compression_available=MagicMock(return_value=False),
+        )
+        fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
+        fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
+        with patch.object(main, "_runtime_selftest_iterations", return_value=1):
+            with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=None):
+                with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                    tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                    tmpdir_cls.return_value.__exit__.return_value = False
+                    with patch.object(main, "load_manifest_entries_from_env") as loader:
+                        loader.side_effect = [
+                            [{"path": "/tmp/disc.iso"}],
+                            [{"path": "/tmp/sample.dds"}],
+                            [{"input": "/tmp/sample.png", "target_format": "PNG"}],
+                        ]
+                        with patch.object(main, "execute_disc_video_manifest", return_value=(True, "disc ok")):
+                            with patch.object(main, "execute_dds_manifest", return_value=(True, "dds ok")):
+                                with patch.object(main, "execute_format_matrix_manifest", return_value=(True, "matrix ok")):
+                                    with patch.dict(
+                                        sys.modules,
+                                        {
+                                            "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                            "PIL.Image": fake_pil_image,
+                                            "src.core.alpha_processor": fake_alpha,
+                                            "src.core.file_converter": fake_fc,
+                                            "src.ui": fake_ui_pkg,
+                                            "src.ui.video_tool": fake_vt,
+                                        },
+                                        clear=False,
+                                    ):
+                                        with patch("sys.stdout", buffer):
+                                            main._emit_runtime_selftest_dump()
+        parsed = json.loads(buffer.getvalue().strip().split("=", 1)[1])
+        self.assertIn("external_disc_video_manifest", parsed["checks"])
+        self.assertIn("external_dds_manifest", parsed["checks"])
+        self.assertIn("external_format_matrix_manifest", parsed["checks"])
+        self.assertTrue(parsed["checks"]["external_disc_video_manifest"]["ok"])
 
     def test_main_window_runtime_readiness_helpers_surface_limits(self):
         _require_qt_gui(self)

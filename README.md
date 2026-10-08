@@ -193,6 +193,48 @@ Example manifest:
 }
 ```
 
+Packaged runtime self-tests can also consume external manifests directly on fresh machines:
+
+```bash
+python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --run-selftest \
+  --selftest-iterations 8 \
+  --selftest-sample-limit 12 \
+  --disc-video-manifest /path/to/disc_video_manifest.json \
+  --dds-manifest /path/to/dds_dx10_manifest.json \
+  --format-matrix-manifest /path/to/packaged_format_matrix.json \
+  --require-selftest-pass \
+  --require-selftest-check external_disc_video_manifest \
+  --require-selftest-check external_dds_manifest \
+  --require-selftest-check external_format_matrix_manifest
+```
+
+Example packaged format-matrix manifest:
+
+```json
+{
+  "base_dir": "/mnt/corpora/conversion-samples",
+  "entries": [
+    {
+      "input": "transparent_ui.png",
+      "target_format": "DDS",
+      "dds_variant": "rgba"
+    },
+    {
+      "input": "ps2_texture.bmp",
+      "target_format": "PNG"
+    },
+    {
+      "input": "hdr_texture.png",
+      "target_format": "DDS",
+      "dds_variant": "dxt1",
+      "expect": "fail",
+      "detail_contains": ["wand", "ImageMagick", "DDS"]
+    }
+  ]
+}
+```
+
 To run only the optional real-corpus validations:
 
 ```bash
@@ -212,6 +254,7 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
   --repeat 3 \
   --run-selftest \
   --selftest-iterations 4 \
+  --selftest-sample-limit 8 \
   --require-selftest-pass \
   --require-selftest-check generated_mp4_load \
   --require-selftest-check mpegts_load \
@@ -219,7 +262,7 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
   --require-no-missing-libs
 ```
 
-The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches. With `--run-selftest`, the packaged executable also generates a tiny built-in media/format matrix (GIF, DDS, MP4, MPEG-TS, and a synthetic odd-extension probe) so fresh-machine checks can validate more than just startup.
+The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches. With `--run-selftest`, the packaged executable also generates a tiny built-in media/format matrix (GIF, DDS, MP4, MPEG-TS, and a synthetic odd-extension probe) so fresh-machine checks can validate more than just startup. When you provide `--disc-video-manifest`, `--dds-manifest`, or `--format-matrix-manifest`, the packaged app also executes those external real-sample sets in-process and reports them as `external_disc_video_manifest`, `external_dds_manifest`, and `external_format_matrix_manifest` self-test checks.
 
 ## Architecture
 

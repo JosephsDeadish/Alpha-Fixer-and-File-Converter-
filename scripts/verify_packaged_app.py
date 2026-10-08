@@ -62,15 +62,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-no-missing-libs", action="store_true", help="Fail if packaged runtime reports missing Linux shared libraries.")
     parser.add_argument("--run-selftest", action="store_true", help="Run the packaged executable's end-to-end runtime self-test after the capability audit.")
     parser.add_argument("--selftest-iterations", type=int, default=2, help="How many self-test iterations the packaged app should run when --run-selftest is set.")
+    parser.add_argument("--selftest-sample-limit", type=int, default=0, help="Optional cap for external manifest entries exercised per packaged self-test run.")
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
+    parser.add_argument("--disc-video-manifest", help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution.")
+    parser.add_argument("--dds-manifest", help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution.")
+    parser.add_argument("--format-matrix-manifest", help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution.")
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
     args = parser.parse_args(argv)
 
     launch_target = Path(args.launch_target)
     if not launch_target.exists():
         raise SystemExit(f"Launch target not found: {launch_target}")
+    if (args.disc_video_manifest or args.dds_manifest or args.format_matrix_manifest) and not args.run_selftest:
+        raise SystemExit("External manifests require --run-selftest so the packaged app can execute them.")
 
     base_env = os.environ.copy()
     if sys.platform.startswith("linux"):
@@ -116,6 +122,14 @@ def main(argv: list[str] | None = None) -> int:
         selftest_env = dict(base_env)
         selftest_env.pop("ALPHA_FIXER_SMOKE_TEST", None)
         selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"] = str(max(1, int(args.selftest_iterations)))
+        if args.selftest_sample_limit:
+            selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
+        if args.disc_video_manifest:
+            selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = args.disc_video_manifest
+        if args.dds_manifest:
+            selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = args.dds_manifest
+        if args.format_matrix_manifest:
+            selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = args.format_matrix_manifest
         selftest_result = _run_and_echo(command, env=selftest_env, timeout=max(30, int(args.timeout)))
         if selftest_result.returncode not in (0, 1):
             raise SystemExit(f"Packaged runtime self-test failed with exit code {selftest_result.returncode}.")

@@ -31,6 +31,10 @@ from src.core.file_converter import (
     output_format_unavailable_reason,
 )
 from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_image
+from src.core.runtime_validation import (
+    execute_format_matrix_manifest,
+    load_manifest_entries,
+)
 from src.core.worker import AlphaWorker, ConverterWorker
 from src.version import APP_NAME
 
@@ -216,6 +220,80 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["path"], sample_path)
         self.assertEqual(entries[0]["expect"], "fail")
+
+    def test_runtime_manifest_loader_resolves_input_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.png")
+            with open(sample_path, "wb") as handle:
+                handle.write(b"png")
+            manifest_path = os.path.join(tmpdir, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "base_dir": ".",
+                        "entries": [{"input": "sample.png", "target_format": "DDS"}],
+                    },
+                    handle,
+                )
+            entries = load_manifest_entries(manifest_path)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["input"], sample_path)
+        self.assertEqual(entries[0]["target_format"], "DDS")
+
+
+class TestRuntimeFormatMatrixManifest(unittest.TestCase):
+    def test_execute_format_matrix_manifest_validates_successful_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.png")
+            _make_png(sample_path)
+            entries = [{"input": sample_path, "target_format": "PNG"}]
+
+            def _fake_convert(src, dst, target_format, **_kwargs):
+                self.assertEqual(src, sample_path)
+                self.assertEqual(target_format, "PNG")
+                _make_png(dst, w=4, h=4)
+                return dst
+
+            ok, detail = execute_format_matrix_manifest(
+                entries,
+                convert_file=_fake_convert,
+                load_dds=lambda path: Image.open(path),
+                image_module=Image,
+                output_formats={"PNG": ".png"},
+                tmpdir=tmpdir,
+            )
+
+        self.assertTrue(ok)
+        self.assertIn("converted=1", detail)
+
+    def test_execute_format_matrix_manifest_checks_expected_failure_tokens(self):
+        entries = [
+            {
+                "input": "/tmp/missing.png",
+                "target_format": "DDS",
+                "expect": "fail",
+                "detail_contains": ["ImageMagick"],
+            }
+        ]
+
+        def _fake_convert(_src, _dst, _target_format, **_kwargs):
+            raise ValueError("ImageMagick runtime unavailable")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.png")
+            _make_png(sample_path)
+            entries[0]["input"] = sample_path
+            ok, detail = execute_format_matrix_manifest(
+                entries,
+                convert_file=_fake_convert,
+                load_dds=lambda path: Image.open(path),
+                image_module=Image,
+                output_formats={"DDS": ".dds"},
+                tmpdir=tmpdir,
+            )
+
+        self.assertTrue(ok)
+        self.assertIn("expected_failures=1", detail)
 
 
 class TestOptionalRealCorpus(unittest.TestCase):
