@@ -12,11 +12,17 @@
     },
     {
       "path": "ps1/sample.bin",
+      "companions": [
+        {
+          "path": "ps1/sample.cue",
+          "notes": "Optional companion cue sheet for BIN-based PlayStation samples. Keeping it alongside the BIN lets the packaged self-test and local odd-container retries exercise cue/bin track-layout recovery."
+        }
+      ],
       "expect": "load_or_explain",
       "hint_contains": [
         "Disc-image video inputs are experimental"
       ],
-      "notes": "Actual PS1 BIN/CUE-style disc-image sample. Keep only the BIN path here; optional downloads should point at a legally redistributable sample."
+      "notes": "Actual PS1 BIN/CUE-style disc-image sample. Point the main path at the BIN and add the matching cue sheet as a companion so cue/bin retries can exercise real track-layout recovery."
     },
     {
       "path": "ps2/sample.iso",

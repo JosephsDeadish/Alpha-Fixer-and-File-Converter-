@@ -240,6 +240,10 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("psp", "sample.umd.iso")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("ps1", "sample.bin")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("ps2", "sample.iso")) for entry in entries))
+        ps1_entry = next(entry for entry in entries if str(entry.get("path") or "").endswith(os.path.join("ps1", "sample.bin")))
+        companions = ps1_entry.get("companions")
+        self.assertIsInstance(companions, list)
+        self.assertTrue(any(str(item.get("path") or "").endswith(os.path.join("ps1", "sample.cue")) for item in companions if isinstance(item, dict)))
         self.assertTrue(all("Disc-image video inputs are experimental" in (entry.get("hint_contains") or [""])[0] for entry in entries))
 
     def test_optional_manifest_entries_accepts_manifest_file_and_resolves_relative_paths(self):
@@ -277,6 +281,28 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["path"], sample_path)
         self.assertEqual(entries[0]["expect"], "fail")
+
+    def test_load_manifest_entries_resolves_companion_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = os.path.join(tmpdir, "manifest.json")
+            os.makedirs(os.path.join(tmpdir, "samples"), exist_ok=True)
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "base_dir": ".",
+                        "entries": [
+                            {
+                                "path": "samples/disc.bin",
+                                "companions": [{"path": "samples/disc.cue"}],
+                            }
+                        ],
+                    },
+                    handle,
+                )
+            entries = load_manifest_entries(manifest_path)
+        companions = entries[0].get("companions")
+        self.assertIsInstance(companions, list)
+        self.assertEqual(companions[0]["path"], os.path.join(tmpdir, "samples", "disc.cue"))
 
     def test_runtime_manifest_loader_resolves_input_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -342,6 +368,27 @@ class TestCorpusHelperInputs(unittest.TestCase):
             self.assertTrue(os.path.isfile(copied_path))
             with open(copied_path, "rb") as handle:
                 self.assertEqual(handle.read(), b"dds")
+
+    def test_materialize_manifest_entries_copy_companions_with_primary_sample(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "sample.bin")
+            cue_path = os.path.join(tmpdir, "sample.cue")
+            cache_dir = os.path.join(tmpdir, "cache")
+            with open(source_path, "wb") as handle:
+                handle.write(b"bin")
+            with open(cue_path, "w", encoding="utf-8") as handle:
+                handle.write('FILE "sample.bin" BINARY\n')
+            materialized = materialize_manifest_entries(
+                [{"path": source_path, "companions": [{"path": cue_path}]}],
+                cache_dir=cache_dir,
+                copy_local=True,
+            )
+            copied_path = materialized[0]["path"]
+            companions = materialized[0].get("companions")
+            self.assertTrue(os.path.isfile(copied_path))
+            self.assertIsInstance(companions, list)
+            self.assertTrue(os.path.isfile(companions[0]["path"]))
+            self.assertEqual(os.path.dirname(companions[0]["path"]), os.path.dirname(copied_path))
 
     def test_materialize_manifest_entries_rejects_bad_checksum(self):
         sample_bytes = b"sample"

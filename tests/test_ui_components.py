@@ -801,6 +801,57 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"].endswith("sample_manifests/public_format_matrix_manifest.json"))
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"], "3")
 
+    def test_verify_packaged_app_merges_repeated_manifest_arguments(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            psp_manifest = os.path.join(tmpdir, "psp.json")
+            ps1_manifest = os.path.join(tmpdir, "ps1.json")
+            with open(psp_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": "/tmp/psp.iso", "expect": "load_or_explain"}]}, handle)
+            with open(ps1_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": "/tmp/ps1.bin", "expect": "load_or_explain"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 1, "checks": {}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        psp_manifest,
+                        "--disc-video-manifest",
+                        ps1_manifest,
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        merged_payload = json.loads(calls[-1]["env"]["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"])
+        self.assertEqual(len(merged_payload["entries"]), 2)
+        self.assertEqual(merged_payload["entries"][0]["path"], "/tmp/psp.iso")
+        self.assertEqual(merged_payload["entries"][1]["path"], "/tmp/ps1.bin")
+
     def test_runtime_selftest_dump_records_external_manifest_checks(self):
         import main
 
@@ -2423,6 +2474,24 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("ffmpeg can demux", hint)
         self.assertIn("Missing: ffmpeg executable.", hint)
 
+    def test_video_load_failure_hint_mentions_disc_sidecar_retry_when_cue_exists(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, "game.bin")
+            cue_path = os.path.join(tmpdir, "game.cue")
+            with open(bin_path, "wb") as handle:
+                handle.write(b"bin")
+            with open(cue_path, "w", encoding="utf-8") as handle:
+                handle.write('FILE "game.bin" BINARY\n')
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint(bin_path)
+        self.assertIn("Companion disc sidecar files were detected", hint)
+        self.assertIn("game.cue", hint)
+
     def test_video_load_failure_hint_includes_probe_summary_when_available(self):
         try:
             from src.ui import video_tool as vt
@@ -2686,6 +2755,52 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIsNotNone(clip)
         self.assertEqual(clip.preferred_video_stream_index, 5)
         self.assertIn("alternate stream #5", clip.load_note)
+        clip.close()
+
+    def test_load_video_clip_retries_matching_cue_sidecar_for_bin_sources(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 4, "size": (320, 240)}
+
+            def get_data(self, idx):
+                return [[[0, 0, 0, 255]]]
+
+            def close(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, "disc.bin")
+            cue_path = os.path.join(tmpdir, "disc.cue")
+            with open(bin_path, "wb") as handle:
+                handle.write(b"bin")
+            with open(cue_path, "w", encoding="utf-8") as handle:
+                handle.write('FILE "disc.bin" BINARY\n')
+
+            def _probe_side_effect(path, preferred_video_stream_index=None, preferred_audio_stream_index=None):
+                self.assertIsNone(preferred_video_stream_index)
+                self.assertIsNone(preferred_audio_stream_index)
+                if path.endswith(".cue"):
+                    return {"has_video": True, "has_audio": False, "video_stream_index": 0, "audio_stream_index": None}
+                return None
+
+            def _probe_video_side_effect(path):
+                if path.endswith(".bin"):
+                    raise RuntimeError("bin direct open failed")
+                return 30.0, 4, (320, 240), None
+
+            with patch.object(vt, "_probe_media_details", side_effect=_probe_side_effect):
+                with patch.object(vt, "_probe_video_clip", side_effect=_probe_video_side_effect):
+                    with patch.object(vt, "_video_has_audio_stream", return_value=False):
+                        with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+                            clip = vt._load_video_clip(bin_path)
+        self.assertIsNotNone(clip)
+        self.assertEqual(clip.source_path, bin_path)
+        self.assertIn("cue sidecar retry active", clip.load_note)
         clip.close()
 
     def test_probe_media_details_prefers_non_attached_pic_stream(self):

@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from src.core.runtime_validation import load_manifest_entries
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
 _PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
@@ -56,6 +58,21 @@ def _prefixed_payload(output: str, *, prefix: str, missing_message: str) -> dict
     return payload
 
 
+def _merged_manifest_arg(raw_values: list[str] | None) -> str | None:
+    values = [str(value or "").strip() for value in (raw_values or []) if str(value or "").strip()]
+    if not values:
+        return None
+    if len(values) == 1:
+        return values[0]
+    merged_entries: list[dict[str, object]] = []
+    for raw in values:
+        entries = load_manifest_entries(raw)
+        if not entries:
+            raise SystemExit(f"Manifest argument could not be loaded: {raw}")
+        merged_entries.extend(entries)
+    return json.dumps({"entries": merged_entries})
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
@@ -71,9 +88,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
-    parser.add_argument("--disc-video-manifest", help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution.")
-    parser.add_argument("--dds-manifest", help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution.")
-    parser.add_argument("--format-matrix-manifest", help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution.")
+    parser.add_argument("--disc-video-manifest", action="append", default=[], help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
+    parser.add_argument("--dds-manifest", action="append", default=[], help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
+    parser.add_argument("--format-matrix-manifest", action="append", default=[], help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--use-public-sample-manifests", action="store_true", help="Use the repository's built-in public disc-video, DDS/DX10, and format-matrix manifests for packaged self-test execution.")
     parser.add_argument("--allow-sample-downloads", action="store_true", help="Allow manifest-backed self-tests to download missing external samples when URL fields are present.")
     parser.add_argument("--sample-cache-dir", help="Optional cache directory for downloaded or materialized manifest samples.")
@@ -85,12 +102,15 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"Launch target not found: {launch_target}")
     if args.use_public_sample_manifests:
         if not args.disc_video_manifest:
-            args.disc_video_manifest = str(_PUBLIC_DISC_VIDEO_MANIFEST)
+            args.disc_video_manifest = [str(_PUBLIC_DISC_VIDEO_MANIFEST)]
         if not args.dds_manifest:
-            args.dds_manifest = str(_PUBLIC_DDS_MANIFEST)
+            args.dds_manifest = [str(_PUBLIC_DDS_MANIFEST)]
         if not args.format_matrix_manifest:
-            args.format_matrix_manifest = str(_PUBLIC_FORMAT_MATRIX_MANIFEST)
-    if (args.disc_video_manifest or args.dds_manifest or args.format_matrix_manifest) and not args.run_selftest:
+            args.format_matrix_manifest = [str(_PUBLIC_FORMAT_MATRIX_MANIFEST)]
+    merged_disc_manifest = _merged_manifest_arg(args.disc_video_manifest)
+    merged_dds_manifest = _merged_manifest_arg(args.dds_manifest)
+    merged_format_manifest = _merged_manifest_arg(args.format_matrix_manifest)
+    if (merged_disc_manifest or merged_dds_manifest or merged_format_manifest) and not args.run_selftest:
         raise SystemExit("External manifests require --run-selftest so the packaged app can execute them.")
 
     base_env = os.environ.copy()
@@ -139,12 +159,12 @@ def main(argv: list[str] | None = None) -> int:
         selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"] = str(max(1, int(args.selftest_iterations)))
         if args.selftest_sample_limit:
             selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
-        if args.disc_video_manifest:
-            selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = args.disc_video_manifest
-        if args.dds_manifest:
-            selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = args.dds_manifest
-        if args.format_matrix_manifest:
-            selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = args.format_matrix_manifest
+        if merged_disc_manifest:
+            selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = merged_disc_manifest
+        if merged_dds_manifest:
+            selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = merged_dds_manifest
+        if merged_format_manifest:
+            selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = merged_format_manifest
         if args.allow_sample_downloads:
             selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
         if args.sample_cache_dir:

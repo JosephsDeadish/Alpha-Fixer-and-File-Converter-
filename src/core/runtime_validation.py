@@ -32,23 +32,40 @@ def load_manifest_entries(raw_or_path: str) -> list[dict[str, object]]:
         base_dir = os.path.normpath(os.path.join(manifest_dir, base_dir))
     if not isinstance(payload, list):
         return []
-    entries: list[dict[str, object]] = []
-    for entry in payload:
-        if not isinstance(entry, dict):
-            continue
+    def _resolve_manifest_path(raw_path: object) -> str:
+        resolved = str(raw_path or "").strip()
+        if not resolved:
+            return ""
+        if not os.path.isabs(resolved):
+            if base_dir:
+                resolved = os.path.normpath(os.path.join(base_dir, resolved))
+            elif manifest_dir:
+                resolved = os.path.normpath(os.path.join(manifest_dir, resolved))
+        return resolved
+
+    def _normalize_manifest_entry(entry: dict[str, object]) -> dict[str, object]:
         normalized = dict(entry)
         for key in ("path", "input", "input_path", "source", "source_path"):
-            raw_path = str(entry.get(key) or "").strip()
-            if not raw_path:
+            resolved = _resolve_manifest_path(entry.get(key))
+            if resolved:
+                normalized[key] = resolved
+        for key in ("companions", "sidecars"):
+            raw_related = entry.get(key)
+            if not isinstance(raw_related, list):
                 continue
-            resolved = raw_path
-            if not os.path.isabs(resolved):
-                if base_dir:
-                    resolved = os.path.normpath(os.path.join(base_dir, resolved))
-                elif manifest_dir:
-                    resolved = os.path.normpath(os.path.join(manifest_dir, resolved))
-            normalized[key] = resolved
-        entries.append(normalized)
+            normalized_related: list[dict[str, object]] = []
+            for item in raw_related:
+                if isinstance(item, str):
+                    item = {"path": item}
+                if isinstance(item, dict):
+                    normalized_related.append(_normalize_manifest_entry(item))
+            normalized[key] = normalized_related
+        return normalized
+
+    entries: list[dict[str, object]] = []
+    for entry in payload:
+        if isinstance(entry, dict):
+            entries.append(_normalize_manifest_entry(entry))
     return entries
 
 
@@ -184,9 +201,34 @@ def materialize_manifest_entry(
     normalized = dict(entry)
     source_key = _entry_source_key(normalized)
     source_path = _entry_source_path(normalized)
+
+    def _materialize_related_entries(parent_target_dir: str = "") -> None:
+        for key in ("companions", "sidecars"):
+            raw_related = normalized.get(key)
+            if not isinstance(raw_related, list):
+                continue
+            materialized_related: list[dict[str, object]] = []
+            for item in raw_related:
+                if isinstance(item, str):
+                    item = {"path": item}
+                if not isinstance(item, dict):
+                    continue
+                related_cache_dir = parent_target_dir or cache_dir or manifest_cache_dir_from_env()
+                materialized_related.append(
+                    materialize_manifest_entry(
+                        item,
+                        cache_dir=related_cache_dir,
+                        allow_download=allow_download,
+                        copy_local=copy_local,
+                        timeout=timeout,
+                    )
+                )
+            normalized[key] = materialized_related
+
     if source_path and os.path.isfile(source_path):
         _verify_entry_checksum(source_path, normalized)
         if not copy_local:
+            _materialize_related_entries()
             return normalized
         target_path = _materialized_target_path(
             normalized,
@@ -196,9 +238,11 @@ def materialize_manifest_entry(
         if os.path.abspath(source_path) != os.path.abspath(target_path):
             shutil.copy2(source_path, target_path)
         normalized[source_key] = target_path
+        _materialize_related_entries(os.path.dirname(target_path))
         return normalized
     download_url = _entry_download_url(normalized)
     if not (allow_download and download_url):
+        _materialize_related_entries()
         return normalized
     target_path = _materialized_target_path(
         normalized,
@@ -222,6 +266,7 @@ def materialize_manifest_entry(
             shutil.copyfileobj(response, handle)
     _verify_entry_checksum(target_path, normalized)
     normalized[source_key] = target_path
+    _materialize_related_entries(os.path.dirname(target_path))
     return normalized
 
 

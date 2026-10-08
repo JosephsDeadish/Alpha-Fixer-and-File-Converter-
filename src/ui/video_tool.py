@@ -65,9 +65,10 @@ _VIDEO_EXTS = {
     ".pss",    # PlayStation 2 streaming video
     ".str",    # PlayStation 1/2 streaming video
     ".xa",     # PlayStation 1 audio/video
-    # Disc images — experimental: ffmpeg can read video streams from these
+    # Disc images / cue sheets — experimental: ffmpeg can read video streams from these
     # when the image contains a demuxable video track (e.g. PSP UMD .iso
     # with MPEG inside).  Raw sector-level disc images may not load.
+    ".cue",    # Cue sheet companion for BIN-style disc images
     ".iso",    # ISO 9660 disc image (PSP UMD / PS2 DVD)
     ".umd",    # PSP UMD disc image (same structure as ISO 9660)
     ".bin",    # CD-ROM disc image (may contain MPEG video sectors)
@@ -79,7 +80,7 @@ _IMAGE_EXTS = {
     ".jfif", ".jpe", ".xnb", ".tim",
 }
 _KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
-_EXPERIMENTAL_DISC_VIDEO_EXTS = {".iso", ".umd", ".bin"}
+_EXPERIMENTAL_DISC_VIDEO_EXTS = {".cue", ".iso", ".umd", ".bin"}
 _ODD_CONTAINER_RECOVERY_EXTS = _EXPERIMENTAL_DISC_VIDEO_EXTS | {
     ".asf", ".divx", ".dv", ".flv", ".mov", ".rm", ".rmvb", ".ts", ".vob", ".yuv",
 }
@@ -100,6 +101,7 @@ _FFMPEG_DEEP_ANALYSIS_ARGS = [
 _SEGMENTED_VIDEO_NAME_RE = re.compile(
     r"(?is)^(?P<base>.+?)(?:[._ -]?)(?P<label>part|pt|cd|disc|disk|segment|seg)(?:[._ -]?)(?P<index>\d+)$"
 )
+_CUE_FILE_RE = re.compile(r'^\s*FILE\s+(?:"(?P<quoted>[^"]+)"|(?P<plain>\S+))\s+\S+', re.IGNORECASE)
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
@@ -373,6 +375,71 @@ def _coerce_optional_stream_index(value) -> Optional[int]:
         return int(value)
     except Exception:
         return None
+
+
+def _join_note_parts(*parts: str) -> str:
+    cleaned = [str(part).strip() for part in parts if str(part or "").strip()]
+    return "; ".join(cleaned)
+
+
+def _cue_referenced_files(path: str) -> list[str]:
+    cue_path = Path(path)
+    results: list[str] = []
+    seen: set[str] = set()
+    try:
+        with cue_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for raw_line in handle:
+                match = _CUE_FILE_RE.match(raw_line)
+                if not match:
+                    continue
+                rel_name = match.group("quoted") or match.group("plain") or ""
+                if not rel_name:
+                    continue
+                candidate = cue_path.parent / rel_name
+                try:
+                    resolved = str(candidate.resolve())
+                except Exception:
+                    resolved = str(candidate)
+                if resolved in seen or not Path(resolved).is_file():
+                    continue
+                seen.add(resolved)
+                results.append(resolved)
+    except Exception:
+        return []
+    return results
+
+
+def _disc_sidecar_sources(path: str) -> list[str]:
+    source = Path(path)
+    ext = source.suffix.lower()
+    candidates: list[str] = []
+    seen: set[str] = {str(source)}
+
+    def _add(candidate_path: Path) -> None:
+        raw_candidate = str(candidate_path)
+        if raw_candidate in seen or not candidate_path.is_file():
+            return
+        seen.add(raw_candidate)
+        candidates.append(raw_candidate)
+
+    if ext == ".cue":
+        for referenced in _cue_referenced_files(path):
+            _add(Path(referenced))
+        for suffix in (".bin", ".img", ".iso", ".umd"):
+            _add(source.with_suffix(suffix))
+    elif ext in {".bin", ".img", ".iso", ".umd"}:
+        _add(source.with_suffix(".cue"))
+    return candidates
+
+
+def _disc_sidecar_retry_note(original_path: str, alternate_path: str) -> str:
+    alt_name = Path(alternate_path).name
+    alt_ext = Path(alternate_path).suffix.lower()
+    if alt_ext == ".cue":
+        return f"cue sidecar retry active ({alt_name})"
+    if Path(original_path).suffix.lower() == ".cue":
+        return f"referenced disc data retry active ({alt_name})"
+    return f"alternate disc source retry active ({alt_name})"
 
 
 def _stream_flag(stream: dict[str, object], key: str) -> int:
@@ -737,10 +804,23 @@ def _video_load_failure_hint(
         lines.append(
             f"This source looks like a segmented / multipart video set ({segment_count} parts detected); the app will also try an ffmpeg concat repair fallback before giving up."
         )
+    disc_sidecars = _disc_sidecar_sources(path) if ext in _EXPERIMENTAL_DISC_VIDEO_EXTS else []
     if ext in _EXPERIMENTAL_DISC_VIDEO_EXTS:
         lines.append(
             "Disc-image video inputs are experimental and only work when ffmpeg can demux a playable stream from the image."
         )
+        if disc_sidecars:
+            preview = ", ".join(Path(candidate).name for candidate in disc_sidecars[:2])
+            extra = len(disc_sidecars) - min(len(disc_sidecars), 2)
+            if extra > 0:
+                preview = f"{preview} +{extra} more"
+            lines.append(
+                f"Companion disc sidecar files were detected ({preview}); the app will also retry them when track-layout metadata may help expose a playable stream."
+            )
+        elif ext in {".bin", ".cue"}:
+            lines.append(
+                "Raw BIN/CUE disc images often need their matching cue/bin companion files to expose tracks correctly."
+            )
         if probe and not bool(probe.get("has_video")):
             lines.append("ffprobe did not detect a playable video stream in this disc image.")
         elif probe and bool(probe.get("has_video")):
@@ -1197,7 +1277,7 @@ def _video_capability_summary() -> str:
         return (
             "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, audio-drop retries for broken source audio, and a manual stream picker for multi-stream containers. "
+                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, cue/bin sidecar retries for disc layouts, audio-drop retries for broken source audio, and a manual stream picker for multi-stream containers. "
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
@@ -1222,7 +1302,7 @@ def _video_capability_details() -> str:
             "",
             "Current behavior:",
             "• Standard video import and MP4 export are available.",
-            "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, or salvage a still frame when ffmpeg can expose usable video data.",
+            "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, retry matching cue/bin sidecars, or salvage a still frame when ffmpeg can expose usable video data.",
             "• Multipart/segmented sources like clip.part1.vob + clip.part2.vob or movie.vob.001 + movie.vob.002 can also be concat-repaired automatically when all parts are present together.",
             "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from a manually chosen video stream.",
             "• Audio-only containers still cannot be added as timeline video clips.",
@@ -1247,6 +1327,8 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
     lower = detail.lower()
     if "multiple video streams were detected" in lower or "preferred-stream=" in lower:
         return "multi-stream container"
+    if "cue sidecar" in lower or "cue/bin companion" in lower or "disc sidecar files were detected" in lower:
+        return "disc sidecar"
     if "attached-picture/cover-art stream" in lower or "attached cover art" in lower:
         return "cover-art stream"
     if "audio but no playable video stream" in lower:
@@ -1267,6 +1349,7 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
 def _video_failure_guidance(category: str) -> str:
     guidance = {
         "video dependency": "Install or bundle imageio, imageio-ffmpeg, ffmpeg, and ffprobe for full video probing and import.",
+        "disc sidecar": "BIN/CUE-style disc images often need their matching companion metadata files kept together so the track layout can be recovered correctly.",
         "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream, but a manual ffmpeg remux may still be needed.",
         "cover-art stream": "This source exposed only cover-art style video metadata instead of continuous frames; dropping attached-picture streams with ffmpeg may help.",
         "audio-only container": "The Video Builder only accepts clips with playable video frames; audio-only files cannot be added to the timeline.",
@@ -1872,95 +1955,115 @@ def _load_video_clip(
     """Try to load a video file using imageio-ffmpeg.  Returns None on failure."""
     preferred_video_stream_index = _coerce_optional_stream_index(preferred_video_stream_index)
     preferred_audio_stream_index = _coerce_optional_stream_index(preferred_audio_stream_index)
-    probe = _probe_media_details(
-        path,
-        preferred_video_stream_index=preferred_video_stream_index,
-        preferred_audio_stream_index=preferred_audio_stream_index,
-    )
     allow_direct_open = preferred_video_stream_index is None and preferred_audio_stream_index is None
-    if allow_direct_open:
-        try:
-            fps, frame_count, frame_size, first_frame = _probe_video_clip(path)
-            if frame_count <= 0:
-                return None
-            if probe and bool(probe.get("selected_video_attached_pic")):
-                raise RuntimeError("Attached-picture stream selected")
-            return _ClipEntry(
-                path,
-                frame_count,
-                _VideoFrameGetter(path, frame_count, first_frame),
-                fps,
-                frame_size=frame_size,
-                clip_type="video",
-                has_audio=_video_has_audio_stream(path),
-                source_path=path,
-                load_strategy="direct",
-                source_probe=probe,
-            )
-        except Exception:
-            probe = _probe_media_details(
-                path,
-                preferred_video_stream_index=preferred_video_stream_index,
-                preferred_audio_stream_index=preferred_audio_stream_index,
-            )
-    manual_stream_note = _stream_selection_note(probe, manual=preferred_video_stream_index is not None)
-    recovered_path, recovery_note, recovery_probe = _attempt_video_recovery(
-        path,
-        probe,
-        force_recovery=not allow_direct_open,
-        allow_alternate_streams=preferred_video_stream_index is None,
-    )
-    if recovered_path:
-        try:
-            fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
-            if frame_count <= 0:
-                _unlink_file_safely(recovered_path)
-                recovered_path = None
-            else:
-                active_probe = recovery_probe or probe
-                return _ClipEntry(
-                    recovered_path,
-                    frame_count,
-                    _VideoFrameGetter(recovered_path, frame_count, first_frame, cleanup_paths=[recovered_path]),
-                    fps,
-                    frame_size=frame_size,
-                    clip_type="video",
-                    has_audio=_video_has_audio_stream(recovered_path),
-                    source_path=path,
-                    load_note=f"{manual_stream_note}; {recovery_note}" if manual_stream_note and recovery_note else (manual_stream_note or recovery_note),
-                    load_strategy=f"{manual_stream_note}; {recovery_note}" if manual_stream_note and recovery_note else (manual_stream_note or recovery_note),
-                    source_probe=active_probe,
-                    preferred_video_stream_index=preferred_video_stream_index if preferred_video_stream_index is not None else _coerce_optional_stream_index(active_probe.get("video_stream_index") if active_probe else None),
-                    preferred_audio_stream_index=preferred_audio_stream_index if preferred_audio_stream_index is not None else _coerce_optional_stream_index(active_probe.get("audio_stream_index") if active_probe else None),
-                )
-        except Exception:
-            _unlink_file_safely(recovered_path)
-            recovered_path = None
-    still_frame = _extract_visual_still_frame(path, probe)
-    if still_frame is None:
-        return None
-    try:
-        return _ClipEntry(
-            path,
-            1,
-            _ImageFrameGetter(still_frame),
-            25.0,
-            frame_size=still_frame.size,
-            clip_type="image",
-            has_audio=bool(probe.get("has_audio")) if probe else False,
-            source_path=path,
-            load_note=f"{manual_stream_note}; {_visual_still_fallback_note(probe)}" if manual_stream_note else _visual_still_fallback_note(probe),
-            load_strategy=f"{manual_stream_note}; {_visual_still_fallback_note(probe)}" if manual_stream_note else _visual_still_fallback_note(probe),
-            source_probe=probe,
+
+    def _try_load_candidate(actual_path: str, *, source_retry_note: str = "") -> Optional["_ClipEntry"]:
+        probe = _probe_media_details(
+            actual_path,
             preferred_video_stream_index=preferred_video_stream_index,
             preferred_audio_stream_index=preferred_audio_stream_index,
         )
-    except Exception:
+        if allow_direct_open:
+            try:
+                fps, frame_count, frame_size, first_frame = _probe_video_clip(actual_path)
+                if frame_count <= 0:
+                    return None
+                if probe and bool(probe.get("selected_video_attached_pic")):
+                    raise RuntimeError("Attached-picture stream selected")
+                note = _join_note_parts(source_retry_note)
+                return _ClipEntry(
+                    actual_path,
+                    frame_count,
+                    _VideoFrameGetter(actual_path, frame_count, first_frame),
+                    fps,
+                    frame_size=frame_size,
+                    clip_type="video",
+                    has_audio=_video_has_audio_stream(actual_path),
+                    source_path=path,
+                    load_note=note,
+                    load_strategy=note or "direct",
+                    source_probe=probe,
+                    preferred_video_stream_index=preferred_video_stream_index if preferred_video_stream_index is not None else _coerce_optional_stream_index(probe.get("video_stream_index") if probe else None),
+                    preferred_audio_stream_index=preferred_audio_stream_index if preferred_audio_stream_index is not None else _coerce_optional_stream_index(probe.get("audio_stream_index") if probe else None),
+                )
+            except Exception:
+                probe = _probe_media_details(
+                    actual_path,
+                    preferred_video_stream_index=preferred_video_stream_index,
+                    preferred_audio_stream_index=preferred_audio_stream_index,
+                )
+        manual_stream_note = _stream_selection_note(probe, manual=preferred_video_stream_index is not None)
+        recovered_path, recovery_note, recovery_probe = _attempt_video_recovery(
+            actual_path,
+            probe,
+            force_recovery=not allow_direct_open,
+            allow_alternate_streams=preferred_video_stream_index is None,
+        )
+        if recovered_path:
+            try:
+                fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
+                if frame_count <= 0:
+                    _unlink_file_safely(recovered_path)
+                    recovered_path = None
+                else:
+                    active_probe = recovery_probe or probe
+                    note = _join_note_parts(source_retry_note, manual_stream_note, recovery_note)
+                    return _ClipEntry(
+                        recovered_path,
+                        frame_count,
+                        _VideoFrameGetter(recovered_path, frame_count, first_frame, cleanup_paths=[recovered_path]),
+                        fps,
+                        frame_size=frame_size,
+                        clip_type="video",
+                        has_audio=_video_has_audio_stream(recovered_path),
+                        source_path=path,
+                        load_note=note,
+                        load_strategy=note,
+                        source_probe=active_probe,
+                        preferred_video_stream_index=preferred_video_stream_index if preferred_video_stream_index is not None else _coerce_optional_stream_index(active_probe.get("video_stream_index") if active_probe else None),
+                        preferred_audio_stream_index=preferred_audio_stream_index if preferred_audio_stream_index is not None else _coerce_optional_stream_index(active_probe.get("audio_stream_index") if active_probe else None),
+                    )
+            except Exception:
+                _unlink_file_safely(recovered_path)
+                recovered_path = None
+        still_frame = _extract_visual_still_frame(actual_path, probe)
+        if still_frame is None:
+            return None
         try:
-            still_frame.close()
+            note = _join_note_parts(source_retry_note, manual_stream_note, _visual_still_fallback_note(probe))
+            return _ClipEntry(
+                actual_path,
+                1,
+                _ImageFrameGetter(still_frame),
+                25.0,
+                frame_size=still_frame.size,
+                clip_type="image",
+                has_audio=bool(probe.get("has_audio")) if probe else False,
+                source_path=path,
+                load_note=note,
+                load_strategy=note,
+                source_probe=probe,
+                preferred_video_stream_index=preferred_video_stream_index,
+                preferred_audio_stream_index=preferred_audio_stream_index,
+            )
         except Exception:
-            pass
-        return None
+            try:
+                still_frame.close()
+            except Exception:
+                pass
+            return None
+
+    clip = _try_load_candidate(path)
+    if clip is not None:
+        return clip
+    for alternate_path in _disc_sidecar_sources(path):
+        clip = _try_load_candidate(
+            alternate_path,
+            source_retry_note=_disc_sidecar_retry_note(path, alternate_path),
+        )
+        if clip is not None:
+            return clip
+    return None
 
 
 def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
