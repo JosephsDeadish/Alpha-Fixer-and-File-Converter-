@@ -506,7 +506,18 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     with patch("src.ui.video_tool._get_ffprobe_exe", return_value="/tmp/ffprobe"):
                         with patch("src.core.file_converter.dds_compression_available", return_value=True):
                             with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
-                                self.assertEqual(main._optional_feature_readiness_notice(), "")
+                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                    "available": True,
+                                    "ready": True,
+                                    "detail": "ok",
+                                    "variants": {
+                                        "dxt1": {"ok": True, "detail": "size=(16, 16)"},
+                                        "dxt3": {"ok": True, "detail": "size=(16, 16)"},
+                                        "dxt5": {"ok": True, "detail": "size=(16, 16)"},
+                                    },
+                                    "failures": [],
+                                }):
+                                    self.assertEqual(main._optional_feature_readiness_notice(), "")
 
     def test_optional_feature_readiness_notice_summarizes_limits(self):
         _require_qt_gui(self)
@@ -534,7 +545,14 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                 with patch("src.ui.video_tool._get_ffmpeg_exe", return_value=None):
                     with patch("src.core.file_converter.dds_compression_available", return_value=True):
                         with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
-                            notice = main._optional_feature_readiness_notice()
+                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                "available": True,
+                                "ready": True,
+                                "detail": "ok",
+                                "variants": {},
+                                "failures": [],
+                            }):
+                                notice = main._optional_feature_readiness_notice()
         self.assertIn("video import/MP4 export unavailable: missing imageio, ffmpeg", notice)
 
     def test_runtime_capability_summary_reports_runtime_bits(self):
@@ -564,7 +582,14 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                                 {"path": "/tmp/ffmpeg", "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
                                                 {"path": "", "exists": False, "runtime_ready": False, "detail": "missing"},
                                             ]):
-                                                summary = main._runtime_capability_summary()
+                                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                    "available": False,
+                                                    "ready": False,
+                                                    "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                    "variants": {},
+                                                    "failures": [],
+                                                }):
+                                                    summary = main._runtime_capability_summary()
         self.assertTrue(summary["has_imageio"])
         self.assertTrue(summary["has_imageio_ffmpeg"])
         self.assertEqual(summary["ffmpeg_path"], "/tmp/ffmpeg")
@@ -680,7 +705,14 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                                             {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
                                                             {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
                                                         ]):
-                                                            summary = main._runtime_capability_summary()
+                                                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                "available": False,
+                                                                "ready": False,
+                                                                "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                                "variants": {},
+                                                                "failures": [],
+                                                            }):
+                                                                summary = main._runtime_capability_summary()
         self.assertTrue(summary["imagemagick_bundled"])
         self.assertTrue(summary["imagemagick_configured"])
         self.assertIn("bundled ImageMagick/wand runtime incomplete", summary["packaged_asset_warnings"])
@@ -713,12 +745,78 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                                 {"path": "/tmp/ffmpeg", "exists": True, "runtime_ready": False, "detail": "permission denied"},
                                                 {"path": "/tmp/ffprobe", "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
                                             ]):
-                                                summary = main._runtime_capability_summary()
+                                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                    "available": True,
+                                                    "ready": True,
+                                                    "detail": "ok",
+                                                    "variants": {},
+                                                    "failures": [],
+                                                }):
+                                                    summary = main._runtime_capability_summary()
         self.assertFalse(summary["video_runtime_ready"])
         self.assertFalse(summary["odd_container_probe_ready"])
         self.assertIn("ffmpeg runtime", summary["missing_video_bits"])
         self.assertIn("ffmpeg self-check failed", summary["feature_readiness_notice"])
         self.assertEqual(summary["ffmpeg_runtime_detail"], "permission denied")
+
+    def test_runtime_capability_summary_flags_failed_dds_variant_selfcheck(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(bundle_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(bundle_dir, "ffmpeg")
+            ffprobe_path = os.path.join(bundle_dir, "ffprobe")
+            svg_path = os.path.join(bundle_dir, "panda_dark.svg")
+            magick_home = os.path.join(bundle_dir, "ImageMagick")
+            os.makedirs(magick_home, exist_ok=True)
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=True):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": True,
+                                                "magick_home_path": magick_home,
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                        ]):
+                                                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                "available": True,
+                                                                "ready": False,
+                                                                "detail": "failed: BC2/DXT3",
+                                                                "variants": {
+                                                                    "dxt1": {"ok": True, "detail": "size=(16, 16)"},
+                                                                    "dxt3": {"ok": False, "detail": "wand save failed"},
+                                                                    "dxt5": {"ok": True, "detail": "size=(16, 16)"},
+                                                                },
+                                                                "failures": ["dxt3"],
+                                                            }):
+                                                                summary = main._runtime_capability_summary()
+        self.assertTrue(summary["dds_compression_variant_selfcheck_available"])
+        self.assertFalse(summary["dds_compression_variant_selfcheck_ready"])
+        self.assertEqual(summary["dds_compression_variant_failures"], ["dxt3"])
+        self.assertIn("DDS compressed output self-check failed: BC2/DXT3", summary["feature_readiness_notice"])
+        self.assertIn("packaged DDS compressed output self-check failed: BC2/DXT3", summary["packaged_asset_warnings"])
 
     def test_runtime_capability_dump_emits_prefixed_json(self):
         import main
@@ -732,6 +830,62 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_CAPABILITIES="))
         parsed = json.loads(line.split("=", 1)[1])
         self.assertEqual(parsed, payload)
+
+    def test_dds_compression_variant_selfcheck_reports_skipped_when_unavailable(self):
+        import main
+        fake_fc = types.SimpleNamespace(
+            dds_compression_available=MagicMock(return_value=False),
+            convert_file=MagicMock(),
+        )
+        with patch.dict(
+            sys.modules,
+            {
+                "src.core.file_converter": fake_fc,
+                "src.core.alpha_processor": types.SimpleNamespace(_load_dds=MagicMock()),
+                "PIL": types.SimpleNamespace(Image=MagicMock()),
+                "PIL.Image": MagicMock(),
+            },
+            clear=False,
+        ):
+            result = main._dds_compression_variant_selfcheck()
+        self.assertFalse(result["available"])
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["failures"], [])
+        self.assertIn("skipped:", result["detail"])
+
+    def test_dds_compression_variant_selfcheck_records_all_variant_results(self):
+        import main
+        fake_dds = MagicMock()
+        fake_dds.size = (16, 16)
+        fake_fc = types.SimpleNamespace(
+            dds_compression_available=MagicMock(return_value=True),
+        )
+
+        def _fake_convert(_src, dest, _target_format, **_kwargs):
+            with open(dest, "wb") as handle:
+                handle.write(b"dds")
+
+        fake_fc.convert_file = MagicMock(side_effect=_fake_convert)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_image_instance = MagicMock()
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        with patch.dict(
+            sys.modules,
+            {
+                "src.core.file_converter": fake_fc,
+                "src.core.alpha_processor": fake_alpha,
+                "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                "PIL.Image": fake_pil_image,
+            },
+            clear=False,
+        ):
+            result = main._dds_compression_variant_selfcheck()
+        self.assertTrue(result["available"])
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(set(result["variants"]), {"dxt1", "dxt3", "dxt5"})
+        self.assertTrue(all(result["variants"][name]["ok"] for name in ("dxt1", "dxt3", "dxt5")))
 
     def test_runtime_selftest_dump_emits_prefixed_json(self):
         import main
@@ -752,23 +906,30 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
         with patch.object(main, "_runtime_selftest_iterations", return_value=2):
             with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=123.45):
-                with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
-                    tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
-                    tmpdir_cls.return_value.__exit__.return_value = False
-                    with patch.dict(
-                        sys.modules,
-                        {
-                            "PIL": types.SimpleNamespace(Image=fake_pil_image),
-                            "PIL.Image": fake_pil_image,
-                            "src.core.alpha_processor": fake_alpha,
-                            "src.core.file_converter": fake_fc,
-                            "src.ui": fake_ui_pkg,
-                            "src.ui.video_tool": fake_vt,
-                        },
-                        clear=False,
-                    ):
-                        with patch("sys.stdout", buffer):
-                            rc = main._emit_runtime_selftest_dump()
+                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                    "available": False,
+                    "ready": False,
+                    "detail": "skipped: ImageMagick/wand runtime unavailable",
+                    "variants": {},
+                    "failures": [],
+                }):
+                    with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                        tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                        tmpdir_cls.return_value.__exit__.return_value = False
+                        with patch.dict(
+                            sys.modules,
+                            {
+                                "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                "PIL.Image": fake_pil_image,
+                                "src.core.alpha_processor": fake_alpha,
+                                "src.core.file_converter": fake_fc,
+                                "src.ui": fake_ui_pkg,
+                                "src.ui.video_tool": fake_vt,
+                            },
+                            clear=False,
+                        ):
+                            with patch("sys.stdout", buffer):
+                                rc = main._emit_runtime_selftest_dump()
         self.assertEqual(rc, 1)
         line = buffer.getvalue().strip()
         self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_SELFTEST="))
@@ -776,6 +937,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(parsed["iterations"], 2)
         self.assertIn("peak_rss_mb", parsed)
         self.assertIn("checks", parsed)
+        self.assertIn("png_to_dds_dxt1", parsed["checks"])
+        self.assertIn("png_to_dds_dxt3", parsed["checks"])
+        self.assertIn("png_to_dds_dxt5", parsed["checks"])
         self.assertFalse(parsed["passed"])
 
     def test_verify_packaged_app_parses_selftest_payload(self):

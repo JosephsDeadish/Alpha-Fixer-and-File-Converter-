@@ -198,6 +198,11 @@ _OPTIONAL_QT_WARNING_PATTERNS = (
     ("PulseAudioService: pa_context_connect() failed", "PulseAudio server"),
 )
 _qt_optional_warning_hits: dict[str, int] = {}
+_DDS_COMPRESSED_VARIANT_LABELS = {
+    "dxt1": "BC1/DXT1",
+    "dxt3": "BC2/DXT3",
+    "dxt5": "BC3/DXT5",
+}
 
 
 def _detect_distro() -> str:
@@ -469,6 +474,64 @@ def _executable_runtime_details(path_text: str, *, args: tuple[str, ...] = ("-ve
     return details
 
 
+def _dds_compression_variant_selfcheck() -> dict[str, object]:
+    details: dict[str, object] = {
+        "available": False,
+        "ready": False,
+        "detail": "",
+        "variants": {},
+        "failures": [],
+    }
+    try:
+        from PIL import Image
+        from src.core.alpha_processor import _load_dds
+        from src.core.file_converter import convert_file, dds_compression_available
+    except Exception as exc:
+        details["detail"] = str(exc).strip() or exc.__class__.__name__
+        return details
+    if not dds_compression_available():
+        details["detail"] = "skipped: ImageMagick/wand runtime unavailable"
+        return details
+    details["available"] = True
+    failures: list[str] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="alpha_fixer_dds_runtime_") as tmpdir:
+            sample_png = os.path.join(tmpdir, "sample.png")
+            sample_img = Image.new("RGBA", (16, 16), (48, 160, 240, 192))
+            try:
+                sample_img.save(sample_png)
+            finally:
+                sample_img.close()
+            for variant in ("dxt1", "dxt3", "dxt5"):
+                out_path = os.path.join(tmpdir, f"sample_{variant}.dds")
+                try:
+                    convert_file(sample_png, out_path, "DDS", dds_variant=variant)
+                    dds_img = _load_dds(out_path)
+                    try:
+                        ok = bool(os.path.isfile(out_path) and dds_img.size == (16, 16))
+                        detail = f"size={dds_img.size}"
+                    finally:
+                        dds_img.close()
+                except Exception as exc:
+                    ok = False
+                    detail = str(exc).strip() or exc.__class__.__name__
+                variant_details = {"ok": ok, "detail": detail}
+                details["variants"][variant] = variant_details
+                if not ok:
+                    failures.append(variant)
+    except Exception as exc:
+        details["detail"] = str(exc).strip() or exc.__class__.__name__
+        return details
+    details["failures"] = failures
+    details["ready"] = not failures
+    details["detail"] = (
+        "ok"
+        if not failures else
+        "failed: " + ", ".join(_DDS_COMPRESSED_VARIANT_LABELS.get(name, name.upper()) for name in failures)
+    )
+    return details
+
+
 def _runtime_capability_summary() -> dict[str, object]:
     frozen = bool(getattr(sys, "frozen", False))
     bundle_dir = ""
@@ -515,6 +578,9 @@ def _runtime_capability_summary() -> dict[str, object]:
     svg_details = _theme_svg_runtime_details()
     imagemagick_details = _imagemagick_runtime_details()
     wand_runtime_ready = bool(imagemagick_details.get("wand_runtime_ready"))
+    dds_variant_selfcheck = _dds_compression_variant_selfcheck()
+    dds_variant_failures = list(dds_variant_selfcheck.get("failures") or [])
+    dds_variant_ready = bool(dds_variant_selfcheck.get("ready"))
     ffmpeg_bundled = bool(frozen and ffmpeg_path_exists and bundle_dir and _path_is_within(ffmpeg_path, bundle_dir))
     ffprobe_bundled = bool(frozen and ffprobe_path_exists and bundle_dir and _path_is_within(ffprobe_path, bundle_dir))
     default_theme_svg_bundled = bool(
@@ -575,6 +641,16 @@ def _runtime_capability_summary() -> dict[str, object]:
             if imagemagick_configured else
             "DDS compressed variants unavailable: ImageMagick/wand runtime missing"
         )
+    elif dds_variant_selfcheck.get("available") and dds_variant_failures:
+        readiness_limits.append(
+            "DDS compressed output self-check failed: "
+            + ", ".join(_DDS_COMPRESSED_VARIANT_LABELS.get(name, name.upper()) for name in dds_variant_failures)
+        )
+    elif not dds_variant_selfcheck.get("available") and str(dds_variant_selfcheck.get("detail") or "").strip():
+        readiness_limits.append(
+            "DDS compressed output self-check unavailable: "
+            + str(dds_variant_selfcheck.get("detail") or "").strip()
+        )
     if not bool(svg_details.get("qt_svg_ready")):
         readiness_limits.append("Qt SVG renderer unavailable")
     if not bool(svg_details.get("default_theme_svg_ready")):
@@ -618,6 +694,11 @@ def _runtime_capability_summary() -> dict[str, object]:
                 if imagemagick_bundled else
                 "packaged ImageMagick/wand runtime unavailable for DDS compressed output"
             )
+        elif dds_variant_selfcheck.get("available") and dds_variant_failures:
+            packaged_asset_warnings.append(
+                "packaged DDS compressed output self-check failed: "
+                + ", ".join(_DDS_COMPRESSED_VARIANT_LABELS.get(name, name.upper()) for name in dds_variant_failures)
+            )
     packaged_bundle_ready = bool(frozen and not packaged_asset_warnings)
     if packaged_asset_warnings:
         readiness_limits.append("packaged asset gaps: " + "; ".join(packaged_asset_warnings))
@@ -648,6 +729,11 @@ def _runtime_capability_summary() -> dict[str, object]:
         "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_runtime_ready and ffprobe_runtime_ready),
         "missing_video_bits": missing_video_bits,
         "dds_compression_available": bool(dds_compression_available()),
+        "dds_compression_variant_selfcheck_available": bool(dds_variant_selfcheck.get("available")),
+        "dds_compression_variant_selfcheck_ready": dds_variant_ready,
+        "dds_compression_variant_selfcheck_detail": str(dds_variant_selfcheck.get("detail") or ""),
+        "dds_compression_variant_failures": dds_variant_failures,
+        "dds_compression_variant_checks": dict(dds_variant_selfcheck.get("variants") or {}),
         "optional_output_limits": unavailable_outputs,
         "default_theme_svg_bundled": default_theme_svg_bundled,
         "imagemagick_bundled": imagemagick_bundled,
@@ -754,14 +840,17 @@ def _emit_runtime_selftest_dump() -> int:
                 dds_img.close()
 
             if dds_compression_available():
-                convert_file(sample_png, sample_dxt1, "DDS", dds_variant="dxt1")
-                dxt_img = _load_dds(sample_dxt1)
-                try:
-                    _record_check("png_to_dds_dxt1", dxt_img.size == (32, 24), f"size={dxt_img.size}")
-                finally:
-                    dxt_img.close()
+                dds_variant_checks = _dds_compression_variant_selfcheck()
+                for variant in ("dxt1", "dxt3", "dxt5"):
+                    result = dict((dds_variant_checks.get("variants") or {}).get(variant) or {})
+                    detail = str(result.get("detail") or dds_variant_checks.get("detail") or "DDS compressed variant self-check unavailable")
+                    if dds_variant_checks.get("available"):
+                        _record_check(f"png_to_dds_{variant}", bool(result.get("ok")), detail)
+                    else:
+                        _record_check(f"png_to_dds_{variant}", detail.startswith("skipped:"), detail)
             else:
-                _record_check("png_to_dds_dxt1", True, "skipped: ImageMagick/wand runtime unavailable")
+                for variant in ("dxt1", "dxt3", "dxt5"):
+                    _record_check(f"png_to_dds_{variant}", True, "skipped: ImageMagick/wand runtime unavailable")
 
             ffmpeg_exe = vt._get_ffmpeg_exe()
             if ffmpeg_exe:
