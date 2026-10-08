@@ -87,6 +87,30 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
     return qi.copy()
 
 
+def _selective_alpha_capability_summary() -> str:
+    return (
+        "Ready now: single-image selective alpha editing, multi-zone painting, shared-zone import, "
+        "undo/redo, saved all-zones slots, and result preview/save tools are available."
+    )
+
+
+def _selective_alpha_capability_has_limits() -> bool:
+    return False
+
+
+def _selective_alpha_capability_details() -> str:
+    return "\n".join(
+        [
+            _selective_alpha_capability_summary(),
+            "",
+            "Selective Alpha tools available here:",
+            "• Paint, flood-fill, move, and transform up to 40 independent alpha zones.",
+            "• Copy zones from the Alpha & RGBA tool, local mask clipboard, or saved all-zones slots.",
+            "• Preview overlays, alpha labels, and the saved result before exporting the edited image.",
+        ]
+    )
+
+
 def _zone_qcolor(
     zone_idx: int,
     alpha: int = 200,
@@ -1681,6 +1705,17 @@ class SelectiveAlphaTool(QWidget):
         lv = QVBoxLayout(left_panel)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
+
+        self._capability_lbl = QLabel(_selective_alpha_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._capability_lbl.setStyleSheet(
+            "color: #b26a00; font-size: 11px;"
+            if _selective_alpha_capability_has_limits()
+            else "color: #2e7d32; font-size: 11px;"
+        )
+        self._capability_lbl.setToolTip(_selective_alpha_capability_details())
+        lv.addWidget(self._capability_lbl)
 
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow

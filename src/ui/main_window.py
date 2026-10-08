@@ -21,8 +21,8 @@ from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab, _alpha_capability_details
 from .converter_tool import ConverterTab, _converter_capability_details, _converter_capability_summary
 from .gif_builder import GifBuilderDialog, _gif_builder_capability_details
-from .history_tab import HistoryTab
-from .selective_alpha_tool import SelectiveAlphaTool
+from .history_tab import HistoryTab, _history_capability_details
+from .selective_alpha_tool import SelectiveAlphaTool, _selective_alpha_capability_details
 from .settings_dialog import SettingsDialog
 from .theme_engine import (
     build_stylesheet, THEME_EFFECTS,
@@ -888,6 +888,12 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         "",
         "Converter:",
         _converter_capability_details(),
+        "",
+        "Selective Alpha:",
+        _selective_alpha_capability_details(),
+        "",
+        "History:",
+        _history_capability_details(),
         "",
         "GIF Builder:",
         _gif_builder_capability_details(),

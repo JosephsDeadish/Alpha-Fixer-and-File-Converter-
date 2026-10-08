@@ -1600,6 +1600,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("ImageMagick/wand runtime: limited", tooltip)
         self.assertIn("Qt SVG renderer:", tooltip)
         self.assertIn("Alpha & RGBA:", tooltip)
+        self.assertIn("Selective Alpha:", tooltip)
+        self.assertIn("History:", tooltip)
 
     def test_main_window_runtime_readiness_helpers_surface_packaged_asset_gap_details(self):
         _require_qt_gui(self)
@@ -1630,16 +1632,22 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         }
         with patch.object(mw, "_gif_builder_capability_details", return_value="GIF DETAIL"):
             with patch.object(mw, "_video_capability_details", return_value="VIDEO DETAIL"):
-                banner = mw._runtime_readiness_banner_text(summary)
-                tooltip = mw._runtime_readiness_banner_tooltip(summary)
+                with patch.object(mw, "_selective_alpha_capability_details", return_value="SELECTIVE DETAIL"):
+                    with patch.object(mw, "_history_capability_details", return_value="HISTORY DETAIL"):
+                        banner = mw._runtime_readiness_banner_text(summary)
+                        tooltip = mw._runtime_readiness_banner_tooltip(summary)
 
         self.assertIn("1 packaged asset gap", banner)
         self.assertIn("Packaged asset gaps:", tooltip)
         self.assertIn("packaged ffprobe binary missing", tooltip)
         self.assertIn("Packaged dependency audit:", tooltip)
+        self.assertIn("SELECTIVE DETAIL", tooltip)
+        self.assertIn("HISTORY DETAIL", tooltip)
         self.assertIn("GIF DETAIL", tooltip)
         self.assertIn("VIDEO DETAIL", tooltip)
         self.assertIn("Converter:", tooltip)
+        self.assertIn("Selective Alpha:", tooltip)
+        self.assertIn("History:", tooltip)
         self.assertIn("GIF Builder:", tooltip)
         self.assertIn("Video Builder:", tooltip)
 
@@ -6289,6 +6297,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         )
         tab = HistoryTab(settings)
         try:
+            self.assertIn("Ready now:", tab._capability_lbl.text())
             tab._sub_tabs.setCurrentIndex(4)
             self.assertIn("What works here right now:", tab._session_status_lbl.text())
             self.assertIn("History: Video Builder", tab.get_status_bar_text())
@@ -6338,6 +6347,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
 
     def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
         self.assertIn("What works here right now:", self._widget._session_status_lbl.text())
+        self.assertIn("Ready now:", self._widget._capability_lbl.text())
         self.assertIn("Selective Alpha ready", self._widget.get_status_bar_text())
         self._widget._src_path = "/tmp/sample.png"
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]

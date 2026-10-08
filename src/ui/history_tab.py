@@ -22,6 +22,31 @@ from PyQt6.QtWidgets import (
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 
+def _history_capability_summary() -> str:
+    return (
+        "Ready now: converter, alpha, selective-alpha, GIF Builder, and Video Builder histories "
+        "can be filtered, previewed, and exported here. GIF and Video Builder views include "
+        "status/notes-aware filtering plus preview thumbnails when source or output media is available."
+    )
+
+
+def _history_capability_has_limits() -> bool:
+    return False
+
+
+def _history_capability_details() -> str:
+    return "\n".join(
+        [
+            _history_capability_summary(),
+            "",
+            "History tools available here:",
+            "• Filter across visible columns, status, notes, file names, and field-specific queries.",
+            "• Export the current sub-tab to CSV, JSON, HTML, or plain text.",
+            "• Preview thumbnails appear when stored source/output media is still available locally.",
+        ]
+    )
+
+
 class _HistoryItem(QTreeWidgetItem):
     """Tree item that sorts the time column using stored raw timestamp data."""
 
@@ -426,6 +451,16 @@ class HistoryTab(QWidget):
         hint = QLabel("⚙  History settings are in  Settings → General → History")
         hint.setStyleSheet("color: #888; font-size: 10px;")
         layout.addWidget(hint)
+
+        self._capability_lbl = QLabel(_history_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setStyleSheet(
+            "color: #b26a00; font-size: 11px;"
+            if _history_capability_has_limits()
+            else "color: #2e7d32; font-size: 11px;"
+        )
+        self._capability_lbl.setToolTip(_history_capability_details())
+        layout.addWidget(self._capability_lbl)
 
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
