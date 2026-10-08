@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path
 
 from src.core.runtime_validation import (
+    enrich_dds_manifest_entries,
     execute_dds_manifest,
     execute_dds_manifest_report,
     execute_disc_video_manifest,
@@ -1264,7 +1265,9 @@ def _emit_runtime_selftest_dump() -> int:
                 if isinstance(manifest_results, dict) and grouped_reports:
                     manifest_results["disc_video_groups"] = grouped_reports
 
-        dds_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DDS_MANIFEST")
+        dds_manifest = enrich_dds_manifest_entries(
+            load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_DDS_MANIFEST")
+        )
         if dds_manifest:
             manifest_results = summary.setdefault("manifest_results", {})
             if isinstance(manifest_results, dict):
@@ -1294,6 +1297,23 @@ def _emit_runtime_selftest_dump() -> int:
                     )
                 if isinstance(manifest_results, dict) and grouped_reports:
                     manifest_results["dds_groups"] = grouped_reports
+                if isinstance(manifest_results, dict):
+                    policy_group_sets: dict[str, dict[str, object]] = {}
+                    for axis in ("surface_kind", "decode_policy", "export_policy", "policy_status"):
+                        axis_reports: dict[str, object] = {}
+                        for suffix, label, grouped_entries in manifest_grouped_entries(dds_manifest, axis):
+                            axis_reports[suffix] = {
+                                "label": label,
+                                **execute_dds_manifest_report(
+                                    grouped_entries,
+                                    _load_dds,
+                                    limit=manifest_limit,
+                                ),
+                            }
+                        if axis_reports:
+                            policy_group_sets[axis] = axis_reports
+                    if policy_group_sets:
+                        manifest_results["dds_policy_groups"] = policy_group_sets
 
         format_manifest = load_manifest_entries_from_env("ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST")
         if format_manifest:

@@ -38,7 +38,9 @@ from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_i
 from src.core.runtime_validation import (
     build_private_local_manifests_from_env,
     corpus_roots_from_env,
+    enrich_dds_manifest_entries,
     execute_dds_manifest,
+    execute_dds_manifest_report,
     execute_disc_video_manifest,
     execute_format_matrix_manifest,
     iter_corpus_files,
@@ -391,6 +393,9 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("dds", "volume-texture.dds")) for entry in entries))
         self.assertTrue(any(str(entry.get("expect") or "").lower() == "load_or_fail_clearly" for entry in entries))
         self.assertTrue(any(str(entry.get("expect") or "").lower() == "fail" for entry in entries))
+        self.assertTrue(any(str(entry.get("decode_policy") or "") == "base-level-only" for entry in entries))
+        self.assertTrue(any(str(entry.get("export_policy") or "") == "complex-surface-not-supported" for entry in entries))
+        self.assertTrue(any(str(entry.get("policy_status") or "") == "pending-design" for entry in entries))
 
     def test_build_private_local_manifests_from_env_discovers_real_sample_layouts(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -427,6 +432,70 @@ class TestCorpusHelperInputs(unittest.TestCase):
             self.assertTrue(any(str(entry.get("group")) == "audio-only" for entry in odd_entries))
             self.assertTrue(any(str(entry.get("group")) == "cubemap" for entry in dds_entries))
             self.assertTrue(any(str(entry.get("group")) == "BC6H" for entry in dds_entries))
+            cubemap_entry = next(entry for entry in dds_entries if str(entry.get("group")) == "cubemap")
+            self.assertEqual(cubemap_entry.get("surface_kind"), "cubemap")
+            self.assertEqual(cubemap_entry.get("decode_policy"), "fail-clearly")
+            self.assertEqual(cubemap_entry.get("policy_status"), "pending-design")
+            bc6h_entry = next(entry for entry in dds_entries if str(entry.get("group")) == "BC6H")
+            self.assertEqual(bc6h_entry.get("surface_kind"), "2d")
+            self.assertEqual(bc6h_entry.get("decode_policy"), "runtime-dependent")
+            self.assertEqual(bc6h_entry.get("export_policy"), "2d-only")
+
+    def test_enrich_dds_manifest_entries_infers_complex_surface_policy_fields(self):
+        entries = enrich_dds_manifest_entries(
+            [
+                {"path": "/tmp/sky_cubemap.dds"},
+                {"path": "/tmp/mipmap_chain.dds"},
+                {"path": "/tmp/scene_bc6h.dds"},
+                {"path": "/tmp/dx10_texture.dds"},
+            ]
+        )
+        self.assertEqual(entries[0]["surface_kind"], "cubemap")
+        self.assertEqual(entries[0]["decode_policy"], "fail-clearly")
+        self.assertEqual(entries[0]["export_policy"], "complex-surface-not-supported")
+        self.assertEqual(entries[1]["surface_kind"], "mipmap")
+        self.assertEqual(entries[1]["decode_policy"], "base-level-only")
+        self.assertEqual(entries[1]["policy_status"], "implemented-with-limits")
+        self.assertEqual(entries[2]["surface_kind"], "2d")
+        self.assertEqual(entries[2]["decode_policy"], "runtime-dependent")
+        self.assertEqual(entries[2]["policy_status"], "runtime-dependent")
+        self.assertEqual(entries[3]["decode_policy"], "load-or-fail-clearly")
+
+    def test_execute_dds_manifest_report_tracks_policy_scaffolding_counts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cube_path = os.path.join(tmpdir, "sky_cubemap.dds")
+            mip_path = os.path.join(tmpdir, "terrain_mipmap.dds")
+            Path(cube_path).write_bytes(b"dds")
+            Path(mip_path).write_bytes(b"dds")
+
+            class _FakeImage:
+                size = (64, 64)
+
+                def close(self):
+                    pass
+
+            def _fake_load(path):
+                if path == cube_path:
+                    raise ValueError("Unsupported DDS cubemap surface.")
+                return _FakeImage()
+
+            report = execute_dds_manifest_report(
+                [
+                    {"path": cube_path, "expect": "fail", "detail_contains": ["cubemap"]},
+                    {"path": mip_path, "expect": "load", "expect_size": [64, 64]},
+                ],
+                _fake_load,
+            )
+        self.assertTrue(report["ok"], msg=report["detail"])
+        self.assertEqual(report["surface_counts"]["cubemap"], 1)
+        self.assertEqual(report["surface_counts"]["mipmap"], 1)
+        self.assertEqual(report["decode_policy_counts"]["fail-clearly"], 1)
+        self.assertEqual(report["decode_policy_counts"]["base-level-only"], 1)
+        self.assertEqual(report["export_policy_counts"]["complex-surface-not-supported"], 1)
+        self.assertEqual(report["policy_status_counts"]["pending-design"], 1)
+        self.assertEqual(report["policy_status_counts"]["implemented-with-limits"], 1)
+        self.assertIn("surfaces=", report["detail"])
+        self.assertIn("decode_policies=", report["detail"])
 
     def test_private_odd_container_video_manifest_template_loads(self):
         manifest_path = os.path.join(

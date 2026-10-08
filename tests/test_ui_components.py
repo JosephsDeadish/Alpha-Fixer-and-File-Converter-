@@ -1028,6 +1028,10 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("manifest_results", parsed)
         self.assertIn("disc_video_groups", parsed["manifest_results"])
         self.assertIn("dds_groups", parsed["manifest_results"])
+        self.assertIn("dds_policy_groups", parsed["manifest_results"])
+        self.assertIn("surface_kind", parsed["manifest_results"]["dds_policy_groups"])
+        self.assertIn("decode_policy", parsed["manifest_results"]["dds_policy_groups"])
+        self.assertIn("cubemap", parsed["manifest_results"]["dds_policy_groups"]["surface_kind"])
         self.assertIn("format_matrix_groups", parsed["manifest_results"])
 
     def test_runtime_selftest_peak_rss_mb_uses_windows_fallback_when_available(self):

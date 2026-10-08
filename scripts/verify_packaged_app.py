@@ -225,6 +225,24 @@ def _print_manifest_result_summary(manifest_results: dict[str, object]) -> None:
                 if detail:
                     line += f" ({detail})"
                 print(line)
+    dds_policy_groups = manifest_results.get("dds_policy_groups")
+    if isinstance(dds_policy_groups, dict) and dds_policy_groups:
+        print("  - dds_policy_groups:")
+        for axis in ("surface_kind", "decode_policy", "export_policy", "policy_status"):
+            grouped = dds_policy_groups.get(axis)
+            if not isinstance(grouped, dict) or not grouped:
+                continue
+            print(f"    * {axis}:")
+            for suffix in sorted(grouped):
+                group_report = grouped.get(suffix)
+                if not isinstance(group_report, dict):
+                    continue
+                label = str(group_report.get("label") or suffix)
+                detail = str(group_report.get("detail") or "").strip()
+                line = f"      - {label}: {'ok' if group_report.get('ok') else 'failed'}"
+                if detail:
+                    line += f" ({detail})"
+                print(line)
     interesting: list[str] = []
     for base_key in ("disc_video", "dds", "format_matrix"):
         report = manifest_results.get(base_key)
@@ -238,7 +256,14 @@ def _print_manifest_result_summary(manifest_results: dict[str, object]) -> None:
                 continue
             label = str(sample.get("label") or sample.get("path") or "sample").strip()
             detail = str(sample.get("detail") or "").strip()
-            interesting.append(f"  - {base_key} [{status}] {label}" + (f": {detail}" if detail else ""))
+            dds_policy_bits = []
+            if base_key == "dds":
+                for key in ("surface_kind", "decode_policy", "export_policy", "policy_status"):
+                    value = str(sample.get(key) or "").strip()
+                    if value:
+                        dds_policy_bits.append(f"{key}={value}")
+            policy_suffix = f" ({', '.join(dds_policy_bits)})" if dds_policy_bits else ""
+            interesting.append(f"  - {base_key} [{status}] {label}{policy_suffix}" + (f": {detail}" if detail else ""))
     if interesting:
         print("Manifest sample outcomes:")
         for line in interesting[:12]:

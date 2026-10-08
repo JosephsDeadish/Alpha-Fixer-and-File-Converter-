@@ -6,6 +6,10 @@
       "sample_id": "bc6h-hdr",
       "path": "dds/bc6h-hdr.dds",
       "required": true,
+      "surface_kind": "2d",
+      "decode_policy": "runtime-dependent",
+      "export_policy": "2d-only",
+      "policy_status": "runtime-dependent",
       "expect": "load_or_fail_clearly",
       "detail_contains": [
         "BC6H",
@@ -18,6 +22,10 @@
       "sample_id": "mipmap-chain",
       "path": "dds/mipmap-chain.dds",
       "required": true,
+      "surface_kind": "mipmap",
+      "decode_policy": "base-level-only",
+      "export_policy": "2d-only-no-mipmap-chain",
+      "policy_status": "implemented-with-limits",
       "expect": "load_or_fail_clearly",
       "detail_contains": [
         "mipmap"
@@ -29,6 +37,10 @@
       "sample_id": "cubemap-face-set",
       "path": "dds/cubemap.dds",
       "required": true,
+      "surface_kind": "cubemap",
+      "decode_policy": "fail-clearly",
+      "export_policy": "complex-surface-not-supported",
+      "policy_status": "pending-design",
       "expect": "fail",
       "detail_contains": [
         "cubemap"
@@ -40,6 +52,10 @@
       "sample_id": "texture-array",
       "path": "dds/texture-array.dds",
       "required": true,
+      "surface_kind": "array",
+      "decode_policy": "fail-clearly",
+      "export_policy": "complex-surface-not-supported",
+      "policy_status": "pending-design",
       "expect": "fail",
       "detail_contains": [
         "array"
@@ -51,6 +67,10 @@
       "sample_id": "volume-texture",
       "path": "dds/volume-texture.dds",
       "required": true,
+      "surface_kind": "volume",
+      "decode_policy": "fail-clearly",
+      "export_policy": "complex-surface-not-supported",
+      "policy_status": "pending-design",
       "expect": "fail",
       "detail_contains": [
         "volume texture"

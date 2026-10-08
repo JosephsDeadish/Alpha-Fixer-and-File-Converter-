@@ -502,26 +502,99 @@ def _dds_entry_for_path(path: str) -> dict[str, object] | None:
     }
     if any(token in lower for token in ("cubemap", "cube")):
         entry.update({"group": "cubemap", "expect": "fail", "detail_contains": ["cubemap"]})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     if "array" in lower:
         entry.update({"group": "array", "expect": "fail", "detail_contains": ["array"]})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     if any(token in lower for token in ("volume", "/3d/", "_3d", "-3d")):
         entry.update({"group": "volume", "expect": "fail", "detail_contains": ["volume texture"]})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     if "bc6h" in lower:
         entry.update({"group": "BC6H", "expect": "load_or_fail_clearly", "detail_contains": ["BC6H", "ImageMagick/wand"]})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     if "bc7" in lower:
         entry.update({"group": "BC7", "expect": "load_or_fail_clearly", "detail_contains": ["BC7", "ImageMagick/wand"]})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     if "mip" in lower:
         entry.update({"group": "mipmap", "expect": "load_or_fail_clearly"})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     if any(token in lower for token in ("dx10", "dxgi")):
         entry.update({"group": "DX10", "expect": "load_or_fail_clearly"})
-        return entry
+        return enrich_dds_manifest_entry(entry)
     return None
+
+
+def _dds_entry_text(entry: dict[str, object]) -> str:
+    parts = [
+        str(_entry_source_path(entry) or "").strip(),
+        str(entry.get("sample_id") or "").strip(),
+        str(entry.get("group") or "").strip(),
+        str(entry.get("family") or "").strip(),
+        str(entry.get("platform") or "").strip(),
+        str(entry.get("notes") or "").strip(),
+    ]
+    return " ".join(part for part in parts if part).lower().replace("\\", "/")
+
+
+def _dds_surface_kind(entry: dict[str, object]) -> str:
+    lower = _dds_entry_text(entry)
+    if any(token in lower for token in ("cubemap", "cube")):
+        return "cubemap"
+    if "array" in lower:
+        return "array"
+    if any(token in lower for token in ("volume", "/3d/", "_3d", "-3d")):
+        return "volume"
+    if "mip" in lower:
+        return "mipmap"
+    return "2d"
+
+
+def _dds_decode_policy(entry: dict[str, object]) -> str:
+    surface_kind = _dds_surface_kind(entry)
+    if surface_kind == "mipmap":
+        return "base-level-only"
+    if surface_kind in {"cubemap", "array", "volume"}:
+        return "fail-clearly"
+    lower = _dds_entry_text(entry)
+    if any(token in lower for token in ("bc6h", "bc7")):
+        return "runtime-dependent"
+    if any(token in lower for token in ("dx10", "dxgi")):
+        return "load-or-fail-clearly"
+    return "direct-2d"
+
+
+def _dds_export_policy(entry: dict[str, object]) -> str:
+    surface_kind = _dds_surface_kind(entry)
+    if surface_kind in {"cubemap", "array", "volume"}:
+        return "complex-surface-not-supported"
+    if surface_kind == "mipmap":
+        return "2d-only-no-mipmap-chain"
+    return "2d-only"
+
+
+def _dds_policy_status(entry: dict[str, object]) -> str:
+    surface_kind = _dds_surface_kind(entry)
+    if surface_kind in {"cubemap", "array", "volume"}:
+        return "pending-design"
+    if surface_kind == "mipmap":
+        return "implemented-with-limits"
+    lower = _dds_entry_text(entry)
+    if any(token in lower for token in ("bc6h", "bc7")):
+        return "runtime-dependent"
+    return "implemented"
+
+
+def enrich_dds_manifest_entry(entry: dict[str, object]) -> dict[str, object]:
+    enriched = dict(entry)
+    enriched.setdefault("surface_kind", _dds_surface_kind(enriched))
+    enriched.setdefault("decode_policy", _dds_decode_policy(enriched))
+    enriched.setdefault("export_policy", _dds_export_policy(enriched))
+    enriched.setdefault("policy_status", _dds_policy_status(enriched))
+    return enriched
+
+
+def enrich_dds_manifest_entries(entries: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [enrich_dds_manifest_entry(entry) if isinstance(entry, dict) else entry for entry in entries]
 
 
 def discover_private_disc_video_entries(roots: list[str], *, limit: int = 32) -> list[dict[str, object]]:
@@ -776,6 +849,10 @@ def _manifest_sample_stub(
     platform = str(entry.get("platform") or entry.get("system") or "").strip()
     if platform:
         result["platform"] = platform
+    for key in ("surface_kind", "decode_policy", "export_policy", "policy_status"):
+        value = str(entry.get(key) or "").strip()
+        if value:
+            result[key] = value
     return result
 
 
@@ -801,6 +878,10 @@ def _disc_manifest_report_detail(report: dict[str, object]) -> str:
 
 def _dds_manifest_report_detail(report: dict[str, object]) -> str:
     group_counts = dict(report.get("group_counts") or {})
+    surface_counts = dict(report.get("surface_counts") or {})
+    decode_policy_counts = dict(report.get("decode_policy_counts") or {})
+    export_policy_counts = dict(report.get("export_policy_counts") or {})
+    policy_status_counts = dict(report.get("policy_status_counts") or {})
     detail = (
         f"entries={int(report.get('exercised') or 0)} "
         f"decoded={int(report.get('decoded') or 0)} "
@@ -809,6 +890,14 @@ def _dds_manifest_report_detail(report: dict[str, object]) -> str:
     )
     if group_counts:
         detail += " groups=" + ",".join(f"{name}:{count}" for name, count in sorted(group_counts.items()))
+    if surface_counts:
+        detail += " surfaces=" + ",".join(f"{name}:{count}" for name, count in sorted(surface_counts.items()))
+    if decode_policy_counts:
+        detail += " decode_policies=" + ",".join(f"{name}:{count}" for name, count in sorted(decode_policy_counts.items()))
+    if export_policy_counts:
+        detail += " export_policies=" + ",".join(f"{name}:{count}" for name, count in sorted(export_policy_counts.items()))
+    if policy_status_counts:
+        detail += " policy_status=" + ",".join(f"{name}:{count}" for name, count in sorted(policy_status_counts.items()))
     return detail
 
 
@@ -1055,6 +1144,7 @@ def execute_dds_manifest_report(
     *,
     limit: int = 0,
 ) -> dict[str, object]:
+    entries = enrich_dds_manifest_entries(entries)
     report: dict[str, object] = {
         "kind": "dds",
         "ok": True,
@@ -1064,6 +1154,10 @@ def execute_dds_manifest_report(
         "expected_failures": 0,
         "missing": 0,
         "group_counts": {},
+        "surface_counts": {},
+        "decode_policy_counts": {},
+        "export_policy_counts": {},
+        "policy_status_counts": {},
         "sample_results": [],
     }
 
@@ -1105,6 +1199,18 @@ def execute_dds_manifest_report(
             group_counts = dict(report.get("group_counts") or {})
             group_counts[group] = group_counts.get(group, 0) + 1
             report["group_counts"] = group_counts
+        for report_key, entry_key in (
+            ("surface_counts", "surface_kind"),
+            ("decode_policy_counts", "decode_policy"),
+            ("export_policy_counts", "export_policy"),
+            ("policy_status_counts", "policy_status"),
+        ):
+            value = str(entry.get(entry_key) or "").strip()
+            if not value:
+                continue
+            counts = dict(report.get(report_key) or {})
+            counts[value] = counts.get(value, 0) + 1
+            report[report_key] = counts
         try:
             img = load_dds_raw(sample_path)
         except Exception as exc:
