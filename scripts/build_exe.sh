@@ -74,12 +74,14 @@ if [[ "$1" == "--onefile" ]]; then
     artifact="dist/AlphaFixerConverter"
     artifact_kind="file"
     launch_target="$artifact"
+    bundle_kind="onefile"
 else
     echo "Building one-folder application…"
     pyinstaller alpha_fixer.spec
     artifact="dist/AlphaFixerConverter"
     artifact_kind="dir"
     launch_target="$artifact/AlphaFixerConverter"
+    bundle_kind="folder"
 fi
 
 echo "Verifying build artifacts…"
@@ -108,7 +110,8 @@ if [[ -x "$launch_target" ]]; then
         --require-bundled-default-theme-svg
         --require-packaged-bundle-ready
         --require-no-missing-libs
-        --json-out "dist/validation-reports/packaged-runtime-audit.json"
+        --bundle-kind "$bundle_kind"
+        --json-out "dist/validation-reports/packaged-runtime-audit-$bundle_kind.json"
     )
     if [[ "${ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
         private_sample_limit="${ALPHA_FIXER_PRIVATE_SAMPLE_LIMIT:-${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-12}}"

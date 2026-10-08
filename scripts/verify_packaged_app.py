@@ -325,9 +325,17 @@ def _smoke_repeat_summary(runs: list[dict[str, object]]) -> dict[str, object]:
     return summary
 
 
+def _validation_bundle_kind(raw_value: object) -> str:
+    value = str(raw_value or "").strip().lower()
+    if value in {"folder", "onefile"}:
+        return value
+    return "unspecified"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
+    parser.add_argument("--bundle-kind", choices=("folder", "onefile"), help="Optional packaged artifact kind label to include in reports.")
     parser.add_argument("--smoke-seconds", type=float, default=1.5, help="Seconds to keep each smoke-launch alive.")
     parser.add_argument("--repeat", type=int, default=1, help="How many smoke-launch cycles to run before auditing capabilities.")
     parser.add_argument("--smoke-launch-delay-seconds", type=float, default=0.0, help="Optional pause between repeated smoke launches.")
@@ -380,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     launch_target = Path(args.launch_target)
     if not launch_target.exists():
         raise SystemExit(f"Launch target not found: {launch_target}")
+    bundle_kind = _validation_bundle_kind(getattr(args, "bundle_kind", ""))
     if args.use_public_sample_manifests:
         if not args.disc_video_manifest:
             args.disc_video_manifest = [str(_PUBLIC_DISC_VIDEO_MANIFEST)]
@@ -681,6 +690,10 @@ def main(argv: list[str] | None = None) -> int:
         json_out = Path(args.json_out)
         json_out.parent.mkdir(parents=True, exist_ok=True)
         final_payload = dict(payload)
+        final_payload["validation_bundle_kind"] = bundle_kind
+        final_payload["validation_host_platform"] = sys.platform
+        final_payload["validation_launch_target"] = str(launch_target)
+        final_payload["validation_launch_target_name"] = launch_target.name
         final_payload["manifest_inputs"] = manifest_inputs
         final_payload["smoke_repeat_summary"] = smoke_summary
         final_payload["smoke_runs"] = smoke_runs

@@ -1181,6 +1181,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_values"], [120.0, 132.5])
         self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_growth"], 12.5)
         self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_spread"], 12.5)
+        self.assertEqual(payload["validation_bundle_kind"], "unspecified")
+        self.assertTrue(payload["validation_launch_target"].endswith("AlphaFixerConverter"))
         self.assertIn("manifest_inputs", payload)
         self.assertFalse(payload["manifest_inputs"]["disc_video"]["provided"])
         self.assertIn("runtime_selftest", payload)
@@ -1258,6 +1260,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                 rc = verify.main(
                     [
                         target,
+                        "--bundle-kind",
+                        "onefile",
                         "--repeat",
                         "2",
                         "--max-smoke-elapsed-growth-seconds",
@@ -1274,6 +1278,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(call_index["value"], 3)
         self.assertEqual(payload["smoke_repeat_summary"]["runs"], 2)
         self.assertEqual(payload["smoke_repeat_summary"]["successful_runs"], 2)
+        self.assertEqual(payload["validation_bundle_kind"], "onefile")
         self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_values"], [1.25, 1.5])
         self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_growth"], 0.25)
         self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_spread"], 0.25)

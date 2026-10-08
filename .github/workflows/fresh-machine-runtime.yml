@@ -12,12 +12,13 @@ permissions:
 
 jobs:
   packaged-runtime:
-    name: Packaged runtime – ${{ matrix.os }}
+    name: Packaged runtime – ${{ matrix.os }} – ${{ matrix.bundle_kind }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        bundle_kind: [folder, onefile]
 
     steps:
       - name: Checkout repository
@@ -34,20 +35,35 @@ jobs:
         run: bash scripts/install_linux_deps.sh
 
       - name: Build packaged app (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.bundle_kind == 'folder'
         run: bash scripts/build_exe.sh
 
       - name: Build packaged app (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && matrix.bundle_kind == 'folder'
         shell: cmd
         run: scripts\build_exe.bat
+
+      - name: Build packaged app one-file (Linux/macOS)
+        if: runner.os != 'Windows' && matrix.bundle_kind == 'onefile'
+        run: bash scripts/build_exe.sh --onefile
+
+      - name: Build packaged app one-file (Windows)
+        if: runner.os == 'Windows' && matrix.bundle_kind == 'onefile'
+        shell: cmd
+        run: scripts\build_exe.bat --onefile
 
       - name: Verify packaged app (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
+          if [[ "${{ matrix.bundle_kind }}" == "onefile" ]]; then
+            launch_target="dist/AlphaFixerConverter"
+          else
+            launch_target="dist/AlphaFixerConverter/AlphaFixerConverter"
+          fi
           python scripts/verify_packaged_app.py \
-            dist/AlphaFixerConverter/AlphaFixerConverter \
+            "$launch_target" \
+            --bundle-kind ${{ matrix.bundle_kind }} \
             --smoke-seconds 2 \
             --repeat 3 \
             --smoke-launch-delay-seconds 0.5 \
@@ -79,15 +95,21 @@ jobs:
             --require-bundled-default-theme-svg \
             --require-packaged-bundle-ready \
             --require-no-missing-libs \
-            --json-out artifacts/runtime-validation-${{ runner.os }}.json
+            --json-out artifacts/runtime-validation-${{ runner.os }}-${{ matrix.bundle_kind }}.json
 
       - name: Verify packaged app (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
+          if ("${{ matrix.bundle_kind }}" -eq "onefile") {
+            $launchTarget = "dist\AlphaFixerConverter.exe"
+          } else {
+            $launchTarget = "dist\AlphaFixerConverter\AlphaFixerConverter.exe"
+          }
           python scripts/verify_packaged_app.py `
-            dist\AlphaFixerConverter\AlphaFixerConverter.exe `
+            $launchTarget `
+            --bundle-kind ${{ matrix.bundle_kind }} `
             --smoke-seconds 2 `
             --repeat 3 `
             --smoke-launch-delay-seconds 0.5 `
@@ -119,12 +141,12 @@ jobs:
             --require-bundled-default-theme-svg `
             --require-packaged-bundle-ready `
             --require-no-missing-libs `
-            --json-out artifacts\runtime-validation-windows.json
+            --json-out artifacts\runtime-validation-windows-${{ matrix.bundle_kind }}.json
 
       - name: Upload runtime validation report
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-validation-${{ matrix.os }}
+          name: runtime-validation-${{ matrix.os }}-${{ matrix.bundle_kind }}
           path: artifacts/
           retention-days: 30
           if-no-files-found: error
