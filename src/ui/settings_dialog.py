@@ -1853,7 +1853,7 @@ class SettingsDialog(QDialog):
         )
         hist_gl.addWidget(self._history_max_alpha_spin, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
-        hist_gl.addWidget(QLabel("  Selective Alpha:"), 4, 0)
+        hist_gl.addWidget(QLabel("  Alpha Painter:"), 4, 0)
         self._history_max_sel_spin = QSpinBox()
         self._history_max_sel_spin.setRange(0, 5000)
         self._history_max_sel_spin.setSpecialValueText("default")
@@ -1861,7 +1861,7 @@ class SettingsDialog(QDialog):
         self._history_max_sel_spin.setSuffix("  entries")
         self._history_max_sel_spin.setMaximumWidth(130)
         self._history_max_sel_spin.setToolTip(
-            "Max history entries for the Selective Alpha Tool (0 = use default above)."
+            "Max history entries for Alpha Painter (0 = use default above)."
         )
         hist_gl.addWidget(self._history_max_sel_spin, 4, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -1884,10 +1884,10 @@ class SettingsDialog(QDialog):
         )
         hist_gl.addWidget(self._chk_track_alpha, 7, 0)
 
-        self._chk_track_sel_alpha = QCheckBox("Selective Alpha")
+        self._chk_track_sel_alpha = QCheckBox("Alpha Painter")
         self._chk_track_sel_alpha.setChecked(True)
         self._chk_track_sel_alpha.setToolTip(
-            "When checked, Selective Alpha Tool saves are recorded in history."
+            "When checked, Alpha Painter saves are recorded in history."
         )
         hist_gl.addWidget(self._chk_track_sel_alpha, 8, 0)
 

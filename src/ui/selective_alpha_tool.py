@@ -89,8 +89,8 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready now: single-image selective alpha editing, multi-zone painting, shared-zone import, "
-        "undo/redo, saved all-zones slots, and result preview/save tools are available."
+        "Ready now: single-image Alpha Painter editing, multi-zone painting, shared-zone import, "
+        "undo/redo, saved full-layout slots, and result preview/save tools are available."
     )
 
 
@@ -103,9 +103,9 @@ def _selective_alpha_capability_details() -> str:
         [
             _selective_alpha_capability_summary(),
             "",
-            "Selective Alpha tools available here:",
+            "Alpha Painter tools available here:",
             "• Paint, flood-fill, move, and transform up to 40 independent alpha zones.",
-            "• Copy zones from the Alpha & RGBA tool, local mask clipboard, or saved all-zones slots.",
+            "• Copy zones from the Alpha & RGBA tool, the single-zone clipboard, or saved full-layout slots.",
             "• Preview overlays, alpha labels, and the saved result before exporting the edited image.",
         ]
     )
@@ -1616,33 +1616,33 @@ class _ZoneRow(QWidget):
 
 
 class SelectiveAlphaTool(QWidget):
-    """Tab widget for the Selective Alpha editor."""
+    """Tab widget for the Alpha Painter editor."""
     queue_status_changed = pyqtSignal(str)
 
     _MASK_SLOT_COUNT: int = 150  # Maximum number of saved-mask slots
     _MASK_SLOT_INIT:  int = 3    # Number of slots created on first launch
-    _AZ_SLOT_COUNT:   int = 150  # Maximum number of all-zones slots
-    _AZ_SLOT_INIT:    int = 3    # Number of all-zones slots created on first launch
+    _AZ_SLOT_COUNT:   int = 150  # Maximum number of full-layout slots
+    _AZ_SLOT_INIT:    int = 3    # Number of full-layout slots created on first launch
     SHORTCUT_DEFS = (
-        ("sa_undo", "Ctrl+Z", "Undo last stroke", "Selective Alpha"),
-        ("sa_redo", "Ctrl+Y", "Redo last stroke", "Selective Alpha"),
-        ("sa_redo_alt", "Ctrl+Shift+Z", "Redo last stroke", "Selective Alpha"),
-        ("sa_open", "Ctrl+O", "Open an image", "Selective Alpha"),
-        ("sa_save", "Ctrl+S", "Save result", "Selective Alpha"),
-        ("sa_apply", "Ctrl+Return", "Apply selective alpha", "Selective Alpha"),
-        ("sa_tool_brush", "B", "Select brush tool", "Selective Alpha"),
-        ("sa_tool_eraser", "E", "Select eraser tool", "Selective Alpha"),
-        ("sa_tool_line", "L", "Select line tool", "Selective Alpha"),
-        ("sa_tool_rect", "R", "Select rectangle tool", "Selective Alpha"),
-        ("sa_tool_ellipse", "X", "Select ellipse tool", "Selective Alpha"),
-        ("sa_tool_fill", "F", "Select fill tool", "Selective Alpha"),
-        ("sa_tool_polygon", "P", "Select polygon tool", "Selective Alpha"),
-        ("sa_tool_transform", "T", "Select transform tool", "Selective Alpha"),
-        ("sa_brush_smaller", "[", "Decrease brush or eraser size", "Selective Alpha"),
-        ("sa_brush_larger", "]", "Increase brush or eraser size", "Selective Alpha"),
-        ("sa_toggle_highlights", "H", "Toggle zone highlights", "Selective Alpha"),
-        ("sa_next_zone", "N", "Select next zone", "Selective Alpha"),
-        ("sa_prev_zone", "Shift+N", "Select previous zone", "Selective Alpha"),
+        ("sa_undo", "Ctrl+Z", "Undo last stroke", "Alpha Painter"),
+        ("sa_redo", "Ctrl+Y", "Redo last stroke", "Alpha Painter"),
+        ("sa_redo_alt", "Ctrl+Shift+Z", "Redo last stroke", "Alpha Painter"),
+        ("sa_open", "Ctrl+O", "Open an image", "Alpha Painter"),
+        ("sa_save", "Ctrl+S", "Save result", "Alpha Painter"),
+        ("sa_apply", "Ctrl+Return", "Apply painted alpha", "Alpha Painter"),
+        ("sa_tool_brush", "B", "Select brush tool", "Alpha Painter"),
+        ("sa_tool_eraser", "E", "Select eraser tool", "Alpha Painter"),
+        ("sa_tool_line", "L", "Select line tool", "Alpha Painter"),
+        ("sa_tool_rect", "R", "Select rectangle tool", "Alpha Painter"),
+        ("sa_tool_ellipse", "X", "Select ellipse tool", "Alpha Painter"),
+        ("sa_tool_fill", "F", "Select fill tool", "Alpha Painter"),
+        ("sa_tool_polygon", "P", "Select polygon tool", "Alpha Painter"),
+        ("sa_tool_transform", "T", "Select transform tool", "Alpha Painter"),
+        ("sa_brush_smaller", "[", "Decrease brush or eraser size", "Alpha Painter"),
+        ("sa_brush_larger", "]", "Increase brush or eraser size", "Alpha Painter"),
+        ("sa_toggle_highlights", "H", "Toggle zone highlights", "Alpha Painter"),
+        ("sa_next_zone", "N", "Select next zone", "Alpha Painter"),
+        ("sa_prev_zone", "Shift+N", "Select previous zone", "Alpha Painter"),
     )
 
     @staticmethod
@@ -1655,7 +1655,7 @@ class SelectiveAlphaTool(QWidget):
             return "Next step: save the current result or keep refining the mask before saving."
         if has_shared_zones:
             return "Next step: review the shared zones, refine the mask, then apply or save when ready."
-        return "Next step: paint or refine the mask, apply selective alpha, then save when ready."
+        return "Next step: paint or refine your zones, then save when the preview looks right."
 
     def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1991,7 +1991,7 @@ class SelectiveAlphaTool(QWidget):
         self._mask_slot_info: list[str] = ["(empty)"] * _MASK_SLOT_INIT
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
-        slots_box = QGroupBox("Saved Masks")
+        slots_box = QGroupBox("Single-Zone Slots")
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
@@ -1999,7 +1999,7 @@ class SelectiveAlphaTool(QWidget):
         # Short description so users know what this section is for
         _sz_hint = QLabel(
             "Save/paste the painted mask for one zone at a time.\n"
-            "Use slots to hold multiple saved masks."
+            "Save and reuse masks for the active zone."
         )
         _sz_hint.setStyleSheet("color: #888; font-size: 9px;")
         _sz_hint.setWordWrap(True)
@@ -2097,15 +2097,15 @@ class SelectiveAlphaTool(QWidget):
         lv.addWidget(slots_box)
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
-        all_zones_box = QGroupBox("📋 All-Zones Clipboard  (all zones at once per slot)")
+        all_zones_box = QGroupBox("📋 Full Layout Slots")
         azv = QVBoxLayout(all_zones_box)
         azv.setSpacing(4)
         azv.setContentsMargins(4, 4, 4, 4)
 
         # Short description so users know what this section is for
         _az_hint = QLabel(
-            "Copy/paste all zones at once (full multi-zone snapshot).\n"
-            "Slots hold complete zone sets across images."
+            "Copy or restore every painted zone at once.\n"
+            "Each slot stores one full zone layout you can reuse on another image."
         )
         _az_hint.setStyleSheet("color: #888; font-size: 9px;")
         _az_hint.setWordWrap(True)
@@ -2134,7 +2134,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_add = QPushButton("＋ Add Slot")
         self._btn_az_slot_add.setMinimumHeight(26)
         self._btn_az_slot_add.setToolTip(
-            "Add a new empty all-zones slot to the list."
+            "Add a new empty full-layout slot to the list."
         )
         self._btn_az_slot_add.clicked.connect(self._on_az_slot_add)
         az_slot_btn_row.addWidget(self._btn_az_slot_add)
@@ -2142,7 +2142,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_del = QPushButton("✕ Delete Slot")
         self._btn_az_slot_del.setMinimumHeight(26)
         self._btn_az_slot_del.setToolTip(
-            "Delete the currently selected all-zones slot from the list.\n"
+            "Delete the currently selected full-layout slot from the list.\n"
             "Any snapshot stored in it will be lost."
         )
         self._btn_az_slot_del.clicked.connect(self._on_az_slot_del)
@@ -2185,7 +2185,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_rename = QPushButton("✏  Rename")
         self._btn_az_slot_rename.setMinimumHeight(26)
         self._btn_az_slot_rename.setToolTip(
-            "Give the selected all-zones slot a custom name."
+            "Give the selected full-layout slot a custom name."
         )
         self._btn_az_slot_rename.clicked.connect(self._on_az_slot_rename)
         az_rename_row.addWidget(self._btn_az_slot_rename)
@@ -2203,7 +2203,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Import from Alpha & RGBA Adjuster Tool ─────────────────────────
         # When the user right-clicks the compare preview in the Alpha &
-        # RGBA Adjuster tab and selects "Copy zones → Selective Alpha tool",
+        # RGBA Adjuster tab and selects "Copy zones → Alpha Painter tool",
         # the zone data is deposited here so the user can import it into the
         # painting canvas with a single button click.
         import_box = QGroupBox("Import Zones from Alpha Tool")
@@ -2213,8 +2213,8 @@ class SelectiveAlphaTool(QWidget):
 
         import_note = QLabel(
             "1. Enable 'Highlight Alpha Values' in the Alpha & RGBA Adjuster.\n"
-            "2. Right-click the compare preview → 'Copy zones → Selective Alpha'.\n"
-            "3. Use the buttons below to import or save to slot/clipboard."
+            "2. Right-click the compare preview → 'Copy zones → Alpha Painter'.\n"
+            "3. Use the buttons below to import the shared zones or save them into slots."
         )
         import_note.setWordWrap(True)
         import_note.setStyleSheet("color: #999; font-size: 11px;")
@@ -2235,28 +2235,27 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
         iv.addWidget(self._btn_import_shared)
 
-        # Item 22: save ALL shared zones into the current all-zones slot
-        self._btn_import_to_az_slot = QPushButton("💾 Save All → All-Zones Clipboard Slot")
+        # Item 22: save ALL shared zones into the current full-layout slot
+        self._btn_import_to_az_slot = QPushButton("💾 Save All → Full Layout Slot")
         self._btn_import_to_az_slot.setMinimumHeight(26)
         self._btn_import_to_az_slot.setEnabled(False)
         self._btn_import_to_az_slot.setToolTip(
             "Save ALL imported zones from the Alpha & RGBA Adjuster directly\n"
-            "into the currently selected All-Zones Clipboard slot so they can\n"
-            "be pasted onto any image later without re-importing."
+            "into the selected full-layout slot so they can\n"
+            "be restored on any image later without re-importing."
         )
         self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
         iv.addWidget(self._btn_import_to_az_slot)
 
         # Item 23: copy one shared zone to the single-zone clipboard
-        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Single Zone → Single-Zone Clipboard")
+        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Single Zone → Clipboard")
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(
-            "Copy one imported zone into the Single Zone Mask Clipboard.\n"
+            "Copy one imported zone into the single-zone clipboard.\n"
             "If more than one zone was imported, a picker will appear\n"
             "so you can choose which zone to copy.\n"
-            "The copied mask can then be pasted via the '📌  Paste Mask' button\n"
-            "in the Zone Editor section below."
+            "The copied mask can then be pasted with the active zone controls below."
         )
         self._btn_import_zone_to_clipboard.clicked.connect(self._on_import_zone_to_clipboard)
         iv.addWidget(self._btn_import_zone_to_clipboard)
@@ -2411,7 +2410,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_session_status()
 
     def _setup_shortcuts(self) -> None:
-        """Bind common keyboard shortcuts for the Selective Alpha editor."""
+        """Bind common keyboard shortcuts for the Alpha Painter editor."""
         self._shortcut_objects: dict[str, QShortcut] = {}
         self._bind_shortcut("sa_undo", "Ctrl+Z", self._on_undo_mask)
         self._bind_shortcut("sa_redo", "Ctrl+Y", self._on_redo_mask)
@@ -2455,7 +2454,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_zone_editor(new_idx)
 
     def _restore_settings(self) -> None:
-        """Restore previously saved Selective Alpha Tool settings."""
+        """Restore previously saved Alpha Painter settings."""
         if self._settings is None:
             return
         self._restoring = True
@@ -2496,7 +2495,7 @@ class SelectiveAlphaTool(QWidget):
             self._restoring = False
 
     def _save_settings(self) -> None:
-        """Persist the current Selective Alpha Tool settings."""
+        """Persist the current Alpha Painter settings."""
         if self._settings is None or self._restoring:
             return
         self._settings.set_sa_zone_alphas(
@@ -2528,7 +2527,7 @@ class SelectiveAlphaTool(QWidget):
     # ---------------------------------------------------------------- helpers
 
     def register_tooltips(self, mgr) -> None:
-        """Register all Selective Alpha tab widgets with the TooltipManager."""
+        """Register all Alpha Painter tab widgets with the TooltipManager."""
         mgr.register(self._btn_open,            "sa_open_btn")
         mgr.register(self._btn_show_highlights, "sa_show_highlights")
         mgr.register(self._btn_save,            "sa_save_btn")
@@ -2620,7 +2619,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_session_status()
 
     def get_status_bar_text(self) -> str:
-        summary = "🎨 Selective Alpha ready" if not self._src_path else f"🎨 Selective Alpha: {os.path.basename(self._src_path)}"
+        summary = "🎨 Alpha Painter ready" if not self._src_path else f"🎨 Alpha Painter: {os.path.basename(self._src_path)}"
         extras: list[str] = []
         if self._src_path:
             tool_names = {
@@ -2640,7 +2639,7 @@ class SelectiveAlphaTool(QWidget):
             extras.append("mask clipboard ready")
         filled_slots = sum(1 for slot in self._az_slots if slot)
         if filled_slots:
-            extras.append(f"{filled_slots} all-zones slot{'s' if filled_slots != 1 else ''} saved")
+            extras.append(f"{filled_slots} full-layout slot{'s' if filled_slots != 1 else ''} saved")
         if self._result_img is not None:
             extras.append("result ready to save")
         return summary + ("  •  " + "  •  ".join(extras) if extras else "")
@@ -2882,7 +2881,7 @@ class SelectiveAlphaTool(QWidget):
         self._on_slot_selected(idx)
 
     def _on_copy_all_zones(self) -> None:
-        """Copy all painted zone masks into the currently selected all-zones slot."""
+        """Copy all painted zone masks into the currently selected full-layout slot."""
         snapshot = self._canvas.get_all_masks()
         idx = self._az_slot_combo.currentIndex()
         self._az_slots[idx] = snapshot
@@ -2893,7 +2892,7 @@ class SelectiveAlphaTool(QWidget):
             self._sound.play_mask_copy()
 
     def _on_paste_all_zones(self) -> None:
-        """Paste all zone masks from the currently selected all-zones slot."""
+        """Paste all zone masks from the currently selected full-layout slot."""
         idx = self._az_slot_combo.currentIndex()
         if idx < 0 or idx >= len(self._az_slots):
             return
@@ -2916,7 +2915,7 @@ class SelectiveAlphaTool(QWidget):
                 self, "No zone from Alpha/RGBA Tool",
                 "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
                 "In the Alpha & RGBA Adjuster tab, right-click the preview and\n"
-                "choose 'Copy zones → Selective Alpha tool'."
+                "choose 'Copy zones → Alpha Painter tool'."
             )
             return
         if not self._canvas.has_image():
@@ -2949,7 +2948,7 @@ class SelectiveAlphaTool(QWidget):
                 self, "No zones from Alpha/RGBA Tool",
                 "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
                 "In the Alpha & RGBA Adjuster tab, right-click the preview and\n"
-                "choose 'Copy zones → Selective Alpha tool'."
+                "choose 'Copy zones → Alpha Painter tool'."
             )
             return
         if not self._canvas.has_image():
@@ -2976,10 +2975,10 @@ class SelectiveAlphaTool(QWidget):
         if self._sound is not None:
             self._sound.play_mask_paste()
 
-    # ---- all-zones slot helpers ----------------------------------------
+    # ---- full-layout slot helpers ----------------------------------------
 
     def _update_az_slot_combo_item(self, idx: int) -> None:
-        """Refresh the combo text for a single all-zones slot index."""
+        """Refresh the combo text for a single full-layout slot index."""
         custom = self._az_slot_names[idx] if idx < len(self._az_slot_names) else ""
         prefix = custom if custom else f"Slot {idx + 1}"
         if self._az_slots[idx] is None:
@@ -3002,7 +3001,7 @@ class SelectiveAlphaTool(QWidget):
             self._btn_paste_all_zones.setEnabled(True)
 
     def _on_az_slot_clear(self) -> None:
-        """Erase the snapshot stored in the currently selected all-zones slot."""
+        """Erase the snapshot stored in the currently selected full-layout slot."""
         idx = self._az_slot_combo.currentIndex()
         if idx < 0 or idx >= len(self._az_slots):
             return
@@ -3012,7 +3011,7 @@ class SelectiveAlphaTool(QWidget):
         self._on_az_slot_selected(idx)
 
     def _on_az_slot_add(self) -> None:
-        """Append a new empty all-zones slot to the list (max _AZ_SLOT_COUNT)."""
+        """Append a new empty full-layout slot to the list (max _AZ_SLOT_COUNT)."""
         if len(self._az_slots) >= self._AZ_SLOT_COUNT:
             return
         idx = len(self._az_slots)
@@ -3025,7 +3024,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_add.setEnabled(len(self._az_slots) < self._AZ_SLOT_COUNT)
 
     def _on_az_slot_del(self) -> None:
-        """Delete the currently selected all-zones slot from the list."""
+        """Delete the currently selected full-layout slot from the list."""
         if len(self._az_slots) <= 1:
             return
         idx = self._az_slot_combo.currentIndex()
@@ -3049,7 +3048,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_add.setEnabled(len(self._az_slots) < self._AZ_SLOT_COUNT)
 
     def _on_az_slot_rename(self) -> None:
-        """Rename the currently selected all-zones slot."""
+        """Rename the currently selected full-layout slot."""
         idx = self._az_slot_combo.currentIndex()
         if idx < 0 or idx >= len(self._az_slots):
             return
@@ -3132,13 +3131,13 @@ class SelectiveAlphaTool(QWidget):
                 "In the Alpha & RGBA Adjuster tab:\n"
                 "1. Load an image with multiple alpha values.\n"
                 "2. Enable 'Highlight Alpha Values'.\n"
-                "3. Right-click the preview and choose 'Copy zones → Selective Alpha tool'."
+                "3. Right-click the preview and choose 'Copy zones → Alpha Painter tool'."
             )
             return
         if not self._canvas.has_image():
             QMessageBox.information(
                 self, "No image loaded",
-                "Please open an image in the Selective Alpha tool before importing zones."
+                "Please open an image in Alpha Painter before importing zones."
             )
             return
 
@@ -3167,7 +3166,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_session_status()
 
     def _on_import_to_az_slot(self) -> None:
-        """Save all shared zones to the currently selected all-zones slot (item 22).
+        """Save all shared zones to the currently selected full-layout slot (item 22).
 
         Converts the (alpha_value, bool_mask) pairs from the Alpha tool into the
         snapshot format expected by _az_slots and stores them in the active slot.
@@ -3191,7 +3190,7 @@ class SelectiveAlphaTool(QWidget):
         self._update_az_slot_combo_item(idx)
         self._on_az_slot_selected(idx)
         self._import_shared_status.setText(
-            f"✅ {num_z} zone(s) saved to All-Zones Slot {idx + 1}."
+            f"✅ {num_z} zone(s) saved to Full Layout Slot {idx + 1}."
         )
         if self._sound is not None:
             self._sound.play_mask_copy()
@@ -3378,7 +3377,7 @@ class SelectiveAlphaTool(QWidget):
         # Always default to a .png path – PNG is the only widely-supported
         # format that preserves a full per-pixel alpha channel.
         base = os.path.splitext(self._src_path)[0] if self._src_path else ""
-        default_path = (base + "_selective_alpha.png") if base else ""
+        default_path = (base + "_alpha_painter.png") if base else ""
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Result",

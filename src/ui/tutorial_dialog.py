@@ -58,15 +58,15 @@ _TUTORIAL_STEPS = [
             "transparency across the image.\n\n"
             "The live preview updates as you drag the sliders."
         ),
-        "tip": "💡  Tip: Right-click the preview to copy alpha zones to the Selective Alpha tool.",
+        "tip": "💡  Tip: Right-click the preview to copy alpha zones to Alpha Painter.",
         "body_is_html": True,
         "shortcut": "Ctrl+Z to undo; Ctrl+Enter to process",
     },
     {
         "icon": "🎭",
-        "title": "Selective Alpha Tool",
+        "title": "Alpha Painter",
         "body": (
-            "The <b>Selective Alpha</b> tool lets you <b>paint zones</b> on an "
+            "The <b>Alpha Painter</b> tool lets you <b>paint zones</b> on an "
             "image and assign a different alpha (transparency) value to each zone.\n\n"
             "• Choose a drawing tool: Freehand, Line, Rectangle, Ellipse, or Fill.\n"
             "• Set the zone's alpha (0 = fully transparent, 255 = fully opaque).\n"

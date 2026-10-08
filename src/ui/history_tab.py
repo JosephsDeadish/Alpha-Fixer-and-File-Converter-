@@ -551,7 +551,7 @@ class HistoryTab(QWidget):
         self._sel_summary = QLabel("")
         self._sel_summary.setObjectName("subheader")
         sel_layout.addWidget(self._sel_summary)
-        self._sub_tabs.addTab(sel_widget, "🎭  Selective Alpha")
+        self._sub_tabs.addTab(sel_widget, "🎭  Alpha Painter")
 
         # --- GIF Builder sub-tab (item 74) ---
         gif_widget = QWidget()
@@ -738,7 +738,7 @@ class HistoryTab(QWidget):
         icon = get_theme_icon(theme_name)
         self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
         self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha & RGBA Adjuster")
-        self._sub_tabs.setTabText(2, f"{icon}🎭  Selective Alpha")
+        self._sub_tabs.setTabText(2, f"{icon}🎭  Alpha Painter")
         self._sub_tabs.setTabText(3, f"{icon}🎞  GIF Builder")
         self._sub_tabs.setTabText(4, f"{icon}🎬  Video Builder")
 
@@ -766,7 +766,7 @@ class HistoryTab(QWidget):
         mapping = {
             0: ("Converter", self._conv_tree, self._conv_search, self._conv_summary),
             1: ("Alpha & RGBA", self._alpha_tree, self._alpha_search, self._alpha_summary),
-            2: ("Selective Alpha", self._sel_tree, self._sel_search, self._sel_summary),
+            2: ("Alpha Painter", self._sel_tree, self._sel_search, self._sel_summary),
             3: ("GIF Builder", self._gif_tree, self._gif_search, self._gif_summary),
             4: ("Video Builder", self._vid_tree, self._vid_search, self._vid_summary),
         }
@@ -975,7 +975,7 @@ class HistoryTab(QWidget):
         self._sel_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
             + ("  (most recent first)" if total > 0 else
-               " — run the Selective Alpha tool to see history here.")
+               " — run Alpha Painter to see history here.")
         )
 
     def _refresh_gif_builder(self):

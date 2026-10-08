@@ -1600,7 +1600,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("ImageMagick/wand runtime: limited", tooltip)
         self.assertIn("Qt SVG renderer:", tooltip)
         self.assertIn("Alpha & RGBA:", tooltip)
-        self.assertIn("Selective Alpha:", tooltip)
+        self.assertIn("Alpha Painter:", tooltip)
         self.assertIn("History:", tooltip)
 
     def test_main_window_runtime_readiness_helpers_surface_packaged_asset_gap_details(self):
@@ -1646,7 +1646,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("GIF DETAIL", tooltip)
         self.assertIn("VIDEO DETAIL", tooltip)
         self.assertIn("Converter:", tooltip)
-        self.assertIn("Selective Alpha:", tooltip)
+        self.assertIn("Alpha Painter:", tooltip)
         self.assertIn("History:", tooltip)
         self.assertIn("GIF Builder:", tooltip)
         self.assertIn("Video Builder:", tooltip)
@@ -6527,7 +6527,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
     def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
         self.assertIn("What works here right now:", self._widget._session_status_lbl.text())
         self.assertIn("Ready now:", self._widget._capability_lbl.text())
-        self.assertIn("Selective Alpha ready", self._widget.get_status_bar_text())
+        self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
         self._widget._src_path = "/tmp/sample.png"
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
         self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)

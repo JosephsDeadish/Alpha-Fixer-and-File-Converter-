@@ -889,7 +889,7 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         "Converter:",
         _converter_capability_details(),
         "",
-        "Selective Alpha:",
+        "Alpha Painter:",
         _selective_alpha_capability_details(),
         "",
         "History:",
@@ -1446,7 +1446,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._alpha_tab, "🖼 Alpha & RGBA")
         self._tabs.addTab(self._converter_tab, "🔄 Converter")
         self._tabs.addTab(self._history_tab, "📋 History")
-        self._tabs.addTab(self._selective_alpha_tab, "🎨 Selective α")
+        self._tabs.addTab(self._selective_alpha_tab, "🎨 Alpha Painter")
         # Refresh history whenever the user switches to it
         self._tabs.currentChanged.connect(self._on_tab_changed)
         self._tabs.currentChanged.connect(self._update_queue_status)
@@ -3897,7 +3897,7 @@ class MainWindow(QMainWindow):
              lambda: self._tabs.setCurrentIndex(1)),
             ("tab_3",   "Ctrl+3",  "Switch to History tab",              "Global",
              lambda: self._tabs.setCurrentIndex(2)),
-            ("tab_4",   "Ctrl+4",  "Switch to Selective Alpha Tool tab", "Global",
+            ("tab_4",   "Ctrl+4",  "Switch to Alpha Painter tab", "Global",
              lambda: self._tabs.setCurrentIndex(3)),
         ]
 
@@ -4164,7 +4164,7 @@ class MainWindow(QMainWindow):
             "<tr><th align='left'>Tool / Context</th><th align='left'>Key</th><th align='left'>Action</th></tr>"
 
             "<tr><td><i>File queues</i></td><td><b>Ctrl+A</b></td><td>Select all files in queue</td></tr>"
-            "<tr><td><i>Selective Alpha (Canvas)</i></td><td><b>Ctrl+Wheel</b></td><td>Zoom in / out</td></tr>"
+            "<tr><td><i>Alpha Painter (Canvas)</i></td><td><b>Ctrl+Wheel</b></td><td>Zoom in / out</td></tr>"
             "<tr><td></td><td><b>Middle-drag / Alt+drag</b></td><td>Pan canvas</td></tr>"
             "<tr><td><i>Right-click window</i></td><td><b>Right-click</b></td>"
             "<td>Open GIF Builder, Video Editor, or Settings</td></tr>"
@@ -4233,7 +4233,7 @@ class MainWindow(QMainWindow):
             "custom fine-tune (set / multiply / add / subtract), per-channel RGBA ±255 adjustments</li>"
             "<li><b>File Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, "
             "QOI and more — batch folder processing with live before/after preview</li>"
-            "<li><b>Selective Alpha Tool:</b> paint alpha zones on images (up to 40 zones), "
+            "<li><b>Alpha Painter:</b> paint alpha zones on images (up to 40 zones), "
             "freehand / line / rectangle / ellipse / fill / polygon / eraser / transform tools, "
             "keyboard shortcuts (B/E/L/R/X/F/P/T), copy/paste zones, clipboard slots</li>"
             "<li><b>GIF Builder &amp; Video Editor:</b> create animated GIFs and videos from "
