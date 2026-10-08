@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
@@ -33,8 +33,8 @@ jobs:
         if: runner.os == 'Linux'
         run: bash scripts/install_linux_deps.sh
 
-      - name: Build packaged app (Linux)
-        if: runner.os == 'Linux'
+      - name: Build packaged app (Linux/macOS)
+        if: runner.os != 'Windows'
         run: bash scripts/build_exe.sh
 
       - name: Build packaged app (Windows)
@@ -42,8 +42,8 @@ jobs:
         shell: cmd
         run: scripts\build_exe.bat
 
-      - name: Verify packaged app (Linux)
-        if: runner.os == 'Linux'
+      - name: Verify packaged app (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
           python scripts/verify_packaged_app.py \
@@ -55,6 +55,9 @@ jobs:
             --selftest-iterations 6 \
             --selftest-sample-limit 4 \
             --selftest-stress-loops 3 \
+            --repeat-selftest-runs 2 \
+            --max-selftest-rss-growth-mb 256 \
+            --max-selftest-rss-spread-mb 256 \
             --require-selftest-pass \
             --require-core-selftest-checks \
             --require-video-selftest-checks \
@@ -69,8 +72,10 @@ jobs:
             --require-ffprobe-selfcheck \
             --require-bundled-ffmpeg \
             --require-bundled-ffprobe \
+            --require-bundled-default-theme-svg \
+            --require-packaged-bundle-ready \
             --require-no-missing-libs \
-            --json-out artifacts/runtime-validation-linux.json
+            --json-out artifacts/runtime-validation-${{ runner.os }}.json
 
       - name: Verify packaged app (Windows)
         if: runner.os == 'Windows'
@@ -86,6 +91,9 @@ jobs:
             --selftest-iterations 6 `
             --selftest-sample-limit 4 `
             --selftest-stress-loops 3 `
+            --repeat-selftest-runs 2 `
+            --max-selftest-rss-growth-mb 256 `
+            --max-selftest-rss-spread-mb 256 `
             --require-selftest-pass `
             --require-core-selftest-checks `
             --require-video-selftest-checks `
@@ -100,6 +108,8 @@ jobs:
             --require-ffprobe-selfcheck `
             --require-bundled-ffmpeg `
             --require-bundled-ffprobe `
+            --require-bundled-default-theme-svg `
+            --require-packaged-bundle-ready `
             --require-no-missing-libs `
             --json-out artifacts\runtime-validation-windows.json
 

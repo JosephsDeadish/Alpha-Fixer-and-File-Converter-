@@ -176,6 +176,33 @@ def _print_selftest_check_summary(checks: dict[str, object]) -> None:
         print(line)
 
 
+def _selftest_peak_rss_series(payloads: list[dict[str, object]]) -> list[float]:
+    values: list[float] = []
+    for payload in payloads:
+        try:
+            raw = payload.get("peak_rss_mb")
+            if raw is None:
+                continue
+            values.append(float(raw))
+        except Exception:
+            continue
+    return values
+
+
+def _selftest_repeat_summary(payloads: list[dict[str, object]]) -> dict[str, object]:
+    peaks = _selftest_peak_rss_series(payloads)
+    summary: dict[str, object] = {
+        "runs": len(payloads),
+        "peak_rss_mb_values": peaks,
+    }
+    if peaks:
+        summary["peak_rss_mb_min"] = round(min(peaks), 2)
+        summary["peak_rss_mb_max"] = round(max(peaks), 2)
+        summary["peak_rss_mb_spread"] = round(max(peaks) - min(peaks), 2)
+        summary["peak_rss_mb_growth"] = round(peaks[-1] - peaks[0], 2)
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
@@ -190,14 +217,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-no-missing-libs", action="store_true", help="Fail if packaged runtime reports missing Linux shared libraries.")
     parser.add_argument("--require-bundled-ffmpeg", action="store_true", help="Fail if ffmpeg resolves outside the packaged bundle.")
     parser.add_argument("--require-bundled-ffprobe", action="store_true", help="Fail if ffprobe resolves outside the packaged bundle.")
+    parser.add_argument("--require-bundled-default-theme-svg", action="store_true", help="Fail if the packaged default-theme SVG asset resolves outside the packaged app.")
     parser.add_argument("--require-bundled-imagemagick", action="store_true", help="Fail if ImageMagick/wand support is not bundled inside the packaged app.")
+    parser.add_argument("--require-packaged-bundle-ready", action="store_true", help="Fail if the packaged runtime audit reports packaged_bundle_ready=false.")
     parser.add_argument("--require-no-packaged-asset-gaps", action="store_true", help="Fail if the packaged runtime audit reports any packaged asset warnings.")
     parser.add_argument("--run-selftest", action="store_true", help="Run the packaged executable's end-to-end runtime self-test after the capability audit.")
     parser.add_argument("--selftest-iterations", type=int, default=2, help="How many self-test iterations the packaged app should run when --run-selftest is set.")
     parser.add_argument("--selftest-sample-limit", type=int, default=0, help="Optional cap for external manifest entries exercised per packaged self-test run.")
     parser.add_argument("--selftest-stress-loops", type=int, default=0, help="Optional number of larger generated media/session stress loops to run during packaged self-test.")
+    parser.add_argument("--repeat-selftest-runs", type=int, default=1, help="How many separate packaged self-test launches to run and compare.")
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
+    parser.add_argument("--max-selftest-rss-growth-mb", type=float, help="Optional upper bound for last-minus-first peak RSS across repeated self-test runs.")
+    parser.add_argument("--max-selftest-rss-spread-mb", type=float, help="Optional upper bound for max-minus-min peak RSS across repeated self-test runs.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
     parser.add_argument("--require-core-selftest-checks", action="store_true", help="Fail unless the built-in PNG/GIF/DDS and generated-video self-test checks all report ok=true.")
     parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
@@ -342,8 +374,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Packaged runtime audit failed: ffmpeg_bundled=false")
     if args.require_bundled_ffprobe and not payload.get("ffprobe_bundled"):
         raise SystemExit("Packaged runtime audit failed: ffprobe_bundled=false")
+    if args.require_bundled_default_theme_svg and not payload.get("default_theme_svg_bundled"):
+        raise SystemExit("Packaged runtime audit failed: default_theme_svg_bundled=false")
     if args.require_bundled_imagemagick and not payload.get("imagemagick_bundled"):
         raise SystemExit("Packaged runtime audit failed: imagemagick_bundled=false")
+    if args.require_packaged_bundle_ready and not payload.get("packaged_bundle_ready"):
+        raise SystemExit("Packaged runtime audit failed: packaged_bundle_ready=false")
     packaged_asset_warnings = payload.get("packaged_asset_warnings") or []
     if args.require_no_packaged_asset_gaps and packaged_asset_warnings:
         raise SystemExit(
@@ -366,66 +402,101 @@ def main(argv: list[str] | None = None) -> int:
         print("⚠️  Packaged runtime audit: DDS compressed variants remain unavailable without bundled ImageMagick/wand.")
 
     selftest_payload = None
+    selftest_runs: list[dict[str, object]] = []
     if args.run_selftest:
-        print("Running packaged end-to-end self-test…")
-        selftest_env = dict(base_env)
-        selftest_env.pop("ALPHA_FIXER_SMOKE_TEST", None)
-        selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"] = str(max(1, int(args.selftest_iterations)))
-        if args.selftest_sample_limit:
-            selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
-        if args.selftest_stress_loops:
-            selftest_env["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"] = str(max(1, int(args.selftest_stress_loops)))
-        if merged_disc_manifest:
-            selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = merged_disc_manifest
-        if require_disc_group_checks:
-            selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"] = "1"
-        if merged_dds_manifest:
-            selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = merged_dds_manifest
-        if require_dds_group_checks:
-            selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"] = "1"
-        if merged_format_manifest:
-            selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = merged_format_manifest
-        if require_format_group_checks:
-            selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"] = "1"
-        if args.allow_sample_downloads:
-            selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
-        if args.sample_cache_dir:
-            selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"] = args.sample_cache_dir
-        selftest_result = _run_and_echo(command, env=selftest_env, timeout=max(30, int(args.timeout)))
-        if selftest_result.returncode not in (0, 1):
-            raise SystemExit(f"Packaged runtime self-test failed with exit code {selftest_result.returncode}.")
-        selftest_payload = _selftest_payload(selftest_result.stdout or "")
-        if args.require_selftest_pass and not selftest_payload.get("passed"):
-            raise SystemExit("Packaged runtime self-test reported passed=false")
-        if args.max_selftest_rss_mb is not None:
-            peak_rss = selftest_payload.get("peak_rss_mb")
-            if peak_rss is not None and float(peak_rss) > float(args.max_selftest_rss_mb):
-                raise SystemExit(
-                    f"Packaged runtime self-test exceeded RSS limit: {peak_rss} MiB > {args.max_selftest_rss_mb} MiB"
-                )
-        checks = selftest_payload.get("checks")
-        if not isinstance(checks, dict):
-            checks = {}
-        _print_selftest_check_summary(checks)
         required_checks = _required_selftest_checks(args)
         for check_name in manifest_group_required_checks:
             if check_name not in required_checks:
                 required_checks.append(check_name)
-        for check_name in required_checks:
-            check = checks.get(check_name)
-            if not isinstance(check, dict) or not check.get("ok"):
-                raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")
-        errors = selftest_payload.get("errors") or []
-        if errors:
-            print("⚠️  Packaged runtime self-test reported issues:")
-            for entry in errors:
-                print(f"   - {entry}")
+        repeated_runs = max(1, int(args.repeat_selftest_runs))
+        for run_index in range(1, repeated_runs + 1):
+            if repeated_runs > 1:
+                print(f"Running packaged end-to-end self-test {run_index}/{repeated_runs}…")
+            else:
+                print("Running packaged end-to-end self-test…")
+            selftest_env = dict(base_env)
+            selftest_env.pop("ALPHA_FIXER_SMOKE_TEST", None)
+            selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"] = str(max(1, int(args.selftest_iterations)))
+            if args.selftest_sample_limit:
+                selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
+            if args.selftest_stress_loops:
+                selftest_env["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"] = str(max(1, int(args.selftest_stress_loops)))
+            if merged_disc_manifest:
+                selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = merged_disc_manifest
+            if require_disc_group_checks:
+                selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"] = "1"
+            if merged_dds_manifest:
+                selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = merged_dds_manifest
+            if require_dds_group_checks:
+                selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"] = "1"
+            if merged_format_manifest:
+                selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = merged_format_manifest
+            if require_format_group_checks:
+                selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"] = "1"
+            if args.allow_sample_downloads:
+                selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
+            if args.sample_cache_dir:
+                selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"] = args.sample_cache_dir
+            selftest_result = _run_and_echo(command, env=selftest_env, timeout=max(30, int(args.timeout)))
+            if selftest_result.returncode not in (0, 1):
+                raise SystemExit(f"Packaged runtime self-test failed with exit code {selftest_result.returncode}.")
+            selftest_payload = _selftest_payload(selftest_result.stdout or "")
+            selftest_runs.append(selftest_payload)
+            if args.require_selftest_pass and not selftest_payload.get("passed"):
+                raise SystemExit(f"Packaged runtime self-test run {run_index} reported passed=false")
+            if args.max_selftest_rss_mb is not None:
+                peak_rss = selftest_payload.get("peak_rss_mb")
+                if peak_rss is not None and float(peak_rss) > float(args.max_selftest_rss_mb):
+                    raise SystemExit(
+                        f"Packaged runtime self-test exceeded RSS limit: {peak_rss} MiB > {args.max_selftest_rss_mb} MiB"
+                    )
+            checks = selftest_payload.get("checks")
+            if not isinstance(checks, dict):
+                checks = {}
+            _print_selftest_check_summary(checks)
+            for check_name in required_checks:
+                check = checks.get(check_name)
+                if not isinstance(check, dict) or not check.get("ok"):
+                    raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")
+            errors = selftest_payload.get("errors") or []
+            if errors:
+                print("⚠️  Packaged runtime self-test reported issues:")
+                for entry in errors:
+                    print(f"   - {entry}")
+        repeat_summary = _selftest_repeat_summary(selftest_runs)
+        peaks = repeat_summary.get("peak_rss_mb_values") or []
+        if repeated_runs > 1 and peaks:
+            print(
+                "Repeated self-test peak RSS: "
+                + ", ".join(f"{float(value):.2f}" for value in peaks)
+                + f" MiB (growth={repeat_summary.get('peak_rss_mb_growth', 0.0):.2f}, "
+                + f"spread={repeat_summary.get('peak_rss_mb_spread', 0.0):.2f})"
+            )
+        if args.max_selftest_rss_growth_mb is not None:
+            if len(peaks) < repeated_runs:
+                raise SystemExit("Packaged runtime self-test RSS growth check needs peak_rss_mb from every repeated run.")
+            growth = float(repeat_summary.get("peak_rss_mb_growth") or 0.0)
+            if growth > float(args.max_selftest_rss_growth_mb):
+                raise SystemExit(
+                    f"Packaged runtime self-test RSS growth exceeded limit: {growth} MiB > {args.max_selftest_rss_growth_mb} MiB"
+                )
+        if args.max_selftest_rss_spread_mb is not None:
+            if len(peaks) < repeated_runs:
+                raise SystemExit("Packaged runtime self-test RSS spread check needs peak_rss_mb from every repeated run.")
+            spread = float(repeat_summary.get("peak_rss_mb_spread") or 0.0)
+            if spread > float(args.max_selftest_rss_spread_mb):
+                raise SystemExit(
+                    f"Packaged runtime self-test RSS spread exceeded limit: {spread} MiB > {args.max_selftest_rss_spread_mb} MiB"
+                )
     if args.json_out:
         json_out = Path(args.json_out)
         json_out.parent.mkdir(parents=True, exist_ok=True)
         final_payload = dict(payload)
         if selftest_payload is not None:
             final_payload["runtime_selftest"] = selftest_payload
+        if selftest_runs:
+            final_payload["runtime_selftest_runs"] = selftest_runs
+            final_payload["runtime_selftest_repeat_summary"] = _selftest_repeat_summary(selftest_runs)
         json_out.write_text(json.dumps(final_payload, indent=2, sort_keys=True), encoding="utf-8")
     print("✅  Packaged runtime capability audit verified.")
     return 0

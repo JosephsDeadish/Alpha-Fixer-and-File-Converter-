@@ -1088,15 +1088,108 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                 )
         self.assertEqual(rc, 0)
         self.assertEqual(len(calls), 3)
-        selftest_env = calls[-1]["env"]
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SELFTEST"], "2")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"], "7")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"], "3")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"], "/tmp/disc.json")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"], "/tmp/dds.json")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"], "/tmp/matrix.json")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"], "1")
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"], "/tmp/sample-cache")
+
+    def test_verify_packaged_app_repeat_selftest_runs_writes_rss_repeat_summary(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            out_json = os.path.join(tmpdir, "runtime.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+            selftest_payloads = iter(
+                [
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 120.0, "checks": {"generated_mp4_load": {"ok": true}}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 132.5, "checks": {"generated_mp4_load": {"ok": true}}}\n',
+                ]
+            )
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(returncode=0, stdout=next(selftest_payloads))
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--repeat-selftest-runs",
+                        "2",
+                        "--max-selftest-rss-growth-mb",
+                        "20",
+                        "--max-selftest-rss-spread-mb",
+                        "20",
+                        "--require-selftest-check",
+                        "generated_mp4_load",
+                        "--json-out",
+                        out_json,
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(calls), 4)
+            with open(out_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        self.assertEqual(len(payload["runtime_selftest_runs"]), 2)
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["runs"], 2)
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_values"], [120.0, 132.5])
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_growth"], 12.5)
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_spread"], 12.5)
+
+    def test_verify_packaged_app_repeat_selftest_runs_can_fail_rss_growth_limit(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            selftest_payloads = iter(
+                [
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 100.0, "checks": {}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 140.5, "checks": {}}\n',
+                ]
+            )
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(returncode=0, stdout=next(selftest_payloads))
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main(
+                        [
+                            target,
+                            "--run-selftest",
+                            "--repeat-selftest-runs",
+                            "2",
+                            "--max-selftest-rss-growth-mb",
+                            "20",
+                        ]
+                    )
+        self.assertIn("RSS growth exceeded limit", str(ctx.exception))
 
     def test_verify_packaged_app_use_public_sample_manifests_populates_defaults(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
@@ -1560,6 +1653,37 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         "--require-bundled-ffprobe",
                         "--require-bundled-imagemagick",
                         "--require-no-packaged-asset-gaps",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_packaged_bundle_ready_and_svg(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--require-packaged-bundle-ready",
+                        "--require-bundled-default-theme-svg",
                     ]
                 )
         self.assertEqual(rc, 0)

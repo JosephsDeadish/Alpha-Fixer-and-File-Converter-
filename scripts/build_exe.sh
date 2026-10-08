@@ -102,6 +102,8 @@ if [[ -x "$launch_target" ]]; then
         --require-ffprobe-selfcheck
         --require-bundled-ffmpeg
         --require-bundled-ffprobe
+        --require-bundled-default-theme-svg
+        --require-packaged-bundle-ready
         --require-no-missing-libs
         --json-out "dist/validation-reports/packaged-runtime-audit.json"
     )
@@ -109,7 +111,10 @@ if [[ -x "$launch_target" ]]; then
         private_sample_limit="${ALPHA_FIXER_PRIVATE_SAMPLE_LIMIT:-${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-12}}"
         private_cache_dir="${ALPHA_FIXER_PRIVATE_SAMPLE_CACHE_DIR:-${ALPHA_FIXER_SAMPLE_CACHE_DIR:-$REPO_ROOT/.sample-cache-private}}"
         private_selftest_iterations="${ALPHA_FIXER_PRIVATE_SELFTEST_ITERATIONS:-4}"
+        private_selftest_repeat_runs="${ALPHA_FIXER_PRIVATE_SELFTEST_REPEAT_RUNS:-1}"
         private_stress_loops="${ALPHA_FIXER_PRIVATE_STRESS_LOOPS:-0}"
+        private_rss_growth_limit="${ALPHA_FIXER_PRIVATE_MAX_SELFTEST_RSS_GROWTH_MB:-}"
+        private_rss_spread_limit="${ALPHA_FIXER_PRIVATE_MAX_SELFTEST_RSS_SPREAD_MB:-}"
         mkdir -p "$private_cache_dir"
         verify_args+=(
             --run-selftest
@@ -124,16 +129,30 @@ if [[ -x "$launch_target" ]]; then
             --allow-sample-downloads
             --sample-cache-dir "$private_cache_dir"
         )
+        if [[ "$private_selftest_repeat_runs" =~ ^[0-9]+$ ]] && (( private_selftest_repeat_runs > 1 )); then
+            verify_args+=(
+                --repeat-selftest-runs "$private_selftest_repeat_runs"
+            )
+        fi
         if [[ "$private_stress_loops" =~ ^[0-9]+$ ]] && (( private_stress_loops > 0 )); then
             verify_args+=(
                 --selftest-stress-loops "$private_stress_loops"
                 --require-stress-selftest-checks
             )
         fi
+        if [[ -n "$private_rss_growth_limit" ]]; then
+            verify_args+=(--max-selftest-rss-growth-mb "$private_rss_growth_limit")
+        fi
+        if [[ -n "$private_rss_spread_limit" ]]; then
+            verify_args+=(--max-selftest-rss-spread-mb "$private_rss_spread_limit")
+        fi
     fi
     if [[ "${ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
         sample_limit="${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-4}"
         sample_cache_dir="${ALPHA_FIXER_SAMPLE_CACHE_DIR:-$REPO_ROOT/.sample-cache}"
+        public_selftest_repeat_runs="${ALPHA_FIXER_PUBLIC_SELFTEST_REPEAT_RUNS:-1}"
+        public_rss_growth_limit="${ALPHA_FIXER_PUBLIC_MAX_SELFTEST_RSS_GROWTH_MB:-}"
+        public_rss_spread_limit="${ALPHA_FIXER_PUBLIC_MAX_SELFTEST_RSS_SPREAD_MB:-}"
         mkdir -p "$sample_cache_dir"
         verify_args+=(
             --run-selftest
@@ -148,6 +167,17 @@ if [[ -x "$launch_target" ]]; then
             --allow-sample-downloads
             --sample-cache-dir "$sample_cache_dir"
         )
+        if [[ "$public_selftest_repeat_runs" =~ ^[0-9]+$ ]] && (( public_selftest_repeat_runs > 1 )); then
+            verify_args+=(
+                --repeat-selftest-runs "$public_selftest_repeat_runs"
+            )
+        fi
+        if [[ -n "$public_rss_growth_limit" ]]; then
+            verify_args+=(--max-selftest-rss-growth-mb "$public_rss_growth_limit")
+        fi
+        if [[ -n "$public_rss_spread_limit" ]]; then
+            verify_args+=(--max-selftest-rss-spread-mb "$public_rss_spread_limit")
+        fi
         if [[ "${ALPHA_FIXER_REQUIRE_DDS_SELFTEST:-0}" == "1" ]]; then
             verify_args+=(
                 --require-dds-selftest-checks
