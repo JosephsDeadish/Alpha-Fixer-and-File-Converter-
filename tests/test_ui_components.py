@@ -2832,6 +2832,80 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             clip.close()
             self.assertFalse(os.path.exists(transcode_path))
 
+    def test_segmented_video_source_detection_accepts_named_and_numeric_parts(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            named_parts = [
+                os.path.join(tmpdir, "movie.part1.vob"),
+                os.path.join(tmpdir, "movie.part2.vob"),
+            ]
+            numeric_parts = [
+                os.path.join(tmpdir, "episode.vob.001"),
+                os.path.join(tmpdir, "episode.vob.002"),
+            ]
+            for path in named_parts + numeric_parts:
+                with open(path, "wb") as handle:
+                    handle.write(b"segment")
+            self.assertEqual(vt._segmented_video_sources(named_parts[0]), named_parts)
+            self.assertEqual(vt._segmented_video_sources(numeric_parts[0]), numeric_parts)
+            self.assertTrue(vt._is_segmented_video_source(named_parts[0]))
+            self.assertTrue(vt._is_probably_video_source(numeric_parts[0], probe=None))
+
+    def test_attempt_video_recovery_uses_concat_segment_repair(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            part1 = os.path.join(tmpdir, "movie.part1.vob")
+            part2 = os.path.join(tmpdir, "movie.part2.vob")
+            for path in (part1, part2):
+                with open(path, "wb") as handle:
+                    handle.write(b"segment")
+            details = {
+                "has_video": True,
+                "has_audio": True,
+                "video_stream_index": 0,
+                "audio_stream_index": 1,
+                "video_stream_count": 1,
+                "video_attached_pic_count": 0,
+                "selected_video_attached_pic": False,
+            }
+            with patch.object(vt, "_concat_segmented_video_source", return_value="/tmp/repaired-concat.mkv") as concat_mock:
+                with patch.object(vt, "_remux_video_source", return_value=None) as remux_mock:
+                    with patch.object(vt, "_transcode_video_source", return_value=None) as transcode_mock:
+                        recovered_path, note, recovered_probe = vt._attempt_video_recovery(part1, details)
+            self.assertEqual(recovered_path, "/tmp/repaired-concat.mkv")
+            self.assertEqual(recovered_probe, details)
+            self.assertIn("segmented concat remux fallback", note)
+            self.assertIn("2 joined parts", note)
+            concat_mock.assert_called_once()
+            remux_mock.assert_not_called()
+            transcode_mock.assert_not_called()
+
+    def test_video_load_failure_hint_mentions_segmented_concat_repair(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = os.path.join(tmpdir, "clip.vob.001")
+            second = os.path.join(tmpdir, "clip.vob.002")
+            for path in (first, second):
+                with open(path, "wb") as handle:
+                    handle.write(b"segment")
+            with patch.object(vt, "_probe_media_details", return_value=None):
+                with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                    hint = vt._video_load_failure_hint(first)
+            self.assertIn("segmented / multipart video set", hint)
+            self.assertIn("concat repair fallback", hint)
+
     def test_attempt_video_recovery_retries_without_audio_after_primary_failures(self):
         try:
             from src.ui import video_tool as vt

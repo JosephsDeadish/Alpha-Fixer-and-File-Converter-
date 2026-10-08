@@ -33,6 +33,7 @@ from functools import lru_cache
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from threading import Lock
@@ -96,6 +97,9 @@ _FFMPEG_DEEP_ANALYSIS_ARGS = [
     "-analyzeduration",
     "100M",
 ]
+_SEGMENTED_VIDEO_NAME_RE = re.compile(
+    r"(?is)^(?P<base>.+?)(?:[._ -]?)(?P<label>part|pt|cd|disc|disk|segment|seg)(?:[._ -]?)(?P<index>\d+)$"
+)
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
@@ -194,6 +198,155 @@ def _unlink_file_safely(path: str) -> None:
         Path(path).unlink(missing_ok=True)
     except Exception:
         pass
+
+
+def _segmented_video_group(path: str) -> Optional[tuple[str, int]]:
+    candidate = Path(path)
+    suffixes = [suffix.lower() for suffix in candidate.suffixes]
+    if len(suffixes) >= 2 and suffixes[-1].startswith(".") and suffixes[-1][1:].isdigit():
+        preceding_ext = suffixes[-2]
+        if preceding_ext in _VIDEO_EXTS or preceding_ext in _ODD_CONTAINER_RECOVERY_EXTS:
+            return str(candidate.with_suffix("")).lower(), int(suffixes[-1][1:])
+    if candidate.suffix.lower() in _VIDEO_EXTS | _ODD_CONTAINER_RECOVERY_EXTS:
+        match = _SEGMENTED_VIDEO_NAME_RE.match(candidate.stem)
+        if match:
+            base_name = match.group("base").rstrip(" ._-")
+            if base_name:
+                return str(candidate.with_name(base_name + candidate.suffix)).lower(), int(match.group("index"))
+    return None
+
+
+def _segmented_video_sources(path: str) -> list[str]:
+    group = _segmented_video_group(path)
+    candidate = Path(path)
+    if group is None or not candidate.parent.is_dir():
+        return []
+    group_key, _ = group
+    matches: list[tuple[int, str]] = []
+    try:
+        for sibling in candidate.parent.iterdir():
+            if not sibling.is_file():
+                continue
+            sibling_group = _segmented_video_group(str(sibling))
+            if sibling_group is None:
+                continue
+            sibling_key, order = sibling_group
+            if sibling_key != group_key:
+                continue
+            matches.append((order, str(sibling)))
+    except Exception:
+        return []
+    if len(matches) <= 1:
+        return []
+    matches.sort(key=lambda item: (item[0], item[1].lower()))
+    deduped: list[str] = []
+    seen_orders: set[int] = set()
+    for order, sibling_path in matches:
+        if order in seen_orders:
+            continue
+        seen_orders.add(order)
+        deduped.append(sibling_path)
+    if str(candidate) not in deduped:
+        return []
+    return deduped
+
+
+def _is_segmented_video_source(path: str) -> bool:
+    return len(_segmented_video_sources(path)) > 1
+
+
+def _ffconcat_line(path: str) -> str:
+    return "file '" + path.replace("\\", "/").replace("'", "'\\''") + "'\n"
+
+
+def _concat_segmented_video_source(
+    segment_paths: list[str],
+    details: Optional[dict[str, object]] = None,
+    *,
+    include_audio: bool = True,
+    transcode: bool = False,
+) -> Optional[str]:
+    ffmpeg_exe = _get_ffmpeg_exe()
+    if not ffmpeg_exe or len(segment_paths) <= 1:
+        return None
+    manifest_file = tempfile.NamedTemporaryFile(
+        prefix="alpha_fixer_video_concat_",
+        suffix=".ffconcat",
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+    )
+    output_suffix = ".mp4" if transcode else ".mkv"
+    output_file = tempfile.NamedTemporaryFile(
+        prefix="alpha_fixer_video_joined_",
+        suffix=output_suffix,
+        delete=False,
+    )
+    manifest_path = manifest_file.name
+    output_path = output_file.name
+    output_file.close()
+    try:
+        manifest_file.write("ffconcat version 1.0\n")
+        for segment_path in segment_paths:
+            manifest_file.write(_ffconcat_line(segment_path))
+        manifest_file.close()
+        command = [
+            ffmpeg_exe,
+            "-y",
+            "-v",
+            "error",
+            "-fflags",
+            "+discardcorrupt",
+            "-err_detect",
+            "ignore_err",
+            *_FFMPEG_DEEP_ANALYSIS_ARGS,
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            manifest_path,
+            *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
+            "-dn",
+            "-sn",
+        ]
+        if transcode:
+            command.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "20",
+                ]
+            )
+            command.extend(["-an"] if not include_audio else ["-c:a", "aac", "-b:a", "160k"])
+        else:
+            command.extend(["-c", "copy"])
+        command.append(output_path)
+        result = subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode == 0 and Path(output_path).is_file() and Path(output_path).stat().st_size > 0:
+            return output_path
+    except Exception:
+        pass
+    finally:
+        try:
+            manifest_file.close()
+        except Exception:
+            pass
+        _unlink_file_safely(manifest_path)
+    _unlink_file_safely(output_path)
+    return None
 
 
 def _parse_ffprobe_rate(value) -> float:
@@ -579,6 +732,11 @@ def _video_load_failure_hint(
         "and check that the file is a supported, non-corrupt video."
     )
     lines = [base]
+    if _is_segmented_video_source(path):
+        segment_count = len(_segmented_video_sources(path))
+        lines.append(
+            f"This source looks like a segmented / multipart video set ({segment_count} parts detected); the app will also try an ffmpeg concat repair fallback before giving up."
+        )
     if ext in _EXPERIMENTAL_DISC_VIDEO_EXTS:
         lines.append(
             "Disc-image video inputs are experimental and only work when ffmpeg can demux a playable stream from the image."
@@ -590,7 +748,7 @@ def _video_load_failure_hint(
                 "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip from this disc image."
             )
         lines.append(
-            "If direct loading fails, the app also tries temporary ffmpeg remux, transcode, audio-drop, and still-frame recovery fallbacks for compatible streams."
+            "If direct loading fails, the app also tries temporary ffmpeg concat repair, remux, transcode, audio-drop, and still-frame recovery fallbacks for compatible streams."
         )
     elif ext in _ODD_CONTAINER_RECOVERY_EXTS and probe and bool(probe.get("has_video")):
         lines.append(
@@ -959,7 +1117,8 @@ def _attempt_video_recovery(
 ) -> tuple[Optional[str], str, Optional[dict[str, object]]]:
     ext = Path(path).suffix.lower()
     details = probe if probe is not None else _probe_media_details(path)
-    if not force_recovery and ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
+    segment_paths = _segmented_video_sources(path)
+    if not force_recovery and not segment_paths and ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
         return None, "", details
     primary_video_index = _coerce_optional_stream_index(details.get("video_stream_index")) if details else None
     for candidate in _recovery_probe_candidates(path, details, allow_alternate_streams=allow_alternate_streams) or [details]:
@@ -969,6 +1128,40 @@ def _attempt_video_recovery(
         for include_audio, mode_label in ((True, ""), (False, "source audio dropped")):
             if not include_audio and not has_audio:
                 continue
+            if len(segment_paths) > 1:
+                concat_remux_path = _concat_segmented_video_source(
+                    segment_paths,
+                    candidate,
+                    include_audio=include_audio,
+                    transcode=False,
+                )
+                if concat_remux_path:
+                    strategy = "temporary segmented concat remux fallback active"
+                    note_parts = [f"{len(segment_paths)} joined parts"]
+                    stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
+                    if stream_note:
+                        note_parts.append(stream_note)
+                    if mode_label:
+                        note_parts.append(mode_label)
+                    strategy += f" ({'; '.join(note_parts)})"
+                    return concat_remux_path, strategy, candidate
+                if candidate is None or bool(candidate.get("has_video")):
+                    concat_transcode_path = _concat_segmented_video_source(
+                        segment_paths,
+                        candidate,
+                        include_audio=include_audio,
+                        transcode=True,
+                    )
+                    if concat_transcode_path:
+                        strategy = "temporary segmented concat transcode fallback active"
+                        note_parts = [f"{len(segment_paths)} joined parts"]
+                        stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
+                        if stream_note:
+                            note_parts.append(stream_note)
+                        if mode_label:
+                            note_parts.append(mode_label)
+                        strategy += f" ({'; '.join(note_parts)})"
+                        return concat_transcode_path, strategy, candidate
             remux_path = _remux_video_source(path, candidate, include_audio=include_audio)
             if remux_path:
                 strategy = "temporary ffmpeg remux fallback active"
@@ -1008,7 +1201,7 @@ def _video_capability_summary() -> str:
                 if ffprobe_ok else
                 "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
             )
-            + "Audio-only containers still cannot be added as video clips, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds. partial/corrupt containers may still need manual repair or remuxing."
+            + "Audio-only containers still cannot be added as video clips, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds. segmented/multipart sets can also be concat-repaired automatically when the parts live together, while partial/corrupt containers may still need manual repair."
         )
     return (
         "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
@@ -1030,6 +1223,7 @@ def _video_capability_details() -> str:
             "Current behavior:",
             "• Standard video import and MP4 export are available.",
             "• Odd-container/disc-image recovery can remux, transcode, retry without source audio, or salvage a still frame when ffmpeg can expose usable video data.",
+            "• Multipart/segmented sources like clip.part1.vob + clip.part2.vob or movie.vob.001 + movie.vob.002 can also be concat-repaired automatically when all parts are present together.",
             "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, and the Selected Stream panel can reload a clip from a manually chosen video stream.",
             "• Audio-only containers still cannot be added as timeline video clips.",
         ])
@@ -1159,6 +1353,8 @@ def _coerce_frame_size(value) -> Optional[tuple[int, int]]:
 def _is_probably_video_source(path: str, probe: Optional[dict[str, object]] = None) -> bool:
     ext = Path(path).suffix.lower()
     if ext in _VIDEO_EXTS:
+        return True
+    if _is_segmented_video_source(path):
         return True
     details = probe if probe is not None else _probe_media_details(path)
     if not details or not details.get("has_video"):

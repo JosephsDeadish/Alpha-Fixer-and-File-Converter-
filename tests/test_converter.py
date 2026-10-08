@@ -190,6 +190,30 @@ class TestBuildOutputPath(unittest.TestCase):
 
 
 class TestCorpusHelperInputs(unittest.TestCase):
+    def test_built_in_public_disc_video_manifest_loads(self):
+        manifest_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "sample_manifests",
+            "public_disc_video_manifest.json",
+        )
+        entries = load_manifest_entries(manifest_path)
+        self.assertGreaterEqual(len(entries), 3)
+        self.assertTrue(any(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".iso") for entry in entries))
+
+    def test_built_in_public_format_matrix_manifest_loads(self):
+        manifest_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "sample_manifests",
+            "public_format_matrix_manifest.json",
+        )
+        entries = load_manifest_entries(manifest_path)
+        self.assertGreaterEqual(len(entries), 3)
+        self.assertTrue(all(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
+        self.assertEqual({str(entry.get("target_format") or "").upper() for entry in entries}, {"DDS", "PNG", "BMP"})
+
     def test_optional_manifest_entries_accepts_manifest_file_and_resolves_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = os.path.join(tmpdir, "samples")

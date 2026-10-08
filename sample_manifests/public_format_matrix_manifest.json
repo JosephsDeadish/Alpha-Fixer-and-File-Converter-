@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "input": "public-format-matrix/sample.png",
+      "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.png",
+      "sha256": "fe9e92f84f70851a7c43c3bf36c4b4a9344749ef639749403f5c6ec182f22c82",
+      "download_name": "sample.png",
+      "cache_subdir": "public-format-matrix",
+      "target_format": "DDS",
+      "dds_variant": "rgba"
+    },
+    {
+      "input": "public-format-matrix/sample.jpg",
+      "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.jpg",
+      "sha256": "0db8cffc4677a3ade15b25f62191b3c45ef9d84ad732c268b85b20ee2501e770",
+      "download_name": "sample.jpg",
+      "cache_subdir": "public-format-matrix",
+      "target_format": "PNG"
+    },
+    {
+      "input": "public-format-matrix/sample.webp",
+      "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.webp",
+      "sha256": "4a5afeaff8483923da964bc7896f02d0283e8bff99b5b8f82a31ae3214dab1d0",
+      "download_name": "sample.webp",
+      "cache_subdir": "public-format-matrix",
+      "target_format": "BMP"
+    }
+  ]
+}

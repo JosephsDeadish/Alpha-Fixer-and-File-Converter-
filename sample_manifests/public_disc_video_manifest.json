@@ -1,0 +1,39 @@
+{
+  "entries": [
+    {
+      "path": "public-disc-video/dvd.iso",
+      "download_url": "https://raw.githubusercontent.com/cvzi/dvd-video-sample/main/dvd.iso",
+      "sha256": "01be2923070d667c0169741d9ee2ba284cbe772a33c4e33d27cae28f2feb5061",
+      "download_name": "dvd.iso",
+      "cache_subdir": "public-disc-video",
+      "expect": "load_or_explain",
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ]
+    },
+    {
+      "path": "public-disc-video/sample.wmv",
+      "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.wmv",
+      "sha256": "60084bf1d83c48fa33c46a0d51346b11a62a3a8112fa7cf1115479cd96f42353",
+      "download_name": "sample.wmv",
+      "cache_subdir": "public-disc-video",
+      "expect": "load_or_explain"
+    },
+    {
+      "path": "public-disc-video/sample.flv",
+      "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.flv",
+      "sha256": "0c5758be9e294ca9d5112c11e0e035a56b183213875bb17f2fe296f2f5bef7e5",
+      "download_name": "sample.flv",
+      "cache_subdir": "public-disc-video",
+      "expect": "load_or_explain"
+    },
+    {
+      "path": "public-disc-video/sample.mxf",
+      "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.mxf",
+      "sha256": "a674e8b412e0dcd554ce64acc2bbc5b331d136f536ef8336be8ea5a266e6951b",
+      "download_name": "sample.mxf",
+      "cache_subdir": "public-disc-video",
+      "expect": "load_or_explain"
+    }
+  ]
+}

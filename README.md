@@ -156,7 +156,14 @@ python -m pytest tests/ -v
 
 ### Real corpus validation
 
-Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because those corpora are large and may be private or copyrighted, they are **not** bundled in this repository.
+Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because many of the most relevant PSP / PS1 / PS2 corpora are large, private, or copyrighted, they are **not** bundled in this repository.
+
+This repo now also ships small **public-download manifest examples** under `sample_manifests/` so fresh machines can exercise real external samples without needing private corpora:
+
+- `sample_manifests/public_disc_video_manifest.json`
+- `sample_manifests/public_format_matrix_manifest.json`
+
+Those built-in manifests intentionally use public sample files that are legally redistributable or publicly downloadable, but they are **not a replacement** for true copyrighted PSP / PS1 / PS2 validation corpora. They are meant to provide a reproducible baseline for packaged runtime checks and fresh-machine smoke coverage.
 
 You can point the tests at external corpora with either directories or JSON manifest files:
 
@@ -210,6 +217,20 @@ export ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS=1
 export ALPHA_FIXER_SAMPLE_CACHE_DIR=/tmp/alpha_fixer_corpus_cache
 ```
 
+For the built-in public manifests:
+
+```bash
+python scripts/populate_sample_manifest.py sample_manifests/public_disc_video_manifest.json \
+  --cache-dir /tmp/alpha_fixer_public_cache \
+  --allow-downloads \
+  --output-manifest /tmp/public_disc_video_manifest.materialized.json
+
+python scripts/populate_sample_manifest.py sample_manifests/public_format_matrix_manifest.json \
+  --cache-dir /tmp/alpha_fixer_public_cache \
+  --allow-downloads \
+  --output-manifest /tmp/public_format_matrix_manifest.materialized.json
+```
+
 Packaged runtime self-tests can also consume external manifests directly on fresh machines:
 
 ```bash
@@ -217,16 +238,16 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
   --run-selftest \
   --selftest-iterations 8 \
   --selftest-sample-limit 12 \
-  --disc-video-manifest /path/to/disc_video_manifest.json \
-  --dds-manifest /path/to/dds_dx10_manifest.json \
-  --format-matrix-manifest /path/to/packaged_format_matrix.json \
+  --disc-video-manifest sample_manifests/public_disc_video_manifest.json \
+  --format-matrix-manifest sample_manifests/public_format_matrix_manifest.json \
   --allow-sample-downloads \
   --sample-cache-dir /tmp/alpha_fixer_packaged_cache \
   --require-selftest-pass \
   --require-selftest-check external_disc_video_manifest \
-  --require-selftest-check external_dds_manifest \
   --require-selftest-check external_format_matrix_manifest
 ```
+
+BC6H / BC7 note: the public manifests above improve real external validation coverage, but they do **not** add pure in-repo BC6H / BC7 software decoding. Advanced BC6H / BC7 DDS inspection still depends on Pillow support or optional ImageMagick/wand decoding when available.
 
 Example packaged format-matrix manifest:
 
