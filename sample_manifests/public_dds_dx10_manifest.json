@@ -1,0 +1,80 @@
+{
+  "entries": [
+    {
+      "path": "public-dds-dx10/bc6h.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/bc6h.dds",
+      "sha256": "a401bfd987baa12873755e2921962f7325911f3af6a06e4d6c4d92fc5d9ac280",
+      "download_name": "bc6h.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "load_or_fail_clearly",
+      "detail_contains": [
+        "BC6H",
+        "ImageMagick/wand"
+      ]
+    },
+    {
+      "path": "public-dds-dx10/bc6h_sf.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/bc6h_sf.dds",
+      "sha256": "61fc656b1ed64105e3d0894ff56b6f59e359fef97a8fafc6944cfe76295b079a",
+      "download_name": "bc6h_sf.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "load_or_fail_clearly",
+      "detail_contains": [
+        "BC6H",
+        "ImageMagick/wand"
+      ]
+    },
+    {
+      "path": "public-dds-dx10/DXGI_FORMAT_BC7_UNORM_SRGB.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/DXGI_FORMAT_BC7_UNORM_SRGB.dds",
+      "sha256": "c1b2497a6a8448161f48c7d0a28995d8c9baec027e5eb398aff59818e144030f",
+      "download_name": "DXGI_FORMAT_BC7_UNORM_SRGB.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "load_or_fail_clearly",
+      "detail_contains": [
+        "BC7",
+        "ImageMagick/wand"
+      ]
+    },
+    {
+      "path": "public-dds-dx10/DXGI_FORMAT_R8G8B8A8_UNORM_SRGB.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/DXGI_FORMAT_R8G8B8A8_UNORM_SRGB.dds",
+      "sha256": "855736b9427be90209d748f66a0bb5d7c8c7f86cc0d1e4e45819e985a2238cbe",
+      "download_name": "DXGI_FORMAT_R8G8B8A8_UNORM_SRGB.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "load"
+    },
+    {
+      "path": "public-dds-dx10/argb-32bpp_MipMaps-1.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/argb-32bpp_MipMaps-1.dds",
+      "sha256": "0027a04183e99471a5df7f1ad0c78f1a2c26bd32fcf9f33a0dbae7c9f84ce36b",
+      "download_name": "argb-32bpp_MipMaps-1.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "load"
+    },
+    {
+      "path": "public-dds-dx10/unimplemented_dxgi_format.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/unimplemented_dxgi_format.dds",
+      "sha256": "7fed4f230dbe1221ba5517df2b27836d7ac635a340887c6cc49971e95ba90268",
+      "download_name": "unimplemented_dxgi_format.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "fail",
+      "detail_contains": [
+        "unsupported",
+        "DXGI"
+      ]
+    },
+    {
+      "path": "public-dds-dx10/unsupported_bitcount.dds",
+      "download_url": "https://raw.githubusercontent.com/python-pillow/Pillow/424d329c6fa43d3e577c1f83dd55f1490ca259a7/Tests/images/unsupported_bitcount.dds",
+      "sha256": "640d391be8c1805ca4979e5a15a60cb6ab3ceac2fb27e99b7b51baeaf1c55c57",
+      "download_name": "unsupported_bitcount.dds",
+      "cache_subdir": "public-dds-dx10",
+      "expect": "fail",
+      "detail_contains": [
+        "Unsupported DDS pixel format",
+        "bits=12"
+      ]
+    }
+  ]
+}

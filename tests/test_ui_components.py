@@ -755,6 +755,52 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"], "1")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"], "/tmp/sample-cache")
 
+    def test_verify_packaged_app_use_public_sample_manifests_populates_defaults(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}, "external_format_matrix_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--use-public-sample-manifests",
+                        "--selftest-sample-limit",
+                        "3",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 3)
+        selftest_env = calls[-1]["env"]
+        self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"].endswith("sample_manifests/public_disc_video_manifest.json"))
+        self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"].endswith("sample_manifests/public_dds_dx10_manifest.json"))
+        self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"].endswith("sample_manifests/public_format_matrix_manifest.json"))
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"], "3")
+
     def test_runtime_selftest_dump_records_external_manifest_checks(self):
         import main
 

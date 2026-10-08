@@ -214,6 +214,34 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(all(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
         self.assertEqual({str(entry.get("target_format") or "").upper() for entry in entries}, {"DDS", "PNG", "BMP"})
 
+    def test_built_in_public_dds_dx10_manifest_loads(self):
+        manifest_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "sample_manifests",
+            "public_dds_dx10_manifest.json",
+        )
+        entries = load_manifest_entries(manifest_path)
+        self.assertGreaterEqual(len(entries), 5)
+        self.assertTrue(all(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
+        self.assertTrue(any("bc6h" in str(entry.get("path") or "").lower() for entry in entries))
+        self.assertTrue(any("dxgi" in str(entry.get("path") or "").lower() for entry in entries))
+        self.assertTrue(any(str(entry.get("expect") or "").lower() == "fail" for entry in entries))
+
+    def test_private_psp_ps1_ps2_disc_manifest_template_loads(self):
+        manifest_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "sample_manifests",
+            "private_psp_ps1_ps2_disc_manifest_template.json",
+        )
+        entries = load_manifest_entries(manifest_path)
+        self.assertEqual(len(entries), 3)
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("psp", "sample.umd.iso")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("ps1", "sample.bin")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("ps2", "sample.iso")) for entry in entries))
+        self.assertTrue(all("Disc-image video inputs are experimental" in (entry.get("hint_contains") or [""])[0] for entry in entries))
+
     def test_optional_manifest_entries_accepts_manifest_file_and_resolves_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = os.path.join(tmpdir, "samples")

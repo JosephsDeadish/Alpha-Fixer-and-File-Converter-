@@ -6,6 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
+_PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
+_PUBLIC_FORMAT_MATRIX_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_format_matrix_manifest.json"
+
 
 def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
@@ -69,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--disc-video-manifest", help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution.")
     parser.add_argument("--dds-manifest", help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution.")
     parser.add_argument("--format-matrix-manifest", help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution.")
+    parser.add_argument("--use-public-sample-manifests", action="store_true", help="Use the repository's built-in public disc-video, DDS/DX10, and format-matrix manifests for packaged self-test execution.")
     parser.add_argument("--allow-sample-downloads", action="store_true", help="Allow manifest-backed self-tests to download missing external samples when URL fields are present.")
     parser.add_argument("--sample-cache-dir", help="Optional cache directory for downloaded or materialized manifest samples.")
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
@@ -77,6 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     launch_target = Path(args.launch_target)
     if not launch_target.exists():
         raise SystemExit(f"Launch target not found: {launch_target}")
+    if args.use_public_sample_manifests:
+        if not args.disc_video_manifest:
+            args.disc_video_manifest = str(_PUBLIC_DISC_VIDEO_MANIFEST)
+        if not args.dds_manifest:
+            args.dds_manifest = str(_PUBLIC_DDS_MANIFEST)
+        if not args.format_matrix_manifest:
+            args.format_matrix_manifest = str(_PUBLIC_FORMAT_MATRIX_MANIFEST)
     if (args.disc_video_manifest or args.dds_manifest or args.format_matrix_manifest) and not args.run_selftest:
         raise SystemExit("External manifests require --run-selftest so the packaged app can execute them.")
 

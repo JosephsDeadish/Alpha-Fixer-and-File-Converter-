@@ -92,12 +92,30 @@ else
 fi
 
 if [[ -x "$launch_target" ]]; then
-    python scripts/verify_packaged_app.py \
-        "$launch_target" \
-        --smoke-seconds 1.5 \
-        --timeout 25 \
-        --require-video-runtime \
+    verify_args=(
+        "$launch_target"
+        --smoke-seconds 1.5
+        --timeout 25
+        --require-video-runtime
         --require-no-missing-libs
+    )
+    if [[ "${ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
+        sample_limit="${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-4}"
+        sample_cache_dir="${ALPHA_FIXER_SAMPLE_CACHE_DIR:-$REPO_ROOT/.sample-cache}"
+        mkdir -p "$sample_cache_dir"
+        verify_args+=(
+            --run-selftest
+            --selftest-iterations 2
+            --selftest-sample-limit "$sample_limit"
+            --use-public-sample-manifests
+            --allow-sample-downloads
+            --sample-cache-dir "$sample_cache_dir"
+            --require-selftest-check external_disc_video_manifest
+            --require-selftest-check external_dds_manifest
+            --require-selftest-check external_format_matrix_manifest
+        )
+    fi
+    python scripts/verify_packaged_app.py "${verify_args[@]}"
 else
     echo "⚠️  Skipping packaged launch smoke test because executable was not found at $launch_target"
 fi
