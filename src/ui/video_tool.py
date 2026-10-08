@@ -457,6 +457,7 @@ def _stream_detail_payload(stream: dict[str, object]) -> dict[str, object]:
     tags = stream.get("tags")
     if not isinstance(tags, dict):
         tags = {}
+    title = str(tags.get("title") or "").strip()
     try:
         width = max(0, int(stream.get("width") or 0))
         height = max(0, int(stream.get("height") or 0))
@@ -470,6 +471,15 @@ def _stream_detail_payload(stream: dict[str, object]) -> dict[str, object]:
         duration = max(0.0, float(stream.get("duration") or 0.0))
     except Exception:
         duration = 0.0
+    try:
+        channels = max(0, int(stream.get("channels") or 0))
+    except Exception:
+        channels = 0
+    try:
+        sample_rate = max(0, int(stream.get("sample_rate") or 0))
+    except Exception:
+        sample_rate = 0
+    title_lower = title.lower()
     return {
         "index": _coerce_optional_stream_index(stream.get("index")),
         "codec_type": str(stream.get("codec_type") or "").strip(),
@@ -482,9 +492,18 @@ def _stream_detail_payload(stream: dict[str, object]) -> dict[str, object]:
         ),
         "bit_rate": bit_rate,
         "duration": duration,
+        "channels": channels,
+        "sample_rate": sample_rate,
         "attached_pic": bool(_stream_flag(stream, "attached_pic")),
+        "default": bool(_stream_flag(stream, "default")),
+        "original": bool(_stream_flag(stream, "original")),
+        "dub": bool(_stream_flag(stream, "dub")) or bool(re.search(r"\bdub\b", title_lower)),
+        "commentary": bool(_stream_flag(stream, "comment"))
+        or bool(re.search(r"\b(commentary|commentator|director['’]?s?\s+commentary)\b", title_lower)),
+        "descriptive": bool(_stream_flag(stream, "descriptions"))
+        or bool(re.search(r"\b(description|descriptive|audio description)\b", title_lower)),
         "language": str(tags.get("language") or "").strip(),
-        "title": str(tags.get("title") or "").strip(),
+        "title": title,
     }
 
 
@@ -505,15 +524,54 @@ def _describe_stream_choice(stream_info: Optional[dict[str, object]]) -> str:
     fps = max(0.0, float(stream_info.get("fps") or 0.0))
     if fps > 0:
         parts.append(f"{fps:.3f}".rstrip("0").rstrip(".") + " fps")
+    channels = max(0, int(stream_info.get("channels") or 0))
+    if channels > 0:
+        parts.append(f"{channels} ch")
+    sample_rate = max(0, int(stream_info.get("sample_rate") or 0))
+    if sample_rate > 0:
+        parts.append(f"{sample_rate} Hz")
     language = str(stream_info.get("language") or "").strip()
     if language:
         parts.append(language)
     title = str(stream_info.get("title") or "").strip()
     if title:
         parts.append(title)
+    if bool(stream_info.get("default")):
+        parts.append("default")
+    if bool(stream_info.get("original")):
+        parts.append("original")
+    if bool(stream_info.get("dub")):
+        parts.append("dub")
+    if bool(stream_info.get("commentary")):
+        parts.append("commentary")
+    if bool(stream_info.get("descriptive")):
+        parts.append("descriptive")
     if bool(stream_info.get("attached_pic")):
         parts.append("cover art")
     return " • ".join(parts)
+
+
+def _selected_stream_choice(
+    details: Optional[dict[str, object]],
+    choices_key: str,
+    index_key: str,
+) -> Optional[dict[str, object]]:
+    if not details:
+        return None
+    stream_index = _coerce_optional_stream_index(details.get(index_key))
+    if stream_index is None:
+        return None
+    choices = details.get(choices_key)
+    if not isinstance(choices, list):
+        return None
+    return next(
+        (
+            choice for choice in choices
+            if isinstance(choice, dict)
+            and _coerce_optional_stream_index(choice.get("index")) == stream_index
+        ),
+        None,
+    )
 
 
 def _stream_selection_note(
@@ -588,7 +646,7 @@ def _probe_media_details(
                 *_FFPROBE_DEEP_ANALYSIS_ARGS,
                 "-print_format", "json",
                 "-show_entries",
-                "format=format_name,duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,bit_rate,duration,disposition=attached_pic:stream_tags=language,title",
+                "format=format_name,duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,bit_rate,duration,channels,sample_rate,disposition=attached_pic+default+original+dub+comment+descriptions:stream_tags=language,title",
                 path,
             ],
             stdout=subprocess.PIPE,
@@ -645,6 +703,8 @@ def _probe_media_details(
 
     selected_video_index = _coerce_optional_stream_index(preferred_video_stream_index)
     selected_audio_index = _coerce_optional_stream_index(preferred_audio_stream_index)
+    video_stream_choices = [_stream_detail_payload(stream) for stream in video_streams]
+    audio_stream_choices = [_stream_detail_payload(stream) for stream in audio_streams]
     video_stream = next(
         (
             stream for stream in video_streams
@@ -662,7 +722,7 @@ def _probe_media_details(
         None,
     ) if selected_audio_index is not None else None
     if audio_stream is None:
-        audio_stream = audio_streams[0] if audio_streams else None
+        audio_stream = max(audio_streams, key=lambda stream: _audio_stream_choice_rank(_stream_detail_payload(stream)), default=None)
     fps = 0.0
     width = height = 0
     video_codec = ""
@@ -701,8 +761,6 @@ def _probe_media_details(
         duration = float(format_info.get("duration") or 0.0)
     except Exception:
         duration = 0.0
-    video_stream_choices = [_stream_detail_payload(stream) for stream in video_streams]
-    audio_stream_choices = [_stream_detail_payload(stream) for stream in audio_streams]
     return {
         "format_name": str(format_info.get("format_name") or "").strip(),
         "duration": duration if duration > 0 else 0.0,
@@ -754,6 +812,12 @@ def _format_media_probe_summary(details: Optional[dict[str, object]]) -> str:
     if audio_stream_count > 1:
         choice = f" preferred-audio-stream={audio_stream_index}" if audio_stream_index is not None else ""
         parts.append(f"audio-streams={audio_stream_count}{choice}")
+    video_choice_note = _stream_selection_note(details, manual=False)
+    if video_choice_note:
+        parts.append(video_choice_note)
+    audio_choice_note = _audio_stream_selection_note(details, manual=False)
+    if audio_choice_note:
+        parts.append(audio_choice_note)
     if attached_pic_count > 0:
         parts.append(f"attached-pic-streams={attached_pic_count}")
     if selected_language:
@@ -873,6 +937,9 @@ def _video_load_failure_hint(
             lines.append(
                 "Multiple audio streams were detected; recovery will also retry alternate audio tracks and audio-drop mode when broken source audio blocks import."
             )
+            audio_note = _audio_stream_selection_note(probe, manual=False)
+            if audio_note:
+                lines.append(f"Automatic selection active: {audio_note}.")
         if bool(probe.get("selected_video_attached_pic")):
             lines.append("The currently selected stream looks like attached cover art instead of continuous video frames.")
     elif probe and bool(probe.get("has_audio")) and not bool(probe.get("has_video")):
@@ -1017,6 +1084,18 @@ def _video_codec_guidance(path: str, details: Optional[dict[str, object]]) -> li
         guidance.append(
             "Detected legacy disc-style audio alongside the video stream; if direct loading fails, recovery may need to drop or replace the original audio before the clip can be imported."
         )
+    selected_audio = _selected_stream_choice(details, "audio_stream_choices", "audio_stream_index")
+    if selected_audio and (bool(selected_audio.get("commentary")) or bool(selected_audio.get("dub")) or bool(selected_audio.get("descriptive"))):
+        labels: list[str] = []
+        if bool(selected_audio.get("commentary")):
+            labels.append("commentary")
+        if bool(selected_audio.get("dub")):
+            labels.append("dub")
+        if bool(selected_audio.get("descriptive")):
+            labels.append("descriptive")
+        guidance.append(
+            f"The currently preferred audio track looks like {'/'.join(labels)} audio; if the wrong track was chosen, reload with another audio stream before exporting."
+        )
     return guidance
 
 
@@ -1056,12 +1135,20 @@ def _video_stream_choice_rank(stream_info: dict[str, object]) -> tuple[int, int,
     return attached_pic, live_video, area, fps, bit_rate, duration
 
 
-def _audio_stream_choice_rank(stream_info: dict[str, object]) -> tuple[float, float, int]:
+def _audio_stream_choice_rank(
+    stream_info: dict[str, object],
+) -> tuple[int, int, int, int, int, int, float, float, int]:
+    preferred = 1 if bool(stream_info.get("default")) else 0
+    original = 1 if bool(stream_info.get("original")) else 0
+    non_commentary = 0 if bool(stream_info.get("commentary")) else 1
+    non_descriptive = 0 if bool(stream_info.get("descriptive")) else 1
+    non_dub = 0 if bool(stream_info.get("dub")) else 1
+    channels = max(0, int(stream_info.get("channels") or 0))
     bit_rate = max(0.0, float(stream_info.get("bit_rate") or 0.0))
     duration = max(0.0, float(stream_info.get("duration") or 0.0))
     index = _coerce_optional_stream_index(stream_info.get("index"))
     normalized_index = -(index if index is not None else 999999)
-    return bit_rate, duration, normalized_index
+    return preferred, original, non_commentary, non_descriptive, non_dub, channels, bit_rate, duration, normalized_index
 
 
 def _recovery_probe_candidates(

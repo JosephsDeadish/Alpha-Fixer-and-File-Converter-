@@ -13,6 +13,17 @@
       ]
     },
     {
+      "path": "public-disc-video/INTRO.pmf",
+      "download_url": "https://raw.githubusercontent.com/0nza1101/PSP-libpmfplayer/93486b7045fc828a3f7f17f932644668bd885b09/sample/data/INTRO.pmf",
+      "sha256": "2a3a85f201d8942989d126f7a22596029ad0b22cd7043573c7228cf354c4e0c1",
+      "download_name": "INTRO.pmf",
+      "cache_subdir": "public-disc-video",
+      "platform": "PSP",
+      "group": "pmf movie asset",
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
+    },
+    {
       "path": "public-disc-video/sample.wmv",
       "download_url": "https://raw.githubusercontent.com/projectivetech/media-samples/master/sample.wmv",
       "sha256": "60084bf1d83c48fa33c46a0d51346b11a62a3a8112fa7cf1115479cd96f42353",

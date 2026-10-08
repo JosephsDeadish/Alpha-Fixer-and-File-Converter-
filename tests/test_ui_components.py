@@ -3327,6 +3327,38 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("Multiple audio streams were detected", hint)
         self.assertIn("alternate audio tracks", hint)
 
+    def test_video_load_failure_hint_surfaces_auto_audio_choice_and_commentary_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 3,
+            "video_stream_index": 1,
+            "audio_stream_index": 4,
+            "audio_stream_choices": [
+                {"index": 2, "codec_name": "ac3", "language": "eng", "title": "Main", "default": False},
+                {"index": 4, "codec_name": "ac3", "language": "eng", "title": "Director Commentary", "commentary": True, "default": True},
+                {"index": 6, "codec_name": "ac3", "language": "jpn", "title": "Dub", "dub": True, "default": False},
+            ],
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/feature.vob")
+        self.assertIn("Automatic selection active: preferred audio #4", hint)
+        self.assertIn("Director Commentary", hint)
+        self.assertIn("The currently preferred audio track looks like commentary audio", hint)
+
     def test_video_load_failure_hint_mentions_recovery_exhausted_for_odd_container(self):
         try:
             from src.ui import video_tool as vt
@@ -4011,6 +4043,36 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(remux_calls, [(True, 9), (True, 5)])
         self.assertEqual(transcode_calls, [(True, 9)])
         self.assertIn("alternate audio #5", note)
+
+    def test_audio_stream_choice_rank_prefers_default_original_non_commentary_tracks(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        preferred = {
+            "index": 6,
+            "default": True,
+            "original": True,
+            "commentary": False,
+            "descriptive": False,
+            "dub": False,
+            "channels": 2,
+            "bit_rate": 128000,
+            "duration": 10.0,
+        }
+        commentary = {
+            "index": 2,
+            "default": True,
+            "original": False,
+            "commentary": True,
+            "descriptive": False,
+            "dub": False,
+            "channels": 6,
+            "bit_rate": 384000,
+            "duration": 10.0,
+        }
+        self.assertGreater(vt._audio_stream_choice_rank(preferred), vt._audio_stream_choice_rank(commentary))
 
     def test_recovery_prefers_probe_selected_stream_indexes(self):
         try:
