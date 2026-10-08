@@ -19,7 +19,8 @@
       "download_name": "sample.wmv",
       "cache_subdir": "public-disc-video",
       "group": "odd container",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.flv",
@@ -28,7 +29,8 @@
       "download_name": "sample.flv",
       "cache_subdir": "public-disc-video",
       "group": "odd container",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.mxf",
@@ -37,7 +39,8 @@
       "download_name": "sample.mxf",
       "cache_subdir": "public-disc-video",
       "group": "odd container",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.avi",
@@ -46,7 +49,8 @@
       "download_name": "sample.avi",
       "cache_subdir": "public-disc-video",
       "group": "legacy container",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.mov",
@@ -55,7 +59,8 @@
       "download_name": "sample.mov",
       "cache_subdir": "public-disc-video",
       "group": "legacy container",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.mpg",
@@ -64,7 +69,8 @@
       "download_name": "sample.mpg",
       "cache_subdir": "public-disc-video",
       "group": "program stream",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.mkv",
@@ -73,7 +79,8 @@
       "download_name": "sample.mkv",
       "cache_subdir": "public-disc-video",
       "group": "matroska family",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.webm",
@@ -82,7 +89,8 @@
       "download_name": "sample.webm",
       "cache_subdir": "public-disc-video",
       "group": "matroska family",
-      "expect": "load_or_explain"
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true
     },
     {
       "path": "public-disc-video/sample.aac",
@@ -92,6 +100,8 @@
       "cache_subdir": "public-disc-video",
       "group": "audio-only",
       "expect": "fail",
+      "expect_probe_has_video": false,
+      "expect_probe_has_audio": true,
       "hint_contains": [
         "audio but no playable video stream"
       ]
@@ -104,6 +114,8 @@
       "cache_subdir": "public-disc-video",
       "group": "audio-only",
       "expect": "fail",
+      "expect_probe_has_video": false,
+      "expect_probe_has_audio": true,
       "hint_contains": [
         "audio but no playable video stream"
       ]
@@ -116,6 +128,8 @@
       "cache_subdir": "public-disc-video",
       "group": "audio-only",
       "expect": "fail",
+      "expect_probe_has_video": false,
+      "expect_probe_has_audio": true,
       "hint_contains": [
         "audio but no playable video stream"
       ]

@@ -59,6 +59,15 @@
         "attached-picture/cover-art stream"
       ],
       "notes": "Use a real media file whose probe prefers an attached-picture stream or embedded artwork. This helps validate still-frame fallback messaging and alternate-stream recovery behavior."
+    },
+    {
+      "group": "odd container",
+      "sample_id": "editorial-wmv-or-mxf",
+      "path": "odd/sample.wmv",
+      "required": true,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "notes": "Use a real WMV/ASF- or MXF-style sample here when you want local corpus coverage for odd containers that may need remux/transcode recovery but are not disc-image specific."
     }
   ]
 }

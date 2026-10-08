@@ -211,9 +211,19 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(".aac") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".ac3") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".wma") for entry in entries))
-        self.assertTrue(any("odd container" in str(entry.get("group") or "").lower() or "legacy container" in str(entry.get("group") or "").lower() for entry in entries))
-        self.assertTrue(any("audio-only" in str(entry.get("group") or "").lower() for entry in entries))
-        self.assertTrue(any(str(entry.get("expect") or "").lower() == "fail" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "disc image" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "odd container" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "legacy container" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "program stream" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "matroska family" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "audio-only" for entry in entries))
+        audio_only = [entry for entry in entries if str(entry.get("group") or "").lower() == "audio-only"]
+        self.assertTrue(audio_only)
+        self.assertTrue(all(str(entry.get("expect") or "").lower() == "fail" for entry in audio_only))
+        self.assertTrue(all(entry.get("expect_probe_has_video") is False for entry in audio_only))
+        self.assertTrue(all(entry.get("expect_probe_has_audio") is True for entry in audio_only))
+        videoish = [entry for entry in entries if str(entry.get("group") or "").lower() != "audio-only"]
+        self.assertTrue(any(entry.get("expect_probe_has_video") is True for entry in videoish))
 
     def test_built_in_public_format_matrix_manifest_loads(self):
         manifest_path = os.path.join(
@@ -304,12 +314,13 @@ class TestCorpusHelperInputs(unittest.TestCase):
             "private_odd_container_video_manifest_template.json",
         )
         entries = load_manifest_entries(manifest_path)
-        self.assertEqual(len(entries), 5)
+        self.assertEqual(len(entries), 6)
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "video_sample.dat")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "audio_only.wma")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "multi_stream.mkv")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "clip.001.vob")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "cover_art_container.mkv")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "sample.wmv")) for entry in entries))
         self.assertTrue(any("audio but no playable video stream" in " ".join(entry.get("hint_contains") or []) for entry in entries))
         self.assertTrue(any("Multiple video streams were detected" in " ".join(entry.get("hint_contains") or []) for entry in entries))
 
