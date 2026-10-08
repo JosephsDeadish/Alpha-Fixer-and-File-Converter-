@@ -8957,21 +8957,22 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_build_script_runs_packaged_launch_smoke_test(self):
         sh_src = self._src("../scripts/build_exe.sh")
-        self.assertIn('ALPHA_FIXER_SMOKE_TEST=1.5', sh_src)
-        self.assertIn('timeout 25s "$launch_target"', sh_src)
-        self.assertIn('echo "✅  Packaged app launch verified."', sh_src)
+        self.assertIn('python scripts/verify_packaged_app.py', sh_src)
+        self.assertIn('--smoke-seconds 1.5', sh_src)
+        self.assertIn('--timeout 25', sh_src)
 
     def test_build_scripts_run_packaged_capability_audit(self):
         sh_src = self._src("../scripts/build_exe.sh")
         bat_src = self._src("../scripts/build_exe.bat")
-        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1', sh_src)
-        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', sh_src)
-        self.assertIn('video_runtime_ready', sh_src)
-        self.assertIn('odd_container_probe_ready', sh_src)
-        self.assertIn('dds_compression_available', sh_src)
-        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1', bat_src)
-        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', bat_src)
-        self.assertIn('video_runtime_ready', bat_src)
+        verify_src = self._src("../scripts/verify_packaged_app.py")
+        self.assertIn('verify_packaged_app.py', sh_src)
+        self.assertIn('verify_packaged_app.py', bat_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP', verify_src)
+        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', verify_src)
+        self.assertIn('video_runtime_ready', verify_src)
+        self.assertIn('odd_container_probe_ready', verify_src)
+        self.assertIn('dds_compression_available', verify_src)
+        self.assertIn('ALPHA_FIXER_SMOKE_TEST', verify_src)
 
     def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
         src = self._src("../main.py")

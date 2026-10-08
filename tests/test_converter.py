@@ -13,6 +13,11 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from tests.corpus_helpers import (
+    _iter_corpus_files,
+    _optional_corpus_roots,
+    _optional_manifest_entries,
+)
 
 from src.core.file_converter import (
     convert_file,
@@ -28,44 +33,6 @@ from src.core.file_converter import (
 from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_image
 from src.core.worker import AlphaWorker, ConverterWorker
 from src.version import APP_NAME
-
-
-def _optional_corpus_roots(*env_names: str) -> list[str]:
-    roots: list[str] = []
-    for env_name in env_names:
-        raw = os.environ.get(env_name, "")
-        if not raw:
-            continue
-        for part in raw.split(os.pathsep):
-            candidate = part.strip()
-            if candidate and os.path.isdir(candidate):
-                roots.append(candidate)
-    return roots
-
-
-def _iter_corpus_files(roots: list[str], suffixes: tuple[str, ...], *, limit: int = 32) -> list[str]:
-    matches: list[str] = []
-    for root in roots:
-        for dirpath, _dirnames, filenames in os.walk(root):
-            for name in sorted(filenames):
-                if name.lower().endswith(suffixes):
-                    matches.append(os.path.join(dirpath, name))
-                    if len(matches) >= limit:
-                        return matches
-    return matches
-
-
-def _optional_manifest_entries(env_name: str) -> list[dict[str, object]]:
-    raw = os.environ.get(env_name, "").strip()
-    if not raw:
-        return []
-    try:
-        payload = json.loads(raw)
-    except Exception:
-        return []
-    if not isinstance(payload, list):
-        return []
-    return [entry for entry in payload if isinstance(entry, dict) and str(entry.get("path") or "").strip()]
 
 
 def _make_png(path: str, w=8, h=8, alpha=200):
@@ -211,6 +178,44 @@ class TestBuildOutputPath(unittest.TestCase):
             input_root="/src",
         )
         self.assertEqual(result, "/out/sub/file.jpg")
+
+
+class TestCorpusHelperInputs(unittest.TestCase):
+    def test_optional_manifest_entries_accepts_manifest_file_and_resolves_relative_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = os.path.join(tmpdir, "samples")
+            os.makedirs(sample_dir, exist_ok=True)
+            sample_path = os.path.join(sample_dir, "clip.dds")
+            with open(sample_path, "wb") as handle:
+                handle.write(b"dds")
+            manifest_path = os.path.join(tmpdir, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump([{"path": "samples/clip.dds", "expect": "load"}], handle)
+            with mock.patch.dict(os.environ, {"ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": manifest_path}, clear=False):
+                entries = _optional_manifest_entries("ALPHA_FIXER_REAL_DDS_DX10_MANIFEST")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["path"], sample_path)
+        self.assertEqual(entries[0]["expect"], "load")
+
+    def test_optional_manifest_entries_accepts_samples_wrapper_and_base_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.bc7.dds")
+            with open(sample_path, "wb") as handle:
+                handle.write(b"dds")
+            manifest_path = os.path.join(tmpdir, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "base_dir": ".",
+                        "samples": [{"path": "sample.bc7.dds", "expect": "fail"}],
+                    },
+                    handle,
+                )
+            with mock.patch.dict(os.environ, {"ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": manifest_path}, clear=False):
+                entries = _optional_manifest_entries("ALPHA_FIXER_REAL_DDS_DX10_MANIFEST")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["path"], sample_path)
+        self.assertEqual(entries[0]["expect"], "fail")
 
 
 class TestOptionalRealCorpus(unittest.TestCase):
@@ -917,18 +922,23 @@ class TestConvertFile(unittest.TestCase):
             finally:
                 img.close()
 
-    def test_load_dds_bc7_returns_placeholder(self):
+    def test_load_dds_bc7_requires_real_decoder(self):
         from src.core.alpha_processor import _load_dds_raw
 
         with tempfile.TemporaryDirectory() as tmpdir:
             src = os.path.join(tmpdir, "input_bc7.dds")
             _make_dx10_dds(src, 4, 4, 98, bytes(16))
-            img = _load_dds_raw(src)
-            try:
-                self.assertEqual(img.size, (4, 4))
-                self.assertEqual(img.getpixel((0, 0)), (128, 128, 128, 255))
-            finally:
-                img.close()
+            with self.assertRaisesRegex(ValueError, "BC6H/BC7 decoder"):
+                _load_dds_raw(src)
+
+    def test_load_dds_bc6h_requires_real_decoder(self):
+        from src.core.alpha_processor import _load_dds_raw
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_bc6h.dds")
+            _make_dx10_dds(src, 4, 4, 95, bytes(16))
+            with self.assertRaisesRegex(ValueError, "BC6H/BC7 decoder"):
+                _load_dds_raw(src)
 
     def test_load_dds_rejects_unknown_dxgi_format(self):
         from src.core.alpha_processor import _load_dds_raw

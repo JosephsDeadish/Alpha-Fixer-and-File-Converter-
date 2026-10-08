@@ -582,7 +582,9 @@ def _video_load_failure_hint(
             "This odd container reports a video stream, but direct loading and ffmpeg recovery fallbacks still could not produce a playable clip."
         )
         if int(probe.get("video_stream_count") or 0) > 1:
-            lines.append("Multiple video streams were detected; recovery will prefer the largest non-cover-art probe-detected video stream.")
+            lines.append(
+                "Multiple video streams were detected; recovery will prefer the largest non-cover-art probe-detected video stream and retry alternate non-cover-art streams when needed."
+            )
         if bool(probe.get("selected_video_attached_pic")):
             lines.append("The currently selected stream looks like attached cover art instead of continuous video frames.")
     elif probe and bool(probe.get("has_audio")) and not bool(probe.get("has_video")):
@@ -670,6 +672,77 @@ def _ffmpeg_stream_maps(details: Optional[dict[str, object]]) -> list[str]:
     else:
         maps.extend(["-map", f"0:{int(audio_index)}?"])
     return maps
+
+
+def _video_stream_choice_rank(stream_info: dict[str, object]) -> tuple[int, int, float, float, float, float]:
+    width = max(0, int(stream_info.get("width") or 0))
+    height = max(0, int(stream_info.get("height") or 0))
+    fps = max(0.0, float(stream_info.get("fps") or 0.0))
+    bit_rate = max(0.0, float(stream_info.get("bit_rate") or 0.0))
+    duration = max(0.0, float(stream_info.get("duration") or 0.0))
+    area = width * height
+    attached_pic = 0 if bool(stream_info.get("attached_pic")) else 1
+    live_video = 1 if area > 0 or fps > 0.5 else 0
+    return attached_pic, live_video, area, fps, bit_rate, duration
+
+
+def _recovery_probe_candidates(
+    path: str,
+    details: Optional[dict[str, object]],
+    *,
+    allow_alternate_streams: bool = True,
+) -> list[dict[str, object]]:
+    if not details:
+        return []
+    candidates = [details]
+    if not allow_alternate_streams:
+        return candidates
+    choices = details.get("video_stream_choices")
+    if not isinstance(choices, list) or len(choices) <= 1:
+        return candidates
+    selected_video_index = _coerce_optional_stream_index(details.get("video_stream_index"))
+    selected_audio_index = _coerce_optional_stream_index(details.get("audio_stream_index"))
+    seen_indexes = {selected_video_index}
+    alternates = [
+        choice
+        for choice in choices
+        if isinstance(choice, dict)
+        and _coerce_optional_stream_index(choice.get("index")) is not None
+        and _coerce_optional_stream_index(choice.get("index")) not in seen_indexes
+        and not bool(choice.get("attached_pic"))
+    ]
+    alternates.sort(key=_video_stream_choice_rank, reverse=True)
+    for choice in alternates:
+        stream_index = _coerce_optional_stream_index(choice.get("index"))
+        if stream_index is None:
+            continue
+        seen_indexes.add(stream_index)
+        candidate = _probe_media_details(
+            path,
+            preferred_video_stream_index=stream_index,
+            preferred_audio_stream_index=selected_audio_index,
+        )
+        if candidate and bool(candidate.get("has_video")):
+            candidates.append(candidate)
+    return candidates
+
+
+def _recovery_stream_note(
+    details: Optional[dict[str, object]],
+    *,
+    primary_video_index: Optional[int] = None,
+) -> str:
+    if not details:
+        return ""
+    selected_video_index = _coerce_optional_stream_index(details.get("video_stream_index"))
+    if selected_video_index is None:
+        return ""
+    video_stream_count = max(0, int(details.get("video_stream_count") or 0))
+    if primary_video_index is not None and selected_video_index != primary_video_index:
+        return f"alternate stream #{selected_video_index}"
+    if video_stream_count > 1:
+        return f"preferred stream #{selected_video_index}"
+    return ""
 
 
 def _remux_video_source(path: str, details: Optional[dict[str, object]] = None) -> Optional[str]:
@@ -848,27 +921,32 @@ def _attempt_video_recovery(
     probe: Optional[dict[str, object]] = None,
     *,
     force_recovery: bool = False,
-) -> tuple[Optional[str], str]:
+    allow_alternate_streams: bool = True,
+) -> tuple[Optional[str], str, Optional[dict[str, object]]]:
     ext = Path(path).suffix.lower()
     details = probe if probe is not None else _probe_media_details(path)
     if not force_recovery and ext not in _ODD_CONTAINER_RECOVERY_EXTS and not bool(details and details.get("has_video")):
-        return None, ""
-    if details and bool(details.get("selected_video_attached_pic")) and int(details.get("video_attached_pic_count") or 0) >= int(details.get("video_stream_count") or 0):
-        return None, ""
-    remux_path = _remux_video_source(path, details)
-    if remux_path:
-        strategy = "temporary ffmpeg remux fallback active"
-        if details and int(details.get("video_stream_count") or 0) > 1 and details.get("video_stream_index") is not None:
-            strategy += f" (preferred stream #{int(details['video_stream_index'])})"
-        return remux_path, strategy
-    if details and bool(details.get("has_video")):
-        transcode_path = _transcode_video_source(path, details)
-        if transcode_path:
-            strategy = "temporary ffmpeg transcode fallback active"
-            if int(details.get("video_stream_count") or 0) > 1 and details.get("video_stream_index") is not None:
-                strategy += f" (preferred stream #{int(details['video_stream_index'])})"
-            return transcode_path, strategy
-    return None, ""
+        return None, "", details
+    primary_video_index = _coerce_optional_stream_index(details.get("video_stream_index")) if details else None
+    for candidate in _recovery_probe_candidates(path, details, allow_alternate_streams=allow_alternate_streams) or [details]:
+        if candidate and bool(candidate.get("selected_video_attached_pic")) and int(candidate.get("video_attached_pic_count") or 0) >= int(candidate.get("video_stream_count") or 0):
+            continue
+        remux_path = _remux_video_source(path, candidate)
+        if remux_path:
+            strategy = "temporary ffmpeg remux fallback active"
+            stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
+            if stream_note:
+                strategy += f" ({stream_note})"
+            return remux_path, strategy, candidate
+        if candidate and bool(candidate.get("has_video")):
+            transcode_path = _transcode_video_source(path, candidate)
+            if transcode_path:
+                strategy = "temporary ffmpeg transcode fallback active"
+                stream_note = _recovery_stream_note(candidate, primary_video_index=primary_video_index)
+                if stream_note:
+                    strategy += f" ({stream_note})"
+                return transcode_path, strategy, candidate
+    return None, "", details
 
 
 def _video_capability_summary() -> str:
@@ -1582,7 +1660,12 @@ def _load_video_clip(
                 preferred_audio_stream_index=preferred_audio_stream_index,
             )
     manual_stream_note = _stream_selection_note(probe, manual=preferred_video_stream_index is not None)
-    recovered_path, recovery_note = _attempt_video_recovery(path, probe, force_recovery=not allow_direct_open)
+    recovered_path, recovery_note, recovery_probe = _attempt_video_recovery(
+        path,
+        probe,
+        force_recovery=not allow_direct_open,
+        allow_alternate_streams=preferred_video_stream_index is None,
+    )
     if recovered_path:
         try:
             fps, frame_count, frame_size, first_frame = _probe_video_clip(recovered_path)
@@ -1590,6 +1673,7 @@ def _load_video_clip(
                 _unlink_file_safely(recovered_path)
                 recovered_path = None
             else:
+                active_probe = recovery_probe or probe
                 return _ClipEntry(
                     recovered_path,
                     frame_count,
@@ -1601,9 +1685,9 @@ def _load_video_clip(
                     source_path=path,
                     load_note=f"{manual_stream_note}; {recovery_note}" if manual_stream_note and recovery_note else (manual_stream_note or recovery_note),
                     load_strategy=f"{manual_stream_note}; {recovery_note}" if manual_stream_note and recovery_note else (manual_stream_note or recovery_note),
-                    source_probe=probe,
-                    preferred_video_stream_index=preferred_video_stream_index,
-                    preferred_audio_stream_index=preferred_audio_stream_index,
+                    source_probe=active_probe,
+                    preferred_video_stream_index=preferred_video_stream_index if preferred_video_stream_index is not None else _coerce_optional_stream_index(active_probe.get("video_stream_index") if active_probe else None),
+                    preferred_audio_stream_index=preferred_audio_stream_index if preferred_audio_stream_index is not None else _coerce_optional_stream_index(active_probe.get("audio_stream_index") if active_probe else None),
                 )
         except Exception:
             _unlink_file_safely(recovered_path)

@@ -89,8 +89,8 @@ def _load_dds(path: str) -> Image.Image:
 
 
 def _load_dds_raw(path: str) -> Image.Image:
-    """DDS reader supporting uncompressed (BGRA/BGR) and compressed (DXT1/3/5,
-    BC4/BC5/BC6H/BC7/ATI1/ATI2) surfaces via pure-Python decompression."""
+    """DDS reader supporting uncompressed (BGRA/BGR) and compressed DXT1/3/5,
+    BC4/BC5/ATI1/ATI2 surfaces, with clear failures for unsupported BC6H/BC7."""
     with open(path, "rb") as f:
         data = f.read()
     if len(data) < 128 or data[:4] != b"DDS ":
@@ -358,16 +358,14 @@ def _decompress_dds_blocks(
     else:
         block_size = 16
 
-    # BC6H and BC7 are complex GPU-compressed formats.  Without a dedicated
-    # decoder library (e.g. bc7decomp) we fall back to a grey placeholder so
-    # the user at least sees something rather than a crash.
+    # BC6H and BC7 are complex GPU-compressed HDR/modern texture formats.
+    # Without a dedicated decoder library we fail clearly instead of returning
+    # misleading placeholder pixels that look like a successful decode.
     if fmt in ("BC6H", "BC7"):
-        logger.warning(
-            "DDS format %s requires a BC6H/BC7 decoder library; "
-            "displaying grey placeholder. Install ImageMagick/wand for full support.",
-            fmt,
+        raise ValueError(
+            f"DDS format {fmt} requires a BC6H/BC7 decoder library. "
+            "Install ImageMagick/wand for full support."
         )
-        return Image.new("RGBA", (width, height), (128, 128, 128, 255))
 
     rgba = np.zeros((bh * 4, bw * 4, 4), dtype=np.uint8)
     offset = 0

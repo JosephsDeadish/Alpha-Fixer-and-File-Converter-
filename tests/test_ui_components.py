@@ -14,6 +14,11 @@ from unittest.mock import MagicMock, patch
 
 # Make src importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from tests.corpus_helpers import (
+    _iter_corpus_files,
+    _optional_corpus_roots,
+    _optional_manifest_entries,
+)
 
 # ---------------------------------------------------------------------------
 # PyQt6 availability – used to skip widget/UI tests when PyQt6 is absent
@@ -70,44 +75,6 @@ def _get_app():
     # Process any pending deleteLater() events from previous tests
     app.processEvents()
     return app
-
-
-def _optional_corpus_roots(*env_names: str) -> list[str]:
-    roots: list[str] = []
-    for env_name in env_names:
-        raw = os.environ.get(env_name, "")
-        if not raw:
-            continue
-        for part in raw.split(os.pathsep):
-            candidate = part.strip()
-            if candidate and os.path.isdir(candidate):
-                roots.append(candidate)
-    return roots
-
-
-def _iter_corpus_files(roots: list[str], suffixes: tuple[str, ...], *, limit: int = 24) -> list[str]:
-    matches: list[str] = []
-    for root in roots:
-        for dirpath, _dirnames, filenames in os.walk(root):
-            for name in sorted(filenames):
-                if name.lower().endswith(suffixes):
-                    matches.append(os.path.join(dirpath, name))
-                    if len(matches) >= limit:
-                        return matches
-    return matches
-
-
-def _optional_manifest_entries(env_name: str) -> list[dict[str, object]]:
-    raw = os.environ.get(env_name, "").strip()
-    if not raw:
-        return []
-    try:
-        payload = json.loads(raw)
-    except Exception:
-        return []
-    if not isinstance(payload, list):
-        return []
-    return [entry for entry in payload if isinstance(entry, dict) and str(entry.get("path") or "").strip()]
 
 
 class TestDropFileList(unittest.TestCase):
@@ -2442,7 +2409,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
 
         with patch.object(vt, "_probe_video_clip", side_effect=RuntimeError("primary open failed")):
             with patch.object(vt, "_probe_media_details", return_value={"has_video": True, "has_audio": True, "selected_video_attached_pic": True}):
-                with patch.object(vt, "_attempt_video_recovery", return_value=(None, "")):
+                with patch.object(vt, "_attempt_video_recovery", return_value=(None, "", None)):
                     with patch.object(vt, "_extract_visual_still_frame", return_value=Image.new("RGBA", (8, 6), (255, 0, 0, 255))):
                         clip = vt._load_video_clip("/tmp/album.bin")
         self.assertIsNotNone(clip)
@@ -2450,6 +2417,61 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(clip.source_path, "/tmp/album.bin")
         self.assertTrue(clip.has_audio)
         self.assertIn("still-frame fallback", clip.load_note)
+        clip.close()
+
+    def test_load_video_clip_retries_alternate_stream_recovery_for_multi_stream_sources(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        primary_probe = {
+            "has_video": True,
+            "has_audio": True,
+            "video_stream_count": 2,
+            "audio_stream_index": 7,
+            "video_stream_index": 3,
+            "video_stream_choices": [
+                {"index": 3, "attached_pic": False, "width": 320, "height": 240, "fps": 24.0, "bit_rate": 1000, "duration": 10.0},
+                {"index": 5, "attached_pic": False, "width": 640, "height": 480, "fps": 29.97, "bit_rate": 2000, "duration": 10.0},
+            ],
+        }
+        alternate_probe = {
+            **primary_probe,
+            "video_stream_index": 5,
+        }
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 4, "size": (640, 480)}
+
+            def get_data(self, idx):
+                return [[[0, 0, 0, 255]]]
+
+            def close(self):
+                return None
+
+        def _probe_side_effect(path, preferred_video_stream_index=None, preferred_audio_stream_index=None):
+            if preferred_video_stream_index == 5:
+                return alternate_probe
+            return primary_probe
+
+        def _remux_side_effect(path, details=None):
+            stream_index = None if details is None else details.get("video_stream_index")
+            if stream_index == 5:
+                return "/tmp/recovered-alt.mkv"
+            return None
+
+        with patch.object(vt, "_probe_media_details", side_effect=_probe_side_effect):
+            with patch.object(vt, "_probe_video_clip", side_effect=[RuntimeError("primary open failed"), (30.0, 4, (640, 480), None)]):
+                with patch.object(vt, "_remux_video_source", side_effect=_remux_side_effect):
+                    with patch.object(vt, "_transcode_video_source", return_value=None):
+                        with patch.object(vt, "_video_has_audio_stream", return_value=True):
+                            with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+                                clip = vt._load_video_clip("/tmp/multi.vob")
+        self.assertIsNotNone(clip)
+        self.assertEqual(clip.preferred_video_stream_index, 5)
+        self.assertIn("alternate stream #5", clip.load_note)
         clip.close()
 
     def test_probe_media_details_prefers_non_attached_pic_stream(self):

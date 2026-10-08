@@ -57,29 +57,11 @@ if "%1"=="--onefile" (
 )
 
 if exist "!LAUNCH_TARGET!" (
-    echo Running packaged capability audit…
-    set "CAPABILITY_OUT=%TEMP%\alpha_fixer_capability_audit.txt"
-    set "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1"
-    "!LAUNCH_TARGET!" > "!CAPABILITY_OUT!" 2>&1
+    echo Running packaged validation...
+    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-no-missing-libs
     if errorlevel 1 (
-        type "!CAPABILITY_OUT!"
-        echo ERROR: Packaged capability audit failed.
-        del /q "!CAPABILITY_OUT!" >nul 2>nul
         exit /b 1
     )
-    type "!CAPABILITY_OUT!"
-    findstr /b /c:"ALPHA_FIXER_RUNTIME_CAPABILITIES=" "!CAPABILITY_OUT!" >nul
-    if errorlevel 1 (
-        echo ERROR: Packaged capability audit did not emit ALPHA_FIXER_RUNTIME_CAPABILITIES output.
-        del /q "!CAPABILITY_OUT!" >nul 2>nul
-        exit /b 1
-    )
-    python -c "import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); prefix='ALPHA_FIXER_RUNTIME_CAPABILITIES='; lines=p.read_text(encoding='utf-8', errors='replace').splitlines(); matches=[raw[len(prefix):] for raw in lines if raw.startswith(prefix)]; assert matches, 'Packaged capability audit did not emit ALPHA_FIXER_RUNTIME_CAPABILITIES output.'; payload=json.loads(matches[-1]); assert payload.get('video_runtime_ready'), 'Packaged runtime audit failed: video_runtime_ready=false'; assert not (payload.get('missing_linux_runtime_libs') or []), 'Packaged runtime audit failed: missing_linux_runtime_libs=' + ','.join(str(name) for name in (payload.get('missing_linux_runtime_libs') or [])); print('WARNING: ffprobe unavailable, odd-container probing stays limited.' if not payload.get('odd_container_probe_ready') else ''); print('WARNING: DDS compressed variants remain unavailable without bundled ImageMagick/wand.' if not payload.get('dds_compression_available') else ''); print('Packaged runtime capability audit verified.')" "!CAPABILITY_OUT!"
-    if errorlevel 1 (
-        del /q "!CAPABILITY_OUT!" >nul 2>nul
-        exit /b 1
-    )
-    del /q "!CAPABILITY_OUT!" >nul 2>nul
 )
 
 echo.

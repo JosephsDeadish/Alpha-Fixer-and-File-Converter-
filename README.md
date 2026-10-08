@@ -104,6 +104,7 @@ Or install manually by distribution:
 If any of these are missing, `main.py` will detect the problem at startup and print the exact install command for your distribution before exiting cleanly — no cryptic crashes.
 
 For DDS support also install [ImageMagick](https://imagemagick.org/).
+BC6H / BC7 / other advanced DX10 DDS variants are currently only supported when Pillow or ImageMagick/wand can decode them directly; the pure-Python fallback now fails clearly instead of fabricating placeholder pixels.
 
 ## Running
 
@@ -130,6 +131,7 @@ scripts\build_exe.bat
 
 The finished application is placed in `dist/AlphaFixerConverter/`.
 Run `AlphaFixerConverter` (Linux/macOS) or `AlphaFixerConverter.exe` (Windows) from that folder.
+Both build scripts now reuse `scripts/verify_packaged_app.py` to smoke-launch the packaged app and dump runtime capabilities, so the same verification step can be re-run manually on a fresh machine later.
 
 ### Single-file build (slower startup)
 
@@ -151,6 +153,68 @@ pyinstaller alpha_fixer.spec
 ```bash
 python -m pytest tests/ -v
 ```
+
+### Real corpus validation
+
+Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because those corpora are large and may be private or copyrighted, they are **not** bundled in this repository.
+
+You can point the tests at external corpora with either directories or JSON manifest files:
+
+```bash
+# Directory-based corpora
+export ALPHA_FIXER_REAL_VIDEO_CORPUS="/path/to/video-corpus"
+export ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS="/path/to/psp-ps1-ps2-disc-samples"
+export ALPHA_FIXER_REAL_DDS_CORPUS="/path/to/dds-corpus"
+export ALPHA_FIXER_REAL_DDS_DX10_CORPUS="/path/to/dds-dx10-corpus"
+
+# Manifest-file based corpora (preferred for curated PSP / PS1 / PS2 / DDS sample sets)
+export ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST="/path/to/disc_video_manifest.json"
+export ALPHA_FIXER_REAL_DDS_DX10_MANIFEST="/path/to/dds_dx10_manifest.json"
+```
+
+Manifest environment variables may contain either:
+- a JSON array directly, or
+- a path to a JSON file on disk
+
+Manifest files can use relative sample paths, which resolve relative to the manifest file itself. They may also wrap entries in a top-level object with `samples` or `entries`, and can provide a `base_dir`.
+
+Example manifest:
+
+```json
+{
+  "base_dir": "/mnt/corpora/psp-disc-video",
+  "samples": [
+    {
+      "path": "sample01.iso",
+      "expect": "load_or_explain",
+      "hint_contains": ["Disc-image video inputs are experimental"]
+    }
+  ]
+}
+```
+
+To run only the optional real-corpus validations:
+
+```bash
+python -m pytest \
+  tests/test_ui_components.py -k "optional_real_video_corpus or optional_real_disc_video" \
+  tests/test_converter.py -k "optional_real_dds"
+```
+
+### Re-running packaged verification on a fresh machine
+
+After copying a built app to another machine, you can rerun the same packaged smoke/capability checks without rebuilding:
+
+```bash
+# Linux / macOS example
+python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --smoke-seconds 2 \
+  --repeat 3 \
+  --require-video-runtime \
+  --require-no-missing-libs
+```
+
+The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches.
 
 ## Architecture
 
