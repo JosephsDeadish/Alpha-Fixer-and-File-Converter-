@@ -1143,6 +1143,89 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"].endswith("sample_manifests/public_dds_dx10_manifest.json"))
         self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"].endswith("sample_manifests/public_format_matrix_manifest.json"))
 
+    def test_verify_packaged_app_use_private_local_manifests_reads_env_defaults(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            disc_manifest = os.path.join(tmpdir, "disc.json")
+            odd_manifest = os.path.join(tmpdir, "odd.json")
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            with open(disc_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"platform": "PSP", "path": "/tmp/psp.iso"}]}, handle)
+            with open(odd_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "odd container", "path": "/tmp/sample.wmv"}]}, handle)
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "cubemap", "path": "/tmp/cube.dds"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": disc_manifest,
+                        "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": odd_manifest,
+                        "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": dds_manifest,
+                    },
+                    clear=False,
+                ):
+                    rc = verify.main([target, "--run-selftest", "--use-private-local-manifests"])
+                    self.assertEqual(rc, 0)
+                    self.assertEqual(len(calls), 3)
+                    selftest_env = calls[-1]["env"]
+                    merged_disc = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"])
+                    merged_dds = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"])
+                    self.assertEqual(len(merged_disc), 2)
+                    self.assertEqual(len(merged_dds), 1)
+
+    def test_verify_packaged_app_use_private_local_manifests_requires_env_input(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            with patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": "",
+                },
+                clear=False,
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main([target, "--use-private-local-manifests"])
+        self.assertIn("No private local manifests were found", str(ctx.exception))
+
     def test_verify_packaged_app_can_require_public_manifest_checks(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)

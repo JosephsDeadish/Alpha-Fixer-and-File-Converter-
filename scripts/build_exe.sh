@@ -105,6 +105,32 @@ if [[ -x "$launch_target" ]]; then
         --require-no-missing-libs
         --json-out "dist/validation-reports/packaged-runtime-audit.json"
     )
+    if [[ "${ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
+        private_sample_limit="${ALPHA_FIXER_PRIVATE_SAMPLE_LIMIT:-${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-12}}"
+        private_cache_dir="${ALPHA_FIXER_PRIVATE_SAMPLE_CACHE_DIR:-${ALPHA_FIXER_SAMPLE_CACHE_DIR:-$REPO_ROOT/.sample-cache-private}}"
+        private_selftest_iterations="${ALPHA_FIXER_PRIVATE_SELFTEST_ITERATIONS:-4}"
+        private_stress_loops="${ALPHA_FIXER_PRIVATE_STRESS_LOOPS:-0}"
+        mkdir -p "$private_cache_dir"
+        verify_args+=(
+            --run-selftest
+            --selftest-iterations "$private_selftest_iterations"
+            --selftest-sample-limit "$private_sample_limit"
+            --require-selftest-pass
+            --require-core-selftest-checks
+            --require-video-selftest-checks
+            --use-private-local-manifests
+            --require-disc-manifest-group-checks
+            --require-dds-manifest-group-checks
+            --allow-sample-downloads
+            --sample-cache-dir "$private_cache_dir"
+        )
+        if [[ "$private_stress_loops" =~ ^[0-9]+$ ]] && (( private_stress_loops > 0 )); then
+            verify_args+=(
+                --selftest-stress-loops "$private_stress_loops"
+                --require-stress-selftest-checks
+            )
+        fi
+    fi
     if [[ "${ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
         sample_limit="${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-4}"
         sample_cache_dir="${ALPHA_FIXER_SAMPLE_CACHE_DIR:-$REPO_ROOT/.sample-cache}"

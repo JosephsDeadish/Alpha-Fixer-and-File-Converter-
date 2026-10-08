@@ -14,6 +14,15 @@ from src.core.runtime_validation import load_manifest_entries, manifest_grouped_
 _PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
 _PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
 _PUBLIC_FORMAT_MATRIX_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_format_matrix_manifest.json"
+_PRIVATE_DISC_MANIFEST_ENV_NAMES = (
+    "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST",
+    "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST",
+    "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST",
+)
+_PRIVATE_DDS_MANIFEST_ENV_NAMES = (
+    "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST",
+    "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST",
+)
 _PUBLIC_MANIFEST_CHECKS = (
     "external_disc_video_manifest",
     "external_dds_manifest",
@@ -103,6 +112,22 @@ def _merged_manifest_arg(raw_values: list[str] | None) -> str | None:
     return json.dumps({"entries": merged_entries})
 
 
+def _manifest_values_from_env(*env_names: str) -> list[str]:
+    values: list[str] = []
+    for env_name in env_names:
+        raw = str(os.environ.get(env_name, "") or "").strip()
+        if not raw:
+            continue
+        if raw.startswith("{") or raw.startswith("["):
+            values.append(raw)
+            continue
+        for part in raw.split(os.pathsep):
+            candidate = str(part or "").strip()
+            if candidate:
+                values.append(candidate)
+    return values
+
+
 def _required_selftest_checks(args) -> list[str]:
     required = [str(name or "").strip() for name in getattr(args, "require_selftest_check", []) if str(name or "").strip()]
     for attr_name, names in (
@@ -187,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dds-manifest", action="append", default=[], help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--format-matrix-manifest", action="append", default=[], help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--use-public-sample-manifests", action="store_true", help="Use the repository's built-in public disc-video, DDS/DX10, and format-matrix manifests for packaged self-test execution.")
+    parser.add_argument("--use-private-local-manifests", action="store_true", help="Load private local disc/video and DDS manifests from ALPHA_FIXER_REAL_* environment variables and merge them into the packaged self-test run.")
     parser.add_argument("--allow-sample-downloads", action="store_true", help="Allow manifest-backed self-tests to download missing external samples when URL fields are present.")
     parser.add_argument("--sample-cache-dir", help="Optional cache directory for downloaded or materialized manifest samples.")
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
@@ -202,6 +228,15 @@ def main(argv: list[str] | None = None) -> int:
             args.dds_manifest = [str(_PUBLIC_DDS_MANIFEST)]
         if not args.format_matrix_manifest:
             args.format_matrix_manifest = [str(_PUBLIC_FORMAT_MATRIX_MANIFEST)]
+    if args.use_private_local_manifests:
+        args.disc_video_manifest.extend(_manifest_values_from_env(*_PRIVATE_DISC_MANIFEST_ENV_NAMES))
+        args.dds_manifest.extend(_manifest_values_from_env(*_PRIVATE_DDS_MANIFEST_ENV_NAMES))
+        if not args.disc_video_manifest and not args.dds_manifest:
+            private_envs = ", ".join((*_PRIVATE_DISC_MANIFEST_ENV_NAMES, *_PRIVATE_DDS_MANIFEST_ENV_NAMES))
+            raise SystemExit(
+                "No private local manifests were found in the configured environment variables: "
+                f"{private_envs}"
+            )
     merged_disc_manifest = _merged_manifest_arg(args.disc_video_manifest)
     merged_dds_manifest = _merged_manifest_arg(args.dds_manifest)
     merged_format_manifest = _merged_manifest_arg(args.format_matrix_manifest)

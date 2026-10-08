@@ -191,7 +191,10 @@ export ALPHA_FIXER_REAL_DDS_DX10_CORPUS="/path/to/dds-dx10-corpus"
 
 # Manifest-file based corpora (preferred for curated PSP / PS1 / PS2 / DDS sample sets)
 export ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST="/path/to/disc_video_manifest.json"
+export ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST="/path/to/odd_container_manifest.json"
+export ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST="/path/to/odd_container_video_manifest.json"
 export ALPHA_FIXER_REAL_DDS_DX10_MANIFEST="/path/to/dds_dx10_manifest.json"
+export ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST="/path/to/dds_complex_manifest.json"
 ```
 
 Manifest environment variables may contain either:
@@ -289,6 +292,32 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
 ```
 
 That grouped-manifest mode is useful when you want separate pass/fail reporting for PSP vs PS1 vs PS2 clips, or for DDS groups like `cubemap`, `array`, and `volume`.
+
+The packaged build scripts can also pick those private manifests up automatically from the same environment variables:
+
+```bash
+export ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS=1
+export ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST="/path/to/private_psp_ps1_ps2_disc_manifest.json"
+export ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST="/path/to/private_odd_container_manifest.json"
+export ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST="/path/to/private_odd_container_video_manifest.json"
+export ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST="/path/to/private_dds_complex_manifest.json"
+export ALPHA_FIXER_PRIVATE_SAMPLE_LIMIT=16
+export ALPHA_FIXER_PRIVATE_SELFTEST_ITERATIONS=4
+export ALPHA_FIXER_PRIVATE_STRESS_LOOPS=3
+bash scripts/build_exe.sh
+```
+
+Or call the verifier directly and let it collect the manifests from the environment:
+
+```bash
+python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --run-selftest \
+  --use-private-local-manifests \
+  --require-selftest-pass \
+  --require-video-selftest-checks \
+  --require-disc-manifest-group-checks \
+  --require-dds-manifest-group-checks
+```
 
 BC6H / BC7 note: the public manifests above improve real external validation coverage, but they do **not** add pure in-repo BC6H / BC7 software decoding. Advanced BC6H / BC7 DDS inspection still depends on Pillow support or optional ImageMagick/wand decoding when available.
 
