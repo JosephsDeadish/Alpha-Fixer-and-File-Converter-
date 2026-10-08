@@ -8969,6 +8969,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('verify_packaged_app.py', bat_src)
         self.assertIn('--require-ffmpeg-selfcheck', sh_src)
         self.assertIn('--require-bundled-ffmpeg', sh_src)
+        self.assertIn('--require-video-selftest-checks', sh_src)
+        self.assertIn('--require-public-manifest-checks', sh_src)
         self.assertIn('--json-out "dist/validation-reports/packaged-runtime-audit.json"', sh_src)
         self.assertIn('--require-ffmpeg-selfcheck', bat_src)
         self.assertIn('--require-bundled-ffmpeg', bat_src)
@@ -8981,6 +8983,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('video_runtime_ready', verify_src)
         self.assertIn('odd_container_probe_ready', verify_src)
         self.assertIn('dds_compression_available', verify_src)
+        self.assertIn('require-video-selftest-checks', verify_src)
+        self.assertIn('require-dds-selftest-checks', verify_src)
         self.assertIn('ALPHA_FIXER_SMOKE_TEST', verify_src)
 
     def test_fresh_machine_runtime_workflow_covers_linux_and_windows(self):
@@ -8990,8 +8994,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("scripts/verify_packaged_app.py", src)
         self.assertIn("--repeat 3", src)
         self.assertIn("--selftest-iterations 6", src)
-        self.assertIn("generated_mp4_load", src)
-        self.assertIn("synthetic_bin_probe", src)
+        self.assertIn("--require-video-selftest-checks", src)
         self.assertIn("--require-ffmpeg-selfcheck", src)
         self.assertIn("--require-bundled-ffmpeg", src)
 

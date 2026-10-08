@@ -514,6 +514,7 @@ def _runtime_capability_summary() -> dict[str, object]:
     unavailable_outputs = optional_pillow_output_limits()
     svg_details = _theme_svg_runtime_details()
     imagemagick_details = _imagemagick_runtime_details()
+    wand_runtime_ready = bool(imagemagick_details.get("wand_runtime_ready"))
     ffmpeg_bundled = bool(frozen and ffmpeg_path_exists and bundle_dir and _path_is_within(ffmpeg_path, bundle_dir))
     ffprobe_bundled = bool(frozen and ffprobe_path_exists and bundle_dir and _path_is_within(ffprobe_path, bundle_dir))
     default_theme_svg_bundled = bool(
@@ -530,6 +531,7 @@ def _runtime_capability_summary() -> dict[str, object]:
             or _path_is_within(imagemagick_home_path, bundle_dir)
         )
     )
+    imagemagick_configured = bool(magick_home_path or imagemagick_home_path or imagemagick_bundled)
     missing_video_bits: list[str] = []
     if not has_imageio:
         missing_video_bits.append("imageio")
@@ -569,6 +571,8 @@ def _runtime_capability_summary() -> dict[str, object]:
         )
     if not dds_compression_available():
         readiness_limits.append(
+            "DDS compressed variants unavailable: ImageMagick/wand runtime incomplete"
+            if imagemagick_configured else
             "DDS compressed variants unavailable: ImageMagick/wand runtime missing"
         )
     if not bool(svg_details.get("qt_svg_ready")):
@@ -608,8 +612,10 @@ def _runtime_capability_summary() -> dict[str, object]:
             packaged_asset_warnings.append("default theme SVG resolves outside the packaged app")
         if missing_svg_count > 0:
             packaged_asset_warnings.append(f"{missing_svg_count} theme SVG asset(s) missing from package")
-        if not bool(imagemagick_details.get("wand_runtime_ready")) and not imagemagick_bundled:
+        if not wand_runtime_ready:
             packaged_asset_warnings.append(
+                "bundled ImageMagick/wand runtime incomplete"
+                if imagemagick_bundled else
                 "packaged ImageMagick/wand runtime unavailable for DDS compressed output"
             )
     packaged_bundle_ready = bool(frozen and not packaged_asset_warnings)
@@ -645,6 +651,7 @@ def _runtime_capability_summary() -> dict[str, object]:
         "optional_output_limits": unavailable_outputs,
         "default_theme_svg_bundled": default_theme_svg_bundled,
         "imagemagick_bundled": imagemagick_bundled,
+        "imagemagick_configured": imagemagick_configured,
         "packaged_bundle_ready": packaged_bundle_ready,
         "packaged_asset_warnings": packaged_asset_warnings,
         "feature_readiness_notice": feature_readiness_notice,

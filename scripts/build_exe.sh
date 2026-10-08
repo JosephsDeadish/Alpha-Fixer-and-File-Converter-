@@ -113,12 +113,14 @@ if [[ -x "$launch_target" ]]; then
             --selftest-sample-limit "$sample_limit"
             --require-selftest-pass
             --use-public-sample-manifests
+            --require-video-selftest-checks
+            --require-public-manifest-checks
             --allow-sample-downloads
             --sample-cache-dir "$sample_cache_dir"
-            --require-selftest-check external_disc_video_manifest
-            --require-selftest-check external_dds_manifest
-            --require-selftest-check external_format_matrix_manifest
         )
+        if [[ "${ALPHA_FIXER_REQUIRE_DDS_SELFTEST:-0}" == "1" ]]; then
+            verify_args+=(--require-dds-selftest-checks --require-wand-runtime)
+        fi
     fi
     python scripts/verify_packaged_app.py "${verify_args[@]}"
 else

@@ -54,9 +54,7 @@ jobs:
             --run-selftest \
             --selftest-iterations 6 \
             --require-selftest-pass \
-            --require-selftest-check generated_mp4_load \
-            --require-selftest-check mpegts_load \
-            --require-selftest-check synthetic_bin_probe \
+            --require-video-selftest-checks \
             --require-video-runtime \
             --require-ffmpeg-selfcheck \
             --require-bundled-ffmpeg \
@@ -76,9 +74,7 @@ jobs:
             --run-selftest `
             --selftest-iterations 6 `
             --require-selftest-pass `
-            --require-selftest-check generated_mp4_load `
-            --require-selftest-check mpegts_load `
-            --require-selftest-check synthetic_bin_probe `
+            --require-video-selftest-checks `
             --require-video-runtime `
             --require-ffmpeg-selfcheck `
             --require-bundled-ffmpeg `

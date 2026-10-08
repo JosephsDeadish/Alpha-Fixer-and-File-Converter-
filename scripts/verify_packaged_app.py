@@ -19,6 +19,22 @@ _PUBLIC_MANIFEST_CHECKS = (
     "external_dds_manifest",
     "external_format_matrix_manifest",
 )
+_VIDEO_SELFTEST_CHECKS = (
+    "generated_mp4_load",
+    "mpegts_load",
+    "synthetic_bin_probe",
+)
+_DDS_SELFTEST_CHECKS = (
+    "png_to_dds_rgba",
+    "png_to_dds_dxt1",
+)
+_CORE_SELFTEST_CHECKS = (
+    "png_to_gif",
+    "png_to_dds_rgba",
+    "generated_mp4_load",
+    "mpegts_load",
+    "synthetic_bin_probe",
+)
 
 
 def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
@@ -82,6 +98,15 @@ def _merged_manifest_arg(raw_values: list[str] | None) -> str | None:
 
 def _required_selftest_checks(args) -> list[str]:
     required = [str(name or "").strip() for name in getattr(args, "require_selftest_check", []) if str(name or "").strip()]
+    for attr_name, names in (
+        ("require_core_selftest_checks", _CORE_SELFTEST_CHECKS),
+        ("require_video_selftest_checks", _VIDEO_SELFTEST_CHECKS),
+        ("require_dds_selftest_checks", _DDS_SELFTEST_CHECKS),
+    ):
+        if getattr(args, attr_name, False):
+            for name in names:
+                if name not in required:
+                    required.append(name)
     if getattr(args, "require_public_manifest_checks", False):
         for name in _PUBLIC_MANIFEST_CHECKS:
             if name not in required:
@@ -130,6 +155,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
+    parser.add_argument("--require-core-selftest-checks", action="store_true", help="Fail unless the built-in PNG/GIF/DDS and generated-video self-test checks all report ok=true.")
+    parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
+    parser.add_argument("--require-dds-selftest-checks", action="store_true", help="Fail unless the built-in DDS self-test checks, including compressed DDS output when available, all report ok=true.")
     parser.add_argument("--require-public-manifest-checks", action="store_true", help="Fail unless the public disc-video, DDS/DX10, and format-matrix self-test checks all report ok=true.")
     parser.add_argument("--disc-video-manifest", action="append", default=[], help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--dds-manifest", action="append", default=[], help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
@@ -155,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     merged_format_manifest = _merged_manifest_arg(args.format_matrix_manifest)
     if (merged_disc_manifest or merged_dds_manifest or merged_format_manifest) and not args.run_selftest:
         raise SystemExit("External manifests require --run-selftest so the packaged app can execute them.")
+    if _required_selftest_checks(args) and not args.run_selftest:
+        raise SystemExit("Self-test check requirements need --run-selftest so the packaged app can execute them.")
 
     base_env = os.environ.copy()
     if sys.platform.startswith("linux"):

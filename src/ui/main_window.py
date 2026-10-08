@@ -834,7 +834,13 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         "• DDS compressed output: "
         + ("ready" if summary.get("dds_compression_available") else "limited (ImageMagick/wand unavailable)"),
         "• ImageMagick/wand runtime: "
-        + ("ready" if summary.get("wand_runtime_ready") else "limited"),
+        + (
+            "ready"
+            if summary.get("wand_runtime_ready")
+            else "limited (configured but incomplete)"
+            if summary.get("imagemagick_configured")
+            else "limited"
+        ),
         "• Qt SVG renderer: "
         + ("ready" if summary.get("qt_svg_ready") else "limited"),
         "• Default theme SVG asset: "

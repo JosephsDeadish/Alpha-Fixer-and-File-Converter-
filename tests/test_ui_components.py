@@ -583,6 +583,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(summary["default_theme_svg_path"], "/tmp/panda_dark.svg")
         self.assertFalse(summary["wand_runtime_ready"])
         self.assertEqual(summary["magick_home_path"], "/tmp/magick")
+        self.assertTrue(summary["imagemagick_configured"])
+        self.assertIn("ImageMagick/wand runtime incomplete", summary["feature_readiness_notice"])
 
     def test_runtime_capability_summary_reports_packaged_asset_gaps(self):
         _require_qt_gui(self)
@@ -636,6 +638,53 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("2 theme SVG asset(s) missing from package", summary["packaged_asset_warnings"])
         self.assertIn("packaged ImageMagick/wand runtime unavailable for DDS compressed output", summary["packaged_asset_warnings"])
         self.assertIn("packaged asset gaps:", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_summary_flags_incomplete_bundled_imagemagick(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(bundle_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(bundle_dir, "ffmpeg")
+            ffprobe_path = os.path.join(bundle_dir, "ffprobe")
+            svg_path = os.path.join(bundle_dir, "panda_dark.svg")
+            magick_home = os.path.join(bundle_dir, "ImageMagick")
+            os.makedirs(magick_home, exist_ok=True)
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": magick_home,
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                        ]):
+                                                            summary = main._runtime_capability_summary()
+        self.assertTrue(summary["imagemagick_bundled"])
+        self.assertTrue(summary["imagemagick_configured"])
+        self.assertIn("bundled ImageMagick/wand runtime incomplete", summary["packaged_asset_warnings"])
+        self.assertIn("ImageMagick/wand runtime incomplete", summary["feature_readiness_notice"])
 
     def test_runtime_capability_summary_requires_ffmpeg_selfcheck_for_video_ready(self):
         _require_qt_gui(self)
@@ -880,6 +929,52 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     ]
                 )
         self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_grouped_video_selftest_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"generated_mp4_load": {"ok": true}, "mpegts_load": {"ok": true}, "synthetic_bin_probe": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main([target, "--run-selftest", "--require-video-selftest-checks"])
+        self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_grouped_dds_selftest_checks_need_run_selftest(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main([target, "--require-dds-selftest-checks"])
+        self.assertIn("--run-selftest", str(ctx.exception))
 
     def test_verify_packaged_app_require_public_manifest_checks_fails_when_missing(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
