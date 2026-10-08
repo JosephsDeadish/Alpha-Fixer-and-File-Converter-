@@ -20,6 +20,19 @@
       "notes": "Actual PSP UMD / ISO sample. Replace with a real local path or add a download_url + sha256 if you have a legally shareable sample. Add expect_frame_size, min_duration_seconds, expect_has_audio, expect_probe_has_audio, expect_audio_codec_contains, expect_probe_frame_size, expect_video_stream_count, expect_audio_stream_count, or expect_load_note_contains as needed for stricter corpus validation."
     },
     {
+      "platform": "PSP",
+      "group": "raw umd container",
+      "sample_id": "umd-raw-container",
+      "path": "psp/sample.umd",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Optional raw .umd sample path for environments where the movie data is exposed as a .umd container instead of .iso. Use this to validate the extension-specific .umd probe/recovery path separately from .umd.iso images."
+    },
+    {
       "platform": "PS1",
       "group": "bin/cue disc image",
       "sample_id": "bin-cue-stream",
@@ -54,6 +67,25 @@
         "Disc-image video inputs are experimental"
       ],
       "notes": "Actual PS2 DVD ISO sample. Add preferred stream indexes or expected failure/load tokens per sample if needed. The validator now also supports expect_probe_has_audio, expect_probe_frame_size, expect_video_stream_count, expect_audio_stream_count, expect_video_stream_index, expect_audio_stream_index, expect_frame_size, require_recovery, and expect_preferred_* stream assertions."
+    },
+    {
+      "platform": "PS2",
+      "group": "bin/cue disc image",
+      "sample_id": "bin-cue-pss-stream",
+      "path": "ps2/sample.bin",
+      "required": false,
+      "companions": [
+        {
+          "path": "ps2/sample.cue",
+          "notes": "Optional companion cue sheet for BIN-based PS2 samples so cue/bin retry logic can rebuild track layout during validation."
+        }
+      ],
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Optional PS2 BIN/CUE-style sample for validating .bin handling separately from DVD .iso files. Add expect_audio_codec_contains, require_recovery, and expect_load_note_contains when you want to confirm cue/bin or audio-drop recovery paths on a real sample."
     }
   ]
 }
