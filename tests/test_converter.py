@@ -200,9 +200,15 @@ class TestCorpusHelperInputs(unittest.TestCase):
             "public_disc_video_manifest.json",
         )
         entries = load_manifest_entries(manifest_path)
-        self.assertGreaterEqual(len(entries), 3)
+        self.assertGreaterEqual(len(entries), 8)
         self.assertTrue(any(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".iso") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".avi") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".mov") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".mpg") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".mkv") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".webm") for entry in entries))
+        self.assertTrue(any("odd container" in str(entry.get("group") or "").lower() or "legacy container" in str(entry.get("group") or "").lower() for entry in entries))
 
     def test_built_in_public_format_matrix_manifest_loads(self):
         manifest_path = os.path.join(
@@ -251,6 +257,22 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertIsInstance(companions, list)
         self.assertTrue(any(str(item.get("path") or "").endswith(os.path.join("ps1", "sample.cue")) for item in companions if isinstance(item, dict)))
         self.assertTrue(all("Disc-image video inputs are experimental" in (entry.get("hint_contains") or [""])[0] for entry in entries))
+
+    def test_private_odd_container_manifest_template_loads(self):
+        manifest_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "sample_manifests",
+            "private_odd_container_manifest_template.json",
+        )
+        entries = load_manifest_entries(manifest_path)
+        self.assertEqual(len(entries), 5)
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.pss")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.str")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.vob")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "movie.vob.001")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("video", "sample.dat")) for entry in entries))
+        self.assertTrue(any("segmented / multipart video set" in " ".join(entry.get("hint_contains") or []) for entry in entries if isinstance(entry, dict)))
 
     def test_private_dds_complex_manifest_template_loads(self):
         manifest_path = os.path.join(
