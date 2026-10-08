@@ -1628,6 +1628,108 @@ def _clip_history_detail(clip: dict[str, object]) -> str:
     return f"{source_name}: " + " | ".join(parts)
 
 
+def _clip_export_value(clip: object, key: str, default=None):
+    if isinstance(clip, dict):
+        return clip.get(key, default)
+    return getattr(clip, key, default)
+
+
+def _audio_source_plan(clips: list[object]) -> dict[str, int | str]:
+    video_clips = 0
+    audio_source_clips = 0
+    silent_video_clips = 0
+    silent_still_sections = 0
+    dropped_audio_recovery_clips = 0
+    manual_audio_override_clips = 0
+    for clip in clips:
+        try:
+            active_frames = max(0, int(_clip_export_value(clip, "active_frames") or 0))
+        except Exception:
+            active_frames = 0
+        if active_frames <= 0:
+            continue
+        clip_type = str(_clip_export_value(clip, "clip_type") or "").strip().lower()
+        has_audio = bool(_clip_export_value(clip, "has_audio"))
+        load_note = str(_clip_export_value(clip, "load_note") or "").strip().lower()
+        preferred_audio_index = _coerce_optional_stream_index(_clip_export_value(clip, "preferred_audio_stream_index"))
+        if clip_type == "video":
+            video_clips += 1
+            if has_audio:
+                audio_source_clips += 1
+            else:
+                silent_video_clips += 1
+            if "audio dropped" in load_note:
+                dropped_audio_recovery_clips += 1
+            if preferred_audio_index is not None:
+                manual_audio_override_clips += 1
+        else:
+            silent_still_sections += 1
+    if audio_source_clips <= 0:
+        mode = "silent"
+    elif silent_video_clips > 0 or silent_still_sections > 0:
+        mode = "mixed-source+silence"
+    else:
+        mode = "all-source-audio"
+    return {
+        "mode": mode,
+        "video_clips": video_clips,
+        "audio_source_clips": audio_source_clips,
+        "silent_video_clips": silent_video_clips,
+        "silent_still_sections": silent_still_sections,
+        "dropped_audio_recovery_clips": dropped_audio_recovery_clips,
+        "manual_audio_override_clips": manual_audio_override_clips,
+    }
+
+
+def _audio_source_plan_hint(plan: dict[str, int | str]) -> str:
+    parts: list[str] = []
+    audio_source_clips = max(0, int(plan.get("audio_source_clips") or 0))
+    video_clips = max(0, int(plan.get("video_clips") or 0))
+    silent_video_clips = max(0, int(plan.get("silent_video_clips") or 0))
+    silent_still_sections = max(0, int(plan.get("silent_still_sections") or 0))
+    dropped_audio_recovery_clips = max(0, int(plan.get("dropped_audio_recovery_clips") or 0))
+    manual_audio_override_clips = max(0, int(plan.get("manual_audio_override_clips") or 0))
+    if video_clips > 1:
+        parts.append(f"{audio_source_clips}/{video_clips} video clips provide source audio.")
+    if silent_video_clips > 0:
+        parts.append(
+            f"{silent_video_clips} video clip{'s' if silent_video_clips != 1 else ''} without usable source audio will stay silent."
+        )
+    if silent_still_sections > 0:
+        parts.append(
+            f"{silent_still_sections} still-image/GIF section{'s' if silent_still_sections != 1 else ''} will be filled with silence."
+        )
+    if dropped_audio_recovery_clips > 0:
+        parts.append(
+            f"{dropped_audio_recovery_clips} recovered clip{'s' if dropped_audio_recovery_clips != 1 else ''} already dropped source audio during import."
+        )
+    if manual_audio_override_clips > 0:
+        parts.append(
+            f"{manual_audio_override_clips} clip{'s' if manual_audio_override_clips != 1 else ''} use manual audio stream override{'s' if manual_audio_override_clips != 1 else ''}."
+        )
+    return " ".join(parts)
+
+
+def _audio_source_plan_history_notes(plan: dict[str, int | str]) -> list[str]:
+    notes = [f"audio-source-plan={str(plan.get('mode') or 'silent')}"]
+    video_clips = max(0, int(plan.get("video_clips") or 0))
+    audio_source_clips = max(0, int(plan.get("audio_source_clips") or 0))
+    notes.append(f"audio-source-clips={audio_source_clips}/{video_clips}")
+    silent_video_clips = max(0, int(plan.get("silent_video_clips") or 0))
+    silent_still_sections = max(0, int(plan.get("silent_still_sections") or 0))
+    dropped_audio_recovery_clips = max(0, int(plan.get("dropped_audio_recovery_clips") or 0))
+    manual_audio_override_clips = max(0, int(plan.get("manual_audio_override_clips") or 0))
+    if silent_video_clips > 0:
+        notes.append(f"audio-silent-video-clips={silent_video_clips}")
+    if silent_still_sections > 0:
+        notes.append(f"audio-silent-still-sections={silent_still_sections}")
+    if dropped_audio_recovery_clips > 0:
+        notes.append(f"audio-dropped-recovery-clips={dropped_audio_recovery_clips}")
+    if manual_audio_override_clips > 0:
+        notes.append(f"audio-manual-stream-overrides={manual_audio_override_clips}")
+    return notes
+
+
 def _open_video_reader(path: str):
     """Open an imageio ffmpeg reader, preferring the bundled ffmpeg binary."""
     import imageio
@@ -3868,6 +3970,8 @@ class VideoToolDialog(QDialog):
         is_mp4 = export_fmt == "mp4"
         has_video_clips = self._timeline_has_video_clips()
         has_audio_source = has_video_clips and self._timeline_has_detected_audio()
+        audio_plan = _audio_source_plan(list(self._clips))
+        audio_plan_hint = _audio_source_plan_hint(audio_plan)
         allow_audio_controls = is_mp4 and self._mp4_export_available and has_video_clips
         allow_audio_source_controls = allow_audio_controls and has_audio_source
 
@@ -3889,15 +3993,23 @@ class VideoToolDialog(QDialog):
             hint = "Audio controls only apply when the timeline contains at least one video clip."
         elif not has_audio_source:
             hint = "No source audio stream was detected in the current video clips, so volume and mute controls stay disabled."
+            if audio_plan_hint:
+                hint += " " + audio_plan_hint
         elif not self._audio_enable_check.isChecked():
             hint = "MP4 export will stay silent until source audio is enabled."
+            if audio_plan_hint:
+                hint += " " + audio_plan_hint
         elif self._audio_mute_check.isChecked() or self._audio_volume_slider.value() <= 0:
             hint = "MP4 export will render without sound because audio is muted."
+            if audio_plan_hint:
+                hint += " " + audio_plan_hint
         else:
             hint = (
                 "Source audio is trimmed, time-matched, and volume-adjusted per video clip. "
                 "Still-image and GIF sections are filled with silence."
             )
+            if audio_plan_hint:
+                hint += " " + audio_plan_hint
         self._audio_hint_lbl.setText(hint)
 
     def _on_clip_speed_changed(self, value: int) -> None:
@@ -4319,6 +4431,8 @@ class VideoToolDialog(QDialog):
         history_audio_mode_override = None
         history_extra_notes: list[str] = []
         completion_note = ""
+        if fmt == "mp4":
+            history_extra_notes.extend(_audio_source_plan_history_notes(_audio_source_plan(clip_snapshot)))
         try:
             if fmt in {"gif", "mp4"}:
                 output_file = tempfile.NamedTemporaryFile(

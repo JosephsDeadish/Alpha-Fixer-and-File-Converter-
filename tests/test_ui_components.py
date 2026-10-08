@@ -4323,6 +4323,94 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(vt._build_atempo_filters(4.0), ["atempo=2.0", "atempo=2"])
         self.assertEqual(vt._build_atempo_filters(0.25), ["atempo=0.5", "atempo=0.5"])
 
+    def test_audio_source_plan_summarizes_mixed_timeline(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        plan = vt._audio_source_plan([
+            {
+                "active_frames": 12,
+                "clip_type": "video",
+                "has_audio": True,
+                "preferred_audio_stream_index": 5,
+            },
+            {
+                "active_frames": 8,
+                "clip_type": "video",
+                "has_audio": False,
+                "load_note": "temporary ffmpeg transcode fallback active, source audio dropped",
+            },
+            {
+                "active_frames": 4,
+                "clip_type": "image",
+                "has_audio": False,
+            },
+        ])
+        self.assertEqual(plan["mode"], "mixed-source+silence")
+        self.assertEqual(plan["audio_source_clips"], 1)
+        self.assertEqual(plan["video_clips"], 2)
+        self.assertEqual(plan["silent_video_clips"], 1)
+        self.assertEqual(plan["silent_still_sections"], 1)
+        self.assertEqual(plan["dropped_audio_recovery_clips"], 1)
+        self.assertEqual(plan["manual_audio_override_clips"], 1)
+        hint = vt._audio_source_plan_hint(plan)
+        self.assertIn("1/2 video clips provide source audio", hint)
+        self.assertIn("1 recovered clip already dropped source audio during import", hint)
+        notes = vt._audio_source_plan_history_notes(plan)
+        self.assertIn("audio-source-plan=mixed-source+silence", notes)
+        self.assertIn("audio-source-clips=1/2", notes)
+        self.assertIn("audio-dropped-recovery-clips=1", notes)
+
+    def test_audio_controls_hint_mentions_mixed_silent_sections_and_manual_overrides(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PyQt6.QtWidgets import QWidget
+
+        parent = QWidget()
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [
+            types.SimpleNamespace(
+                active_frames=12,
+                clip_type="video",
+                has_audio=True,
+                load_note="",
+                preferred_audio_stream_index=4,
+            ),
+            types.SimpleNamespace(
+                active_frames=8,
+                clip_type="video",
+                has_audio=False,
+                load_note="temporary ffmpeg transcode fallback active, source audio dropped",
+                preferred_audio_stream_index=None,
+            ),
+            types.SimpleNamespace(
+                active_frames=6,
+                clip_type="image",
+                has_audio=False,
+                load_note="",
+                preferred_audio_stream_index=None,
+            ),
+        ]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._update_audio_controls()
+        hint = dialog._audio_hint_lbl.text()
+        self.assertIn("1/2 video clips provide source audio", hint)
+        self.assertIn("1 video clip without usable source audio will stay silent", hint)
+        self.assertIn("1 still-image/GIF section will be filled with silence", hint)
+        self.assertIn("1 recovered clip already dropped source audio during import", hint)
+        self.assertIn("1 clip uses manual audio stream override", hint)
+        dialog.close()
+        dialog.deleteLater()
+        parent.deleteLater()
+        self._app.processEvents()
+
     def test_export_rewrites_mismatched_gif_extension(self):
         _require_qt_gui(self)
         self._app = _get_app()
@@ -4524,8 +4612,104 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 entry = settings._video_history[0]
                 self.assertEqual(entry["audio"], "off (mux failed)")
                 self.assertEqual(entry["errors"], 1)
+                self.assertIn("audio-source-plan=all-source-audio", entry["notes"])
+                self.assertIn("audio-source-clips=1/1", entry["notes"])
                 self.assertIn("audio-mux-fallback=silent", entry["notes"])
                 self.assertIn("audio-mux-error=mux failed", entry["notes"])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_export_records_audio_source_plan_for_mixed_timeline(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def __init__(self, path):
+                self._path = path
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                with open(self._path, "wb") as fh:
+                    fh.write(b"rendered-mp4")
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [
+            types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True),
+            types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=False),
+            types.SimpleNamespace(active_frames=1, clip_type="image", has_audio=False),
+        ]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        snapshots = [
+            {
+                "active_frames": 1,
+                "path": "/tmp/with-audio.mp4",
+                "source_path": "/tmp/with-audio.mp4",
+                "clip_type": "video",
+                "has_audio": True,
+                "load_note": "",
+                "preferred_audio_stream_index": 7,
+            },
+            {
+                "active_frames": 1,
+                "path": "/tmp/no-audio.mp4",
+                "source_path": "/tmp/no-audio.iso",
+                "clip_type": "video",
+                "has_audio": False,
+                "load_note": "temporary ffmpeg transcode fallback active, source audio dropped",
+                "preferred_audio_stream_index": None,
+            },
+            {
+                "active_frames": 1,
+                "path": "/tmp/still.png",
+                "source_path": "/tmp/still.png",
+                "clip_type": "image",
+                "has_audio": False,
+                "load_note": "",
+                "preferred_audio_stream_index": None,
+            },
+        ]
+        dialog._snapshot_clip_render_state = lambda clip, fps: snapshots.pop(0)
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: True
+
+        def _fake_mux(_render_path, out_path, _clip_snapshot, _fps):
+            with open(out_path, "wb") as fh:
+                fh.write(b"muxed-mp4")
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "mixed.mp4")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
+                        with patch.object(dialog, "_mux_mp4_audio", side_effect=_fake_mux):
+                            with patch.object(vt.QMessageBox, "information"):
+                                dialog._export()
+                self.assertEqual(len(settings._video_history), 1)
+                entry = settings._video_history[0]
+                self.assertEqual(entry["audio"], "kept")
+                self.assertIn("audio-source-plan=mixed-source+silence", entry["notes"])
+                self.assertIn("audio-source-clips=1/2", entry["notes"])
+                self.assertIn("audio-silent-video-clips=1", entry["notes"])
+                self.assertIn("audio-silent-still-sections=1", entry["notes"])
+                self.assertIn("audio-dropped-recovery-clips=1", entry["notes"])
+                self.assertIn("audio-manual-stream-overrides=1", entry["notes"])
         finally:
             dialog.close()
             dialog.deleteLater()
