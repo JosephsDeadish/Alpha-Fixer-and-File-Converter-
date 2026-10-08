@@ -194,6 +194,33 @@ def _entry_label(entry: dict[str, object], sample_path: str) -> str:
     return " / ".join(part for part in parts if part)
 
 
+def _disc_manifest_group(entry: dict[str, object]) -> str:
+    for key in ("group", "platform", "system"):
+        value = str(entry.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _disc_recovery_bucket(note: str) -> str:
+    lower = str(note or "").strip().lower()
+    if not lower:
+        return ""
+    if "concat" in lower:
+        return "concat"
+    if "sidecar" in lower or "cue" in lower:
+        return "sidecar"
+    if "audio-drop" in lower or "without source audio" in lower:
+        return "audio-drop"
+    if "still-frame" in lower or "single-frame" in lower:
+        return "still-frame"
+    if "transcode" in lower:
+        return "transcode"
+    if "remux" in lower:
+        return "remux"
+    return "recovery"
+
+
 def _entry_download_url(entry: dict[str, object]) -> str:
     return str(entry.get("url") or entry.get("download_url") or "").strip()
 
@@ -348,8 +375,10 @@ def execute_disc_video_manifest(
     *,
     limit: int = 0,
 ) -> tuple[bool, str]:
-    exercised = loaded = explained = unavailable = 0
+    exercised = loaded = explained = expected_failures = unavailable = 0
     platform_counts: dict[str, int] = {}
+    group_counts: dict[str, int] = {}
+    recovery_counts: dict[str, int] = {}
     for raw_entry in _limited_entries(entries, limit):
         try:
             entry = materialize_manifest_entry(
@@ -392,6 +421,9 @@ def execute_disc_video_manifest(
         platform = str(entry.get("platform") or entry.get("system") or "").strip()
         if platform:
             platform_counts[platform] = platform_counts.get(platform, 0) + 1
+        group = _disc_manifest_group(entry)
+        if group:
+            group_counts[group] = group_counts.get(group, 0) + 1
         if expected == "load":
             if clip is None:
                 return False, f"{sample_label}: expected load, got failure hint: {hint}"
@@ -401,6 +433,7 @@ def execute_disc_video_manifest(
                     clip.close()
                 finally:
                     return False, f"{sample_label}: expected failure, but clip loaded"
+            expected_failures += 1
         elif clip is None and not str(hint).strip():
             return False, f"{sample_label}: expected load_or_explain, but no clip or hint was produced"
         for token in _entry_tokens(entry, "hint_contains"):
@@ -500,20 +533,34 @@ def execute_disc_video_manifest(
                     actual_value = _entry_int({key: getattr(clip, attr_name, None)}, key)
                     if actual_value != expected_value:
                         return False, f"{sample_label}: expected {label} {expected_value}, got {actual_value}"
+                recovery_bucket = _disc_recovery_bucket(getattr(clip, "load_note", "") or "")
+                if recovery_bucket:
+                    recovery_counts[recovery_bucket] = recovery_counts.get(recovery_bucket, 0) + 1
                 loaded += 1
             finally:
                 clip.close()
-        else:
+        elif expected != "fail":
             explained += 1
     if exercised == 0:
         return False, f"no available samples matched manifest (missing={unavailable})"
+    group_summary = ""
+    if group_counts:
+        group_summary = " groups=" + ",".join(
+            f"{name}:{count}" for name, count in sorted(group_counts.items())
+        )
     platform_summary = ""
     if platform_counts:
         platform_summary = " platforms=" + ",".join(
             f"{name}:{count}" for name, count in sorted(platform_counts.items())
         )
+    recovery_summary = ""
+    if recovery_counts:
+        recovery_summary = " recoveries=" + ",".join(
+            f"{name}:{count}" for name, count in sorted(recovery_counts.items())
+        )
     return True, (
-        f"entries={exercised} loaded={loaded} explained={explained} missing={unavailable}{platform_summary}"
+        f"entries={exercised} loaded={loaded} expected_failures={expected_failures} "
+        f"explained={explained} missing={unavailable}{group_summary}{platform_summary}{recovery_summary}"
     )
 
 

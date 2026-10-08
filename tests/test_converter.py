@@ -267,11 +267,15 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("psp", "sample.umd.iso")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("ps1", "sample.bin")) for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("ps2", "sample.iso")) for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "umd disc image" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "bin/cue disc image" for entry in entries))
+        self.assertTrue(any(str(entry.get("group") or "").lower() == "dvd disc image" for entry in entries))
         ps1_entry = next(entry for entry in entries if str(entry.get("path") or "").endswith(os.path.join("ps1", "sample.bin")))
         companions = ps1_entry.get("companions")
         self.assertIsInstance(companions, list)
         self.assertTrue(any(str(item.get("path") or "").endswith(os.path.join("ps1", "sample.cue")) for item in companions if isinstance(item, dict)))
         self.assertTrue(all("Disc-image video inputs are experimental" in (entry.get("hint_contains") or [""])[0] for entry in entries))
+        self.assertTrue(all(entry.get("expect_probe_has_video") is True for entry in entries))
 
     def test_private_odd_container_manifest_template_loads(self):
         manifest_path = os.path.join(
@@ -537,6 +541,7 @@ class TestCorpusHelperInputs(unittest.TestCase):
             )
             entries = [{
                 "platform": "PS2",
+                "group": "dvd disc image",
                 "sample_id": "main-stream",
                 "path": sample_path,
                 "required": True,
@@ -563,7 +568,68 @@ class TestCorpusHelperInputs(unittest.TestCase):
 
             ok, detail = execute_disc_video_manifest(entries, fake_tool)
         self.assertTrue(ok, msg=detail)
+        self.assertIn("groups=dvd disc image:1", detail)
         self.assertIn("platforms=PS2:1", detail)
+        self.assertIn("recoveries=transcode:1", detail)
+
+    def test_execute_disc_video_manifest_summarizes_expected_failures_and_explanations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            audio_only_path = os.path.join(tmpdir, "sample.aac")
+            explain_path = os.path.join(tmpdir, "sample.iso")
+            for path in (audio_only_path, explain_path):
+                with open(path, "wb") as handle:
+                    handle.write(b"media")
+
+            probes = {
+                audio_only_path: {
+                    "has_video": False,
+                    "has_audio": True,
+                    "format_name": "aac",
+                    "audio_codec": "aac",
+                },
+                explain_path: {
+                    "has_video": False,
+                    "has_audio": False,
+                    "format_name": "iso",
+                    "video_codec": "",
+                },
+            }
+            hints = {
+                audio_only_path: "ffprobe detected audio but no playable video stream",
+                explain_path: "Disc-image video inputs are experimental",
+            }
+            fake_tool = types.SimpleNamespace(
+                _probe_media_details=lambda path, **_kwargs: probes[path],
+                _load_video_clip=lambda *_args, **_kwargs: None,
+                _video_load_failure_hint=lambda path, **_kwargs: hints[path],
+            )
+            entries = [
+                {
+                    "path": audio_only_path,
+                    "group": "audio-only",
+                    "expect": "fail",
+                    "expect_probe_has_video": False,
+                    "expect_probe_has_audio": True,
+                    "hint_contains": ["audio but no playable video stream"],
+                },
+                {
+                    "path": explain_path,
+                    "platform": "PSP",
+                    "group": "disc image",
+                    "expect": "load_or_explain",
+                    "expect_probe_has_video": False,
+                    "hint_contains": ["Disc-image video inputs are experimental"],
+                },
+            ]
+
+            ok, detail = execute_disc_video_manifest(entries, fake_tool)
+        self.assertTrue(ok, msg=detail)
+        self.assertIn("entries=2", detail)
+        self.assertIn("loaded=0", detail)
+        self.assertIn("expected_failures=1", detail)
+        self.assertIn("explained=1", detail)
+        self.assertIn("groups=audio-only:1,disc image:1", detail)
+        self.assertIn("platforms=PSP:1", detail)
 
     def test_execute_dds_manifest_enforces_required_sample_and_expected_size(self):
         entries = [{"path": "/tmp/missing.bc6h.dds", "required": True, "group": "BC6H"}]
