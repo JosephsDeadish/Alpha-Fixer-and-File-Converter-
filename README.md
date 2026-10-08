@@ -161,9 +161,16 @@ Optional real-world corpus tests already exist for odd video containers / disc i
 This repo now also ships small **public-download manifest examples** under `sample_manifests/` so fresh machines can exercise real external samples without needing private corpora:
 
 - `sample_manifests/public_disc_video_manifest.json`
+- `sample_manifests/public_dds_dx10_manifest.json`
 - `sample_manifests/public_format_matrix_manifest.json`
 
 Those built-in manifests intentionally use public sample files that are legally redistributable or publicly downloadable, but they are **not a replacement** for true copyrighted PSP / PS1 / PS2 validation corpora. They are meant to provide a reproducible baseline for packaged runtime checks and fresh-machine smoke coverage.
+
+There are also starter **private manifest templates** for local corpora you cannot redistribute publicly:
+
+- `sample_manifests/private_psp_ps1_ps2_disc_manifest_template.json`
+- `sample_manifests/private_odd_container_video_manifest_template.json`
+- `sample_manifests/private_dds_complex_manifest_template.json`
 
 You can point the tests at external corpora with either directories or JSON manifest files:
 

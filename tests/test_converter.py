@@ -200,7 +200,7 @@ class TestCorpusHelperInputs(unittest.TestCase):
             "public_disc_video_manifest.json",
         )
         entries = load_manifest_entries(manifest_path)
-        self.assertGreaterEqual(len(entries), 8)
+        self.assertGreaterEqual(len(entries), 11)
         self.assertTrue(any(str(entry.get("download_url") or "").startswith("https://raw.githubusercontent.com/") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".iso") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".avi") for entry in entries))
@@ -208,7 +208,12 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(".mpg") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".mkv") for entry in entries))
         self.assertTrue(any(str(entry.get("path") or "").endswith(".webm") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".aac") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".ac3") for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(".wma") for entry in entries))
         self.assertTrue(any("odd container" in str(entry.get("group") or "").lower() or "legacy container" in str(entry.get("group") or "").lower() for entry in entries))
+        self.assertTrue(any("audio-only" in str(entry.get("group") or "").lower() for entry in entries))
+        self.assertTrue(any(str(entry.get("expect") or "").lower() == "fail" for entry in entries))
 
     def test_built_in_public_format_matrix_manifest_loads(self):
         manifest_path = os.path.join(
@@ -290,6 +295,23 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("dds", "volume-texture.dds")) for entry in entries))
         self.assertTrue(any(str(entry.get("expect") or "").lower() == "load_or_fail_clearly" for entry in entries))
         self.assertTrue(any(str(entry.get("expect") or "").lower() == "fail" for entry in entries))
+
+    def test_private_odd_container_video_manifest_template_loads(self):
+        manifest_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "sample_manifests",
+            "private_odd_container_video_manifest_template.json",
+        )
+        entries = load_manifest_entries(manifest_path)
+        self.assertEqual(len(entries), 5)
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "video_sample.dat")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "audio_only.wma")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "multi_stream.mkv")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "clip.001.vob")) for entry in entries))
+        self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("odd", "cover_art_container.mkv")) for entry in entries))
+        self.assertTrue(any("audio but no playable video stream" in " ".join(entry.get("hint_contains") or []) for entry in entries))
+        self.assertTrue(any("Multiple video streams were detected" in " ".join(entry.get("hint_contains") or []) for entry in entries))
 
     def test_optional_manifest_entries_accepts_manifest_file_and_resolves_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:

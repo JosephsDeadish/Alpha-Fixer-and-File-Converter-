@@ -1,0 +1,64 @@
+{
+  "base_dir": ".",
+  "entries": [
+    {
+      "group": "unknown-extension playable video",
+      "sample_id": "probe-detected-video",
+      "path": "odd/video_sample.dat",
+      "required": true,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "supported, non-corrupt video"
+      ],
+      "notes": "Point this at a real playable video file stored under a misleading or unknown extension. Use expect_frame_size, min_frames, min_duration_seconds, or expect_load_note_contains when you want to prove probe-detected odd-extension recovery kept working."
+    },
+    {
+      "group": "audio-only",
+      "sample_id": "audio-misdrop",
+      "path": "odd/audio_only.wma",
+      "required": true,
+      "expect": "fail",
+      "expect_probe_has_video": false,
+      "expect_probe_has_audio": true,
+      "hint_contains": [
+        "audio but no playable video stream"
+      ],
+      "notes": "Use a real audio-only file that users might accidentally drop into the Video Builder. This verifies that the runtime explains why it cannot be loaded instead of silently skipping it."
+    },
+    {
+      "group": "multi-stream container",
+      "sample_id": "alternate-video-streams",
+      "path": "odd/multi_stream.mkv",
+      "required": true,
+      "expect": "load_or_explain",
+      "expect_video_stream_count": 2,
+      "hint_contains": [
+        "Multiple video streams were detected"
+      ],
+      "notes": "Use a real file with multiple video streams or attached-picture plus live-video streams. Add preferred_video_stream_index / preferred_audio_stream_index and expect_preferred_* assertions when you want stricter manual-stream validation."
+    },
+    {
+      "group": "segmented container",
+      "sample_id": "multipart-set",
+      "path": "odd/clip.001.vob",
+      "required": true,
+      "expect": "load_or_explain",
+      "hint_contains": [
+        "segmented / multipart video set"
+      ],
+      "notes": "Point this at a real segmented or multipart container set. Keep every sibling part together so concat-repair validation can exercise the grouped recovery path."
+    },
+    {
+      "group": "cover-art or attached-picture",
+      "sample_id": "cover-art-stream",
+      "path": "odd/cover_art_container.mkv",
+      "required": true,
+      "expect": "load_or_explain",
+      "hint_contains": [
+        "attached-picture/cover-art stream"
+      ],
+      "notes": "Use a real media file whose probe prefers an attached-picture stream or embedded artwork. This helps validate still-frame fallback messaging and alternate-stream recovery behavior."
+    }
+  ]
+}
