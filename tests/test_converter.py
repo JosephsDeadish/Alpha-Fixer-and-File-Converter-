@@ -951,6 +951,52 @@ class TestCorpusHelperInputs(unittest.TestCase):
             self.assertIn("--require-stress-selftest-checks", argv)
             self.assertIn("--max-smoke-elapsed-growth-seconds", argv)
             self.assertIn("--max-smoke-elapsed-spread-seconds", argv)
+            summary_path = os.path.join(out_dir, "private-runtime-validation-summary.json")
+            self.assertTrue(os.path.isfile(summary_path))
+            summary_payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["status"], "completed")
+            self.assertEqual(summary_payload["preflight"]["discovered_manifest_entry_counts"]["disc_video"], 1)
+            self.assertEqual(summary_payload["preflight"]["discovered_manifest_entry_counts"]["dds"], 1)
+
+    def test_run_private_packaged_validation_script_writes_preflight_summary_when_no_corpus_exists(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "run_private_packaged_validation.py")
+        spec = importlib.util.spec_from_file_location("run_private_packaged_validation", module_path)
+        script = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(script)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out")
+            launch_target = os.path.join(tmpdir, "AlphaFixerConverter")
+            Path(launch_target).write_text("stub", encoding="utf-8")
+            os.chmod(launch_target, 0o755)
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS": "",
+                    "ALPHA_FIXER_REAL_VIDEO_CORPUS": "",
+                    "ALPHA_FIXER_VIDEO_CORPUS_DIR": "",
+                    "ALPHA_FIXER_REAL_DDS_DX10_CORPUS": "",
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": "",
+                    "ALPHA_FIXER_DDS_CORPUS_DIR": "",
+                },
+                clear=False,
+            ), mock.patch.object(script.verify_packaged_app_script, "main") as verify_main:
+                rc = script.main([launch_target, "--output-dir", out_dir])
+            self.assertEqual(rc, 1)
+            verify_main.assert_not_called()
+            summary_path = os.path.join(out_dir, "private-runtime-validation-summary.json")
+            self.assertTrue(os.path.isfile(summary_path))
+            summary_payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["status"], "preflight_failed")
+            self.assertEqual(summary_payload["preflight"]["total_discovered_entries"], 0)
+            self.assertIn("ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS", summary_payload["preflight"]["corpus_env"])
+            self.assertIn("No eligible private corpus samples were discovered", summary_payload["error"])
 
 
 class TestRuntimeFormatMatrixManifest(unittest.TestCase):
