@@ -52,6 +52,34 @@ def _has_wand() -> bool:
         return False
 
 
+def _load_dds_via_wand(path: str) -> Image.Image:
+    from wand.image import Image as WandImage
+
+    with WandImage(filename=path) as wimg:
+        wimg.format = "png"
+        blob = wimg.make_blob()
+    _tmp = Image.open(io.BytesIO(blob))
+    try:
+        return _tmp.convert("RGBA")
+    finally:
+        _tmp.close()
+
+
+def _try_load_dds_via_wand(path: str, *, context: str = "") -> Optional[Image.Image]:
+    if not _has_wand():
+        return None
+    try:
+        return _load_dds_via_wand(path)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        if context:
+            logger.warning("Wand failed to load DDS %s after %s: %s", path, context, exc)
+        else:
+            logger.warning("Wand failed to load DDS %s: %s", path, exc)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # DDS helpers (via Wand / ImageMagick)
 # ---------------------------------------------------------------------------
@@ -69,28 +97,17 @@ def _load_dds(path: str) -> Image.Image:
         raise
     except Exception as exc:
         logger.warning("Pillow failed to load DDS %s: %s", path, exc)
-    if _has_wand():
-        try:
-            from wand.image import Image as WandImage
-            with WandImage(filename=path) as wimg:
-                wimg.format = "png"
-                blob = wimg.make_blob()
-            _tmp = Image.open(io.BytesIO(blob))
-            try:
-                return _tmp.convert("RGBA")
-            finally:
-                _tmp.close()
-        except MemoryError:
-            raise
-        except Exception as exc:
-            logger.warning("Wand failed to load DDS %s: %s", path, exc)
+    wand_img = _try_load_dds_via_wand(path)
+    if wand_img is not None:
+        return wand_img
     # Fallback: minimal DDS reader using raw BGRA or RGBA data
     return _load_dds_raw(path)
 
 
 def _load_dds_raw(path: str) -> Image.Image:
     """DDS reader supporting uncompressed (BGRA/BGR) and compressed DXT1/3/5,
-    BC4/BC5/ATI1/ATI2 surfaces, with clear failures for unsupported BC6H/BC7."""
+    BC4/BC5/ATI1/ATI2 surfaces, with optional Wand fallback for BC6H/BC7 and
+    unsupported complex DX10 surfaces."""
     with open(path, "rb") as f:
         data = f.read()
     if len(data) < 128 or data[:4] != b"DDS ":
@@ -128,15 +145,24 @@ def _load_dds_raw(path: str) -> Image.Image:
     legacy_volume = bool(caps2 & 0x00200000)
     dx10_cubemap = bool(dx10_misc_flag & 0x4)
     if dx10_array_size > 1:
+        wand_img = _try_load_dds_via_wand(path, context="unsupported DDS texture array")
+        if wand_img is not None:
+            return wand_img
         raise ValueError(
             f"Unsupported DDS texture array ({dx10_array_size} slices). "
             "Install ImageMagick/wand to inspect non-2D DDS arrays."
         )
     if legacy_cubemap or dx10_cubemap:
+        wand_img = _try_load_dds_via_wand(path, context="unsupported DDS cubemap")
+        if wand_img is not None:
+            return wand_img
         raise ValueError(
             "Unsupported DDS cubemap surface. Install ImageMagick/wand to inspect cubemap DDS textures."
         )
     if legacy_volume or dx10_resource_dimension == 4 or depth > 1:
+        wand_img = _try_load_dds_via_wand(path, context="unsupported DDS volume texture")
+        if wand_img is not None:
+            return wand_img
         raise ValueError(
             "Unsupported DDS volume texture. Install ImageMagick/wand to inspect 3D DDS textures."
         )
@@ -191,15 +217,25 @@ def _load_dds_raw(path: str) -> Image.Image:
 
     if pf_flags & _DDPF_FOURCC or pf_fourcc != b"\x00\x00\x00\x00":
         if fourcc_str in ("DXT1", "DXT3", "DXT5", "BC4", "BC5", "BC6H", "BC7"):
+            if fourcc_str in ("BC6H", "BC7"):
+                wand_img = _try_load_dds_via_wand(path, context=f"{fourcc_str} decode fallback")
+                if wand_img is not None:
+                    return wand_img
             return _decompress_dds_blocks(
                 pixel_data, width, height, fourcc_str
             )
         if dx10_dxgi_format:
+            wand_img = _try_load_dds_via_wand(path, context=f"unsupported DXGI format {dx10_dxgi_format}")
+            if wand_img is not None:
+                return wand_img
             raise ValueError(
                 f"Unsupported DDS compressed format (FourCC={pf_fourcc!r}, "
                 f"unknown/unsupported DXGI={dx10_dxgi_format}). "
                 "Install ImageMagick/wand to read this DDS variant."
             )
+        wand_img = _try_load_dds_via_wand(path, context=f"unsupported FourCC {pf_fourcc!r}")
+        if wand_img is not None:
+            return wand_img
         raise ValueError(
             f"Unsupported DDS compressed format (FourCC={pf_fourcc!r}, "
             f"DXGI={dx10_dxgi_format}). "

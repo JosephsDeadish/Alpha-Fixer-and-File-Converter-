@@ -82,6 +82,20 @@ _EXPERIMENTAL_DISC_VIDEO_EXTS = {".iso", ".umd", ".bin"}
 _ODD_CONTAINER_RECOVERY_EXTS = _EXPERIMENTAL_DISC_VIDEO_EXTS | {
     ".asf", ".divx", ".dv", ".flv", ".mov", ".rm", ".rmvb", ".ts", ".vob", ".yuv",
 }
+
+_FFPROBE_DEEP_ANALYSIS_ARGS = [
+    "-probesize",
+    "100M",
+    "-analyzeduration",
+    "100M",
+]
+
+_FFMPEG_DEEP_ANALYSIS_ARGS = [
+    "-probesize",
+    "100M",
+    "-analyzeduration",
+    "100M",
+]
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420
@@ -322,6 +336,7 @@ def _probe_media_details(
             [
                 ffprobe_exe,
                 "-v", "error",
+                *_FFPROBE_DEEP_ANALYSIS_ARGS,
                 "-print_format", "json",
                 "-show_entries",
                 "format=format_name,duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,bit_rate,duration,disposition=attached_pic:stream_tags=language,title",
@@ -781,6 +796,7 @@ def _remux_video_source(
                 "+discardcorrupt",
                 "-err_detect",
                 "ignore_err",
+                *_FFMPEG_DEEP_ANALYSIS_ARGS,
                 "-i",
                 path,
                 *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),
@@ -843,6 +859,7 @@ def _extract_visual_still_frame(path: str, details: Optional[dict[str, object]] 
                 "+discardcorrupt",
                 "-err_detect",
                 "ignore_err",
+                *_FFMPEG_DEEP_ANALYSIS_ARGS,
                 "-i",
                 path,
                 *(_ffmpeg_stream_maps(details)[:2] if details else ["-map", "0:v:0"]),
@@ -898,6 +915,7 @@ def _transcode_video_source(
                 "+discardcorrupt",
                 "-err_detect",
                 "ignore_err",
+                *_FFMPEG_DEEP_ANALYSIS_ARGS,
                 "-i",
                 path,
                 *_ffmpeg_stream_maps_with_audio(details, include_audio=include_audio),

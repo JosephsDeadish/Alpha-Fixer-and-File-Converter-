@@ -736,6 +736,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         "/tmp/dds.json",
                         "--format-matrix-manifest",
                         "/tmp/matrix.json",
+                        "--allow-sample-downloads",
+                        "--sample-cache-dir",
+                        "/tmp/sample-cache",
                         "--require-selftest-pass",
                         "--require-selftest-check",
                         "external_disc_video_manifest",
@@ -749,6 +752,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"], "/tmp/disc.json")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"], "/tmp/dds.json")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"], "/tmp/matrix.json")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"], "/tmp/sample-cache")
 
     def test_runtime_selftest_dump_records_external_manifest_checks(self):
         import main
@@ -2723,6 +2728,27 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(details["video_codec"], "mpeg1video")
         self.assertEqual(details["selected_video_language"], "jpn")
         self.assertEqual(len(details["video_stream_choices"]), 2)
+
+    def test_probe_media_details_uses_deeper_analysis_flags(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        calls = []
+        payload = {"format": {"format_name": "mpeg"}, "streams": []}
+
+        def _fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            return types.SimpleNamespace(returncode=0, stdout=json.dumps(payload))
+
+        with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+            with patch.object(vt.subprocess, "run", side_effect=_fake_run):
+                vt._probe_media_details("/tmp/sample.vob")
+        self.assertTrue(calls)
+        self.assertIn("-probesize", calls[0])
+        self.assertIn("100M", calls[0])
+        self.assertIn("-analyzeduration", calls[0])
 
     def test_video_load_failure_hint_mentions_cover_art_streams(self):
         try:

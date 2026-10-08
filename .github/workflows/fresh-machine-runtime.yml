@@ -1,0 +1,89 @@
+name: Fresh Machine Runtime Validation
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  packaged-runtime:
+    name: Packaged runtime – ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: bash scripts/install_linux_deps.sh
+
+      - name: Build packaged app (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/build_exe.sh
+
+      - name: Build packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: scripts\build_exe.bat
+
+      - name: Verify packaged app (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p artifacts
+          python scripts/verify_packaged_app.py \
+            dist/AlphaFixerConverter/AlphaFixerConverter \
+            --smoke-seconds 2 \
+            --repeat 3 \
+            --timeout 45 \
+            --run-selftest \
+            --selftest-iterations 6 \
+            --require-selftest-pass \
+            --require-selftest-check generated_mp4_load \
+            --require-selftest-check mpegts_load \
+            --require-selftest-check synthetic_bin_probe \
+            --require-video-runtime \
+            --require-odd-probe-ready \
+            --require-no-missing-libs \
+            --json-out artifacts/runtime-validation-linux.json
+
+      - name: Verify packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          python scripts/verify_packaged_app.py `
+            dist\AlphaFixerConverter\AlphaFixerConverter.exe `
+            --smoke-seconds 2 `
+            --repeat 3 `
+            --timeout 45 `
+            --run-selftest `
+            --selftest-iterations 6 `
+            --require-selftest-pass `
+            --require-selftest-check generated_mp4_load `
+            --require-selftest-check mpegts_load `
+            --require-selftest-check synthetic_bin_probe `
+            --require-video-runtime `
+            --require-odd-probe-ready `
+            --require-no-missing-libs `
+            --json-out artifacts\runtime-validation-windows.json
+
+      - name: Upload runtime validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-validation-${{ matrix.os }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error

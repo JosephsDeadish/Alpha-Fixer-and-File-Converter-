@@ -8976,6 +8976,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('dds_compression_available', verify_src)
         self.assertIn('ALPHA_FIXER_SMOKE_TEST', verify_src)
 
+    def test_fresh_machine_runtime_workflow_covers_linux_and_windows(self):
+        src = self._src("../.github/workflows/fresh-machine-runtime.yml")
+        self.assertIn("ubuntu-latest", src)
+        self.assertIn("windows-latest", src)
+        self.assertIn("scripts/verify_packaged_app.py", src)
+        self.assertIn("--repeat 3", src)
+        self.assertIn("--selftest-iterations 6", src)
+        self.assertIn("generated_mp4_load", src)
+        self.assertIn("synthetic_bin_probe", src)
+
     def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
         src = self._src("../main.py")
         self.assertIn("def _missing_linux_runtime_libs() -> list[str]:", src)

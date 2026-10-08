@@ -1,7 +1,12 @@
+import hashlib
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 
 def load_manifest_entries(raw_or_path: str) -> list[dict[str, object]]:
@@ -47,6 +52,28 @@ def load_manifest_entries(raw_or_path: str) -> list[dict[str, object]]:
     return entries
 
 
+def manifest_downloads_enabled() -> bool:
+    for env_name in (
+        "ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS",
+        "ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS",
+    ):
+        raw = os.environ.get(env_name, "").strip().lower()
+        if raw in {"1", "true", "yes", "on"}:
+            return True
+    return False
+
+
+def manifest_cache_dir_from_env() -> str:
+    for env_name in (
+        "ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR",
+        "ALPHA_FIXER_SAMPLE_CACHE_DIR",
+    ):
+        value = os.environ.get(env_name, "").strip()
+        if value:
+            return value
+    return os.path.join(tempfile.gettempdir(), "alpha_fixer_manifest_cache")
+
+
 def load_manifest_entries_from_env(env_name: str) -> list[dict[str, object]]:
     return load_manifest_entries(os.environ.get(env_name, ""))
 
@@ -81,6 +108,14 @@ def _entry_source_path(entry: dict[str, object]) -> str:
     return ""
 
 
+def _entry_source_key(entry: dict[str, object]) -> str:
+    for key in ("path", "input", "input_path", "source", "source_path"):
+        value = str(entry.get(key) or "").strip()
+        if value:
+            return key
+    return "path"
+
+
 def _entry_tokens(entry: dict[str, object], key: str) -> list[str]:
     tokens = entry.get(key) or []
     if isinstance(tokens, str):
@@ -90,6 +125,126 @@ def _entry_tokens(entry: dict[str, object], key: str) -> list[str]:
     return [str(token) for token in tokens if str(token).strip()]
 
 
+def _entry_download_url(entry: dict[str, object]) -> str:
+    return str(entry.get("url") or entry.get("download_url") or "").strip()
+
+
+def _entry_sha256(entry: dict[str, object]) -> str:
+    return str(entry.get("sha256") or entry.get("checksum") or "").strip().lower()
+
+
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_entry_checksum(path: str, entry: dict[str, object]) -> None:
+    expected = _entry_sha256(entry)
+    if not expected:
+        return
+    actual = _sha256_file(path)
+    if actual.lower() != expected:
+        raise ValueError(
+            f"{Path(path).name}: sha256 mismatch (expected {expected}, got {actual})"
+        )
+
+
+def _materialized_target_path(
+    entry: dict[str, object],
+    *,
+    cache_dir: str,
+) -> str:
+    source_path = _entry_source_path(entry)
+    explicit_name = str(entry.get("download_name") or "").strip()
+    explicit_subdir = str(entry.get("cache_subdir") or "").strip()
+    if explicit_name:
+        rel_name = explicit_name
+    elif source_path:
+        rel_name = os.path.basename(source_path)
+    else:
+        parsed = urlparse(_entry_download_url(entry))
+        rel_name = os.path.basename(parsed.path) or "sample.bin"
+    target_dir = cache_dir
+    if explicit_subdir:
+        target_dir = os.path.join(target_dir, explicit_subdir)
+    return os.path.join(target_dir, rel_name)
+
+
+def materialize_manifest_entry(
+    entry: dict[str, object],
+    *,
+    cache_dir: str = "",
+    allow_download: bool = False,
+    copy_local: bool = False,
+    timeout: int = 120,
+) -> dict[str, object]:
+    normalized = dict(entry)
+    source_key = _entry_source_key(normalized)
+    source_path = _entry_source_path(normalized)
+    if source_path and os.path.isfile(source_path):
+        _verify_entry_checksum(source_path, normalized)
+        if not copy_local:
+            return normalized
+        target_path = _materialized_target_path(
+            normalized,
+            cache_dir=cache_dir or manifest_cache_dir_from_env(),
+        )
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        if os.path.abspath(source_path) != os.path.abspath(target_path):
+            shutil.copy2(source_path, target_path)
+        normalized[source_key] = target_path
+        return normalized
+    download_url = _entry_download_url(normalized)
+    if not (allow_download and download_url):
+        return normalized
+    target_path = _materialized_target_path(
+        normalized,
+        cache_dir=cache_dir or manifest_cache_dir_from_env(),
+    )
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    if os.path.isfile(target_path):
+        try:
+            _verify_entry_checksum(target_path, normalized)
+        except Exception:
+            try:
+                os.remove(target_path)
+            except OSError:
+                pass
+    if not os.path.isfile(target_path):
+        request = Request(
+            download_url,
+            headers={"User-Agent": "AlphaFixerConverter/manifest-fetch"},
+        )
+        with urlopen(request, timeout=max(5, int(timeout))) as response, open(target_path, "wb") as handle:
+            shutil.copyfileobj(response, handle)
+    _verify_entry_checksum(target_path, normalized)
+    normalized[source_key] = target_path
+    return normalized
+
+
+def materialize_manifest_entries(
+    entries: list[dict[str, object]],
+    *,
+    cache_dir: str = "",
+    allow_download: bool = False,
+    copy_local: bool = False,
+    timeout: int = 120,
+) -> list[dict[str, object]]:
+    return [
+        materialize_manifest_entry(
+            entry,
+            cache_dir=cache_dir,
+            allow_download=allow_download,
+            copy_local=copy_local,
+            timeout=timeout,
+        )
+        for entry in entries
+    ]
+
+
 def execute_disc_video_manifest(
     entries: list[dict[str, object]],
     video_tool,
@@ -97,7 +252,16 @@ def execute_disc_video_manifest(
     limit: int = 0,
 ) -> tuple[bool, str]:
     exercised = loaded = explained = unavailable = 0
-    for entry in _limited_entries(entries, limit):
+    for raw_entry in _limited_entries(entries, limit):
+        try:
+            entry = materialize_manifest_entry(
+                raw_entry,
+                cache_dir=manifest_cache_dir_from_env(),
+                allow_download=manifest_downloads_enabled(),
+            )
+        except Exception as exc:
+            sample_label = Path(_entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample").name
+            return False, f"{sample_label}: manifest materialization failed: {exc}"
         sample_path = _entry_source_path(entry)
         if not sample_path or not os.path.isfile(sample_path):
             unavailable += 1
@@ -151,7 +315,16 @@ def execute_dds_manifest(
     limit: int = 0,
 ) -> tuple[bool, str]:
     exercised = decoded = failed_as_expected = unavailable = 0
-    for entry in _limited_entries(entries, limit):
+    for raw_entry in _limited_entries(entries, limit):
+        try:
+            entry = materialize_manifest_entry(
+                raw_entry,
+                cache_dir=manifest_cache_dir_from_env(),
+                allow_download=manifest_downloads_enabled(),
+            )
+        except Exception as exc:
+            sample_label = Path(_entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample").name
+            return False, f"{sample_label}: manifest materialization failed: {exc}"
         sample_path = _entry_source_path(entry)
         if not sample_path or not os.path.isfile(sample_path):
             unavailable += 1
@@ -193,7 +366,16 @@ def execute_format_matrix_manifest(
     limit: int = 0,
 ) -> tuple[bool, str]:
     exercised = converted = expected_failures = unavailable = 0
-    for index, entry in enumerate(_limited_entries(entries, limit), start=1):
+    for index, raw_entry in enumerate(_limited_entries(entries, limit), start=1):
+        try:
+            entry = materialize_manifest_entry(
+                raw_entry,
+                cache_dir=manifest_cache_dir_from_env(),
+                allow_download=manifest_downloads_enabled(),
+            )
+        except Exception as exc:
+            sample_label = Path(_entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample").name
+            return False, f"{sample_label}: manifest materialization failed: {exc}"
         input_path = _entry_source_path(entry)
         if not input_path or not os.path.isfile(input_path):
             unavailable += 1

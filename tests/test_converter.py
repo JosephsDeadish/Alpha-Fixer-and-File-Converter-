@@ -4,10 +4,14 @@ Tests for file converter utilities.
 import sys
 import os
 import json
+import hashlib
+import io
 import tempfile
 import unittest
 from unittest import mock
 import types
+import importlib.util
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -34,6 +38,7 @@ from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_i
 from src.core.runtime_validation import (
     execute_format_matrix_manifest,
     load_manifest_entries,
+    materialize_manifest_entries,
 )
 from src.core.worker import AlphaWorker, ConverterWorker
 from src.version import APP_NAME
@@ -239,6 +244,106 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["input"], sample_path)
         self.assertEqual(entries[0]["target_format"], "DDS")
+
+    def test_materialize_manifest_entries_downloads_missing_url_backed_sample(self):
+        sample_bytes = b"odd-container-sample"
+        digest = hashlib.sha256(sample_bytes).hexdigest()
+        entries = [
+            {
+                "path": "missing/sample.iso",
+                "url": "https://example.invalid/sample.iso",
+                "sha256": digest,
+                "download_name": "sample.iso",
+                "expect": "load_or_explain",
+            }
+        ]
+
+        class _FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.close()
+                return False
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("src.core.runtime_validation.urlopen", return_value=_FakeResponse(sample_bytes)):
+                materialized = materialize_manifest_entries(entries, cache_dir=tmpdir, allow_download=True)
+            self.assertEqual(len(materialized), 1)
+            self.assertTrue(os.path.isfile(materialized[0]["path"]))
+            with open(materialized[0]["path"], "rb") as handle:
+                self.assertEqual(handle.read(), sample_bytes)
+
+    def test_materialize_manifest_entries_copies_existing_local_samples_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "source.dds")
+            cache_dir = os.path.join(tmpdir, "cache")
+            with open(source_path, "wb") as handle:
+                handle.write(b"dds")
+            materialized = materialize_manifest_entries(
+                [{"path": source_path, "expect": "load"}],
+                cache_dir=cache_dir,
+                copy_local=True,
+            )
+            copied_path = materialized[0]["path"]
+            self.assertNotEqual(os.path.abspath(copied_path), os.path.abspath(source_path))
+            self.assertTrue(os.path.isfile(copied_path))
+            with open(copied_path, "rb") as handle:
+                self.assertEqual(handle.read(), b"dds")
+
+    def test_materialize_manifest_entries_rejects_bad_checksum(self):
+        sample_bytes = b"sample"
+
+        class _FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.close()
+                return False
+
+        entries = [
+            {
+                "path": "missing/sample.dds",
+                "url": "https://example.invalid/sample.dds",
+                "sha256": "0" * 64,
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("src.core.runtime_validation.urlopen", return_value=_FakeResponse(sample_bytes)):
+                with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
+                    materialize_manifest_entries(entries, cache_dir=tmpdir, allow_download=True)
+
+    def test_populate_sample_manifest_script_materializes_and_writes_manifest(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "populate_sample_manifest.py")
+        spec = importlib.util.spec_from_file_location("populate_sample_manifest", module_path)
+        script = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(script)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.bin")
+            cache_dir = os.path.join(tmpdir, "cache")
+            out_manifest = os.path.join(tmpdir, "materialized.json")
+            with open(sample_path, "wb") as handle:
+                handle.write(b"media")
+            manifest_path = os.path.join(tmpdir, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": sample_path}]}, handle)
+            rc = script.main(
+                [
+                    manifest_path,
+                    "--cache-dir",
+                    cache_dir,
+                    "--copy-local",
+                    "--output-manifest",
+                    out_manifest,
+                ]
+            )
+            self.assertEqual(rc, 0)
+            payload = json.loads(Path(out_manifest).read_text(encoding="utf-8"))
+            self.assertEqual(Path(payload["base_dir"]).resolve(), Path(cache_dir).resolve())
+            self.assertTrue(os.path.isfile(payload["entries"][0]["path"]))
 
 
 class TestRuntimeFormatMatrixManifest(unittest.TestCase):
@@ -1009,6 +1114,22 @@ class TestConvertFile(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "BC6H/BC7 decoder"):
                 _load_dds_raw(src)
 
+    def test_load_dds_bc7_uses_wand_fallback_when_available(self):
+        from src.core import alpha_processor as ap
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_bc7.dds")
+            _make_dx10_dds(src, 4, 4, 98, bytes(16))
+            fallback_img = Image.new("RGBA", (4, 4), (1, 2, 3, 255))
+            with mock.patch.object(ap, "_has_wand", return_value=True):
+                with mock.patch.object(ap, "_load_dds_via_wand", return_value=fallback_img):
+                    img = ap._load_dds_raw(src)
+            try:
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0)), (1, 2, 3, 255))
+            finally:
+                img.close()
+
     def test_load_dds_bc6h_requires_real_decoder(self):
         from src.core.alpha_processor import _load_dds_raw
 
@@ -1083,6 +1204,22 @@ class TestConvertFile(unittest.TestCase):
             _make_dx10_dds(src, 4, 4, 80, bytes([180, 0]) + bytes(6), array_size=2)
             with self.assertRaisesRegex(ValueError, "texture array"):
                 _load_dds_raw(src)
+
+    def test_load_dds_uses_wand_fallback_for_texture_arrays_when_available(self):
+        from src.core import alpha_processor as ap
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input_array.dds")
+            _make_dx10_dds(src, 4, 4, 80, bytes([180, 0]) + bytes(6), array_size=2)
+            fallback_img = Image.new("RGBA", (4, 4), (4, 5, 6, 255))
+            with mock.patch.object(ap, "_has_wand", return_value=True):
+                with mock.patch.object(ap, "_load_dds_via_wand", return_value=fallback_img):
+                    img = ap._load_dds_raw(src)
+            try:
+                self.assertEqual(img.size, (4, 4))
+                self.assertEqual(img.getpixel((0, 0)), (4, 5, 6, 255))
+            finally:
+                img.close()
 
     def test_load_dds_rejects_legacy_cubemaps(self):
         from src.core.alpha_processor import _load_dds_raw

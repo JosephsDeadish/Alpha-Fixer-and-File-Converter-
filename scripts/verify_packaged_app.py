@@ -69,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--disc-video-manifest", help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution.")
     parser.add_argument("--dds-manifest", help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution.")
     parser.add_argument("--format-matrix-manifest", help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution.")
+    parser.add_argument("--allow-sample-downloads", action="store_true", help="Allow manifest-backed self-tests to download missing external samples when URL fields are present.")
+    parser.add_argument("--sample-cache-dir", help="Optional cache directory for downloaded or materialized manifest samples.")
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
     args = parser.parse_args(argv)
 
@@ -130,6 +132,10 @@ def main(argv: list[str] | None = None) -> int:
             selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = args.dds_manifest
         if args.format_matrix_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = args.format_matrix_manifest
+        if args.allow_sample_downloads:
+            selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
+        if args.sample_cache_dir:
+            selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR"] = args.sample_cache_dir
         selftest_result = _run_and_echo(command, env=selftest_env, timeout=max(30, int(args.timeout)))
         if selftest_result.returncode not in (0, 1):
             raise SystemExit(f"Packaged runtime self-test failed with exit code {selftest_result.returncode}.")
