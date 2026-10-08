@@ -36,6 +36,8 @@ from src.core.file_converter import (
 )
 from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_image
 from src.core.runtime_validation import (
+    execute_dds_manifest,
+    execute_disc_video_manifest,
     execute_format_matrix_manifest,
     load_manifest_entries,
     materialize_manifest_entries,
@@ -412,6 +414,104 @@ class TestCorpusHelperInputs(unittest.TestCase):
             with mock.patch("src.core.runtime_validation.urlopen", return_value=_FakeResponse(sample_bytes)):
                 with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
                     materialize_manifest_entries(entries, cache_dir=tmpdir, allow_download=True)
+
+    def test_execute_disc_video_manifest_enforces_required_missing_samples(self):
+        entries = [{"path": "/tmp/missing-disc.iso", "required": True, "platform": "PSP"}]
+        ok, detail = execute_disc_video_manifest(entries, types.SimpleNamespace())
+        self.assertFalse(ok)
+        self.assertIn("required sample missing", detail)
+
+    def test_execute_disc_video_manifest_checks_probe_and_clip_expectations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.iso")
+            with open(sample_path, "wb") as handle:
+                handle.write(b"disc")
+
+            class _FakeClip:
+                def __init__(self):
+                    self.source_path = sample_path
+                    self.total_frames = 48
+                    self.fps = 24.0
+                    self.frame_size = (320, 240)
+                    self.has_audio = True
+                    self.load_note = "temporary ffmpeg transcode fallback active"
+                    self.load_strategy = self.load_note
+                    self.preferred_video_stream_index = 4
+                    self.preferred_audio_stream_index = 9
+
+                def close(self):
+                    pass
+
+            fake_tool = types.SimpleNamespace(
+                _probe_media_details=lambda *_args, **_kwargs: {
+                    "has_video": True,
+                    "has_audio": True,
+                    "video_codec": "mpeg2video",
+                    "audio_codec": "ac3",
+                    "format_name": "mpeg,iso",
+                    "width": 320,
+                    "height": 240,
+                    "video_stream_count": 2,
+                    "audio_stream_count": 3,
+                    "video_stream_index": 4,
+                    "audio_stream_index": 9,
+                },
+                _load_video_clip=lambda *_args, **_kwargs: _FakeClip(),
+                _video_load_failure_hint=lambda *_args, **_kwargs: "Disc-image video inputs are experimental",
+            )
+            entries = [{
+                "platform": "PS2",
+                "sample_id": "main-stream",
+                "path": sample_path,
+                "required": True,
+                "expect": "load",
+                "min_frames": 10,
+                "min_duration_seconds": 1.5,
+                "expect_has_audio": True,
+                "expect_frame_size": [320, 240],
+                "expect_probe_has_video": True,
+                "expect_probe_has_audio": True,
+                "expect_video_codec_contains": ["mpeg2"],
+                "expect_audio_codec_contains": ["ac3"],
+                "expect_format_name_contains": ["iso"],
+                "expect_video_stream_count": 2,
+                "expect_audio_stream_count": 3,
+                "expect_video_stream_index": 4,
+                "expect_audio_stream_index": 9,
+                "expect_preferred_video_stream_index": 4,
+                "expect_preferred_audio_stream_index": 9,
+                "require_recovery": True,
+                "expect_load_note_contains": ["transcode fallback"],
+                "hint_contains": ["experimental"],
+            }]
+
+            ok, detail = execute_disc_video_manifest(entries, fake_tool)
+        self.assertTrue(ok, msg=detail)
+        self.assertIn("platforms=PS2:1", detail)
+
+    def test_execute_dds_manifest_enforces_required_sample_and_expected_size(self):
+        entries = [{"path": "/tmp/missing.bc6h.dds", "required": True, "group": "BC6H"}]
+        ok, detail = execute_dds_manifest(entries, lambda _path: None)
+        self.assertFalse(ok)
+        self.assertIn("required sample missing", detail)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.dds")
+            with open(sample_path, "wb") as handle:
+                handle.write(b"dds")
+
+            class _FakeImage:
+                size = (64, 32)
+
+                def close(self):
+                    pass
+
+            ok, detail = execute_dds_manifest(
+                [{"path": sample_path, "group": "DX10", "expect": "load", "expect_size": [64, 32]}],
+                lambda _path: _FakeImage(),
+            )
+        self.assertTrue(ok, msg=detail)
+        self.assertIn("groups=DX10:1", detail)
 
     def test_populate_sample_manifest_script_materializes_and_writes_manifest(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "populate_sample_manifest.py")

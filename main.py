@@ -611,6 +611,7 @@ def _runtime_capability_summary() -> dict[str, object]:
             packaged_asset_warnings.append(
                 "packaged ImageMagick/wand runtime unavailable for DDS compressed output"
             )
+    packaged_bundle_ready = bool(frozen and not packaged_asset_warnings)
     if packaged_asset_warnings:
         readiness_limits.append("packaged asset gaps: " + "; ".join(packaged_asset_warnings))
     feature_readiness_notice = ""
@@ -643,6 +644,7 @@ def _runtime_capability_summary() -> dict[str, object]:
         "optional_output_limits": unavailable_outputs,
         "default_theme_svg_bundled": default_theme_svg_bundled,
         "imagemagick_bundled": imagemagick_bundled,
+        "packaged_bundle_ready": packaged_bundle_ready,
         "packaged_asset_warnings": packaged_asset_warnings,
         "feature_readiness_notice": feature_readiness_notice,
         **svg_details,

@@ -843,7 +843,45 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"].endswith("sample_manifests/public_disc_video_manifest.json"))
         self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"].endswith("sample_manifests/public_dds_dx10_manifest.json"))
         self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"].endswith("sample_manifests/public_format_matrix_manifest.json"))
-        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"], "3")
+
+    def test_verify_packaged_app_can_require_bundled_dependencies_and_no_asset_gaps(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout=(
+                            'ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, '
+                            '"odd_container_probe_ready": true, "missing_linux_runtime_libs": [], '
+                            '"dds_compression_available": true, "ffmpeg_bundled": true, '
+                            '"ffprobe_bundled": true, "imagemagick_bundled": true, '
+                            '"packaged_asset_warnings": []}\n'
+                        ),
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--require-bundled-ffmpeg",
+                        "--require-bundled-ffprobe",
+                        "--require-bundled-imagemagick",
+                        "--require-no-packaged-asset-gaps",
+                    ]
+                )
+        self.assertEqual(rc, 0)
 
     def test_verify_packaged_app_merges_repeated_manifest_arguments(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
@@ -1043,11 +1081,57 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("1 packaged asset gap", banner)
         self.assertIn("Packaged asset gaps:", tooltip)
         self.assertIn("packaged ffprobe binary missing", tooltip)
+        self.assertIn("Packaged dependency audit:", tooltip)
         self.assertIn("GIF DETAIL", tooltip)
         self.assertIn("VIDEO DETAIL", tooltip)
         self.assertIn("Converter:", tooltip)
         self.assertIn("GIF Builder:", tooltip)
         self.assertIn("Video Builder:", tooltip)
+
+    def test_main_window_runtime_readiness_helpers_surface_verified_packaged_bundle(self):
+        _require_qt_gui(self)
+        from src.ui import main_window as mw
+
+        summary = {
+            "frozen": True,
+            "bundle_dir": "/tmp/dist",
+            "video_runtime_ready": True,
+            "odd_container_probe_ready": True,
+            "missing_video_bits": [],
+            "dds_compression_available": True,
+            "optional_output_limits": [],
+            "missing_linux_runtime_libs": [],
+            "packaged_runtime_notice": "",
+            "feature_readiness_notice": "",
+            "optional_qt_notice": "",
+            "has_imageio": True,
+            "has_imageio_ffmpeg": True,
+            "ffmpeg_path": "/tmp/dist/ffmpeg",
+            "ffprobe_path": "/tmp/dist/ffprobe",
+            "ffmpeg_path_exists": True,
+            "ffprobe_path_exists": True,
+            "ffmpeg_runtime_ready": True,
+            "ffprobe_runtime_ready": True,
+            "ffmpeg_bundled": True,
+            "ffprobe_bundled": True,
+            "wand_runtime_ready": True,
+            "imagemagick_bundled": True,
+            "qt_svg_ready": True,
+            "default_theme_svg_ready": True,
+            "default_theme_svg_path": "/tmp/dist/panda_dark.svg",
+            "default_theme_svg_bundled": True,
+            "theme_svg_missing_count": 0,
+            "packaged_asset_warnings": [],
+            "packaged_bundle_ready": True,
+        }
+
+        banner = mw._runtime_readiness_banner_text(summary)
+        tooltip = mw._runtime_readiness_banner_tooltip(summary)
+
+        self.assertIn("packaged bundle verified", banner)
+        self.assertIn("Packaged dependency audit:", tooltip)
+        self.assertIn("Bundled ffmpeg: yes", tooltip)
+        self.assertIn("Packaged bundle verification: passed", tooltip)
 
 
 # ---------------------------------------------------------------------------

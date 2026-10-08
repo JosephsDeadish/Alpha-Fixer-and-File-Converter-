@@ -2,16 +2,26 @@
   "base_dir": ".",
   "entries": [
     {
+      "platform": "PSP",
+      "sample_id": "umd-main-movie",
       "path": "psp/sample.umd.iso",
+      "required": true,
       "expect": "load_or_explain",
       "preferred_video_stream_index": 0,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "min_frames": 10,
       "hint_contains": [
         "Disc-image video inputs are experimental"
       ],
-      "notes": "Actual PSP UMD / ISO sample. Replace with a real local path or add a download_url + sha256 if you have a legally shareable sample."
+      "notes": "Actual PSP UMD / ISO sample. Replace with a real local path or add a download_url + sha256 if you have a legally shareable sample. Add expect_frame_size, min_duration_seconds, expect_has_audio, expect_probe_has_video, expect_audio_codec_contains, or expect_load_note_contains as needed for stricter corpus validation."
     },
     {
+      "platform": "PS1",
+      "sample_id": "bin-cue-stream",
       "path": "ps1/sample.bin",
+      "required": true,
       "companions": [
         {
           "path": "ps1/sample.cue",
@@ -19,19 +29,26 @@
         }
       ],
       "expect": "load_or_explain",
+      "expect_format_name_contains": [
+        "bin"
+      ],
       "hint_contains": [
         "Disc-image video inputs are experimental"
       ],
-      "notes": "Actual PS1 BIN/CUE-style disc-image sample. Point the main path at the BIN and add the matching cue sheet as a companion so cue/bin retries can exercise real track-layout recovery."
+      "notes": "Actual PS1 BIN/CUE-style disc-image sample. Point the main path at the BIN and add the matching cue sheet as a companion so cue/bin retries can exercise real track-layout recovery. Use require_recovery plus expect_load_note_contains when you specifically want to prove the cue/bin recovery path stayed active."
     },
     {
+      "platform": "PS2",
+      "sample_id": "dvd-pss-stream",
       "path": "ps2/sample.iso",
+      "required": true,
       "expect": "load_or_explain",
       "preferred_video_stream_index": 0,
+      "expect_probe_has_video": true,
       "hint_contains": [
         "Disc-image video inputs are experimental"
       ],
-      "notes": "Actual PS2 DVD ISO sample. Add preferred stream indexes or expected failure/load tokens per sample if needed."
+      "notes": "Actual PS2 DVD ISO sample. Add preferred stream indexes or expected failure/load tokens per sample if needed. The validator now also supports expect_video_stream_count, expect_audio_stream_count, expect_video_stream_index, expect_audio_stream_index, expect_frame_size, and expect_preferred_* stream assertions."
     }
   ]
 }

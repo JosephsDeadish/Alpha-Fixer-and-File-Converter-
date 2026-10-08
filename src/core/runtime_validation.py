@@ -142,6 +142,58 @@ def _entry_tokens(entry: dict[str, object], key: str) -> list[str]:
     return [str(token) for token in tokens if str(token).strip()]
 
 
+def _entry_bool(entry: dict[str, object], key: str, default: bool = False) -> bool:
+    value = entry.get(key, default)
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _entry_int(entry: dict[str, object], key: str) -> int | None:
+    try:
+        return int(entry.get(key))
+    except Exception:
+        return None
+
+
+def _entry_float(entry: dict[str, object], key: str) -> float | None:
+    try:
+        return float(entry.get(key))
+    except Exception:
+        return None
+
+
+def _entry_size(entry: dict[str, object], key: str) -> tuple[int, int] | None:
+    value = entry.get(key)
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        try:
+            return (int(value[0]), int(value[1]))
+        except Exception:
+            return None
+    text = str(value or "").strip().lower()
+    if "x" in text:
+        left, right = text.split("x", 1)
+        try:
+            return (int(left.strip()), int(right.strip()))
+        except Exception:
+            return None
+    return None
+
+
+def _entry_label(entry: dict[str, object], sample_path: str) -> str:
+    parts = [
+        str(entry.get("platform") or "").strip(),
+        str(entry.get("sample_id") or entry.get("label") or entry.get("name") or "").strip(),
+        Path(sample_path).name,
+    ]
+    return " / ".join(part for part in parts if part)
+
+
 def _entry_download_url(entry: dict[str, object]) -> str:
     return str(entry.get("url") or entry.get("download_url") or "").strip()
 
@@ -297,6 +349,7 @@ def execute_disc_video_manifest(
     limit: int = 0,
 ) -> tuple[bool, str]:
     exercised = loaded = explained = unavailable = 0
+    platform_counts: dict[str, int] = {}
     for raw_entry in _limited_entries(entries, limit):
         try:
             entry = materialize_manifest_entry(
@@ -309,11 +362,22 @@ def execute_disc_video_manifest(
             return False, f"{sample_label}: manifest materialization failed: {exc}"
         sample_path = _entry_source_path(entry)
         if not sample_path or not os.path.isfile(sample_path):
+            if _entry_bool(entry, "required"):
+                return False, f"{Path(sample_path or _entry_source_path(raw_entry) or 'sample').name}: required sample missing"
             unavailable += 1
             continue
         preferred_video = entry.get("preferred_video_stream_index")
         preferred_audio = entry.get("preferred_audio_stream_index")
         expected = str(entry.get("expect") or "load_or_explain").strip().lower()
+        sample_label = _entry_label(entry, sample_path)
+        probe = None
+        probe_loader = getattr(video_tool, "_probe_media_details", None)
+        if callable(probe_loader):
+            probe = probe_loader(
+                sample_path,
+                preferred_video_stream_index=preferred_video,
+                preferred_audio_stream_index=preferred_audio,
+            )
         clip = video_tool._load_video_clip(
             sample_path,
             preferred_video_stream_index=preferred_video,
@@ -325,32 +389,132 @@ def execute_disc_video_manifest(
             preferred_audio_stream_index=preferred_audio,
         )
         exercised += 1
+        platform = str(entry.get("platform") or entry.get("system") or "").strip()
+        if platform:
+            platform_counts[platform] = platform_counts.get(platform, 0) + 1
         if expected == "load":
             if clip is None:
-                return False, f"{Path(sample_path).name}: expected load, got failure hint: {hint}"
+                return False, f"{sample_label}: expected load, got failure hint: {hint}"
         elif expected == "fail":
             if clip is not None:
                 try:
                     clip.close()
                 finally:
-                    return False, f"{Path(sample_path).name}: expected failure, but clip loaded"
+                    return False, f"{sample_label}: expected failure, but clip loaded"
         elif clip is None and not str(hint).strip():
-            return False, f"{Path(sample_path).name}: expected load_or_explain, but no clip or hint was produced"
+            return False, f"{sample_label}: expected load_or_explain, but no clip or hint was produced"
+        for token in _entry_tokens(entry, "hint_contains"):
+            if token not in hint:
+                return False, f"{sample_label}: missing required hint token: {token}"
+        if probe is not None:
+            expected_probe_size = _entry_size(entry, "expect_probe_frame_size")
+            if expected_probe_size is not None:
+                actual_probe_size = (
+                    max(0, int(probe.get("width") or 0)),
+                    max(0, int(probe.get("height") or 0)),
+                )
+                if actual_probe_size != expected_probe_size:
+                    return False, (
+                        f"{sample_label}: expected probed size {expected_probe_size}, got {actual_probe_size}"
+                    )
+            for key, label in (
+                ("expect_video_stream_count", "video stream count"),
+                ("expect_audio_stream_count", "audio stream count"),
+                ("expect_video_stream_index", "selected video stream"),
+                ("expect_audio_stream_index", "selected audio stream"),
+            ):
+                expected_value = _entry_int(entry, key)
+                if expected_value is None:
+                    continue
+                probe_key = {
+                    "expect_video_stream_count": "video_stream_count",
+                    "expect_audio_stream_count": "audio_stream_count",
+                    "expect_video_stream_index": "video_stream_index",
+                    "expect_audio_stream_index": "audio_stream_index",
+                }[key]
+                actual_value = _entry_int(probe, probe_key)
+                if actual_value != expected_value:
+                    return False, f"{sample_label}: expected {label} {expected_value}, got {actual_value}"
+            for key, probe_key, label in (
+                ("expect_probe_has_video", "has_video", "probe video"),
+                ("expect_probe_has_audio", "has_audio", "probe audio"),
+            ):
+                if key not in entry:
+                    continue
+                expected_value = _entry_bool(entry, key)
+                actual_value = bool(probe.get(probe_key))
+                if actual_value != expected_value:
+                    return False, f"{sample_label}: expected {label}={expected_value}, got {actual_value}"
+            for key, probe_key, label in (
+                ("expect_format_name_contains", "format_name", "format"),
+                ("expect_video_codec_contains", "video_codec", "video codec"),
+                ("expect_audio_codec_contains", "audio_codec", "audio codec"),
+            ):
+                for token in _entry_tokens(entry, key):
+                    if token.lower() not in str(probe.get(probe_key) or "").lower():
+                        return False, f"{sample_label}: missing expected {label} token: {token}"
         if clip is not None:
             try:
                 if clip.source_path != sample_path:
-                    return False, f"{Path(sample_path).name}: loaded clip lost original source path"
+                    return False, f"{sample_label}: loaded clip lost original source path"
+                min_frames = _entry_int(entry, "min_frames")
+                if min_frames is not None and int(getattr(clip, "total_frames", 0) or 0) < min_frames:
+                    return False, (
+                        f"{sample_label}: expected at least {min_frames} frames, got {getattr(clip, 'total_frames', 0)}"
+                    )
+                min_duration = _entry_float(entry, "min_duration_seconds")
+                if min_duration is not None:
+                    fps = max(0.0, float(getattr(clip, "fps", 0.0) or 0.0))
+                    duration = (float(getattr(clip, "total_frames", 0) or 0) / fps) if fps > 0 else 0.0
+                    if duration + 1e-9 < min_duration:
+                        return False, (
+                            f"{sample_label}: expected duration >= {min_duration}s, got {duration:.3f}s"
+                        )
+                if "expect_has_audio" in entry:
+                    expected_audio = _entry_bool(entry, "expect_has_audio")
+                    if bool(getattr(clip, "has_audio", False)) != expected_audio:
+                        return False, (
+                            f"{sample_label}: expected has_audio={expected_audio}, got {bool(getattr(clip, 'has_audio', False))}"
+                        )
+                expected_size = _entry_size(entry, "expect_frame_size")
+                if expected_size is not None and tuple(getattr(clip, "frame_size", ()) or ()) != expected_size:
+                    return False, (
+                        f"{sample_label}: expected frame size {expected_size}, got {getattr(clip, 'frame_size', None)}"
+                    )
+                if _entry_bool(entry, "require_recovery") and not str(getattr(clip, "load_note", "") or "").strip():
+                    return False, f"{sample_label}: expected a recovery path, but clip loaded directly"
+                for key, source_attr, label in (
+                    ("expect_load_note_contains", "load_note", "load note"),
+                    ("expect_load_strategy_contains", "load_strategy", "load strategy"),
+                ):
+                    for token in _entry_tokens(entry, key):
+                        if token.lower() not in str(getattr(clip, source_attr, "") or "").lower():
+                            return False, f"{sample_label}: missing expected {label} token: {token}"
+                for key, attr_name, label in (
+                    ("expect_preferred_video_stream_index", "preferred_video_stream_index", "preferred video stream"),
+                    ("expect_preferred_audio_stream_index", "preferred_audio_stream_index", "preferred audio stream"),
+                ):
+                    expected_value = _entry_int(entry, key)
+                    if expected_value is None:
+                        continue
+                    actual_value = _entry_int({key: getattr(clip, attr_name, None)}, key)
+                    if actual_value != expected_value:
+                        return False, f"{sample_label}: expected {label} {expected_value}, got {actual_value}"
                 loaded += 1
             finally:
                 clip.close()
         else:
             explained += 1
-        for token in _entry_tokens(entry, "hint_contains"):
-            if token not in hint:
-                return False, f"{Path(sample_path).name}: missing required hint token: {token}"
     if exercised == 0:
         return False, f"no available samples matched manifest (missing={unavailable})"
-    return True, f"entries={exercised} loaded={loaded} explained={explained} missing={unavailable}"
+    platform_summary = ""
+    if platform_counts:
+        platform_summary = " platforms=" + ",".join(
+            f"{name}:{count}" for name, count in sorted(platform_counts.items())
+        )
+    return True, (
+        f"entries={exercised} loaded={loaded} explained={explained} missing={unavailable}{platform_summary}"
+    )
 
 
 def execute_dds_manifest(
@@ -360,6 +524,7 @@ def execute_dds_manifest(
     limit: int = 0,
 ) -> tuple[bool, str]:
     exercised = decoded = failed_as_expected = unavailable = 0
+    sample_groups: dict[str, int] = {}
     for raw_entry in _limited_entries(entries, limit):
         try:
             entry = materialize_manifest_entry(
@@ -372,32 +537,48 @@ def execute_dds_manifest(
             return False, f"{sample_label}: manifest materialization failed: {exc}"
         sample_path = _entry_source_path(entry)
         if not sample_path or not os.path.isfile(sample_path):
+            if _entry_bool(entry, "required"):
+                return False, f"{Path(sample_path or _entry_source_path(raw_entry) or 'sample').name}: required sample missing"
             unavailable += 1
             continue
         expected = str(entry.get("expect") or "load_or_fail_clearly").strip().lower()
+        sample_label = _entry_label(entry, sample_path)
         exercised += 1
+        group = str(entry.get("group") or entry.get("platform") or entry.get("family") or "").strip()
+        if group:
+            sample_groups[group] = sample_groups.get(group, 0) + 1
         try:
             img = load_dds_raw(sample_path)
         except Exception as exc:
             detail = str(exc)
             if expected == "load":
-                return False, f"{Path(sample_path).name}: expected decode, got: {detail}"
+                return False, f"{sample_label}: expected decode, got: {detail}"
             for token in _entry_tokens(entry, "detail_contains"):
                 if token.lower() not in detail.lower():
-                    return False, f"{Path(sample_path).name}: missing DDS failure token: {token}"
+                    return False, f"{sample_label}: missing DDS failure token: {token}"
             failed_as_expected += 1
             continue
         try:
             if img.size[0] <= 0 or img.size[1] <= 0:
-                return False, f"{Path(sample_path).name}: decoded image had invalid size {img.size}"
+                return False, f"{sample_label}: decoded image had invalid size {img.size}"
             if expected == "fail":
-                return False, f"{Path(sample_path).name}: expected failure, but DDS decoded"
+                return False, f"{sample_label}: expected failure, but DDS decoded"
+            expected_size = _entry_size(entry, "expect_size")
+            if expected_size is not None and tuple(img.size) != expected_size:
+                return False, f"{sample_label}: expected decoded size {expected_size}, got {img.size}"
             decoded += 1
         finally:
             img.close()
     if exercised == 0:
         return False, f"no available samples matched manifest (missing={unavailable})"
-    return True, f"entries={exercised} decoded={decoded} expected_failures={failed_as_expected} missing={unavailable}"
+    group_summary = ""
+    if sample_groups:
+        group_summary = " groups=" + ",".join(
+            f"{name}:{count}" for name, count in sorted(sample_groups.items())
+        )
+    return True, (
+        f"entries={exercised} decoded={decoded} expected_failures={failed_as_expected} missing={unavailable}{group_summary}"
+    )
 
 
 def execute_format_matrix_manifest(

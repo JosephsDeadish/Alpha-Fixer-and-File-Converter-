@@ -85,6 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-ffprobe-selfcheck", action="store_true", help="Fail if the packaged runtime cannot execute the resolved ffprobe binary successfully.")
     parser.add_argument("--require-wand-runtime", action="store_true", help="Fail if the packaged runtime lacks a working ImageMagick/wand runtime.")
     parser.add_argument("--require-no-missing-libs", action="store_true", help="Fail if packaged runtime reports missing Linux shared libraries.")
+    parser.add_argument("--require-bundled-ffmpeg", action="store_true", help="Fail if ffmpeg resolves outside the packaged bundle.")
+    parser.add_argument("--require-bundled-ffprobe", action="store_true", help="Fail if ffprobe resolves outside the packaged bundle.")
+    parser.add_argument("--require-bundled-imagemagick", action="store_true", help="Fail if ImageMagick/wand support is not bundled inside the packaged app.")
+    parser.add_argument("--require-no-packaged-asset-gaps", action="store_true", help="Fail if the packaged runtime audit reports any packaged asset warnings.")
     parser.add_argument("--run-selftest", action="store_true", help="Run the packaged executable's end-to-end runtime self-test after the capability audit.")
     parser.add_argument("--selftest-iterations", type=int, default=2, help="How many self-test iterations the packaged app should run when --run-selftest is set.")
     parser.add_argument("--selftest-sample-limit", type=int, default=0, help="Optional cap for external manifest entries exercised per packaged self-test run.")
@@ -160,6 +164,18 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "Packaged runtime audit failed: missing_linux_runtime_libs="
             + ",".join(str(name) for name in missing_libs)
+        )
+    if args.require_bundled_ffmpeg and not payload.get("ffmpeg_bundled"):
+        raise SystemExit("Packaged runtime audit failed: ffmpeg_bundled=false")
+    if args.require_bundled_ffprobe and not payload.get("ffprobe_bundled"):
+        raise SystemExit("Packaged runtime audit failed: ffprobe_bundled=false")
+    if args.require_bundled_imagemagick and not payload.get("imagemagick_bundled"):
+        raise SystemExit("Packaged runtime audit failed: imagemagick_bundled=false")
+    packaged_asset_warnings = payload.get("packaged_asset_warnings") or []
+    if args.require_no_packaged_asset_gaps and packaged_asset_warnings:
+        raise SystemExit(
+            "Packaged runtime audit failed: packaged_asset_warnings="
+            + " | ".join(str(entry) for entry in packaged_asset_warnings)
         )
     if not payload.get("ffmpeg_runtime_ready"):
         print(

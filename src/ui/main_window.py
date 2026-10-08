@@ -789,6 +789,8 @@ def _runtime_readiness_banner_text(summary: dict[str, object] | None) -> str:
     packaged_asset_warnings = summary.get("packaged_asset_warnings") or []
     if packaged_asset_warnings:
         parts.append(f"{len(packaged_asset_warnings)} packaged asset gap(s)")
+    elif bool(summary.get("frozen")) and bool(summary.get("packaged_bundle_ready")):
+        parts.append("packaged bundle verified")
     return "🧭 Readiness: " + "  •  ".join(parts)
 
 
@@ -838,6 +840,17 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         "• Default theme SVG asset: "
         + (str(summary.get("default_theme_svg_path") or "missing") if summary.get("default_theme_svg_ready") else "missing"),
     ])
+    if summary.get("frozen"):
+        lines.extend([
+            "",
+            "Packaged dependency audit:",
+            "• Packaged bundle root: " + str(summary.get("bundle_dir") or "unknown"),
+            "• Bundled ffmpeg: " + ("yes" if summary.get("ffmpeg_bundled") else "no"),
+            "• Bundled ffprobe: " + ("yes" if summary.get("ffprobe_bundled") else "no"),
+            "• Bundled ImageMagick/wand: " + ("yes" if summary.get("imagemagick_bundled") else "no"),
+            "• Bundled default theme SVG: " + ("yes" if summary.get("default_theme_svg_bundled") else "no"),
+            "• Packaged bundle verification: " + ("passed" if summary.get("packaged_bundle_ready") else "needs attention"),
+        ])
     theme_svg_missing_count = int(summary.get("theme_svg_missing_count") or 0)
     if theme_svg_missing_count > 0:
         lines.append(f"• Theme SVG assets missing: {theme_svg_missing_count}")
