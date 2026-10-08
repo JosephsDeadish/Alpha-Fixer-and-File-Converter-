@@ -904,42 +904,46 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         )
         fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
         fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
-        with patch.object(main, "_runtime_selftest_iterations", return_value=2):
-            with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=123.45):
-                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
-                    "available": False,
-                    "ready": False,
-                    "detail": "skipped: ImageMagick/wand runtime unavailable",
-                    "variants": {},
-                    "failures": [],
-                }):
-                    with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
-                        tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
-                        tmpdir_cls.return_value.__exit__.return_value = False
-                        with patch.dict(
-                            sys.modules,
-                            {
-                                "PIL": types.SimpleNamespace(Image=fake_pil_image),
-                                "PIL.Image": fake_pil_image,
-                                "src.core.alpha_processor": fake_alpha,
-                                "src.core.file_converter": fake_fc,
-                                "src.ui": fake_ui_pkg,
-                                "src.ui.video_tool": fake_vt,
-                            },
-                            clear=False,
-                        ):
-                            with patch("sys.stdout", buffer):
-                                rc = main._emit_runtime_selftest_dump()
+        with patch.dict(os.environ, {"ALPHA_FIXER_RUNTIME_STRESS_LOOPS": "2"}, clear=False):
+            with patch.object(main, "_runtime_selftest_iterations", return_value=2):
+                with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=123.45):
+                    with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                        "available": False,
+                        "ready": False,
+                        "detail": "skipped: ImageMagick/wand runtime unavailable",
+                        "variants": {},
+                        "failures": [],
+                    }):
+                        with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                            tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                            tmpdir_cls.return_value.__exit__.return_value = False
+                            with patch.dict(
+                                sys.modules,
+                                {
+                                    "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                    "PIL.Image": fake_pil_image,
+                                    "src.core.alpha_processor": fake_alpha,
+                                    "src.core.file_converter": fake_fc,
+                                    "src.ui": fake_ui_pkg,
+                                    "src.ui.video_tool": fake_vt,
+                                },
+                                clear=False,
+                            ):
+                                with patch("sys.stdout", buffer):
+                                    rc = main._emit_runtime_selftest_dump()
         self.assertEqual(rc, 1)
         line = buffer.getvalue().strip()
         self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_SELFTEST="))
         parsed = json.loads(line.split("=", 1)[1])
         self.assertEqual(parsed["iterations"], 2)
+        self.assertEqual(parsed["stress_loops"], 2)
         self.assertIn("peak_rss_mb", parsed)
         self.assertIn("checks", parsed)
         self.assertIn("png_to_dds_dxt1", parsed["checks"])
         self.assertIn("png_to_dds_dxt3", parsed["checks"])
         self.assertIn("png_to_dds_dxt5", parsed["checks"])
+        self.assertIn("stress_image_session_batch", parsed["checks"])
+        self.assertIn("stress_video_session_batch", parsed["checks"])
         self.assertFalse(parsed["passed"])
 
     def test_runtime_selftest_dump_emits_grouped_manifest_checks_when_requested(self):
@@ -1739,7 +1743,6 @@ class TestStartupCapabilityNotice(unittest.TestCase):
 
 class TestSettingsManagerNewKeys(unittest.TestCase):
     def setUp(self):
-        _get_app()
         # Use a temp location to avoid polluting real settings
         from PyQt6.QtCore import QSettings
         with patch.object(
