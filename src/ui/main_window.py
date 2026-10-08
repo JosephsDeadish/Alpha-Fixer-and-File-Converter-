@@ -20,7 +20,7 @@ from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab, _alpha_capability_details
 from .converter_tool import ConverterTab, _converter_capability_details, _converter_capability_summary
-from .gif_builder import GifBuilderDialog, _gif_builder_capability_summary
+from .gif_builder import GifBuilderDialog, _gif_builder_capability_details
 from .history_tab import HistoryTab
 from .selective_alpha_tool import SelectiveAlphaTool
 from .settings_dialog import SettingsDialog
@@ -29,7 +29,7 @@ from .theme_engine import (
     get_theme_svg_path, get_theme_status,
     get_theme_tab_labels, get_theme_icon,
 )
-from .video_tool import VideoToolDialog, _video_capability_summary
+from .video_tool import VideoToolDialog, _video_capability_details
 try:
     from ..version import __version__, APP_NAME
 except Exception:
@@ -779,6 +779,9 @@ def _runtime_readiness_banner_text(summary: dict[str, object] | None) -> str:
     runtime_libs = summary.get("missing_linux_runtime_libs") or []
     if runtime_libs:
         parts.append(f"{len(runtime_libs)} Linux runtime lib(s) missing")
+    packaged_asset_warnings = summary.get("packaged_asset_warnings") or []
+    if packaged_asset_warnings:
+        parts.append(f"{len(packaged_asset_warnings)} packaged asset gap(s)")
     return "🧭 Readiness: " + "  •  ".join(parts)
 
 
@@ -837,6 +840,11 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
     missing_runtime_libs = summary.get("missing_linux_runtime_libs") or []
     if missing_runtime_libs:
         lines.append("• Missing Linux runtime libs: " + ", ".join(str(lib) for lib in missing_runtime_libs))
+    packaged_asset_warnings = summary.get("packaged_asset_warnings") or []
+    if packaged_asset_warnings:
+        lines.append("• Packaged asset gaps:")
+        for warning in packaged_asset_warnings:
+            lines.append(f"    - {warning}")
     lines.extend([
         "",
         "Alpha & RGBA:",
@@ -846,10 +854,10 @@ def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
         _converter_capability_details(),
         "",
         "GIF Builder:",
-        _gif_builder_capability_summary(),
+        _gif_builder_capability_details(),
         "",
         "Video Builder:",
-        _video_capability_summary(),
+        _video_capability_details(),
     ])
     return "\n".join(lines)
 

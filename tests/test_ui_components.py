@@ -597,6 +597,55 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertFalse(summary["wand_runtime_ready"])
         self.assertEqual(summary["magick_home_path"], "/tmp/magick")
 
+    def test_runtime_capability_summary_reports_packaged_asset_gaps(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            external_dir = os.path.join(tmpdir, "external")
+            os.makedirs(bundle_dir, exist_ok=True)
+            os.makedirs(external_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(external_dir, "ffmpeg")
+            svg_path = os.path.join(external_dir, "panda_dark.svg")
+            for path in (executable_path, ffmpeg_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=None):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 2,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": "",
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        summary = main._runtime_capability_summary()
+        self.assertTrue(summary["frozen"])
+        self.assertEqual(summary["bundle_dir"], bundle_dir)
+        self.assertFalse(summary["ffmpeg_bundled"])
+        self.assertFalse(summary["default_theme_svg_bundled"])
+        self.assertFalse(summary["imagemagick_bundled"])
+        self.assertIn("ffmpeg resolves outside the packaged app", summary["packaged_asset_warnings"])
+        self.assertIn("packaged ffprobe binary missing", summary["packaged_asset_warnings"])
+        self.assertIn("default theme SVG resolves outside the packaged app", summary["packaged_asset_warnings"])
+        self.assertIn("2 theme SVG asset(s) missing from package", summary["packaged_asset_warnings"])
+        self.assertIn("packaged ImageMagick/wand runtime unavailable for DDS compressed output", summary["packaged_asset_warnings"])
+        self.assertIn("packaged asset gaps:", summary["feature_readiness_notice"])
+
     def test_runtime_capability_dump_emits_prefixed_json(self):
         import main
         payload = {"video_runtime_ready": True, "odd_container_probe_ready": True}
@@ -643,6 +692,44 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("ImageMagick/wand runtime: limited", tooltip)
         self.assertIn("Qt SVG renderer:", tooltip)
         self.assertIn("Alpha & RGBA:", tooltip)
+
+    def test_main_window_runtime_readiness_helpers_surface_packaged_asset_gap_details(self):
+        _require_qt_gui(self)
+        from src.ui import main_window as mw
+
+        summary = {
+            "video_runtime_ready": True,
+            "odd_container_probe_ready": True,
+            "missing_video_bits": [],
+            "dds_compression_available": True,
+            "optional_output_limits": [],
+            "missing_linux_runtime_libs": [],
+            "packaged_runtime_notice": "",
+            "feature_readiness_notice": "⚠ Optional feature limits detected: packaged asset gaps: ffprobe missing.",
+            "optional_qt_notice": "",
+            "has_imageio": True,
+            "has_imageio_ffmpeg": True,
+            "ffmpeg_path": "/tmp/ffmpeg",
+            "ffprobe_path": "",
+            "ffmpeg_path_exists": True,
+            "ffprobe_path_exists": False,
+            "wand_runtime_ready": True,
+            "qt_svg_ready": True,
+            "default_theme_svg_ready": True,
+            "default_theme_svg_path": "/tmp/panda_dark.svg",
+            "theme_svg_missing_count": 0,
+            "packaged_asset_warnings": ["packaged ffprobe binary missing"],
+        }
+        with patch.object(mw, "_gif_builder_capability_details", return_value="GIF DETAIL"):
+            with patch.object(mw, "_video_capability_details", return_value="VIDEO DETAIL"):
+                banner = mw._runtime_readiness_banner_text(summary)
+                tooltip = mw._runtime_readiness_banner_tooltip(summary)
+
+        self.assertIn("1 packaged asset gap", banner)
+        self.assertIn("Packaged asset gaps:", tooltip)
+        self.assertIn("packaged ffprobe binary missing", tooltip)
+        self.assertIn("GIF DETAIL", tooltip)
+        self.assertIn("VIDEO DETAIL", tooltip)
         self.assertIn("Converter:", tooltip)
         self.assertIn("GIF Builder:", tooltip)
         self.assertIn("Video Builder:", tooltip)
@@ -2316,6 +2403,22 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("preferred-stream selection", summary)
         self.assertIn("partial/corrupt containers", summary)
 
+    def test_video_capability_details_surface_diagnostics_and_manual_picker_gap(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with patch.object(vt, "_has_ffmpeg", return_value=True):
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                            details = vt._video_capability_details()
+        self.assertIn("All video dependencies are available.", details)
+        self.assertIn("manual stream picker is not available yet", details)
+        self.assertIn("ffprobe detail/probing ready", details)
+
     def test_load_video_clip_uses_still_frame_fallback_when_recovery_paths_fail(self):
         try:
             from src.ui import video_tool as vt
@@ -3392,10 +3495,27 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("audio is ignored", dialog._capability_lbl.text())
             self.assertIn("Audio-only containers", dialog._capability_lbl.text())
             self.assertIn("single-frame fallbacks", dialog._capability_lbl.text())
+            self.assertIn("manual multi-stream picker is not available yet", dialog._capability_lbl.toolTip())
         finally:
             dialog.close()
             dialog.deleteLater()
             self._app.processEvents()
+
+    def test_gif_builder_capability_details_surface_video_runtime_and_picker_gap(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        with patch.object(gb, "_has_ffmpeg", return_value=True):
+            with patch.object(gb, "_has_imageio", return_value=True):
+                with patch.object(gb, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(gb, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch.object(gb, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                            details = gb._gif_builder_capability_details()
+        self.assertIn("All video dependencies are available.", details)
+        self.assertIn("manual multi-stream picker is not available yet", details)
+        self.assertIn("audio is ignored", details)
 
     def test_alpha_tab_shows_capability_summary(self):
         try:

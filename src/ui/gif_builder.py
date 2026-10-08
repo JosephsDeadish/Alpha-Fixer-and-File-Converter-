@@ -171,6 +171,38 @@ def _gif_builder_capability_summary() -> str:
     )
 
 
+def _gif_builder_capability_has_limits() -> bool:
+    return not (_has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg() and _get_ffprobe_exe())
+
+
+def _gif_builder_capability_details() -> str:
+    deps_ok = _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg()
+    ffprobe_exe = _get_ffprobe_exe()
+    lines = [_gif_builder_capability_summary(), "", _video_io_diagnostics()]
+    if deps_ok:
+        lines.extend([
+            "",
+            "Current behavior:",
+            "• Image and animated-GIF imports are fully available.",
+            "• Video imports expand decoded visual frames into GIF frames automatically; audio is ignored on import/export.",
+            "• Odd-container probing/recovery is best-effort when ffmpeg can expose a playable stream or salvageable still frame.",
+            "• Automatic preferred-stream selection is used when ffprobe is available, but a manual multi-stream picker is not available yet.",
+        ])
+        if ffprobe_exe:
+            lines.append(f"• ffprobe detail/probing ready: {ffprobe_exe}")
+        else:
+            lines.append("• ffprobe detail/probing limited: grouped failure diagnostics stay less specific.")
+    else:
+        lines.extend([
+            "",
+            "Limited mode details:",
+            "• Image and animated-GIF workflows remain available.",
+            "• Video-source imports and odd-container probing need imageio, imageio-ffmpeg, and ffmpeg.",
+            "• Manual multi-stream selection is not available yet.",
+        ])
+    return "\n".join(lines)
+
+
 class _FrameEntry:
     """A single frame in the GIF builder's frame list."""
 
@@ -451,8 +483,12 @@ class GifBuilderDialog(QDialog):
 
         self._capability_lbl = QLabel(_gif_builder_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
-        self._capability_lbl.setToolTip(_gif_builder_capability_summary())
+        self._capability_lbl.setStyleSheet(
+            "color: #b26a00; font-size: 11px;"
+            if _gif_builder_capability_has_limits()
+            else "color: #2e7d32; font-size: 11px;"
+        )
+        self._capability_lbl.setToolTip(_gif_builder_capability_details())
         self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._capability_lbl)
 

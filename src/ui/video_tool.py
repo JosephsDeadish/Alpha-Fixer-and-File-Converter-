@@ -747,6 +747,38 @@ def _video_capability_summary() -> str:
     )
 
 
+def _video_capability_has_limits() -> bool:
+    return not (_has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg() and _get_ffprobe_exe())
+
+
+def _video_capability_details() -> str:
+    deps_ok = _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg()
+    ffprobe_exe = _get_ffprobe_exe()
+    lines = [_video_capability_summary(), "", _video_io_diagnostics()]
+    if deps_ok:
+        lines.extend([
+            "",
+            "Current behavior:",
+            "• Standard video import and MP4 export are available.",
+            "• Odd-container/disc-image recovery can remux, transcode, or salvage a still frame when ffmpeg can expose usable video data.",
+            "• Automatic preferred-stream selection is used for multi-stream containers when ffprobe is available, but a manual stream picker is not available yet.",
+            "• Audio-only containers still cannot be added as timeline video clips.",
+        ])
+        if ffprobe_exe:
+            lines.append(f"• ffprobe detail/probing ready: {ffprobe_exe}")
+        else:
+            lines.append("• ffprobe detail/probing limited: recovery still works, but stream diagnostics stay less specific.")
+    else:
+        lines.extend([
+            "",
+            "Limited mode details:",
+            "• Images and animated GIFs can still be added to the timeline.",
+            "• MP4 export, video-source import, odd-container probing, and recovery fallbacks need imageio, imageio-ffmpeg, and ffmpeg.",
+            "• Manual multi-stream selection is not available yet.",
+        ])
+    return "\n".join(lines)
+
+
 def _classify_video_import_failure(name: str, detail: str) -> str:
     ext = Path(name).suffix.lower()
     lower = detail.lower()
@@ -1631,8 +1663,12 @@ class VideoToolDialog(QDialog):
 
         self._capability_lbl = QLabel(_video_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
-        self._capability_lbl.setToolTip(_video_capability_summary() + "\n\n" + self._video_io_diagnostics)
+        self._capability_lbl.setStyleSheet(
+            "color: #b26a00; font-size: 11px;"
+            if _video_capability_has_limits()
+            else "color: #2e7d32; font-size: 11px;"
+        )
+        self._capability_lbl.setToolTip(_video_capability_details())
         root.addWidget(self._capability_lbl)
 
         if not self._video_io_available:

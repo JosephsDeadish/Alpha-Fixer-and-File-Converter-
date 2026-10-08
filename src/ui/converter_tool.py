@@ -53,6 +53,10 @@ def _converter_capability_summary() -> str:
     return prefix + " " + " ".join(parts)
 
 
+def _converter_capability_has_limits() -> bool:
+    return bool(optional_pillow_output_limits() or not dds_compression_available())
+
+
 def _converter_capability_details() -> str:
     unavailable = optional_pillow_output_limits()
     lines = [_converter_capability_summary()]
@@ -183,7 +187,11 @@ class ConverterTab(QWidget):
 
         self._capability_lbl = QLabel(_converter_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setStyleSheet(
+            "color: #b26a00; font-size: 11px;"
+            if _converter_capability_has_limits()
+            else "color: #2e7d32; font-size: 11px;"
+        )
         self._capability_lbl.setToolTip(_converter_capability_details())
         main_layout.addWidget(self._capability_lbl)
 

@@ -46,6 +46,10 @@ def _alpha_capability_summary() -> str:
     return " ".join(parts)
 
 
+def _alpha_capability_has_limits() -> bool:
+    return not (_has_cairosvg() or _has_svglib()) or not _has_wand()
+
+
 def _alpha_capability_details() -> str:
     lines = [
         _alpha_capability_summary(),
@@ -355,7 +359,11 @@ class AlphaFixerTab(QWidget):
 
         self._capability_lbl = QLabel(_alpha_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._capability_lbl.setStyleSheet(
+            "color: #b26a00; font-size: 11px;"
+            if _alpha_capability_has_limits()
+            else "color: #2e7d32; font-size: 11px;"
+        )
         self._capability_lbl.setToolTip(_alpha_capability_details())
         main_layout.addWidget(self._capability_lbl)
 

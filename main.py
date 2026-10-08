@@ -350,6 +350,29 @@ def _normalized_existing_path(path_text: str) -> str:
     return str(resolved) if resolved.exists() else ""
 
 
+def _resolved_path(path_text: str) -> Path | None:
+    candidate = str(path_text or "").strip()
+    if not candidate:
+        return None
+    try:
+        resolved = Path(candidate).expanduser().resolve()
+    except Exception:
+        resolved = Path(candidate).expanduser()
+    return resolved
+
+
+def _path_is_within(path_text: str, root_text: str) -> bool:
+    candidate = _resolved_path(path_text)
+    root = _resolved_path(root_text)
+    if candidate is None or root is None:
+        return False
+    try:
+        candidate.relative_to(root)
+        return True
+    except Exception:
+        return False
+
+
 def _qt_svg_runtime_ready() -> bool:
     try:
         from PyQt6.QtSvg import QSvgRenderer  # noqa: F401
@@ -398,9 +421,17 @@ def _imagemagick_runtime_details() -> dict[str, object]:
 
 
 def _runtime_capability_summary() -> dict[str, object]:
+    frozen = bool(getattr(sys, "frozen", False))
+    bundle_dir = ""
+    if frozen:
+        try:
+            bundle_dir = str(Path(sys.executable).resolve().parent)
+        except Exception:
+            bundle_dir = str(Path(sys.executable).parent)
     summary: dict[str, object] = {
-        "frozen": bool(getattr(sys, "frozen", False)),
+        "frozen": frozen,
         "platform": sys.platform,
+        "bundle_dir": bundle_dir,
         "missing_linux_runtime_libs": _missing_linux_runtime_libs() if sys.platform == "linux" else [],
     }
     summary["packaged_runtime_notice"] = _packaged_runtime_notice(
@@ -428,6 +459,22 @@ def _runtime_capability_summary() -> dict[str, object]:
     unavailable_outputs = optional_pillow_output_limits()
     svg_details = _theme_svg_runtime_details()
     imagemagick_details = _imagemagick_runtime_details()
+    ffmpeg_bundled = bool(frozen and ffmpeg_path_exists and bundle_dir and _path_is_within(ffmpeg_path, bundle_dir))
+    ffprobe_bundled = bool(frozen and ffprobe_path_exists and bundle_dir and _path_is_within(ffprobe_path, bundle_dir))
+    default_theme_svg_bundled = bool(
+        frozen
+        and svg_details.get("default_theme_svg_ready")
+        and bundle_dir
+        and _path_is_within(str(svg_details.get("default_theme_svg_path") or ""), bundle_dir)
+    )
+    magick_home_path = str(imagemagick_details.get("magick_home_path") or "")
+    imagemagick_home_path = str(imagemagick_details.get("imagemagick_home_path") or "")
+    imagemagick_bundled = bool(
+        frozen and bundle_dir and (
+            _path_is_within(magick_home_path, bundle_dir)
+            or _path_is_within(imagemagick_home_path, bundle_dir)
+        )
+    )
     missing_video_bits: list[str] = []
     if not has_imageio:
         missing_video_bits.append("imageio")
@@ -465,6 +512,32 @@ def _runtime_capability_summary() -> dict[str, object]:
         if extra > 0:
             preview = f"{preview} +{extra} more"
         readiness_limits.append(f"optional image exports unavailable: {preview}")
+    packaged_asset_warnings: list[str] = []
+    if frozen:
+        if not ffmpeg_path:
+            packaged_asset_warnings.append("packaged ffmpeg binary missing")
+        elif not ffmpeg_path_exists:
+            packaged_asset_warnings.append("packaged ffmpeg path invalid")
+        elif not ffmpeg_bundled:
+            packaged_asset_warnings.append("ffmpeg resolves outside the packaged app")
+        if not ffprobe_path:
+            packaged_asset_warnings.append("packaged ffprobe binary missing")
+        elif not ffprobe_path_exists:
+            packaged_asset_warnings.append("packaged ffprobe path invalid")
+        elif not ffprobe_bundled:
+            packaged_asset_warnings.append("ffprobe resolves outside the packaged app")
+        if not bool(svg_details.get("default_theme_svg_ready")):
+            packaged_asset_warnings.append("default theme SVG asset missing from package")
+        elif not default_theme_svg_bundled:
+            packaged_asset_warnings.append("default theme SVG resolves outside the packaged app")
+        if missing_svg_count > 0:
+            packaged_asset_warnings.append(f"{missing_svg_count} theme SVG asset(s) missing from package")
+        if not bool(imagemagick_details.get("wand_runtime_ready")) and not imagemagick_bundled:
+            packaged_asset_warnings.append(
+                "packaged ImageMagick/wand runtime unavailable for DDS compressed output"
+            )
+    if packaged_asset_warnings:
+        readiness_limits.append("packaged asset gaps: " + "; ".join(packaged_asset_warnings))
     feature_readiness_notice = ""
     if readiness_limits:
         feature_readiness_notice = (
@@ -482,11 +555,16 @@ def _runtime_capability_summary() -> dict[str, object]:
         "ffprobe_path_exists": ffprobe_path_exists,
         "ffmpeg_on_path": ffmpeg_on_path,
         "ffprobe_on_path": ffprobe_on_path,
+        "ffmpeg_bundled": ffmpeg_bundled,
+        "ffprobe_bundled": ffprobe_bundled,
         "video_runtime_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path),
         "odd_container_probe_ready": bool(has_imageio and has_imageio_ffmpeg and ffmpeg_path and ffprobe_path),
         "missing_video_bits": missing_video_bits,
         "dds_compression_available": bool(dds_compression_available()),
         "optional_output_limits": unavailable_outputs,
+        "default_theme_svg_bundled": default_theme_svg_bundled,
+        "imagemagick_bundled": imagemagick_bundled,
+        "packaged_asset_warnings": packaged_asset_warnings,
         "feature_readiness_notice": feature_readiness_notice,
         **svg_details,
         **imagemagick_details,
