@@ -99,7 +99,9 @@ if [[ -x "$launch_target" ]]; then
         --timeout 25
         --require-video-runtime
         --require-ffmpeg-selfcheck
+        --require-ffprobe-selfcheck
         --require-bundled-ffmpeg
+        --require-bundled-ffprobe
         --require-no-missing-libs
         --json-out "dist/validation-reports/packaged-runtime-audit.json"
     )
@@ -112,6 +114,7 @@ if [[ -x "$launch_target" ]]; then
             --selftest-iterations 2
             --selftest-sample-limit "$sample_limit"
             --require-selftest-pass
+            --require-core-selftest-checks
             --use-public-sample-manifests
             --require-video-selftest-checks
             --require-public-manifest-checks
@@ -119,7 +122,12 @@ if [[ -x "$launch_target" ]]; then
             --sample-cache-dir "$sample_cache_dir"
         )
         if [[ "${ALPHA_FIXER_REQUIRE_DDS_SELFTEST:-0}" == "1" ]]; then
-            verify_args+=(--require-dds-selftest-checks --require-wand-runtime)
+            verify_args+=(
+                --require-dds-selftest-checks
+                --require-wand-runtime
+                --require-bundled-imagemagick
+                --require-no-packaged-asset-gaps
+            )
         fi
     fi
     python scripts/verify_packaged_app.py "${verify_args[@]}"

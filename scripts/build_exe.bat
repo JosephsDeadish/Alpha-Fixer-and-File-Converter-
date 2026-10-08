@@ -64,10 +64,10 @@ if exist "!LAUNCH_TARGET!" (
         if not defined ALPHA_FIXER_SAMPLE_CACHE_DIR set "ALPHA_FIXER_SAMPLE_CACHE_DIR=%CD%\.sample-cache"
         if not exist "!ALPHA_FIXER_SAMPLE_CACHE_DIR!" mkdir "!ALPHA_FIXER_SAMPLE_CACHE_DIR!"
         set "VERIFY_DDS_ARGS="
-        if "%ALPHA_FIXER_REQUIRE_DDS_SELFTEST%"=="1" set "VERIFY_DDS_ARGS=--require-dds-selftest-checks --require-wand-runtime"
-        python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-bundled-ffmpeg --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json --run-selftest --selftest-iterations 2 --selftest-sample-limit !ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT! --require-selftest-pass --use-public-sample-manifests --require-video-selftest-checks --require-public-manifest-checks --allow-sample-downloads --sample-cache-dir "!ALPHA_FIXER_SAMPLE_CACHE_DIR!" !VERIFY_DDS_ARGS!
+        if "%ALPHA_FIXER_REQUIRE_DDS_SELFTEST%"=="1" set "VERIFY_DDS_ARGS=--require-dds-selftest-checks --require-wand-runtime --require-bundled-imagemagick --require-no-packaged-asset-gaps"
+        python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json --run-selftest --selftest-iterations 2 --selftest-sample-limit !ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT! --require-selftest-pass --require-core-selftest-checks --use-public-sample-manifests --require-video-selftest-checks --require-public-manifest-checks --allow-sample-downloads --sample-cache-dir "!ALPHA_FIXER_SAMPLE_CACHE_DIR!" !VERIFY_DDS_ARGS!
     ) else (
-        python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-bundled-ffmpeg --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json
+        python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-no-missing-libs --json-out dist\validation-reports\packaged-runtime-audit-windows.json
     )
     if errorlevel 1 (
         exit /b 1
