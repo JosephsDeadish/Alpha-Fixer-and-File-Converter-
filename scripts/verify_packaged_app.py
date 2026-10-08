@@ -14,6 +14,11 @@ from src.core.runtime_validation import load_manifest_entries
 _PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
 _PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
 _PUBLIC_FORMAT_MATRIX_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_format_matrix_manifest.json"
+_PUBLIC_MANIFEST_CHECKS = (
+    "external_disc_video_manifest",
+    "external_dds_manifest",
+    "external_format_matrix_manifest",
+)
 
 
 def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
@@ -75,6 +80,34 @@ def _merged_manifest_arg(raw_values: list[str] | None) -> str | None:
     return json.dumps({"entries": merged_entries})
 
 
+def _required_selftest_checks(args) -> list[str]:
+    required = [str(name or "").strip() for name in getattr(args, "require_selftest_check", []) if str(name or "").strip()]
+    if getattr(args, "require_public_manifest_checks", False):
+        for name in _PUBLIC_MANIFEST_CHECKS:
+            if name not in required:
+                required.append(name)
+    return required
+
+
+def _print_selftest_check_summary(checks: dict[str, object]) -> None:
+    if not isinstance(checks, dict) or not checks:
+        return
+    print("Self-test checks:")
+    for name in sorted(checks):
+        check = checks.get(name)
+        if isinstance(check, dict):
+            ok = bool(check.get("ok"))
+            detail = str(check.get("detail") or "").strip()
+        else:
+            ok = False
+            detail = ""
+        status = "ok" if ok else "failed"
+        line = f"  - {name}: {status}"
+        if detail:
+            line += f" ({detail})"
+        print(line)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
@@ -97,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-selftest-pass", action="store_true", help="Fail if the packaged runtime self-test reports passed=false.")
     parser.add_argument("--max-selftest-rss-mb", type=float, help="Optional upper bound for the packaged self-test peak RSS value when reported.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
+    parser.add_argument("--require-public-manifest-checks", action="store_true", help="Fail unless the public disc-video, DDS/DX10, and format-matrix self-test checks all report ok=true.")
     parser.add_argument("--disc-video-manifest", action="append", default=[], help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--dds-manifest", action="append", default=[], help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--format-matrix-manifest", action="append", default=[], help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
@@ -227,7 +261,8 @@ def main(argv: list[str] | None = None) -> int:
         checks = selftest_payload.get("checks")
         if not isinstance(checks, dict):
             checks = {}
-        for check_name in args.require_selftest_check:
+        _print_selftest_check_summary(checks)
+        for check_name in _required_selftest_checks(args):
             check = checks.get(check_name)
             if not isinstance(check, dict) or not check.get("ok"):
                 raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")
