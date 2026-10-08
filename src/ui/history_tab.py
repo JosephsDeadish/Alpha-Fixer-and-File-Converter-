@@ -351,6 +351,16 @@ def _set_builder_tooltip(item: QTreeWidgetItem, columns: int, base_text: str, fi
         item.setToolTip(col, tooltip)
 
 
+def _history_next_step_text(total: int, visible: int, filter_text: str) -> str:
+    if total <= 0:
+        return "Next step: run a tool or export from a builder to populate history here."
+    if filter_text and visible <= 0:
+        return "Next step: clear or relax the current filter to bring matching history entries back into view."
+    if filter_text and visible < total:
+        return "Next step: review the filtered status/notes results, then clear the filter or export the current view."
+    return "Next step: review status and notes details, export the current view, or switch history sub-tabs."
+
+
 def _video_history_status(errors: object, notes: str) -> str:
     try:
         err_count = int(errors or 0)
@@ -422,6 +432,11 @@ class HistoryTab(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
         layout.addWidget(self._session_status_lbl)
+        self._next_step_lbl = QLabel("Next step: run a tool or export from a builder to populate history here.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self._next_step_lbl)
 
         btn_row = QHBoxLayout()
         self._btn_export = QPushButton("📤  Export History…")
@@ -745,9 +760,25 @@ class HistoryTab(QWidget):
 
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
+        mapping = {
+            0: (self._conv_tree, self._conv_search),
+            1: (self._alpha_tree, self._alpha_search),
+            2: (self._sel_tree, self._sel_search),
+            3: (self._gif_tree, self._gif_search),
+            4: (self._vid_tree, self._vid_search),
+        }
+        tree, search = mapping.get(self._sub_tabs.currentIndex(), (self._conv_tree, self._conv_search))
+        total = tree.topLevelItemCount()
+        visible = sum(1 for row in range(total) if not tree.topLevelItem(row).isHidden())
+        filter_text = search.text().strip()
+        next_text = _history_next_step_text(total, visible, filter_text)
+        self._next_step_lbl.setText(next_text)
+        self._next_step_lbl.setToolTip(next_text)
         text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        if next_text:
+            text += f"\n{next_text}"
         self._session_status_lbl.setText(text)
-        self._session_status_lbl.setToolTip(status or text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
         self.queue_status_changed.emit(status)
 
     def _refresh_converter(self):

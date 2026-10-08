@@ -1621,6 +1621,18 @@ class SelectiveAlphaTool(QWidget):
         ("sa_prev_zone", "Shift+N", "Select previous zone", "Selective Alpha"),
     )
 
+    @staticmethod
+    def _next_step_text(src_path: str, has_shared_zones: bool, result_ready: bool) -> str:
+        if not src_path:
+            if has_shared_zones:
+                return "Next step: open an image, then review the shared zones and apply them to the source."
+            return "Next step: open an image or copy zones from the Alpha tab to begin editing."
+        if result_ready:
+            return "Next step: save the current result or keep refining the mask before saving."
+        if has_shared_zones:
+            return "Next step: review the shared zones, refine the mask, then apply or save when ready."
+        return "Next step: paint or refine the mask, apply selective alpha, then save when ready."
+
     def __init__(self, settings_manager=None, sound_engine=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings_manager
@@ -1688,6 +1700,11 @@ class SelectiveAlphaTool(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
         wf_lay.addWidget(self._session_status_lbl)
+        self._next_step_lbl = QLabel("Next step: open an image or copy zones from the Alpha tab to begin editing.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        wf_lay.addWidget(self._next_step_lbl)
 
         # Row 1b: Overlay opacity slider (item 16)
         _ov_row = QHBoxLayout()
@@ -2595,9 +2612,18 @@ class SelectiveAlphaTool(QWidget):
 
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
+        next_text = self._next_step_text(
+            self._src_path or "",
+            bool(self._shared_zones),
+            self._result_img is not None,
+        )
+        self._next_step_lbl.setText(next_text)
+        self._next_step_lbl.setToolTip(next_text)
         text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        if next_text:
+            text += f"\n{next_text}"
         self._session_status_lbl.setText(text)
-        self._session_status_lbl.setToolTip(status or text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
         self.queue_status_changed.emit(status)
 
     def _set_btn_save_enabled(self, v: bool) -> None:

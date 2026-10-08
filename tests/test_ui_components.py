@@ -5456,6 +5456,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("SVG inputs", widget._capability_lbl.text())
             self.assertIn("What works here right now:", widget._session_status_lbl.text())
             self.assertIn("Alpha ready", widget._session_status_lbl.text())
+            self.assertIn("Next step:", widget._session_status_lbl.text())
+            self.assertIn("add image files", widget._next_step_lbl.text())
         finally:
             widget.close()
             widget.deleteLater()
@@ -5798,6 +5800,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("What works here right now:", widget._session_status_lbl.text())
             self.assertIn("Converter ready", widget._session_status_lbl.text())
             self.assertIn("preview sample.png", widget._session_status_lbl.text())
+            self.assertIn("Next step:", widget._session_status_lbl.text())
+            self.assertIn("review the live preview", widget._next_step_lbl.text())
         finally:
             widget.close()
             widget.deleteLater()
@@ -5827,6 +5831,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             widget._refresh_session_status()
             self.assertIn("What works here right now:", widget._session_status_lbl.text())
             self.assertIn("preview sprite.png", widget._session_status_lbl.text())
+            self.assertIn("Next step:", widget._session_status_lbl.text())
+            self.assertIn("review the preview helpers", widget._next_step_lbl.text())
         finally:
             widget.close()
             widget.deleteLater()
@@ -6157,10 +6163,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("What works here right now:", tab._session_status_lbl.text())
             self.assertIn("History: Video Builder", tab.get_status_bar_text())
             self.assertIn("1 item", tab.get_status_bar_text())
+            self.assertIn("Next step:", tab._session_status_lbl.text())
             tab._vid_search.setText("transcode")
             self.assertIn("filter transcode", tab.get_status_bar_text())
+            self.assertIn("filtered status/notes results", tab._next_step_lbl.text())
             tab._vid_search.setText("missing")
             self.assertIn("0/1 shown", tab.get_status_bar_text())
+            self.assertIn("bring matching history entries back", tab._next_step_lbl.text())
         finally:
             tab.close()
             tab.deleteLater()
@@ -6213,6 +6222,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("all-zones slot", summary)
         self.assertIn("result ready to save", summary)
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
+        self.assertIn("Next step:", self._widget._session_status_lbl.text())
+        self.assertIn("save the current result", self._widget._next_step_lbl.text())
 
     def test_fairy_garden_has_fairy_effect(self):
         from src.ui.theme_engine import FAIRY_THEME

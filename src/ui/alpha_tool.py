@@ -63,6 +63,16 @@ def _alpha_capability_details() -> str:
     return "\n".join(lines)
 
 
+def _alpha_next_step_text(has_files: bool, preview_path: str, helper_text: str) -> str:
+    if not has_files:
+        return "Next step: add image files to preview or process, then choose a preset or manual adjustments."
+    if preview_path:
+        if "atlas" in helper_text.lower() or "heat-map" in helper_text.lower():
+            return "Next step: review the preview helpers, fine-tune the adjustments, then process the batch or send zones to Selective Alpha."
+        return "Next step: review the before/after preview, fine-tune the adjustments, then process the batch when ready."
+    return "Next step: select a queued image to inspect the preview, then adjust settings or run the batch."
+
+
 # ---------------------------------------------------------------------------
 # Background worker: load + process one image for the comparison pane
 # ---------------------------------------------------------------------------
@@ -373,6 +383,11 @@ class AlphaFixerTab(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
         main_layout.addWidget(self._session_status_lbl)
+        self._next_step_lbl = QLabel("Next step: add image files to preview or process, then choose a preset or manual adjustments.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        main_layout.addWidget(self._next_step_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
         outer_splitter.setChildrenCollapsible(False)
@@ -1106,9 +1121,15 @@ class AlphaFixerTab(QWidget):
 
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
+        helper_text = self._preview_helper_lbl.text().strip() if hasattr(self, "_preview_helper_lbl") else ""
+        next_text = _alpha_next_step_text(bool(self.get_queue_status_text()), self._preview_path or "", helper_text)
+        self._next_step_lbl.setText(next_text)
+        self._next_step_lbl.setToolTip(next_text)
         text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        if next_text:
+            text += f"\n{next_text}"
         self._session_status_lbl.setText(text)
-        self._session_status_lbl.setToolTip(status or text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)

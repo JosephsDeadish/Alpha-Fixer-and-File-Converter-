@@ -2846,24 +2846,32 @@ class MainWindow(QMainWindow):
             return
         self._status_bar.showMessage(message, max(1000, int(timeout_ms)))
 
+    @staticmethod
+    def _set_status_label_text(label, text: str) -> None:
+        if label is None:
+            return
+        rendered = str(text or "").strip()
+        label.setText(rendered)
+        label.setToolTip(rendered)
+
     def _update_queue_status(self) -> None:
         if self._queue_status_label is None:
             return
         tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
         status_getter = getattr(tab, "get_status_bar_text", None)
         if callable(status_getter):
-            self._queue_status_label.setText(status_getter())
+            self._set_status_label_text(self._queue_status_label, status_getter())
             return
         queue_getter = getattr(tab, "get_queue_status_text", None)
         if callable(queue_getter):
-            self._queue_status_label.setText(queue_getter())
+            self._set_status_label_text(self._queue_status_label, queue_getter())
             return
         file_list = getattr(tab, "_file_list", None)
         if file_list is None or not hasattr(file_list, "count"):
-            self._queue_status_label.setText("")
+            self._set_status_label_text(self._queue_status_label, "")
             return
         count = int(file_list.count())
-        self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")
+        self._set_status_label_text(self._queue_status_label, f"📁 {count} queued" if count > 0 else "")
 
     def _visible_builder_status_text(self) -> str:
         visible_dialogs = []
@@ -2887,7 +2895,7 @@ class MainWindow(QMainWindow):
     def _update_builder_status(self, *_args) -> None:
         if self._builder_status_label is None:
             return
-        self._builder_status_label.setText(self._visible_builder_status_text())
+        self._set_status_label_text(self._builder_status_label, self._visible_builder_status_text())
 
     def _connect_builder_status(self, dialog) -> None:
         if dialog is None or getattr(dialog, "_status_bar_hooks_connected", False):

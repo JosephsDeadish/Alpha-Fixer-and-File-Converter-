@@ -73,6 +73,16 @@ def _converter_capability_details() -> str:
     return "\n".join(lines)
 
 
+def _converter_next_step_text(has_files: bool, preview_path: str, preview_loading: bool) -> str:
+    if not has_files:
+        return "Next step: add files or a folder, choose an output format, then preview or convert."
+    if preview_loading:
+        return "Next step: wait for the live preview to finish, then confirm the output settings and run the batch."
+    if preview_path:
+        return "Next step: review the live preview, adjust output settings, then convert or export any grouped failure details."
+    return "Next step: select a queued file to preview the current output format, then convert when ready."
+
+
 def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
     """Return the logical update rectangle for the current GIF frame."""
     rect = getattr(gif, "dispose_extent", None)
@@ -201,6 +211,11 @@ class ConverterTab(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
         main_layout.addWidget(self._session_status_lbl)
+        self._next_step_lbl = QLabel("Next step: add files or a folder, choose an output format, then preview or convert.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        main_layout.addWidget(self._next_step_lbl)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -893,9 +908,18 @@ class ConverterTab(QWidget):
 
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
+        next_text = _converter_next_step_text(
+            bool(self.get_queue_status_text()),
+            self._current_preview_path or "",
+            self._preview_loader is not None,
+        )
+        self._next_step_lbl.setText(next_text)
+        self._next_step_lbl.setToolTip(next_text)
         text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        if next_text:
+            text += f"\n{next_text}"
         self._session_status_lbl.setText(text)
-        self._session_status_lbl.setToolTip(status or text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 
     def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
         failed = int(summary.get("failure_count", 0) or 0)
