@@ -11,6 +11,7 @@ import sys
 import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Make src importable
@@ -1292,7 +1293,68 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     self.assertEqual(len(merged_disc), 2)
                     self.assertEqual(len(merged_dds), 1)
 
-    def test_verify_packaged_app_use_private_local_manifests_requires_env_input(self):
+    def test_verify_packaged_app_use_private_local_manifests_can_autodiscover_corpus_files(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            video_root = os.path.join(tmpdir, "video")
+            dds_root = os.path.join(tmpdir, "dds")
+            os.makedirs(os.path.join(video_root, "ps1"), exist_ok=True)
+            os.makedirs(os.path.join(video_root, "odd"), exist_ok=True)
+            os.makedirs(dds_root, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            Path(os.path.join(video_root, "ps1", "sample.bin")).write_bytes(b"bin")
+            Path(os.path.join(video_root, "ps1", "sample.cue")).write_text('FILE "sample.bin" BINARY\n', encoding="utf-8")
+            Path(os.path.join(video_root, "odd", "sample.wmv")).write_bytes(b"wmv")
+            Path(os.path.join(dds_root, "sky_cubemap.dds")).write_bytes(b"dds")
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                       returncode=0,
+                       stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                       returncode=0,
+                       stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with patch.dict(
+                    os.environ,
+                    {
+                       "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_VIDEO_CORPUS": video_root,
+                       "ALPHA_FIXER_REAL_DDS_CORPUS": dds_root,
+                    },
+                    clear=False,
+                ):
+                    rc = verify.main([target, "--run-selftest", "--use-private-local-manifests"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(calls), 3)
+            selftest_env = calls[-1]["env"]
+            merged_disc = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"])
+            merged_dds = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"])
+            self.assertTrue(any(str(entry.get("group")) == "bin/cue disc image" for entry in merged_disc))
+            self.assertTrue(any(str(entry.get("group")) == "legacy container" for entry in merged_disc))
+            self.assertTrue(any(str(entry.get("group")) == "cubemap" for entry in merged_dds))
+
+    def test_verify_packaged_app_use_private_local_manifests_requires_manifest_or_corpus_input(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
         verify = importlib.util.module_from_spec(spec)
@@ -1312,12 +1374,19 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST": "",
                     "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": "",
                     "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS": "",
+                    "ALPHA_FIXER_REAL_VIDEO_CORPUS": "",
+                    "ALPHA_FIXER_VIDEO_CORPUS_DIR": "",
+                    "ALPHA_FIXER_REAL_DDS_DX10_CORPUS": "",
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": "",
+                    "ALPHA_FIXER_DDS_CORPUS_DIR": "",
                 },
                 clear=False,
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     verify.main([target, "--use-private-local-manifests"])
         self.assertIn("No private local manifests were found", str(ctx.exception))
+        self.assertIn("no discoverable private corpus samples", str(ctx.exception))
 
     def test_verify_packaged_app_can_require_public_manifest_checks(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")

@@ -36,9 +36,12 @@ from src.core.file_converter import (
 )
 from src.core.alpha_processor import SUPPORTED_WRITE, detect_atlas_cells, save_image
 from src.core.runtime_validation import (
+    build_private_local_manifests_from_env,
+    corpus_roots_from_env,
     execute_dds_manifest,
     execute_disc_video_manifest,
     execute_format_matrix_manifest,
+    iter_corpus_files,
     load_manifest_entries,
     manifest_group_check_suffix,
     manifest_grouped_entries,
@@ -194,6 +197,28 @@ class TestBuildOutputPath(unittest.TestCase):
 
 
 class TestCorpusHelperInputs(unittest.TestCase):
+    def test_runtime_validation_corpus_root_helpers_discover_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_a = os.path.join(tmpdir, "a")
+            root_b = os.path.join(tmpdir, "b")
+            os.makedirs(root_a, exist_ok=True)
+            os.makedirs(root_b, exist_ok=True)
+            first = os.path.join(root_a, "sample.iso")
+            second = os.path.join(root_b, "texture.dds")
+            Path(first).write_bytes(b"iso")
+            Path(second).write_bytes(b"dds")
+            with mock.patch.dict(
+                os.environ,
+                {"AF_TEST_ROOTS": os.pathsep.join([root_a, root_b])},
+                clear=False,
+            ):
+                roots = corpus_roots_from_env("AF_TEST_ROOTS")
+            self.assertEqual(roots, [os.path.abspath(root_a), os.path.abspath(root_b)])
+            self.assertEqual(
+                iter_corpus_files(roots, (".iso", ".dds")),
+                [os.path.abspath(first), os.path.abspath(second)],
+            )
+
     def test_manifest_group_helpers_slug_and_preserve_order(self):
         entries = [
             {"platform": "PSP", "path": "/tmp/a.iso"},
@@ -366,6 +391,42 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(any(str(entry.get("path") or "").endswith(os.path.join("dds", "volume-texture.dds")) for entry in entries))
         self.assertTrue(any(str(entry.get("expect") or "").lower() == "load_or_fail_clearly" for entry in entries))
         self.assertTrue(any(str(entry.get("expect") or "").lower() == "fail" for entry in entries))
+
+    def test_build_private_local_manifests_from_env_discovers_real_sample_layouts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_root = os.path.join(tmpdir, "video")
+            dds_root = os.path.join(tmpdir, "dds")
+            os.makedirs(os.path.join(video_root, "ps1"), exist_ok=True)
+            os.makedirs(os.path.join(video_root, "ps2"), exist_ok=True)
+            os.makedirs(os.path.join(video_root, "odd"), exist_ok=True)
+            os.makedirs(dds_root, exist_ok=True)
+            Path(os.path.join(video_root, "ps1", "movie.bin")).write_bytes(b"bin")
+            Path(os.path.join(video_root, "ps1", "movie.cue")).write_text('FILE "movie.bin" BINARY\n', encoding="utf-8")
+            Path(os.path.join(video_root, "ps2", "disc.iso")).write_bytes(b"iso")
+            Path(os.path.join(video_root, "odd", "sample.wmv")).write_bytes(b"wmv")
+            Path(os.path.join(video_root, "odd", "audio_only.wma")).write_bytes(b"wma")
+            Path(os.path.join(dds_root, "sky_cubemap.dds")).write_bytes(b"dds")
+            Path(os.path.join(dds_root, "scene_bc6h.dds")).write_bytes(b"dds")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS": video_root,
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": dds_root,
+                },
+                clear=False,
+            ):
+                manifests = build_private_local_manifests_from_env(limit=16)
+            disc_entries = manifests["disc_video"]
+            odd_entries = manifests["odd_video"]
+            dds_entries = manifests["dds"]
+            self.assertTrue(any(str(entry.get("group")) == "bin/cue disc image" for entry in disc_entries))
+            self.assertTrue(any(str(entry.get("group")) == "dvd disc image" for entry in disc_entries))
+            bin_entry = next(entry for entry in disc_entries if str(entry.get("group")) == "bin/cue disc image")
+            self.assertTrue(any(str(item.get("path") or "").endswith("movie.cue") for item in bin_entry.get("companions", []) if isinstance(item, dict)))
+            self.assertTrue(any(str(entry.get("group")) == "legacy container" for entry in odd_entries))
+            self.assertTrue(any(str(entry.get("group")) == "audio-only" for entry in odd_entries))
+            self.assertTrue(any(str(entry.get("group")) == "cubemap" for entry in dds_entries))
+            self.assertTrue(any(str(entry.get("group")) == "BC6H" for entry in dds_entries))
 
     def test_private_odd_container_video_manifest_template_loads(self):
         manifest_path = os.path.join(
@@ -750,6 +811,40 @@ class TestCorpusHelperInputs(unittest.TestCase):
             payload = json.loads(Path(out_manifest).read_text(encoding="utf-8"))
             self.assertEqual(Path(payload["base_dir"]).resolve(), Path(cache_dir).resolve())
             self.assertTrue(os.path.isfile(payload["entries"][0]["path"]))
+
+    def test_populate_private_manifests_script_writes_generated_files(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "populate_private_manifests.py")
+        spec = importlib.util.spec_from_file_location("populate_private_manifests", module_path)
+        script = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(script)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_root = os.path.join(tmpdir, "video")
+            dds_root = os.path.join(tmpdir, "dds")
+            out_dir = os.path.join(tmpdir, "out")
+            os.makedirs(os.path.join(video_root, "psp"), exist_ok=True)
+            os.makedirs(os.path.join(video_root, "odd"), exist_ok=True)
+            os.makedirs(dds_root, exist_ok=True)
+            Path(os.path.join(video_root, "psp", "sample.umd.iso")).write_bytes(b"iso")
+            Path(os.path.join(video_root, "odd", "sample.wmv")).write_bytes(b"wmv")
+            Path(os.path.join(dds_root, "texture_bc7.dds")).write_bytes(b"dds")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_VIDEO_CORPUS": video_root,
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": dds_root,
+                },
+                clear=False,
+            ):
+                rc = script.main(["--output-dir", out_dir, "--limit", "8"])
+            self.assertEqual(rc, 0)
+            disc_entries = load_manifest_entries(os.path.join(out_dir, "private_real_disc_video_manifest.json"))
+            odd_entries = load_manifest_entries(os.path.join(out_dir, "private_real_odd_container_manifest.json"))
+            dds_entries = load_manifest_entries(os.path.join(out_dir, "private_real_dds_complex_manifest.json"))
+            self.assertTrue(any(str(entry.get("group")) == "umd disc image" for entry in disc_entries))
+            self.assertTrue(any(str(entry.get("group")) == "legacy container" for entry in odd_entries))
+            self.assertTrue(any(str(entry.get("group")) == "BC7" for entry in dds_entries))
 
 
 class TestRuntimeFormatMatrixManifest(unittest.TestCase):

@@ -112,6 +112,46 @@ def manifest_sample_limit_from_env(
     return max(0, min(int(maximum), int(limit)))
 
 
+def corpus_roots_from_env(*env_names: str) -> list[str]:
+    roots: list[str] = []
+    seen: set[str] = set()
+    for env_name in env_names:
+        raw = os.environ.get(env_name, "")
+        if not raw:
+            continue
+        for part in raw.split(os.pathsep):
+            candidate = os.path.abspath(part.strip())
+            if candidate and os.path.isdir(candidate) and candidate not in seen:
+                seen.add(candidate)
+                roots.append(candidate)
+    return roots
+
+
+def iter_corpus_files(
+    roots: list[str],
+    suffixes: tuple[str, ...],
+    *,
+    limit: int = 0,
+) -> list[str]:
+    wanted = tuple(str(suffix or "").lower() for suffix in suffixes if str(suffix or "").strip())
+    matches: list[str] = []
+    seen: set[str] = set()
+    for root in roots:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for name in sorted(filenames):
+                lower = name.lower()
+                if wanted and not any(lower.endswith(suffix) for suffix in wanted):
+                    continue
+                path = os.path.abspath(os.path.join(dirpath, name))
+                if path in seen:
+                    continue
+                seen.add(path)
+                matches.append(path)
+                if limit > 0 and len(matches) >= limit:
+                    return matches
+    return matches
+
+
 def _limited_entries(entries: list[dict[str, object]], limit: int) -> list[dict[str, object]]:
     if limit <= 0:
         return list(entries)
@@ -230,6 +270,316 @@ def _entry_label(entry: dict[str, object], sample_path: str) -> str:
         Path(sample_path).name,
     ]
     return " / ".join(part for part in parts if part)
+
+
+def render_manifest_payload(entries: list[dict[str, object]], *, base_dir: str = "") -> str:
+    payload: dict[str, object] = {"entries": list(entries)}
+    if base_dir:
+        payload["base_dir"] = base_dir
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def _sample_id_from_path(path: str) -> str:
+    name = Path(path).name.lower()
+    for suffix in (".umd.iso", ".001.vob", ".vob.001"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    else:
+        name = Path(name).stem
+    tokens = re.findall(r"[a-z0-9]+", name)
+    return "-".join(tokens[:6]) or "sample"
+
+
+def _path_has_tokens(path: str, *tokens: str) -> bool:
+    lower = str(path or "").replace("\\", "/").lower()
+    return any(token in lower for token in tokens if token)
+
+
+def _guess_disc_platform(path: str) -> str:
+    lower = str(path or "").replace("\\", "/").lower()
+    if any(token in lower for token in ("/psp/", "psp", ".umd", ".pmf")):
+        return "PSP"
+    if any(token in lower for token in ("/ps1/", "ps1", "playstation1", ".str")):
+        return "PS1"
+    if any(token in lower for token in ("/ps2/", "ps2", "playstation2", ".pss", ".vob")):
+        return "PS2"
+    return "Console video"
+
+
+def _disc_entry_for_path(path: str) -> dict[str, object] | None:
+    resolved = os.path.abspath(path)
+    lower_name = Path(resolved).name.lower()
+    lower_path = resolved.lower()
+    ext = Path(resolved).suffix.lower()
+    platform = _guess_disc_platform(resolved)
+    entry: dict[str, object] = {
+        "platform": platform,
+        "sample_id": _sample_id_from_path(resolved),
+        "path": resolved,
+        "required": True,
+        "expect": "load_or_explain",
+    }
+    if lower_name.endswith(".umd.iso") or ext == ".umd":
+        entry["group"] = "umd disc image" if lower_name.endswith(".umd.iso") else "raw umd container"
+        entry["expect_probe_has_video"] = True
+        entry["hint_contains"] = ["Disc-image video inputs are experimental"]
+    elif ext == ".iso":
+        entry["group"] = "dvd disc image"
+        entry["expect_probe_has_video"] = True
+        entry["hint_contains"] = ["Disc-image video inputs are experimental"]
+    elif ext == ".bin":
+        entry["group"] = "bin/cue disc image"
+        entry["expect_probe_has_video"] = True
+        entry["hint_contains"] = ["Disc-image video inputs are experimental"]
+        cue_path = os.path.splitext(resolved)[0] + ".cue"
+        if os.path.isfile(cue_path):
+            entry["companions"] = [{"path": cue_path}]
+    elif ext == ".pmf":
+        entry["group"] = "pmf movie asset"
+        entry["expect_probe_has_video"] = True
+        entry["expect_video_codec_contains"] = ["mpeg"]
+    elif ext == ".pss":
+        entry["group"] = "pss movie asset"
+        entry["expect_probe_has_video"] = True
+        entry["expect_video_codec_contains"] = ["mpeg"]
+    elif ext == ".str":
+        entry["group"] = "str movie asset"
+        entry["expect_probe_has_video"] = True
+        entry["expect_video_codec_contains"] = ["mpeg"]
+    elif ".cue" in lower_path:
+        return None
+    else:
+        return None
+    return entry
+
+
+def _is_segmented_video_name(name: str) -> bool:
+    lower = str(name or "").lower()
+    return bool(
+        re.search(r"\.\d{3}\.[a-z0-9]+$", lower)
+        or re.search(r"\.[a-z0-9]+\.\d{3}$", lower)
+        or re.search(r"\.\d{3}$", lower)
+    )
+
+
+def _odd_video_entry_for_path(path: str) -> dict[str, object] | None:
+    resolved = os.path.abspath(path)
+    lower_name = Path(resolved).name.lower()
+    ext = Path(resolved).suffix.lower()
+    entry: dict[str, object] = {
+        "sample_id": _sample_id_from_path(resolved),
+        "path": resolved,
+        "required": True,
+    }
+    if ext == ".wma":
+        entry.update(
+            {
+                "platform": "Audio-only",
+                "group": "audio-only",
+                "expect": "fail",
+                "expect_probe_has_video": False,
+                "expect_probe_has_audio": True,
+                "hint_contains": ["audio but no playable video stream"],
+            }
+        )
+        return entry
+    if _is_segmented_video_name(lower_name):
+        entry.update(
+            {
+                "platform": "Segmented video",
+                "group": "segmented container",
+                "expect": "load_or_explain",
+                "hint_contains": ["segmented / multipart video set"],
+            }
+        )
+        return entry
+    if ext == ".dat":
+        entry.update(
+            {
+                "platform": "Odd extension",
+                "group": "unknown-extension playable video",
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+            }
+        )
+        return entry
+    if ext in {".wmv", ".asf"}:
+        entry.update(
+            {
+                "platform": "Windows legacy",
+                "group": "legacy container",
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+            }
+        )
+        return entry
+    if ext == ".mxf":
+        entry.update(
+            {
+                "platform": "Editorial",
+                "group": "odd container",
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+            }
+        )
+        return entry
+    if ext == ".mov":
+        entry.update(
+            {
+                "platform": "QuickTime",
+                "group": "quicktime edge case",
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+            }
+        )
+        return entry
+    if ext == ".avi":
+        entry.update(
+            {
+                "platform": "Legacy index container",
+                "group": "legacy index container",
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+            }
+        )
+        return entry
+    if ext == ".vob":
+        entry.update(
+            {
+                "platform": "Program stream",
+                "group": "program stream",
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+                "expect_video_codec_contains": ["mpeg"],
+            }
+        )
+        return entry
+    if ext == ".mkv" and _path_has_tokens(lower_name, "multi", "stream"):
+        entry.update(
+            {
+                "platform": "Matroska",
+                "group": "multi-stream container",
+                "expect": "load_or_explain",
+            }
+        )
+        return entry
+    if ext == ".mkv" and _path_has_tokens(lower_name, "cover", "art", "poster"):
+        entry.update(
+            {
+                "platform": "Matroska",
+                "group": "cover-art or attached-picture",
+                "expect": "load_or_explain",
+                "hint_contains": ["attached-picture/cover-art stream"],
+            }
+        )
+        return entry
+    if ext in {".pmf", ".pss", ".str"}:
+        entry.update(
+            {
+                "platform": _guess_disc_platform(resolved),
+                "group": {
+                    ".pmf": "pmf movie asset",
+                    ".pss": "legacy program stream",
+                    ".str": "legacy stream",
+                }[ext],
+                "expect": "load_or_explain",
+                "expect_probe_has_video": True,
+                "expect_video_codec_contains": ["mpeg"],
+            }
+        )
+        return entry
+    return None
+
+
+def _dds_entry_for_path(path: str) -> dict[str, object] | None:
+    resolved = os.path.abspath(path)
+    lower = resolved.lower().replace("\\", "/")
+    entry: dict[str, object] = {
+        "sample_id": _sample_id_from_path(resolved),
+        "path": resolved,
+        "required": True,
+    }
+    if any(token in lower for token in ("cubemap", "cube")):
+        entry.update({"group": "cubemap", "expect": "fail", "detail_contains": ["cubemap"]})
+        return entry
+    if "array" in lower:
+        entry.update({"group": "array", "expect": "fail", "detail_contains": ["array"]})
+        return entry
+    if any(token in lower for token in ("volume", "/3d/", "_3d", "-3d")):
+        entry.update({"group": "volume", "expect": "fail", "detail_contains": ["volume texture"]})
+        return entry
+    if "bc6h" in lower:
+        entry.update({"group": "BC6H", "expect": "load_or_fail_clearly", "detail_contains": ["BC6H", "ImageMagick/wand"]})
+        return entry
+    if "bc7" in lower:
+        entry.update({"group": "BC7", "expect": "load_or_fail_clearly", "detail_contains": ["BC7", "ImageMagick/wand"]})
+        return entry
+    if "mip" in lower:
+        entry.update({"group": "mipmap", "expect": "load_or_fail_clearly"})
+        return entry
+    if any(token in lower for token in ("dx10", "dxgi")):
+        entry.update({"group": "DX10", "expect": "load_or_fail_clearly"})
+        return entry
+    return None
+
+
+def discover_private_disc_video_entries(roots: list[str], *, limit: int = 32) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in iter_corpus_files(roots, (".iso", ".umd", ".bin", ".pmf", ".pss", ".str"), limit=0):
+        entry = _disc_entry_for_path(path)
+        if entry is None:
+            continue
+        entries.append(entry)
+        if limit > 0 and len(entries) >= limit:
+            break
+    return entries
+
+
+def discover_private_odd_video_entries(roots: list[str], *, limit: int = 32) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in iter_corpus_files(
+        roots,
+        (".pmf", ".pss", ".str", ".vob", ".wmv", ".asf", ".mxf", ".mov", ".avi", ".dat", ".mkv", ".wma"),
+        limit=0,
+    ):
+        entry = _odd_video_entry_for_path(path)
+        if entry is None:
+            continue
+        entries.append(entry)
+        if limit > 0 and len(entries) >= limit:
+            break
+    return entries
+
+
+def discover_private_dds_entries(roots: list[str], *, limit: int = 32) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in iter_corpus_files(roots, (".dds",), limit=0):
+        entry = _dds_entry_for_path(path)
+        if entry is None:
+            continue
+        entries.append(entry)
+        if limit > 0 and len(entries) >= limit:
+            break
+    return entries
+
+
+def build_private_local_manifests_from_env(*, limit: int = 32) -> dict[str, list[dict[str, object]]]:
+    video_roots = corpus_roots_from_env(
+        "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS",
+        "ALPHA_FIXER_REAL_VIDEO_CORPUS",
+        "ALPHA_FIXER_VIDEO_CORPUS_DIR",
+    )
+    dds_roots = corpus_roots_from_env(
+        "ALPHA_FIXER_REAL_DDS_DX10_CORPUS",
+        "ALPHA_FIXER_REAL_DDS_CORPUS",
+        "ALPHA_FIXER_DDS_CORPUS_DIR",
+    )
+    return {
+        "disc_video": discover_private_disc_video_entries(video_roots, limit=limit),
+        "odd_video": discover_private_odd_video_entries(video_roots, limit=limit),
+        "dds": discover_private_dds_entries(dds_roots, limit=limit),
+    }
 
 
 def _disc_manifest_group(entry: dict[str, object]) -> str:

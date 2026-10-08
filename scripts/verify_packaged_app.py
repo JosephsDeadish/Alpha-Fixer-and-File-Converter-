@@ -10,7 +10,12 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.core.runtime_validation import load_manifest_entries, manifest_grouped_entries
+from src.core.runtime_validation import (
+    build_private_local_manifests_from_env,
+    load_manifest_entries,
+    manifest_grouped_entries,
+    render_manifest_payload,
+)
 _PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
 _PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
 _PUBLIC_FORMAT_MATRIX_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_format_matrix_manifest.json"
@@ -245,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format-matrix-manifest", action="append", default=[], help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--use-public-sample-manifests", action="store_true", help="Use the repository's built-in public disc-video, DDS/DX10, and format-matrix manifests for packaged self-test execution.")
     parser.add_argument("--use-private-local-manifests", action="store_true", help="Load private local disc/video and DDS manifests from ALPHA_FIXER_REAL_* environment variables and merge them into the packaged self-test run.")
+    parser.add_argument("--private-manifest-auto-limit", type=int, default=32, help="Maximum auto-discovered entries per private manifest when --use-private-local-manifests falls back to corpus-root scanning.")
     parser.add_argument("--allow-sample-downloads", action="store_true", help="Allow manifest-backed self-tests to download missing external samples when URL fields are present.")
     parser.add_argument("--sample-cache-dir", help="Optional cache directory for downloaded or materialized manifest samples.")
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
@@ -264,11 +270,20 @@ def main(argv: list[str] | None = None) -> int:
         args.disc_video_manifest.extend(_manifest_values_from_env(*_PRIVATE_DISC_MANIFEST_ENV_NAMES))
         args.dds_manifest.extend(_manifest_values_from_env(*_PRIVATE_DDS_MANIFEST_ENV_NAMES))
         if not args.disc_video_manifest and not args.dds_manifest:
-            private_envs = ", ".join((*_PRIVATE_DISC_MANIFEST_ENV_NAMES, *_PRIVATE_DDS_MANIFEST_ENV_NAMES))
-            raise SystemExit(
-                "No private local manifests were found in the configured environment variables: "
-                f"{private_envs}"
-            )
+            discovered = build_private_local_manifests_from_env(limit=max(1, int(args.private_manifest_auto_limit)))
+            disc_entries = list(discovered.get("disc_video") or []) + list(discovered.get("odd_video") or [])
+            dds_entries = list(discovered.get("dds") or [])
+            if disc_entries:
+                args.disc_video_manifest.append(render_manifest_payload(disc_entries))
+            if dds_entries:
+                args.dds_manifest.append(render_manifest_payload(dds_entries))
+            if not args.disc_video_manifest and not args.dds_manifest:
+                private_envs = ", ".join((*_PRIVATE_DISC_MANIFEST_ENV_NAMES, *_PRIVATE_DDS_MANIFEST_ENV_NAMES))
+                raise SystemExit(
+                    "No private local manifests were found in the configured environment variables, "
+                    "and no discoverable private corpus samples were found in the configured ALPHA_FIXER_REAL_* corpus directories: "
+                    f"{private_envs}"
+                )
     merged_disc_manifest = _merged_manifest_arg(args.disc_video_manifest)
     merged_dds_manifest = _merged_manifest_arg(args.dds_manifest)
     merged_format_manifest = _merged_manifest_arg(args.format_matrix_manifest)
