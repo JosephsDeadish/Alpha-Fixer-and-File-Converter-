@@ -3733,6 +3733,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             "path": "/tmp/remuxed.mkv",
             "source_path": "/tmp/game.iso",
             "load_note": "temporary ffmpeg remux fallback active",
+            "preferred_video_stream_index": 3,
         }
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
         dialog._timeline_canvas_size = lambda fmt: (2, 2)
@@ -3755,9 +3756,11 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(entry["canvas"], "2×2")
         self.assertEqual(entry["sources"], "unknown ×1")
         self.assertEqual(entry["recovery"], "remux ×1")
+        self.assertEqual(entry["streams"], "game.iso: stream #3")
         self.assertIn("canvas=2×2", entry["notes"])
         self.assertIn("remux fallback", entry["notes"])
         self.assertIn("audio=off", entry["notes"])
+        self.assertIn("streams=game.iso: stream #3", entry["notes"])
 
 
 @unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
@@ -4338,9 +4341,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "errors": 0,
                 "files": ["a.png"],
                 "delay": "80 ms",
+                "fps": "12.5",
+                "optimize": "on",
                 "loop": "∞",
                 "resize": "≤320×auto",
-                "fps": "12.5",
                 "sources": "image ×1",
                 "largest_frame": "64×64",
                 "alpha_summary": "2/3",
@@ -4360,29 +4364,33 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "filter": "sepia",
                 "audio": "off",
                 "recovery": "transcode ×1",
+                "streams": "a.iso: stream #3",
                 "sources": "video ×2",
                 "files": ["a.iso"],
-                "notes": "recovery=transcode ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+                "notes": "recovery=transcode ×1 | streams=a.iso: stream #3 | clips=sample.iso: temporary ffmpeg transcode fallback active",
             }
         )
         tab = HistoryTab(settings)
         try:
             self.assertEqual(tab._gif_tree.topLevelItem(0).text(3), "80 ms")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(4), "∞")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "≤320×auto")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "image ×1")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(7), "64×64")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(8), "2/3")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(11), "OK")
-            self.assertEqual(tab._gif_tree.topLevelItem(0).text(12), "optimize=on")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(4), "12.5")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "on")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "∞")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(7), "≤320×auto")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(8), "image ×1")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(9), "64×64")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(10), "2/3")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(13), "OK")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(14), "optimize=on")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(2), "MP4")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(4), "24")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(5), "640×480")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(6), "sepia")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(7), "off")
             self.assertEqual(tab._vid_tree.topLevelItem(0).text(8), "transcode ×1")
-            self.assertEqual(tab._vid_tree.topLevelItem(0).text(12), "Recovery")
-            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(13))
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(9), "a.iso: stream #3")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(13), "Recovery")
+            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(14))
             self.assertIn("OK 1", tab._gif_summary.text())
             self.assertIn("Recovery 1", tab._vid_summary.text())
         finally:
@@ -4409,9 +4417,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "audio": "kept",
                 "fps": "30",
                 "recovery": "transcode ×1",
+                "streams": "sample.iso: stream #3",
                 "sources": "video ×1, image ×1",
                 "files": ["a.iso"],
-                "notes": "recovery=transcode ×1 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+                "notes": "recovery=transcode ×1 | streams=sample.iso: stream #3 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
             }
         )
         tab = HistoryTab(settings)
@@ -4431,6 +4440,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab._apply_filter(tab._vid_tree, "format:mp4")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "recovery:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "streams:stream #3")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "audio:kept")
             self.assertFalse(item.isHidden())
@@ -4533,9 +4544,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 "fps": "30",
                 "canvas": "640×480",
                 "recovery": "transcode ×1",
+                "streams": "sample.iso: stream #3",
                 "sources": "video ×1, image ×1",
                 "files": ["a.iso"],
-                "notes": "recovery=transcode ×1 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+                "notes": "recovery=transcode ×1 | streams=sample.iso: stream #3 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
             }
         )
         tab = HistoryTab(settings)
@@ -4546,6 +4558,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab._apply_filter(tab._vid_tree, "audio:off|kept")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "recovery:remux recovery:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "stream:*#3")
             self.assertFalse(item.isHidden())
             tab._apply_filter(tab._vid_tree, "size:480")
             self.assertFalse(item.isHidden())

@@ -3248,6 +3248,10 @@ class VideoToolDialog(QDialog):
             for clip in clip_snapshot
             if _coerce_optional_stream_index(clip.get("preferred_video_stream_index")) is not None
         ]
+        stream_summary = "manual" if selected_streams else ""
+        if selected_streams:
+            stream_summary = "; ".join(selected_streams[:3]) + (" …" if len(selected_streams) > 3 else "")
+            entry["streams"] = stream_summary
         notes = [
             f"filter={entry['filter']}",
             f"audio={entry['audio']}",
@@ -3261,8 +3265,8 @@ class VideoToolDialog(QDialog):
             notes.append(f"recovery={entry['recovery']}")
         if noted:
             notes.append("clips=" + ("; ".join(noted[:3]) + (" …" if len(noted) > 3 else "")))
-        if selected_streams:
-            notes.append("streams=" + ("; ".join(selected_streams[:3]) + (" …" if len(selected_streams) > 3 else "")))
+        if stream_summary:
+            notes.append("streams=" + stream_summary)
         if extra_notes:
             notes.extend(str(note).strip() for note in extra_notes if str(note).strip())
         if notes:
