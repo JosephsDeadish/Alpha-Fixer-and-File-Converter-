@@ -473,6 +473,12 @@ class GifBuilderDialog(QDialog):
         self._setup_shortcuts()
         self._refresh_session_status()
 
+    def add_media_paths(self, paths: list[str]) -> None:
+        """Append media files to the current builder session."""
+        clean_paths = [str(path) for path in (paths or []) if str(path or "").strip()]
+        if clean_paths:
+            self._add_paths(clean_paths)
+
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------

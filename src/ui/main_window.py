@@ -2962,6 +2962,28 @@ class MainWindow(QMainWindow):
         dialog._status_bar_hooks_connected = True
         self._update_builder_status()
 
+    def _open_or_focus_gif_builder(self, initial_files: list[str] | None = None) -> None:
+        if not hasattr(self, "_gif_builder_dlg") or self._gif_builder_dlg is None:
+            self._gif_builder_dlg = GifBuilderDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
+            self._connect_builder_status(self._gif_builder_dlg)
+        if initial_files:
+            adder = getattr(self._gif_builder_dlg, "add_media_paths", None)
+            if callable(adder):
+                adder(initial_files)
+        self._gif_builder_dlg.show()
+        self._gif_builder_dlg.raise_()
+        self._gif_builder_dlg.activateWindow()
+        self._update_builder_status()
+
+    def _open_or_focus_video_builder(self) -> None:
+        if not hasattr(self, "_video_tool_dlg") or self._video_tool_dlg is None:
+            self._video_tool_dlg = VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
+            self._connect_builder_status(self._video_tool_dlg)
+        self._video_tool_dlg.show()
+        self._video_tool_dlg.raise_()
+        self._video_tool_dlg.activateWindow()
+        self._update_builder_status()
+
     def _clear_custom_background_notice(self) -> None:
         self._bg_notice = ""
 
@@ -4286,21 +4308,9 @@ class MainWindow(QMainWindow):
         act_settings.triggered.connect(self._open_settings)
         chosen = menu.exec(event.globalPos())
         if chosen is act_gif:
-            if not hasattr(self, "_gif_builder_dlg") or self._gif_builder_dlg is None:
-                self._gif_builder_dlg = GifBuilderDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
-                self._connect_builder_status(self._gif_builder_dlg)
-            self._gif_builder_dlg.show()
-            self._gif_builder_dlg.raise_()
-            self._gif_builder_dlg.activateWindow()
-            self._update_builder_status()
+            self._open_or_focus_gif_builder()
         elif chosen is act_video:
-            if not hasattr(self, "_video_tool_dlg") or self._video_tool_dlg is None:
-                self._video_tool_dlg = VideoToolDialog(parent=self, tooltip_mgr=self._tooltip_mgr)
-                self._connect_builder_status(self._video_tool_dlg)
-            self._video_tool_dlg.show()
-            self._video_tool_dlg.raise_()
-            self._video_tool_dlg.activateWindow()
-            self._update_builder_status()
+            self._open_or_focus_video_builder()
         event.accept()
 
     def eventFilter(self, obj: "QObject", event: "QEvent") -> bool:

@@ -5866,6 +5866,72 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertIn("Next step: add clips", tooltip)
         self.assertIn("Ready now: image/GIF clips work here", tooltip)
 
+    def test_main_window_shared_gif_builder_reuses_dialog_and_appends_files(self):
+        try:
+            from src.ui import main_window as mw
+        except ImportError as exc:
+            self.skipTest(f"main_window import unavailable in test env: {exc}")
+
+        created = []
+        connected = []
+        updated = []
+
+        class _FakeDialog:
+            def __init__(self, parent=None, tooltip_mgr=None):
+                self.parent = parent
+                self.tooltip_mgr = tooltip_mgr
+                self.added = []
+                self.shown = 0
+                self.raised = 0
+                self.activated = 0
+                created.append(self)
+
+            def add_media_paths(self, paths):
+                self.added.append(list(paths))
+
+            def show(self):
+                self.shown += 1
+
+            def raise_(self):
+                self.raised += 1
+
+            def activateWindow(self):
+                self.activated += 1
+
+        fake_self = types.SimpleNamespace(
+            _tooltip_mgr=object(),
+            _gif_builder_dlg=None,
+            _connect_builder_status=lambda dialog: connected.append(dialog),
+            _update_builder_status=lambda: updated.append("ok"),
+        )
+
+        with patch.object(mw, "GifBuilderDialog", _FakeDialog):
+            mw.MainWindow._open_or_focus_gif_builder(fake_self, ["/tmp/a.png"])
+            mw.MainWindow._open_or_focus_gif_builder(fake_self, ["/tmp/b.png"])
+
+        self.assertEqual(len(created), 1)
+        self.assertEqual(connected, [created[0]])
+        self.assertEqual(created[0].added, [["/tmp/a.png"], ["/tmp/b.png"]])
+        self.assertEqual(created[0].shown, 2)
+        self.assertEqual(created[0].raised, 2)
+        self.assertEqual(created[0].activated, 2)
+        self.assertEqual(len(updated), 2)
+
+    def test_converter_open_gif_builder_delegates_to_main_window_when_available(self):
+        try:
+            from src.ui.converter_tool import ConverterTab
+        except ImportError as exc:
+            self.skipTest(f"converter_tool import unavailable in test env: {exc}")
+
+        calls = []
+        fake_host = types.SimpleNamespace(
+            _open_or_focus_gif_builder=lambda paths: calls.append(list(paths)),
+        )
+        fake_self = types.SimpleNamespace(window=lambda: fake_host)
+
+        ConverterTab._open_gif_builder(fake_self, ["/tmp/a.png", "/tmp/b.gif"])
+        self.assertEqual(calls, [["/tmp/a.png", "/tmp/b.gif"]])
+
     def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
         try:
             from src.ui.history_tab import HistoryTab
