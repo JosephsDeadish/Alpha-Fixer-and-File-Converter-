@@ -897,6 +897,7 @@ def _video_load_failure_hint(
         if audio_selection_note:
             lines.append(f"Manual selection active: {audio_selection_note}.")
     lines.extend(_video_container_guidance(path, probe))
+    lines.extend(_video_codec_guidance(path, probe))
     probe_summary = _format_media_probe_summary(probe)
     if probe_summary:
         lines.append(probe_summary)
@@ -909,6 +910,7 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
         return []
     ext = Path(path).suffix.lower()
     format_name = str(details.get("format_name") or "").lower()
+    video_codec = str(details.get("video_codec") or "").lower()
     guidance: list[str] = []
     if ext == ".vob" or ("mpeg" in format_name and ext in {".vob", ".pss", ".str"}):
         guidance.append(
@@ -954,7 +956,6 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
         guidance.append(
             "Attached-picture/cover-art streams were also detected; recovery prefers a live video stream when possible, but some containers still need a manual remux to drop cover-art tracks."
         )
-    video_codec = str(details.get("video_codec") or "").lower()
     if video_codec in {"mjpeg", "jpeg2000", "png"}:
         guidance.append(
             "Still-image or intra-frame-only video codecs can behave like cover-art or slideshow streams; a full transcode or single-frame fallback may be required before timeline playback is reliable."
@@ -962,6 +963,54 @@ def _video_container_guidance(path: str, details: Optional[dict[str, object]]) -
     elif video_codec in {"hevc", "h265", "av1"}:
         guidance.append(
             "Modern high-efficiency codecs may decode inconsistently in odd containers; if direct loading fails, a clean MP4 remux or H.264 transcode is usually the safest fallback."
+        )
+    return guidance
+
+
+def _video_codec_guidance(path: str, details: Optional[dict[str, object]]) -> list[str]:
+    if not details:
+        return []
+    ext = Path(path).suffix.lower()
+    format_name = str(details.get("format_name") or "").lower()
+    video_codec = str(details.get("video_codec") or "").lower()
+    audio_codec = str(details.get("audio_codec") or "").lower()
+    audio_stream_count = max(0, int(details.get("audio_stream_count") or 0))
+    guidance: list[str] = []
+    odd_container = ext in _ODD_CONTAINER_RECOVERY_EXTS or any(
+        token in format_name for token in ("mpegts", "matroska", "asf", "realmedia", "avi", "mpeg")
+    )
+    if video_codec in {"hevc", "h265", "av1"}:
+        guidance.append(
+            "Detected HEVC/H.265 or AV1 video; when these codecs arrive in AVI/WMV/TS/odd wrappers, remuxing to MP4 or transcoding to H.264/AVC is usually the most reliable import path."
+        )
+    elif video_codec in {"prores", "dnxhd", "dvvideo"}:
+        guidance.append(
+            "Detected an intermediate/broadcast codec (ProRes/DNxHD/DV-style); odd wrappers or damaged timing metadata often need a clean editorial transcode before timeline playback is stable."
+        )
+    elif video_codec in {"mjpeg", "jpeg2000", "png"} and odd_container:
+        guidance.append(
+            "Detected a still-image style video codec inside a nonstandard container; the builder may only recover this as a slideshow/still-frame source unless ffmpeg can transcode it cleanly."
+        )
+    elif video_codec in {"mpeg1video", "mpeg2video"} and (ext in _EXPERIMENTAL_DISC_VIDEO_EXTS or ext in {".pss", ".str", ".vob"}):
+        guidance.append(
+            "Detected legacy MPEG program-stream video commonly used in PSP/PS1/PS2-era assets; alternate tracks, cue/bin metadata, or audio-drop recovery may be needed before the clip becomes playable."
+        )
+    elif video_codec in {"rv10", "rv20", "rv30", "rv40"}:
+        guidance.append(
+            "Detected a legacy RealVideo codec; these files often need a full ffmpeg transcode because direct indexing and partial-stream recovery are unreliable."
+        )
+    if audio_codec in {"ac3", "eac3", "dts", "truehd"}:
+        if audio_stream_count > 1:
+            guidance.append(
+                "Selected audio uses AC3/DTS-style compressed audio and multiple audio tracks are present; if import or export fails, try another audio stream or reload with source audio dropped."
+            )
+        elif odd_container:
+            guidance.append(
+                "Source audio uses AC3/DTS-style compressed audio; if the video stream looks valid but recovery still fails, retrying without source audio is often the safest fallback."
+            )
+    elif audio_codec in {"mp2", "adx", "xa", "adpcm_xa", "adpcm_ima_wav"} and ext in _EXPERIMENTAL_DISC_VIDEO_EXTS | {".pss", ".str", ".vob"}:
+        guidance.append(
+            "Detected legacy disc-style audio alongside the video stream; if direct loading fails, recovery may need to drop or replace the original audio before the clip can be imported."
         )
     return guidance
 
@@ -1387,6 +1436,16 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
         return "disc sidecar"
     if "attached-picture/cover-art stream" in lower or "attached cover art" in lower:
         return "cover-art stream"
+    if "hevc/h.265 or av1" in lower or "transcoding to h.264/avc" in lower:
+        return "high-efficiency codec"
+    if "intermediate/broadcast codec" in lower or "editorial transcode" in lower:
+        return "broadcast codec"
+    if "legacy realvideo codec" in lower:
+        return "legacy codec"
+    if "ac3/dts-style compressed audio" in lower or "retrying without source audio" in lower:
+        return "source audio track"
+    if "legacy disc-style audio" in lower:
+        return "legacy audio track"
     if ("codec" in lower and "unsupported" in lower) or "unsupported pixel format" in lower or "could not determine codec parameters" in lower:
         return "video codec"
     if "invalid data found when processing input" in lower or "container may be partial, malformed" in lower:
@@ -1413,6 +1472,11 @@ def _video_failure_guidance(category: str) -> str:
         "disc sidecar": "BIN/CUE-style disc images often need their matching companion metadata files kept together so the track layout can be recovered correctly.",
         "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream and the Selected Stream panel can retry a manual override, but a manual ffmpeg remux may still be needed.",
         "cover-art stream": "This source exposed only cover-art style video metadata instead of continuous frames; dropping attached-picture streams with ffmpeg may help.",
+        "high-efficiency codec": "HEVC/H.265 or AV1 streams in awkward wrappers often import more reliably after a clean MP4 remux or H.264/AVC transcode.",
+        "broadcast codec": "Intermediate/editing codecs in damaged or unusual wrappers often need a clean editorial transcode before timeline playback stays stable.",
+        "legacy codec": "Legacy RealVideo-style codecs are best handled with a full ffmpeg transcode because partial recovery and direct indexing are often unreliable.",
+        "source audio track": "If the video stream appears valid, retrying another audio stream or dropping the original compressed audio track can unblock import/export.",
+        "legacy audio track": "Legacy disc-era audio tracks often need to be dropped or replaced before the video can be recovered cleanly.",
         "video codec": "The container exposed a video stream, but the codec or pixel format still could not be decoded reliably in this runtime. Remuxing or transcoding to H.264/AVC is usually the safest fallback.",
         "container codec mismatch": "The container metadata and embedded stream data do not line up cleanly. A full ffmpeg remux/transcode often fixes these damaged index/timestamp mismatches.",
         "audio-only container": "The Video Builder only accepts clips with playable video frames; audio-only files cannot be added to the timeline.",

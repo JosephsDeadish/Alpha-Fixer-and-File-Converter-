@@ -2641,7 +2641,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             "has_video": True,
             "has_audio": True,
             "video_codec": "h264",
-            "audio_codec": "aac",
+            "audio_codec": "ac3",
             "width": 1280,
             "height": 720,
             "fps": 23.976,
@@ -2650,8 +2650,8 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             "video_stream_index": 0,
             "audio_stream_index": 4,
             "audio_stream_choices": [
-                {"index": 2, "codec_name": "aac", "language": "eng", "title": "Main"},
-                {"index": 4, "codec_name": "aac", "language": "jpn", "title": "Commentary"},
+                {"index": 2, "codec_name": "ac3", "language": "eng", "title": "Main"},
+                {"index": 4, "codec_name": "ac3", "language": "jpn", "title": "Commentary"},
             ],
         }
         with patch.object(vt, "_probe_media_details", return_value=probe):
@@ -2659,6 +2659,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 hint = vt._video_load_failure_hint("/tmp/streamed.mkv", preferred_audio_stream_index=4)
         self.assertIn("Manual selection active: manual audio #4", hint)
         self.assertIn("preferred-audio-stream=4", hint)
+        self.assertIn("try another audio stream or reload with source audio dropped", hint)
 
     def test_video_load_failure_hint_mentions_recovery_exhausted_for_odd_container(self):
         try:
@@ -2729,6 +2730,55 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
                 hint = vt._video_load_failure_hint("/tmp/legacy.rmvb")
         self.assertIn("RealMedia / RMVB support is best-effort", hint)
+        self.assertIn("Detected a legacy RealVideo codec", hint)
+
+    def test_video_load_failure_hint_mentions_hevc_wrapper_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpegts",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "hevc",
+            "audio_codec": "aac",
+            "width": 1920,
+            "height": 1080,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/capture.ts")
+        self.assertIn("Detected HEVC/H.265 or AV1 video", hint)
+        self.assertIn("H.264/AVC", hint)
+
+    def test_video_load_failure_hint_mentions_broadcast_codec_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mxf",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "dnxhd",
+            "audio_codec": "pcm_s16le",
+            "width": 1920,
+            "height": 1080,
+            "fps": 25.0,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/edit.mxf")
+        self.assertIn("Detected an intermediate/broadcast codec", hint)
+        self.assertIn("editorial transcode", hint)
 
     def test_classify_video_import_failure_distinguishes_audio_only_and_recovery(self):
         try:
@@ -2755,6 +2805,14 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertEqual(
             vt._classify_video_import_failure("strange.mxf", "Unsupported pixel format in codec pipeline"),
             "video codec",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("modern.ts", "Detected HEVC/H.265 or AV1 video; when these codecs arrive in AVI/WMV/TS/odd wrappers, remuxing to MP4 or transcoding to H.264/AVC is usually the most reliable import path."),
+            "high-efficiency codec",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("concert.mkv", "Selected audio uses AC3/DTS-style compressed audio and multiple audio tracks are present; if import or export fails, try another audio stream or reload with source audio dropped."),
+            "source audio track",
         )
 
     def test_video_capability_summary_mentions_ready_state_and_audio_only_limit(self):
