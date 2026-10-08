@@ -3068,6 +3068,26 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             vt._classify_video_import_failure("concert.mkv", "Selected audio uses AC3/DTS-style compressed audio and multiple audio tracks are present; if import or export fails, try another audio stream or reload with source audio dropped."),
             "source audio track",
         )
+        self.assertEqual(
+            vt._classify_video_import_failure("capture.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading."),
+            "transport stream timing",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("feature.mkv", "Matroska/WebM files can carry multiple alternate video/audio programs; if one stream fails, the builder will prefer the strongest detected video stream but manual stream reloads may still help."),
+            "matroska/webm program",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("edit.mov", "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode recovery is often needed when direct indexing is incomplete."),
+            "quicktime metadata",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("disc.str", "Detected legacy MPEG program-stream video commonly used in PSP/PS1/PS2-era assets; alternate tracks, cue/bin metadata, or audio-drop recovery may be needed before the clip becomes playable."),
+            "program stream layout",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("slideshow.mkv", "Detected a still-image style video codec inside a nonstandard container; the builder may only recover this as a slideshow/still-frame source unless ffmpeg can transcode it cleanly."),
+            "still-image video",
+        )
 
     def test_video_capability_summary_mentions_ready_state_and_audio_only_limit(self):
         try:
@@ -3941,6 +3961,45 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             dialog.deleteLater()
             self._app.processEvents()
 
+    def test_video_import_status_surfaces_container_specific_failure_groups(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._update_import_status(
+                added=0,
+                attempted=4,
+                recovered=[],
+                failures=[
+                    ("capture.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading.\nProbe: container=mpegts; video=h264; audio=aac."),
+                    ("feature.mkv", "Matroska/WebM files can carry multiple alternate video/audio programs; if one stream fails, the builder will prefer the strongest detected video stream but manual stream reloads may still help.\nProbe: container=matroska,webm; video=vp9; audio=opus."),
+                    ("edit.mov", "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode recovery is often needed when direct indexing is incomplete.\nProbe: container=mov,mp4,m4a,3gp,3g2,mj2; video=prores; audio=pcm_s16le."),
+                    ("slideshow.mkv", "Detected a still-image style video codec inside a nonstandard container; the builder may only recover this as a slideshow/still-frame source unless ffmpeg can transcode it cleanly.\nProbe: container=matroska,webm; video=mjpeg; audio=none."),
+                ],
+                skipped=[],
+            )
+            summary = dialog._import_status_lbl.text()
+            details = dialog._import_detail_box.toPlainText()
+            self.assertIn("4 failed", summary)
+            self.assertIn("transport stream timing ×1", summary)
+            self.assertIn("matroska/webm program ×1", details)
+            self.assertIn("quicktime metadata ×1", details)
+            self.assertIn("still-image video ×1", details)
+            self.assertIn("Probe-detected containers: matroska,webm ×2, mov,mp4,m4a,3gp,3g2,mj2 ×1, mpegts ×1", details)
+            self.assertIn("Probe-detected video codecs: h264 ×1, mjpeg ×1, prores ×1, vp9 ×1", details)
+            self.assertIn("transport stream timing:", details)
+            self.assertIn("quicktime metadata:", details)
+            self.assertIn("still-image video:", details)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
     def test_optional_real_video_corpus_samples_probe_and_explain_or_load(self):
         try:
             from src.ui import video_tool as vt
@@ -4547,6 +4606,39 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
             self.assertIn("audio-only container", dialog._import_detail_box.toPlainText())
             self.assertIn("cannot be added", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_groups_transport_stream_failures_with_specific_guidance(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=0,
+                added_frames=0,
+                recovered=[],
+                failures=[
+                    ("capture.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading.\nProbe: container=mpegts; video=h264; audio=aac."),
+                    ("capture2.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading.\nProbe: container=mpegts; video=h264; audio=ac3."),
+                ],
+                skipped=[],
+                loaded_details=[],
+                source_type_counts={},
+                frame_size_counts={},
+                alpha_source_count=0,
+                largest_frame=(0, 0),
+            )
+            self.assertIn("transport stream timing ×2", dialog._import_status_lbl.text())
+            self.assertIn("transport stream timing", dialog._import_detail_box.toPlainText())
+            self.assertIn("Probe-detected containers: mpegts ×2", dialog._import_detail_box.toPlainText())
+            self.assertIn("Probe-detected video codecs: h264 ×2", dialog._import_detail_box.toPlainText())
         finally:
             dialog.close()
             dialog.deleteLater()

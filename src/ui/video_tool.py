@@ -1430,12 +1430,26 @@ def _classify_video_import_failure(name: str, detail: str) -> str:
     lower = detail.lower()
     if "segmented / multipart video set" in lower or "joined parts" in lower or "concat repair fallback" in lower:
         return "segmented container"
+    if "dvd/console-program streams like vob/pss/str" in lower or "legacy mpeg program-stream video" in lower:
+        return "program stream layout"
+    if "transport-stream sources often contain discontinuities or missing timestamps" in lower:
+        return "transport stream timing"
+    if "matroska/webm files can carry multiple alternate video/audio programs" in lower:
+        return "matroska/webm program"
+    if "quicktime/mov-family files may depend on edit lists" in lower:
+        return "quicktime metadata"
+    if "asf/wmv containers rely heavily on index metadata" in lower or "avi/divx files often depend on legacy indexes" in lower:
+        return "legacy index container"
+    if "realmedia / rmvb support is best-effort" in lower:
+        return "realmedia container"
     if "multiple video streams were detected" in lower or "preferred-stream=" in lower:
         return "multi-stream container"
     if "cue sidecar" in lower or "cue/bin companion" in lower or "disc sidecar files were detected" in lower:
         return "disc sidecar"
     if "attached-picture/cover-art stream" in lower or "attached cover art" in lower:
         return "cover-art stream"
+    if "still-image or intra-frame-only video codecs can behave like cover-art or slideshow streams" in lower or "still-image style video codec inside a nonstandard container" in lower:
+        return "still-image video"
     if "hevc/h.265 or av1" in lower or "transcoding to h.264/avc" in lower:
         return "high-efficiency codec"
     if "intermediate/broadcast codec" in lower or "editorial transcode" in lower:
@@ -1469,9 +1483,16 @@ def _video_failure_guidance(category: str) -> str:
     guidance = {
         "video dependency": "Install or bundle imageio, imageio-ffmpeg, ffmpeg, and ffprobe for full video probing and import.",
         "segmented container": "Multipart or segmented sources need every part present together; if automatic concat repair still fails, try a manual ffmpeg concat/remux first.",
+        "program stream layout": "DVD/PSP/PS1/PS2-era program streams often carry broken navigation/index data, alternate tracks, or nontrivial stream layouts; remux, transcode, cue/bin sidecars, or audio-drop retries may be required.",
+        "transport stream timing": "Transport streams often fail because of discontinuities, missing timestamps, or damaged capture timing; a clean remux/transcode usually works better than direct indexing.",
+        "matroska/webm program": "Matroska/WebM containers may carry alternate video/audio programs or attachments; if the preferred stream still fails, retry a different stream selection or remux only the needed streams.",
+        "quicktime metadata": "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata that direct indexing can miss; a clean remux or transcode is often the safest fallback.",
+        "legacy index container": "Legacy AVI/DivX/ASF/WMV indexes are brittle; when the index is damaged or incomplete, rebuilding the file with ffmpeg is usually more reliable than direct loading.",
+        "realmedia container": "Older RealMedia/RMVB files are best handled with a full ffmpeg transcode because direct indexing and partial-stream recovery are often unreliable.",
         "disc sidecar": "BIN/CUE-style disc images often need their matching companion metadata files kept together so the track layout can be recovered correctly.",
         "multi-stream container": "This container exposes multiple video streams; the app already prefers the largest detected stream and the Selected Stream panel can retry a manual override, but a manual ffmpeg remux may still be needed.",
         "cover-art stream": "This source exposed only cover-art style video metadata instead of continuous frames; dropping attached-picture streams with ffmpeg may help.",
+        "still-image video": "This source looks more like a slideshow/cover-art style video stream than continuous motion; a transcode or single-frame fallback may be the only reliable import path.",
         "high-efficiency codec": "HEVC/H.265 or AV1 streams in awkward wrappers often import more reliably after a clean MP4 remux or H.264/AVC transcode.",
         "broadcast codec": "Intermediate/editing codecs in damaged or unusual wrappers often need a clean editorial transcode before timeline playback stays stable.",
         "legacy codec": "Legacy RealVideo-style codecs are best handled with a full ffmpeg transcode because partial recovery and direct indexing are often unreliable.",
