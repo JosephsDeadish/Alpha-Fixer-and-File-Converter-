@@ -1170,6 +1170,49 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                 )
         self.assertEqual(rc, 0)
 
+    def test_verify_packaged_app_can_require_public_manifest_group_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest_disc_image": {"ok": true}, "external_disc_video_manifest_odd_container": {"ok": true}, "external_disc_video_manifest_legacy_container": {"ok": true}, "external_disc_video_manifest_program_stream": {"ok": true}, "external_disc_video_manifest_matroska_family": {"ok": true}, "external_disc_video_manifest_audio_only": {"ok": true}, "external_dds_manifest_bc6h": {"ok": true}, "external_dds_manifest_bc4": {"ok": true}, "external_dds_manifest_dx10_bc4": {"ok": true}, "external_dds_manifest_bc5": {"ok": true}, "external_dds_manifest_dx10_bc5": {"ok": true}, "external_dds_manifest_bc7_mipmap": {"ok": true}, "external_dds_manifest_bc7": {"ok": true}, "external_dds_manifest_dx10_rgba": {"ok": true}, "external_dds_manifest_rgba_mipmap": {"ok": true}, "external_dds_manifest_unsupported_dxgi": {"ok": true}, "external_dds_manifest_unsupported_pixel_format": {"ok": true}, "external_dds_manifest_unsupported_bitcount": {"ok": true}, "external_format_matrix_manifest_dds": {"ok": true}, "external_format_matrix_manifest_png": {"ok": true}, "external_format_matrix_manifest_bmp": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--use-public-sample-manifests",
+                        "--require-public-manifest-group-checks",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        selftest_env = calls[-1]["env"]
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"], "1")
+
     def test_verify_packaged_app_can_require_grouped_video_selftest_checks(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
@@ -1285,6 +1328,22 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                     ]
                 )
         self.assertIn("platform/group labels", str(ctx.exception))
+
+    def test_verify_packaged_app_public_manifest_group_checks_require_all_manifests(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main([target, "--run-selftest", "--require-public-manifest-group-checks"])
+        self.assertIn("Use --use-public-sample-manifests", str(ctx.exception))
 
     def test_verify_packaged_app_grouped_dds_selftest_checks_need_run_selftest(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")

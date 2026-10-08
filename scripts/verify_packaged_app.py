@@ -169,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
     parser.add_argument("--require-dds-selftest-checks", action="store_true", help="Fail unless the built-in DDS self-test checks, including compressed DDS output when available, all report ok=true.")
     parser.add_argument("--require-public-manifest-checks", action="store_true", help="Fail unless the public disc-video, DDS/DX10, and format-matrix self-test checks all report ok=true.")
+    parser.add_argument("--require-public-manifest-group-checks", action="store_true", help="Fail unless every platform/group/format subgroup represented in the loaded public manifests also reports ok=true.")
     parser.add_argument("--require-disc-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every platform/group represented in the supplied disc-video manifest.")
     parser.add_argument("--require-dds-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every group/family represented in the supplied DDS manifest.")
     parser.add_argument("--require-format-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every target format represented in the supplied format-matrix manifest.")
@@ -194,8 +195,18 @@ def main(argv: list[str] | None = None) -> int:
     merged_disc_manifest = _merged_manifest_arg(args.disc_video_manifest)
     merged_dds_manifest = _merged_manifest_arg(args.dds_manifest)
     merged_format_manifest = _merged_manifest_arg(args.format_matrix_manifest)
+    if args.require_public_manifest_group_checks and not (
+        merged_disc_manifest and merged_dds_manifest and merged_format_manifest
+    ):
+        raise SystemExit(
+            "Public manifest group checks require disc-video, DDS, and format manifests. "
+            "Use --use-public-sample-manifests for the built-in set."
+        )
     manifest_group_required_checks: list[str] = []
-    if args.require_disc_manifest_group_checks:
+    require_disc_group_checks = args.require_disc_manifest_group_checks or args.require_public_manifest_group_checks
+    require_dds_group_checks = args.require_dds_manifest_group_checks or args.require_public_manifest_group_checks
+    require_format_group_checks = args.require_format_manifest_group_checks or args.require_public_manifest_group_checks
+    if require_disc_group_checks:
         disc_group_checks = _manifest_group_requirement_checks(
             merged_disc_manifest,
             "external_disc_video_manifest",
@@ -206,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         if not disc_group_checks:
             raise SystemExit("Disc manifest group checks require a disc-video manifest with platform/group labels.")
         manifest_group_required_checks.extend(disc_group_checks)
-    if args.require_dds_manifest_group_checks:
+    if require_dds_group_checks:
         dds_group_checks = _manifest_group_requirement_checks(
             merged_dds_manifest,
             "external_dds_manifest",
@@ -219,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         for check_name in dds_group_checks:
             if check_name not in manifest_group_required_checks:
                 manifest_group_required_checks.append(check_name)
-    if args.require_format_manifest_group_checks:
+    if require_format_group_checks:
         format_group_checks = _manifest_group_requirement_checks(
             merged_format_manifest,
             "external_format_matrix_manifest",
@@ -319,15 +330,15 @@ def main(argv: list[str] | None = None) -> int:
             selftest_env["ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT"] = str(max(1, int(args.selftest_sample_limit)))
         if merged_disc_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"] = merged_disc_manifest
-        if args.require_disc_manifest_group_checks:
+        if require_disc_group_checks:
             selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"] = "1"
         if merged_dds_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"] = merged_dds_manifest
-        if args.require_dds_manifest_group_checks:
+        if require_dds_group_checks:
             selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"] = "1"
         if merged_format_manifest:
             selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"] = merged_format_manifest
-        if args.require_format_manifest_group_checks:
+        if require_format_group_checks:
             selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"] = "1"
         if args.allow_sample_downloads:
             selftest_env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "1"
