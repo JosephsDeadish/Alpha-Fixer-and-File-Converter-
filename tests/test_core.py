@@ -8967,6 +8967,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             self.assertIn('copy_metadata("imageio")', src)
             self.assertIn('collect_data_files("imageio_ffmpeg")', src)
             self.assertIn('copy_metadata("imageio_ffmpeg")', src)
+            self.assertIn("def _optional_ffprobe_bundle():", src)
+            self.assertIn('binaries.append((resolved_text, "imageio_ffmpeg/binaries"))', src)
             self.assertIn("def _optional_wand_bundle():", src)
             self.assertIn('os.environ.get("MAGICK_HOME")', src)
             self.assertIn('collect_data_files("wand")', src)
@@ -9076,6 +9078,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("--require-bundled-ffprobe", src)
         self.assertIn("--require-bundled-default-theme-svg", src)
         self.assertIn("--require-packaged-bundle-ready", src)
+        self.assertIn("brew install ffmpeg", src)
+        self.assertIn("choco install ffmpeg -y", src)
 
     def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
         src = self._src("../main.py")

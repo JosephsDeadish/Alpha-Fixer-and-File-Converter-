@@ -393,6 +393,26 @@ def _path_is_within(path_text: str, root_text: str) -> bool:
         return False
 
 
+def _path_is_within_any(path_text: str, roots: list[str]) -> bool:
+    return any(_path_is_within(path_text, root_text) for root_text in roots if str(root_text or "").strip())
+
+
+def _runtime_bundle_roots() -> list[str]:
+    roots: list[str] = []
+    if not bool(getattr(sys, "frozen", False)):
+        return roots
+    try:
+        executable_parent = str(Path(sys.executable).resolve().parent)
+    except Exception:
+        executable_parent = str(Path(sys.executable).parent)
+    if executable_parent:
+        roots.append(executable_parent)
+    meipass = str(getattr(sys, "_MEIPASS", "") or "").strip()
+    if meipass and meipass not in roots:
+        roots.append(meipass)
+    return roots
+
+
 def _qt_svg_runtime_ready() -> bool:
     try:
         from PyQt6.QtSvg import QSvgRenderer  # noqa: F401
@@ -540,11 +560,9 @@ def _dds_compression_variant_selfcheck() -> dict[str, object]:
 def _runtime_capability_summary() -> dict[str, object]:
     frozen = bool(getattr(sys, "frozen", False))
     bundle_dir = ""
+    bundle_roots = _runtime_bundle_roots()
     if frozen:
-        try:
-            bundle_dir = str(Path(sys.executable).resolve().parent)
-        except Exception:
-            bundle_dir = str(Path(sys.executable).parent)
+        bundle_dir = bundle_roots[0] if bundle_roots else ""
     summary: dict[str, object] = {
         "frozen": frozen,
         "platform": sys.platform,
@@ -586,20 +604,19 @@ def _runtime_capability_summary() -> dict[str, object]:
     dds_variant_selfcheck = _dds_compression_variant_selfcheck()
     dds_variant_failures = list(dds_variant_selfcheck.get("failures") or [])
     dds_variant_ready = bool(dds_variant_selfcheck.get("ready"))
-    ffmpeg_bundled = bool(frozen and ffmpeg_path_exists and bundle_dir and _path_is_within(ffmpeg_path, bundle_dir))
-    ffprobe_bundled = bool(frozen and ffprobe_path_exists and bundle_dir and _path_is_within(ffprobe_path, bundle_dir))
+    ffmpeg_bundled = bool(frozen and ffmpeg_path_exists and _path_is_within_any(ffmpeg_path, bundle_roots))
+    ffprobe_bundled = bool(frozen and ffprobe_path_exists and _path_is_within_any(ffprobe_path, bundle_roots))
     default_theme_svg_bundled = bool(
         frozen
         and svg_details.get("default_theme_svg_ready")
-        and bundle_dir
-        and _path_is_within(str(svg_details.get("default_theme_svg_path") or ""), bundle_dir)
+        and _path_is_within_any(str(svg_details.get("default_theme_svg_path") or ""), bundle_roots)
     )
     magick_home_path = str(imagemagick_details.get("magick_home_path") or "")
     imagemagick_home_path = str(imagemagick_details.get("imagemagick_home_path") or "")
     imagemagick_bundled = bool(
-        frozen and bundle_dir and (
-            _path_is_within(magick_home_path, bundle_dir)
-            or _path_is_within(imagemagick_home_path, bundle_dir)
+        frozen and (
+            _path_is_within_any(magick_home_path, bundle_roots)
+            or _path_is_within_any(imagemagick_home_path, bundle_roots)
         )
     )
     imagemagick_configured = bool(magick_home_path or imagemagick_home_path or imagemagick_bundled)
@@ -693,7 +710,7 @@ def _runtime_capability_summary() -> dict[str, object]:
             packaged_asset_warnings.append("default theme SVG resolves outside the packaged app")
         if missing_svg_count > 0:
             packaged_asset_warnings.append(f"{missing_svg_count} theme SVG asset(s) missing from package")
-        if not wand_runtime_ready:
+        if imagemagick_configured and not wand_runtime_ready:
             packaged_asset_warnings.append(
                 "bundled ImageMagick/wand runtime incomplete"
                 if imagemagick_bundled else

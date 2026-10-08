@@ -34,6 +34,17 @@ jobs:
         if: runner.os == 'Linux'
         run: bash scripts/install_linux_deps.sh
 
+      - name: Install macOS ffmpeg
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Install Windows ffmpeg
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install ffmpeg -y
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin"
+
       - name: Build packaged app (Linux/macOS)
         if: runner.os != 'Windows' && matrix.bundle_kind == 'folder'
         run: bash scripts/build_exe.sh

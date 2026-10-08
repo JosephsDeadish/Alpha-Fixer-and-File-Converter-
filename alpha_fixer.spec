@@ -13,6 +13,7 @@ Requires:  pip install pyinstaller
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -164,14 +165,50 @@ def _optional_wand_bundle():
     return datas, binaries, hiddenimports
 
 
+def _optional_ffprobe_bundle():
+    binaries = []
+    seen: set[str] = set()
+    candidates = []
+    try:
+        import imageio_ffmpeg
+
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if ffmpeg_exe:
+            ffmpeg_path = Path(ffmpeg_exe)
+            candidates.extend([
+                ffmpeg_path.with_name("ffprobe"),
+                ffmpeg_path.with_name("ffprobe.exe"),
+            ])
+    except Exception:
+        pass
+
+    for name in ("ffprobe", "ffprobe.exe"):
+        resolved = shutil.which(name)
+        if resolved:
+            candidates.append(Path(resolved))
+
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        resolved_text = str(resolved)
+        if not resolved.exists() or resolved_text in seen:
+            continue
+        binaries.append((resolved_text, "imageio_ffmpeg/binaries"))
+        seen.add(resolved_text)
+    return binaries
+
+
 _wand_datas, _wand_binaries, _wand_hidden = _optional_wand_bundle()
 _linux_runtime_binaries = _optional_linux_runtime_bundle()
+_ffprobe_binaries = _optional_ffprobe_bundle()
 _pyqt_binaries = collect_dynamic_libs("PyQt6")
 
 a = Analysis(
     ["main.py"],
     pathex=[str(Path(".").resolve())],
-    binaries=_wand_binaries + _linux_runtime_binaries + _pyqt_binaries,
+    binaries=_wand_binaries + _linux_runtime_binaries + _ffprobe_binaries + _pyqt_binaries,
     datas=[
         # Bundle all SVG theme files and the generated icon into the app.
         ("src/assets/svg", "src/assets/svg"),

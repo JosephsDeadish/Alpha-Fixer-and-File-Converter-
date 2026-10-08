@@ -662,7 +662,6 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("packaged ffprobe binary missing", summary["packaged_asset_warnings"])
         self.assertIn("default theme SVG resolves outside the packaged app", summary["packaged_asset_warnings"])
         self.assertIn("2 theme SVG asset(s) missing from package", summary["packaged_asset_warnings"])
-        self.assertIn("packaged ImageMagick/wand runtime unavailable for DDS compressed output", summary["packaged_asset_warnings"])
         self.assertIn("packaged asset gaps:", summary["feature_readiness_notice"])
 
     def test_runtime_capability_summary_flags_incomplete_bundled_imagemagick(self):
@@ -718,6 +717,113 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertTrue(summary["imagemagick_configured"])
         self.assertIn("bundled ImageMagick/wand runtime incomplete", summary["packaged_asset_warnings"])
         self.assertIn("ImageMagick/wand runtime incomplete", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_summary_accepts_onefile_extracted_assets_as_bundled(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "dist")
+            meipass_dir = os.path.join(tmpdir, "_MEI12345")
+            os.makedirs(bundle_dir, exist_ok=True)
+            os.makedirs(os.path.join(meipass_dir, "imageio_ffmpeg", "binaries"), exist_ok=True)
+            os.makedirs(os.path.join(meipass_dir, "src", "assets", "svg"), exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(meipass_dir, "imageio_ffmpeg", "binaries", "ffmpeg")
+            ffprobe_path = os.path.join(meipass_dir, "imageio_ffmpeg", "binaries", "ffprobe")
+            svg_path = os.path.join(meipass_dir, "src", "assets", "svg", "panda_dark.svg")
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": "",
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main.sys, "_MEIPASS", meipass_dir, create=True):
+                                                            with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                                {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                                {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                            ]):
+                                                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                    "available": False,
+                                                                    "ready": False,
+                                                                    "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                                    "variants": {},
+                                                                    "failures": [],
+                                                                }):
+                                                                    summary = main._runtime_capability_summary()
+        self.assertTrue(summary["ffmpeg_bundled"])
+        self.assertTrue(summary["ffprobe_bundled"])
+        self.assertTrue(summary["default_theme_svg_bundled"])
+        self.assertTrue(summary["packaged_bundle_ready"])
+        self.assertEqual(summary["packaged_asset_warnings"], [])
+
+    def test_runtime_capability_summary_does_not_flag_unconfigured_optional_wand_as_packaged_gap(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(bundle_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(bundle_dir, "ffmpeg")
+            ffprobe_path = os.path.join(bundle_dir, "ffprobe")
+            svg_path = os.path.join(bundle_dir, "panda_dark.svg")
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": "",
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                        ]):
+                                                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                "available": False,
+                                                                "ready": False,
+                                                                "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                                "variants": {},
+                                                                "failures": [],
+                                                            }):
+                                                                summary = main._runtime_capability_summary()
+        self.assertEqual(summary["packaged_asset_warnings"], [])
+        self.assertTrue(summary["packaged_bundle_ready"])
 
     def test_runtime_capability_summary_requires_ffmpeg_selfcheck_for_video_ready(self):
         _require_qt_gui(self)
