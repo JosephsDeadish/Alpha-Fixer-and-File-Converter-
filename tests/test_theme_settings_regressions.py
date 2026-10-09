@@ -93,6 +93,60 @@ def test_tutorial_guidance_tracks_live_theme_and_font_without_changing_steps(app
         sip.delete(widget)
 
 
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+def test_tutorial_navigation_fits_compact_screen_and_live_font_changes(app, name, pixels):
+    from PyQt6.QtWidgets import QBoxLayout
+    from src.ui.theme_engine import build_stylesheet
+    from src.ui.tutorial_dialog import TutorialDialog
+
+    widget = TutorialDialog()
+    screen = Mock()
+    screen.availableGeometry.return_value = QRect(-480, 0, 480, 900)
+    try:
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + f"\nQWidget {{ font-size: {pixels}px; }}")
+        widget.resize(464, 800)
+        with patch.object(widget, "screen", return_value=screen):
+            widget.show()
+            for _ in range(5):
+                app.processEvents()
+            assert screen.availableGeometry().contains(widget.frameGeometry())
+            for live_pixels in [pixels, 13, 32, 13]:
+                widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                                    + f"\nQWidget {{ font-size: {live_pixels}px; }}")
+                for index in range(widget._total):
+                    widget._show_step(index)
+                    for _ in range(5):
+                        app.processEvents()
+                    assert widget.width() <= 464
+                    assert screen.availableGeometry().contains(widget.frameGeometry())
+                    if live_pixels >= 24:
+                        assert widget._nav_layout.direction() == QBoxLayout.Direction.TopToBottom
+                    for button in (widget._btn_prev, widget._btn_close, widget._btn_next):
+                        assert button.parentWidget().rect().contains(button.geometry())
+                        assert button.width() >= button.sizeHint().width()
+                        assert widget.rect().contains(button.parentWidget().geometry())
+            screen.availableGeometry.return_value = QRect(0, 0, 2400, 1400)
+            widget.resize(1800, 1000)
+            app.processEvents()
+            assert widget._nav_layout.direction() == QBoxLayout.Direction.LeftToRight
+            widget._show_step(0)
+            widget._btn_next.click()
+            assert widget._step == 1
+            widget._btn_prev.click()
+            assert widget._step == 0
+            widget._show_step(widget._total - 1)
+            widget._btn_next.click()
+            assert not widget.isVisible()
+            widget.show()
+            widget._btn_close.click()
+            assert not widget.isVisible()
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
 @pytest.mark.parametrize("field,value", [
     ("name", []), ("name", ""), ("accent", None), ("accent", "not-a-color"),
     ("_cursor", []), ("_effect", {}), ("_trail_color", "not-a-color"),

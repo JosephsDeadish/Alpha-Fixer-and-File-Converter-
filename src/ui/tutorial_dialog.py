@@ -10,11 +10,11 @@ from ..core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
 
 from ._ui_utils import fit_dialog_to_screen
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QProgressBar, QScrollArea, QWidget,
+    QFrame, QProgressBar, QScrollArea, QWidget, QBoxLayout, QSizePolicy,
 )
 
 
@@ -250,7 +250,10 @@ class TutorialDialog(QDialog):
         root.addWidget(self._shortcut_lbl)
 
         # Navigation buttons
-        nav_row = QHBoxLayout()
+        nav_host = QWidget()
+        nav_host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        nav_row = QHBoxLayout(nav_host)
+        nav_row.setContentsMargins(0, 0, 0, 0)
         self._btn_prev = QPushButton("◀  Previous")
         self._btn_prev.setMinimumHeight(30)
         self._btn_prev.setToolTip("Go to the previous tutorial step.  (← arrow key)")
@@ -262,7 +265,7 @@ class TutorialDialog(QDialog):
         self._btn_next.setToolTip("Go to the next tutorial step.  (→ arrow key)")
         self._btn_next.clicked.connect(self._next)
 
-        btn_close = QPushButton("✕  Close")
+        btn_close = self._btn_close = QPushButton("✕  Close")
         btn_close.setMinimumHeight(30)
         btn_close.setToolTip("Close the tutorial.")
         btn_close.clicked.connect(self.close)
@@ -272,7 +275,12 @@ class TutorialDialog(QDialog):
         nav_row.addWidget(btn_close)
         nav_row.addStretch(1)
         nav_row.addWidget(self._btn_next)
-        root.addLayout(nav_row)
+        nav_row.setDirection(QBoxLayout.Direction.TopToBottom)
+        self._nav_layout = nav_row
+        root.addWidget(nav_host)
+        self._nav_update_timer = QTimer(self)
+        self._nav_update_timer.setSingleShot(True)
+        self._nav_update_timer.timeout.connect(self._update_navigation_layout)
 
     # ------------------------------------------------------------------
     # Navigation
@@ -312,6 +320,33 @@ class TutorialDialog(QDialog):
         self._btn_next.setText(
             "Finish  ✓" if idx == self._total - 1 else "Next  ▶"
         )
+        self._update_navigation_layout()
+
+    def _update_navigation_layout(self):
+        row = getattr(self, "_nav_layout", None)
+        if row is None:
+            return
+        margins = self.layout().contentsMargins()
+        needed = (sum(max(button.minimumWidth(), button.sizeHint().width())
+                      for button in (self._btn_prev, self._btn_close, self._btn_next))
+                  + 4 * row.spacing() + margins.left() + margins.right() + 16)
+        direction = (QBoxLayout.Direction.TopToBottom if self.width() < needed
+                     else QBoxLayout.Direction.LeftToRight)
+        if row.direction() != direction:
+            row.setDirection(direction)
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self._update_navigation_layout()
+
+    def event(self, event):
+        result = super().event(event)
+        timer = getattr(self, "_nav_update_timer", None)
+        if timer is not None and event.type() in (
+            QEvent.Type.StyleChange, QEvent.Type.FontChange, QEvent.Type.LayoutRequest,
+        ):
+            timer.start(0)
+        return result
 
     def _next(self) -> None:
         if self._step < self._total - 1:
@@ -325,5 +360,6 @@ class TutorialDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._update_navigation_layout()
         fit_dialog_to_screen(self)
         QTimer.singleShot(0, lambda: fit_dialog_to_screen(self))
