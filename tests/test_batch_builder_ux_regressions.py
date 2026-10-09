@@ -300,3 +300,65 @@ def test_gif_preview_honours_override_from_first_tick_and_live_edits(builder, tm
     assert builder._preview_timer.interval() == 250
     builder._advance_preview()
     assert builder._preview_timer.interval() == 250
+
+
+@pytest.mark.parametrize("playing", [False, True])
+def test_global_delay_updates_inherited_control_without_changing_playhead(builder, tmp_path, playing):
+    add_frames(builder, tmp_path)
+    builder._btn_play.setChecked(playing)
+    builder._scrubber.setValue(1)
+    builder._delay_slider.setValue(450)
+    assert builder._preview_idx == 1
+    assert builder._pf_slider.value() == 450
+    assert builder._pf_val_lbl.text() == "450 ms"
+    assert not builder._pf_slider.isEnabled()
+    assert builder._frames[0].delay_ms is None
+    builder._pf_check.setChecked(True)
+    assert builder._frames[0].delay_ms == 450
+
+
+def test_disabling_override_displays_global_delay_without_mutating_other_frames(builder, tmp_path):
+    add_frames(builder, tmp_path)
+    builder._pf_check.setChecked(True)
+    builder._pf_slider.setValue(700)
+    builder._delay_slider.setValue(300)
+    assert builder._pf_slider.value() == 700
+    assert builder._frames[0].delay_ms == 700
+    builder._pf_check.setChecked(False)
+    assert builder._pf_slider.value() == 300
+    assert builder._pf_val_lbl.text() == "300 ms"
+    assert builder._frames[0].delay_ms is None
+    assert builder._frames[1].delay_ms is None
+    builder._pf_check.setChecked(True)
+    assert builder._frames[0].delay_ms == 300
+
+
+@pytest.mark.parametrize("playing", [False, True])
+@pytest.mark.parametrize("scrubbed", [False, True])
+def test_real_model_reorder_preserves_frame_and_refreshes_edit_controls(builder, tmp_path, playing, scrubbed):
+    from PyQt6.QtCore import QModelIndex
+
+    add_frames(builder, tmp_path)
+    builder._frames[0].delay_ms = 650
+    builder._frames[1].delay_ms = 200
+    builder._on_selection_changed(0)
+    selected = builder._frames[0]
+    builder._btn_play.setChecked(playing)
+    if scrubbed:
+        builder._scrubber.setValue(1)
+    preview = builder._frames[builder._preview_idx]
+    assert builder._frame_list.model().moveRows(QModelIndex(), 0, 1, QModelIndex(), 2)
+    assert builder._frames[1] is selected
+    assert builder._frame_list.currentRow() == 1
+    assert builder._frames[builder._preview_idx] is preview
+    assert builder._scrubber.value() == builder._preview_idx
+    assert builder._preview_frame_lbl.text() == f"{builder._preview_idx + 1} / 2"
+    assert builder._pf_check.isChecked()
+    assert builder._pf_slider.value() == 650
+    assert builder._pf_val_lbl.text() == "650 ms"
+    assert builder._preview_timer.isActive() == playing
+    if playing:
+        assert builder._preview_timer.interval() == (200 if scrubbed else 650)
+    builder._pf_slider.setValue(850)
+    assert selected.delay_ms == 850
+    assert builder._frames[0].delay_ms == 200

@@ -1043,11 +1043,21 @@ class GifBuilderDialog(QDialog):
 
     def _sync_frames_from_list(self) -> None:
         """Rebuild ``self._frames`` from current list-widget item order."""
+        preview_entry = (
+            self._frames[self._preview_idx]
+            if 0 <= self._preview_idx < len(self._frames) else None
+        )
         self._frames = []
         for i in range(self._frame_list.count()):
             entry = self._frame_list.item(i).data(_ENTRY_ROLE)
             if entry is not None:
                 self._frames.append(entry)
+        for index, entry in enumerate(self._frames):
+            if entry is preview_entry:
+                self._preview_idx = index
+                break
+        self._on_selection_changed(self._frame_list.currentRow(), update_preview=False)
+        self._update_scrubber()
         self._update_preview_frame()
 
     def _remove_selected(self) -> None:
@@ -1331,7 +1341,7 @@ class GifBuilderDialog(QDialog):
     # Per-frame delay override (slider-based)
     # ------------------------------------------------------------------
 
-    def _on_selection_changed(self, row: int) -> None:
+    def _on_selection_changed(self, row: int, *, update_preview: bool = True) -> None:
         self._pf_check.setEnabled(0 <= row < len(self._frames))
         if row < 0 or row >= len(self._frames):
             self._pf_check.blockSignals(True)
@@ -1341,7 +1351,7 @@ class GifBuilderDialog(QDialog):
             self._update_frame_diagnostics()
             return
         # Show the selected frame in the preview when playback is not running (item 39)
-        if not self._preview_timer.isActive():
+        if update_preview and not self._preview_timer.isActive():
             self._preview_idx = row
             self._update_scrubber()
             self._update_preview_frame()
@@ -1362,6 +1372,8 @@ class GifBuilderDialog(QDialog):
         self._pf_slider.setEnabled(checked and 0 <= row < len(self._frames))
         if 0 <= row < len(self._frames):
             self._frames[row].delay_ms = self._pf_slider.value() if checked else None
+        if not checked:
+            self._sync_inherited_delay_control()
         if self._preview_timer.isActive():
             self._preview_timer.setInterval(self._current_preview_delay())
         self._update_frame_diagnostics()
@@ -1381,9 +1393,18 @@ class GifBuilderDialog(QDialog):
 
     def _on_delay_changed(self, value: int) -> None:
         self._delay_val_lbl.setText(f"{value} ms")
+        self._sync_inherited_delay_control()
         if self._preview_timer.isActive():
             self._preview_timer.setInterval(self._current_preview_delay())
         self._update_frame_diagnostics()
+
+    def _sync_inherited_delay_control(self) -> None:
+        row = self._frame_list.currentRow()
+        if 0 <= row < len(self._frames) and self._frames[row].delay_ms is None:
+            self._pf_slider.blockSignals(True)
+            self._pf_slider.setValue(self._delay_slider.value())
+            self._pf_slider.blockSignals(False)
+            self._pf_val_lbl.setText(f"{self._pf_slider.value()} ms")
 
     # ------------------------------------------------------------------
     # Preview / transport
