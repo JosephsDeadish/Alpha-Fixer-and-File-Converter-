@@ -182,7 +182,8 @@ class TutorialDialog(QDialog):
         # Step counter label
         self._counter_lbl = QLabel("Step 1 / " + str(self._total))
         self._counter_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self._counter_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        self._counter_lbl.setProperty("toolGuidance", True)
+        self._counter_lbl.setWordWrap(True)
         root.addWidget(self._counter_lbl)
 
         # Icon + title row
@@ -238,18 +239,14 @@ class TutorialDialog(QDialog):
         # Tip label
         self._tip_lbl = QLabel()
         self._tip_lbl.setWordWrap(True)
-        self._tip_lbl.setStyleSheet(
-            "color: #88c0d0; font-size: 10px; padding: 4px 6px;"
-            " background: rgba(136,192,208,30);"
-            " border-radius: 4px;"
-        )
+        self._tip_lbl.setProperty("toolGuidance", True)
         root.addWidget(self._tip_lbl)
 
         # Shortcut hint
         self._shortcut_lbl = QLabel()
         self._shortcut_lbl.setWordWrap(True)
         self._shortcut_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._shortcut_lbl.setStyleSheet("color: #a3be8c; font-size: 10px; font-family: monospace;")
+        self._shortcut_lbl.setProperty("toolGuidance", True)
         root.addWidget(self._shortcut_lbl)
 
         # Navigation buttons

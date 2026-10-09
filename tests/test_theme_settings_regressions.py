@@ -38,6 +38,61 @@ def dialog(app, tmp_path):
         sip.delete(manager._qs)
 
 
+@pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
+def test_tutorial_guidance_tracks_live_theme_and_font_without_changing_steps(app, name):
+    from src.ui.theme_engine import build_stylesheet
+    from src.ui.tutorial_dialog import TutorialDialog, _TUTORIAL_STEPS
+
+    widget = TutorialDialog()
+    try:
+        theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+        labels = (widget._counter_lbl, widget._tip_lbl, widget._shortcut_lbl)
+        widget.resize(1000, 1000)
+        widget.show()
+        for pixels in [13, 24, 18]:
+            widget.setStyleSheet(build_stylesheet(theme)
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            app.processEvents()
+            for label in labels:
+                assert not label.styleSheet()
+                assert label.property("toolGuidance")
+                assert label.wordWrap()
+                assert label.font().pixelSize() == pixels
+                assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+            assert widget._step == 0
+            assert not widget._btn_prev.isEnabled()
+            for index, step in enumerate(_TUTORIAL_STEPS):
+                assert widget._step == index
+                assert widget._counter_lbl.text() == f"Step {index + 1} / {widget._total}"
+                assert widget._tip_lbl.text() == step.get("tip", "")
+                assert widget._tip_lbl.isHidden() == (not bool(step.get("tip")))
+                assert widget._shortcut_lbl.isHidden() == (not bool(step.get("shortcut")))
+                for label in labels:
+                    if label.isVisible():
+                        assert widget.rect().contains(label.geometry())
+                        assert label.height() >= label.heightForWidth(label.width())
+                if index < widget._total - 1:
+                    widget._btn_next.click()
+                    app.processEvents()
+            assert widget._btn_next.text() == "Finish  ✓"
+            widget._btn_prev.click()
+            assert widget._step == widget._total - 2
+            widget._show_step(0)
+        widget.activateWindow()
+        widget._btn_next.setFocus()
+        app.processEvents()
+        QTest.keyClick(widget, Qt.Key.Key_Right)
+        assert widget._step == 1
+        QTest.keyClick(widget, Qt.Key.Key_Left)
+        assert widget._step == 0
+        widget._show_step(widget._total - 1)
+        widget._btn_next.click()
+        assert not widget.isVisible()
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
 @pytest.mark.parametrize("field,value", [
     ("name", []), ("name", ""), ("accent", None), ("accent", "not-a-color"),
     ("_cursor", []), ("_effect", {}), ("_trail_color", "not-a-color"),
