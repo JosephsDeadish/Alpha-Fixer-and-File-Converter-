@@ -128,6 +128,7 @@ jobs:
         shell: pwsh
         run: |
           choco install ffmpeg imagemagick -y
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $magick = Get-ChildItem "C:\Program Files" -Directory -Filter "ImageMagick*" | Select-Object -First 1
           if (-not $magick) { throw "ImageMagick installation not found" }
           "MAGICK_HOME=$($magick.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -151,6 +152,30 @@ jobs:
         if: runner.os == 'Windows' && matrix.bundle_kind == 'onefile'
         shell: cmd
         run: scripts\build_exe.bat --onefile
+
+      - name: Verify offline bundled runtimes and generated conversions
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          suffix=""
+          if [[ "${{ runner.os }}" == "Windows" ]]; then suffix=".exe"; fi
+          if [[ "${{ matrix.bundle_kind }}" == "onefile" ]]; then
+            launch_target="dist/AlphaFixerConverter${suffix}"
+          else
+            launch_target="dist/AlphaFixerConverter/AlphaFixerConverter${suffix}"
+          fi
+          python scripts/verify_packaged_app.py "$launch_target" \
+            --bundle-kind ${{ matrix.bundle_kind }} --offline \
+            --smoke-seconds 2 --repeat 2 --timeout ${{ matrix.timeout_seconds }} \
+            --run-selftest --selftest-iterations 2 \
+            --require-selftest-pass --require-core-selftest-checks \
+            --require-video-selftest-checks --require-dds-selftest-checks \
+            --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck \
+            --require-bundled-ffmpeg --require-bundled-ffprobe \
+            --require-wand-runtime --require-bundled-imagemagick \
+            --require-bundled-default-theme-svg --require-packaged-bundle-ready \
+            --require-no-packaged-asset-gaps --require-no-missing-libs \
+            --json-out artifacts/offline-${{ runner.os }}-${{ matrix.bundle_kind }}.json
 
       - name: Verify packaged app (Linux/macOS)
         if: runner.os != 'Windows'
@@ -196,7 +221,6 @@ jobs:
             --require-bundled-ffprobe \
             --require-wand-runtime \
             --require-bundled-imagemagick \
-            --offline-runtime \
             --require-bundled-default-theme-svg \
             --require-packaged-bundle-ready \
             --require-no-packaged-asset-gaps \
@@ -248,7 +272,6 @@ jobs:
             --require-bundled-ffprobe `
             --require-wand-runtime `
             --require-bundled-imagemagick `
-            --offline-runtime `
             --require-bundled-default-theme-svg `
             --require-packaged-bundle-ready `
             --require-no-packaged-asset-gaps `

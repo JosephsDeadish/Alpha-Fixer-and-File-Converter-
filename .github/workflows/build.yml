@@ -59,7 +59,7 @@ jobs:
             $exe = "dist\AlphaFixerConverter\AlphaFixerConverter.exe"
           }
           python scripts/verify_packaged_app.py $exe `
-            --bundle-kind ${{ matrix.bundle_kind }} --offline-runtime `
+            --bundle-kind ${{ matrix.bundle_kind }} --offline `
             --smoke-seconds 2 --timeout 90 --run-selftest `
             --require-selftest-pass --require-core-selftest-checks `
             --require-video-selftest-checks --require-dds-selftest-checks `

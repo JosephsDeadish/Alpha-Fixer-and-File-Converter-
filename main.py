@@ -1256,7 +1256,7 @@ def _emit_runtime_selftest_dump() -> int:
                             stress_settings.add_video_builder_history(video_entry)
                             history_tab = HistoryTab(stress_settings)
                             try:
-                                history_tab.refresh_history()
+                                history_tab.refresh()
                                 if (
                                     history_tab._gif_tree.topLevelItemCount() > 0
                                     and history_tab._vid_tree.topLevelItemCount() > 0
@@ -1529,13 +1529,17 @@ def _show_crash_dialog(
     *fatal*         – when True the application will exit after the dialog.
     *exc_type*      – the exception class for displaying the error type header.
     """
+    if _unattended_validation_requested():
+        print(f"{title}: {summary}\n{traceback_text}", file=sys.stderr)
+        return
     try:
         from PyQt6.QtWidgets import (
             QApplication, QDialog, QVBoxLayout, QHBoxLayout,
             QLabel, QPlainTextEdit, QPushButton, QFrame,
         )
-        from PyQt6.QtCore import Qt
+        from PyQt6.QtCore import Qt, QTimer
         from PyQt6.QtGui import QFont, QClipboard
+        from src.ui._ui_utils import fit_dialog_to_screen
 
         app = QApplication.instance()
         if app is None:
@@ -1543,7 +1547,7 @@ def _show_crash_dialog(
 
         dlg = QDialog()
         dlg.setWindowTitle(title)
-        dlg.setMinimumSize(600, 480)
+        dlg.setMinimumSize(480, 320)
         dlg.resize(760, 560)
         dlg.setWindowFlags(
             dlg.windowFlags()
@@ -1692,6 +1696,8 @@ def _show_crash_dialog(
 
         layout.addLayout(btn_row)
 
+        fit_dialog_to_screen(dlg)
+        QTimer.singleShot(0, lambda: fit_dialog_to_screen(dlg))
         dlg.exec()
     except Exception:
         # If the crash dialog itself fails, fall back silently – the error
@@ -1720,6 +1726,14 @@ def _collect_sysinfo() -> str:
     return "\n".join(lines)
 
 
+def _unattended_validation_requested() -> bool:
+    return (
+        _runtime_selftest_iterations() > 0
+        or _runtime_capability_dump_requested()
+        or _smoke_test_duration_ms() > 0
+    )
+
+
 def _excepthook(exc_type, exc_value, exc_tb):
     """Log uncaught exceptions and show a friendly dialog instead of crashing silently."""
     global _excepthook_active
@@ -1727,6 +1741,16 @@ def _excepthook(exc_type, exc_value, exc_tb):
     msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     sysinfo = _collect_sysinfo()
     logger.critical("Uncaught exception:\n%s\nSystem info:\n%s", msg, sysinfo)
+    if _unattended_validation_requested():
+        print(msg, file=sys.stderr)
+        try:
+            from PyQt6.QtCore import QCoreApplication
+            app = QCoreApplication.instance()
+            if app is not None:
+                app.exit(1)
+        except ImportError:
+            pass
+        return
 
     # If we're already inside _excepthook (i.e. an error occurred while the
     # previous error dialog was open), only log – do not open another dialog.
@@ -1756,9 +1780,6 @@ def _excepthook(exc_type, exc_value, exc_tb):
         pass
     finally:
         _excepthook_active = False
-
-
-sys.excepthook = _excepthook
 
 
 # ---------------------------------------------------------------------------
@@ -1971,6 +1992,7 @@ class _HangWatchdog:
 # ---------------------------------------------------------------------------
 
 def main():
+    sys.excepthook = _excepthook
     if _runtime_capability_dump_requested():
         sys.exit(_emit_runtime_capability_dump())
 

@@ -118,5 +118,74 @@ class TestOfflineVerification(unittest.TestCase):
                 run.assert_not_called()
 
 
+class TestUnattendedValidation(unittest.TestCase):
+    def test_validation_errors_do_not_open_modal_crash_dialog(self):
+        import main
+        from PyQt6.QtWidgets import QDialog
+
+        for env in (
+            {"ALPHA_FIXER_RUNTIME_SELFTEST": "1"},
+            {"ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP": "1"},
+            {"ALPHA_FIXER_SMOKE_TEST": "0.5"},
+        ):
+            with self.subTest(mode=env):
+                with patch.dict(os.environ, env), patch.object(QDialog, "exec") as execute:
+                    with patch("sys.stderr"):
+                        main._show_crash_dialog("Validation failure", "Test", "traceback", "")
+                    execute.assert_not_called()
+
+    def test_uncaught_validation_error_exits_event_loop_with_failure(self):
+        import main
+        from unittest.mock import MagicMock
+
+        app = MagicMock()
+        with patch.dict(os.environ, {"ALPHA_FIXER_RUNTIME_SELFTEST": "1"}):
+            with patch("PyQt6.QtCore.QCoreApplication.instance", return_value=app):
+                with patch("sys.stderr"), patch.object(main, "_show_crash_dialog") as dialog:
+                    main._excepthook(ValueError, ValueError("Validation failed"), None)
+                app.exit.assert_called_once_with(1)
+                dialog.assert_not_called()
+
+
+class TestSettingsScreenFitting(unittest.TestCase):
+    def test_settings_fit_decorated_window_on_small_secondary_screen(self):
+        from PyQt6.QtCore import QRect
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QApplication, QScrollArea
+        from unittest.mock import MagicMock
+        from src.core.settings_manager import SettingsManager
+        from src.ui.settings_dialog import SettingsDialog
+
+        app = QApplication.instance() or QApplication(["test"])
+        original_font = app.font()
+        screen = MagicMock()
+        available = QRect(-640, 30, 640, 480)
+        screen.availableGeometry.return_value = available
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("src.core.settings_manager._settings_ini_path",
+                       return_value=str(Path(directory) / "settings.ini")):
+                manager = SettingsManager()
+                try:
+                    for point_size in (8, 24):
+                        with self.subTest(font=point_size):
+                            font = QFont(original_font)
+                            font.setPointSize(point_size)
+                            app.setFont(font)
+                            dialog = SettingsDialog(manager)
+                            try:
+                                with patch.object(dialog, "screen", return_value=screen):
+                                    dialog.show()
+                                    app.processEvents()
+                                    app.processEvents()
+                                    self.assertTrue(available.contains(dialog.frameGeometry()))
+                                    self.assertTrue(dialog.findChildren(QScrollArea))
+                            finally:
+                                dialog.close()
+                                dialog.deleteLater()
+                                app.processEvents()
+                finally:
+                    app.setFont(original_font)
+
+
 if __name__ == "__main__":
     unittest.main()

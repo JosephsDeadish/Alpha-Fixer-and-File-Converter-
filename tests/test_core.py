@@ -40,6 +40,21 @@ def make_rgba_image(w=4, h=4, alpha=128) -> Image.Image:
 
 
 class TestOptionalFeatureReadinessNotice(unittest.TestCase):
+    def setUp(self):
+        import main
+        for name, result in (
+            ("_dds_compression_variant_selfcheck", {"available": True, "ready": True, "failures": []}),
+            ("_theme_svg_runtime_details", {"qt_svg_ready": True, "default_theme_svg_ready": True, "theme_svg_missing_count": 0}),
+            ("_imagemagick_runtime_details", {"wand_runtime_ready": True}),
+        ):
+            patcher = mock.patch.object(main, name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(main, "_executable_runtime_details", side_effect=lambda path: {
+            "exists": bool(path), "runtime_ready": bool(path), "detail": "ok" if path else "",
+        })
+        patcher.start()
+        self.addCleanup(patcher.stop)
     def test_notice_empty_when_optional_features_are_ready(self):
         import main
 
@@ -52,6 +67,7 @@ class TestOptionalFeatureReadinessNotice(unittest.TestCase):
         converter_stub = types.ModuleType("src.core.file_converter")
         converter_stub.dds_compression_available = lambda: True
         converter_stub.optional_pillow_output_limits = lambda: []
+        converter_stub._has_vtracer = lambda: True
 
         with mock.patch.dict(sys.modules, {
             "src.ui.video_tool": video_stub,
@@ -74,6 +90,7 @@ class TestOptionalFeatureReadinessNotice(unittest.TestCase):
             ("AVIF", "needs libavif"),
             ("JPEG2000", "needs OpenJPEG"),
         ]
+        converter_stub._has_vtracer = lambda: True
 
         with mock.patch.dict(sys.modules, {
             "src.ui.video_tool": video_stub,
@@ -81,7 +98,7 @@ class TestOptionalFeatureReadinessNotice(unittest.TestCase):
         }):
             notice = main._optional_feature_readiness_notice()
 
-        self.assertIn("odd-container probing limited", notice)
+        self.assertIn("odd-container probing/detail guidance limited", notice)
         self.assertIn("DDS compressed variants unavailable", notice)
         self.assertIn("AVIF", notice)
 
@@ -5755,9 +5772,7 @@ class TestSelectiveAlphaProcessor(unittest.TestCase):
 
 class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
     """
-    Tests for the non-Qt helper logic on SelectiveAlphaCanvas:
-      _snapshot / _restore_snapshot / _push_history / undo_mask / redo_mask
-      _erase_brush / _erase_brush_move
+    Tests for mask snapshots, undo/redo, and erasing on SelectiveAlphaCanvas.
     These tests bypass the Qt paint/event system by calling internal helpers
     directly and inspecting the resulting masks.
     """
@@ -5782,53 +5797,48 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
         # Stub out paint/update so no actual rendering happens in CI.
         canvas.update = lambda: None
 
-        # Override with a known test image so tests are deterministic.
-        if canvas._src_img is not None:
-            canvas._src_img.close()
-        canvas._src_img   = Image.new("RGBA", (16, 16), (100, 100, 100, 200))
-        canvas._src_arr   = np.array(canvas._src_img, dtype=np.uint8)
-        canvas._masks     = [None] * 7
-        canvas._history   = []
-        canvas._redo_stack = []
-        canvas._brush_size  = 3
-        canvas._eraser_size = 3
-        canvas._active_zone = 0
-        canvas._edge_map    = None
-        canvas._composite_dirty = True
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            path = Path(directory) / "canvas.png"
+            Image.new("RGBA", (16, 16), (100, 100, 100, 200)).save(path)
+            self.assertTrue(canvas.load_image(str(path)))
+        canvas.set_brush_size(3)
+        canvas.set_eraser_size(3)
+        self.addCleanup(canvas.unload_image)
+        self.addCleanup(canvas.close)
         return canvas
 
     # ---- snapshot helpers -------------------------------------------------
 
     def test_snapshot_all_none(self):
         canvas = self._make_canvas_with_image()
-        snap = canvas._snapshot()
-        self.assertEqual(len(snap), 7)
-        self.assertTrue(all(s is None for s in snap))
+        snap = canvas.get_all_masks()
+        from src.ui.selective_alpha_tool import NUM_ZONES
+        self.assertEqual(len(snap), NUM_ZONES)
+        self.assertTrue(all(not s.any() for s in snap))
 
     def test_snapshot_captures_mask(self):
         canvas = self._make_canvas_with_image()
-        canvas._masks[0] = Image.fromarray(
-            np.full((16, 16), 255, dtype=np.uint8), "L"
-        )
-        snap = canvas._snapshot()
-        self.assertIsNotNone(snap[0])
+        canvas._masks[0].fill(255)
+        snap = canvas.get_all_masks()
         self.assertTrue((snap[0] == 255).all())
-        canvas._masks[0].close()
+        canvas._masks[0].fill(0)
+        self.assertTrue((snap[0] == 255).all())
 
     def test_restore_snapshot_restores_mask(self):
         canvas = self._make_canvas_with_image()
         arr = np.full((16, 16), 200, dtype=np.uint8)
-        snap = [arr.copy()] + [None] * 6
+        snap = [arr.copy()] + [np.zeros((16, 16), dtype=np.uint8) for _ in range(6)]
 
         # Manually stub update() so it doesn't try to paint
         canvas.update = lambda: None
-        canvas._restore_snapshot(snap)
+        canvas.set_all_masks(snap)
 
         m = canvas._masks[0]
         self.assertIsNotNone(m)
         result = np.array(m, dtype=np.uint8)
         self.assertTrue((result == 200).all())
-        m.close()
+        snap[0].fill(0)
+        self.assertTrue((m == 200).all())
 
     # ---- push / undo / redo -----------------------------------------------
 
@@ -5843,9 +5853,9 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
         import types
         canvas = self._make_canvas_with_image()
         self._stub_signals(canvas)
-        self.assertEqual(len(canvas._history), 0)
+        self.assertEqual(len(canvas._undo_stack), 0)
         canvas._push_history()
-        self.assertEqual(len(canvas._history), 1)
+        self.assertEqual(len(canvas._undo_stack), 1)
 
     def test_undo_restores_previous_state(self):
         import types
@@ -5854,14 +5864,11 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
 
         # Start empty, push history, then paint zone 0
         canvas._push_history()
-        canvas._masks[0] = Image.fromarray(
-            np.full((16, 16), 255, dtype=np.uint8), "L"
-        )
+        canvas._masks[0].fill(255)
 
         self.assertIsNotNone(canvas._masks[0])
-        result = canvas.undo_mask()
-        self.assertTrue(result)
-        self.assertIsNone(canvas._masks[0])   # restored to pre-paint state
+        canvas.undo_mask()
+        self.assertFalse(canvas._masks[0].any())
 
     def test_redo_restores_forward_state(self):
         import types
@@ -5869,18 +5876,14 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
         self._stub_signals(canvas)
 
         canvas._push_history()
-        canvas._masks[0] = Image.fromarray(
-            np.full((16, 16), 128, dtype=np.uint8), "L"
-        )
+        canvas._masks[0].fill(128)
         canvas.undo_mask()
-        self.assertIsNone(canvas._masks[0])
+        self.assertFalse(canvas._masks[0].any())
 
-        result = canvas.redo_mask()
-        self.assertTrue(result)
+        canvas.redo_mask()
         self.assertIsNotNone(canvas._masks[0])
         arr = np.array(canvas._masks[0], dtype=np.uint8)
         self.assertTrue((arr == 128).all())
-        canvas._masks[0].close()
 
     def test_push_clears_redo_stack(self):
         import types
@@ -5888,9 +5891,7 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
         self._stub_signals(canvas)
 
         canvas._push_history()
-        canvas._masks[0] = Image.fromarray(
-            np.full((16, 16), 255, dtype=np.uint8), "L"
-        )
+        canvas._masks[0].fill(255)
         canvas.undo_mask()
         self.assertEqual(len(canvas._redo_stack), 1)
 
@@ -5900,52 +5901,47 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
 
     # ---- eraser -----------------------------------------------------------
 
-    def test_erase_brush_clears_all_zones(self):
+    def test_erase_brush_preserves_other_zones(self):
         canvas = self._make_canvas_with_image()
 
         # Paint two zones with full white masks
         for i in range(3):
-            canvas._masks[i] = Image.fromarray(
-                np.full((16, 16), 255, dtype=np.uint8), "L"
-            )
+            canvas._masks[i].fill(255)
 
         # Erase at centre
-        canvas._erase_brush(8, 8)
+        canvas._paint_circle(canvas._masks[0], 8, 8, 3, erase=True)
 
-        # The erased region should be 0 in all three painted zones
+        # Erasing affects the active zone only.
         for i in range(3):
             arr = np.array(canvas._masks[i], dtype=np.uint8)
             # Centre pixel must be 0 after erasing
             self.assertEqual(
-                arr[8, 8], 0,
-                f"Zone {i} centre pixel should be erased"
+                arr[8, 8], 0 if i == 0 else 255,
+                f"Unexpected erased state for zone {i}"
             )
-            canvas._masks[i].close()
-            canvas._masks[i] = None
 
     def test_erase_brush_no_effect_on_none_zone(self):
         canvas = self._make_canvas_with_image()
-        canvas._erase_brush(8, 8)   # all masks are None – must not raise
+        canvas._paint_circle(canvas._masks[0], 8, 8, 3, erase=True)
+        self.assertFalse(canvas._masks[0].any())
 
     def test_eraser_size_applies(self):
         canvas = self._make_canvas_with_image()
-        canvas._eraser_size = 1
-        canvas._masks[0] = Image.fromarray(
-            np.full((16, 16), 255, dtype=np.uint8), "L"
-        )
-        canvas._erase_brush(8, 8)
+        canvas.set_eraser_size(1)
+        canvas._masks[0].fill(255)
+        canvas._paint_circle(canvas._masks[0], 8, 8, canvas._eraser_size, erase=True)
         arr = np.array(canvas._masks[0], dtype=np.uint8)
         # Centre should be erased; corner should not
         self.assertEqual(arr[8, 8], 0)
         self.assertEqual(arr[0, 0], 255)
-        canvas._masks[0].close()
-        canvas._masks[0] = None
 
     # ---- cursor position --------------------------------------------------
 
     def test_cursor_pos_initialises_to_none(self):
         canvas = self._make_canvas_with_image()
-        self.assertIsNone(canvas._cursor_pos)
+        self.assertFalse(canvas._cursor_on_canvas)
+        self.assertLess(canvas._cursor_wx, 0)
+        self.assertLess(canvas._cursor_wy, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -8656,7 +8652,7 @@ class TestRound46SelectiveAlphaUIFixes(unittest.TestCase):
         """_setup_ui must create a 'Saved Masks' QGroupBox."""
         src = self._src()
         self.assertIn(
-            '"Saved Masks"',
+            '"Single-Zone Slots"',
             src,
             "_setup_ui must create a 'Saved Masks' group for the slot collection",
         )
@@ -8829,7 +8825,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('progress.setLabelText("Mixing source audio into MP4…")', src)
         self.assertIn('"-i", "anullsrc=channel_layout=stereo:sample_rate=48000"', src)
         self.assertIn("silence_input_index = input_index", src)
-        self.assertIn('f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f},asetpts=PTS-STARTPTS[{label}]"', src)
+        self.assertIn('f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f}"', src)
+        self.assertIn('"asetpts=PTS-STARTPTS",', src)
+        self.assertIn("*normalize_filters,", src)
         self.assertIn('"-c:a", "aac"', src)
         self.assertIn("first = gif_frames[0]", src)
         self.assertIn("append_images=rest", src)
@@ -8948,36 +8946,29 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         bat_src = self._src("../scripts/build_exe.bat")
         self.assertIn("Installing runtime dependencies from requirements.txt", sh_src)
         self.assertIn("python -m pip install -r requirements.txt", sh_src)
-        self.assertIn("Build capability audit:", sh_src)
-        self.assertIn("ffprobe bundling source ready", sh_src)
-        self.assertIn("No ffprobe source found for packaging", sh_src)
-        self.assertIn("MAGICK_HOME", sh_src)
+        self.assertIn("python scripts/bundle_dependencies.py", sh_src)
+        self.assertLess(sh_src.index("python scripts/bundle_dependencies.py"), sh_src.index("pyinstaller alpha_fixer"))
         self.assertIn("Installing runtime dependencies from requirements.txt", bat_src)
         self.assertIn("python -m pip install -r requirements.txt", bat_src)
-        self.assertIn("Build capability audit:", bat_src)
-        self.assertIn("ffprobe bundling source ready", bat_src)
-        self.assertIn("No ffprobe source found for packaging", bat_src)
-        self.assertIn("MAGICK_HOME", bat_src)
+        self.assertIn(r"python scripts\bundle_dependencies.py", bat_src)
+        self.assertIn("if errorlevel 1 exit /b 1", bat_src)
 
     def test_pyinstaller_specs_bundle_imageio_and_ffmpeg_metadata(self):
         folder_src = self._src("../alpha_fixer.spec")
         onefile_src = self._src("../alpha_fixer_onefile.spec")
+        collector = self._src("../scripts/bundle_dependencies.py")
         for src in (folder_src, onefile_src):
-            self.assertIn('_LINUX_RUNTIME_LIBS = [', src)
-            self.assertIn('collect_dynamic_libs("PyQt6")', src)
-            self.assertIn('collect_data_files("PyQt6")', src)
-            self.assertIn('copy_metadata("PyQt6")', src)
-            self.assertIn('collect_data_files("imageio")', src)
-            self.assertIn('copy_metadata("imageio")', src)
-            self.assertIn('collect_data_files("imageio_ffmpeg")', src)
-            self.assertIn('copy_metadata("imageio_ffmpeg")', src)
-            self.assertIn("def _optional_ffprobe_bundle():", src)
-            self.assertIn('for env_name in ("ALPHA_FIXER_FFPROBE_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE"):', src)
-            self.assertIn('configured_ffmpeg = os.environ.get("IMAGEIO_FFMPEG_EXE")', src)
-            self.assertIn('binaries.append((resolved_text, "imageio_ffmpeg/binaries"))', src)
-            self.assertIn("def _optional_wand_bundle():", src)
-            self.assertIn('os.environ.get("MAGICK_HOME")', src)
-            self.assertIn('collect_data_files("wand")', src)
+            self.assertIn("collect_release_dependencies()", src)
+            self.assertIn("binaries=binaries", src)
+            self.assertIn("scripts/runtime_hook_dependencies.py", src)
+        for package in ("wand", "PyQt6", "imageio", "imageio_ffmpeg"):
+            self.assertIn(f'"{package}"', collector)
+        self.assertIn("collect_data_files(", collector)
+        self.assertIn("collect_dynamic_libs(package)", collector)
+        self.assertIn("copy_metadata(package)", collector)
+        self.assertIn('for name in ("ffmpeg", "ffprobe"):', collector)
+        self.assertIn("validate_executable(executable, name)", collector)
+        self.assertIn("LINUX_QT_LIBS", collector)
 
     def test_build_script_runs_packaged_launch_smoke_test(self):
         sh_src = self._src("../scripts/build_exe.sh")
@@ -9061,7 +9052,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("ubuntu-latest", src)
         self.assertIn("windows-latest", src)
         self.assertIn("macos-latest", src)
-        self.assertIn("bundle_kind: [folder, onefile]", src)
+        self.assertGreaterEqual(src.count("bundle_kind: folder"), 3)
+        self.assertGreaterEqual(src.count("bundle_kind: onefile"), 3)
         self.assertIn("build_exe.sh --onefile", src)
         self.assertIn("build_exe.bat --onefile", src)
         self.assertIn("scripts/verify_packaged_app.py", src)
@@ -9086,7 +9078,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("--require-bundled-default-theme-svg", src)
         self.assertIn("--require-packaged-bundle-ready", src)
         self.assertIn("brew install ffmpeg", src)
-        self.assertIn("choco install ffmpeg -y", src)
+        self.assertIn("choco install ffmpeg imagemagick -y", src)
 
     def test_main_keeps_packaged_runtime_audit_and_smoke_test_hooks(self):
         src = self._src("../main.py")
@@ -9108,20 +9100,20 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._converter_tab.queue_status_changed.connect(self._update_queue_status)", src)
         self.assertIn("self._tabs.currentChanged.connect(self._update_queue_status)", src)
         self.assertIn("def _update_queue_status(self) -> None:", src)
-        self.assertIn('status_getter = getattr(tab, "get_status_bar_text", None)', src)
+        self.assertIn('status_getter = getattr(source, "get_status_bar_text", None)', src)
         self.assertIn("if callable(status_getter):", src)
-        self.assertIn("self._queue_status_label.setText(status_getter())", src)
+        self.assertIn("summary, tooltip = _status_summary_and_tooltip(tab)", src)
         self.assertIn('queue_getter = getattr(tab, "get_queue_status_text", None)', src)
         self.assertIn("if callable(queue_getter):", src)
-        self.assertIn("self._queue_status_label.setText(queue_getter())", src)
-        self.assertIn('self._queue_status_label.setText(f"📁 {count} queued" if count > 0 else "")', src)
+        self.assertIn("self._set_status_label_text(self._queue_status_label, summary, tooltip)", src)
+        self.assertIn('summary = f"📁 {count} queued" if count > 0 else ""', src)
 
     def test_main_window_keeps_builder_status_bar_summary_hooks(self):
         src = self._src("ui/main_window.py")
         self.assertIn("self._builder_status_label = QLabel(\"\")", src)
         self.assertIn("def _visible_builder_status_text(self) -> str:", src)
         self.assertIn("for attr in (\"_gif_builder_dlg\", \"_video_tool_dlg\"):", src)
-        self.assertIn('getter = getattr(dlg, "get_status_bar_text", None)', src)
+        self.assertIn('summary, tooltip = _status_summary_and_tooltip(dlg)', src)
         self.assertIn("def _update_builder_status(self, *_args) -> None:", src)
         self.assertIn("def _connect_builder_status(self, dialog) -> None:", src)
         self.assertIn("dialog.status_notice.connect(self._show_transient_status)", src)
@@ -9155,9 +9147,12 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_video_export_closes_mp4_writer_before_success(self):
         src = self._src("ui/video_tool.py")
-        self.assertIn("if not canceled and writer is not None:", src)
-        self.assertIn("writer.close()", src)
-        self.assertIn("writer = None", src)
+        start = src.index("if writer is not None:", src.index("source_pil.close()"))
+        close = src.index("writer.close()", start)
+        reset = src.index("writer = None", close)
+        assembly = src.index('if fmt == "gif" and not canceled and gif_frames:', reset)
+        self.assertLess(close, reset)
+        self.assertLess(reset, assembly)
 
     def test_video_preview_closes_adjusted_and_filtered_images(self):
         src = self._src("ui/video_tool.py")
@@ -9174,7 +9169,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertLess(count_idx, duration_idx)
         self.assertGreater(decode_idx, count_idx)
         self.assertIn("return fps, frame_count, frame_size, first_frame", src)
-        self.assertIn("_VideoFrameGetter(path, frame_count, first_frame)", src)
+        self.assertIn("_VideoFrameGetter(actual_path, frame_count, first_frame)", src)
 
     def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
         src = self._src("../scripts/install_linux_deps.sh")
@@ -9215,7 +9210,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("if filtered is not None and filtered is not adjusted and filtered is not source_pil:", src)
         self.assertIn("adjusted.close()", src)
         self.assertIn('source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)', src)
-        self.assertNotIn("size=canvas_size", src)
+        self.assertIn("canvas_size=canvas_size", src)
 
     def test_converter_tab_accepts_video_inputs_for_gif_builder(self):
         src = self._src("ui/converter_tool.py")
@@ -9256,9 +9251,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._thumb_cache", src)
         self.assertIn("cached = self._thumb_cache.get(key)", src)
         self.assertIn("self._thumb_cache = {key: pix}", src)
-        self.assertIn("from .video_tool import _VIDEO_EXTS, _load_video_frames", src)
+        self.assertIn("from .video_tool import (", src)
+        self.assertIn("_load_video_frames,", src)
         self.assertIn("_SUPPORTED_EXTS = _IMAGE_EXTS | _VIDEO_EXTS", src)
-        self.assertIn("if ext in _VIDEO_EXTS:", src)
+        self.assertIn("if treat_as_video:", src)
         self.assertIn("pil_frames, fps = _load_video_frames(path)", src)
         self.assertIn("frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))", src)
 
@@ -9595,7 +9591,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("ui/video_tool.py")
         self.assertIn("has_audio: bool = False", src)
         self.assertIn("self.has_audio = has_audio", src)
-        self.assertIn("has_audio=_video_has_audio_stream(path)", src)
+        self.assertIn("has_audio=_video_has_audio_stream(actual_path)", src)
         self.assertIn("and clip.has_audio", src)
         self.assertIn('"has_audio": clip_type == "video" and clip.has_audio,', src)
 

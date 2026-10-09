@@ -2470,7 +2470,10 @@ class SelectiveAlphaTool(QWidget):
             shortcut.setKey(QKeySequence(key_sequence))
 
     def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
-        key_sequence = self._settings.get_shortcut_binding(shortcut_id, default)
+        key_sequence = (
+            self._settings.get_shortcut_binding(shortcut_id, default)
+            if self._settings is not None else default
+        )
         shortcut = QShortcut(QKeySequence(key_sequence), self)
         shortcut.activated.connect(slot)
         self._shortcut_objects[shortcut_id] = shortcut

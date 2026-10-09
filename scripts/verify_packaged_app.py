@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json-out", help="Optional path to write the final runtime capability payload as JSON.")
     args = parser.parse_args(argv)
 
-    launch_target = Path(args.launch_target)
+    launch_target = Path(args.launch_target).resolve()
     if not launch_target.exists():
         raise SystemExit(f"Launch target not found: {launch_target}")
     bundle_kind = _validation_bundle_kind(getattr(args, "bundle_kind", ""))

@@ -2715,34 +2715,17 @@ class SettingsDialog(QDialog):
         """Center the dialog on the screen it will appear on and clamp its
         size to the available geometry so no part is hidden off-screen."""
         super().showEvent(event)
-        # Determine which screen we're on (use parent's screen, fall back to primary)
-        screen = (self.parent().screen() if self.parent() is not None else None)
-        if screen is None:
-            screen = QApplication.primaryScreen()
-        if screen is None:
-            return
-        ag = screen.availableGeometry()
-        # Relax the minimum size so the dialog can shrink to fit the screen.
-        # Without this, resize() cannot reduce below setMinimumSize(), leaving
-        # the bottom/right edge of the dialog off-screen on small monitors.
-        # Subtract 4 px to leave room for window decorations/shadows so the
-        # resize lands cleanly within the available area.
-        safe_w = max(320, ag.width() - 4)
-        safe_h = max(240, ag.height() - 4)
-        if self.minimumWidth() >= safe_w or self.minimumHeight() >= safe_h:
-            self.setMinimumSize(
-                min(self.minimumWidth(), safe_w),
-                min(self.minimumHeight(), safe_h),
-            )
-        # Ensure the dialog is no larger than the available area
-        w = min(self.width(), ag.width())
-        h = min(self.height(), ag.height())
-        if w != self.width() or h != self.height():
-            self.resize(w, h)
-        # Center on the available geometry
-        x = ag.x() + max(0, (ag.width() - w) // 2)
-        y = ag.y() + max(0, (ag.height() - h) // 2)
-        self.move(x, y)
+        self._fit_to_screen()
+        QTimer.singleShot(0, self._fit_to_screen)
+
+    def _fit_to_screen(self):
+        from ._ui_utils import fit_dialog_to_screen
+
+        fit_dialog_to_screen(self)
+        screen = self.screen()
+        if screen is not None:
+            delta = screen.availableGeometry().center() - self.frameGeometry().center()
+            self.move(self.pos() + delta)
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply

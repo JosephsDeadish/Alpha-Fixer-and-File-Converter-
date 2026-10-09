@@ -105,7 +105,7 @@ _SEGMENTED_VIDEO_NAME_RE = re.compile(
     r"(?is)^(?P<base>.+?)(?:[._ -]?)(?P<label>part|pt|cd|disc|disk|segment|seg)(?:[._ -]?)(?P<index>\d+)$"
 )
 _CUE_FILE_RE = re.compile(r'^\s*FILE\s+(?:"(?P<quoted>[^"]+)"|(?P<plain>\S+))\s+\S+', re.IGNORECASE)
-_PROBE_FIELD_RE = re.compile(r"(?i)(?:^|[;\\n])\s*(container|video|audio|preferred-stream|preferred-audio-stream|video-streams|audio-streams)=([^;.\n]+)")
+_PROBE_FIELD_RE = re.compile(r"(?i)(?:^|[;\n]|\bProbe:)\s*(container|video|audio|preferred-stream|preferred-audio-stream|video-streams|audio-streams)=([^;.\n]+)")
 _MAX_VIDEO_LOAD_FAILURE_DETAILS = 3
 
 _PREVIEW_MAX_W = 420

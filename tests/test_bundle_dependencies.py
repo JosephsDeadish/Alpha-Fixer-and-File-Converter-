@@ -2,6 +2,7 @@ import ctypes
 import json
 import os
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -28,6 +29,26 @@ def test_invalid_configured_executable_is_fatal(monkeypatch):
     monkeypatch.setenv("IMAGEIO_FFMPEG_EXE", "missing-runtime/ffmpeg")
     with pytest.raises(RuntimeError, match="does not name a file"):
         bundle.find_executable("ffmpeg")
+
+
+def test_nonfunctional_native_executable_is_fatal(tmp_path, monkeypatch):
+    executable = make_file(tmp_path / "ffprobe")
+    monkeypatch.setattr(bundle.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=1, stdout="not ffprobe",
+    ))
+    with pytest.raises(RuntimeError, match="not executable"):
+        bundle.validate_executable(executable, "ffprobe")
+
+
+def test_windows_chocolatey_runtime_not_launcher_shim(tmp_path, monkeypatch):
+    monkeypatch.setattr(bundle.sys, "platform", "win32")
+    for variable in ("ALPHA_FIXER_FFPROBE_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("ChocolateyInstall", str(tmp_path))
+    native = make_file(tmp_path / "lib/ffmpeg/tools/ffmpeg/bin/ffprobe.exe")
+    shim = make_file(tmp_path / "bin/ffprobe.exe")
+    monkeypatch.setattr(bundle.shutil, "which", lambda name: str(shim))
+    assert bundle.find_executable("ffprobe") == native.resolve()
 
 
 def test_explicit_ffprobe_wins_over_host_path(tmp_path, monkeypatch):
@@ -86,6 +107,41 @@ def test_windows_installer_layout(tmp_path, monkeypatch):
     config = make_file(tmp_path / "policy.xml")
     coder = make_file(tmp_path / "IM_MOD_RL_DDS_.dll")
     assert bundle.imagemagick_layout(library, tmp_path) == ([config], [coder])
+
+
+def test_libtool_descriptor_does_not_load_from_build_host(tmp_path):
+    descriptor = make_file(tmp_path / "installed/png.la", (
+        "dlname='png.so'\ninstalled=yes\nlibdir='/build-host/lib/coders'\n"
+        "dependency_libs='/build-host/lib/libpng.so'\n"
+    ))
+    generated = bundle.relocate_libtool_descriptor(descriptor, tmp_path / "generated")
+    text = generated.read_text()
+    assert "dlname='png.so'" in text
+    assert "installed=no" in text
+    assert "libdir=''" in text
+    assert "dependency_libs=''" in text
+    assert "/build-host" not in text
+    assert "installed=yes" in descriptor.read_text()
+
+
+def test_collector_fails_when_linux_qt_native_library_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(bundle.sys, "platform", "linux")
+    monkeypatch.setitem(sys.modules, "PyInstaller.utils.hooks", SimpleNamespace(
+        collect_data_files=lambda *a, **k: [], collect_dynamic_libs=lambda *a: [],
+        copy_metadata=lambda *a: [],
+    ))
+    library = make_file(tmp_path / "libMagickWand.so.7")
+    monkeypatch.setitem(sys.modules, "wand.api", SimpleNamespace(library=SimpleNamespace(_name=str(library))))
+    monkeypatch.setattr(bundle, "imagemagick_layout", lambda *a: ([tmp_path / "policy.xml"], [tmp_path / "png.so"]))
+
+    def resolve(name, roots=()):
+        if name == str(library):
+            return library
+        raise RuntimeError(f"Mandatory runtime library not found: {name}")
+
+    monkeypatch.setattr(bundle, "resolve_library", resolve)
+    with pytest.raises(RuntimeError, match="libEGL.so.1"):
+        bundle.collect_release_dependencies(tmp_path / "generated")
 
 
 def test_runtime_hook_overrides_build_host_paths(tmp_path, monkeypatch):

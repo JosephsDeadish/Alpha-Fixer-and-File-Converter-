@@ -58,15 +58,42 @@ def find_executable(name: str) -> Path:
             if not candidate.is_file():
                 raise RuntimeError(f"{variable} does not name a file: {candidate}")
             return candidate.resolve()
+    if sys.platform == "win32":
+        # Chocolatey's bin/*.exe are launch shims, not redistributable FFmpeg.
+        chocolatey = Path(os.environ.get("ChocolateyInstall", r"C:\ProgramData\chocolatey"))
+        for package in sorted((chocolatey / "lib").glob("ffmpeg*")):
+            candidates = sorted(package.glob(f"tools/**/{name}.exe"))
+            if candidates:
+                return candidates[0].resolve()
+    candidate = shutil.which(name)
+    if candidate:
+        return Path(candidate).resolve()
     if name == "ffmpeg":
         import imageio_ffmpeg
         candidate = Path(imageio_ffmpeg.get_ffmpeg_exe())
         if candidate.is_file():
             return candidate.resolve()
-    candidate = shutil.which(name)
-    if candidate:
-        return Path(candidate).resolve()
     raise RuntimeError(f"Mandatory runtime executable not found: {name}; install FFmpeg first")
+
+
+def validate_executable(executable: Path, name: str):
+    result = subprocess.run(
+        [str(executable), "-version"], capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode or f"{name} version" not in result.stdout.lower():
+        raise RuntimeError(f"Mandatory {name} runtime is not executable: {executable}")
+
+
+def relocate_libtool_descriptor(descriptor: Path, output: Path) -> Path:
+    """Prevent IM's libltdl loader from preferring absolute build-host paths."""
+    generated = output / "coders" / descriptor.name
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    text = descriptor.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^libdir=.*$", "libdir=''", text)
+    text = re.sub(r"(?m)^installed=.*$", "installed=no", text)
+    text = re.sub(r"(?m)^dependency_libs=.*$", "dependency_libs=''", text)
+    generated.write_text(text, encoding="utf-8")
+    return generated
 
 
 def imagemagick_layout(library: Path, home: Path | None = None):
@@ -104,6 +131,23 @@ def imagemagick_layout(library: Path, home: Path | None = None):
     return configs, coders
 
 
+@lru_cache(maxsize=1)
+def _wheel_native_licenses():
+    result = {}
+    for distribution in importlib.metadata.distributions():
+        files = distribution.files or ()
+        licenses = [
+            Path(distribution.locate_file(p)) for p in files
+            if any(token in str(p).lower() for token in ("license", "copying", "copyright", "notice"))
+            and Path(distribution.locate_file(p)).is_file()
+        ]
+        for relative in files:
+            name = str(relative).lower()
+            if ".so" in name or name.endswith((".dll", ".dylib", ".exe")):
+                result[Path(distribution.locate_file(relative)).resolve()] = licenses
+    return result
+
+
 @lru_cache(maxsize=None)
 def _native_license_files(source: Path):
     roots = [source.parent, source.parent.parent]
@@ -114,6 +158,8 @@ def _native_license_files(source: Path):
     for root in dict.fromkeys(roots):
         for pattern in ("*LICENSE*", "*license*", "*COPYING*", "*copyright*", "licenses/**/*"):
             found.extend(p for p in root.glob(pattern) if p.is_file())
+    # Native Qt wheel licenses live in dist-info, not beside Qt6/lib/*.so.
+    found.extend(_wheel_native_licenses().get(source.resolve(), ()))
     if sys.platform == "linux" and shutil.which("dpkg-query"):
         # Debian copyright files are the authoritative installed native license source.
         result = subprocess.run(
@@ -188,19 +234,16 @@ def collect_release_dependencies(output: Path = Path("build/runtime-resources"))
         binaries.extend((str(p.resolve()), ".") for p in wand_library.parent.glob(pattern) if p.is_file())
     if sys.platform == "linux":
         binaries.extend((str(resolve_library(name)), ".") for name in LINUX_QT_LIBS)
-    binaries.extend((str(find_executable(name)), "imageio_ffmpeg/binaries") for name in ("ffmpeg", "ffprobe"))
+    for name in ("ffmpeg", "ffprobe"):
+        executable = find_executable(name)
+        validate_executable(executable, name)
+        binaries.append((str(executable), "imageio_ffmpeg/binaries"))
     binaries.extend((str(p), "imagemagick/modules/coders") for p in coders if p.suffix != ".la")
     datas = []
     for descriptor in (p for p in coders if p.suffix == ".la"):
         # libltdl otherwise prefers the absolute build-host libdir. An uninstalled
         # descriptor falls back to its own directory after trying .libs.
-        generated = output / "coders" / descriptor.name
-        generated.parent.mkdir(parents=True, exist_ok=True)
-        text = descriptor.read_text(encoding="utf-8")
-        text = re.sub(r"(?m)^libdir=.*$", "libdir=''", text)
-        text = re.sub(r"(?m)^installed=.*$", "installed=no", text)
-        text = re.sub(r"(?m)^dependency_libs=.*$", "dependency_libs=''", text)
-        generated.write_text(text, encoding="utf-8")
+        generated = relocate_libtool_descriptor(descriptor, output)
         datas.append((str(generated), "imagemagick/modules/coders"))
     config_paths = set()
     for config in configs:
@@ -209,7 +252,9 @@ def collect_release_dependencies(output: Path = Path("build/runtime-resources"))
         datas.append((str(config), destination.as_posix()))
         config_paths.add(destination.as_posix())
     for package in ("wand", "PyQt6", "imageio", "imageio_ffmpeg"):
-        datas.extend(collect_data_files(package))
+        datas.extend(collect_data_files(
+            package, excludes=["binaries/ffmpeg*"] if package == "imageio_ffmpeg" else None,
+        ))
         datas.extend(copy_metadata(package))
         binaries.extend(collect_dynamic_libs(package))
     # Qt hooks collect plugin dependencies; fail early if its mandatory SVG library is absent.
