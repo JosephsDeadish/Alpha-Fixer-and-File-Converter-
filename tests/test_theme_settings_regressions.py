@@ -940,6 +940,77 @@ def test_backup_export_normalizes_and_round_trips(dialog, tmp_path, extension):
     assert list(tmp_path.glob(".alpha_fixer_save_*")) == []
 
 
+@pytest.mark.parametrize("key,payload", [
+    ("custom_shortcuts", "{"), ("custom_shortcuts", "null"),
+    ("custom_shortcuts", "[]"), ("custom_shortcuts", '{"settings": 3}'),
+    ("custom_shortcuts", '{"settings": null}'), ("custom_shortcuts", '{"settings": []}'),
+    ("sa_zone_alphas", ""), ("sa_zone_alphas", "{}"), ("sa_zone_alphas", "[]"),
+    ("sa_zone_alphas", "[null]"), ("sa_zone_alphas", "[true]"),
+    ("sa_zone_alphas", "[1.5]"), ("sa_zone_alphas", "[-1]"),
+    ("sa_zone_alphas", "[256]"), ("sa_zone_alphas", '["not alpha"]'),
+    ("sa_zone_alphas", "[NaN]"), ("sa_zone_alphas", json.dumps([128] * 41)),
+    ("sa_zone_colors", "{"), ("sa_zone_colors", "null"), ("sa_zone_colors", "[]"),
+    ("sa_zone_colors", "[128]"), ("sa_zone_colors", "[[1,2,3]]"),
+    ("sa_zone_colors", "[[1,2,3,4,5]]"), ("sa_zone_colors", "[[1,2,3,false]]"),
+    ("sa_zone_colors", "[[1,2,3,256]]"), ("sa_zone_colors", "[[1,2,3,-1]]"),
+    ("sa_zone_colors", "[[1,2,3,1.5]]"),
+    ("sa_zone_colors", json.dumps([[0, 0, 0, 128]] * 41)),
+])
+def test_invalid_structured_backup_preserves_preferences_and_disk(dialog, tmp_path, key, payload):
+    widget, manager = dialog
+    manager.set("font_size", 12)
+    manager.sync()
+    before = {name: manager.get(name) for name in manager.EXPORT_KEYS}
+    before_disk = Path(manager._qs.fileName()).read_bytes()
+    path = tmp_path / "invalid-structured.json"
+    path.write_text(json.dumps({"font_size": 20, key: payload}), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        manager.import_settings(str(path))
+    assert {name: manager.get(name) for name in manager.EXPORT_KEYS} == before
+    assert Path(manager._qs.fileName()).read_bytes() == before_disk
+
+
+@pytest.mark.parametrize("count", [1, 7, 40])
+@pytest.mark.parametrize("legacy_strings", [False, True])
+def test_structured_backup_boundaries_survive_disk_reload(dialog, tmp_path, count, legacy_strings):
+    widget, manager = dialog
+    alphas = [0, 255] * 20
+    colors = [[0, 255, 0, 255]] * count
+    alphas = alphas[:count]
+    if legacy_strings:
+        alphas = [str(value) for value in alphas]
+        colors = [[str(value) for value in color] for color in colors]
+    values = {
+        "custom_shortcuts": json.dumps({"settings": "Ctrl+Alt+S", "future.action": ""}),
+        "sa_zone_alphas": json.dumps(alphas),
+        "sa_zone_colors": json.dumps(colors),
+    }
+    path = tmp_path / "structured.json"
+    path.write_text(json.dumps(values), encoding="utf-8")
+    manager.import_settings(str(path))
+    with patch("src.core.settings_manager._settings_ini_path", return_value=manager._qs.fileName()):
+        reloaded = SettingsManager()
+    try:
+        assert {key: reloaded.get(key) for key in values} == values
+        assert reloaded.get_shortcut_binding("settings", "Ctrl+,") == "Ctrl+Alt+S"
+        assert reloaded.get_shortcut_binding("future.action", "F1") == "F1"
+        expected = [int(value) for value in alphas[:7]]
+        assert reloaded.get_sa_zone_alphas() == expected + [128] * (7 - len(expected))
+        assert reloaded.get_sa_zone_colors() == [[int(value) for value in color] for color in colors]
+    finally:
+        reloaded.sync()
+        sip.delete(reloaded._qs)
+
+
+def test_empty_structured_backup_defaults_remain_supported(dialog, tmp_path):
+    widget, manager = dialog
+    path = tmp_path / "defaults.json"
+    path.write_text(json.dumps({"custom_shortcuts": "", "sa_zone_colors": ""}), encoding="utf-8")
+    manager.import_settings(str(path))
+    assert manager.get_custom_shortcuts() == {}
+    assert manager.get_sa_zone_colors() is None
+
+
 def test_backup_round_trip_accepts_every_exportable_default(dialog, tmp_path):
     widget, manager = dialog
     for key in manager.EXPORT_KEYS:

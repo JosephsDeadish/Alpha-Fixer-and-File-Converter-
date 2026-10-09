@@ -746,6 +746,39 @@ class SettingsManager:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
+    @staticmethod
+    def _validate_backup_structure(key: str, value: str) -> None:
+        if key not in ("custom_shortcuts", "sa_zone_alphas", "sa_zone_colors"):
+            return
+        # Empty shortcut maps and zone colors mean "use defaults".
+        if not value and key != "sa_zone_alphas":
+            return
+        try:
+            data = json.loads(value)
+        except ValueError:
+            raise ValueError(f"Invalid JSON preference: {key}") from None
+        if key == "custom_shortcuts":
+            if not isinstance(data, dict) or not all(
+                isinstance(binding, str) for binding in data.values()
+            ):
+                raise ValueError(f"Invalid shortcut map: {key} (expected text bindings)")
+            return
+        if not isinstance(data, list) or not 1 <= len(data) <= 40:
+            raise ValueError(f"Invalid zone preference: {key} (expected 1–40 zones)")
+        rows = data if key == "sa_zone_colors" else [data]
+        for row in rows:
+            if not isinstance(row, list) or (key == "sa_zone_colors" and len(row) != 4):
+                raise ValueError(f"Invalid zone preference: {key} (expected RGBA rows)")
+            for component in row:
+                if type(component) not in (int, str):
+                    raise ValueError(f"Invalid zone preference: {key} (expected integers 0–255)")
+                try:
+                    number = int(component)
+                except ValueError:
+                    raise ValueError(f"Invalid zone preference: {key} (expected integers 0–255)") from None
+                if not 0 <= number <= 255:
+                    raise ValueError(f"Invalid zone preference: {key} (expected integers 0–255)")
+
     def import_settings(self, path: str) -> list[str]:
         """
         Load settings from a JSON file exported by export_settings().
@@ -800,6 +833,8 @@ class SettingsManager:
                             )
                 elif not isinstance(value, str):
                     raise ValueError(f"Invalid text preference: {key}")
+                if isinstance(value, str):
+                    self._validate_backup_structure(key, value)
                 validated[key] = value
         for key, value in validated.items():
             self._qs.setValue(key, value)
