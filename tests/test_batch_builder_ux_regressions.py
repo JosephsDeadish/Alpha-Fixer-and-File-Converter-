@@ -129,6 +129,13 @@ def test_builder_accessible_timing_names_and_keyboard_edits(app, kind):
                         widget._trim_end_slider, widget._clip_speed_slider,
                         widget._still_duration_spin, widget._scrubber, widget._fps_slider,
                         widget._filter_combo, widget._export_fmt_combo, widget._audio_volume_slider]
+            adjustments = [widget._brightness_slider, widget._contrast_slider,
+                           widget._saturation_slider, widget._sharpness_slider,
+                           widget._black_slider, widget._white_slider]
+            controls += adjustments
+            labels = widget.findChildren(QLabel)
+            for control in adjustments:
+                assert any(label.buddy() is control for label in labels)
             edit = widget._fps_slider
         names = [control.accessibleName() for control in controls]
         assert all(names) and len(set(names)) == len(names)

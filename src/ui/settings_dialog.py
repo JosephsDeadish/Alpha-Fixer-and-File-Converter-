@@ -2036,6 +2036,26 @@ class SettingsDialog(QDialog):
         tabs.setTabToolTip(2, "Sound enablement, theme sound profiles, and event volumes.")
         tabs.setTabToolTip(3, "Optional click, background, mouse, cursor, and button effects.")
 
+        for grid, rows in ((misc_gl, (0, 1, 2)), (scale_gl, (0, 2, 3, 4, 5)),
+                           (hist_gl, (0, 2, 3, 4, 5, 6))):
+            for row in rows:
+                label = grid.itemAtPosition(row, 0).widget()
+                control = grid.itemAtPosition(row, 1).widget()
+                label.setBuddy(control)
+                name = label.text().strip().rstrip(":")
+                if grid is hist_gl:
+                    name += " history limit"
+                control.setAccessibleName(name)
+                control.setAccessibleDescription(control.toolTip())
+        for control, name in (
+            (self._sound_volume_slider, "Application sound volume (percent)"),
+            (self._trail_length_slider, "Mouse trail length (points)"),
+            (self._trail_fade_slider, "Mouse trail fade speed"),
+            (self._trail_intensity_slider, "Mouse trail intensity (percent)"),
+        ):
+            control.setAccessibleName(name)
+            control.setAccessibleDescription(control.toolTip())
+
         layout.addWidget(tabs, 1)
 
         # ---- Dialog button: just "Close" (settings already saved live) ----

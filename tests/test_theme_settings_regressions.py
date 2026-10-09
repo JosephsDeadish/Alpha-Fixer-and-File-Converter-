@@ -58,6 +58,29 @@ def test_invalid_import_does_not_modify_themes(dialog, tmp_path, field, value):
     assert manager.get_theme() == original
 
 
+def test_settings_appearance_history_labels_and_named_sliders_preserve_preferences(dialog):
+    widget, manager = dialog
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    controls = [
+        widget._font_size_spin, widget._tooltip_mode_combo, widget._tooltip_style_combo,
+        widget._ui_scale_combo, widget._btn_height_combo, widget._widget_spacing_combo,
+        widget._border_radius_combo, widget._panel_padding_combo,
+        widget._history_max_spin, widget._history_max_conv_spin, widget._history_max_alpha_spin,
+        widget._history_max_sel_spin, widget._history_max_gif_spin, widget._history_max_video_spin,
+    ]
+    labels = widget.findChildren(QLabel)
+    names = [control.accessibleName() for control in controls]
+    assert all(names) and len(set(names)) == len(names)
+    for control in controls:
+        assert sum(label.buddy() is control for label in labels) == 1
+    for control in (widget._sound_volume_slider, widget._trail_length_slider,
+                    widget._trail_fade_slider, widget._trail_intensity_slider):
+        assert control.accessibleName()
+    widget._load_values()
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+    assert [control.accessibleName() for control in controls] == names
+
+
 def test_invalid_utf8_import_reports_error(dialog, tmp_path):
     widget, manager = dialog
     path = tmp_path / "invalid.json"

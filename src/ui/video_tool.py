@@ -3253,6 +3253,9 @@ class VideoToolDialog(QDialog):
             lbl.setFixedWidth(90)
             row.addWidget(lbl)
             slider = _make_hslider(lo, hi, val)
+            lbl.setBuddy(slider)
+            slider.setAccessibleName(f"Video {label.rstrip(':')}")
+            slider.setAccessibleDescription(tooltip)
             if tooltip:
                 slider.setToolTip(tooltip)
             row.addWidget(slider, 1)
