@@ -10,7 +10,7 @@ All image loading is done in background QThreads so the UI is never blocked.
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, QRect, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QRect, QSize, QTimer, QEvent, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QFont, QFontMetrics,
     QPixmap, QImage, QColor, QMovie,
@@ -37,7 +37,7 @@ _REDOCK_TOOLTIP = (
 # ---------------------------------------------------------------------------
 
 class _ZoomOverlayBar(QFrame):
-    """Compact semi-transparent zoom control bar (－ / ⊡ / ＋).
+    """Compact themed zoom control bar (－ / ⊡ / ＋).
 
     Create as a *child* of the widget it should float over, then call
     ``reposition(parent_size)`` in the parent's ``resizeEvent`` to keep it
@@ -47,34 +47,17 @@ class _ZoomOverlayBar(QFrame):
     def __init__(self, zoom_in_cb, zoom_out_cb, zoom_fit_cb, parent=None):
         super().__init__(parent)
         self.setObjectName("zoomOverlayBar")
-        self.setStyleSheet(
-            "QFrame#zoomOverlayBar {"
-            "  background: rgba(20, 20, 20, 155);"
-            "  border-radius: 6px;"
-            "  border: 1px solid rgba(255,255,255,35);"
-            "}"
-            "QPushButton {"
-            "  background: rgba(55,55,55,190);"
-            "  color: #eee;"
-            "  border: none;"
-            "  border-radius: 4px;"
-            "  font-size: 13px;"
-            "  min-width: 24px; max-width: 24px;"
-            "  min-height: 20px; max-height: 20px;"
-            "  padding: 0;"
-            "}"
-            "QPushButton:hover  { background: rgba(95,95,95,210); }"
-            "QPushButton:pressed{ background: rgba(35,35,35,240); }"
-        )
         row = QHBoxLayout(self)
         row.setContentsMargins(3, 2, 3, 2)
         row.setSpacing(3)
-        for label, tip, cb in [
-            ("－", "Zoom out  (Ctrl + scroll-down)", zoom_out_cb),
-            ("⊡", "Reset zoom / fit to window",      zoom_fit_cb),
-            ("＋", "Zoom in  (Ctrl + scroll-up)",     zoom_in_cb),
+        for label, name, tip, cb in [
+            ("－", "Zoom out", "Zoom out  (Ctrl + scroll-down)", zoom_out_cb),
+            ("⊡", "Fit preview to window", "Reset zoom / fit to window", zoom_fit_cb),
+            ("＋", "Zoom in", "Zoom in  (Ctrl + scroll-up)", zoom_in_cb),
         ]:
             btn = QPushButton(label)
+            btn.setProperty("previewOverlay", True)
+            btn.setAccessibleName(name)
             btn.setToolTip(tip)
             btn.clicked.connect(cb)
             row.addWidget(btn)
@@ -84,7 +67,7 @@ class _ZoomOverlayBar(QFrame):
     def reposition(self, parent_size) -> None:
         """Pin to top-right corner of *parent_size*."""
         margin = 6
-        self.move(parent_size.width() - self.width() - margin, margin)
+        self.move(max(margin, parent_size.width() - self.width() - margin), margin)
 
 
 def _pil_to_qimage(img) -> QImage:
@@ -428,6 +411,9 @@ class BeforeAfterWidget(QWidget):
         # Floating pop-out button (top-left corner)
         self._popout_btn = self._make_popout_button()
         self._reposition_popout_btn()
+        self._overlay_update_timer = QTimer(self)
+        self._overlay_update_timer.setSingleShot(True)
+        self._overlay_update_timer.timeout.connect(self._refresh_overlays)
 
     # ------------------------------------------------------------------
     # Pop-out overlay button
@@ -437,19 +423,7 @@ class BeforeAfterWidget(QWidget):
         btn = QPushButton("⇗ Undock", self)
         btn.setObjectName("popoutBtn")
         self._apply_popout_button_state(btn, undocked=False)
-        btn.setFixedSize(90, 22)
-        btn.setStyleSheet(
-            "QPushButton#popoutBtn {"
-            "  background: rgba(20,20,20,155);"
-            "  color: #eee;"
-            "  border: 1px solid rgba(255,255,255,35);"
-            "  border-radius: 5px;"
-            "  font-size: 13px;"
-            "  padding: 0;"
-            "}"
-            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
-            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
-        )
+        btn.setProperty("previewOverlay", True)
         btn.clicked.connect(self._on_popout_clicked)
         btn.raise_()
         return btn
@@ -458,11 +432,38 @@ class BeforeAfterWidget(QWidget):
     def _apply_popout_button_state(btn: "QPushButton", *, undocked: bool) -> None:
         """Keep pop-out button text and tooltip in sync from one source of truth."""
         btn.setText("⇙ Redock" if undocked else "⇗ Undock")
+        btn.setAccessibleName("Redock preview" if undocked else "Undock preview")
         btn.setToolTip(_REDOCK_TOOLTIP if undocked else _UNDOCK_TOOLTIP)
+        btn.adjustSize()
 
     def _reposition_popout_btn(self) -> None:
         margin = 6
         self._popout_btn.move(margin, margin)
+
+    def _refresh_overlays(self):
+        self._zoom_bar.adjustSize()
+        self._zoom_bar.reposition(self.size())
+        undocked = self._popout_dialog is not None and not self._popout_dialog.isHidden()
+        self._apply_popout_button_state(self._popout_btn, undocked=undocked)
+        if self._popout_btn.width() > self.width() - 12:
+            self._popout_btn.setText("⇙" if undocked else "⇗")
+            self._popout_btn.adjustSize()
+        self._reposition_popout_btn()
+        if (not self._popout_btn.isHidden()
+                and self._popout_btn.geometry().adjusted(-3, -3, 3, 3).intersects(
+                    self._zoom_bar.geometry())):
+            self._zoom_bar.move(self._zoom_bar.x(), self._popout_btn.geometry().bottom() + 6)
+        self._zoom_bar.raise_()
+        self._popout_btn.raise_()
+
+    def event(self, event):
+        result = super().event(event)
+        timer = getattr(self, "_overlay_update_timer", None)
+        if timer is not None and event.type() in (
+            QEvent.Type.StyleChange, QEvent.Type.FontChange, QEvent.Type.LayoutRequest,
+        ):
+            timer.start(0)
+        return result
 
     def _on_popout_clicked(self) -> None:
         """Undock or redock the floating comparison window.
@@ -520,6 +521,7 @@ class BeforeAfterWidget(QWidget):
             """Reset button and stored reference when dialog closes for any reason."""
             self._popout_dialog = None
             self._apply_popout_button_state(self._popout_btn, undocked=False)
+            self._refresh_overlays()
             dlg.deleteLater()
 
         dlg.finished.connect(_on_dialog_finished)
@@ -527,6 +529,7 @@ class BeforeAfterWidget(QWidget):
         # Emit signal so the parent tool can attach extra widgets (e.g. checkboxes)
         self.popout_requested.emit()
         dlg.show()
+        self._refresh_overlays()
 
     # ------------------------------------------------------------------
     # Pop-out button visibility
@@ -535,6 +538,7 @@ class BeforeAfterWidget(QWidget):
     def hide_popout_button(self) -> None:
         """Hide the pop-out overlay button (e.g. when widget is already inside a pop-out dialog)."""
         self._popout_btn.hide()
+        self._refresh_overlays()
 
     def _sync_popout_state(self) -> None:
         dlg = self._popout_dialog
@@ -707,10 +711,7 @@ class BeforeAfterWidget(QWidget):
         super().resizeEvent(event)
         self._checker = None  # invalidate; rebuilt lazily in paintEvent
         self._clamp_pan()
-        self._zoom_bar.reposition(event.size())
-        self._zoom_bar.raise_()
-        self._reposition_popout_btn()
-        self._popout_btn.raise_()
+        self._refresh_overlays()
 
     def wheelEvent(self, event):  # noqa: N802
         """Ctrl+scroll zooms in/out; plain scroll bubbles to the parent."""
@@ -800,7 +801,8 @@ class BeforeAfterWidget(QWidget):
                 btext = "BEFORE"
                 bw = fm.horizontalAdvance(btext) + 8
                 # Offset BEFORE downward to clear the pop-out button in the top-left corner.
-                by = 32
+                by = (self._popout_btn.geometry().bottom() + 6
+                      if self._popout_btn.isVisible() else 6)
                 painter.fillRect(4, by, bw, lh, QColor(0, 0, 0, 150))
                 painter.setPen(QColor("#dddddd"))
                 painter.drawText(8, by + fm.ascent() + 2, btext)
@@ -810,7 +812,7 @@ class BeforeAfterWidget(QWidget):
                 aw2 = fm.horizontalAdvance(atext) + 8
                 ax = w - aw2 - 4
                 # Offset AFTER downward to clear the zoom overlay bar in the top-right corner.
-                ay = 32
+                ay = self._zoom_bar.geometry().bottom() + 6
                 painter.fillRect(ax, ay, aw2, lh, QColor(0, 0, 0, 150))
                 painter.setPen(QColor(self._divider_color))
                 painter.drawText(ax + 4, ay + fm.ascent() + 2, atext)

@@ -1614,21 +1614,10 @@ class AlphaFixerTab(QWidget):
         row.addWidget(atlas_chk)
         row.addStretch(1)
         # Redock button inside the dialog so users can re-dock from within it.
-        # Styled as a transparent overlay to match the pop-out button (item 16).
         btn_dock = _QPB("⇙  Redock", row_w)
         btn_dock.setObjectName("popoutBtn")
-        btn_dock.setStyleSheet(
-            "QPushButton#popoutBtn {"
-            "  background: rgba(30,30,30,160);"
-            "  color: white;"
-            "  border: 1px solid rgba(255,255,255,60);"
-            "  border-radius: 4px;"
-            "  padding: 3px 8px;"
-            "  font-size: 11px;"
-            "}"
-            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
-            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
-        )
+        btn_dock.setProperty("previewOverlay", True)
+        btn_dock.setAccessibleName("Redock preview")
         btn_dock.setToolTip(
             "Close this floating window and redock the preview back into the main panel."
         )

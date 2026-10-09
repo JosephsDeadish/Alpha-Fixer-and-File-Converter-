@@ -3,15 +3,17 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, QObject, pyqtSignal
-from PyQt6.QtGui import QImage
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog
+from PyQt6.QtCore import QCoreApplication, QEvent, QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QImage, QColor, QPalette
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QPushButton
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
 from src.ui.alpha_tool import AlphaFixerTab
 from src.ui.converter_tool import ConverterTab
 from src.ui.preview_pane import BeforeAfterWidget, ImagePreviewPane
+from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, build_stylesheet
 
 
 class PreviewLoader(QObject):
@@ -60,6 +62,108 @@ def tool(request, app, tmp_path):
 
 def dispose_events():
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
+def test_embedded_preview_controls_scale_and_remain_contained_with_keyboard_zoom(app, name):
+    widget = BeforeAfterWidget()
+    theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+    try:
+        widget.resize(360, 220)
+        widget.show()
+        image = QImage(8, 8, QImage.Format.Format_RGBA8888)
+        image.fill(QColor("red"))
+        widget.set_before(image)
+        widget.set_after(image)
+        zoom_buttons = widget._zoom_bar.findChildren(QPushButton)
+        assert [button.accessibleName() for button in zoom_buttons] == [
+            "Zoom out", "Fit preview to window", "Zoom in",
+        ]
+        assert widget._popout_btn.accessibleName() == "Undock preview"
+        for pixels in [13, 24, 32, 13]:
+            widget.setStyleSheet(build_stylesheet(theme)
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for width in [360, 180, 700]:
+                widget.resize(width, 220)
+                for _ in range(5):
+                    app.processEvents()
+                assert widget.rect().contains(widget._zoom_bar.geometry())
+                assert widget.rect().contains(widget._popout_btn.geometry())
+                assert not widget._zoom_bar.geometry().intersects(widget._popout_btn.geometry())
+                for button in zoom_buttons + [widget._popout_btn]:
+                    assert not button.styleSheet()
+                    assert button.font().pixelSize() == pixels
+                    assert button.palette().color(QPalette.ColorRole.ButtonText) == QColor(theme["text"])
+                    assert button.width() >= button.sizeHint().width()
+                    assert button.height() >= button.sizeHint().height()
+        widget.activateWindow()
+        QTest.mouseMove(widget, widget.rect().bottomRight())
+        for button in zoom_buttons + [widget._popout_btn]:
+            other = zoom_buttons[0] if button is not zoom_buttons[0] else zoom_buttons[1]
+            other.setFocus()
+            app.processEvents()
+            before_size, before_geometry = button.sizeHint(), button.geometry()
+            before_image = button.grab().toImage()
+            button.setFocus(Qt.FocusReason.TabFocusReason)
+            app.processEvents()
+            assert button.hasFocus()
+            assert button.sizeHint() == before_size
+            assert button.geometry() == before_geometry
+            assert button.grab().toImage() != before_image, name
+        zoom_buttons[2].setFocus()
+        app.processEvents()
+        initial = widget._zoom
+        QTest.keyClick(zoom_buttons[2], Qt.Key.Key_Space)
+        assert widget._zoom > initial
+        QTest.keyClick(zoom_buttons[1], Qt.Key.Key_Space)
+        assert widget._zoom == 1
+        zoom_buttons[2].setEnabled(False)
+        QTest.keyClick(zoom_buttons[2], Qt.Key.Key_Space)
+        assert widget._zoom == 1
+        widget.resize(700, 220)
+        app.processEvents()
+        assert widget._popout_btn.text() == "⇗ Undock"
+        widget._popout_btn.click()
+        assert widget._popout_btn.accessibleName() == "Redock preview"
+        widget.close_popout_dialog()
+        assert widget._popout_btn.accessibleName() == "Undock preview"
+        widget.resize(180, 220)
+        widget._popout_btn.click()
+        assert widget._popout_btn.accessibleName() == "Redock preview"
+        assert widget.rect().contains(widget._popout_btn.geometry())
+        widget.close_popout_dialog()
+        assert widget.rect().contains(widget._popout_btn.geometry())
+    finally:
+        widget.close_popout_dialog()
+        widget.close()
+        sip.delete(widget)
+        dispose_events()
+
+
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light", "Secret Skeleton"])
+def test_floating_redock_uses_shared_theme_and_keyboard_action(tool, app, name):
+    theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+    tool.setStyleSheet(build_stylesheet(theme) + "\nQWidget { font-size: 24px; }")
+    tool._compare._on_popout_clicked()
+    dialog = tool._compare._popout_dialog
+    try:
+        dialog.setStyleSheet(build_stylesheet(theme) + "\nQWidget { font-size: 24px; }")
+        app.processEvents()
+        button = next(button for button in dialog.findChildren(QPushButton)
+                      if button.accessibleName() == "Redock preview" and button.isVisible())
+        assert not button.styleSheet()
+        assert button.font().pixelSize() == 24
+        assert button.palette().color(QPalette.ColorRole.ButtonText) == QColor(theme["text"])
+        assert button.width() >= button.sizeHint().width()
+        dialog.activateWindow()
+        button.setFocus()
+        app.processEvents()
+        QTest.keyClick(button, Qt.Key.Key_Space)
+        assert tool._compare._popout_dialog is None
+        assert tool._compare.isVisible()
+    finally:
+        tool._compare.close_popout_dialog()
+        dispose_events()
 
 
 def test_repeated_popout_close_releases_windows_and_restores_controls(tool):

@@ -3912,6 +3912,23 @@ QLabel[settingsHint="true"] {{
 QLabel[toolGuidance="true"] {{
     color: {t['text']};
 }}
+QFrame#zoomOverlayBar {{
+    background-color: {t['surface']};
+    border: 1px solid {t['border']};
+    border-radius: 6px;
+}}
+QPushButton[previewOverlay="true"] {{
+    background-color: {t['surface']};
+    color: {t['text']};
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 3px;
+    min-width: 24px;
+    min-height: 20px;
+}}
+QPushButton[previewOverlay="true"]:hover {{
+    background-color: {t['button_hover']};
+}}
 QLabel[statusTone] {{
     color: {t['text']};
 }}

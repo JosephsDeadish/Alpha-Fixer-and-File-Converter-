@@ -2120,7 +2120,7 @@ class ConverterTab(QWidget):
 
         dlg.finished.connect(self._on_compare_docked_back)
 
-        # Add a transparent overlay "⇙  Redock" button inside the floating
+        # Add a "⇙  Redock" button inside the floating
         # dialog so the user can redock from the dialog itself (item 15).
         row_w = QWidget(dlg)
         row_w.setObjectName("dlgDockRow")
@@ -2129,18 +2129,8 @@ class ConverterTab(QWidget):
         row.addStretch(1)
         btn_dock = QPushButton("⇙  Redock", row_w)
         btn_dock.setObjectName("popoutBtn")
-        btn_dock.setStyleSheet(
-            "QPushButton#popoutBtn {"
-            "  background: rgba(30,30,30,160);"
-            "  color: white;"
-            "  border: 1px solid rgba(255,255,255,60);"
-            "  border-radius: 4px;"
-            "  padding: 3px 8px;"
-            "  font-size: 11px;"
-            "}"
-            "QPushButton#popoutBtn:hover  { background: rgba(80,80,80,200); }"
-            "QPushButton#popoutBtn:pressed{ background: rgba(30,30,30,240); }"
-        )
+        btn_dock.setProperty("previewOverlay", True)
+        btn_dock.setAccessibleName("Redock preview")
         btn_dock.setToolTip(
             "Close this floating window and redock the preview back into the main panel."
         )
