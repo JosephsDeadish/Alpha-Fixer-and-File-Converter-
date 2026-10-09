@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QObject, Qt, pyqtSignal
-from PyQt6.QtGui import QImage, QColor, QPalette
+from PyQt6.QtGui import QImage, QColor, QPalette, QPainter, QFontMetrics
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QPushButton
 
@@ -62,6 +62,57 @@ def tool(request, app, tmp_path):
 
 def dispose_events():
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+def test_painted_preview_text_inherits_live_font_and_elides_within_each_side(app, pixels, name):
+    fonts, texts = [], []
+
+    class RecordingPainter(QPainter):
+        def setFont(self, font):
+            fonts.append(font)
+            super().setFont(font)
+
+        def drawText(self, *args):
+            texts.append((args, self.font()))
+            return super().drawText(*args)
+
+    widget = BeforeAfterWidget()
+    try:
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + f"\nQWidget {{ font-size: {pixels}px; }}")
+        widget.resize(240, 240)
+        widget.show()
+        app.processEvents()
+        with patch("src.ui.preview_pane.QPainter", RecordingPainter):
+            widget.grab()
+            assert any(args[-1] == "Select a file to compare" for args, _ in texts)
+            widget.set_loading()
+            widget.grab()
+            assert any(args[-1] == "Processing…" for args, _ in texts)
+            image = QImage(8, 8, QImage.Format.Format_RGBA8888)
+            image.fill(QColor("red"))
+            widget.set_before(image)
+            widget.set_after(image)
+            widget.set_stats(
+                {"min": 0, "max": 255, "mean": 100.0, "percent_nonzero": 50.0},
+                {"min": 0, "max": 255, "mean": 120.0, "percent_nonzero": 75.0},
+            )
+            texts.clear()
+            widget.grab()
+        assert fonts
+        assert all(font.pixelSize() == pixels for font in fonts)
+        assert all(font.family() == widget.font().family() for font in fonts)
+        painted = [(args, font) for args, font in texts if len(args) == 3]
+        assert len(painted) == 4
+        assert any("…" in args[-1] for args, _ in painted)
+        for args, font in painted:
+            assert QFontMetrics(font).horizontalAdvance(args[-1]) <= widget.width() // 2 - 8
+        assert widget._stats_before and widget._stats_after
+    finally:
+        widget.close()
+        sip.delete(widget)
 
 
 @pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))

@@ -785,32 +785,35 @@ class BeforeAfterWidget(QWidget):
             painter.fillRect(split_x, 0, w - split_x, h, QColor(0, 0, 0, 110))
             painter.setClipping(False)
             painter.setPen(QColor(self._divider_color))
-            painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            loading_font = QFont(self.font())
+            loading_font.setBold(True)
+            painter.setFont(loading_font)
             painter.drawText(
                 QRect(split_x, 0, w - split_x, h),
-                Qt.AlignmentFlag.AlignCenter,
+                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                 "Processing…",
             )
 
         # ── Placeholder when no images at all ────────────────────────
         if not self._pix_before and not self._loading:
             painter.setPen(QColor("#a0a0b0"))
-            painter.setFont(QFont("Segoe UI", 10))
+            painter.setFont(self.font())
             painter.drawText(
                 QRect(0, 0, w, h),
-                Qt.AlignmentFlag.AlignCenter,
+                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                 "Select a file to compare",
             )
 
         # ── BEFORE / AFTER labels ─────────────────────────────────────
         if self._pix_before or self._pix_after or self._loading:
-            lbl_font = QFont("Segoe UI", 8, QFont.Weight.Bold)
+            lbl_font = QFont(self.font())
+            lbl_font.setBold(True)
             painter.setFont(lbl_font)
             fm = QFontMetrics(lbl_font)
             lh = fm.height() + 4
 
-            if split_x > 55:
-                btext = "BEFORE"
+            if split_x > 16:
+                btext = fm.elidedText("BEFORE", Qt.TextElideMode.ElideRight, split_x - 16)
                 bw = fm.horizontalAdvance(btext) + 8
                 # Offset BEFORE downward to clear the pop-out button in the top-left corner.
                 by = (self._popout_btn.geometry().bottom() + 6
@@ -819,8 +822,8 @@ class BeforeAfterWidget(QWidget):
                 painter.setPen(QColor("#dddddd"))
                 painter.drawText(8, by + fm.ascent() + 2, btext)
 
-            if w - split_x > 55:
-                atext = "AFTER"
+            if w - split_x > 16:
+                atext = fm.elidedText("AFTER", Qt.TextElideMode.ElideRight, w - split_x - 16)
                 aw2 = fm.horizontalAdvance(atext) + 8
                 ax = w - aw2 - 4
                 # Offset AFTER downward to clear the zoom overlay bar in the top-right corner.
@@ -834,7 +837,7 @@ class BeforeAfterWidget(QWidget):
         # this compact overlay serves as a fallback when the widget is used
         # standalone (e.g. in other contexts) or the window is too narrow.
         if (self._stats_before or self._stats_after) and w < self._COMPACT_OVERLAY_WIDTH_THRESHOLD:
-            stats_font = QFont("Segoe UI", 8)
+            stats_font = QFont(self.font())
             painter.setFont(stats_font)
             sfm = QFontMetrics(stats_font)
             slh = sfm.height() + 4
@@ -848,7 +851,8 @@ class BeforeAfterWidget(QWidget):
                 painter.setPen(QColor("#dddddd"))
                 painter.setClipRect(QRect(margin, sb_y, sb_w, slh))
                 painter.drawText(margin + 4, sb_y + sfm.ascent() + 2,
-                                 self._stats_before)
+                                 sfm.elidedText(self._stats_before, Qt.TextElideMode.ElideRight,
+                                                max(0, sb_w - 8)))
                 painter.setClipping(False)
 
             if self._stats_after and w - split_x > 10:
@@ -860,7 +864,8 @@ class BeforeAfterWidget(QWidget):
                 painter.setPen(QColor(self._divider_color))
                 painter.setClipRect(QRect(sa_x, sa_y, sa_w, slh))
                 painter.drawText(sa_x + 4, sa_y + sfm.ascent() + 2,
-                                 self._stats_after)
+                                 sfm.elidedText(self._stats_after, Qt.TextElideMode.ElideRight,
+                                                max(0, sa_w - 8)))
                 painter.setClipping(False)
 
         # ── Divider line ──────────────────────────────────────────────
