@@ -45,6 +45,7 @@ from src.core.runtime_validation import (
     execute_format_matrix_manifest,
     iter_corpus_files,
     load_manifest_entries,
+    manifest_coverage_review,
     manifest_group_check_suffix,
     manifest_grouped_entries,
     materialize_manifest_entries,
@@ -234,6 +235,23 @@ class TestCorpusHelperInputs(unittest.TestCase):
             [(suffix, label, len(group_entries)) for suffix, label, group_entries in grouped],
             [("psp", "PSP", 2), ("bc7_mipmap", "BC7 mipmap", 1), ("ps1", "PS1", 1)],
         )
+
+    def test_manifest_coverage_review_matches_required_labels_case_insensitively(self):
+        entries = [
+            {"platform": "PSP", "path": "/tmp/a.iso"},
+            {"platform": "PS1", "path": "/tmp/b.bin"},
+            {"group": "BC7 mipmap", "path": "/tmp/c.dds"},
+        ]
+        review = manifest_coverage_review(entries, ["psp", "PS2"], "platform")
+        self.assertEqual(review["present_labels"], ["PSP", "PS1"])
+        self.assertEqual(review["matched_labels"]["psp"], "PSP")
+        self.assertEqual(review["missing_labels"], ["PS2"])
+        self.assertFalse(review["ok"])
+
+        group_review = manifest_coverage_review(entries, ["bc7 MIPMAP"], "group")
+        self.assertEqual(group_review["matched_labels"]["bc7 MIPMAP"], "BC7 mipmap")
+        self.assertEqual(group_review["missing_labels"], [])
+        self.assertTrue(group_review["ok"])
 
     def test_built_in_public_disc_video_manifest_loads(self):
         manifest_path = os.path.join(

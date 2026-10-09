@@ -1831,6 +1831,121 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"], "1")
         self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"], "1")
 
+    def test_verify_packaged_app_can_require_specific_manifest_coverage_labels(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            json_out = os.path.join(tmpdir, "report.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            disc_manifest = os.path.join(tmpdir, "disc.json")
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            matrix_manifest = os.path.join(tmpdir, "matrix.json")
+            with open(disc_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"platform": "PSP", "path": "/tmp/psp.iso"}, {"platform": "PS1", "path": "/tmp/ps1.bin"}, {"platform": "PS2", "path": "/tmp/ps2.iso"}]}, handle)
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "BC6H", "path": "/tmp/bc6h.dds"}, {"group": "BC7", "path": "/tmp/bc7.dds"}, {"group": "mipmap", "path": "/tmp/mip.dds"}]}, handle)
+            with open(matrix_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"input": "/tmp/in.png", "target_format": "PNG"}, {"input": "/tmp/in.webp", "target_format": "DDS"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}, "external_format_matrix_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        disc_manifest,
+                        "--dds-manifest",
+                        dds_manifest,
+                        "--format-matrix-manifest",
+                        matrix_manifest,
+                        "--require-disc-manifest-platform",
+                        "PSP",
+                        "--require-disc-manifest-platform",
+                        "PS1",
+                        "--require-disc-manifest-platform",
+                        "PS2",
+                        "--require-dds-manifest-group",
+                        "BC6H",
+                        "--require-dds-manifest-group",
+                        "BC7",
+                        "--require-dds-manifest-group",
+                        "mipmap",
+                        "--require-format-manifest-target",
+                        "PNG",
+                        "--require-format-manifest-target",
+                        "DDS",
+                        "--json-out",
+                        json_out,
+                    ]
+                )
+            payload = json.loads(Path(json_out).read_text(encoding="utf-8"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            payload["manifest_inputs"]["disc_video"]["coverage_review"]["platform"]["missing_labels"],
+            [],
+        )
+        self.assertEqual(
+            payload["manifest_inputs"]["dds"]["coverage_review"]["group"]["missing_labels"],
+            [],
+        )
+        self.assertEqual(
+            payload["manifest_inputs"]["format_matrix"]["coverage_review"]["target"]["missing_labels"],
+            [],
+        )
+
+    def test_verify_packaged_app_required_manifest_coverage_fails_when_missing(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "BC6H", "path": "/tmp/bc6h.dds"}]}, handle)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--dds-manifest",
+                        dds_manifest,
+                        "--require-dds-manifest-group",
+                        "BC6H",
+                        "--require-dds-manifest-group",
+                        "BC7",
+                    ]
+                )
+        self.assertIn("DDS manifest missing required group labels", str(ctx.exception))
+        self.assertIn("BC7", str(ctx.exception))
+
     def test_verify_packaged_app_manifest_group_checks_require_grouped_manifest(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
         spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)

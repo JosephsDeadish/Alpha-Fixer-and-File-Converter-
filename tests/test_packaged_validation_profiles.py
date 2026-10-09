@@ -107,6 +107,17 @@ class TestPackagedValidationProfiles(unittest.TestCase):
             self.assertIn("--use-public-sample-manifests", argv)
             self.assertIn("--require-public-manifest-checks", argv)
             self.assertIn("--require-public-manifest-group-checks", argv)
+            self.assertIn("--require-disc-manifest-platform", argv)
+            self.assertIn("PSP", argv)
+            self.assertIn("PS1", argv)
+            self.assertIn("PS2", argv)
+            self.assertIn("--require-dds-manifest-group", argv)
+            self.assertIn("BC6H", argv)
+            self.assertIn("BC7", argv)
+            self.assertIn("mipmap", argv)
+            self.assertIn("cubemap", argv)
+            self.assertIn("array", argv)
+            self.assertIn("volume", argv)
             self.assertEqual(argv[argv.index("--repeat") + 1], "5")
             self.assertEqual(argv[argv.index("--repeat-selftest-runs") + 1], "4")
             summary_path = os.path.join(out_dir, "private-runtime-validation-summary.json")
@@ -114,6 +125,14 @@ class TestPackagedValidationProfiles(unittest.TestCase):
             self.assertEqual(summary_payload["preflight"]["validation_profile"], "onefile-deep")
             self.assertEqual(summary_payload["preflight"]["bundle_kind"], "onefile")
             self.assertEqual(summary_payload["preflight"]["requested_validation_settings"]["repeat"], 5)
+            self.assertEqual(
+                summary_payload["preflight"]["required_manifest_coverage"]["disc_video"]["platform"]["missing_labels"],
+                ["PSP", "PS1"],
+            )
+            self.assertEqual(
+                summary_payload["preflight"]["required_manifest_coverage"]["dds"]["group"]["missing_labels"],
+                ["BC6H", "BC7", "mipmap", "cubemap", "volume"],
+            )
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ if str(_REPO_ROOT) not in sys.path:
 from src.core.runtime_validation import (
     build_private_local_manifests_from_env,
     load_manifest_entries,
+    manifest_coverage_review,
     manifest_grouped_entries,
     render_manifest_payload,
 )
@@ -176,6 +177,10 @@ def _manifest_input_summary(raw_manifest: str | None, *group_keys: str) -> dict[
             for suffix, label, group_entries in grouped
         ]
     return summary
+
+
+def _required_label_args(values: list[str] | None) -> list[str]:
+    return [str(value or "").strip() for value in (values or []) if str(value or "").strip()]
 
 
 def _print_selftest_check_summary(checks: dict[str, object]) -> None:
@@ -550,6 +555,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-disc-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every platform/group represented in the supplied disc-video manifest.")
     parser.add_argument("--require-dds-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every group/family represented in the supplied DDS manifest.")
     parser.add_argument("--require-format-manifest-group-checks", action="store_true", help="Fail unless the packaged self-test reports ok=true for every target format represented in the supplied format-matrix manifest.")
+    parser.add_argument("--require-disc-manifest-platform", action="append", default=[], help="Require the supplied disc-video manifest to include at least one entry for this platform/system label. Repeat for multiple labels.")
+    parser.add_argument("--require-disc-manifest-group", action="append", default=[], help="Require the supplied disc-video manifest to include at least one entry for this group label. Repeat for multiple labels.")
+    parser.add_argument("--require-dds-manifest-group", action="append", default=[], help="Require the supplied DDS manifest to include at least one entry for this group/family label. Repeat for multiple labels.")
+    parser.add_argument("--require-format-manifest-target", action="append", default=[], help="Require the supplied format-matrix manifest to include at least one entry for this target/output format label. Repeat for multiple labels.")
     parser.add_argument("--disc-video-manifest", action="append", default=[], help="Optional external PSP/PS1/PS2 disc-video manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--dds-manifest", action="append", default=[], help="Optional external DDS/DX10 manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
     parser.add_argument("--format-matrix-manifest", action="append", default=[], help="Optional external packaged conversion-matrix manifest (path or inline JSON) for packaged self-test execution. Repeat to merge multiple manifests.")
@@ -604,6 +613,10 @@ def main(argv: list[str] | None = None) -> int:
     require_disc_group_checks = args.require_disc_manifest_group_checks or args.require_public_manifest_group_checks
     require_dds_group_checks = args.require_dds_manifest_group_checks or args.require_public_manifest_group_checks
     require_format_group_checks = args.require_format_manifest_group_checks or args.require_public_manifest_group_checks
+    required_disc_platforms = _required_label_args(args.require_disc_manifest_platform)
+    required_disc_groups = _required_label_args(args.require_disc_manifest_group)
+    required_dds_groups = _required_label_args(args.require_dds_manifest_group)
+    required_format_targets = _required_label_args(args.require_format_manifest_target)
     manifest_inputs = {
         "disc_video": _manifest_input_summary(merged_disc_manifest, "platform", "system", "group"),
         "dds": _manifest_input_summary(merged_dds_manifest, "group", "platform", "family"),
@@ -611,6 +624,46 @@ def main(argv: list[str] | None = None) -> int:
         "used_public_sample_manifests": bool(args.use_public_sample_manifests),
         "used_private_local_manifests": bool(args.use_private_local_manifests),
     }
+    disc_entries = load_manifest_entries(merged_disc_manifest or "")
+    dds_entries = load_manifest_entries(merged_dds_manifest or "")
+    format_entries = load_manifest_entries(merged_format_manifest or "")
+    manifest_inputs["disc_video"]["coverage_review"] = {
+        "platform": manifest_coverage_review(disc_entries, required_disc_platforms, "platform", "system"),
+        "group": manifest_coverage_review(disc_entries, required_disc_groups, "group"),
+    }
+    manifest_inputs["dds"]["coverage_review"] = {
+        "group": manifest_coverage_review(dds_entries, required_dds_groups, "group", "family", "platform"),
+    }
+    manifest_inputs["format_matrix"]["coverage_review"] = {
+        "target": manifest_coverage_review(format_entries, required_format_targets, "target_format", "output_format", "format"),
+    }
+    coverage_errors: list[str] = []
+    disc_platform_review = manifest_inputs["disc_video"]["coverage_review"]["platform"]
+    disc_group_review = manifest_inputs["disc_video"]["coverage_review"]["group"]
+    dds_group_review = manifest_inputs["dds"]["coverage_review"]["group"]
+    format_target_review = manifest_inputs["format_matrix"]["coverage_review"]["target"]
+    if required_disc_platforms and disc_platform_review.get("missing_labels"):
+        coverage_errors.append(
+            "Disc-video manifest missing required platform labels: "
+            + ", ".join(str(label) for label in disc_platform_review["missing_labels"])
+        )
+    if required_disc_groups and disc_group_review.get("missing_labels"):
+        coverage_errors.append(
+            "Disc-video manifest missing required group labels: "
+            + ", ".join(str(label) for label in disc_group_review["missing_labels"])
+        )
+    if required_dds_groups and dds_group_review.get("missing_labels"):
+        coverage_errors.append(
+            "DDS manifest missing required group labels: "
+            + ", ".join(str(label) for label in dds_group_review["missing_labels"])
+        )
+    if required_format_targets and format_target_review.get("missing_labels"):
+        coverage_errors.append(
+            "Format-matrix manifest missing required target labels: "
+            + ", ".join(str(label) for label in format_target_review["missing_labels"])
+        )
+    if coverage_errors:
+        raise SystemExit(" ; ".join(coverage_errors))
     if require_disc_group_checks:
         disc_group_checks = _manifest_group_requirement_checks(
             merged_disc_manifest,

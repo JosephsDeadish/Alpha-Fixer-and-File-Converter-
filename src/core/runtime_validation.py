@@ -195,6 +195,42 @@ def manifest_grouped_entries(
     ]
 
 
+def manifest_coverage_review(
+    entries: list[dict[str, object]],
+    required_labels: list[str] | tuple[str, ...] | None = None,
+    *keys: str,
+) -> dict[str, object]:
+    grouped = manifest_grouped_entries(entries, *keys)
+    present_labels = [label for _suffix, label, _group_entries in grouped]
+    present_suffixes = [suffix for suffix, _label, _group_entries in grouped]
+    label_by_suffix = {
+        manifest_group_check_suffix(label): label
+        for label in present_labels
+    }
+    normalized_required = [
+        str(label or "").strip()
+        for label in (required_labels or [])
+        if str(label or "").strip()
+    ]
+    matched_labels: dict[str, str] = {}
+    missing_labels: list[str] = []
+    for label in normalized_required:
+        suffix = manifest_group_check_suffix(label)
+        matched = str(label_by_suffix.get(suffix) or "").strip()
+        if matched:
+            matched_labels[label] = matched
+        else:
+            missing_labels.append(label)
+    return {
+        "present_labels": present_labels,
+        "present_suffixes": present_suffixes,
+        "required_labels": normalized_required,
+        "matched_labels": matched_labels,
+        "missing_labels": missing_labels,
+        "ok": not missing_labels,
+    }
+
+
 def _entry_source_path(entry: dict[str, object]) -> str:
     for key in ("path", "input", "input_path", "source", "source_path"):
         value = str(entry.get(key) or "").strip()

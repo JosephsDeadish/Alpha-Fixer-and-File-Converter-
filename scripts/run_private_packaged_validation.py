@@ -15,6 +15,7 @@ from src.core.runtime_validation import (
     build_private_local_manifests_from_env,
     corpus_roots_from_env,
     iter_corpus_files,
+    manifest_coverage_review,
 )
 
 _VIDEO_CORPUS_ENV_NAMES = (
@@ -34,6 +35,8 @@ _PRIVATE_MANIFEST_ENV_NAMES = (
     "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST",
     "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST",
 )
+_REQUIRED_PRIVATE_DISC_PLATFORMS = ("PSP", "PS1", "PS2")
+_REQUIRED_PRIVATE_DDS_GROUPS = ("BC6H", "BC7", "mipmap", "cubemap", "array", "volume")
 _VALIDATION_PROFILES: dict[str, dict[str, float | int]] = {
     "standard": {},
     "deep": {
@@ -145,6 +148,13 @@ def _preflight_summary(
     disc_entries = list(discovered.get("disc_video") or [])
     odd_entries = list(discovered.get("odd_video") or [])
     dds_entries = list(discovered.get("dds") or [])
+    disc_coverage = {
+        "platform": manifest_coverage_review(disc_entries, _REQUIRED_PRIVATE_DISC_PLATFORMS, "platform", "system"),
+        "group": manifest_coverage_review(disc_entries, (), "group"),
+    }
+    dds_coverage = {
+        "group": manifest_coverage_review(dds_entries, _REQUIRED_PRIVATE_DDS_GROUPS, "group", "family", "platform"),
+    }
     return {
         "launch_target": launch_target,
         "launch_target_exists": Path(launch_target).exists(),
@@ -177,6 +187,10 @@ def _preflight_summary(
             "disc_video": disc_entries[:3],
             "odd_video": odd_entries[:3],
             "dds": dds_entries[:3],
+        },
+        "required_manifest_coverage": {
+            "disc_video": disc_coverage,
+            "dds": dds_coverage,
         },
         "total_discovered_entries": len(disc_entries) + len(odd_entries) + len(dds_entries),
     }
@@ -433,8 +447,12 @@ def main(argv: list[str] | None = None) -> int:
             dds_manifest_count += 1
     if disc_manifest_count > 0:
         verify_args.append("--require-disc-manifest-group-checks")
+        for label in _REQUIRED_PRIVATE_DISC_PLATFORMS:
+            verify_args.extend(["--require-disc-manifest-platform", label])
     if dds_manifest_count > 0:
         verify_args.append("--require-dds-manifest-group-checks")
+        for label in _REQUIRED_PRIVATE_DDS_GROUPS:
+            verify_args.extend(["--require-dds-manifest-group", label])
 
     print(f"Running private packaged validation via: {verify_args[0]}")
     print(f"Generated manifests: {manifests_dir}")
