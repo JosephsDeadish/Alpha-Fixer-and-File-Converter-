@@ -1645,17 +1645,17 @@ def _video_capability_summary() -> str:
     ffprobe_ok = _get_ffprobe_exe() is not None
     if deps_ok:
         return (
-            "Ready: standard video import, MP4 export, and image/GIF clip assembly are available. "
+            "Ready: video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Odd-container probing and recovery are enabled through ffprobe + ffmpeg. "
+                "Odd-container probing and recovery are enabled. "
                 if ffprobe_ok else
-                "Odd-container recovery is available, but probing/detail messages stay limited until ffprobe is available. "
+                "Odd-container recovery is available, but probe detail stays limited until ffprobe is available. "
             )
             + "Audio-only containers still cannot be added as video clips."
         )
     return (
-        "Ready with limits: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
-        "Odd-container/disc-image recovery and detailed probing stay unavailable until those dependencies are present."
+        "Limited: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
+        "Odd-container recovery and detailed probing stay unavailable until those dependencies are present."
     )
 
 
@@ -3939,11 +3939,11 @@ class VideoToolDialog(QDialog):
 
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
-        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        text = f"Tool status: {status}" if status else "Tool status: ready"
         next_step = getattr(self, "_next_step_lbl", None)
         next_text = next_step.text().strip() if next_step is not None else ""
         if next_text:
-            text += f"\n{next_text}"
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 

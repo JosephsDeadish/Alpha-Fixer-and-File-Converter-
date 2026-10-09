@@ -40,14 +40,12 @@ def _converter_capability_summary() -> str:
     parts: list[str] = []
     if unavailable:
         formats = ", ".join(name for name, _reason in unavailable)
-        parts.append(
-            f"Optional Pillow exports unavailable here: {formats}; selecting one will fall back to PNG."
-        )
+        parts.append(f"optional exports limited ({formats} fall back to PNG)")
     if compressed_dds:
-        parts.append("standard image conversion plus DDS raw/compressed output are available.")
+        parts.append("standard image conversion and DDS raw/compressed output are ready")
     else:
-        parts.append("standard image conversion is available; DDS compressed variants need ImageMagick/wand.")
-    prefix = "Ready with limits:" if unavailable or not compressed_dds else "Ready:"
+        parts.append("standard image conversion is ready; DDS compressed output needs ImageMagick/wand")
+    prefix = "Limited:" if unavailable or not compressed_dds else "Ready:"
     return prefix + " " + " ".join(parts)
 
 
@@ -913,9 +911,9 @@ class ConverterTab(QWidget):
         )
         self._next_step_lbl.setText(next_text)
         self._next_step_lbl.setToolTip(next_text)
-        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        text = f"Tool status: {status}" if status else "Tool status: ready"
         if next_text:
-            text += f"\n{next_text}"
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 

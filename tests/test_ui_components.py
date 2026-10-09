@@ -371,7 +371,7 @@ class TestConverterTab(unittest.TestCase):
             with patch.object(ct, "dds_compression_available", return_value=False):
                 summary = ct._converter_capability_summary()
                 details = ct._converter_capability_details()
-        self.assertIn("Ready with limits:", summary)
+        self.assertIn("Limited:", summary)
         self.assertIn("fall back to PNG", summary)
         self.assertIn("ImageMagick/wand", details)
         self.assertIn("AVIF", details)
@@ -6346,9 +6346,9 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertTrue(hasattr(widget, "_capability_lbl"))
             self.assertTrue(widget._capability_lbl.text().startswith("Ready:"))
             self.assertIn("SVG inputs", widget._capability_lbl.text())
-            self.assertIn("What works here right now:", widget._session_status_lbl.text())
+            self.assertIn("Tool status:", widget._session_status_lbl.text())
             self.assertIn("Alpha ready", widget._session_status_lbl.text())
-            self.assertIn("Next step:", widget._session_status_lbl.text())
+            self.assertIn("Next:", widget._session_status_lbl.text())
             self.assertIn("add image files", widget._next_step_lbl.text())
         finally:
             widget.close()
@@ -6464,7 +6464,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
 
         dialog = gb.GifBuilderDialog()
         try:
-            self.assertIn("What works here right now:", dialog._session_status_lbl.text())
+            self.assertIn("Tool status:", dialog._session_status_lbl.text())
             self.assertIn("GIF Builder ready", dialog._session_status_lbl.text())
             dialog._update_import_status(
                 attempted=2,
@@ -6488,7 +6488,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Import summary:", self._app.clipboard().text())
             self.assertIn("broken.bin", self._app.clipboard().text())
             self.assertIn("1 failed", dialog._session_status_lbl.text())
-            self.assertIn("Next step:", dialog._session_status_lbl.text())
+            self.assertIn("Next:", dialog._session_status_lbl.text())
             self.assertIn("audio-only files cannot be added", dialog._next_step_lbl.text())
             self.assertIn("Show details or Copy details", dialog._next_step_lbl.text())
         finally:
@@ -6641,7 +6641,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
 
         dialog = vt.VideoToolDialog()
         try:
-            self.assertIn("What works here right now:", dialog._session_status_lbl.text())
+            self.assertIn("Tool status:", dialog._session_status_lbl.text())
             self.assertIn("Video Builder ready", dialog._session_status_lbl.text())
             dialog._video_io_available = False
             dialog._update_import_status(
@@ -6661,7 +6661,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("audio.ogg", self._app.clipboard().text())
             self.assertIn("image/GIF mode", dialog._session_status_lbl.text())
             self.assertIn("1 failed", dialog._session_status_lbl.text())
-            self.assertIn("Next step:", dialog._session_status_lbl.text())
+            self.assertIn("Next:", dialog._session_status_lbl.text())
             self.assertIn("audio-only files cannot be added", dialog._next_step_lbl.text())
             self.assertIn("image/GIF clips and GIF export still work here", dialog._next_step_lbl.text())
         finally:
@@ -6689,10 +6689,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             widget._output_info_lbl.setText("<b>OUT</b><br>Preview<br><b>unavailable</b>")
             self.assertIn("preview unavailable", widget.get_status_bar_text())
             widget._refresh_session_status()
-            self.assertIn("What works here right now:", widget._session_status_lbl.text())
+            self.assertIn("Tool status:", widget._session_status_lbl.text())
             self.assertIn("Converter ready", widget._session_status_lbl.text())
             self.assertIn("preview sample.png", widget._session_status_lbl.text())
-            self.assertIn("Next step:", widget._session_status_lbl.text())
+            self.assertIn("Next:", widget._session_status_lbl.text())
             self.assertIn("review the live preview", widget._next_step_lbl.text())
         finally:
             widget.close()
@@ -6721,9 +6721,9 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("alpha heat-map on", summary)
             self.assertIn("atlas boxes on (4 cells)", summary)
             widget._refresh_session_status()
-            self.assertIn("What works here right now:", widget._session_status_lbl.text())
+            self.assertIn("Tool status:", widget._session_status_lbl.text())
             self.assertIn("preview sprite.png", widget._session_status_lbl.text())
-            self.assertIn("Next step:", widget._session_status_lbl.text())
+            self.assertIn("Next:", widget._session_status_lbl.text())
             self.assertIn("review the preview helpers", widget._next_step_lbl.text())
         finally:
             widget.close()
@@ -6748,13 +6748,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             _next_step_lbl=_FakeLabel("Next step: add clips to start a timeline, then preview or export."),
             _capability_lbl=_FakeLabel("Ready: image/GIF clips work here; MP4 export needs ffmpeg."),
             _session_status_lbl=_FakeLabel(
-                "What works here right now: 🎬 Video Builder ready  •  image/GIF mode\n"
-                "Next step: add clips to start a timeline, then preview or export."
+                "Tool status: 🎬 Video Builder ready  •  image/GIF mode\n"
+                "Next: add clips to start a timeline, then preview or export."
             ),
         )
         summary, tooltip = _status_summary_and_tooltip(source)
         self.assertEqual(summary, "🎬 Video Builder ready  •  image/GIF mode")
-        self.assertIn("What works here right now:", tooltip)
+        self.assertIn("Tool status:", tooltip)
         self.assertIn("Next step: add clips", tooltip)
         self.assertIn("Ready: image/GIF clips work here", tooltip)
 
@@ -6819,13 +6819,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             isVisible=lambda: True,
             isActiveWindow=lambda: True,
             get_status_bar_text=lambda: "🎬 Video Builder: 2 clips  •  import 1 recovered",
-            _session_status_lbl=types.SimpleNamespace(text=lambda: "What works here right now: 🎬 Video Builder: 2 clips  •  import 1 recovered"),
+            _session_status_lbl=types.SimpleNamespace(text=lambda: "Tool status: 🎬 Video Builder: 2 clips  •  import 1 recovered"),
             _capability_lbl=types.SimpleNamespace(text=lambda: "Ready: video import and MP4 export are available."),
             _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: preview the recovered clip and export when ready."),
         )
         current_tab = types.SimpleNamespace(
             get_status_bar_text=lambda: "📋 History: 3 items  •  filter status:partial",
-            _session_status_lbl=types.SimpleNamespace(text=lambda: "What works here right now: 📋 History: 3 items  •  filter status:partial"),
+            _session_status_lbl=types.SimpleNamespace(text=lambda: "Tool status: 📋 History: 3 items  •  filter status:partial"),
             _capability_lbl=types.SimpleNamespace(text=lambda: ""),
             _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: adjust the filter or export the visible rows."),
         )
@@ -6836,13 +6836,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         )
 
         text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
-        self.assertEqual(text, "Selected tool: 🎬 Video Builder — preview the recovered clip and export when ready.")
-        self.assertIn("What works here right now:", tooltip)
+        self.assertEqual(text, "Selected: 🎬 Video Builder  •  Next: preview the recovered clip and export when ready.")
+        self.assertIn("Tool status:", tooltip)
         self.assertIn("preview the recovered clip", tooltip)
 
         active_builder.isActiveWindow = lambda: False
         text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
-        self.assertEqual(text, "Selected tool: 📋 History — adjust the filter or export the visible rows.")
+        self.assertEqual(text, "Selected: 📋 History  •  Next: adjust the filter or export the visible rows.")
         self.assertIn("adjust the filter", tooltip)
 
     def test_converter_open_gif_builder_delegates_to_main_window_when_available(self):
@@ -7186,10 +7186,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertFalse(tab._sub_tabs.tabBar().expanding())
             self.assertEqual(tab._sub_tabs.tabBar().tabToolTip(1), "Alpha & RGBA Adjuster history")
             tab._sub_tabs.setCurrentIndex(4)
-            self.assertIn("What works here right now:", tab._session_status_lbl.text())
+            self.assertIn("Tool status:", tab._session_status_lbl.text())
             self.assertIn("History: Video Builder", tab.get_status_bar_text())
             self.assertIn("1 item", tab.get_status_bar_text())
-            self.assertIn("Next step:", tab._session_status_lbl.text())
+            self.assertIn("Next:", tab._session_status_lbl.text())
             tab._vid_search.setText("transcode")
             self.assertIn("filter transcode", tab.get_status_bar_text())
             self.assertIn("filtered status/notes results", tab._next_step_lbl.text())
@@ -7233,7 +7233,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertFalse(self._widget._btn_slot_add.isEnabled())
 
     def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
-        self.assertIn("What works here right now:", self._widget._session_status_lbl.text())
+        self.assertIn("Tool status:", self._widget._session_status_lbl.text())
         self.assertIn("Ready:", self._widget._capability_lbl.text())
         self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
         self._widget._src_path = "/tmp/sample.png"
@@ -7249,7 +7249,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("all-zones slot", summary)
         self.assertIn("result ready to save", summary)
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
-        self.assertIn("Next step:", self._widget._session_status_lbl.text())
+        self.assertIn("Next:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
 
     def test_selective_alpha_slot_labels_explain_next_actions(self):

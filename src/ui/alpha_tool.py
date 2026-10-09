@@ -33,16 +33,16 @@ from ..core.file_converter import _has_cairosvg, _has_svglib
 def _alpha_capability_summary() -> str:
     svg_ready = _has_cairosvg() or _has_svglib()
     parts = [
-        "Ready: standard raster alpha/RGBA processing and preview tools are available.",
+        "Ready: raster alpha/RGBA processing and preview tools are available.",
     ]
     if svg_ready:
-        parts.append("SVG inputs are ready.")
+        parts.append("SVG input ready.")
     else:
-        parts.append("SVG inputs need cairosvg or svglib.")
+        parts.append("SVG input needs cairosvg or svglib.")
     if _has_wand():
-        parts.append("Complex DDS inspection is ready with ImageMagick/wand support.")
+        parts.append("Complex DDS helpers ready.")
     else:
-        parts.append("Complex DDS helpers stay limited until ImageMagick/wand is available.")
+        parts.append("Complex DDS helpers limited without ImageMagick/wand.")
     return " ".join(parts)
 
 
@@ -1125,9 +1125,9 @@ class AlphaFixerTab(QWidget):
         next_text = _alpha_next_step_text(bool(self.get_queue_status_text()), self._preview_path or "", helper_text)
         self._next_step_lbl.setText(next_text)
         self._next_step_lbl.setToolTip(next_text)
-        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        text = f"Tool status: {status}" if status else "Tool status: ready"
         if next_text:
-            text += f"\n{next_text}"
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 

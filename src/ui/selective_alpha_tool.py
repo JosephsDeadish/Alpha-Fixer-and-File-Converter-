@@ -89,8 +89,7 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready: single-image Alpha Painter editing, multi-zone painting, shared-zone import, "
-        "undo/redo, saved full-layout slots, and result preview/save tools are available."
+        "Ready: Alpha Painter editing, shared-zone import, undo/redo, saved layouts, and preview/export tools are available."
     )
 
 
@@ -2681,9 +2680,9 @@ class SelectiveAlphaTool(QWidget):
         )
         self._next_step_lbl.setText(next_text)
         self._next_step_lbl.setToolTip(next_text)
-        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        text = f"Tool status: {status}" if status else "Tool status: ready"
         if next_text:
-            text += f"\n{next_text}"
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
         self.queue_status_changed.emit(status)

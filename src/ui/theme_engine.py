@@ -3624,16 +3624,16 @@ QTabBar[objectName="qt_tabwidget_tabbar"] {{
 QTabBar::tab {{
     background: {t['primary']};
     color: {t['text_secondary']};
-    padding: 5px 14px;
-    min-width: 80px;
-    min-height: 22px;
+    padding: 7px 16px;
+    min-width: 108px;
+    min-height: 28px;
     margin-right: 3px;
     border: 2px solid {t['border']};
     border-bottom: none;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 12px;
 }}
 QTabBar::tab:selected {{
     background: {t['tab_selected']};

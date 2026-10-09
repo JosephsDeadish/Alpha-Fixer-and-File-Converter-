@@ -755,46 +755,36 @@ class _ToastNotification(QWidget):
 
 def _runtime_readiness_banner_text(summary: dict[str, object] | None) -> str:
     if not summary:
-        return "🧭 App status: checking runtime and bundled-build support…"
+        return "🧭 App status: checking bundled runtime support…"
     parts: list[str] = []
-    parts.append("core image tools ready")
+    parts.append("images ready")
     ffmpeg_runtime_ready = bool(summary.get("ffmpeg_runtime_ready"))
     if bool(summary.get("video_runtime_ready")):
-        parts.append("video + MP4 ready")
+        parts.append("video ready")
     else:
         missing = summary.get("missing_video_bits") or []
         if missing:
-            parts.append("video + MP4 limited (" + ", ".join(str(bit) for bit in missing) + ")")
+            parts.append("video limited")
         elif summary.get("ffmpeg_path") and not ffmpeg_runtime_ready:
-            parts.append("video + MP4 limited (ffmpeg self-check failed)")
+            parts.append("video limited")
         else:
-            parts.append("video + MP4 limited")
+            parts.append("video limited")
     if bool(summary.get("odd_container_probe_ready")):
         parts.append("odd-container probe ready")
     elif bool(summary.get("video_runtime_ready")):
-        ffprobe_runtime_ready = bool(summary.get("ffprobe_runtime_ready"))
-        if summary.get("ffprobe_path") and not ffprobe_runtime_ready:
-            parts.append("odd-container probe limited (ffprobe self-check failed)")
-        else:
-            parts.append("odd-container probe limited")
+        parts.append("odd-container probe limited")
     if bool(summary.get("dds_compression_available")):
-        parts.append("DDS compression ready")
+        parts.append("DDS extras ready")
     else:
-        parts.append("DDS compression limited")
+        parts.append("DDS extras limited")
     optional_output_limits = summary.get("optional_output_limits") or []
     if optional_output_limits:
-        parts.append(f"{len(optional_output_limits)} optional export limit(s)")
+        parts.append(f"{len(optional_output_limits)} export limit{'s' if len(optional_output_limits) != 1 else ''}")
     runtime_libs = summary.get("missing_linux_runtime_libs") or []
     packaged_asset_warnings = summary.get("packaged_asset_warnings") or []
     if bool(summary.get("frozen")):
         if runtime_libs or packaged_asset_warnings or not bool(summary.get("packaged_bundle_ready")):
-            detail_parts: list[str] = []
-            if runtime_libs:
-                detail_parts.append(f"{len(runtime_libs)} runtime lib{'s' if len(runtime_libs) != 1 else ''}")
-            if packaged_asset_warnings:
-                detail_parts.append(f"{len(packaged_asset_warnings)} packaged asset gap{'s' if len(packaged_asset_warnings) != 1 else ''}")
-            detail = f" ({', '.join(detail_parts)})" if detail_parts else ""
-            parts.append("bundle needs attention" + detail)
+            parts.append("bundle needs attention")
         else:
             parts.append("bundle verified")
     else:
@@ -952,15 +942,19 @@ def _tool_name_from_summary(summary: str) -> tuple[str, str]:
 def _selected_tool_text(summary: str, next_text: str) -> str:
     tool_name, summary_detail = _tool_name_from_summary(summary)
     next_detail = _trim_detail_prefix(next_text, "Next step:")
+    if next_detail.lower().startswith("next:"):
+        next_detail = next_detail[5:].strip()
+    if summary_detail and "." in summary_detail:
+        summary_detail = summary_detail.split(".", 1)[0].strip()
     if tool_name and next_detail:
-        return f"Selected tool: {tool_name} — {next_detail}"
+        return f"Selected: {tool_name}  •  Next: {next_detail}"
     if tool_name and summary_detail:
-        return f"Selected tool: {tool_name} — {summary_detail}"
+        return f"Selected: {tool_name}  •  {summary_detail}"
     if tool_name:
-        return f"Selected tool: {tool_name}"
+        return f"Selected: {tool_name}"
     if next_detail:
-        return f"Selected tool: {next_detail}"
-    return "Selected tool: choose a tab or open a builder"
+        return f"Selected: {next_detail}"
+    return "Selected: choose a tool tab or open a builder"
 
 
 def _status_summary_and_tooltip(source) -> tuple[str, str]:
@@ -1447,7 +1441,7 @@ class MainWindow(QMainWindow):
         self._readiness_lbl.setStyleSheet("color: #888; padding: 0 10px 6px 10px;")
         self._readiness_lbl.setToolTip(_runtime_readiness_banner_tooltip(self._runtime_capability_summary))
         cv.addWidget(self._readiness_lbl)
-        self._current_tool_lbl = QLabel("Selected tool: loading status…")
+        self._current_tool_lbl = QLabel("Selected: loading tool status…")
         self._current_tool_lbl.setObjectName("subheader")
         self._current_tool_lbl.setWordWrap(True)
         self._current_tool_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1507,7 +1501,7 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget()
         self._bg_tabs = self._tabs
         self._tabs.setUsesScrollButtons(True)
-        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         self._tabs.tabBar().setExpanding(False)
         # Allow drag-to-reorder tabs (item 56).
         self._tabs.tabBar().setMovable(True)
@@ -2998,8 +2992,8 @@ class MainWindow(QMainWindow):
         if summary:
             return _selected_tool_text(summary, _label_text(getattr(tab, "_next_step_lbl", None))), tooltip
         return (
-            "Selected tool: choose a tab or open a builder",
-            "What works here right now: choose a tab or open a builder",
+            "Selected: choose a tool tab or open a builder",
+            "Choose a tool tab or open a builder to see status and next steps.",
         )
 
     def _update_current_tool_status(self, *_args) -> None:

@@ -155,16 +155,16 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 def _gif_builder_capability_summary() -> str:
     if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
         if _get_ffprobe_exe():
-            odd_container_text = " detailed odd-container probing is enabled."
+            odd_container_text = " Odd-container probing is enabled."
         else:
-            odd_container_text = " odd-container probing detail stays limited until ffprobe is available."
+            odd_container_text = " Odd-container detail stays limited until ffprobe is available."
         return (
-            "Ready: images, animated GIFs, and video-source imports are available."
+            "Ready: image, animated GIF, and video-source imports are available."
             + odd_container_text
-            + " Video clips expand into GIF frames automatically; audio stays ignored for GIF import/export."
+            + " Video clips expand into GIF frames automatically; audio is ignored for GIF import/export."
         )
     return (
-        "Ready with limits: images and animated GIFs work, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
+        "Limited: images and animated GIFs work, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
         + _video_io_diagnostics()
     )
 
@@ -1117,10 +1117,10 @@ class GifBuilderDialog(QDialog):
 
     def _refresh_session_status(self, *_args) -> None:
         status = self.get_status_bar_text().strip()
-        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        text = f"Tool status: {status}" if status else "Tool status: ready"
         next_text = self._next_step_lbl.text().strip()
         if next_text:
-            text += f"\n{next_text}"
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
 

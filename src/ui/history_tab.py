@@ -24,7 +24,7 @@ _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 def _history_capability_summary() -> str:
     return (
-        "Ready: converter, alpha, selective-alpha, GIF Builder, and Video Builder histories can be filtered, previewed, and exported here."
+        "Ready: browse, filter, preview, and export converter, alpha, GIF Builder, Video Builder, and Alpha Painter history."
     )
 
 
@@ -482,7 +482,7 @@ class HistoryTab(QWidget):
         # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
         self._sub_tabs.setUsesScrollButtons(True)
-        self._sub_tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        self._sub_tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         self._sub_tabs.tabBar().setExpanding(False)
 
         # --- Converter sub-tab ---
@@ -506,7 +506,7 @@ class HistoryTab(QWidget):
         self._conv_summary = QLabel("")
         self._conv_summary.setObjectName("subheader")
         conv_layout.addWidget(self._conv_summary)
-        self._sub_tabs.addTab(conv_widget, "🔄  Converter")
+        self._sub_tabs.addTab(conv_widget, "🔄 Converter")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(conv_widget), "Converter history")
 
         # --- Alpha & RGBA Adjuster sub-tab ---
@@ -742,11 +742,11 @@ class HistoryTab(QWidget):
         self._hdr.setText(f"{prefix}  Processing History")
         # Decorate the sub-tab labels with the theme icon.
         icon = get_theme_icon(theme_name)
-        self._sub_tabs.setTabText(0, f"{icon}🔄  Converter")
-        self._sub_tabs.setTabText(1, f"{icon}🖼  Alpha & RGBA Adjuster")
-        self._sub_tabs.setTabText(2, f"{icon}🎭  Alpha Painter")
-        self._sub_tabs.setTabText(3, f"{icon}🎞  GIF Builder")
-        self._sub_tabs.setTabText(4, f"{icon}🎬  Video Builder")
+        self._sub_tabs.setTabText(0, f"{icon}🔄 Converter")
+        self._sub_tabs.setTabText(1, f"{icon}🖼 Alpha & RGBA Adjuster")
+        self._sub_tabs.setTabText(2, f"{icon}🎭 Alpha Painter")
+        self._sub_tabs.setTabText(3, f"{icon}🎞 GIF Builder")
+        self._sub_tabs.setTabText(4, f"{icon}🎬 Video Builder")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -815,9 +815,9 @@ class HistoryTab(QWidget):
         next_text = _history_next_step_text(total, visible, filter_text)
         self._next_step_lbl.setText(next_text)
         self._next_step_lbl.setToolTip(next_text)
-        text = f"What works here right now: {status}" if status else "What works here right now: ready"
+        text = f"Tool status: {status}" if status else "Tool status: ready"
         if next_text:
-            text += f"\n{next_text}"
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
         self.queue_status_changed.emit(status)
