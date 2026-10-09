@@ -9,12 +9,16 @@ from contextlib import contextmanager
 
 def set_status_tone(label, tone: str) -> None:
     """Refresh theme styling after a status label changes semantic tone."""
+    from PyQt6.QtCore import QCoreApplication, QEvent
+
     tone = tone if tone in ("neutral", "success", "warning", "error") else "neutral"
     if label.property("statusTone") == tone:
         return
     label.setProperty("statusTone", tone)
     label.style().unpolish(label)
     label.style().polish(label)
+    QCoreApplication.sendEvent(label, QEvent(QEvent.Type.StyleChange))
+    label.updateGeometry()
     label.update()
 
 

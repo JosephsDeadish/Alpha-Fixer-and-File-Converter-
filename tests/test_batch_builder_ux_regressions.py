@@ -276,6 +276,7 @@ def test_builder_guidance_and_recovery_tones_follow_live_theme_and_scale(app, ki
                     assert label.font().pixelSize() == pixels
                 for label in [widget._import_status_lbl, widget._next_step_lbl]:
                     assert label.property("statusTone") == expected_tone
+                    assert label.height() >= label.minimumSizeHint().height()
                     if expected_tone != "neutral":
                         assert label.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
                 assert widget._import_status_lbl.text() == summary
@@ -288,6 +289,17 @@ def test_builder_guidance_and_recovery_tones_follow_live_theme_and_scale(app, ki
             widget._set_import_status("Ready", detail="", tone="neutral")
             assert widget._import_detail_box.isHidden()
             assert widget._import_detail_toggle_btn.isHidden()
+        label = widget._import_status_lbl
+        widget._set_import_status("Ready", tone="neutral")
+        app.processEvents()
+        neutral_height = label.sizeHint().height()
+        widget._set_import_status("Ready", tone="error")
+        app.processEvents()
+        assert label.sizeHint().height() > neutral_height
+        assert label.height() >= label.minimumSizeHint().height()
+        widget._set_import_status("Ready", tone="neutral")
+        app.processEvents()
+        assert label.sizeHint().height() == neutral_height
     finally:
         if kind == "gif":
             widget._clear_all()
