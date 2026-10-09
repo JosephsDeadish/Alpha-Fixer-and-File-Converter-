@@ -1978,8 +1978,9 @@ class _HangWatchdog:
             except Exception:
                 pass
         if self._thread is not None:
-            self._thread.join()
-            self._thread = None
+            self._thread.join(timeout=self._CHECK_INTERVAL_S)
+            if not self._thread.is_alive():
+                self._thread = None
 
     def _on_tick(self) -> None:
         """Called by QTimer on the UI thread — proof the event loop is running."""
@@ -2022,7 +2023,7 @@ class _HangWatchdog:
 # ---------------------------------------------------------------------------
 
 def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
-    """Close native UI resources before QApplication/interpreter teardown."""
+    """Run UI cleanup while QApplication still exists."""
     from PyQt6 import sip
     from PyQt6.QtCore import QCoreApplication, QEvent
 
@@ -2040,10 +2041,8 @@ def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
     finally:
         shutdown()
         app.aboutToQuit.disconnect(shutdown)
-        if not sip.isdeleted(window):
-            sip.delete(window)
-        if splash is not None and not sip.isdeleted(splash):
-            sip.delete(splash)
+        # Do not force-delete the widget tree: a bounded closeEvent wait may
+        # have timed out while a cooperative worker is still using its objects.
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 

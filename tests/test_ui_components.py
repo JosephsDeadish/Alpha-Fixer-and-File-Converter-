@@ -2584,7 +2584,7 @@ class TestSoundEngine(unittest.TestCase):
 
 
 class TestOrderlyApplicationShutdown(unittest.TestCase):
-    def test_main_window_shutdown_joins_workers_and_is_idempotent(self):
+    def test_main_window_shutdown_keeps_bounded_waits_and_is_idempotent(self):
         app = _get_app()
         from PyQt6 import sip
         from PyQt6.QtGui import QCloseEvent
@@ -2598,20 +2598,25 @@ class TestOrderlyApplicationShutdown(unittest.TestCase):
             window = MainWindow(settings)
             threads = []
             for tab in (window._alpha_tab, window._converter_tab):
-                for name in ("_worker", "_preview_loader", "_collect_thread"):
+                for name, timeout in (("_worker", 15000), ("_preview_loader", 3000)):
                     thread = MagicMock()
                     thread.isRunning.return_value = True
+                    thread.wait.return_value = False
                     setattr(tab, name, thread)
-                    threads.append(thread)
+                    threads.append((thread, timeout))
             effect = window._sound._effect
+            pool = MagicMock()
+            pool.waitForDone.return_value = False
             try:
-                with patch.object(settings, "sync", wraps=settings.sync) as sync:
+                with patch.object(settings, "sync", wraps=settings.sync) as sync, \
+                        patch("PyQt6.QtCore.QThreadPool.globalInstance", return_value=pool):
                     window.closeEvent(QCloseEvent())
                     window.closeEvent(QCloseEvent())
                     sync.assert_called_once()
-                for thread in threads:
+                pool.waitForDone.assert_called_once_with(3000)
+                for thread, timeout in threads:
                     thread.stop.assert_called_once()
-                    thread.wait.assert_called_once_with()
+                    thread.wait.assert_called_once_with(timeout)
                 if effect is not None:
                     self.assertTrue(sip.isdeleted(effect))
                 self.assertIsNone(window._sound._effect)
@@ -2619,7 +2624,7 @@ class TestOrderlyApplicationShutdown(unittest.TestCase):
             finally:
                 sip.delete(window)
 
-    def test_direct_exit_closes_and_destroys_window_while_app_alive(self):
+    def test_direct_exit_closes_without_forcing_widget_destruction(self):
         app = _get_app()
         import main
         from PyQt6 import sip
@@ -2649,13 +2654,15 @@ class TestOrderlyApplicationShutdown(unittest.TestCase):
         QTimer.singleShot(0, lambda: app.exit(7))
 
         self.assertEqual(main._run_gui_event_loop(app, window, watchdog), 7)
-        self.assertTrue(sip.isdeleted(window))
+        self.assertFalse(sip.isdeleted(window))
+        self.assertFalse(window.isVisible())
         self.assertIn("deferred", events)
         self.assertLess(events.index("watchdog"), events.index("close"))
-        self.assertLess(events.index("close"), events.index("destroy"))
+        self.assertNotIn("destroy", events)
         self.assertFalse(sip.isdeleted(app))
+        sip.delete(window)
 
-    def test_event_loop_exception_still_releases_window(self):
+    def test_event_loop_exception_still_closes_window(self):
         qt_app = _get_app()
         import main
         from PyQt6 import sip
@@ -2667,10 +2674,11 @@ class TestOrderlyApplicationShutdown(unittest.TestCase):
         watchdog = MagicMock()
         with self.assertRaisesRegex(RuntimeError, "event loop failed"):
             main._run_gui_event_loop(app, window, watchdog)
-        self.assertTrue(sip.isdeleted(window))
+        self.assertFalse(sip.isdeleted(window))
         watchdog.stop.assert_called_once()
         app.aboutToQuit.disconnect.assert_called_once()
         self.assertFalse(sip.isdeleted(qt_app))
+        sip.delete(window)
 
     def test_watchdog_stop_wakes_and_joins_monitor(self):
         app = _get_app()
