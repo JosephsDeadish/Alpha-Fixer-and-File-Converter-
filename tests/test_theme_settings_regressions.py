@@ -847,6 +847,99 @@ def test_out_of_range_backup_ui_reports_failure_without_applying(dialog, tmp_pat
     assert widget._font_size_spin.value() == before["font_size"]
 
 
+def test_backup_export_declined_normalized_overwrite_keeps_file(dialog, tmp_path):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    chosen = tmp_path / "backup"
+    destination = tmp_path / "backup.json"
+    destination.write_bytes(b"existing backup")
+    with patch("src.ui.main_window.QFileDialog.getSaveFileName", return_value=(str(chosen), "")), \
+         patch("PyQt6.QtWidgets.QMessageBox.question", return_value=QMessageBox.StandardButton.No) as question, \
+         patch.object(manager, "export_settings") as export, \
+         patch("src.ui.main_window.QMessageBox.information") as success:
+        MainWindow._export_settings(widget)
+    question.assert_called_once()
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    export.assert_not_called()
+    success.assert_not_called()
+    assert destination.read_bytes() == b"existing backup"
+    assert not chosen.exists()
+
+
+def test_backup_export_failure_preserves_destination_and_cleans_stage(dialog, tmp_path):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    destination = tmp_path / "backup.json"
+    destination.write_bytes(b"existing backup")
+    def fail_after_partial_write(path):
+        assert Path(path).parent == destination.parent
+        assert Path(path) != destination
+        Path(path).write_bytes(b"incomplete backup")
+        raise OSError("disk write failed")
+
+    with patch("src.ui.main_window.QFileDialog.getSaveFileName", return_value=(str(destination), "")), \
+         patch.object(manager, "export_settings", side_effect=fail_after_partial_write), \
+         patch("src.ui.main_window.QMessageBox.critical") as error, \
+         patch("src.ui.main_window.QMessageBox.information") as success:
+        MainWindow._export_settings(widget)
+    error.assert_called_once()
+    success.assert_not_called()
+    assert destination.read_bytes() == b"existing backup"
+    assert list(tmp_path.glob(".alpha_fixer_save_*")) == []
+
+
+def test_backup_export_confirmed_normalized_overwrite_replaces_file(dialog, tmp_path):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    chosen = tmp_path / "backup"
+    destination = tmp_path / "backup.json"
+    destination.write_bytes(b"existing backup")
+    manager.set("font_size", 16)
+    with patch("src.ui.main_window.QFileDialog.getSaveFileName", return_value=(str(chosen), "")), \
+         patch("PyQt6.QtWidgets.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes), \
+         patch("src.ui.main_window.QMessageBox.information"):
+        MainWindow._export_settings(widget)
+    assert json.loads(destination.read_text(encoding="utf-8"))["font_size"] == 16
+    assert list(tmp_path.glob(".alpha_fixer_save_*")) == []
+
+
+def test_backup_export_cancel_does_not_write(dialog):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    with patch("src.ui.main_window.QFileDialog.getSaveFileName", return_value=("", "")), \
+         patch.object(manager, "export_settings") as export, \
+         patch("src.ui.main_window.QMessageBox.information") as success:
+        MainWindow._export_settings(widget)
+    export.assert_not_called()
+    success.assert_not_called()
+
+
+@pytest.mark.parametrize("extension", ["", ".JSON"])
+def test_backup_export_normalizes_and_round_trips(dialog, tmp_path, extension):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    manager.set("font_size", 18)
+    chosen = tmp_path / f"backup{extension}"
+    destination = chosen if extension else chosen.with_suffix(".json")
+    with patch("src.ui.main_window.QFileDialog.getSaveFileName", return_value=(str(chosen), "")), \
+         patch("src.ui.main_window.QMessageBox.information") as success, \
+         patch("src.ui.main_window.QMessageBox.critical") as error:
+        MainWindow._export_settings(widget)
+    success.assert_called_once()
+    assert str(destination) in success.call_args.args[2]
+    error.assert_not_called()
+    assert json.loads(destination.read_text(encoding="utf-8"))["font_size"] == 18
+    manager.set("font_size", 10)
+    manager.import_settings(str(destination))
+    assert manager.get("font_size") == 18
+    assert list(tmp_path.glob(".alpha_fixer_save_*")) == []
+
+
 def test_backup_round_trip_accepts_every_exportable_default(dialog, tmp_path):
     widget, manager = dialog
     for key in manager.EXPORT_KEYS:

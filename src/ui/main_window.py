@@ -3895,8 +3895,15 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        chosen_path = path
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        from ._ui_utils import confirm_normalized_save_path, staged_output_path
+        if not confirm_normalized_save_path(self, chosen_path, path):
+            return
         try:
-            self._settings.export_settings(path)
+            with staged_output_path(path) as staged_path:
+                self._settings.export_settings(staged_path)
             QMessageBox.information(self, "Export Settings",
                                     f"Settings exported to:\n{path}")
         except Exception as exc:
