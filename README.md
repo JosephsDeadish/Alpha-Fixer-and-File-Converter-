@@ -306,6 +306,13 @@ Passing an offscreen test on a Linux build host is not certification of Windows,
 macOS, every graphics driver, or every experimental media variant. Signing requires
 the distributor's credentials and must not be fabricated or committed.
 
+Custom-background transitions leave input controls, scrollbars and their private
+child widgets opaque and themed. Unchanged transparency settings do not repolish
+the widget tree; disabling a background restores each host's previous background
+fill setting. Regression checks cover repeated PNG/GIF background and theme changes
+and unmocked builder shutdown, but native displays and screen readers still require
+separate acceptance testing.
+
 ### Real corpus validation
 
 Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because many of the most relevant PSP / PS1 / PS2 corpora are large, private, or copyrighted, they are **not** bundled in this repository.

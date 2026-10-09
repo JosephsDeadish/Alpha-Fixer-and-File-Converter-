@@ -10,8 +10,8 @@ import webbrowser
 from PyQt6.QtCore import Qt, QEvent, QObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPixmap, QPainter, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
 from PyQt6.QtWidgets import (
-    QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox,
-    QComboBox, QMainWindow, QTabWidget, QStatusBar, QMenu,
+    QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox,
+    QComboBox, QLineEdit, QPlainTextEdit, QTextEdit, QMainWindow, QTabWidget, QStatusBar, QMenu,
     QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QApplication,
     QMessageBox, QFileDialog,
 )
@@ -2903,15 +2903,28 @@ class MainWindow(QMainWindow):
             targets.append(widget)
 
         def _should_skip(widget: QWidget) -> bool:
-            return isinstance(widget, (QAbstractButton, QComboBox, QAbstractSpinBox))
+            # Controls and their private children remain themed, opaque surfaces.
+            # In particular, native scrollbars must not receive the generic
+            # transparent QWidget rule over their styled subcontrols.
+            return isinstance(widget, (
+                QAbstractButton, QComboBox, QAbstractSpinBox, QAbstractSlider,
+                QLineEdit, QPlainTextEdit, QTextEdit, QAbstractItemView,
+            ))
+
+        def _inside_control(widget: QWidget) -> bool:
+            while widget is not None:
+                if _should_skip(widget):
+                    return True
+                widget = widget.parentWidget()
+            return False
 
         for root in self._bg_host_widgets:
             if root is None:
                 continue
-            if not _should_skip(root):
+            if not _inside_control(root):
                 _track(root)
             for child in root.findChildren(QWidget):
-                if _should_skip(child):
+                if _inside_control(child):
                     continue
                 _track(child)
                 if isinstance(child, (QAbstractScrollArea, QAbstractItemView)):
@@ -2922,15 +2935,29 @@ class MainWindow(QMainWindow):
         return targets
 
     def _set_background_host_transparency(self, enabled: bool) -> None:
+        changed = False
         for widget in self._background_transparency_targets():
             try:
+                # An unset property already means opaque. In particular, do not
+                # unpolish the entire widget tree on ordinary theme startup.
+                if bool(widget.property("customBgTransparent")) == enabled:
+                    continue
+                if enabled:
+                    widget._custom_bg_auto_fill_background = widget.autoFillBackground()
                 widget.setProperty("customBgTransparent", enabled)
-                widget.setAutoFillBackground(not enabled)
-                widget.style().unpolish(widget)
-                widget.style().polish(widget)
-                widget.update()
+                widget.setAutoFillBackground(
+                    False if enabled else widget._custom_bg_auto_fill_background
+                )
+                changed = True
             except Exception:
                 pass
+        if changed:
+            # Let Qt refresh the stylesheet as a whole after all properties are
+            # set. Manually unpolishing/polishing a snapshot of its descendants
+            # can invalidate internal widgets while that snapshot is traversed.
+            app = QApplication.instance()
+            if app is not None and app.styleSheet():
+                app.setStyleSheet(app.styleSheet())
 
     def _set_custom_background_notice(self, message: str) -> None:
         if not message or message == self._bg_notice:

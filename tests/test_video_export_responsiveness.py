@@ -522,11 +522,8 @@ def parented_video(tmp_path, video_app):
     app = video_app
     app.processEvents()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    # Background QStyle repolishing is unrelated to export lifecycle and can
-    # crash native offscreen Qt after the full UI suite has exercised styles.
     with patch("src.core.settings_manager._settings_ini_path",
-               return_value=str(tmp_path / "settings.ini")), \
-            patch.object(MainWindow, "_set_background_host_transparency"):
+               return_value=str(tmp_path / "settings.ini")):
         settings = SettingsManager()
         window = MainWindow(settings)
     window.show()
