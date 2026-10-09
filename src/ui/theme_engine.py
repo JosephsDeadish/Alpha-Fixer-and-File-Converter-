@@ -19,6 +19,16 @@ def _brand_banner(text: str) -> str:
     return text.replace(_LEGACY_APP_BANNER, APP_NAME)
 
 
+def get_theme_hold_effect(theme: dict) -> str:
+    """Resolve the hold-click style shared by settings and the runtime."""
+    effect = theme.get("_effect", "default")
+    if effect == "gore":
+        return "blood"
+    if effect in ("bat", "goth"):
+        return "shake"
+    return "bubble"
+
+
 # Default panda-themed dark palette
 DEFAULT_THEME = {
     "name": "Panda Dark",

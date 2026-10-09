@@ -1763,16 +1763,9 @@ class MainWindow(QMainWindow):
             self._click_effects.set_hold_effects(False)
             return
         if self._settings.get("use_theme_hold_effects", False):
-            theme = self._settings.get_theme()
-            eff = theme.get("_effect", "default")
-            if eff == "gore":
-                key = "blood"
-            elif eff in ("ocean", "ripple", "mermaid", "ice", "bubble"):
-                key = "bubble"
-            elif eff in ("bat", "goth"):
-                key = "shake"
-            else:
-                key = "bubble"
+            from .theme_engine import get_theme_hold_effect
+
+            key = get_theme_hold_effect(self._settings.get_theme())
         else:
             key = self._settings.get("hold_effects_key", "bubble")
         self._click_effects.set_hold_effects(True, key)

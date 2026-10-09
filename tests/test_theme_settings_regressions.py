@@ -534,6 +534,125 @@ def test_theme_sound_preview_does_not_overwrite_manual_profile(dialog):
     assert widget._sound_profile_combo.currentData() == manual
 
 
+@pytest.mark.parametrize("theme,expected", [
+    ("Gore", "blood"), ("Bat Cave", "shake"), ("Panda Dark", "bubble"),
+])
+def test_hold_theme_display_matches_runtime_and_preserves_manual_choice(dialog, theme, expected):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    widget._hold_effects_check.setChecked(True)
+    widget._use_theme_hold_check.setChecked(False)
+    manual = "shake" if expected != "shake" else "blood"
+    widget._hold_key_combo.setCurrentIndex(widget._hold_key_combo.findData(manual))
+    widget._use_theme_hold_check.setChecked(True)
+    widget._rebuild_theme_combo(select=theme)
+    widget._on_preset_selected_live()
+    assert widget._hold_key_combo.currentData() == expected
+    assert not widget._hold_key_combo.isEnabled()
+    assert manager.get("hold_effects_key") == manual
+    host = Mock(_settings=manager, _click_effects=Mock())
+    MainWindow._apply_hold_effects(host)
+    host._click_effects.set_hold_effects.assert_called_once_with(True, expected)
+    widget._hold_effects_check.setChecked(False)
+    widget._hold_effects_check.setChecked(True)
+    assert manager.get("hold_effects_key") == manual
+    widget._use_theme_hold_check.setChecked(False)
+    assert widget._hold_key_combo.currentData() == manual
+    assert widget._hold_key_combo.isEnabled()
+
+
+@pytest.mark.parametrize("use_theme", [False, True])
+def test_loading_hold_preferences_does_not_emit_or_overwrite_them(dialog, use_theme):
+    widget, manager = dialog
+    preferences = {
+        "hold_effects_enabled": True, "use_theme_hold_effects": use_theme,
+        "hold_effects_key": "blood",
+    }
+    for key, value in preferences.items():
+        manager.set(key, value)
+    changed = Mock()
+    widget.settings_changed.connect(changed)
+    widget._load_values()
+    changed.assert_not_called()
+    assert {key: manager.get(key) for key in preferences} == preferences
+    reopened = SettingsDialog(manager)
+    try:
+        assert reopened._hold_effects_check.isChecked()
+        assert reopened._use_theme_hold_check.isChecked() == use_theme
+        assert reopened._hold_key_combo.currentData() == ("bubble" if use_theme else "blood")
+        reopened._use_theme_hold_check.setChecked(False)
+        assert reopened._hold_key_combo.currentData() == "blood"
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+
+
+@pytest.mark.parametrize("cursor", ["Cross", "emoji:🦇", "emoji:🧪"])
+def test_cursor_theme_display_preserves_manual_choice_across_reopening(dialog, cursor):
+    widget, manager = dialog
+    widget._cursor_enable_check.setChecked(True)
+    widget._use_theme_cursor_check.setChecked(False)
+    widget._cursor_combo.setCurrentText("IBeam")
+    widget._theme = dict(manager.get_theme(), _cursor=cursor)
+    manager.set_theme(widget._theme)
+    widget._use_theme_cursor_check.setChecked(True)
+    expected = cursor.removeprefix("emoji:")
+    assert widget._cursor_combo.currentText().split(" ", 1)[0] == expected
+    assert not widget._cursor_combo.isEnabled()
+    assert manager.get("cursor") == "IBeam"
+    assert manager.get("last_cursor_key_pref") == "IBeam"
+    widget._cursor_enable_check.setChecked(False)
+    widget._cursor_enable_check.setChecked(True)
+    assert manager.get("cursor") == "IBeam"
+    reopened = SettingsDialog(manager)
+    try:
+        assert reopened._cursor_combo.currentText().split(" ", 1)[0] == expected
+        reopened._use_theme_cursor_check.setChecked(False)
+        assert reopened._cursor_combo.currentText() == "IBeam"
+        assert reopened._cursor_combo.isEnabled()
+        assert manager.get("cursor") == "IBeam"
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+
+
+def test_legacy_manual_emoji_cursor_restores_after_theme_mode(dialog):
+    widget, manager = dialog
+    manager.set("cursor", "emoji:🧪")
+    manager.set("last_cursor_key_pref", "emoji:🧪")
+    manager.set("cursor_enabled", True)
+    manager.set("use_theme_cursor", True)
+    widget._load_values()
+    widget._use_theme_cursor_check.setChecked(False)
+    assert widget._cursor_combo.currentText() == "🧪"
+    assert manager.get("cursor") == "emoji:🧪"
+
+
+def test_theme_added_emoji_selected_manually_survives_reopening(dialog):
+    widget, manager = dialog
+    widget._cursor_enable_check.setChecked(True)
+    widget._theme = dict(manager.get_theme(), _cursor="emoji:🧪")
+    manager.set_theme(widget._theme)
+    widget._use_theme_cursor_check.setChecked(True)
+    widget._use_theme_cursor_check.setChecked(False)
+    widget._cursor_combo.setCurrentText("🧪")
+    assert manager.get("cursor") == "emoji:🧪"
+    assert manager.get("last_cursor_key_pref") == "emoji:🧪"
+    reopened = SettingsDialog(manager)
+    try:
+        assert reopened._cursor_combo.currentText() == "🧪"
+        reopened._cursor_enable_check.setChecked(False)
+        reopened._cursor_enable_check.setChecked(True)
+        reopened._use_theme_cursor_check.setChecked(True)
+        reopened._use_theme_cursor_check.setChecked(False)
+        assert reopened._cursor_combo.currentText() == "🧪"
+        assert manager.get("cursor") == "emoji:🧪"
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+
+
 @pytest.mark.parametrize("kind,manual,theme", [
     ("drip", "water", "Gore"),
     ("flock", "fish", "Bat Cave"),

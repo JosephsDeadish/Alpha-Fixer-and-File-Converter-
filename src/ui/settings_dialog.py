@@ -1201,7 +1201,7 @@ class SettingsDialog(QDialog):
         self._cursor_combo.setToolTip(
             "Choose the mouse cursor shape used throughout the application.\n"
             "Emoji cursors animate when 'Animate cursor' is enabled.\n"
-            "Hidden when 'Use theme cursor' is checked."
+            "Shows the theme cursor and is disabled when 'Use theme cursor' is checked."
         )
         _cmw_gl.addWidget(self._cursor_combo, 0, 1)
         _cursor_sub_vl.addWidget(self._cursor_manual_widget)
@@ -1226,15 +1226,12 @@ class SettingsDialog(QDialog):
             self._cursor_combo.setEnabled(cursor_en and not use_theme)
             self._cursor_theme_info_lbl.setVisible(use_theme)
             if use_theme:
-                self._update_cursor_theme_info()
+                self._sync_use_theme_combos()
             else:
                 # Restore last-used cursor when "Use theme" is turned off (item 1).
                 last = getattr(self, "_last_cursor_key", "Default")
-                idx = self._cursor_combo.findText(last)
-                if idx >= 0:
-                    self._cursor_combo.blockSignals(True)
-                    self._cursor_combo.setCurrentIndex(idx)
-                    self._cursor_combo.blockSignals(False)
+                with QSignalBlocker(self._cursor_combo):
+                    self._set_cursor_combo(last)
         self._cursor_enable_check.toggled.connect(lambda _: _update_cursor_sub())
         self._use_theme_cursor_check.toggled.connect(lambda _: _update_cursor_sub())
         mouse_row.addWidget(grp_cursor, 1)
@@ -2272,6 +2269,7 @@ class SettingsDialog(QDialog):
             self._custom_bg_check, self._use_theme_bg_check, self._custom_bg_path_edit,
             # Sound profile combo also saves settings on currentIndexChanged.
             self._sound_profile_combo,
+            self._hold_effects_check, self._use_theme_hold_check, self._hold_key_combo,
             # UI density combos
             self._btn_height_combo, self._widget_spacing_combo,
             self._border_radius_combo, self._panel_padding_combo,
@@ -2372,8 +2370,7 @@ class SettingsDialog(QDialog):
         self._cursor_enable_check.setChecked(cursor_enabled)
         self._cursor_sub.setVisible(cursor_enabled)
         cursor_val = self._settings.get("cursor", "Default")
-        idx = self._cursor_combo.findText(cursor_val)
-        self._cursor_combo.setCurrentIndex(max(idx, 0))
+        self._set_cursor_combo(cursor_val)
         use_theme_cur = self._settings.get("use_theme_cursor", False)
         self._use_theme_cursor_check.setChecked(use_theme_cur)
         # item 1/4: keep manual widget visible — just disable combo when use-theme is on
@@ -2977,6 +2974,21 @@ class SettingsDialog(QDialog):
                 return
         self._effect_combo.setCurrentIndex(0)
 
+    def _set_cursor_combo(self, cursor_spec: str) -> None:
+        """Show named and emoji cursors without losing custom theme glyphs."""
+        label = cursor_spec.removeprefix("emoji:")
+        idx = self._cursor_combo.findText(label)
+        if idx < 0 and cursor_spec.startswith("emoji:"):
+            idx = next(
+                (i for i in range(self._cursor_combo.count())
+                 if self._cursor_combo.itemText(i).split(" ", 1)[0] == label),
+                -1,
+            )
+            if idx < 0:
+                self._cursor_combo.addItem(label, userData=cursor_spec)
+                idx = self._cursor_combo.count() - 1
+        self._cursor_combo.setCurrentIndex(max(0, idx))
+
     def _sync_use_theme_combos(self) -> None:
         """Refresh all 'use theme' combo selections to reflect the current theme.
 
@@ -3009,10 +3021,16 @@ class SettingsDialog(QDialog):
             self._banner_anim_combo,
             self._button_anim_style_combo,
             self._bg_drip_combo,
+            self._hold_key_combo,
         ]
         for c in _combos:
             c.blockSignals(True)
         try:
+            if self._use_theme_hold_check.isChecked():
+                from .theme_engine import get_theme_hold_effect
+
+                key = get_theme_hold_effect(theme)
+                self._hold_key_combo.setCurrentIndex(self._hold_key_combo.findData(key))
             # Trail combo
             if self._use_theme_trail_check.isChecked():
                 trail_key = theme.get("_trail", "dots")
@@ -3129,16 +3147,9 @@ class SettingsDialog(QDialog):
         if self._use_theme_cursor_check.isChecked():
             self._update_cursor_theme_info()
             cursor_spec = theme.get("_cursor", "Default")
-            if cursor_spec.startswith("emoji:"):
-                cursor_label = cursor_spec[len("emoji:"):]
-            else:
-                cursor_label = cursor_spec
             # Select the matching item in the combo so the UI reflects the theme cursor
-            idx = self._cursor_combo.findText(cursor_label)
-            if idx >= 0:
-                self._cursor_combo.blockSignals(True)
-                self._cursor_combo.setCurrentIndex(idx)
-                self._cursor_combo.blockSignals(False)
+            with QSignalBlocker(self._cursor_combo):
+                self._set_cursor_combo(cursor_spec)
 
     def _on_effect_changed_live(self) -> None:
         """Sync the effect key into the theme dict and persist immediately."""
@@ -3502,11 +3513,11 @@ class SettingsDialog(QDialog):
     def _on_cursor_changed(self) -> None:
         use_theme = self._use_theme_cursor_check.isChecked()
         self._settings.set("cursor_enabled", self._cursor_enable_check.isChecked())
-        self._settings.set("cursor", self._cursor_combo.currentText())
         self._settings.set("use_theme_cursor", use_theme)
         # Track last manual selection so it can be restored on "Use theme" uncheck (item 1).
         if not use_theme:
-            self._last_cursor_key = self._cursor_combo.currentText()
+            self._last_cursor_key = self._cursor_combo.currentData() or self._cursor_combo.currentText()
+            self._settings.set("cursor", self._last_cursor_key)
             self._settings.set("last_cursor_key_pref", self._last_cursor_key)
         self.settings_changed.emit()
 
@@ -3597,13 +3608,23 @@ class SettingsDialog(QDialog):
 
     def _on_hold_effects_changed(self) -> None:
         """Save hold-click effect settings and notify main window (item 48/49)."""
+        was_themed = self._settings.get("use_theme_hold_effects", False)
         enabled = self._hold_effects_check.isChecked()
         use_theme = self._use_theme_hold_check.isChecked()
         self._settings.set("hold_effects_enabled", enabled)
         self._settings.set("use_theme_hold_effects", use_theme)
-        key = self._hold_key_combo.currentData()
-        if key:
-            self._settings.set("hold_effects_key", key)
+        if use_theme:
+            self._sync_use_theme_combos()
+        else:
+            if was_themed:
+                key = self._settings.get("hold_effects_key", "bubble")
+                with QSignalBlocker(self._hold_key_combo):
+                    self._hold_key_combo.setCurrentIndex(
+                        max(0, self._hold_key_combo.findData(key))
+                    )
+            key = self._hold_key_combo.currentData()
+            if key:
+                self._settings.set("hold_effects_key", key)
         self._hold_effect_sub.setVisible(enabled)
         # Item 1: keep combo visible but disabled when "Use theme" is on.
         self._hold_inner_widget.setVisible(True)
