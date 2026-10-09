@@ -4088,6 +4088,17 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             clip.still_duration_frames = active_frames
         return clip
 
+    def _export_and_wait(self, dialog):
+        from src.ui.video_tool import VideoToolDialog
+        from tests.video_export_helpers import wait_for_video_export
+        snapshot = dialog._snapshot_clip_render_state
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            **VideoToolDialog._snapshot_clip_render_state(dialog, clip, fps),
+            **snapshot(clip, fps),
+        }
+        dialog._export()
+        wait_for_video_export(dialog)
+
     def test_probe_video_clip_uses_imageio_ffmpeg_count_fallback(self):
         try:
             from src.ui import video_tool as vt
@@ -5814,7 +5825,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             ):
                 with patch.object(vt.QMessageBox, "information"):
                     with patch("PIL.Image.Image.save", autospec=True, side_effect=lambda self, path, **kwargs: saved_paths.append(path)):
-                        dialog._export()
+                        self._export_and_wait(dialog)
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -5845,7 +5856,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
                     with patch.object(vt.QMessageBox, "critical") as critical_mock:
                         with patch("PIL.Image.Image.save", autospec=True, side_effect=RuntimeError("gif failed")):
-                            dialog._export()
+                            self._export_and_wait(dialog)
                 critical_mock.assert_called_once()
                 with open(out_path, "rb") as fh:
                     self.assertEqual(fh.read(), b"original-gif")
@@ -5891,7 +5902,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             ):
                 with patch.object(vt.QMessageBox, "information"):
                     with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or writer_kwargs.append(kwargs) or fake_writer):
-                        dialog._export()
+                        self._export_and_wait(dialog)
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -5932,7 +5943,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
                     with patch("imageio.get_writer", return_value=_FailingWriter()):
                         with patch.object(vt.QMessageBox, "critical") as critical_mock:
-                            dialog._export()
+                            self._export_and_wait(dialog)
                 critical_mock.assert_called_once()
                 with open(out_path, "rb") as fh:
                     self.assertEqual(fh.read(), b"original-mp4")
@@ -5987,9 +5998,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                     fh.write(b"original")
                 with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
                     with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
-                        with patch.object(dialog, "_mux_mp4_audio", side_effect=RuntimeError("mux failed")):
+                        with patch("src.core.video_export.mux_mp4_audio", side_effect=RuntimeError("mux failed")):
                             with patch.object(vt.QMessageBox, "information") as info_mock:
-                                dialog._export()
+                                self._export_and_wait(dialog)
                 info_mock.assert_called_once()
                 self.assertIn("silent MP4", info_mock.call_args.args[2])
                 with open(out_path, "rb") as fh:
@@ -6075,7 +6086,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         dialog._timeline_canvas_size = lambda fmt: (2, 2)
         dialog._should_mux_audio = lambda fmt, clips: True
 
-        def _fake_mux(_render_path, out_path, _clip_snapshot, _fps):
+        def _fake_mux(_render_path, out_path, _clip_snapshot, _fps, *args):
             with open(out_path, "wb") as fh:
                 fh.write(b"muxed-mp4")
 
@@ -6084,9 +6095,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 out_path = os.path.join(tmpdir, "mixed.mp4")
                 with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
                     with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
-                        with patch.object(dialog, "_mux_mp4_audio", side_effect=_fake_mux):
+                        with patch("src.core.video_export.mux_mp4_audio", side_effect=_fake_mux):
                             with patch.object(vt.QMessageBox, "information"):
-                                dialog._export()
+                                self._export_and_wait(dialog)
                 self.assertEqual(len(settings._video_history), 1)
                 entry = settings._video_history[0]
                 self.assertEqual(entry["audio"], "kept")
@@ -6126,7 +6137,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         }]
         commands = []
 
-        def _fake_run(cmd, **kwargs):
+        def _fake_run(cmd, *args, **kwargs):
             commands.append(cmd)
             if len(commands) == 1:
                 return types.SimpleNamespace(returncode=1, stderr="Non-monotonic DTS")
@@ -6134,7 +6145,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
 
         try:
             with patch.object(vt, "_get_ffmpeg_exe", return_value="/usr/bin/ffmpeg"):
-                with patch.object(vt.subprocess, "run", side_effect=_fake_run):
+                with patch("src.core.video_export.run_mux_process", side_effect=_fake_run):
                     notes = dialog._mux_mp4_audio("/tmp/silent.mp4", "/tmp/out.mp4", clip_snapshot, 20.0)
             self.assertEqual(len(commands), 2)
             self.assertNotIn("aresample=async=1:first_pts=0:min_hard_comp=0.100", " ".join(commands[0]))
@@ -6199,12 +6210,12 @@ class TestVideoProbeFallbacks(unittest.TestCase):
                 out_path = os.path.join(tmpdir, "normalized.mp4")
                 with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
                     with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
-                        with patch.object(dialog, "_mux_mp4_audio", return_value=[
+                        with patch("src.core.video_export.mux_mp4_audio", return_value=[
                             "audio-mux-retry=normalized",
                             "audio-mux-first-error=Non-monotonic DTS",
                         ]):
                             with patch.object(vt.QMessageBox, "information") as info_mock:
-                                dialog._export()
+                                self._export_and_wait(dialog)
                 info_mock.assert_called_once()
                 self.assertIn("normalized stereo/48 kHz audio", info_mock.call_args.args[2])
                 self.assertEqual(len(settings._video_history), 1)
@@ -6260,10 +6271,13 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         dialog._timeline_canvas_size = lambda fmt: (2, 2)
         dialog._should_mux_audio = lambda fmt, clips: False
         try:
-            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-history-test.mp4", "")):
+            with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                vt.QFileDialog, "getSaveFileName",
+                return_value=(os.path.join(tmpdir, "video-history-test.mp4"), ""),
+            ):
                 with patch.object(vt.QMessageBox, "information"):
                     with patch("imageio.get_writer", return_value=_FakeWriter()):
-                        dialog._export()
+                        self._export_and_wait(dialog)
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -6271,11 +6285,11 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self._app.processEvents()
         self.assertEqual(len(settings._video_history), 1)
         entry = settings._video_history[0]
-        self.assertEqual(entry["output"], "/tmp/video-history-test.mp4")
+        self.assertEqual(Path(entry["output"]).name, "video-history-test.mp4")
         self.assertEqual(entry["files"], ["game.iso"])
         self.assertEqual(entry["format"], "MP4")
         self.assertEqual(entry["canvas"], "2×2")
-        self.assertEqual(entry["sources"], "unknown ×1")
+        self.assertEqual(entry["sources"], "video ×1")
         self.assertEqual(entry["recovery"], "remux ×1")
         self.assertEqual(entry["streams"], "game.iso: manual video #3, manual audio #1")
         self.assertIn("manual video #3", entry["clips"])

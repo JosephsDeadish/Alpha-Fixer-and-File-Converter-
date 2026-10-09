@@ -29,6 +29,8 @@ Opening the dialog:
 from __future__ import annotations
 
 import datetime
+import copy
+from collections import deque
 from functools import lru_cache
 import json
 import os
@@ -41,6 +43,10 @@ from threading import Lock
 from typing import Callable, Optional
 
 from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
+from src.core.video_export import (
+    VideoExportSettings, VideoExportWorker, mux_mp4_audio,
+    source_frame_index, source_frame_indices,
+)
 
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, pyqtSignal,
@@ -2428,6 +2434,21 @@ class _SequenceFrameGetter:
         self._frames.clear()
 
 
+class _SnapshotFrameGetter:
+    """Owned export images keyed by their original source frame indices."""
+
+    def __init__(self):
+        self._frames = {}
+
+    def __call__(self, index):
+        return self._frames[int(index)].copy()
+
+    def _close_reader(self):
+        for frame in self._frames.values():
+            frame.close()
+        self._frames.clear()
+
+
 class _VideoFrameGetter:
     """Picklable frame getter for a multi-frame video clip."""
 
@@ -2884,6 +2905,7 @@ class VideoToolDialog(QDialog):
     """
     status_notice = pyqtSignal(str, int)
     queue_status_changed = pyqtSignal(str)
+    export_finished = pyqtSignal()
     SHORTCUT_DEFS = (
         ("video_remove_selected", "Delete", "Remove selected clip", "Video Builder"),
         ("video_toggle_play", "Space", "Play or pause preview", "Video Builder"),
@@ -2900,6 +2922,15 @@ class VideoToolDialog(QDialog):
         self._tooltip_mgr = tooltip_mgr
         _configure_imageio_ffmpeg()
         self._clips: list[_ClipEntry] = []
+        self._export_worker = None
+        self._export_selecting = False
+        self._export_canceling = False
+        self._close_after_export = False
+        self._export_deferred_result = None
+        self._export_progress = None
+        self._export_copy_jobs = deque()
+        self._export_poll = QTimer(self)
+        self._export_poll.timeout.connect(self._poll_export_cancel)
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._is_playing: bool = False
@@ -2928,6 +2959,7 @@ class VideoToolDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = scrollable_dialog_layout(self)
+        self._export_content = root.parentWidget()
 
         title = QLabel("🎬  Video Builder")
         title.setObjectName("subheader")
@@ -3838,6 +3870,8 @@ class VideoToolDialog(QDialog):
         )
 
     def _apply_selected_stream_choice(self) -> None:
+        if self.is_exporting():
+            return
         row = self._clip_list.currentRow()
         if row < 0 or row >= len(self._clips):
             return
@@ -4065,6 +4099,8 @@ class VideoToolDialog(QDialog):
         return new_clip
 
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
+        if self.is_exporting():
+            return
         skipped = []
         fallback_loaded: list[tuple[str, str]] = []
         failed_videos: list[tuple[str, str]] = []
@@ -4118,6 +4154,8 @@ class VideoToolDialog(QDialog):
         )
 
     def _add_video(self) -> None:
+        if self.is_exporting():
+            return
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Video / Odd-Container Files", "",
             _format_extension_filter("Video Files", _VIDEO_EXTS),
@@ -4125,6 +4163,8 @@ class VideoToolDialog(QDialog):
         self._load_video_paths(paths, insert_row=self._next_insert_row())
 
     def _load_video_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
+        if self.is_exporting():
+            return
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         fallback_loaded: list[tuple[str, str]] = []
         failed_videos: list[tuple[str, str]] = []
@@ -4175,6 +4215,7 @@ class VideoToolDialog(QDialog):
         canvas_size: Optional[tuple[int, int]] = None,
         audio_mode_override: Optional[str] = None,
         extra_notes: Optional[list[str]] = None,
+        preferences: Optional[VideoExportSettings] = None,
     ) -> None:
         settings = self._resolve_settings()
         if settings is None:
@@ -4190,9 +4231,9 @@ class VideoToolDialog(QDialog):
             "files": files,
             "first_file": str(clip_snapshot[0].get("source_path") or clip_snapshot[0].get("path") or "") if clip_snapshot else "",
             "sources": _summarize_clip_types(clip_snapshot),
-            "filter": str(self._filter_combo.currentData() or "none"),
+            "filter": preferences.filter if preferences else str(self._filter_combo.currentData() or "none"),
             "audio": audio_mode_override or ("kept" if self._should_mux_audio(fmt, clip_snapshot) else "off"),
-            "fps": str(int(self._fps_slider.value())),
+            "fps": str(int(preferences.fps if preferences else self._fps_slider.value())),
         }
         if canvas_size and len(canvas_size) == 2:
             try:
@@ -4255,6 +4296,8 @@ class VideoToolDialog(QDialog):
             pass
 
     def _add_images(self) -> None:
+        if self.is_exporting():
+            return
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Images / GIFs", "",
             _format_extension_filter("Images", _IMAGE_EXTS),
@@ -4262,6 +4305,8 @@ class VideoToolDialog(QDialog):
         self._load_image_paths(paths, insert_row=self._next_insert_row())
 
     def _load_image_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
+        if self.is_exporting():
+            return
         skipped = []
         next_row = len(self._clips) if insert_row is None else max(0, min(len(self._clips), insert_row))
         added = 0
@@ -4285,6 +4330,8 @@ class VideoToolDialog(QDialog):
         )
 
     def _remove_selected(self) -> None:
+        if self.is_exporting():
+            return
         row = self._clip_list.currentRow()
         if row < 0 or row >= len(self._clips):
             return
@@ -4301,6 +4348,8 @@ class VideoToolDialog(QDialog):
 
     def _sync_clips_from_list(self) -> None:
         """Rebuild ``self._clips`` from current list-item order."""
+        if self.is_exporting():
+            return
         self._clips = []
         for i in range(self._clip_list.count()):
             clip = self._clip_list.item(i).data(_CLIP_ROLE)
@@ -4498,6 +4547,8 @@ class VideoToolDialog(QDialog):
         self._after_selected_clip_timing_changed(row)
 
     def _split_clip_at_playhead(self) -> None:
+        if self.is_exporting():
+            return
         total = self._total_preview_frames()
         if total <= 1 or not self._clips:
             QMessageBox.information(self, "Split Clip", "Load a multi-frame clip before splitting.")
@@ -4619,6 +4670,8 @@ class VideoToolDialog(QDialog):
         self._update_preview()
 
     def _toggle_play(self) -> None:
+        if self.is_exporting():
+            return
         self._btn_play.setChecked(not self._btn_play.isChecked())
 
     def _on_play_toggled(self, playing: bool) -> None:
@@ -4690,22 +4743,13 @@ class VideoToolDialog(QDialog):
             "source_duration_seconds": source_duration_seconds,
             "has_audio": clip_type == "video" and clip.has_audio,
             "load_note": clip.load_note,
-            "source_probe": clip.source_probe,
+            "source_probe": copy.deepcopy(clip.source_probe),
             "preferred_video_stream_index": clip.preferred_video_stream_index,
             "preferred_audio_stream_index": clip.preferred_audio_stream_index,
         }
 
     def _get_snapshot_frame(self, clip: dict[str, object], output_idx: int):
-        get_source_frame = clip["frame_getter"]
-        trim_start = int(clip["trim_start"])
-        clip_type = str(clip["clip_type"])
-        base_active_frames = int(clip["base_active_frames"])
-        if clip_type == "image" or base_active_frames <= 0:
-            return get_source_frame(trim_start)
-        speed = max(0.1, int(clip["speed_percent"]) / 100.0)
-        mapped = int(output_idx * speed)
-        source_offset = max(0, min(base_active_frames - 1, mapped))
-        return get_source_frame(trim_start + source_offset)
+        return clip["frame_getter"](source_frame_index(clip, output_idx))
 
     def _should_mux_audio(self, fmt: str, clip_snapshot: list[dict[str, object]]) -> bool:
         return (
@@ -4724,129 +4768,21 @@ class VideoToolDialog(QDialog):
         clip_snapshot: list[dict[str, object]],
         output_fps: float,
     ) -> list[str]:
-        ffmpeg_exe = _get_ffmpeg_exe()
-        if not ffmpeg_exe:
-            raise RuntimeError("FFmpeg is unavailable for MP4 audio export.")
-        needs_silence = any(
-            max(0, int(clip["active_frames"])) > 0
-            and not (clip["clip_type"] == "video" and clip["has_audio"])
-            for clip in clip_snapshot
+        return mux_mp4_audio(
+            silent_video_path, out_path, clip_snapshot, output_fps,
+            self._audio_volume_slider.value() / 100.0,
         )
-
-        def _build_mux_command(*, normalize_audio: bool) -> list[str]:
-            cmd = [ffmpeg_exe, "-y", "-v", "error", "-i", silent_video_path]
-            filter_parts: list[str] = []
-            concat_inputs: list[str] = []
-            input_index = 1
-            silence_input_index = None
-            if needs_silence:
-                cmd.extend([
-                    "-f", "lavfi",
-                    "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                ])
-                silence_input_index = input_index
-                input_index += 1
-            normalize_filters = [
-                "aresample=async=1:first_pts=0:min_hard_comp=0.100",
-                "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp",
-            ] if normalize_audio else []
-            for clip_idx, clip in enumerate(clip_snapshot):
-                active_frames = max(0, int(clip["active_frames"]))
-                if active_frames <= 0:
-                    continue
-                output_duration = float(clip["timeline_seconds"])
-                label = f"a{clip_idx}"
-                if clip["clip_type"] == "video" and clip["has_audio"]:
-                    cmd.extend(["-i", str(clip["path"])])
-                    trim_start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
-                    trim_end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
-                    source_duration = max(0.001, trim_end - trim_start)
-                    duration_ratio = max(0.001, output_duration) / source_duration
-                    tempo_factor = max(0.01, 1.0 / duration_ratio)
-                    filters = [
-                        f"[{input_index}:a]atrim=start={trim_start:.6f}:end={trim_end:.6f}",
-                        "asetpts=PTS-STARTPTS",
-                        *_build_atempo_filters(tempo_factor),
-                        *normalize_filters,
-                    ]
-                    filter_parts.append(",".join(filters) + f"[{label}]")
-                else:
-                    if silence_input_index is None:
-                        raise RuntimeError("FFmpeg silence source is unavailable for MP4 audio export.")
-                    filters = [
-                        f"[{silence_input_index}:a]atrim=start=0:end={output_duration:.6f}",
-                        "asetpts=PTS-STARTPTS",
-                        *normalize_filters,
-                    ]
-                    filter_parts.append(",".join(filters) + f"[{label}]")
-                concat_inputs.append(f"[{label}]")
-                if clip["clip_type"] == "video" and clip["has_audio"]:
-                    input_index += 1
-
-            if not concat_inputs:
-                raise RuntimeError("No audio segments were available for MP4 export.")
-
-            filter_parts.append(
-                "".join(concat_inputs) + f"concat=n={len(concat_inputs)}:v=0:a=1[a_concat]"
-            )
-            volume = max(0.0, self._audio_volume_slider.value() / 100.0)
-            output_label = "[a_concat]"
-            if abs(volume - 1.0) > 0.0001:
-                filter_parts.append(f"[a_concat]volume={volume:.3f}[a_out]")
-                output_label = "[a_out]"
-            if normalize_audio:
-                filter_parts.append(
-                    f"{output_label}aresample=async=1:first_pts=0:min_hard_comp=0.100,"
-                    "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp[a_norm]"
-                )
-                output_label = "[a_norm]"
-            total_duration = sum(max(0.0, float(clip["timeline_seconds"])) for clip in clip_snapshot)
-            if total_duration > 0:
-                filter_parts.append(
-                    f"{output_label}apad=whole_dur={total_duration:.6f},atrim=end={total_duration:.6f}[a_final]"
-                )
-                output_label = "[a_final]"
-
-            cmd.extend([
-                "-filter_complex", ";".join(filter_parts),
-                "-map", "0:v:0",
-                "-map", output_label,
-                "-c:v", "copy",
-                "-c:a", "aac",
-                out_path,
-            ])
-            return cmd
-
-        first_cmd = _build_mux_command(normalize_audio=False)
-        result = subprocess.run(
-            first_cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False,
-            text=True,
-            timeout=180,
-        )
-        if result.returncode == 0:
-            return []
-        first_error = result.stderr.strip() or "FFmpeg audio mux failed."
-        second_cmd = _build_mux_command(normalize_audio=True)
-        retry_result = subprocess.run(
-            second_cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False,
-            text=True,
-            timeout=180,
-        )
-        if retry_result.returncode == 0:
-            return [
-                "audio-mux-retry=normalized",
-                f"audio-mux-first-error={first_error}",
-            ]
-        second_error = retry_result.stderr.strip() or "FFmpeg normalized audio mux failed."
-        raise RuntimeError(f"{first_error} | normalized retry failed: {second_error}")
 
     def _export(self) -> None:
+        if self.is_exporting() or self._export_selecting:
+            return
+        self._export_selecting = True
+        try:
+            self._select_export()
+        finally:
+            self._export_selecting = False
+
+    def _select_export(self) -> None:
         output_fps = max(0.1, float(self._fps_slider.value()))
         clip_snapshot = [
             self._snapshot_clip_render_state(clip, output_fps)
@@ -4857,15 +4793,6 @@ class VideoToolDialog(QDialog):
         if total == 0:
             QMessageBox.information(self, "No Clips", "Add at least one clip or image first.")
             return
-
-        def _global_frame_to_snapshot(global_idx: int) -> tuple[int, int]:
-            idx = global_idx
-            for clip_idx, clip in enumerate(clip_snapshot):
-                active_frames = int(clip["active_frames"])
-                if idx < active_frames:
-                    return clip_idx, idx
-                idx -= active_frames
-            return max(0, len(clip_snapshot) - 1), 0
 
         fmt = self._export_fmt_combo.currentData() or "gif"
         fps = output_fps
@@ -4907,276 +4834,145 @@ class VideoToolDialog(QDialog):
         if not confirm_normalized_save_path(self, chosen_path, out_path):
             return
         self._btn_play.setChecked(False)
-        out_path_existed = Path(out_path).exists()
-
-        progress = QProgressDialog("Rendering and saving output…", "Cancel", 0, total, self)
+        settings = VideoExportSettings(
+            out_path, fmt, fps, canvas_size, filter_key,
+            {
+                "brightness": self._brightness_slider.value() / 100.0,
+                "contrast": self._contrast_slider.value() / 100.0,
+                "black_point": self._black_slider.value(),
+                "white_point": self._white_slider.value(),
+                "saturation": self._saturation_slider.value() / 100.0,
+                "sharpness": self._sharpness_slider.value() / 100.0,
+            },
+            self._should_mux_audio(fmt, clip_snapshot),
+            self._audio_volume_slider.value() / 100.0,
+        )
+        worker = VideoExportWorker(settings, self)
+        self._export_worker = worker
+        self._export_canceling = False
+        self._export_snapshot = clip_snapshot
+        self._export_copy_jobs = deque()
+        for snapshot in clip_snapshot:
+            getter = snapshot.pop("frame_getter")
+            if isinstance(getter, _VideoFrameGetter):
+                snapshot["frame_getter"] = _VideoFrameGetter(getter._path, getter._total_frames)
+            else:
+                owned = _SnapshotFrameGetter()
+                snapshot["frame_getter"] = owned
+                # Copy only source frames selected by the frozen trim/speed
+                # mapping. Sparse indices retain their original source identity.
+                self._export_copy_jobs.extend(
+                    (owned, getter, index) for index in source_frame_indices(snapshot)
+                )
+        worker.clips = clip_snapshot
+        self._export_content_enabled = self._export_content.isEnabled()
+        self._export_content.setEnabled(False)
+        self._export_shortcuts = [(shortcut, shortcut.isEnabled())
+                                  for shortcut in self.findChildren(QShortcut)]
+        for shortcut, _ in self._export_shortcuts:
+            shortcut.setEnabled(False)
+        progress = QProgressDialog("Copying render sources…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
         progress.setAutoReset(False)
         progress.setAutoClose(False)
+        self._export_progress = progress
+        progress.canceled.connect(self._cancel_export)
+        worker.progress.connect(self._on_export_progress)
+        worker.finished.connect(self._on_export_finished)
         progress.show()
-        QApplication.processEvents()
-        brightness = self._brightness_slider.value() / 100.0
-        contrast = self._contrast_slider.value() / 100.0
-        black_point = self._black_slider.value()
-        white_point = self._white_slider.value()
-        saturation = self._saturation_slider.value() / 100.0
-        sharpness = self._sharpness_slider.value() / 100.0
-        writer = None
-        gif_frames = []
-        canceled = False
-        wrote_frames = False
-        render_path = out_path
-        temp_mp4 = None
-        temp_output_path = None
-        export_stage = "render setup"
-        export_issue_count = 0
-        history_audio_mode_override = None
-        history_extra_notes: list[str] = []
-        completion_note = ""
-        if fmt == "mp4":
-            history_extra_notes.extend(_audio_source_plan_history_notes(_audio_source_plan(clip_snapshot)))
-        try:
-            if fmt in {"gif", "mp4"}:
-                output_file = tempfile.NamedTemporaryFile(
-                    prefix="alpha_fixer_export_",
-                    suffix=target_suffix,
-                    dir=str(Path(out_path).absolute().parent),
-                    delete=False,
-                )
-                temp_output_path = output_file.name
-                output_file.close()
-            if fmt != "gif":
-                if self._should_mux_audio(fmt, clip_snapshot):
-                    temp_file = tempfile.NamedTemporaryFile(
-                        prefix="alpha_fixer_video_",
-                        suffix=".mp4",
-                        dir=str(Path(out_path).absolute().parent),
-                        delete=False,
-                    )
-                    temp_mp4 = temp_file.name
-                    temp_file.close()
-                    render_path = temp_mp4
-                elif temp_output_path is not None:
-                    render_path = temp_output_path
-                import imageio
-                import numpy as np
-                writer = imageio.get_writer(
-                    render_path,
-                    format="FFMPEG",
-                    fps=fps,
-                    codec="libx264",
-                    pixelformat="yuv420p",
-                )
-            export_stage = "frame rendering"
-            for i in range(total):
-                progress.setValue(i)
-                QApplication.processEvents()
-                if progress.wasCanceled():
-                    canceled = True
-                    break
-                ci, fi = _global_frame_to_snapshot(i)
-                source_pil = self._get_snapshot_frame(clip_snapshot[ci], fi)
-                adjusted = source_pil
-                filtered = None
-                framed = None
-                rgb = None
-                try:
-                    adjusted = _apply_adjustments(
-                        source_pil,
-                        brightness=brightness,
-                        contrast=contrast,
-                        black_point=black_point,
-                        white_point=white_point,
-                        saturation=saturation,
-                        sharpness=sharpness,
-                    )
-                    filtered = _apply_filter(adjusted, filter_key)
-                    framed = _fit_frame_to_canvas(filtered, canvas_size, fmt)
-                    if fmt != "gif":
-                        rgb = framed if framed.mode == "RGB" else framed.convert("RGB")
-                        try:
-                            writer.append_data(np.array(rgb))
-                        finally:
-                            if rgb is not None and rgb is not framed:
-                                rgb.close()
-                    if fmt == "gif":
-                        gif_frames.append(framed)
-                        framed = None
-                    wrote_frames = True
-                finally:
-                    if framed is not None and framed is not filtered:
-                        try:
-                            framed.close()
-                        except Exception:
-                            pass
-                    if filtered is not None and filtered is not adjusted and filtered is not source_pil:
-                        try:
-                            filtered.close()
-                        except Exception:
-                            pass
-                    if adjusted is not source_pil and adjusted is not filtered:
-                        try:
-                            adjusted.close()
-                        except Exception:
-                            pass
-                    try:
-                        source_pil.close()
-                    except Exception:
-                        pass
-            if writer is not None:
-                try:
-                    writer.close()
-                except Exception:
-                    if not canceled:
-                        raise
-                writer = None
-            QApplication.processEvents()
-            if progress.wasCanceled():
-                progress.close()
+        self._export_poll.start(25)
+        QTimer.singleShot(0, self._copy_export_source)
+
+    def is_exporting(self) -> bool:
+        return self._export_worker is not None
+
+    def request_export_cancel(self) -> None:
+        if self.is_exporting():
+            self._close_after_export = True
+        self._cancel_export()
+
+    def _copy_export_source(self) -> None:
+        worker = self._export_worker
+        if worker is None:
+            return
+        self._poll_export_cancel()
+        if self._export_copy_jobs and not self._export_canceling:
+            owned, source, index = self._export_copy_jobs.popleft()
+            try:
+                owned._frames[index] = source(index)
+            except Exception as exc:
+                worker.error = str(exc)
+                self._export_copy_jobs.clear()
+                # Cleanup still happens in run(), then native finished().
+                worker.outcome = "snapshot error"
+            else:
+                QTimer.singleShot(0, self._copy_export_source)
                 return
-            if fmt == "gif" and not canceled and gif_frames:
-                export_stage = "GIF assembly"
-                first = gif_frames[0]
-                rest = gif_frames[1:]
-                try:
-                    if rest:
-                        first.save(
-                            temp_output_path or out_path,
-                            format="GIF",
-                            save_all=True,
-                            append_images=rest,
-                            duration=max(1, int(round(1000.0 / fps))),
-                            loop=0,
-                            disposal=2,
-                        )
-                    else:
-                        first.save(
-                            temp_output_path or out_path,
-                            format="GIF",
-                            duration=max(1, int(round(1000.0 / fps))),
-                            loop=0,
-                            disposal=2,
-                        )
-                finally:
-                    for frame in gif_frames:
-                        try:
-                            frame.close()
-                        except Exception:
-                            pass
-                    gif_frames.clear()
-                if temp_output_path is not None:
-                    Path(temp_output_path).replace(out_path)
-                    temp_output_path = None
-            elif fmt == "mp4" and not canceled and wrote_frames and temp_mp4 is not None:
-                export_stage = "audio muxing"
-                progress.setLabelText("Mixing source audio into MP4…")
-                QApplication.processEvents()
-                if progress.wasCanceled():
-                    progress.close()
-                    return
-                try:
-                    mux_notes = self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps) or []
-                    if mux_notes:
-                        history_extra_notes.extend(mux_notes)
-                        if any(str(note).startswith("audio-mux-retry=normalized") for note in mux_notes):
-                            completion_note = (
-                                "Saved after retrying MP4 audio muxing with normalized stereo/48 kHz audio."
-                            )
-                    if temp_output_path is not None:
-                        Path(temp_output_path).replace(out_path)
-                        temp_output_path = None
-                except Exception as exc:
-                    silent_render = Path(render_path)
-                    if not silent_render.is_file() or silent_render.stat().st_size <= 0:
-                        raise
-                    if temp_output_path is not None:
-                        try:
-                            Path(temp_output_path).unlink(missing_ok=True)
-                        except Exception:
-                            pass
-                        temp_output_path = None
-                    silent_render.replace(out_path)
-                    temp_mp4 = None
-                    export_issue_count += 1
-                    history_audio_mode_override = "off (mux failed)"
-                    history_extra_notes.extend([
-                        "audio-mux-fallback=silent",
-                        f"audio-mux-error={(str(exc).strip() or 'unknown mux failure')}",
-                    ])
-                    completion_note = (
-                        "Saved as a silent MP4 because source-audio muxing failed after video rendering."
-                    )
-            elif fmt == "mp4" and not canceled and wrote_frames and temp_output_path is not None:
-                Path(temp_output_path).replace(out_path)
-                temp_output_path = None
-            progress.setValue(total)
-        except Exception as exc:
-            if temp_mp4 is not None:
-                try:
-                    Path(temp_mp4).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            if temp_output_path is not None:
-                try:
-                    Path(temp_output_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            progress.close()
-            QMessageBox.critical(self, "Export Error", f"Could not save output during {export_stage}:\n{exc}")
-            return
-        finally:
-            if writer is not None:
-                try:
-                    writer.close()
-                except Exception:
-                    pass
-            if temp_mp4 is not None:
-                try:
-                    Path(temp_mp4).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            if temp_output_path is not None:
-                try:
-                    Path(temp_output_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            for frame in gif_frames:
-                try:
-                    frame.close()
-                except Exception:
-                    pass
-            gif_frames.clear()
+        self._export_copy_jobs.clear()
+        worker.start()
 
-        if canceled or not wrote_frames:
-            if not out_path_existed:
-                try:
-                    Path(out_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            progress.close()
-            return
+    def _poll_export_cancel(self) -> None:
+        if self._export_progress is not None and self._export_progress.wasCanceled():
+            self._cancel_export()
+        if self._export_canceling and self._export_progress is not None:
+            self._export_progress.show()
 
+    def _cancel_export(self) -> None:
+        worker = self._export_worker
+        if worker is None or self._export_canceling or not worker.cancel():
+            return
+        self._export_canceling = True
+        self._export_progress.setLabelText("Canceling… Waiting for encoder and source cleanup.")
+        self._export_progress.setCancelButton(None)
+
+    def _on_export_progress(self, value: int, text: str) -> None:
+        if self._export_progress is not None and not self._export_canceling:
+            self._export_progress.setLabelText(text)
+            self._export_progress.setValue(value)
+
+    def _on_export_finished(self) -> None:
+        worker = self._export_worker
+        if worker is None:
+            return
+        settings = worker.settings
+        self._export_poll.stop()
+        progress, self._export_progress = self._export_progress, None
+        progress.canceled.disconnect(self._cancel_export)
         progress.close()
-        self._record_export_history(
-            out_path,
-            fmt,
-            clip_snapshot,
-            len(clip_snapshot),
-            export_issue_count,
-            canvas_size=canvas_size,
-            audio_mode_override=history_audio_mode_override,
-            extra_notes=history_extra_notes,
-        )
-        status_suffix = f" — {completion_note}" if completion_note else ""
-        self.status_notice.emit(
-            f"Video Builder export saved: {Path(out_path).name} ({len(clip_snapshot)} clip{'s' if len(clip_snapshot) != 1 else ''}, {fmt.upper()}){status_suffix}",
-            8000,
-        )
-        final_message = f"Saved to:\n{out_path}"
-        if completion_note:
-            final_message += f"\n\n{completion_note}"
-        QMessageBox.information(self, "Export Complete", final_message)
+        progress.deleteLater()
+        self._export_content.setEnabled(self._export_content_enabled)
+        for shortcut, enabled in self._export_shortcuts:
+            shortcut.setEnabled(enabled)
+        self._export_worker = None
+        self._export_copy_jobs.clear()
+        if worker.outcome == "success":
+            self._record_export_history(
+                settings.output, settings.format, self._export_snapshot,
+                len(self._export_snapshot), worker.issue_count,
+                canvas_size=settings.canvas_size, audio_mode_override=worker.audio_mode,
+                extra_notes=worker.notes, preferences=settings,
+            )
+            suffix = f" — {worker.completion_note}" if worker.completion_note else ""
+            self.status_notice.emit(
+                f"Video Builder export saved: {Path(settings.output).name} "
+                f"({len(self._export_snapshot)} clips, {settings.format.upper()}){suffix}", 8000,
+            )
+            if not self._close_after_export:
+                QMessageBox.information(self, "Export Complete", f"Saved to:\n{settings.output}{suffix}")
+        elif worker.outcome == "error" and not self._close_after_export:
+            QMessageBox.critical(self, "Export Error",
+                                 f"Could not save output during {worker.stage}:\n{worker.error}")
+        self._export_snapshot = []
+        worker.deleteLater()
+        self.export_finished.emit()
+        if self._close_after_export:
+            self._close_after_export = False
+            result, self._export_deferred_result = self._export_deferred_result, None
+            if result is None:
+                self.close()
+            else:
+                self.done(result)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -5264,8 +5060,30 @@ class VideoToolDialog(QDialog):
             "Mixed-size clips are scaled to fit this canvas and letterboxed automatically."
         )
 
-    def closeEvent(self, event) -> None:
+    def _release_clips(self) -> None:
         self._preview_timer.stop()
+        self._btn_play.setChecked(False)
         for clip in self._clips:
             clip.close()
+        self._clips.clear()
+        self._clip_list.clear()
+        self._clip_list.setCurrentRow(-1)
+        self._on_clip_selected(-1)
+        self._update_scrubber()
+        self._update_preview()
+
+    def closeEvent(self, event) -> None:
+        if self.is_exporting():
+            self.request_export_cancel()
+            event.ignore()
+            return
+        self._release_clips()
         super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        if self.is_exporting():
+            self._export_deferred_result = result
+            self.request_export_cancel()
+            return
+        self._release_clips()
+        super().done(result)

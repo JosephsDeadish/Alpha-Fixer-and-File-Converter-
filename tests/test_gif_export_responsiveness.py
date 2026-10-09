@@ -410,7 +410,7 @@ def test_real_main_window_close_waits_for_parented_gif_worker_cleanup(tmp_path):
                 assert widget.is_exporting()
                 assert not window.close()
                 assert not window.close()
-                assert window._gif_shutdown_pending
+                assert window._builder_shutdown_pending == [widget]
                 assert window.isVisible()
                 assert widget._close_after_export
                 assert widget._export_canceling
@@ -426,7 +426,7 @@ def test_real_main_window_close_waits_for_parented_gif_worker_cleanup(tmp_path):
                 wait_for_gif_export(widget)
             wait_until(lambda: getattr(window, "_shutdown_complete", False))
             assert completion == [(False, False, (), False, False)]
-            assert not window._gif_shutdown_pending
+            assert not window._builder_shutdown_pending
             assert not window.isVisible()
             assert not widget.isVisible()
             assert widget._frames == []

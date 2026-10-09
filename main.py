@@ -2041,16 +2041,28 @@ def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
     finally:
         shutdown()
         app.aboutToQuit.disconnect(shutdown)
-        dialog = getattr(window, "_gif_builder_dlg", None) if not sip.isdeleted(window) else None
-        if dialog is not None and dialog.is_exporting():
+        dialogs = [
+            dialog for attr in ("_gif_builder_dlg", "_video_tool_dlg")
+            if not sip.isdeleted(window)
+            and (dialog := getattr(window, attr, None)) is not None and dialog.is_exporting()
+        ]
+        if dialogs:
             # Direct QApplication.exit() bypasses the deferred main-window close.
             # Keep queued worker cleanup running before releasing the Qt tree.
             cleanup_loop = QEventLoop()
-            dialog.export_finished.connect(cleanup_loop.quit)
-            dialog.request_export_cancel()
-            if dialog.is_exporting():
+
+            def check_exports_finished():
+                if not any(dialog.is_exporting() for dialog in dialogs):
+                    cleanup_loop.quit()
+
+            for dialog in dialogs:
+                dialog.export_finished.connect(check_exports_finished)
+            for dialog in dialogs:
+                dialog.request_export_cancel()
+            if any(dialog.is_exporting() for dialog in dialogs):
                 cleanup_loop.exec()
-            dialog.export_finished.disconnect(cleanup_loop.quit)
+            for dialog in dialogs:
+                dialog.export_finished.disconnect(check_exports_finished)
             if not sip.isdeleted(window):
                 window.close()
         # Do not force-delete the widget tree: a bounded closeEvent wait may

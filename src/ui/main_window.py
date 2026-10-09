@@ -4695,23 +4695,33 @@ class MainWindow(QMainWindow):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def _resume_close_after_gif_export(self):
-        dialog = getattr(self, "_gif_builder_dlg", None)
-        if dialog is not None:
-            dialog.export_finished.disconnect(self._resume_close_after_gif_export)
-        self._gif_shutdown_pending = False
-        QTimer.singleShot(0, self.close)
+    def _resume_close_after_builder_export(self):
+        pending = getattr(self, "_builder_shutdown_pending", [])
+        for dialog in tuple(pending):
+            if not dialog.is_exporting():
+                dialog.export_finished.disconnect(self._resume_close_after_builder_export)
+                pending.remove(dialog)
+        if not pending:
+            QTimer.singleShot(0, self.close)
 
     def closeEvent(self, event):
         if getattr(self, "_shutdown_complete", False):
             event.accept()
             return
-        dialog = getattr(self, "_gif_builder_dlg", None)
-        if dialog is not None and dialog.is_exporting():
+        active = [
+            dialog for attr in ("_gif_builder_dlg", "_video_tool_dlg")
+            if (dialog := getattr(self, attr, None)) is not None and dialog.is_exporting()
+        ]
+        if active:
             event.ignore()
-            if not getattr(self, "_gif_shutdown_pending", False):
-                self._gif_shutdown_pending = True
-                dialog.export_finished.connect(self._resume_close_after_gif_export)
+            pending = getattr(self, "_builder_shutdown_pending", None)
+            if pending is None:
+                pending = self._builder_shutdown_pending = []
+            newly_pending = [dialog for dialog in active if dialog not in pending]
+            for dialog in newly_pending:
+                pending.append(dialog)
+                dialog.export_finished.connect(self._resume_close_after_builder_export)
+            for dialog in newly_pending:
                 dialog.request_export_cancel()
             return
         self._shutdown_complete = True

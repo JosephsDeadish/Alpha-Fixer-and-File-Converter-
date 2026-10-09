@@ -15,6 +15,7 @@ from src.ui.gif_builder import GifBuilderDialog
 from src.ui.selective_alpha_tool import SelectiveAlphaTool
 from src.ui.video_tool import VideoToolDialog, _ClipEntry, _CLIP_ROLE
 from tests.gif_export_helpers import wait_for_gif_export
+from tests.video_export_helpers import wait_for_video_export
 
 
 @pytest.fixture(scope="module")
@@ -203,10 +204,11 @@ def test_video_final_staging_uses_destination_filesystem(app, tmp_path, fmt, mux
             stack.enter_context(patch("src.ui.video_tool.QMessageBox.information"))
             stack.enter_context(patch("src.ui.video_tool.QMessageBox.warning"))
             stack.enter_context(patch.object(widget, "_should_mux_audio", return_value=mux))
-            stack.enter_context(patch.object(widget, "_mux_mp4_audio", side_effect=OSError("mux failure")))
+            stack.enter_context(patch("src.core.video_export.mux_mp4_audio", side_effect=OSError("mux failure")))
             if fmt == "mp4":
                 stack.enter_context(patch("imageio.get_writer", get_writer))
             widget._export()
+            wait_for_video_export(widget)
         assert created
         assert all(path.parent == tmp_path for path in created)
         assert all(not path.exists() for path in created)
@@ -312,6 +314,8 @@ def test_builder_normalized_destination_confirms_before_export(app, painter, tmp
             widget._export()
             if kind == "gif_builder":
                 wait_for_gif_export(widget)
+            else:
+                wait_for_video_export(widget)
         question.assert_called_once()
         assert str(final) in question.call_args.args[2]
         assert question.call_args.args[-1] == QMessageBox.StandardButton.No
@@ -412,6 +416,8 @@ def test_confirmed_export_pauses_preview(playing_builder, tmp_path):
         widget._export()
         if module.endswith("gif_builder"):
             wait_for_gif_export(widget)
+        else:
+            wait_for_video_export(widget)
     with Image.open(output) as image:
         assert image.format == "GIF"
     assert not widget._preview_timer.isActive()
@@ -442,15 +448,18 @@ def test_cancel_on_last_gif_frame_preserves_destination(playing_builder, tmp_pat
 
         cancel_hook = patch.object(Image.Image, "quantize", frame)
     else:
-        original = widget._get_snapshot_frame
+        from src.ui import video_tool
+        original = video_tool._apply_filter
+        calls = []
 
-        def frame(snapshot, index):
-            result = original(snapshot, index)
-            if index == 1:
-                dialogs[0].cancel()
+        def frame(image, key):
+            result = original(image, key)
+            calls.append(1)
+            if len(calls) == 2:
+                widget._export_worker.cancel()
             return result
 
-        cancel_hook = patch.object(widget, "_get_snapshot_frame", frame)
+        cancel_hook = patch.object(video_tool, "_apply_filter", frame)
 
     notice = Mock()
     widget.status_notice.connect(notice)
@@ -461,6 +470,8 @@ def test_cancel_on_last_gif_frame_preserves_destination(playing_builder, tmp_pat
         widget._export()
         if module.endswith("gif_builder"):
             wait_for_gif_export(widget)
+        else:
+            wait_for_video_export(widget)
     assert output.read_bytes() == b"existing"
     history.assert_not_called()
     info.assert_not_called()
@@ -498,22 +509,28 @@ def test_mp4_late_cancellation_skips_mux_and_commit(playing_builder, tmp_path, s
         def close():
             Path(path).write_bytes(b"encoded")
             if stage == "writer_close":
-                dialogs[0].cancel()
+                widget._export_worker.cancel()
 
         writer.close.side_effect = close
         return writer
+
+    def cancel_mux(*args):
+        widget._export_worker.cancel()
+        args[-1]()
 
     with patch(f"{module}.QFileDialog.getSaveFileName", return_value=(str(output), "")), \
             patch(f"{module}.QProgressDialog", progress), \
             patch("imageio.get_writer", get_writer), \
             patch.object(widget, "_should_mux_audio", return_value=True), \
-            patch.object(widget, "_mux_mp4_audio") as mux, \
+            patch("src.core.video_export.mux_mp4_audio", side_effect=cancel_mux) as mux, \
             patch.object(widget, "_record_export_history") as history, \
             patch.object(QMessageBox, "information") as info:
         widget._export()
+        wait_for_video_export(widget)
     assert output.read_bytes() == b"existing"
-    mux.assert_not_called()
+    if stage == "writer_close":
+        mux.assert_not_called()
     history.assert_not_called()
     info.assert_not_called()
-    assert not dialogs[0].isVisible()
+    assert sip.isdeleted(dialogs[0]) or not dialogs[0].isVisible()
     assert not list(tmp_path.glob("*alpha_fixer*"))
