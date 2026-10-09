@@ -6146,6 +6146,79 @@ class TestBuilderHistoryPolish(unittest.TestCase):
     def tearDown(self):
         self._app.processEvents()
 
+    def test_tool_root_geometry_across_builtin_themes_and_font_extremes(self):
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QScrollArea
+        from src.core.presets import PresetManager
+        from src.core.settings_manager import SettingsManager
+        from src.ui.alpha_tool import AlphaFixerTab
+        from src.ui.converter_tool import ConverterTab
+        from src.ui.history_tab import HistoryTab
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, build_stylesheet
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        original_font = QFont(self._app.font())
+        original_style = self._app.styleSheet()
+        widgets = []
+        try:
+            with tempfile.TemporaryDirectory(dir=".") as folder:
+                with patch("src.core.settings_manager._settings_ini_path",
+                           return_value=os.path.join(folder, "settings.ini")):
+                    settings = SettingsManager()
+                widgets = [
+                    AlphaFixerTab(PresetManager(settings), settings),
+                    ConverterTab(settings),
+                    SelectiveAlphaTool(settings),
+                    HistoryTab(settings),
+                ]
+                margins = [
+                    tuple(getattr(widget.layout().contentsMargins(), side)()
+                          for side in ("left", "top", "right", "bottom"))
+                    for widget in widgets
+                ]
+                for theme_name, theme in {**PRESET_THEMES, **HIDDEN_THEMES}.items():
+                    for point_size in (8, 24):
+                        font = QFont(original_font)
+                        font.setPointSize(point_size)
+                        self._app.setFont(font)
+                        scaled_px = max(8, min(32, round(point_size * 1.33)))
+                        self._app.setStyleSheet(
+                            build_stylesheet(theme) + f"\nQWidget {{ font-size: {scaled_px}px; }}"
+                        )
+                        for index, widget in enumerate(widgets):
+                            with self.subTest(theme=theme_name, font=point_size,
+                                              tool=type(widget).__name__):
+                                widget.resize(1000, 750)
+                                widget.show()
+                                self._app.processEvents()
+                                self._app.processEvents()
+                                current = widget.layout().contentsMargins()
+                                self.assertEqual(
+                                    tuple(getattr(current, side)() for side in
+                                          ("left", "top", "right", "bottom")),
+                                    margins[index],
+                                )
+                                for item_index in range(widget.layout().count()):
+                                    item = widget.layout().itemAt(item_index)
+                                    child = item.widget()
+                                    if child is not None and child.isVisible():
+                                        self.assertTrue(widget.rect().contains(child.geometry()))
+                                if isinstance(widget, SelectiveAlphaTool):
+                                    scroll = widget.findChild(QScrollArea)
+                                    self.assertGreaterEqual(
+                                        scroll.widget().width(),
+                                        scroll.widget().minimumSizeHint().width(),
+                                    )
+                                widget.hide()
+        finally:
+            for widget in widgets:
+                widget.close()
+                widget.deleteLater()
+            self._app.setStyleSheet(original_style)
+            self._app.setFont(original_font)
+            self._app.processEvents()
+
     def test_history_filters_casefold_unicode_filenames_and_fields(self):
         from PyQt6.QtWidgets import QTreeWidget
         from src.ui.history_tab import (

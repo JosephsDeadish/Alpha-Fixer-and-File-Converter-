@@ -71,16 +71,18 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
         output = Path(directory) / "result.json"
         child_env = dict(env)
         child_env["ALPHA_FIXER_VALIDATION_JSON_OUT"] = str(output)
-        with subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=child_env,
-            start_new_session=os.name != "nt",
-        ) as process:
+        # A regular temporary file avoids Windows pipe-reader threads that can
+        # block stream closure when a detached descendant survives a timeout.
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as capture:
+            process = subprocess.Popen(
+                command,
+                stdout=capture,
+                stderr=subprocess.STDOUT,
+                env=child_env,
+                start_new_session=os.name != "nt",
+            )
             try:
-                stdout, _ = process.communicate(timeout=timeout)
+                process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
                 # One-file bootloaders and FFmpeg can leave descendants holding
                 # the output pipe open if only the top-level process is killed.
@@ -100,14 +102,17 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
                     except ProcessLookupError:
                         pass
                 process.kill()
-                # Do not wait forever if a descendant deliberately detached.
                 try:
-                    stdout, _ = process.communicate(timeout=5)
-                    if stdout:
-                        print(stdout, end="" if stdout.endswith("\n") else "\n")
+                    process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    process.stdout.close()
+                    pass
+                capture.seek(0)
+                stdout = capture.read()
+                if stdout:
+                    print(stdout, end="" if stdout.endswith("\n") else "\n")
                 raise
+            capture.seek(0)
+            stdout = capture.read()
             result = subprocess.CompletedProcess(command, process.returncode, stdout=stdout)
         if output.is_file():
             data = json.loads(output.read_text(encoding="utf-8"))

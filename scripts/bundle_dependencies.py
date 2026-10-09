@@ -19,6 +19,8 @@ LINUX_QT_LIBS = (
     # PyInstaller treats these as host graphics-stack libraries, but the
     # portable bundle also needs their generic loaders on a minimal target OS.
     "libGLX.so.0", "libGLdispatch.so.0", "libxcb.so.1",
+    "libdrm.so.2", "libwayland-client.so.0", "libwayland-cursor.so.0",
+    "libwayland-egl.so.1", "libxcb-dri3.so.0",
     "libxcb-keysyms.so.1", "libxcb-image.so.0", "libxcb-icccm.so.4",
     "libxcb-xkb.so.1", "libxcb-shape.so.0", "libxcb-cursor.so.0",
     "libxcb-render-util.so.0", "libxkbcommon-x11.so.0", "libxcb-util.so.1",
@@ -26,10 +28,10 @@ LINUX_QT_LIBS = (
 
 
 def resolve_library(name: str, roots=()) -> Path:
-    """Resolve only the named library, never copy a system library directory."""
+    """Locate a library while preserving its loader-visible SONAME filename."""
     path = Path(name)
     if path.is_file():
-        return path.resolve()
+        return path.absolute()
     directories = [Path(p) for p in roots]
     for variable in ("PATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
         directories.extend(Path(p) for p in os.environ.get(variable, "").split(os.pathsep) if p)
@@ -39,14 +41,14 @@ def resolve_library(name: str, roots=()) -> Path:
             if "=>" in line and line.strip().split()[0] == path.name:
                 candidate = Path(line.rsplit("=>", 1)[1].strip())
                 if candidate.is_file():
-                    return candidate.resolve()
+                    return candidate.absolute()
         directories.extend([Path("/usr/lib"), Path("/lib")])
     elif sys.platform == "darwin":
         directories.extend([Path("/opt/homebrew/lib"), Path("/usr/local/lib")])
     for directory in directories:
         candidate = directory / path.name
         if candidate.is_file():
-            return candidate.resolve()
+            return candidate.absolute()
     raise RuntimeError(f"Mandatory runtime library not found: {name}")
 
 
@@ -267,6 +269,19 @@ def collect_release_dependencies(output: Path = Path("build/runtime-resources"))
     patterns = ("*MagickCore*.so*", "*MagickCore*.dylib", "CORE_RL_*.dll", "libMagick*.dll")
     for pattern in patterns:
         binaries.extend((str(p.resolve()), ".") for p in wand_library.parent.glob(pattern) if p.is_file())
+    if sys.platform == "linux":
+        # Wand probes MAGICK_HOME/lib for unversioned .so names before using
+        # host ldconfig/compilers. Production installs often provide only .so.N.
+        magick_libraries = [wand_library] + [
+            Path(source) for source, _ in binaries if "MagickCore" in Path(source).name
+        ]
+        staging = output / "imagemagick-lib"
+        staging.mkdir(parents=True, exist_ok=True)
+        for source in magick_libraries:
+            name = source.name.partition(".so")[0] + ".so"
+            target = staging / name
+            shutil.copy2(source, target)
+            binaries.append((str(target), "lib"))
     if sys.platform == "linux":
         binaries.extend((str(resolve_library(name)), ".") for name in LINUX_QT_LIBS)
     for name in ("ffmpeg", "ffprobe"):

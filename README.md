@@ -177,6 +177,11 @@ The verifier clears inherited smoke/audit/self-test modes and sample settings so
 each launch tests the mode requested on the command line. Sample downloads must
 be explicitly enabled. Timed-out validations terminate their process tree, including
 one-file bootloader and FFmpeg children, instead of leaving a hung validation running.
+Linux CI additionally launches both bundle types as an unprivileged user in a
+minimal Ubuntu container with networking disabled and the package mounted
+read-only. No Python, FFmpeg, ImageMagick, or Qt packages are installed in that
+container. Capability checks and generated conversions must pass there too;
+build-host libraries alone are not evidence of a portable release.
 
 ### Single-file build (slower startup)
 

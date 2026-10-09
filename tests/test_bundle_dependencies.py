@@ -34,7 +34,11 @@ def test_missing_ffprobe_is_fatal(monkeypatch):
         bundle.find_executable("ffprobe")
 
 def test_minimal_linux_release_includes_generic_graphics_dependencies():
-    for name in ("libxcb.so.1", "libGLX.so.0", "libGLdispatch.so.0"):
+    for name in (
+        "libxcb.so.1", "libGLX.so.0", "libGLdispatch.so.0", "libdrm.so.2",
+        "libwayland-client.so.0", "libwayland-cursor.so.0", "libwayland-egl.so.1",
+        "libxcb-dri3.so.0",
+    ):
         assert name in bundle.LINUX_QT_LIBS
 
 
@@ -79,6 +83,22 @@ def test_library_resolution_matches_exact_soname(tmp_path, monkeypatch):
         f"libMagickWand.so.7 (libc6) => {library}\n"
     )))
     assert bundle.resolve_library(library.name) == library.resolve()
+
+def test_library_resolution_preserves_excluded_loader_soname(tmp_path, monkeypatch):
+    library = make_file(tmp_path / "libxcb.so.1.1.0")
+    soname = tmp_path / "libxcb.so.1"
+    try:
+        soname.symlink_to(library.name)
+    except OSError:
+        pytest.skip("Test platform cannot create native-library symlinks")
+    monkeypatch.setattr(bundle.sys, "platform", "linux")
+    monkeypatch.setattr(bundle.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        stdout=f"libxcb.so.1 (libc6) => {soname}\n",
+    ))
+    assert bundle.resolve_library(soname.name) == soname.absolute()
+    assert bundle.resolve_library(str(soname)) == soname.absolute()
+    monkeypatch.setattr(bundle.sys, "platform", "win32")
+    assert bundle.resolve_library(soname.name, [tmp_path]) == soname.absolute()
 
 
 def test_missing_library_is_fatal(tmp_path, monkeypatch):
@@ -253,6 +273,33 @@ def test_collector_preserves_versioned_config_layout(tmp_path, monkeypatch):
     assert "PyQt6" in metadata
     assert "PyQt6" not in collected_data
     assert "PyQt6" not in collected_binaries
+
+
+def test_linux_wand_can_find_native_libraries_without_host_discovery(tmp_path, monkeypatch):
+    monkeypatch.setattr(bundle.sys, "platform", "linux")
+    monkeypatch.setattr(bundle, "LINUX_QT_LIBS", ())
+    wand = make_file(tmp_path / "libMagickWand-6.Q16.so.7", "wand runtime")
+    core = make_file(tmp_path / "libMagickCore-6.Q16.so.7", "core runtime")
+    config = make_file(tmp_path / "config/policy.xml")
+    coder = make_file(tmp_path / "coders/dds.so")
+    extension = make_file(tmp_path / "vtracer/native.so")
+    monkeypatch.setitem(sys.modules, "wand.api", SimpleNamespace(library=SimpleNamespace(_name=str(wand))))
+    monkeypatch.setitem(sys.modules, "PyInstaller.utils.hooks", SimpleNamespace(
+        collect_data_files=lambda *a, **k: [], collect_dynamic_libs=lambda *a: [],
+        copy_metadata=lambda *a: [],
+    ))
+    monkeypatch.setitem(sys.modules, "PyQt6", SimpleNamespace(QtCore=None, QtGui=None, QtSvg=None, QtWidgets=None))
+    monkeypatch.setattr(bundle, "imagemagick_layout", lambda *a: ([config], [coder]))
+    monkeypatch.setattr(bundle, "find_executable", lambda name: tmp_path / name)
+    monkeypatch.setattr(bundle, "validate_executable", lambda *a: None)
+    monkeypatch.setattr(bundle, "vtracer_native_extension", lambda: extension)
+    monkeypatch.setattr(bundle, "write_notices", lambda *a: [])
+    output = tmp_path / "generated"
+    _, binaries, _ = bundle.collect_release_dependencies(output)
+    for source in (wand, core):
+        alias = output / "imagemagick-lib" / (source.name.partition(".so")[0] + ".so")
+        assert alias.read_bytes() == source.read_bytes()
+        assert (str(alias), "lib") in binaries
 
 
 def test_missing_vtracer_native_runtime_is_fatal(monkeypatch):

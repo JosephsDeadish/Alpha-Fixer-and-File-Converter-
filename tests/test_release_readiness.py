@@ -204,6 +204,21 @@ class TestOfflineVerification(unittest.TestCase):
                     invocation = next(line for line in text.splitlines() if "--offline" in line)
                     self.assertIn(flag, text[:offline] if filename.endswith(".sh") else invocation)
 
+    def test_linux_ci_verifies_clean_os_without_runtime_installs_or_network(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/fresh-machine-runtime.yml").read_text(encoding="utf-8")
+        step = workflow.split(
+            "- name: Verify Linux bundle on a clean network-disabled operating system", 1,
+        )[1].split("- name: Verify packaged app (Linux/macOS)", 1)[0]
+        for option in (
+            "--network none", "--read-only", "--user 65534:65534",
+            "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1", "ALPHA_FIXER_RUNTIME_SELFTEST=2",
+            '"packaged_bundle_ready"', '"wand_runtime_ready"', '"svg_vectorization"',
+        ):
+            self.assertIn(option, step)
+        self.assertNotIn("apt-get", step)
+        self.assertNotIn("pip install", step)
+
     def test_windowed_executable_reports_through_file_channel(self):
         payload = {"frozen": True, "packaged_bundle_ready": True}
 
@@ -214,8 +229,7 @@ class TestOfflineVerification(unittest.TestCase):
             }), encoding="utf-8")
             from unittest.mock import MagicMock
             process = MagicMock()
-            process.__enter__.return_value = process
-            process.communicate.return_value = ("", None)
+            process.wait.return_value = 0
             process.returncode = 0
             return process
 
@@ -252,6 +266,37 @@ class TestOfflineVerification(unittest.TestCase):
                         os.kill(int(pid_file.read_text()), signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+
+    def test_windows_timeout_does_not_wait_on_surviving_pipe_reader(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        process = MagicMock()
+        process.pid = 123
+        process.wait.side_effect = [
+            subprocess.TimeoutExpired(["app.exe"], 2),
+            subprocess.TimeoutExpired(["app.exe"], 5),
+        ]
+
+        def launch(command, **kwargs):
+            self.assertNotEqual(kwargs["stdout"], subprocess.PIPE)
+            kwargs["stdout"].write("partial validation output\n")
+            return process
+
+        with patch.object(self.verifier, "os", SimpleNamespace(name="nt")):
+            with patch.object(self.verifier.subprocess, "Popen", side_effect=launch):
+                with patch.object(self.verifier.subprocess, "run", return_value=SimpleNamespace(returncode=1)) as kill_tree:
+                    with patch("sys.stdout"):
+                        with self.assertRaises(subprocess.TimeoutExpired):
+                            self.verifier._run_and_echo(
+                                ["app.exe"], env={"SystemRoot": r"C:\Windows"}, timeout=2,
+                            )
+        self.assertIn("/T", kill_tree.call_args.args[0])
+        self.assertIn("/F", kill_tree.call_args.args[0])
+        self.assertEqual([call.kwargs["timeout"] for call in process.wait.call_args_list], [2, 5])
+        process.kill.assert_called_once()
+        process.communicate.assert_not_called()
+        process.stdout.close.assert_not_called()
 
 class TestUnattendedValidation(unittest.TestCase):
     def test_validation_payload_can_be_written_without_console(self):
