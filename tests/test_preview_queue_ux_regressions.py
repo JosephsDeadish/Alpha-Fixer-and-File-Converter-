@@ -8,14 +8,14 @@ from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, pyqtSignal
 from PyQt6.QtTest import QTest
 from PyQt6.QtGui import QAction, QImage, QColor, QPalette
-from PyQt6.QtWidgets import QApplication, QMenu, QLabel
+from PyQt6.QtWidgets import QApplication, QMenu, QLabel, QWidget
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
 from src.ui.alpha_tool import AlphaFixerTab, _AlphaPreviewLoader
 from src.ui.drop_list import DropFileList
-from src.ui.selective_alpha_tool import SelectiveAlphaTool
-from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
+from src.ui.selective_alpha_tool import SelectiveAlphaTool, _FloatingZoomOverlay
+from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, build_stylesheet
 
 
 class PreviewLoader(QObject):
@@ -88,6 +88,77 @@ def sample_image():
 
 def sample_stats():
     return {"min": 0, "max": 255, "mean": 100.0, "percent_nonzero": 50.0}
+
+
+def test_painter_zoom_overlay_avoids_history_and_updates_actual_canvas(painter, app, tmp_path):
+    open_painter_image(painter, tmp_path)
+    painter.show()
+    painter.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Light"])
+                         + "\nQWidget { font-size: 24px; }")
+    painter._canvas.setFixedSize(360, 400)
+    for _ in range(15):
+        app.processEvents()
+    overlay = painter._zoom_overlay
+    assert painter._canvas.rect().contains(overlay.geometry())
+    assert not overlay.geometry().intersects(painter._history_overlay.geometry())
+    overlay._zoom_buttons[1].click()
+    before = overlay._zoom_lbl.text()
+    overlay._zoom_buttons[2].click()
+    for _ in range(15):
+        app.processEvents()
+    assert overlay._zoom_lbl.text() != before
+    assert not overlay._position_timer.isActive()
+    overlay._zoom_buttons[1].click()
+    assert overlay._zoom_lbl.text() == before
+
+
+@pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
+def test_painter_zoom_overlay_scales_fits_and_preserves_keyboard_actions(app, name):
+    host = QWidget()
+    callbacks = [Mock(), Mock(), Mock()]
+    overlay = _FloatingZoomOverlay(*callbacks, parent=host)
+    theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+    try:
+        host.resize(700, 300)
+        host.show()
+        overlay.show()
+        for pixels in [13, 24, 32, 13]:
+            host.setStyleSheet(build_stylesheet(theme)
+                              + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for width in [180, 360, 700]:
+                host.resize(width, 300)
+                for zoom in [1.0, 12.5, 0.125]:
+                    overlay.set_zoom(zoom)
+                    for _ in range(15):
+                        app.processEvents()
+                    assert not overlay._position_timer.isActive()
+                    assert host.rect().contains(overlay.geometry())
+                    assert overlay._zoom_lbl.text() == f"{int(round(zoom * 100))}%"
+                    assert overlay._zoom_lbl.width() >= overlay._zoom_lbl.sizeHint().width()
+                    assert overlay._zoom_lbl.font().pixelSize() == pixels
+                    assert overlay._zoom_lbl.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+                    for button in overlay._zoom_buttons:
+                        assert button.font().pixelSize() == pixels
+                        assert button.palette().color(QPalette.ColorRole.ButtonText) == QColor(theme["text"])
+                        assert button.width() >= button.sizeHint().width()
+                        assert button.height() >= button.sizeHint().height()
+                if width == 700:
+                    assert not overlay._compact
+        assert [button.accessibleName() for button in overlay._zoom_buttons] == [
+            "Zoom out", "Fit Painter canvas to window", "Zoom in",
+        ]
+        host.activateWindow()
+        for button, callback in zip(overlay._zoom_buttons, [callbacks[1], callbacks[2], callbacks[0]]):
+            button.setFocus()
+            app.processEvents()
+            QTest.keyClick(button, Qt.Key.Key_Space)
+            callback.assert_called_once()
+            button.setEnabled(False)
+            QTest.keyClick(button, Qt.Key.Key_Space)
+            callback.assert_called_once()
+    finally:
+        host.close()
+        sip.delete(host)
 
 
 def test_selection_change_invalidates_results_during_debounce(alpha, tmp_path):

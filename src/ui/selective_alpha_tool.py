@@ -1220,7 +1220,7 @@ class SelectiveAlphaCanvas(QWidget):
 
 
 class _FloatingZoomOverlay(QFrame):
-    """Semi-transparent floating overlay with Zoom In / Fit / Zoom Out buttons.
+    """Themed floating overlay with Zoom In / Fit / Zoom Out buttons.
 
     Positioned at the top-right corner of its parent widget.  Reparent to the
     widget you want it to float over and call ``reposition()`` from the parent's
@@ -1231,28 +1231,7 @@ class _FloatingZoomOverlay(QFrame):
         super().__init__(parent)
         self.setObjectName("zoomOverlay")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-        self.setStyleSheet(
-            "QFrame#zoomOverlay {"
-            "  background: rgba(30, 30, 30, 160);"
-            "  border-radius: 6px;"
-            "  border: 1px solid rgba(255,255,255,40);"
-            "}"
-            "QPushButton {"
-            "  background: rgba(60,60,60,200);"
-            "  color: #eee;"
-            "  border: none;"
-            "  border-radius: 4px;"
-            "  font-size: 13px;"
-            "  min-width: 26px;"
-            "  max-width: 26px;"
-            "  min-height: 22px;"
-            "  max-height: 22px;"
-            "  padding: 0;"
-            "}"
-            "QPushButton:hover { background: rgba(100,100,100,220); }"
-            "QPushButton:pressed { background: rgba(40,40,40,255); }"
-        )
-        row = QHBoxLayout(self)
+        row = QGridLayout(self)
         row.setContentsMargins(4, 3, 4, 3)
         row.setSpacing(3)
         btn_out = QPushButton("－")
@@ -1264,24 +1243,73 @@ class _FloatingZoomOverlay(QFrame):
         btn_in = QPushButton("＋")
         btn_in.setToolTip("Zoom in  (Ctrl+scroll)")
         btn_in.clicked.connect(zoom_in_cb)
-        row.addWidget(btn_out)
-        row.addWidget(btn_fit)
-        row.addWidget(btn_in)
+        self._zoom_buttons = (btn_out, btn_fit, btn_in)
+        for column, (button, name) in enumerate(zip(
+            self._zoom_buttons, ("Zoom out", "Fit Painter canvas to window", "Zoom in"),
+        )):
+            button.setProperty("previewOverlay", True)
+            button.setAccessibleName(name)
+            row.addWidget(button, 0, column)
         self._zoom_lbl = QLabel("100%")
-        self._zoom_lbl.setStyleSheet("color: #ccc; font-size: 10px; min-width: 34px;")
+        self._zoom_lbl.setProperty("previewZoomValue", True)
+        self._zoom_lbl.setAccessibleName("Painter canvas zoom percentage")
         self._zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        row.addWidget(self._zoom_lbl)
+        row.addWidget(self._zoom_lbl, 0, 3)
+        self._compact = False
+        self._position_timer = QTimer(self)
+        self._position_timer.setSingleShot(True)
+        self._position_timer.timeout.connect(self._refresh_position)
+        if parent is not None:
+            parent.installEventFilter(self)
         self.adjustSize()
         self.raise_()
 
     def set_zoom(self, zoom: float) -> None:
         """Update the zoom percentage label."""
         self._zoom_lbl.setText(f"{int(round(zoom * 100))}%")
+        self._position_timer.start(0)
 
     def reposition(self, parent_size) -> None:
         """Pin the overlay to the top-right corner of *parent_size*."""
         margin = 6
-        self.move(parent_size.width() - self.width() - margin, margin)
+        row = self.layout()
+        margins = row.contentsMargins()
+        needed = (sum(button.sizeHint().width() for button in self._zoom_buttons)
+                  + self._zoom_lbl.sizeHint().width() + 3 * row.horizontalSpacing()
+                  + margins.left() + margins.right() + 12)
+        compact = parent_size.width() < needed
+        if compact != self._compact:
+            row.removeWidget(self._zoom_lbl)
+            if compact:
+                row.addWidget(self._zoom_lbl, 1, 0, 1, 3)
+            else:
+                row.addWidget(self._zoom_lbl, 0, 3)
+            self._compact = compact
+        row.activate()
+        self.adjustSize()
+        self.move(max(margin, parent_size.width() - self.width() - margin), margin)
+        parent = self.parentWidget()
+        history = parent.findChild(QFrame, "historyOverlay") if parent is not None else None
+        if history is not None and not history.isHidden() and self.geometry().intersects(history.geometry()):
+            self.move(self.x(), history.geometry().bottom() + margin)
+
+    def _refresh_position(self):
+        if self.parentWidget() is not None:
+            self.reposition(self.parentWidget().size())
+
+    def event(self, event):
+        result = super().event(event)
+        timer = getattr(self, "_position_timer", None)
+        if timer is not None and event.type() in (
+            QEvent.Type.StyleChange, QEvent.Type.FontChange, QEvent.Type.LayoutRequest,
+        ):
+            timer.start(0)
+        return result
+
+    def eventFilter(self, obj, event):
+        if obj is self.parentWidget() and event.type() == QEvent.Type.Resize:
+            self._position_timer.start(0)
+        return super().eventFilter(obj, event)
 
 
 class _FloatingHistoryOverlay(QFrame):

@@ -3909,10 +3909,10 @@ QLabel[settingsHint="true"] {{
     color: {t['text']};
     margin-left: 4px;
 }}
-QLabel[toolGuidance="true"] {{
+QLabel[toolGuidance="true"], QLabel[previewZoomValue="true"] {{
     color: {t['text']};
 }}
-QFrame#zoomOverlayBar {{
+QFrame#zoomOverlayBar, QFrame#zoomOverlay {{
     background-color: {t['surface']};
     border: 1px solid {t['border']};
     border-radius: 6px;
