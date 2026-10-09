@@ -676,6 +676,23 @@ class SettingsManager:
     # Export / import all settings to a JSON file
     # ------------------------------------------------------------------
 
+    _IMPORT_INTEGER_RANGES = {
+        "sound_volume": (0, 100),
+        "trail_length": (10, 200),
+        "trail_fade_speed": (1, 10),
+        "trail_intensity": (10, 100),
+        "font_size": (8, 24),
+        "history_max_entries": (10, 5000),
+        "history_max_entries_converter": (0, 5000),
+        "history_max_entries_alpha": (0, 5000),
+        "history_max_entries_selective_alpha": (0, 5000),
+        "history_max_entries_gif_builder": (0, 5000),
+        "history_max_entries_video_builder": (0, 5000),
+        "last_converter_quality": (1, 100),
+        "sa_brush_size": (1, 200),
+        "sa_eraser_size": (1, 200),
+    }
+
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
         # Sound settings
@@ -735,7 +752,8 @@ class SettingsManager:
         Returns a list of keys that were imported.
         Raises OSError on file-read failure, json.JSONDecodeError if the
         file contains invalid JSON syntax, or ValueError if the JSON root
-        is not an object (dict) or a recognized preference has an invalid type.
+        is not an object (dict) or a recognized preference has an invalid type
+        or is outside its supported numeric range.
         All recognized values are validated before any preferences are changed.
         """
         with open(path, encoding="utf-8") as f:
@@ -773,6 +791,13 @@ class SettingsManager:
                     # QSettings stores integer variants as signed 64-bit values.
                     if not -(2**63) <= value < 2**63:
                         raise ValueError(f"Integer preference out of range: {key}")
+                    if key in self._IMPORT_INTEGER_RANGES:
+                        minimum, maximum = self._IMPORT_INTEGER_RANGES[key]
+                        if not minimum <= value <= maximum:
+                            raise ValueError(
+                                f"Integer preference out of range: {key} "
+                                f"(expected {minimum}–{maximum}, got {value})"
+                            )
                 elif not isinstance(value, str):
                     raise ValueError(f"Invalid text preference: {key}")
                 validated[key] = value

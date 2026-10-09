@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -750,6 +751,100 @@ def test_legacy_backup_scalars_survive_disk_reload_and_settings_reopening(dialog
         sip.delete(reopened)
         reloaded.sync()
         sip.delete(reloaded._qs)
+
+
+_BACKUP_NUMERIC_LIMITS = [
+    ("sound_volume", 0, 100), ("font_size", 8, 24),
+    ("trail_length", 10, 200), ("trail_fade_speed", 1, 10),
+    ("trail_intensity", 10, 100), ("history_max_entries", 10, 5000),
+    ("history_max_entries_converter", 0, 5000),
+    ("history_max_entries_alpha", 0, 5000),
+    ("history_max_entries_selective_alpha", 0, 5000),
+    ("history_max_entries_gif_builder", 0, 5000),
+    ("history_max_entries_video_builder", 0, 5000),
+    ("last_converter_quality", 1, 100),
+    ("sa_brush_size", 1, 200), ("sa_eraser_size", 1, 200),
+]
+
+
+@pytest.mark.parametrize("key,minimum,maximum", _BACKUP_NUMERIC_LIMITS)
+@pytest.mark.parametrize("boundary", ["below", "above"])
+def test_out_of_range_backup_is_atomic_on_disk(dialog, tmp_path, key, minimum, maximum, boundary):
+    widget, manager = dialog
+    manager.set("theme", "Existing theme")
+    manager.sync()
+    before_disk = Path(manager._qs.fileName()).read_bytes()
+    before = {name: manager.get(name) for name in manager.EXPORT_KEYS}
+    value = minimum - 1 if boundary == "below" else maximum + 1
+    path = tmp_path / "out-of-range.json"
+    path.write_text(json.dumps({"theme": "Replacement theme", key: str(value)}), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        manager.import_settings(str(path))
+    assert {name: manager.get(name) for name in manager.EXPORT_KEYS} == before
+    assert Path(manager._qs.fileName()).read_bytes() == before_disk
+
+
+@pytest.mark.parametrize("upper", [False, True])
+@pytest.mark.parametrize("legacy_strings", [False, True])
+def test_backup_numeric_boundaries_match_reopened_widgets(dialog, tmp_path, upper, legacy_strings):
+    widget, manager = dialog
+    values = {key: maximum if upper else minimum for key, minimum, maximum in _BACKUP_NUMERIC_LIMITS}
+    path = tmp_path / "numeric-boundaries.json"
+    path.write_text(json.dumps({key: str(value) if legacy_strings else value
+                                for key, value in values.items()}), encoding="utf-8")
+    assert set(manager.import_settings(str(path))) == set(values)
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=manager._qs.fileName()):
+        reloaded = SettingsManager()
+    reopened = SettingsDialog(reloaded)
+    try:
+        assert {key: reloaded.get(key, 0) for key in values} == values
+        controls = {
+            "sound_volume": reopened._sound_volume_slider,
+            "font_size": reopened._font_size_spin,
+            "trail_length": reopened._trail_length_slider,
+            "trail_fade_speed": reopened._trail_fade_slider,
+            "trail_intensity": reopened._trail_intensity_slider,
+            "history_max_entries": reopened._history_max_spin,
+            "history_max_entries_converter": reopened._history_max_conv_spin,
+            "history_max_entries_alpha": reopened._history_max_alpha_spin,
+            "history_max_entries_selective_alpha": reopened._history_max_sel_spin,
+            "history_max_entries_gif_builder": reopened._history_max_gif_spin,
+            "history_max_entries_video_builder": reopened._history_max_video_spin,
+        }
+        for key, control in controls.items():
+            assert control.value() == values[key], key
+            assert (control.minimum(), control.maximum()) == SettingsManager._IMPORT_INTEGER_RANGES[key]
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+        reloaded.sync()
+        sip.delete(reloaded._qs)
+
+
+def test_out_of_range_backup_ui_reports_failure_without_applying(dialog, tmp_path):
+    from src.ui.main_window import MainWindow
+
+    widget, manager = dialog
+    manager.set("sound_volume", 35)
+    widget._load_values()
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    path = tmp_path / "invalid-volume.json"
+    path.write_text(json.dumps({"font_size": 20, "sound_volume": -1}), encoding="utf-8")
+    with patch("src.ui.main_window.QFileDialog.getOpenFileName", return_value=(str(path), "")), \
+         patch("src.ui.main_window.QMessageBox.critical") as error, \
+         patch("src.ui.main_window.QMessageBox.information") as success, \
+         patch.object(widget, "_on_settings_changed", create=True) as apply:
+        MainWindow._import_settings(widget)
+    error.assert_called_once()
+    assert error.call_args.args[1] == "Import Failed"
+    assert "sound_volume" in error.call_args.args[2]
+    assert "0–100" in error.call_args.args[2]
+    apply.assert_not_called()
+    success.assert_not_called()
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+    assert widget._sound_volume_slider.value() == 35
+    assert widget._font_size_spin.value() == before["font_size"]
 
 
 def test_backup_round_trip_accepts_every_exportable_default(dialog, tmp_path):
