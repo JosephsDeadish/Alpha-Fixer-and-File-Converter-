@@ -1509,8 +1509,11 @@ class _ZoneRow(QWidget):
         top.addWidget(name_lbl)
 
         # Alpha label + spinbox
-        top.addWidget(QLabel("α:"))
+        alpha_label = QLabel("α:")
+        top.addWidget(alpha_label)
         self._alpha_spin = QSpinBox()
+        alpha_label.setBuddy(self._alpha_spin)
+        self._alpha_spin.setAccessibleName(f"{color_name} zone alpha (0–255)")
         self._alpha_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._alpha_spin.setRange(0, 255)
         self._alpha_spin.setValue(128)
@@ -1799,6 +1802,8 @@ class SelectiveAlphaTool(QWidget):
         )
         _ov_row.addWidget(_ov_lbl)
         self._overlay_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        _ov_lbl.setBuddy(self._overlay_opacity_slider)
+        self._overlay_opacity_slider.setAccessibleName("Zone overlay opacity (0–255)")
         self._overlay_opacity_slider.setRange(0, 255)
         self._overlay_opacity_slider.setValue(160)
         self._overlay_opacity_slider.setToolTip(_ov_lbl.toolTip())
@@ -1880,8 +1885,11 @@ class SelectiveAlphaTool(QWidget):
         size_box = QGroupBox("Tool Size")
         sg = QGridLayout(size_box)
         sg.setSpacing(4)
-        sg.addWidget(QLabel("Highlighter (px):"), 0, 0)
+        brush_label = QLabel("Highlighter (px):")
+        sg.addWidget(brush_label, 0, 0)
         self._brush_spin = QSpinBox()
+        brush_label.setBuddy(self._brush_spin)
+        self._brush_spin.setAccessibleName("Paint brush radius (image pixels)")
         self._brush_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._brush_spin.setRange(1, 200)
         self._brush_spin.setValue(10)
@@ -1890,8 +1898,11 @@ class SelectiveAlphaTool(QWidget):
             lambda v: self._canvas.set_brush_size(v)
         )
         sg.addWidget(self._brush_spin, 0, 1)
-        sg.addWidget(QLabel("Eraser (px):"), 1, 0)
+        eraser_label = QLabel("Eraser (px):")
+        sg.addWidget(eraser_label, 1, 0)
         self._eraser_spin = QSpinBox()
+        eraser_label.setBuddy(self._eraser_spin)
+        self._eraser_spin.setAccessibleName("Eraser radius (image pixels)")
         self._eraser_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._eraser_spin.setRange(1, 200)
         self._eraser_spin.setValue(10)
@@ -1947,8 +1958,11 @@ class SelectiveAlphaTool(QWidget):
         az_sel_row = QHBoxLayout()
         az_sel_row.setContentsMargins(0, 2, 0, 2)
         az_sel_row.setSpacing(4)
-        az_sel_row.addWidget(QLabel("Active:"))
+        active_label = QLabel("Active:")
+        az_sel_row.addWidget(active_label)
         self._active_zone_combo = QComboBox()
+        active_label.setBuddy(self._active_zone_combo)
+        self._active_zone_combo.setAccessibleName("Active paint zone")
         self._active_zone_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1994,6 +2008,8 @@ class SelectiveAlphaTool(QWidget):
         self._ze_swatch_btn.setToolTip("Click to choose a colour for this zone")
         ze_row1.addWidget(self._ze_swatch_btn)
         self._ze_name_edit = QLineEdit(ZONE_NAMES[0])
+        self._ze_name_edit.setAccessibleName("Active zone name")
+        self._ze_swatch_btn.setAccessibleName("Choose active zone overlay color")
         self._ze_name_edit.setPlaceholderText("Zone name…")
         self._ze_name_edit.setToolTip(
             "Custom name for this zone.\n"
@@ -2004,8 +2020,12 @@ class SelectiveAlphaTool(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         ze_row1.addWidget(self._ze_name_edit)
-        ze_row1.addWidget(QLabel("α:"))
+        zone_alpha_label = QLabel("α:")
+        ze_row1.addWidget(zone_alpha_label)
         self._ze_alpha_spin = QSpinBox()
+        zone_alpha_label.setBuddy(self._ze_alpha_spin)
+        self._ze_alpha_spin.setAccessibleName("Active zone alpha (0–255)")
+        self._ze_alpha_spin.setAccessibleDescription("0 is transparent; 255 is opaque.")
         self._ze_alpha_spin.setRange(0, 255)
         self._ze_alpha_spin.setValue(128)
         self._ze_alpha_spin.setMinimumWidth(62)
@@ -2055,8 +2075,11 @@ class SelectiveAlphaTool(QWidget):
         # Slot selector row (combo on its own row so the name shows in full)
         sel_row = QHBoxLayout()
         sel_row.setSpacing(4)
-        sel_row.addWidget(QLabel("Slot:"))
+        slot_label = QLabel("Slot:")
+        sel_row.addWidget(slot_label)
         self._slot_combo = QComboBox()
+        slot_label.setBuddy(self._slot_combo)
+        self._slot_combo.setAccessibleName("Single-zone mask slot")
         self._slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -2161,8 +2184,11 @@ class SelectiveAlphaTool(QWidget):
         # Slot selector row (combo on its own row so the name shows in full)
         az_sel_row2 = QHBoxLayout()
         az_sel_row2.setSpacing(4)
-        az_sel_row2.addWidget(QLabel("Slot:"))
+        layout_slot_label = QLabel("Slot:")
+        az_sel_row2.addWidget(layout_slot_label)
         self._az_slot_combo = QComboBox()
+        layout_slot_label.setBuddy(self._az_slot_combo)
+        self._az_slot_combo.setAccessibleName("Full zone layout slot")
         self._az_slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -2245,6 +2271,23 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_clear.clicked.connect(self._on_az_slot_clear)
         az_rename_row.addWidget(self._btn_az_slot_clear)
         azv.addLayout(az_rename_row)
+
+        for control, name in (
+            (self._btn_slot_add, "Add single-zone mask slot"),
+            (self._btn_slot_del, "Delete single-zone mask slot"),
+            (self._btn_slot_save, "Save active zone mask to slot"),
+            (self._btn_slot_paste, "Paste slot mask into active zone"),
+            (self._btn_slot_rename, "Rename single-zone mask slot"),
+            (self._btn_slot_clear, "Clear single-zone slot mask"),
+            (self._btn_az_slot_add, "Add full zone layout slot"),
+            (self._btn_az_slot_del, "Delete full zone layout slot"),
+            (self._btn_copy_all_zones, "Save all zone masks to layout slot"),
+            (self._btn_paste_all_zones, "Restore all zone masks from layout slot"),
+            (self._btn_az_slot_rename, "Rename full zone layout slot"),
+            (self._btn_az_slot_clear, "Clear full zone layout slot"),
+        ):
+            control.setAccessibleName(name)
+            control.setAccessibleDescription(control.toolTip())
 
         lv.addWidget(all_zones_box)
 

@@ -5,7 +5,8 @@ import pytest
 import numpy as np
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, pyqtSignal
+from PyQt6.QtTest import QTest
 from PyQt6.QtGui import QAction, QImage, QColor, QPalette
 from PyQt6.QtWidgets import QApplication, QMenu, QLabel
 
@@ -244,6 +245,48 @@ def open_painter_image(painter, tmp_path, size=(8, 8)):
                return_value=(str(path), "")):
         painter._on_open()
     return path
+
+
+def test_painter_named_inputs_keep_zone_switching_and_keyboard_edits(painter, app, tmp_path):
+    open_painter_image(painter, tmp_path)
+    controls = [painter._brush_spin, painter._eraser_spin, painter._overlay_opacity_slider,
+                painter._active_zone_combo, painter._ze_alpha_spin,
+                painter._slot_combo, painter._az_slot_combo]
+    names = [control.accessibleName() for control in controls]
+    assert all(names) and len(set(names)) == len(names)
+    labels = painter.findChildren(QLabel)
+    for control in controls:
+        assert sum(label.buddy() is control for label in labels) == 1
+    assert painter._ze_name_edit.accessibleName()
+    assert painter._ze_swatch_btn.accessibleName()
+    actions = [painter._btn_slot_add, painter._btn_slot_del, painter._btn_slot_save,
+               painter._btn_slot_paste, painter._btn_slot_rename, painter._btn_slot_clear,
+               painter._btn_az_slot_add, painter._btn_az_slot_del, painter._btn_copy_all_zones,
+               painter._btn_paste_all_zones, painter._btn_az_slot_rename, painter._btn_az_slot_clear]
+    action_names = [action.accessibleName() for action in actions]
+    assert all(action_names) and len(set(action_names)) == len(action_names)
+    assert all(action.accessibleDescription() for action in actions)
+    assert not painter._btn_slot_paste.isEnabled()
+    assert not painter._btn_paste_all_zones.isEnabled()
+    assert "0" in painter._ze_alpha_spin.accessibleDescription()
+    painter.show()
+    painter.activateWindow()
+    app.processEvents()
+    painter._active_zone_combo.setCurrentIndex(1)
+    assert painter._ze_cur_idx == 1
+    before = painter._ze_alpha_spin.value()
+    painter._ze_alpha_spin.setFocus()
+    QTest.keyClick(painter._ze_alpha_spin, Qt.Key.Key_Up)
+    assert painter._ze_alpha_spin.value() == before + 1
+    assert painter._canvas._zone_alphas[1] == before + 1
+    painter._active_zone_combo.setCurrentIndex(0)
+    assert painter._canvas._zone_alphas[0] == before
+    painter._active_zone_combo.setCurrentIndex(1)
+    assert painter._ze_alpha_spin.value() == before + 1
+    assert [control.accessibleName() for control in controls] == names
+    painter._ze_alpha_spin.setEnabled(False)
+    QTest.keyClick(painter._ze_alpha_spin, Qt.Key.Key_Up)
+    assert painter._canvas._zone_alphas[1] == before + 1
 
 
 def test_painter_guidance_preserves_slot_states_across_themes_and_scales(painter, app, tmp_path):

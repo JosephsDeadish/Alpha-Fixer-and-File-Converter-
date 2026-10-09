@@ -8,6 +8,7 @@ from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QImage, QColor, QPalette
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
 
 from src.core.settings_manager import SettingsManager
@@ -66,6 +67,37 @@ def select_format(converter, fmt):
     converter._fmt_combo.setCurrentIndex(index)
     converter._on_format_changed(index)
     converter._preview_debounce.stop()
+
+
+def test_named_history_search_preserves_filter_and_clear_behavior(settings, app):
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T12:00:00", "format": "PNG",
+        "file_count": 1, "success": 1, "errors": 0, "files": ["first.png"],
+    })
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T13:00:00", "format": "JPEG",
+        "file_count": 1, "success": 1, "errors": 0, "files": ["second.jpg"],
+    })
+    widget = HistoryTab(settings)
+    try:
+        fields = [widget._conv_search, widget._alpha_search, widget._sel_search,
+                  widget._gif_search, widget._vid_search]
+        names = [field.accessibleName() for field in fields]
+        assert all(names) and len(set(names)) == len(names)
+        assert all("Clear" in field.accessibleDescription() for field in fields)
+        widget.show()
+        app.processEvents()
+        widget._conv_search.setFocus()
+        QTest.keyClicks(widget._conv_search, "format:PNG")
+        tree = widget._conv_tree
+        assert sum(not tree.topLevelItem(i).isHidden()
+                   for i in range(tree.topLevelItemCount())) == 1
+        widget._conv_search.clear()
+        assert all(not tree.topLevelItem(i).isHidden() for i in range(tree.topLevelItemCount()))
+        assert [field.accessibleName() for field in fields] == names
+    finally:
+        widget.close()
+        sip.delete(widget)
 
 
 @pytest.mark.parametrize("tool", ["converter", "history", "alpha"])

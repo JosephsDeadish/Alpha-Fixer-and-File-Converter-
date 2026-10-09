@@ -696,6 +696,13 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
+        titles = {"converter": "Converter", "alpha": "Alpha & RGBA Adjuster",
+                  "selective": "Painter", "gif": "GIF Builder", "video": "Video Builder"}
+        field.setAccessibleName(f"Filter {titles.get(name, name)} history")
+        field.setAccessibleDescription(
+            "Filter history by text or field expressions such as status:, file: and format:. "
+            "Clear the search to show all entries."
+        )
         field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/streams/clip/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, streams:, clip:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps:, wildcards (*.gif), ranges (>24, <=100), or field ORs (audio:off|kept) …")
         field.setClearButtonEnabled(True)
         return field
