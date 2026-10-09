@@ -3583,6 +3583,28 @@ def _get_theme_gradient_css(t: dict) -> str:
     return ""
 
 
+def _readable_disabled_color(theme: dict) -> str:
+    """Keep disabled text legible while preferring the theme's muted color."""
+    from PyQt6.QtGui import QColor
+
+    def luminance(value: str) -> float:
+        color = QColor(value)
+        channels = (color.redF(), color.greenF(), color.blueF())
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+                  for c in channels]
+        return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+    backgrounds = [luminance(theme[key]) for key in ("surface", "background")]
+    for candidate in (theme["text_secondary"], theme["text"], "#000000", "#ffffff"):
+        foreground = luminance(candidate)
+        if all((max(foreground, bg) + 0.05) / (min(foreground, bg) + 0.05) >= 4.5
+               for bg in backgrounds):
+            return candidate
+    # Unusually contrasting custom surfaces may have no mutually readable color.
+    surface = backgrounds[0]
+    return "#000000" if surface > 0.179 else "#ffffff"
+
+
 def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (follow theme)") -> str:
     """Generate a full Qt stylesheet from the given theme dictionary.
 
@@ -3592,6 +3614,7 @@ def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (f
     "Neon", "Classic" to force a fixed visual style for all tooltips.
     """
     t = {**DEFAULT_THEME, **(theme or {})}
+    disabled_text = _readable_disabled_color(t)
     return f"""
 /* ===== Global ===== */
 QWidget {{
@@ -4133,4 +4156,33 @@ QFrame#card {{
 {_get_tooltip_css(t, tooltip_style)}
 {_get_theme_gradient_css(t)}
 {_get_theme_extra_css(t)}
+
+/* ===== Disabled Controls (after theme-specific decorations) ===== */
+QPushButton:disabled, QPushButton:disabled:hover, QPushButton:disabled:checked,
+QPushButton#accent:disabled, QPushButton#accent:disabled:hover,
+QPushButton#resetBtn:disabled, QPushButton#resetBtn:disabled:hover,
+QToolButton:disabled, QToolButton:disabled:hover {{
+    background-color: {t['surface']};
+    color: {disabled_text};
+    border: 1px dashed {t['border']};
+}}
+QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled,
+QComboBox:disabled, QComboBox:disabled:hover,
+QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    background-color: {t['surface']};
+    color: {disabled_text};
+    border: 1px dashed {t['border']};
+}}
+QComboBox::drop-down:disabled,
+QSpinBox::up-button:disabled, QSpinBox::down-button:disabled,
+QDoubleSpinBox::up-button:disabled, QDoubleSpinBox::down-button:disabled {{
+    background-color: {t['surface']};
+    border-color: {t['border']};
+}}
+QCheckBox:disabled, QRadioButton:disabled {{
+    color: {disabled_text};
+}}
+QSlider::handle:horizontal:disabled, QSlider::sub-page:horizontal:disabled {{
+    background-color: {t['text_secondary']};
+}}
 """

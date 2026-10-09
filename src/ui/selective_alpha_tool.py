@@ -2371,9 +2371,9 @@ class SelectiveAlphaTool(QWidget):
         rv.setSpacing(2)
         rv.addWidget(self._canvas, 1)
         self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px  |  Zoom: 100%")
-        self._status_lbl.setStyleSheet(
-            "color: #999; font-size: 10px; padding: 2px 4px;"
-        )
+        self._status_lbl.setProperty("toolGuidance", True)
+        self._status_lbl.setWordWrap(True)
+        self._status_lbl.setContentsMargins(4, 2, 4, 2)
         self._status_lbl.setToolTip(
             "Shows the active tool, zone, brush size, and cursor position.\n\n"
             "Navigation tips:\n"
@@ -2390,9 +2390,8 @@ class SelectiveAlphaTool(QWidget):
         status_row.setSpacing(4)
         status_row.addWidget(self._status_lbl, 1)
         self._coord_lbl = QLabel("—")
-        self._coord_lbl.setStyleSheet(
-            "color: #888; font-size: 10px; padding: 2px 6px;"
-        )
+        self._coord_lbl.setProperty("toolGuidance", True)
+        self._coord_lbl.setContentsMargins(6, 2, 6, 2)
         self._coord_lbl.setToolTip("Cursor position in image pixel coordinates (x, y).")
         self._coord_lbl.setMinimumWidth(80)
         self._coord_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

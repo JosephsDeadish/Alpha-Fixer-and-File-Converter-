@@ -7,7 +7,11 @@ from PyQt6 import sip
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QMessageBox, QGroupBox, QScrollArea, QLabel
+from PyQt6.QtWidgets import (
+    QApplication, QMessageBox, QGroupBox, QScrollArea, QLabel, QWidget, QVBoxLayout,
+    QPushButton, QToolButton, QLineEdit, QTextEdit, QComboBox, QSpinBox,
+    QDoubleSpinBox, QCheckBox, QRadioButton,
+)
 
 from src.core.settings_manager import SettingsManager
 from src.ui.settings_dialog import SettingsDialog
@@ -467,6 +471,65 @@ def test_reset_hover_and_pressed_use_readable_theme_surface(dialog, app, name):
     assert button.grab().toImage().pixelColor(4, button.height() // 2) == QColor(theme["surface"])
     with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
         QTest.mouseRelease(button, Qt.MouseButton.LeftButton, pos=button.rect().center())
+
+
+def test_disabled_controls_keep_readable_theme_colors_and_do_not_activate(app):
+    from src.ui.theme_engine import build_stylesheet, _readable_disabled_color
+
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    controls = [QPushButton("Standard"), QPushButton("Accent"), QPushButton("Reset"),
+                QToolButton(), QLineEdit("Value"), QTextEdit("Value"), QComboBox(),
+                QSpinBox(), QDoubleSpinBox(), QCheckBox("Choice"), QRadioButton("Choice")]
+    controls[1].setObjectName("accent")
+    controls[2].setObjectName("resetBtn")
+    controls[3].setText("Tool")
+    controls[6].addItem("Selected")
+    activated = Mock()
+    controls[1].clicked.connect(activated)
+    for control in controls:
+        layout.addWidget(control)
+        control.setEnabled(False)
+    host.show()
+    try:
+        for theme in list(PRESET_THEMES.values()) + list(HIDDEN_THEMES.values()):
+            host.setStyleSheet(build_stylesheet(theme))
+            app.processEvents()
+            expected = QColor(_readable_disabled_color(theme))
+            for control in controls:
+                role = (QPalette.ColorRole.ButtonText if isinstance(control, (QPushButton, QToolButton))
+                        else QPalette.ColorRole.WindowText if isinstance(control, (QCheckBox, QRadioButton))
+                        else QPalette.ColorRole.Text)
+                assert control.palette().color(QPalette.ColorGroup.Disabled, role) == expected
+            assert controls[1].palette().color(
+                QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button) == QColor(theme["surface"])
+        QTest.mouseClick(controls[1], Qt.MouseButton.LeftButton)
+        activated.assert_not_called()
+        controls[1].setEnabled(True)
+        QTest.mouseClick(controls[1], Qt.MouseButton.LeftButton)
+        activated.assert_called_once()
+    finally:
+        host.close()
+        sip.delete(host)
+
+
+@pytest.mark.parametrize("theme", list(PRESET_THEMES.values()) + list(HIDDEN_THEMES.values()),
+                         ids=lambda theme: theme["name"])
+def test_disabled_text_contrast_across_builtin_themes(theme):
+    from src.ui.theme_engine import _readable_disabled_color
+
+    def luminance(value):
+        color = QColor(value)
+        channels = (color.redF(), color.greenF(), color.blueF())
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+                  for c in channels]
+        return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+    foreground = luminance(_readable_disabled_color(theme))
+    for key in ("surface", "background"):
+        background = luminance(theme[key])
+        contrast = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+        assert contrast >= 4.5, (theme["name"], key, contrast)
 
 
 @pytest.mark.parametrize("finish", ["accept", "reject", "close"])

@@ -249,7 +249,7 @@ def open_painter_image(painter, tmp_path, size=(8, 8)):
 def test_painter_guidance_preserves_slot_states_across_themes_and_scales(painter, app, tmp_path):
     open_painter_image(painter, tmp_path)
     labels = [label for label in painter.findChildren(QLabel) if label.property("toolGuidance")]
-    assert len(labels) == 8
+    assert len(labels) == 10
     capability = painter._capability_lbl
     capability_text = capability.text(), capability.toolTip()
     painter.show()
@@ -270,7 +270,7 @@ def test_painter_guidance_preserves_slot_states_across_themes_and_scales(painter
         app.processEvents()
         for label in labels + [capability]:
             assert not label.styleSheet()
-            assert label.wordWrap()
+            assert label.wordWrap() or label is painter._coord_lbl
             assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
             assert label.font().pixelSize() == pixels
         assert capability.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
@@ -286,6 +286,10 @@ def test_painter_guidance_preserves_slot_states_across_themes_and_scales(painter
         assert (painter._slot_info_lbl.text(), painter._az_slot_info_lbl.text()) != filled_text
         assert not painter._slot_info_lbl.styleSheet()
         assert not painter._az_slot_info_lbl.styleSheet()
+        painter._canvas.cursor_moved.emit(123, 456)
+        assert painter._coord_lbl.text() == "x:123  y:456"
+        assert painter._status_lbl.text()
+        assert painter._status_lbl.wordWrap()
 
 
 def menu_state(canvas):
