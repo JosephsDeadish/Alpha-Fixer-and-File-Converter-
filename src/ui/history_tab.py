@@ -11,12 +11,12 @@ import re
 import shlex
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSlot, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QSize, QRect, QEvent, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
-    QTabWidget, QFileDialog, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem,
+    QTabWidget, QFileDialog, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem, QSizePolicy,
 )
 
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
@@ -466,6 +466,7 @@ class HistoryTab(QWidget):
 
         hdr = QLabel("📋  Processing History")
         hdr.setObjectName("header")
+        hdr.setWordWrap(True)
         self._hdr = hdr
         layout.addWidget(hdr)
 
@@ -494,14 +495,22 @@ class HistoryTab(QWidget):
         self._next_step_lbl.setProperty("toolGuidance", True)
         layout.addWidget(self._next_step_lbl)
 
-        btn_row = QHBoxLayout()
+        action_host = QWidget()
+        action_host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        btn_row = QHBoxLayout(action_host)
+        btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(6)
         self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
         btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)
-        layout.addLayout(btn_row)
+        btn_row.setDirection(QBoxLayout.Direction.TopToBottom)
+        self._action_layout = btn_row
+        layout.addWidget(action_host)
+        self._action_update_timer = QTimer(self)
+        self._action_update_timer.setSingleShot(True)
+        self._action_update_timer.timeout.connect(self._update_action_layout)
 
         # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
@@ -531,6 +540,7 @@ class HistoryTab(QWidget):
         conv_layout.addWidget(self._conv_tree)
         self._conv_summary = QLabel("")
         self._conv_summary.setObjectName("subheader")
+        self._conv_summary.setWordWrap(True)
         conv_layout.addWidget(self._conv_summary)
         self._sub_tabs.addTab(conv_widget, "🔄 Converter")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(conv_widget), "Converter history")
@@ -556,6 +566,7 @@ class HistoryTab(QWidget):
         alpha_layout.addWidget(self._alpha_tree)
         self._alpha_summary = QLabel("")
         self._alpha_summary.setObjectName("subheader")
+        self._alpha_summary.setWordWrap(True)
         alpha_layout.addWidget(self._alpha_summary)
         self._sub_tabs.addTab(alpha_widget, "🖼  Alpha & RGBA")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(alpha_widget), "Alpha & RGBA Adjuster history")
@@ -581,6 +592,7 @@ class HistoryTab(QWidget):
         sel_layout.addWidget(self._sel_tree)
         self._sel_summary = QLabel("")
         self._sel_summary.setObjectName("subheader")
+        self._sel_summary.setWordWrap(True)
         sel_layout.addWidget(self._sel_summary)
         self._sub_tabs.addTab(sel_widget, "🎭  Alpha Painter")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(sel_widget), "Alpha Painter history")
@@ -619,6 +631,7 @@ class HistoryTab(QWidget):
         self._gif_tree.setItemDelegate(self._gif_anim_delegate)
         self._gif_summary = QLabel("")
         self._gif_summary.setObjectName("subheader")
+        self._gif_summary.setWordWrap(True)
         gif_layout.addWidget(self._gif_summary)
         self._sub_tabs.addTab(gif_widget, "🎞  GIF Builder")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(gif_widget), "GIF Builder history")
@@ -655,6 +668,7 @@ class HistoryTab(QWidget):
         vid_layout.addWidget(self._vid_tree)
         self._vid_summary = QLabel("")
         self._vid_summary.setObjectName("subheader")
+        self._vid_summary.setWordWrap(True)
         vid_layout.addWidget(self._vid_summary)
         self._sub_tabs.addTab(vid_widget, "🎬  Video Builder")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(vid_widget), "Video Builder history")
@@ -686,6 +700,32 @@ class HistoryTab(QWidget):
         )
         self._vid_search.textChanged.connect(self._refresh_session_status)
         self._sub_tabs.currentChanged.connect(self._refresh_session_status)
+
+    def _update_action_layout(self):
+        row = getattr(self, "_action_layout", None)
+        if row is None:
+            return
+        margins = self.layout().contentsMargins()
+        needed = (sum(max(button.minimumWidth(), button.sizeHint().width())
+                      for button in (self._btn_export, self._btn_clear))
+                  + 2 * row.spacing() + margins.left() + margins.right() + 16)
+        direction = (QBoxLayout.Direction.TopToBottom if self.width() < needed
+                     else QBoxLayout.Direction.LeftToRight)
+        if row.direction() != direction:
+            row.setDirection(direction)
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self._update_action_layout()
+
+    def event(self, event):
+        result = super().event(event)
+        timer = getattr(self, "_action_update_timer", None)
+        if timer is not None and event.type() in (
+            QEvent.Type.StyleChange, QEvent.Type.FontChange, QEvent.Type.LayoutRequest,
+        ):
+            timer.start(0)
+        return result
 
     # ------------------------------------------------------------------
     # Search / filter helpers

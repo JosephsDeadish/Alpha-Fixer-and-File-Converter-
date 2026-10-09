@@ -9,7 +9,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QImage, QColor, QPalette
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
+from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel, QBoxLayout
 
 from src.core.settings_manager import SettingsManager
 from src.core.presets import PresetManager
@@ -95,6 +95,70 @@ def test_named_history_search_preserves_filter_and_clear_behavior(settings, app)
         widget._conv_search.clear()
         assert all(not tree.topLevelItem(i).isHidden() for i in range(tree.topLevelItemCount()))
         assert [field.accessibleName() for field in fields] == names
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+@pytest.mark.parametrize("initial_pixels", [13, 24, 32])
+def test_history_actions_and_summaries_fit_compact_and_live_scaled_layouts(
+        settings, app, name, initial_pixels):
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T12:00:00", "format": "PNG",
+        "file_count": 1, "success": 1, "errors": 0, "files": ["first.png"],
+    })
+    before = settings.get_converter_history()
+    widget = HistoryTab(settings)
+    try:
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + f"\nQWidget {{ font-size: {initial_pixels}px; }}")
+        widget.resize(640, 1000)
+        widget.show()
+        buttons = (widget._btn_export, widget._btn_clear)
+        for pixels in [initial_pixels, 13, 32, 24, 13]:
+            widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for _ in range(5):
+                app.processEvents()
+            assert widget.width() == 640
+            expected = (QBoxLayout.Direction.TopToBottom if pixels >= 24
+                        else QBoxLayout.Direction.LeftToRight)
+            assert widget._action_layout.direction() == expected
+            for button in buttons:
+                assert button.parentWidget().rect().contains(button.geometry())
+                assert button.width() >= button.sizeHint().width()
+            for index, summary in enumerate([
+                widget._conv_summary, widget._alpha_summary, widget._sel_summary,
+                widget._gif_summary, widget._vid_summary,
+            ]):
+                widget._sub_tabs.setCurrentIndex(index)
+                app.processEvents()
+                assert summary.wordWrap()
+                assert summary.parentWidget().rect().contains(summary.geometry())
+                assert summary.height() >= summary.heightForWidth(summary.width())
+        widget._sub_tabs.setCurrentIndex(0)
+        widget._conv_search.setText("format:PNG")
+        with patch("src.ui.history_tab.QFileDialog.getSaveFileName",
+                   return_value=("", "")) as save_dialog:
+            widget._btn_export.click()
+            save_dialog.assert_called_once()
+        with patch("src.ui.history_tab.QMessageBox.question",
+                   return_value=QMessageBox.StandardButton.No) as confirm:
+            widget._btn_clear.click()
+            confirm.assert_called_once()
+        assert settings.get_converter_history() == before
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + "\nQWidget { font-size: 32px; }")
+        widget.resize(1600, 1000)
+        for _ in range(5):
+            app.processEvents()
+        assert widget._action_layout.direction() == QBoxLayout.Direction.LeftToRight
+        widget.resize(640, 1000)
+        for _ in range(5):
+            app.processEvents()
+        assert widget.width() == 640
+        assert widget._action_layout.direction() == QBoxLayout.Direction.TopToBottom
     finally:
         widget.close()
         sip.delete(widget)
