@@ -9533,10 +9533,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         src = self._src("core/file_converter.py")
         self.assertNotIn("_QUALITY_FORMATS =", src)
 
-    def test_history_text_export_truncates_long_filename_column(self):
+    def test_history_text_export_preserves_long_filename_column(self):
         src = self._src("ui/history_tab.py")
-        self.assertIn("if is_last and len(text) > 80:", src)
-        self.assertIn('return text[:77] + "..."', src)
+        self.assertNotIn('return text[:77] + "..."', src)
+        self.assertIn("[str(cell) for cell in row]", src)
 
     def test_settings_dialog_keeps_locked_hidden_current_theme_selectable(self):
         src = self._src("ui/settings_dialog.py")

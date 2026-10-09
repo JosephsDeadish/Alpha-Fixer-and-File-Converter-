@@ -273,3 +273,67 @@ def test_banner_theme_toggle_restores_the_actual_manual_animation(dialog):
     widget._banner_use_theme_anim_check.setChecked(False)
     assert widget._banner_anim_combo.currentData() == "glitch"
     assert manager.get("banner_anim_style") == "glitch"
+
+
+def test_theme_sound_preview_does_not_overwrite_manual_profile(dialog):
+    widget, manager = dialog
+    profiles = [widget._sound_profile_combo.itemData(i)
+                for i in range(widget._sound_profile_combo.count())]
+    manual = next(profile for profile in profiles if profile != "soft")
+    widget._sound_profile_combo.setCurrentIndex(widget._sound_profile_combo.findData(manual))
+    widget._use_theme_sound_check.setChecked(True)
+    widget._rebuild_theme_combo(select="Panda Dark")
+    widget._on_preset_selected_live()
+    assert manager.get("sound_manual_profile") == manual
+    widget._use_theme_sound_check.setChecked(False)
+    assert widget._sound_profile_combo.currentData() == manual
+
+
+@pytest.mark.parametrize("kind,manual,theme", [
+    ("drip", "water", "Gore"),
+    ("flock", "fish", "Bat Cave"),
+    ("ambient", "snow", "Galaxy"),
+])
+def test_background_theme_toggle_preserves_manual_style(dialog, kind, manual, theme):
+    widget, manager = dialog
+    enabled = getattr(widget, f"_bg_{kind}_check")
+    follow = getattr(widget, f"_use_theme_{kind}_check")
+    combo = getattr(widget, f"_bg_{kind}_combo")
+    key = f"bg_{kind}_" + ("style" if kind == "flock" else "type")
+    enabled.setChecked(True)
+    combo.setCurrentIndex(combo.findData(manual))
+    follow.setChecked(True)
+    widget._rebuild_theme_combo(select=theme)
+    widget._on_preset_selected_live()
+    assert manager.get(key) == manual
+    enabled.setChecked(False)
+    enabled.setChecked(True)
+    assert manager.get(key) == manual
+    follow.setChecked(False)
+    assert combo.currentData() == manual
+    assert manager.get(key) == manual
+
+
+def test_opening_settings_does_not_erase_saved_background_or_notification_choices(dialog, tmp_path):
+    widget, manager = dialog
+    background = tmp_path / "custom-background.png"
+    background.write_bytes(b"background placeholder")
+    preferences = {
+        "custom_bg_enabled": True, "use_theme_bg": True,
+        "custom_bg_path": str(background),
+        "notif_overlay_enabled": True, "use_theme_notif": True,
+        "bg_flock_enabled": True, "use_theme_flock": True, "bg_flock_style": "fish",
+    }
+    manager.set_theme(PRESET_THEMES["Bat Cave"])
+    for key, value in preferences.items():
+        manager.set(key, value)
+    reopened = SettingsDialog(manager)
+    try:
+        assert {key: manager.get(key) for key in preferences} == preferences
+        assert reopened._custom_bg_path_edit.text() == str(background)
+        assert reopened._use_theme_bg_check.isChecked()
+        assert reopened._use_theme_notif_check.isChecked()
+        assert reopened._bg_flock_combo.currentData() == "bats"
+    finally:
+        reopened.close()
+        sip.delete(reopened)

@@ -4,7 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
-from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer
+from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -359,6 +359,7 @@ class SettingsDialog(QDialog):
         self._custom_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._use_theme_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._custom_bg_path_edit.textChanged.connect(lambda _: _update_custom_bg_state())
+        self._update_custom_bg_state = _update_custom_bg_state
         self._custom_bg_sub.setVisible(False)  # hidden until enabled
 
         def _browse_bg_file():
@@ -2240,6 +2241,8 @@ class SettingsDialog(QDialog):
             self._bg_drip_check, self._use_theme_drip_check, self._bg_drip_combo,
             self._bg_flock_check, self._use_theme_flock_check, self._bg_flock_combo,
             self._bg_ambient_check, self._use_theme_ambient_check, self._bg_ambient_combo,
+            self._notif_overlay_check, self._use_theme_notif_check,
+            self._custom_bg_check, self._use_theme_bg_check, self._custom_bg_path_edit,
             # Sound profile combo also saves settings on currentIndexChanged.
             self._sound_profile_combo,
             # UI density combos
@@ -2601,9 +2604,6 @@ class SettingsDialog(QDialog):
             except Exception:
                 pass
 
-        for c in controls:
-            c.blockSignals(False)
-
         # Load last-used preferences for "Use theme" combos (item 1).
         self._last_trail_style = str(
             self._settings.get("last_trail_style_pref",
@@ -2642,6 +2642,10 @@ class SettingsDialog(QDialog):
         self._custom_bg_theme_info_lbl.setVisible(custom_bg_enabled and use_theme_bg)
         self._custom_bg_path_edit.setEnabled(custom_bg_enabled and not use_theme_bg)
         self._custom_bg_browse_btn.setEnabled(custom_bg_enabled and not use_theme_bg)
+        self._update_custom_bg_state()
+        self._sync_use_theme_combos()
+        for c in controls:
+            c.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Tooltip registration
@@ -3232,7 +3236,8 @@ class SettingsDialog(QDialog):
             profile = _THEME_SOUND_PROFILES.get(theme_name, "soft")
             idx = self._sound_profile_combo.findData(profile)
             if idx >= 0:
-                self._sound_profile_combo.setCurrentIndex(idx)
+                with QSignalBlocker(self._sound_profile_combo):
+                    self._sound_profile_combo.setCurrentIndex(idx)
             # Show a small hint below so the user knows this is auto-set.
             self._sound_theme_info_lbl.setText(
                 f"🎵 Auto-set by '{theme_name}' theme  →  {profile}"
@@ -3683,12 +3688,17 @@ class SettingsDialog(QDialog):
 
 
     def _on_bg_drip_changed(self) -> None:
+        was_themed = self._settings.get("use_theme_drip", False)
         enabled = self._bg_drip_check.isChecked()
         self._settings.set("bg_drip_enabled", enabled)
         use_theme_drip = self._use_theme_drip_check.isChecked()
         self._settings.set("use_theme_drip", use_theme_drip)
-        drip_type = self._bg_drip_combo.currentData() or "blood"
-        self._settings.set("bg_drip_type", drip_type)
+        if not use_theme_drip:
+            if was_themed:
+                idx = self._bg_drip_combo.findData(self._settings.get("bg_drip_type", "blood"))
+                with QSignalBlocker(self._bg_drip_combo):
+                    self._bg_drip_combo.setCurrentIndex(max(0, idx))
+            self._settings.set("bg_drip_type", self._bg_drip_combo.currentData() or "blood")
         # Keep sub-controls in sync with the enabled/use-theme state.
         self._use_theme_drip_check.setEnabled(enabled)
         # item 1/4: combo stays visible — disabled + shows themed value when use-theme is on
@@ -3714,17 +3724,25 @@ class SettingsDialog(QDialog):
             if theme_drip:
                 for i in range(self._bg_drip_combo.count()):
                     if self._bg_drip_combo.itemData(i) == theme_drip:
-                        self._bg_drip_combo.setCurrentIndex(i)
+                        with QSignalBlocker(self._bg_drip_combo):
+                            self._bg_drip_combo.setCurrentIndex(i)
                         break
         self.settings_changed.emit()
 
     def _on_bg_flock_changed(self) -> None:
+        was_themed = self._settings.get("use_theme_flock", False)
         enabled = self._bg_flock_check.isChecked()
         self._settings.set("bg_flock_enabled", enabled)
         use_theme_flock = self._use_theme_flock_check.isChecked()
         self._settings.set("use_theme_flock", use_theme_flock)
-        flock_style = self._bg_flock_combo.currentData() or "bats"
-        self._settings.set("bg_flock_style", flock_style)
+        if use_theme_flock:
+            self._sync_use_theme_combos()
+        else:
+            if was_themed:
+                idx = self._bg_flock_combo.findData(self._settings.get("bg_flock_style", "bats"))
+                with QSignalBlocker(self._bg_flock_combo):
+                    self._bg_flock_combo.setCurrentIndex(max(0, idx))
+            self._settings.set("bg_flock_style", self._bg_flock_combo.currentData() or "bats")
         # item 1/4: inner widget stays visible — disable combo when use-theme is on
         self._use_theme_flock_check.setEnabled(enabled)
         self._bg_flock_theme_lbl.setVisible(use_theme_flock)
@@ -3733,13 +3751,18 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_bg_ambient_changed(self) -> None:
+        was_themed = self._settings.get("use_theme_ambient", False)
         enabled = self._bg_ambient_check.isChecked()
         self._settings.set("bg_ambient_enabled", enabled)
         use_theme = self._use_theme_ambient_check.isChecked()
         self._settings.set("use_theme_ambient", use_theme)
-        if not enabled:
-            self._settings.set("bg_ambient_type", "none")
-        elif not use_theme:
+        if use_theme:
+            self._sync_use_theme_combos()
+        else:
+            if was_themed:
+                idx = self._bg_ambient_combo.findData(self._settings.get("bg_ambient_type", "snow"))
+                with QSignalBlocker(self._bg_ambient_combo):
+                    self._bg_ambient_combo.setCurrentIndex(max(0, idx))
             ambient_type = self._bg_ambient_combo.currentData() or "snow"
             self._settings.set("bg_ambient_type", ambient_type)
         # item 1/4: inner widget stays visible — disable combo when use-theme is on

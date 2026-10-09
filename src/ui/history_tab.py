@@ -79,7 +79,7 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(80)
         self._tick_timer.timeout.connect(self._tick)
-        self._tick_timer.start()
+        tree.installEventFilter(self)
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -94,8 +94,13 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
                     from PyQt6.QtGui import QMovie
                     m = QMovie(path, parent=self)
                     m.setScaledSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
-                    m.start()
+                    if not m.isValid():
+                        m.deleteLater()
+                        return
                     self._movies[path] = m
+                    if self._tree.isVisible():
+                        m.start()
+                        self._tick_timer.start()
                 except Exception:
                     pass
 
@@ -108,6 +113,24 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
             except Exception:
                 pass
         self._movies.clear()
+        self._tick_timer.stop()
+
+    def eventFilter(self, watched, event) -> bool:
+        from PyQt6.QtCore import QEvent
+
+        if watched is self._tree:
+            if event.type() == QEvent.Type.Hide:
+                self._tick_timer.stop()
+                for movie in self._movies.values():
+                    movie.setPaused(True)
+            elif event.type() == QEvent.Type.Show and self._movies:
+                for movie in self._movies.values():
+                    if movie.state() == movie.MovieState.NotRunning:
+                        movie.start()
+                    else:
+                        movie.setPaused(False)
+                self._tick_timer.start()
+        return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------
     # Internals
@@ -577,8 +600,8 @@ class HistoryTab(QWidget):
                 "Total number of frames included.",
                 "Base export delay used for frames without per-frame overrides.",
                 "Approximate playback FPS implied by the recorded delay.",
-                "Loop count recorded for the export.",
                 "Whether palette optimization was enabled for this build.",
+                "Loop count recorded for the export.",
                 "Resize cap applied during export, if any.",
                 "Summary of imported source types used in this build.",
                 "Largest imported source frame size recorded for this build.",
@@ -1283,8 +1306,6 @@ class HistoryTab(QWidget):
         elif not current_ext:
             path = str(Path(path).with_suffix(".txt"))
 
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-
         # Collect rows in the same visible order shown to the user.
         rows = []
         for r in range(tree.topLevelItemCount()):
@@ -1296,6 +1317,7 @@ class HistoryTab(QWidget):
         ext = Path(path).suffix.lower().lstrip(".") or "txt"
 
         try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             if ext == "csv":
                 self._export_csv(path, headers, rows)
 
@@ -1326,14 +1348,8 @@ class HistoryTab(QWidget):
 
             else:
                 # Plain text (default)
-                def _txt_cell(value: str, *, is_last: bool = False) -> str:
-                    text = str(value)
-                    if is_last and len(text) > 80:
-                        return text[:77] + "..."
-                    return text
-
                 txt_rows = [
-                    [_txt_cell(cell, is_last=(i == len(headers) - 1)) for i, cell in enumerate(row)]
+                    [str(cell) for cell in row]
                     for row in rows
                 ]
                 col_widths = [max(len(h), *(len(r[i]) for r in txt_rows), 4)

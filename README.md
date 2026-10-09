@@ -40,6 +40,7 @@ Arrange image/GIF frames, preview animation, adjust frame timing, and export a G
 Build a timeline from images, animations, and video clips, trim clips, and export GIF or MP4. Video import and MP4 export use the bundled FFmpeg runtime.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.
+History exports follow the visible, filtered row order and preserve complete filenames, including in plain text. GIF history thumbnails pause when their view is hidden, and export destination failures provide a recovery warning instead of an unhandled error.
 
 ## UI & Customization
 - 🐼 **18 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄, Fairy Garden 🧚, Mermaid 🧜, Shark Bait 🦈, Alien 🛸, Noodle 🍜, Pancake 🥞
@@ -50,6 +51,8 @@ History views record the tools' operations. Stopping a conversion prevents new w
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
 - Theme imports validate colors, names, and effect metadata before changing preferences. Custom names retain their exact identity, and theme-following controls update immediately. Closing Settings applies pending live changes; resetting cancels them so old timers cannot restore erased preferences.
+- “Use theme” sound and background-effect previews preserve your manual choices; unchecking the option restores them, even after switching themes or disabling/re-enabling the effect.
+- Opening Settings preserves saved custom-background paths and theme-background selections instead of rewriting them during control initialization.
 - **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth), rising flames (Volcano 🔥), snowflakes (Arctic ❄), pandas (Panda Dark/Light/Secret Sakura 🐼), electric bolts (Neon Panda ⚡)
 - **11 mouse trail styles**: Dots, Ribbon, Noodle 🍜 (physics), Comet, Fairy Dust ✨, Wave 🌊, Sparkle ❄, Rainbow 🌈, Distortion Wave, Fire 🔥, Lightning ⚡ — configurable color and intensity
 - **Animated banner** with 10 styles: Spin, Bounce, Shake, Pendulum, Pulse, Float, Flip, Orbit, Glitch, Drip (Settings → Theme). Legacy flock-themed banners display Bounce; independent flocks remain available under Background Effects.

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from PIL import Image
+from PyQt6.QtCore import QCoreApplication
 
 from src.core import worker as worker_module
 from src.core.worker import AlphaWorker, ConverterWorker
@@ -75,6 +76,10 @@ _REAL_WAIT = concurrent.futures.wait
 
 
 class TestWorkerCancellationRegressions(unittest.TestCase):
+    def setUp(self):
+        # Worker cleanup may run GC; retain the Qt wrapper from earlier UI tests.
+        self._app = QCoreApplication.instance()
+
     def test_alpha_accounts_for_inflight_completion_after_stop(self):
         for fails in (False, True):
             with self.subTest(fails=fails), tempfile.TemporaryDirectory(dir=".") as root:
