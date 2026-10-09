@@ -5808,7 +5808,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         dialog._timeline_canvas_size = lambda fmt: (2, 2)
         saved_paths = []
         try:
-            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.mp4", "")):
+            with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                vt.QFileDialog, "getSaveFileName",
+                return_value=(os.path.join(tmpdir, "video-output.mp4"), ""),
+            ):
                 with patch.object(vt.QMessageBox, "information"):
                     with patch("PIL.Image.Image.save", autospec=True, side_effect=lambda self, path, **kwargs: saved_paths.append(path)):
                         dialog._export()
@@ -5882,7 +5885,10 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         writer_kwargs = []
         fake_writer = _FakeWriter()
         try:
-            with patch.object(vt.QFileDialog, "getSaveFileName", return_value=("/tmp/video-output.gif", "")):
+            with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                vt.QFileDialog, "getSaveFileName",
+                return_value=(os.path.join(tmpdir, "video-output.gif"), ""),
+            ):
                 with patch.object(vt.QMessageBox, "information"):
                     with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or writer_kwargs.append(kwargs) or fake_writer):
                         dialog._export()

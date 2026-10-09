@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtWidgets import QApplication, QListWidgetItem, QMessageBox
+from PyQt6.QtWidgets import QApplication, QListWidgetItem, QMessageBox, QProgressDialog
 
 from src.core.settings_manager import SettingsManager
 from src.ui._ui_utils import confirm_normalized_save_path, staged_output_path
@@ -341,3 +341,168 @@ def test_normalized_save_skips_unnecessary_prompt(app, tmp_path, changed, exists
     with patch.object(QMessageBox, "question") as question:
         assert confirm_normalized_save_path(None, chosen, str(final))
     question.assert_not_called()
+
+
+@pytest.fixture(params=["gif", "video"])
+def playing_builder(request, app, painter):
+    if request.param == "gif":
+        widget = GifBuilderDialog()
+        second = Path(painter._src_path).with_name("second.png")
+        with Image.new("RGBA", (8, 8), (50, 60, 70, 255)) as image:
+            image.save(second)
+        widget._add_paths([painter._src_path, str(second)])
+        module = "src.ui.gif_builder"
+    else:
+        widget = VideoToolDialog()
+        clip = _ClipEntry(painter._src_path, 2,
+                          lambda _: Image.new("RGBA", (8, 8), (10, 20, 30, 255)),
+                          clip_type="video", frame_size=(8, 8))
+        widget._clips.append(clip)
+        item = QListWidgetItem("source")
+        item.setData(_CLIP_ROLE, clip)
+        widget._clip_list.addItem(item)
+        widget._clip_list.setCurrentRow(0)
+        widget._update_scrubber()
+        widget._update_ui_state()
+        widget._export_fmt_combo.setCurrentIndex(widget._export_fmt_combo.findData("gif"))
+        module = "src.ui.video_tool"
+    widget._btn_play.setChecked(True)
+    assert widget._preview_timer.isActive()
+    yield widget, module
+    widget._preview_timer.stop()
+    if request.param == "gif":
+        widget._clear_all()
+    widget.close()
+    sip.delete(widget)
+
+
+@pytest.mark.parametrize("cancel", ["dialog", "overwrite"])
+def test_canceling_save_dialog_keeps_preview_playing(playing_builder, tmp_path, cancel):
+    widget, module = playing_builder
+    chosen = tmp_path / "existing"
+    chosen.with_suffix(".gif").write_bytes(b"original")
+    path = "" if cancel == "dialog" else str(chosen)
+    with patch(f"{module}.QFileDialog.getSaveFileName", return_value=(path, "")), \
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+        widget._export()
+    assert widget._preview_timer.isActive()
+    assert widget._btn_play.isChecked()
+    assert chosen.with_suffix(".gif").read_bytes() == b"original"
+
+
+def test_confirmed_export_pauses_preview(playing_builder, tmp_path):
+    widget, module = playing_builder
+    output = tmp_path / "result.gif"
+
+    def progress(*args, **kwargs):
+        assert not widget._preview_timer.isActive()
+        assert not widget._btn_play.isChecked()
+        assert "Play" in widget._btn_play.text()
+        return QProgressDialog(*args, **kwargs)
+
+    with patch(f"{module}.QFileDialog.getSaveFileName", return_value=(str(output), "")), \
+            patch(f"{module}.QProgressDialog", progress), \
+            patch.object(QMessageBox, "information"):
+        widget._export()
+    with Image.open(output) as image:
+        assert image.format == "GIF"
+    assert not widget._preview_timer.isActive()
+
+
+def test_cancel_on_last_gif_frame_preserves_destination(playing_builder, tmp_path):
+    widget, module = playing_builder
+    output = tmp_path / "result.gif"
+    output.write_bytes(b"existing")
+    dialogs = []
+
+    def progress(*args, **kwargs):
+        dialog = QProgressDialog(*args, **kwargs)
+        dialogs.append(dialog)
+        return dialog
+
+    if module.endswith("gif_builder"):
+        original = Image.Image.quantize
+        calls = []
+
+        def frame(image, *args, **kwargs):
+            result = original(image, *args, **kwargs)
+            calls.append(1)
+            if len(calls) == len(widget._frames):
+                dialogs[0].cancel()
+            return result
+
+        cancel_hook = patch.object(Image.Image, "quantize", frame)
+    else:
+        original = widget._get_snapshot_frame
+
+        def frame(snapshot, index):
+            result = original(snapshot, index)
+            if index == 1:
+                dialogs[0].cancel()
+            return result
+
+        cancel_hook = patch.object(widget, "_get_snapshot_frame", frame)
+
+    notice = Mock()
+    widget.status_notice.connect(notice)
+    with patch(f"{module}.QFileDialog.getSaveFileName", return_value=(str(output), "")), \
+            patch(f"{module}.QProgressDialog", progress), cancel_hook, \
+            patch.object(widget, "_record_export_history") as history, \
+            patch.object(QMessageBox, "information") as info:
+        widget._export()
+    assert output.read_bytes() == b"existing"
+    history.assert_not_called()
+    info.assert_not_called()
+    notice.assert_not_called()
+    assert not dialogs[0].isVisible()
+    assert not list(tmp_path.glob("*alpha_fixer*"))
+
+
+@pytest.mark.parametrize("playing_builder", ["video"], indirect=True)
+@pytest.mark.parametrize("stage", ["writer_close", "mux_start"])
+def test_mp4_late_cancellation_skips_mux_and_commit(playing_builder, tmp_path, stage):
+    widget, module = playing_builder
+    widget._mp4_export_available = True
+    widget._export_fmt_combo.setCurrentIndex(widget._export_fmt_combo.findData("mp4"))
+    output = tmp_path / "result.mp4"
+    output.write_bytes(b"existing")
+    dialogs = []
+
+    def progress(*args, **kwargs):
+        dialog = QProgressDialog(*args, **kwargs)
+        label = dialog.setLabelText
+
+        def set_label(text):
+            label(text)
+            if stage == "mux_start" and text.startswith("Mixing source audio"):
+                dialog.cancel()
+
+        dialog.setLabelText = set_label
+        dialogs.append(dialog)
+        return dialog
+
+    def get_writer(path, **kwargs):
+        writer = Mock()
+
+        def close():
+            Path(path).write_bytes(b"encoded")
+            if stage == "writer_close":
+                dialogs[0].cancel()
+
+        writer.close.side_effect = close
+        return writer
+
+    with patch(f"{module}.QFileDialog.getSaveFileName", return_value=(str(output), "")), \
+            patch(f"{module}.QProgressDialog", progress), \
+            patch("imageio.get_writer", get_writer), \
+            patch.object(widget, "_should_mux_audio", return_value=True), \
+            patch.object(widget, "_mux_mp4_audio") as mux, \
+            patch.object(widget, "_record_export_history") as history, \
+            patch.object(QMessageBox, "information") as info:
+        widget._export()
+    assert output.read_bytes() == b"existing"
+    mux.assert_not_called()
+    history.assert_not_called()
+    info.assert_not_called()
+    assert not dialogs[0].isVisible()
+    assert not list(tmp_path.glob("*alpha_fixer*"))

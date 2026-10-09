@@ -1488,6 +1488,7 @@ class GifBuilderDialog(QDialog):
         from ._ui_utils import confirm_normalized_save_path
         if not confirm_normalized_save_path(self, chosen_path, out_path):
             return
+        self._btn_play.setChecked(False)
 
         from PIL import Image
 
@@ -1500,6 +1501,8 @@ class GifBuilderDialog(QDialog):
         progress = QProgressDialog("Building GIF…", "Cancel", 0, len(self._frames), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
+        progress.setAutoReset(False)
+        progress.setAutoClose(False)
 
         import time as _time
         import datetime
@@ -1550,6 +1553,9 @@ class GifBuilderDialog(QDialog):
         progress.setLabelText("Saving GIF…")
         progress.setValue(len(self._frames))
         try:
+            QApplication.processEvents()
+            if progress.wasCanceled():
+                return
             from ._ui_utils import staged_output_path
             with staged_output_path(out_path) as staged_path:
                 pil_frames[0].save(

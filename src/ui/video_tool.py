@@ -4884,11 +4884,14 @@ class VideoToolDialog(QDialog):
         from ._ui_utils import confirm_normalized_save_path
         if not confirm_normalized_save_path(self, chosen_path, out_path):
             return
+        self._btn_play.setChecked(False)
         out_path_existed = Path(out_path).exists()
 
         progress = QProgressDialog("Rendering and saving output…", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
+        progress.setAutoReset(False)
+        progress.setAutoClose(False)
         progress.show()
         QApplication.processEvents()
         brightness = self._brightness_slider.value() / 100.0
@@ -5006,6 +5009,10 @@ class VideoToolDialog(QDialog):
                     if not canceled:
                         raise
                 writer = None
+            QApplication.processEvents()
+            if progress.wasCanceled():
+                progress.close()
+                return
             if fmt == "gif" and not canceled and gif_frames:
                 export_stage = "GIF assembly"
                 first = gif_frames[0]
@@ -5043,6 +5050,9 @@ class VideoToolDialog(QDialog):
                 export_stage = "audio muxing"
                 progress.setLabelText("Mixing source audio into MP4…")
                 QApplication.processEvents()
+                if progress.wasCanceled():
+                    progress.close()
+                    return
                 try:
                     mux_notes = self._mux_mp4_audio(render_path, temp_output_path, clip_snapshot, fps) or []
                     if mux_notes:
