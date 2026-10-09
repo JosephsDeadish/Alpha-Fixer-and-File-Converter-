@@ -40,6 +40,8 @@ import tempfile
 from threading import Lock
 from typing import Callable, Optional
 
+from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout
+
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, pyqtSignal,
 )
@@ -2892,7 +2894,7 @@ class VideoToolDialog(QDialog):
     def __init__(self, parent=None, tooltip_mgr=None):
         super().__init__(parent)
         self.setWindowTitle("🎬 Video Builder")
-        self.setMinimumSize(1120, 760)
+        self.setMinimumSize(480, 320)
         self.resize(1320, 820)
         self.setModal(False)
         self._tooltip_mgr = tooltip_mgr
@@ -2925,9 +2927,7 @@ class VideoToolDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(8, 8, 8, 8)
-        root.setSpacing(6)
+        root = scrollable_dialog_layout(self)
 
         title = QLabel("🎬  Video Builder")
         title.setObjectName("subheader")
@@ -5134,6 +5134,8 @@ class VideoToolDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        fit_dialog_to_screen(self)
+        QTimer.singleShot(0, lambda: fit_dialog_to_screen(self))
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     def hideEvent(self, event) -> None:

@@ -4018,10 +4018,11 @@ class MainWindow(QMainWindow):
             QSizePolicy, QScrollArea,
         )
         from PyQt6.QtCore import Qt as _Qt, QTimer as _QTimer
+        from ._ui_utils import fit_dialog_to_screen
 
         dlg = QDialog(self)
         dlg.setWindowTitle("⌨  Keyboard Shortcuts")
-        dlg.setMinimumSize(760, 560)
+        dlg.setMinimumSize(480, 320)
         dlg.setSizeGripEnabled(True)
         app_icon = self.windowIcon()
         if not app_icon.isNull():
@@ -4043,9 +4044,11 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(12, 12, 12, 8)
         outer.setSpacing(8)
 
-        outer.addWidget(QLabel(
+        heading = QLabel(
             "<b>⌨  Customizable Shortcuts</b>  — click <i>Change</i> to remap any shortcut."
-        ))
+        )
+        heading.setWordWrap(True)
+        outer.addWidget(heading)
 
         # Editable shortcuts table
         table = QTableWidget(0, 4)
@@ -4099,7 +4102,7 @@ class MainWindow(QMainWindow):
                 ctrl_h.addWidget(btn_change)
                 ctrl_h.addWidget(btn_reset)
                 table.setCellWidget(row, 3, ctrl_w)
-                table.setRowHeight(row, 36)
+                table.setRowHeight(row, max(36, ctrl_w.minimumSizeHint().height()))
 
                 # Capture shortcut on Change click
                 def _make_change_handler(_sc_id, _btn_c, _key_item, _btn_r, _info):
@@ -4115,7 +4118,8 @@ class MainWindow(QMainWindow):
                             | _Qt.WindowType.WindowStaysOnTopHint
                         )
                         cap_dlg.setModal(True)
-                        cap_dlg.setFixedSize(340, 140)
+                        cap_dlg.resize(420, 200)
+                        cap_dlg.setSizeGripEnabled(True)
                         cap_v = QVBoxLayout(cap_dlg)
                         cap_lbl = QLabel(
                             "<b>Press the key combination you want to use.</b>\n"
@@ -4145,7 +4149,7 @@ class MainWindow(QMainWindow):
                                 cap_dlg.reject()
                                 return
                             mods = event.modifiers()
-                            seq = QKeySequence(int(mods) | key)
+                            seq = QKeySequence(mods.value | key)
                             key_str = seq.toString()
                             if not key_str:
                                 return
@@ -4154,6 +4158,8 @@ class MainWindow(QMainWindow):
                             _QTimer.singleShot(400, cap_dlg.accept)
 
                         cap_dlg.keyPressEvent = _key_press
+                        fit_dialog_to_screen(cap_dlg)
+                        _QTimer.singleShot(0, lambda: fit_dialog_to_screen(cap_dlg))
                         result = cap_dlg.exec()
 
                         _btn_c.setText("Change")
@@ -4227,6 +4233,8 @@ class MainWindow(QMainWindow):
         buttons.rejected.connect(dlg.reject)
         outer.addWidget(buttons)
 
+        fit_dialog_to_screen(dlg)
+        _QTimer.singleShot(0, lambda: fit_dialog_to_screen(dlg))
         dlg.exec()
 
     def _show_about(self):

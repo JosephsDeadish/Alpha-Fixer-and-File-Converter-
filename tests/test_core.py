@@ -9445,7 +9445,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn('return f"{icon}  {Path(path).name}  [{size_text}still • {clip.still_duration_frames} fr]"', src)
         self.assertIn("def _split_clip_at_playhead(self) -> None:", src)
         self.assertIn('self._bind_shortcut("video_split_clip", "Ctrl+E", self._split_clip_at_playhead)', src)
-        self.assertIn('self.setMinimumSize(1120, 760)', src)
+        self.assertIn('self.setMinimumSize(480, 320)', src)
+        self.assertIn('root = scrollable_dialog_layout(self)', src)
+        self.assertIn('fit_dialog_to_screen(self)', src)
         self.assertIn('self.resize(1320, 820)', src)
         self.assertIn('_format_extension_filter("Video Files", _VIDEO_EXTS)', src)
         self.assertIn('_format_extension_filter("Images", _IMAGE_EXTS)', src)
@@ -9570,7 +9572,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("self._register_shortcut_provider(self._selective_alpha_tab)", src)
         self.assertIn('self._register_shortcut_provider(GifBuilderDialog, owner_attr="_gif_builder_dlg")', src)
         self.assertIn('self._register_shortcut_provider(VideoToolDialog, owner_attr="_video_tool_dlg")', src)
-        self.assertIn("dlg.setMinimumSize(760, 560)", src)
+        self.assertIn("dlg.setMinimumSize(480, 320)", src)
+        self.assertIn("fit_dialog_to_screen(dlg)", src)
         self.assertIn("btn_change.setMinimumWidth(86)", src)
 
     def test_main_window_resyncs_dialog_trails_for_visible_windows(self):

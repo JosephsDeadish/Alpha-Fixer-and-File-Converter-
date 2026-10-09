@@ -1,9 +1,54 @@
 """
 Shared UI helper utilities used by multiple tool widgets.
 
-Kept small and import-free (only stdlib) so it can be imported early
-without pulling in heavy Qt or Pillow dependencies.
+Qt helpers import lazily so this module can be imported early without
+pulling in heavy Qt or Pillow dependencies.
 """
+
+
+def scrollable_dialog_layout(dialog):
+    """Keep large tool layouts reachable without forcing the window off-screen."""
+    from PyQt6.QtWidgets import QLayout, QScrollArea, QVBoxLayout, QWidget
+
+    outer = QVBoxLayout(dialog)
+    outer.setContentsMargins(8, 8, 8, 8)
+    outer.setSpacing(6)
+    content = QWidget()
+    layout = QVBoxLayout(content)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+    scroll = QScrollArea(dialog)
+    scroll.setObjectName("dialogContentScroll")
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    scroll.setWidget(content)
+    outer.addWidget(scroll)
+    return layout
+
+
+def fit_dialog_to_screen(dialog):
+    """Clamp the decorated window to its current screen's usable area."""
+    from PyQt6.QtCore import QPoint
+
+    screen = dialog.screen()
+    if screen is None:
+        return
+    available = screen.availableGeometry()
+    frame = dialog.frameGeometry()
+    border_w = max(0, frame.width() - dialog.width())
+    border_h = max(0, frame.height() - dialog.height())
+    safe_w = max(1, available.width() - border_w - 16)
+    safe_h = max(1, available.height() - border_h - 16)
+    dialog.setMinimumSize(
+        min(dialog.minimumWidth(), safe_w),
+        min(dialog.minimumHeight(), safe_h),
+    )
+    dialog.resize(min(dialog.width(), safe_w), min(dialog.height(), safe_h))
+    frame = dialog.frameGeometry()
+    x = max(available.left() + 8, min(frame.x(), available.right() - frame.width() - 7))
+    y = max(available.top() + 8, min(frame.y(), available.bottom() - frame.height() - 7))
+    dialog.move(dialog.pos() + QPoint(x - frame.x(), y - frame.y()))
 
 
 def format_eta(current: int, total: int, elapsed: float, threshold: int = 500) -> str:

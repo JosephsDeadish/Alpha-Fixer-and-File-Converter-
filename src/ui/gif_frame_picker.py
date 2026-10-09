@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSize
+from ._ui_utils import fit_dialog_to_screen
+
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -66,8 +68,8 @@ class GifFramePickerDialog(QDialog):
         self._checkboxes: list[QCheckBox] = []
         self._frame_count = 0
         self.setWindowTitle(f"Select GIF Frames — {Path(path).name}")
-        self.setMinimumWidth(560)
-        self.setMinimumHeight(400)
+        self.setMinimumSize(320, 240)
+        self.resize(700, 480)
         self.setModal(True)
         self._build_ui()
         self._load_frames()
@@ -84,6 +86,8 @@ class GifFramePickerDialog(QDialog):
         # Info label
         self._info_lbl = QLabel("Loading frames…")
         self._info_lbl.setObjectName("subheader")
+        self._info_lbl.setWordWrap(True)
+        self._info_lbl.setTextFormat(Qt.TextFormat.PlainText)
         root.addWidget(self._info_lbl)
 
         # Toolbar: Select All / Deselect All / invert
@@ -101,13 +105,13 @@ class GifFramePickerDialog(QDialog):
             "Flip every frame's selection. The ones you wanted are now unwanted. Chaos theory in action."
         )
         for btn in (self._btn_all, self._btn_none, self._btn_invert):
-            btn.setFixedHeight(28)
+            btn.setMinimumHeight(28)
             tool_row.addWidget(btn)
         tool_row.addStretch()
         self._sel_lbl = QLabel("0 / 0 selected")
         self._sel_lbl.setObjectName("subheader")
-        tool_row.addWidget(self._sel_lbl)
         root.addLayout(tool_row)
+        root.addWidget(self._sel_lbl)
 
         self._btn_all.clicked.connect(self._select_all)
         self._btn_none.clicked.connect(self._deselect_all)
@@ -126,15 +130,16 @@ class GifFramePickerDialog(QDialog):
         root.addWidget(scroll, 1)
 
         # OK / Cancel
-        btn_box = QDialogButtonBox(
+        self._btn_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        btn_box.setToolTip(
+        self._btn_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+        self._btn_box.setToolTip(
             "OK exports the checked frames. Cancel abandons ship entirely. Choose your destiny."
         )
-        btn_box.accepted.connect(self.accept)
-        btn_box.rejected.connect(self.reject)
-        root.addWidget(btn_box)
+        self._btn_box.accepted.connect(self.accept)
+        self._btn_box.rejected.connect(self.reject)
+        root.addWidget(self._btn_box)
 
     # ------------------------------------------------------------------
     # Frame loading
@@ -278,6 +283,16 @@ class GifFramePickerDialog(QDialog):
         selected = sum(1 for cb in self._checkboxes if cb.isChecked())
         total = len(self._checkboxes)
         self._sel_lbl.setText(f"{selected} / {total} selected")
+        self._btn_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(selected > 0)
+
+    def accept(self):
+        if self.selected_indices():
+            super().accept()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        fit_dialog_to_screen(self)
+        QTimer.singleShot(0, lambda: fit_dialog_to_screen(self))
 
     # ------------------------------------------------------------------
     # Result

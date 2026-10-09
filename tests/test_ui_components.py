@@ -7877,6 +7877,181 @@ class TestPreviewPaneNoBlockingWait(unittest.TestCase):
 #  distracting — see issue #2 comment "i hate the emojis ... always changing".)
 # ---------------------------------------------------------------------------
 
+class TestDialogAccessibility(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        self._widgets = []
+        self._old_font = self._app.font()
+
+    def tearDown(self):
+        for widget in self._widgets:
+            widget.close()
+            widget.deleteLater()
+        self._app.setFont(self._old_font)
+        self._app.processEvents()
+
+    def test_builders_fit_small_secondary_screen_with_scrollable_controls(self):
+        from PyQt6.QtCore import QRect
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QScrollArea
+        from src.ui.gif_builder import GifBuilderDialog
+        from src.ui.video_tool import VideoToolDialog
+
+        available = QRect(-800, 40, 800, 600)
+        screen = MagicMock()
+        screen.availableGeometry.return_value = available
+        for point_size in (9, 24):
+            font = QFont(self._old_font)
+            font.setPointSize(point_size)
+            self._app.setFont(font)
+            for dialog_type in (GifBuilderDialog, VideoToolDialog):
+                with self.subTest(dialog=dialog_type.__name__, font=point_size):
+                    dialog = dialog_type()
+                    self._widgets.append(dialog)
+                    with patch.object(dialog, "screen", return_value=screen):
+                        dialog.show()
+                        self._app.processEvents()
+                    self.assertTrue(available.contains(dialog.frameGeometry()))
+                    scroll = dialog.findChild(QScrollArea, "dialogContentScroll")
+                    self.assertIsNotNone(scroll)
+                    self.assertGreater(scroll.widget().width(), 0)
+                    if point_size == 24:
+                        self.assertGreater(
+                            scroll.horizontalScrollBar().maximum()
+                            + scroll.verticalScrollBar().maximum(), 0,
+                        )
+                    for area in reversed(dialog.findChildren(QScrollArea)):
+                        if area.widget().isAncestorOf(dialog._btn_export):
+                            area.ensureWidgetVisible(dialog._btn_export)
+                    self._app.processEvents()
+                    center = dialog._btn_export.mapTo(
+                        scroll.viewport(), dialog._btn_export.rect().center()
+                    )
+                    self.assertTrue(scroll.viewport().rect().contains(center))
+
+    def test_fit_dialog_preserves_geometry_when_already_on_screen(self):
+        from PyQt6.QtCore import QRect
+        from PyQt6.QtWidgets import QDialog
+        from src.ui._ui_utils import fit_dialog_to_screen
+
+        dialog = QDialog()
+        self._widgets.append(dialog)
+        dialog.resize(360, 260)
+        dialog.move(100, 120)
+        dialog.show()
+        self._app.processEvents()
+        original = dialog.geometry()
+        screen = MagicMock()
+        screen.availableGeometry.return_value = QRect(0, 0, 1200, 900)
+        with patch.object(dialog, "screen", return_value=screen):
+            fit_dialog_to_screen(dialog)
+        self.assertEqual(dialog.geometry(), original)
+        with patch.object(dialog, "screen", return_value=None):
+            fit_dialog_to_screen(dialog)
+        self.assertEqual(dialog.geometry(), original)
+
+    def test_frame_picker_requires_nonempty_selection(self):
+        from PIL import Image
+        from PyQt6.QtWidgets import QDialogButtonBox
+        from src.ui.gif_frame_picker import GifFramePickerDialog
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "frames.gif")
+            with Image.new("RGBA", (12, 12), "red") as first:
+                with Image.new("RGBA", (12, 12), "blue") as second:
+                    first.save(path, save_all=True, append_images=[second])
+            dialog = GifFramePickerDialog(path)
+            self._widgets.append(dialog)
+            ok = dialog._btn_box.button(QDialogButtonBox.StandardButton.Ok)
+            self.assertTrue(ok.isEnabled())
+            self.assertEqual(dialog.selected_indices(), [0, 1])
+            dialog._deselect_all()
+            self.assertFalse(ok.isEnabled())
+            with patch("PyQt6.QtWidgets.QDialog.accept") as accept:
+                dialog.accept()
+                accept.assert_not_called()
+                dialog._checkboxes[1].setChecked(True)
+                self.assertTrue(ok.isEnabled())
+                dialog.accept()
+                accept.assert_called_once()
+            dialog._invert_selection()
+            self.assertEqual(dialog.selected_indices(), [0])
+            dialog._select_all()
+            self.assertEqual(dialog.selected_indices(), [0, 1])
+
+    def test_frame_picker_read_failure_disables_export(self):
+        from PyQt6.QtWidgets import QDialogButtonBox
+        from src.ui.gif_frame_picker import GifFramePickerDialog
+
+        with patch("PIL.Image.open", side_effect=OSError("Unreadable GIF")):
+            dialog = GifFramePickerDialog("missing.gif")
+        self._widgets.append(dialog)
+        self.assertIn("Unreadable GIF", dialog._info_lbl.text())
+        self.assertFalse(
+            dialog._btn_box.button(QDialogButtonBox.StandardButton.Ok).isEnabled()
+        )
+        self.assertEqual(dialog.selected_indices(), [])
+
+    def test_tutorial_step_starts_at_top_after_scrolling(self):
+        from PyQt6.QtCore import QRect
+        from src.ui.tutorial_dialog import TutorialDialog
+
+        dialog = TutorialDialog()
+        self._widgets.append(dialog)
+        screen = MagicMock()
+        screen.availableGeometry.return_value = QRect(0, 0, 640, 400)
+        with patch.object(dialog, "screen", return_value=screen):
+            dialog.show()
+            self._app.processEvents()
+        self.assertTrue(screen.availableGeometry().contains(dialog.frameGeometry()))
+        dialog._body_lbl.setText("<br>".join(["Long tutorial text"] * 100))
+        self._app.processEvents()
+        self._app.processEvents()
+        bar = dialog._body_scroll.verticalScrollBar()
+        self.assertGreater(bar.maximum(), 0)
+        bar.setValue(bar.maximum())
+        dialog._next()
+        self._app.processEvents()
+        self.assertEqual(bar.value(), 0)
+        self.assertEqual(dialog._step, 1)
+        dialog._prev()
+        self.assertEqual(dialog._step, 0)
+
+    def test_shortcut_capture_accepts_control_modifier(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QDialog, QTableWidget, QPushButton, QWidget
+        from src.ui.main_window import MainWindow
+
+        parent = QWidget()
+        self._widgets.append(parent)
+        parent._shortcut_map = {
+            "run": {
+                "group": "Global", "desc": "Run", "current": "F5", "default": "F5",
+            },
+        }
+        parent._update_shortcut = MagicMock()
+        dialogs = []
+
+        def exec_dialog(dialog):
+            dialogs.append(dialog)
+            if dialog.windowTitle() == "Press a Key Combination":
+                self.assertGreater(dialog.maximumWidth(), dialog.width())
+                QTest.keyClick(dialog, Qt.Key.Key_K, Qt.KeyboardModifier.ControlModifier)
+                return QDialog.DialogCode.Accepted
+            table = dialog.findChild(QTableWidget)
+            controls = table.cellWidget(0, 3)
+            controls.findChildren(QPushButton)[0].click()
+            self.assertEqual(table.item(0, 2).text(), "Ctrl+K")
+            self.assertGreaterEqual(table.rowHeight(0), controls.minimumSizeHint().height())
+            return QDialog.DialogCode.Rejected
+
+        with patch.object(QDialog, "exec", exec_dialog):
+            MainWindow._show_shortcuts(parent)
+        parent._update_shortcut.assert_called_once_with("run", "Ctrl+K")
+        self._widgets.extend(dialogs)
+
+
 class TestThemeTabLabels(unittest.TestCase):
     def test_returns_three_labels(self):
         from src.ui.theme_engine import get_theme_tab_labels

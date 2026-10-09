@@ -60,6 +60,8 @@ Convert between image formats with optional resize and quality control.
 - **Selective Alpha Tool** – paint alpha zones directly on an image with up to 40 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
 - **HiDPI & multi-monitor aware** – fractional DPI scaling (125 %, 150 %, 200 %) and multiple displays are fully supported; window position is automatically corrected if a monitor is disconnected
+- **Small-screen dialog access** – GIF/Video Builder windows fit the current screen, with scrollable controls when space or larger fonts require it. Tutorial, GIF frame selection, and shortcut dialogs also fit the available screen area.
+- **GIF frame selection safeguards** – exporting requires at least one selected frame; unreadable GIFs cannot be accepted as empty exports.
 - **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
 - **Keyboard shortcuts** (F1 for full list):
   - `F5` – Run / Process / Convert

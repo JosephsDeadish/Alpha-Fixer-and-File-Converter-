@@ -7,7 +7,9 @@ the application with fun, friendly descriptions and keyboard-shortcut hints.
 
 from html import escape
 
-from PyQt6.QtCore import Qt
+from ._ui_utils import fit_dialog_to_screen
+
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -143,7 +145,7 @@ class TutorialDialog(QDialog):
         self._theme_name = theme_name
 
         self.setWindowTitle("📚  Interactive Tutorial")
-        self.setMinimumSize(520, 420)
+        self.setMinimumSize(320, 240)
         self.resize(640, 480)
         self.setWindowFlags(
             self.windowFlags()
@@ -211,7 +213,7 @@ class TutorialDialog(QDialog):
         root.addWidget(sep)
 
         # Body text in a scroll area so long text doesn't overflow
-        scroll = QScrollArea()
+        scroll = self._body_scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         body_container = QWidget()
@@ -244,6 +246,7 @@ class TutorialDialog(QDialog):
 
         # Shortcut hint
         self._shortcut_lbl = QLabel()
+        self._shortcut_lbl.setWordWrap(True)
         self._shortcut_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._shortcut_lbl.setStyleSheet("color: #a3be8c; font-size: 10px; font-family: monospace;")
         root.addWidget(self._shortcut_lbl)
@@ -291,6 +294,8 @@ class TutorialDialog(QDialog):
         else:
             body_html = escape(body_text).replace("\n", "<br>")
         self._body_lbl.setText(body_html)
+        self._body_scroll.verticalScrollBar().setValue(0)
+        self._body_scroll.horizontalScrollBar().setValue(0)
 
         tip = step.get("tip", "")
         self._tip_lbl.setText(tip)
@@ -319,3 +324,8 @@ class TutorialDialog(QDialog):
     def _prev(self) -> None:
         if self._step > 0:
             self._show_step(self._step - 1)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        fit_dialog_to_screen(self)
+        QTimer.singleShot(0, lambda: fit_dialog_to_screen(self))
