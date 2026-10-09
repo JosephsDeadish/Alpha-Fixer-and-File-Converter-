@@ -1645,18 +1645,16 @@ def _video_capability_summary() -> str:
     ffprobe_ok = _get_ffprobe_exe() is not None
     if deps_ok:
         return (
-            "Ready now: standard video import, MP4 export, and image/GIF clip assembly are available. "
+            "Ready: standard video import, MP4 export, and image/GIF clip assembly are available. "
             + (
-                "Best-effort odd-container and disc-image probing/recovery is also available through ffprobe + ffmpeg, with automatic preferred-stream selection, cue/bin sidecar retries for disc layouts, audio-drop retries for broken source audio, and manual video/audio stream pickers for multi-stream containers. "
-                "When timestamp/index metadata is damaged, recovery can also retry timestamp-rebuild remux/transcode passes for TS/WMV/AVI/MOV/MXF/FLV/Ogg-style containers. "
-                "Recovery also retries alternate audio tracks when multi-audio containers expose a bad default program. "
+                "Odd-container probing and recovery are enabled through ffprobe + ffmpeg. "
                 if ffprobe_ok else
-                "Odd-container recovery is partially available, but probing/detail messages stay limited until ffprobe is available. "
+                "Odd-container recovery is available, but probing/detail messages stay limited until ffprobe is available. "
             )
-            + "Audio-only containers still cannot be added as video clips, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds. segmented/multipart sets can also be concat-repaired automatically when the parts live together, while partial/corrupt containers may still need manual repair."
+            + "Audio-only containers still cannot be added as video clips."
         )
     return (
-        "Limited mode: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
+        "Ready with limits: images and animated GIFs still work, but video import/MP4 export need imageio, imageio-ffmpeg, and ffmpeg. "
         "Odd-container/disc-image recovery and detailed probing stay unavailable until those dependencies are present."
     )
 

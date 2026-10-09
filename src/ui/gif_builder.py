@@ -155,18 +155,16 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 def _gif_builder_capability_summary() -> str:
     if _has_ffmpeg() and _has_imageio() and _has_imageio_ffmpeg():
         if _get_ffprobe_exe():
-            odd_container_text = (
-                " Best-effort odd-container probing is also available when ffprobe can expose a playable video stream."
-            )
+            odd_container_text = " detailed odd-container probing is enabled."
         else:
-            odd_container_text = " Odd-container probing detail stays limited until ffprobe is available."
+            odd_container_text = " odd-container probing detail stays limited until ffprobe is available."
         return (
-            "Ready now: images, animated GIFs, and video-source imports are available. Video clips are expanded into GIF frames automatically, audio is ignored during GIF import/export, and import summaries keep grouped failures plus per-frame diagnostics visible during preview."
+            "Ready: images, animated GIFs, and video-source imports are available."
             + odd_container_text
-            + " Audio-only containers still cannot be imported as visual GIF frames, but cover-art/slideshow-only sources may still import as single-frame fallbacks when extraction succeeds."
+            + " Video clips expand into GIF frames automatically; audio stays ignored for GIF import/export."
         )
     return (
-        "Limited mode: images and animated GIFs are ready now, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
+        "Ready with limits: images and animated GIFs work, but video-source imports need imageio, imageio-ffmpeg, and ffmpeg.\n"
         + _video_io_diagnostics()
     )
 

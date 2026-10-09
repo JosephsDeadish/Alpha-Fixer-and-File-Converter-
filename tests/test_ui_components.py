@@ -2268,9 +2268,11 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         banner = mw._runtime_readiness_banner_text(summary)
         tooltip = mw._runtime_readiness_banner_tooltip(summary)
 
-        self.assertIn("video/MP4 limited (imageio, ffmpeg)", banner)
-        self.assertIn("DDS compressed output limited", banner)
-        self.assertIn("optional image export limit", banner)
+        self.assertIn("App status:", banner)
+        self.assertIn("video + MP4 limited (imageio, ffmpeg)", banner)
+        self.assertIn("DDS compression limited", banner)
+        self.assertIn("1 optional export limit", banner)
+        self.assertIn("source run", banner)
         self.assertIn("Main-window readiness snapshot", tooltip)
         self.assertIn("imageio: missing", tooltip)
         self.assertIn("ffmpeg: missing", tooltip)
@@ -2315,6 +2317,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         banner = mw._runtime_readiness_banner_text(summary)
                         tooltip = mw._runtime_readiness_banner_tooltip(summary)
 
+        self.assertIn("bundle needs attention", banner)
         self.assertIn("1 packaged asset gap", banner)
         self.assertIn("Packaged asset gaps:", tooltip)
         self.assertIn("packaged ffprobe binary missing", tooltip)
@@ -2369,7 +2372,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         banner = mw._runtime_readiness_banner_text(summary)
         tooltip = mw._runtime_readiness_banner_tooltip(summary)
 
-        self.assertIn("packaged bundle verified", banner)
+        self.assertIn("bundle verified", banner)
         self.assertIn("Packaged dependency audit:", tooltip)
         self.assertIn("Bundled ffmpeg: yes", tooltip)
         self.assertIn("Packaged bundle verification: passed", tooltip)
@@ -6341,7 +6344,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         widget = AlphaFixerTab(MagicMock(), settings)
         try:
             self.assertTrue(hasattr(widget, "_capability_lbl"))
-            self.assertTrue(widget._capability_lbl.text().startswith("Ready now:"))
+            self.assertTrue(widget._capability_lbl.text().startswith("Ready:"))
             self.assertIn("SVG inputs", widget._capability_lbl.text())
             self.assertIn("What works here right now:", widget._session_status_lbl.text())
             self.assertIn("Alpha ready", widget._session_status_lbl.text())
@@ -6743,7 +6746,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         source = types.SimpleNamespace(
             get_status_bar_text=lambda: "🎬 Video Builder ready  •  image/GIF mode",
             _next_step_lbl=_FakeLabel("Next step: add clips to start a timeline, then preview or export."),
-            _capability_lbl=_FakeLabel("Ready now: image/GIF clips work here; MP4 export needs ffmpeg."),
+            _capability_lbl=_FakeLabel("Ready: image/GIF clips work here; MP4 export needs ffmpeg."),
             _session_status_lbl=_FakeLabel(
                 "What works here right now: 🎬 Video Builder ready  •  image/GIF mode\n"
                 "Next step: add clips to start a timeline, then preview or export."
@@ -6753,7 +6756,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         self.assertEqual(summary, "🎬 Video Builder ready  •  image/GIF mode")
         self.assertIn("What works here right now:", tooltip)
         self.assertIn("Next step: add clips", tooltip)
-        self.assertIn("Ready now: image/GIF clips work here", tooltip)
+        self.assertIn("Ready: image/GIF clips work here", tooltip)
 
     def test_main_window_shared_gif_builder_reuses_dialog_and_appends_files(self):
         try:
@@ -6817,7 +6820,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             isActiveWindow=lambda: True,
             get_status_bar_text=lambda: "🎬 Video Builder: 2 clips  •  import 1 recovered",
             _session_status_lbl=types.SimpleNamespace(text=lambda: "What works here right now: 🎬 Video Builder: 2 clips  •  import 1 recovered"),
-            _capability_lbl=types.SimpleNamespace(text=lambda: "Ready now: video import and MP4 export are available."),
+            _capability_lbl=types.SimpleNamespace(text=lambda: "Ready: video import and MP4 export are available."),
             _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: preview the recovered clip and export when ready."),
         )
         current_tab = types.SimpleNamespace(
@@ -6833,13 +6836,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         )
 
         text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
-        self.assertEqual(text, "Current tool: 🎬 Video Builder: 2 clips  •  import 1 recovered")
+        self.assertEqual(text, "Selected tool: 🎬 Video Builder — preview the recovered clip and export when ready.")
         self.assertIn("What works here right now:", tooltip)
         self.assertIn("preview the recovered clip", tooltip)
 
         active_builder.isActiveWindow = lambda: False
         text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
-        self.assertEqual(text, "Current tool: 📋 History: 3 items  •  filter status:partial")
+        self.assertEqual(text, "Selected tool: 📋 History — adjust the filter or export the visible rows.")
         self.assertIn("adjust the filter", tooltip)
 
     def test_converter_open_gif_builder_delegates_to_main_window_when_available(self):
@@ -7178,7 +7181,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         )
         tab = HistoryTab(settings)
         try:
-            self.assertIn("Ready now:", tab._capability_lbl.text())
+            self.assertIn("Ready:", tab._capability_lbl.text())
+            self.assertTrue(tab._sub_tabs.usesScrollButtons())
+            self.assertFalse(tab._sub_tabs.tabBar().expanding())
+            self.assertEqual(tab._sub_tabs.tabBar().tabToolTip(1), "Alpha & RGBA Adjuster history")
             tab._sub_tabs.setCurrentIndex(4)
             self.assertIn("What works here right now:", tab._session_status_lbl.text())
             self.assertIn("History: Video Builder", tab.get_status_bar_text())
@@ -7228,7 +7234,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
 
     def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
         self.assertIn("What works here right now:", self._widget._session_status_lbl.text())
-        self.assertIn("Ready now:", self._widget._capability_lbl.text())
+        self.assertIn("Ready:", self._widget._capability_lbl.text())
         self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
         self._widget._src_path = "/tmp/sample.png"
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]

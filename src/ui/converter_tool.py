@@ -44,11 +44,9 @@ def _converter_capability_summary() -> str:
             f"Optional Pillow exports unavailable here: {formats}; selecting one will fall back to PNG."
         )
     if compressed_dds:
-        parts.append("DDS raw and compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants are ready.")
+        parts.append("standard image conversion plus DDS raw/compressed output are available.")
     else:
-        parts.append(
-            "DDS raw variants are ready; BC1/DXT1, BC2/DXT3, and BC3/DXT5 compressed variants need ImageMagick/wand."
-        )
+        parts.append("standard image conversion is available; DDS compressed variants need ImageMagick/wand.")
     prefix = "Ready with limits:" if unavailable or not compressed_dds else "Ready:"
     return prefix + " " + " ".join(parts)
 

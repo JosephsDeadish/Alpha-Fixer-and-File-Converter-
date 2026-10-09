@@ -755,43 +755,51 @@ class _ToastNotification(QWidget):
 
 def _runtime_readiness_banner_text(summary: dict[str, object] | None) -> str:
     if not summary:
-        return "🧭 Readiness: scanning video/export/runtime support…"
+        return "🧭 App status: checking runtime and bundled-build support…"
     parts: list[str] = []
+    parts.append("core image tools ready")
     ffmpeg_runtime_ready = bool(summary.get("ffmpeg_runtime_ready"))
-    ffprobe_runtime_ready = bool(summary.get("ffprobe_runtime_ready"))
     if bool(summary.get("video_runtime_ready")):
-        parts.append("video import/MP4 export ready")
+        parts.append("video + MP4 ready")
     else:
         missing = summary.get("missing_video_bits") or []
         if missing:
-            parts.append("video/MP4 limited (" + ", ".join(str(bit) for bit in missing) + ")")
+            parts.append("video + MP4 limited (" + ", ".join(str(bit) for bit in missing) + ")")
         elif summary.get("ffmpeg_path") and not ffmpeg_runtime_ready:
-            parts.append("video/MP4 limited (ffmpeg self-check failed)")
+            parts.append("video + MP4 limited (ffmpeg self-check failed)")
         else:
-            parts.append("video/MP4 limited")
+            parts.append("video + MP4 limited")
     if bool(summary.get("odd_container_probe_ready")):
-        parts.append("odd-container probing ready")
+        parts.append("odd-container probe ready")
     elif bool(summary.get("video_runtime_ready")):
+        ffprobe_runtime_ready = bool(summary.get("ffprobe_runtime_ready"))
         if summary.get("ffprobe_path") and not ffprobe_runtime_ready:
-            parts.append("odd-container probing limited (ffprobe self-check failed)")
+            parts.append("odd-container probe limited (ffprobe self-check failed)")
         else:
-            parts.append("odd-container probing limited")
+            parts.append("odd-container probe limited")
     if bool(summary.get("dds_compression_available")):
-        parts.append("DDS compressed output ready")
+        parts.append("DDS compression ready")
     else:
-        parts.append("DDS compressed output limited")
+        parts.append("DDS compression limited")
     optional_output_limits = summary.get("optional_output_limits") or []
     if optional_output_limits:
-        parts.append(f"{len(optional_output_limits)} optional image export limit(s)")
+        parts.append(f"{len(optional_output_limits)} optional export limit(s)")
     runtime_libs = summary.get("missing_linux_runtime_libs") or []
-    if runtime_libs:
-        parts.append(f"{len(runtime_libs)} Linux runtime lib(s) missing")
     packaged_asset_warnings = summary.get("packaged_asset_warnings") or []
-    if packaged_asset_warnings:
-        parts.append(f"{len(packaged_asset_warnings)} packaged asset gap(s)")
-    elif bool(summary.get("frozen")) and bool(summary.get("packaged_bundle_ready")):
-        parts.append("packaged bundle verified")
-    return "🧭 Readiness: " + "  •  ".join(parts)
+    if bool(summary.get("frozen")):
+        if runtime_libs or packaged_asset_warnings or not bool(summary.get("packaged_bundle_ready")):
+            detail_parts: list[str] = []
+            if runtime_libs:
+                detail_parts.append(f"{len(runtime_libs)} runtime lib{'s' if len(runtime_libs) != 1 else ''}")
+            if packaged_asset_warnings:
+                detail_parts.append(f"{len(packaged_asset_warnings)} packaged asset gap{'s' if len(packaged_asset_warnings) != 1 else ''}")
+            detail = f" ({', '.join(detail_parts)})" if detail_parts else ""
+            parts.append("bundle needs attention" + detail)
+        else:
+            parts.append("bundle verified")
+    else:
+        parts.append("source run")
+    return "🧭 App status: " + "  •  ".join(parts)
 
 
 def _runtime_readiness_banner_tooltip(summary: dict[str, object] | None) -> str:
@@ -914,6 +922,45 @@ def _label_text(widget) -> str:
         except Exception:
             return ""
     return str(getattr(widget, "text", "") or "").strip()
+
+
+def _trim_detail_prefix(text: str, *prefixes: str) -> str:
+    detail = str(text or "").strip()
+    lower = detail.lower()
+    for prefix in prefixes:
+        token = prefix.lower()
+        if lower.startswith(token):
+            return detail[len(prefix):].strip()
+    return detail
+
+
+def _tool_name_from_summary(summary: str) -> tuple[str, str]:
+    rendered = str(summary or "").strip()
+    if not rendered:
+        return "", ""
+    if ":" in rendered:
+        head, tail = rendered.split(":", 1)
+        return head.strip(), tail.strip()
+    lower = rendered.lower()
+    for marker in (" ready  •", " ready •", " ready"):
+        idx = lower.find(marker)
+        if idx > 0:
+            return rendered[:idx].strip(), rendered[idx + 1 :].strip(" •")
+    return rendered, ""
+
+
+def _selected_tool_text(summary: str, next_text: str) -> str:
+    tool_name, summary_detail = _tool_name_from_summary(summary)
+    next_detail = _trim_detail_prefix(next_text, "Next step:")
+    if tool_name and next_detail:
+        return f"Selected tool: {tool_name} — {next_detail}"
+    if tool_name and summary_detail:
+        return f"Selected tool: {tool_name} — {summary_detail}"
+    if tool_name:
+        return f"Selected tool: {tool_name}"
+    if next_detail:
+        return f"Selected tool: {next_detail}"
+    return "Selected tool: choose a tab or open a builder"
 
 
 def _status_summary_and_tooltip(source) -> tuple[str, str]:
@@ -1400,21 +1447,68 @@ class MainWindow(QMainWindow):
         self._readiness_lbl.setStyleSheet("color: #888; padding: 0 10px 6px 10px;")
         self._readiness_lbl.setToolTip(_runtime_readiness_banner_tooltip(self._runtime_capability_summary))
         cv.addWidget(self._readiness_lbl)
-        self._current_tool_lbl = QLabel("Current tool: loading status…")
+        self._current_tool_lbl = QLabel("Selected tool: loading status…")
         self._current_tool_lbl.setObjectName("subheader")
         self._current_tool_lbl.setWordWrap(True)
         self._current_tool_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._current_tool_lbl.setStyleSheet("color: #888; padding: 0 10px 8px 10px;")
         cv.addWidget(self._current_tool_lbl)
 
+        utility_bar = QWidget()
+        self._bg_host_widgets.append(utility_bar)
+        utility_layout = QHBoxLayout(utility_bar)
+        utility_layout.setContentsMargins(8, 0, 8, 8)
+        utility_layout.setSpacing(6)
+
+        self._theme_label = QLabel("Theme: Panda Dark")
+        self._theme_label.setObjectName("subheader")
+        utility_layout.addWidget(self._theme_label)
+
+        self._svg_badge = self._make_svg_badge()
+        if self._svg_badge is not None:
+            utility_layout.addWidget(self._svg_badge)
+
+        utility_layout.addStretch(1)
+
+        btn_settings = QPushButton("⚙ Settings")
+        btn_settings.setMinimumWidth(88)
+        btn_settings.setMaximumWidth(170)
+        btn_settings.setMinimumHeight(26)
+        btn_settings.setToolTip("Open Settings (Ctrl+,)")
+        btn_settings.clicked.connect(self._open_settings)
+        utility_layout.addWidget(btn_settings)
+        self._btn_settings = btn_settings
+
+        btn_help = QPushButton("❓ Help")
+        btn_help.setMinimumWidth(74)
+        btn_help.setMaximumWidth(130)
+        btn_help.setMinimumHeight(26)
+        btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
+        btn_help.clicked.connect(self._show_help_menu)
+        utility_layout.addWidget(btn_help)
+        self._btn_help = btn_help
+
+        btn_patreon = QPushButton("💖 Patreon")
+        btn_patreon.setMinimumWidth(96)
+        btn_patreon.setMaximumWidth(156)
+        btn_patreon.setMinimumHeight(26)
+        btn_patreon.setStyleSheet(
+            "QPushButton { padding-left: 4px; padding-right: 6px; }"
+        )
+        btn_patreon.setToolTip(
+            "Support development on Patreon!\n"
+            "patreon.com/c/DeadOnTheInside"
+        )
+        btn_patreon.clicked.connect(self._open_patreon)
+        utility_layout.addWidget(btn_patreon)
+        self._btn_patreon = btn_patreon
+        cv.addWidget(utility_bar)
+
         self._tabs = QTabWidget()
         self._bg_tabs = self._tabs
-        # Item 43: Never show scroll arrows — tabs must always be visible.
-        # setExpanding(True) shares the tab bar width equally across all tabs,
-        # so they shrink rather than scroll when the window is narrow.
-        self._tabs.setUsesScrollButtons(False)
-        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
-        self._tabs.tabBar().setExpanding(True)
+        self._tabs.setUsesScrollButtons(True)
+        self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        self._tabs.tabBar().setExpanding(False)
         # Allow drag-to-reorder tabs (item 56).
         self._tabs.tabBar().setMovable(True)
         self._alpha_tab = AlphaFixerTab(self._preset_mgr, self._settings)
@@ -1455,62 +1549,6 @@ class MainWindow(QMainWindow):
 
         # Tab-switching shortcuts are set up in _setup_keyboard_shortcuts.
 
-        # Corner widget: Settings / Help / Patreon buttons on the right of the tab bar.
-        # This puts all tool controls in one row, freeing vertical space for content.
-        corner = QWidget()
-        self._bg_host_widgets.append(corner)
-        corner_layout = QHBoxLayout(corner)
-        corner_layout.setContentsMargins(2, 2, 6, 2)
-        corner_layout.setSpacing(4)
-
-        # Current theme label
-        self._theme_label = QLabel("  Theme: Panda Dark  ")
-        self._theme_label.setObjectName("subheader")
-        corner_layout.addWidget(self._theme_label)
-
-        # SVG theme badge (decorative – shows animated SVG for the active theme)
-        self._svg_badge = self._make_svg_badge()
-        if self._svg_badge is not None:
-            corner_layout.addWidget(self._svg_badge)
-
-        # ⚙ Settings button  (item 44: allow enough width for emoji + text at any font size)
-        btn_settings = QPushButton("⚙  Settings")
-        btn_settings.setMinimumWidth(90)
-        btn_settings.setMaximumWidth(180)
-        btn_settings.setMinimumHeight(26)
-        btn_settings.setToolTip("Open Settings (Ctrl+,)")
-        btn_settings.clicked.connect(self._open_settings)
-        corner_layout.addWidget(btn_settings)
-        self._btn_settings = btn_settings
-
-        # Help button – opens a dropdown with shortcuts/about/export/import
-        btn_help = QPushButton("❓  Help")
-        btn_help.setMinimumWidth(72)
-        btn_help.setMaximumWidth(130)
-        btn_help.setMinimumHeight(26)
-        btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
-        btn_help.clicked.connect(self._show_help_menu)
-        corner_layout.addWidget(btn_help)
-        self._btn_help = btn_help
-
-        # Patreon button (item 44 — colored heart, not cut off)
-        btn_patreon = QPushButton("💖  Patreon")
-        btn_patreon.setMinimumWidth(100)
-        btn_patreon.setMaximumWidth(160)
-        btn_patreon.setMinimumHeight(26)
-        btn_patreon.setStyleSheet(
-            "QPushButton { padding-left: 4px; padding-right: 6px; }"
-        )
-        btn_patreon.setToolTip(
-            "Support development on Patreon!\n"
-            "patreon.com/c/DeadOnTheInside"
-        )
-        btn_patreon.clicked.connect(self._open_patreon)
-        corner_layout.addWidget(btn_patreon)
-        self._btn_patreon = btn_patreon
-
-        self._tabs.setCornerWidget(corner, Qt.Corner.TopRightCorner)
-
         # Unlock status label now lives in the status bar so notifications no
         # longer compete with the tab bar for horizontal space.
         self._unlock_lbl = QLabel("")
@@ -1522,7 +1560,7 @@ class MainWindow(QMainWindow):
         # Status bar
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
-        self._status_bar.showMessage("Ready  🐼")
+        self._status_bar.showMessage("Ready — choose a tool tab or open a builder.")
         self._queue_status_label = QLabel("")
         self._queue_status_label.setObjectName("subheader")
         self._queue_status_label.setStyleSheet("color: #888; padding: 0 6px;")
@@ -2723,6 +2761,15 @@ class MainWindow(QMainWindow):
             from .theme_engine import get_theme_icon
             theme_name = self._settings.get("theme", "Panda Dark")
             self._tabs.setTabText(len(self._tab_base_labels), f"{get_theme_icon(theme_name)}🎨  Selective α")
+        tab_tips = (
+            "Alpha & RGBA Adjuster — queue files, preview changes, and process alpha/RGBA fixes.",
+            "Converter — batch-convert images and textures with preview and failure reporting.",
+            "History — review, filter, preview, and export prior batch/builder runs.",
+            "Alpha Painter — paint and transform multi-zone alpha masks on one image.",
+        )
+        for idx, tip in enumerate(tab_tips):
+            if idx < self._tabs.count():
+                self._tabs.tabBar().setTabToolTip(idx, tip)
 
     def _apply_custom_background(self) -> None:
         """Apply a custom background image, GIF, or video to the main window.
@@ -2945,13 +2992,13 @@ class MainWindow(QMainWindow):
                 continue
             summary, tooltip = _status_summary_and_tooltip(dlg)
             if summary:
-                return f"Current tool: {summary}", tooltip
+                return _selected_tool_text(summary, _label_text(getattr(dlg, "_next_step_lbl", None))), tooltip
         tab = self._tabs.currentWidget() if hasattr(self, "_tabs") else None
         summary, tooltip = _status_summary_and_tooltip(tab)
         if summary:
-            return f"Current tool: {summary}", tooltip
+            return _selected_tool_text(summary, _label_text(getattr(tab, "_next_step_lbl", None))), tooltip
         return (
-            "Current tool: choose a tab or open a builder",
+            "Selected tool: choose a tab or open a builder",
             "What works here right now: choose a tab or open a builder",
         )
 

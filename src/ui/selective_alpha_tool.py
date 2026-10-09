@@ -89,7 +89,7 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready now: single-image Alpha Painter editing, multi-zone painting, shared-zone import, "
+        "Ready: single-image Alpha Painter editing, multi-zone painting, shared-zone import, "
         "undo/redo, saved full-layout slots, and result preview/save tools are available."
     )
 

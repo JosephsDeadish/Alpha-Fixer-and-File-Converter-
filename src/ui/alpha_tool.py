@@ -33,16 +33,16 @@ from ..core.file_converter import _has_cairosvg, _has_svglib
 def _alpha_capability_summary() -> str:
     svg_ready = _has_cairosvg() or _has_svglib()
     parts = [
-        "Ready now: standard raster alpha/RGBA processing and preview tools are available.",
+        "Ready: standard raster alpha/RGBA processing and preview tools are available.",
     ]
     if svg_ready:
         parts.append("SVG inputs are ready.")
     else:
         parts.append("SVG inputs need cairosvg or svglib.")
     if _has_wand():
-        parts.append("DDS inspection and compressed DDS helpers can use ImageMagick/wand when needed.")
+        parts.append("Complex DDS inspection is ready with ImageMagick/wand support.")
     else:
-        parts.append("Complex DDS variants and compressed DDS helpers stay limited until ImageMagick/wand is available.")
+        parts.append("Complex DDS helpers stay limited until ImageMagick/wand is available.")
     return " ".join(parts)
 
 

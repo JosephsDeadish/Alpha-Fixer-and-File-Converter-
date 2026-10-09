@@ -24,9 +24,7 @@ _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 def _history_capability_summary() -> str:
     return (
-        "Ready now: converter, alpha, selective-alpha, GIF Builder, and Video Builder histories "
-        "can be filtered, previewed, and exported here. GIF and Video Builder views include "
-        "status/notes-aware filtering plus preview thumbnails when source or output media is available."
+        "Ready: converter, alpha, selective-alpha, GIF Builder, and Video Builder histories can be filtered, previewed, and exported here."
     )
 
 
@@ -483,6 +481,9 @@ class HistoryTab(QWidget):
 
         # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
+        self._sub_tabs.setUsesScrollButtons(True)
+        self._sub_tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+        self._sub_tabs.tabBar().setExpanding(False)
 
         # --- Converter sub-tab ---
         conv_widget = QWidget()
@@ -506,6 +507,7 @@ class HistoryTab(QWidget):
         self._conv_summary.setObjectName("subheader")
         conv_layout.addWidget(self._conv_summary)
         self._sub_tabs.addTab(conv_widget, "🔄  Converter")
+        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(conv_widget), "Converter history")
 
         # --- Alpha & RGBA Adjuster sub-tab ---
         alpha_widget = QWidget()
@@ -528,7 +530,8 @@ class HistoryTab(QWidget):
         self._alpha_summary = QLabel("")
         self._alpha_summary.setObjectName("subheader")
         alpha_layout.addWidget(self._alpha_summary)
-        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha & RGBA Adjuster")
+        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha & RGBA")
+        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(alpha_widget), "Alpha & RGBA Adjuster history")
 
         # --- Selective Alpha sub-tab ---
         sel_widget = QWidget()
@@ -552,6 +555,7 @@ class HistoryTab(QWidget):
         self._sel_summary.setObjectName("subheader")
         sel_layout.addWidget(self._sel_summary)
         self._sub_tabs.addTab(sel_widget, "🎭  Alpha Painter")
+        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(sel_widget), "Alpha Painter history")
 
         # --- GIF Builder sub-tab (item 74) ---
         gif_widget = QWidget()
@@ -588,6 +592,7 @@ class HistoryTab(QWidget):
         self._gif_summary.setObjectName("subheader")
         gif_layout.addWidget(self._gif_summary)
         self._sub_tabs.addTab(gif_widget, "🎞  GIF Builder")
+        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(gif_widget), "GIF Builder history")
 
         # --- Video Builder sub-tab (item 74) ---
         vid_widget = QWidget()
@@ -622,6 +627,7 @@ class HistoryTab(QWidget):
         self._vid_summary.setObjectName("subheader")
         vid_layout.addWidget(self._vid_summary)
         self._sub_tabs.addTab(vid_widget, "🎬  Video Builder")
+        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(vid_widget), "Video Builder history")
 
         layout.addWidget(self._sub_tabs, 1)
 
