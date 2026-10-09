@@ -1758,10 +1758,8 @@ class SelectiveAlphaTool(QWidget):
         self._capability_lbl = QLabel(_selective_alpha_capability_summary())
         self._capability_lbl.setWordWrap(True)
         self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._capability_lbl.setStyleSheet(
-            "color: #b26a00; font-size: 11px;"
-            if _selective_alpha_capability_has_limits()
-            else "color: #2e7d32; font-size: 11px;"
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _selective_alpha_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_selective_alpha_capability_details())
         lv.addWidget(self._capability_lbl)
@@ -1782,12 +1780,12 @@ class SelectiveAlphaTool(QWidget):
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._session_status_lbl.setProperty("toolGuidance", True)
         wf_lay.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel("Next step: open an image or copy zones from the Alpha tab to begin editing.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setProperty("toolGuidance", True)
         wf_lay.addWidget(self._next_step_lbl)
 
         # Row 1b: Overlay opacity slider (item 16)
@@ -2050,7 +2048,7 @@ class SelectiveAlphaTool(QWidget):
             "Save/paste the painted mask for one zone at a time.\n"
             "Save and reuse masks for the active zone."
         )
-        _sz_hint.setStyleSheet("color: #888; font-size: 9px;")
+        _sz_hint.setProperty("toolGuidance", True)
         _sz_hint.setWordWrap(True)
         sv.addWidget(_sz_hint)
 
@@ -2095,7 +2093,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Status label for the selected slot
         self._slot_info_lbl = QLabel(self._empty_single_zone_slot_text())
-        self._slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        self._slot_info_lbl.setProperty("toolGuidance", True)
         self._slot_info_lbl.setWordWrap(True)
         sv.addWidget(self._slot_info_lbl)
 
@@ -2156,7 +2154,7 @@ class SelectiveAlphaTool(QWidget):
             "Copy or restore every painted zone at once.\n"
             "Each slot stores one full zone layout you can reuse on another image."
         )
-        _az_hint.setStyleSheet("color: #888; font-size: 9px;")
+        _az_hint.setProperty("toolGuidance", True)
         _az_hint.setWordWrap(True)
         azv.addWidget(_az_hint)
 
@@ -2199,7 +2197,7 @@ class SelectiveAlphaTool(QWidget):
         azv.addLayout(az_slot_btn_row)
 
         self._az_slot_info_lbl = QLabel(self._empty_full_layout_slot_text())
-        self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        self._az_slot_info_lbl.setProperty("toolGuidance", True)
         self._az_slot_info_lbl.setWordWrap(True)
         azv.addWidget(self._az_slot_info_lbl)
 
@@ -2265,7 +2263,7 @@ class SelectiveAlphaTool(QWidget):
             "save the whole set into a Full Layout Slot, or copy one zone into the single-zone clipboard."
         )
         import_note.setWordWrap(True)
-        import_note.setStyleSheet("color: #999; font-size: 11px;")
+        import_note.setProperty("toolGuidance", True)
         import_note.setToolTip(self._shared_zone_import_instructions())
         iv.addWidget(import_note)
 
@@ -2273,7 +2271,7 @@ class SelectiveAlphaTool(QWidget):
             "No shared zones ready yet.\n" + self._shared_zone_import_instructions()
         )
         self._import_shared_status.setWordWrap(True)
-        self._import_shared_status.setStyleSheet("color: #888; font-size: 11px;")
+        self._import_shared_status.setProperty("toolGuidance", True)
         iv.addWidget(self._import_shared_status)
 
         self._btn_import_shared = QPushButton("📥 Import Zones to Canvas")
@@ -2872,13 +2870,11 @@ class SelectiveAlphaTool(QWidget):
             return
         if self._mask_slots[idx] is None:
             self._slot_info_lbl.setText(self._empty_single_zone_slot_text())
-            self._slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
             self._btn_slot_paste.setEnabled(False)
         else:
             self._slot_info_lbl.setText(
                 self._filled_single_zone_slot_text(self._mask_slot_info[idx])
             )
-            self._slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
             self._btn_slot_paste.setEnabled(True)
         self._sync_paste_actions()
 
@@ -3068,13 +3064,11 @@ class SelectiveAlphaTool(QWidget):
             return
         if self._az_slots[idx] is None:
             self._az_slot_info_lbl.setText(self._empty_full_layout_slot_text())
-            self._az_slot_info_lbl.setStyleSheet("color: #888; font-size: 10px;")
             self._btn_paste_all_zones.setEnabled(False)
         else:
             self._az_slot_info_lbl.setText(
                 self._filled_full_layout_slot_text(self._az_slot_info[idx])
             )
-            self._az_slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
             self._btn_paste_all_zones.setEnabled(True)
         self._sync_paste_actions()
 
@@ -3192,7 +3186,6 @@ class SelectiveAlphaTool(QWidget):
             f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"
             f"{clipboard_note}\n{next_actions}"
         )
-        self._import_shared_status.setStyleSheet("color: #aef; font-size: 10px;")
         self._btn_import_shared.setEnabled(True)
         self._btn_import_to_az_slot.setEnabled(True)
         self._btn_import_zone_to_clipboard.setEnabled(True)

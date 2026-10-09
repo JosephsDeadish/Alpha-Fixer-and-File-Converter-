@@ -55,6 +55,7 @@ Settings backup imports validate recognized preference types before changing any
 Settings guidance and theme-status hints follow the active theme's text colors and UI font size, with wrapping for narrow windows. The reset button uses the theme's error color instead of a fixed light-red style.
 Alpha Fixer, Converter and History guidance also follows theme text colors and UI scaling, including Alpha preview-helper messages. Their capability banners use readable theme text on a theme surface, with warning/success borders; capability details remain available as text and tooltips.
 GIF and Video Builder guidance and import/recovery messages use the same readable, scalable theme styling. Success, warning and error messages keep descriptive text and diagnostics, with theme-colored borders rather than fixed low-contrast text colors.
+Painter workflow hints, single-zone/full-layout slot messages and shared-zone import guidance also follow the active theme and UI font size. Filled and empty slots remain distinguished by their text and paste-button availability.
 Trim edits immediately refresh the paused preview, including a playhead clamped by a shorter timeline. Preview FPS changes update active playback and duration summaries without restarting playback. Single-frame timelines remain exportable, but play and scrubbing are disabled.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.

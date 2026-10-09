@@ -6,14 +6,15 @@ import numpy as np
 from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, pyqtSignal
-from PyQt6.QtGui import QAction, QImage
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtGui import QAction, QImage, QColor, QPalette
+from PyQt6.QtWidgets import QApplication, QMenu, QLabel
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
 from src.ui.alpha_tool import AlphaFixerTab, _AlphaPreviewLoader
 from src.ui.drop_list import DropFileList
 from src.ui.selective_alpha_tool import SelectiveAlphaTool
+from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
 
 
 class PreviewLoader(QObject):
@@ -243,6 +244,48 @@ def open_painter_image(painter, tmp_path, size=(8, 8)):
                return_value=(str(path), "")):
         painter._on_open()
     return path
+
+
+def test_painter_guidance_preserves_slot_states_across_themes_and_scales(painter, app, tmp_path):
+    open_painter_image(painter, tmp_path)
+    labels = [label for label in painter.findChildren(QLabel) if label.property("toolGuidance")]
+    assert len(labels) == 8
+    capability = painter._capability_lbl
+    capability_text = capability.text(), capability.toolTip()
+    painter.show()
+    for name, pixels in [("Panda Dark", 13), ("Panda Light", 24), ("Panda Dark", 18)]:
+        theme = PRESET_THEMES[name]
+        painter.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
+        painter._mask_slots[0] = np.ones((8, 8), dtype=np.uint8)
+        painter._mask_slot_info[0] = "Zone 1"
+        painter._az_slots[0] = [np.ones((8, 8), dtype=np.uint8)]
+        painter._az_slot_info[0] = "Full layout"
+        painter._on_slot_selected(0)
+        painter._on_az_slot_selected(0)
+        assert painter._btn_slot_paste.isEnabled()
+        assert painter._btn_paste_all_zones.isEnabled()
+        filled_text = painter._slot_info_lbl.text(), painter._az_slot_info_lbl.text()
+        painter.receive_shared_zones([(128, np.ones((8, 8), dtype=bool))])
+        painter._refresh_session_status()
+        app.processEvents()
+        for label in labels + [capability]:
+            assert not label.styleSheet()
+            assert label.wordWrap()
+            assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+            assert label.font().pixelSize() == pixels
+        assert capability.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
+        assert (capability.text(), capability.toolTip()) == capability_text
+        assert "ready" in painter._import_shared_status.text()
+        assert painter._btn_import_shared.isEnabled()
+        painter._mask_slots[0] = None
+        painter._az_slots[0] = None
+        painter._on_slot_selected(0)
+        painter._on_az_slot_selected(0)
+        assert not painter._btn_slot_paste.isEnabled()
+        assert not painter._btn_paste_all_zones.isEnabled()
+        assert (painter._slot_info_lbl.text(), painter._az_slot_info_lbl.text()) != filled_text
+        assert not painter._slot_info_lbl.styleSheet()
+        assert not painter._az_slot_info_lbl.styleSheet()
 
 
 def menu_state(canvas):
