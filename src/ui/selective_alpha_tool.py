@@ -1320,6 +1320,8 @@ class _FloatingHistoryOverlay(QFrame):
 
     Positioned at the top-left corner of its parent widget.  Reparent to the
     canvas widget and call ``reposition()`` from the parent's ``resizeEvent``.
+    Short canvases scroll the controls at their normal font size, leaving room
+    for the zoom overlay below when the two cannot fit side by side.
     """
 
     highlight_toggled    = pyqtSignal(bool)
@@ -1332,6 +1334,7 @@ class _FloatingHistoryOverlay(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
         self._scroll_area = QScrollArea(self)
         self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll_area.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1403,6 +1406,9 @@ class _FloatingHistoryOverlay(QFrame):
         self._position_timer.setSingleShot(True)
         self._position_timer.timeout.connect(self._refresh_position)
         self._scroll_content.installEventFilter(self)
+        for control in (self._btn_undo, self._btn_redo, self._chk_highlight,
+                        self._chk_labels, self._btn_all_vis):
+            control.installEventFilter(self)
         if parent is not None:
             parent.installEventFilter(self)
         self.raise_()
@@ -1431,6 +1437,9 @@ class _FloatingHistoryOverlay(QFrame):
         elif obj is self._scroll_content and event.type() in (
             QEvent.Type.LayoutRequest, QEvent.Type.StyleChange, QEvent.Type.FontChange,
         ):
+            self._position_timer.start(0)
+        elif event.type() == QEvent.Type.FocusIn and isinstance(obj, QWidget):
+            self._scroll_area.ensureWidgetVisible(obj, 0, 0)
             self._position_timer.start(0)
         return super().eventFilter(obj, event)
 
@@ -1525,6 +1534,7 @@ class _FloatingHistoryOverlay(QFrame):
             row.setDirection(direction)
         self._scroll_content.layout().activate()
         self._scroll_content.adjustSize()
+        self._scroll_content.layout().activate()
         content_size = self._scroll_content.size()
         border = 2 * self.frameWidth()
         height = max(1, parent_size.height() - 2 * margin)
@@ -1544,6 +1554,9 @@ class _FloatingHistoryOverlay(QFrame):
         self.resize(width, min(height, content_size.height() + border + horizontal))
         self.layout().activate()
         self.move(margin, margin)
+        focused = self._scroll_content.focusWidget()
+        if focused is not None and focused.hasFocus():
+            self._scroll_area.ensureWidgetVisible(focused, 0, 0)
 
 # ---------------------------------------------------------------------------
 # Zone row widget

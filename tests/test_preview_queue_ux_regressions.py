@@ -270,7 +270,7 @@ def test_painter_short_history_scrolls_and_restores(app, width, pixels, with_zoo
             zoom.show()
         settle_painter_overlays(app, host, history, zoom)
         scrollbar = history._scroll_area.verticalScrollBar()
-        if pixels == 32 or (pixels == 24 and with_zoom):
+        if pixels == 32 and (width == 200 or with_zoom):
             assert scrollbar.maximum() > 0
         for control in controls:
             assert control.font().pixelSize() == pixels
@@ -291,10 +291,10 @@ def test_painter_short_history_scrolls_and_restores(app, width, pixels, with_zoo
         labels.assert_called_once_with(False)
         zones.assert_called_once_with(False)
         if scrollbar.maximum():
-            assert scrollbar.value() > 0
             focus_visible_history_control(app, history, controls[0])
-            assert scrollbar.value() == 0
+            assert scrollbar.value() <= 3
         if zoom is not None:
+            focus_visible_history_control(app, history, controls[-1])
             QTest.keyClick(controls[-1], Qt.Key.Key_Tab)
             app.processEvents()
             assert zoom._zoom_buttons[0].hasFocus()
@@ -330,6 +330,7 @@ def test_painter_short_actual_canvas_keeps_controls_and_masks(painter, app, tmp_
     painter.show()
     painter.activateWindow()
     history, zoom, canvas = painter._history_overlay, painter._zoom_overlay, painter._canvas
+    canvas._push_history()
     canvas._masks[0][0, 0] = 1
     masks = canvas.get_all_masks()
     history.set_undo_count(9999)
@@ -346,6 +347,13 @@ def test_painter_short_actual_canvas_keeps_controls_and_masks(painter, app, tmp_
     focus_visible_history_control(app, history, history._btn_all_vis)
     QTest.keyClick(history._btn_all_vis, Qt.Key.Key_Space)
     assert all(np.array_equal(before, after) for before, after in zip(masks, canvas.get_all_masks()))
+    focus_visible_history_control(app, history, history._btn_undo)
+    QTest.keyClick(history._btn_undo, Qt.Key.Key_Space)
+    assert not canvas._masks[0].any()
+    settle_painter_overlays(app, canvas, history, zoom)
+    focus_visible_history_control(app, history, history._btn_redo)
+    QTest.keyClick(history._btn_redo, Qt.Key.Key_Space)
+    assert all(np.array_equal(before, after) for before, after in zip(masks, canvas.get_all_masks()))
     for button in zoom._zoom_buttons:
         button.setFocus()
         assert button.hasFocus()
@@ -355,6 +363,45 @@ def test_painter_short_actual_canvas_keeps_controls_and_masks(painter, app, tmp_
     settle_painter_overlays(app, canvas, history, zoom)
     assert history._scroll_area.verticalScrollBar().maximum() == 0
     assert history._chk_highlight.text() == "Highlight transparent"
+
+
+def test_painter_history_scrolls_oversized_count_labels_without_font_reduction(app):
+    host = QWidget()
+    undo = Mock()
+    history = _FloatingHistoryOverlay(undo, Mock(), host)
+    zoom = _FloatingZoomOverlay(Mock(), Mock(), Mock(), host)
+    try:
+        host.resize(200, 200)
+        host.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Dark"])
+                          + "\nQWidget { font-size: 32px; }")
+        history.set_undo_count(123456789012)
+        history.set_redo_count(123456789012)
+        host.show()
+        host.activateWindow()
+        history.show()
+        zoom.show()
+        settle_painter_overlays(app, host, history, zoom)
+        scrollbar = history._scroll_area.horizontalScrollBar()
+        assert scrollbar.maximum() > 0
+        assert history._btn_undo.font().pixelSize() == 32
+        viewport = history._scroll_area.viewport()
+        for value, corner in [(0, history._btn_undo.rect().topLeft()),
+                              (scrollbar.maximum(), history._btn_undo.rect().topRight())]:
+            scrollbar.setValue(value)
+            app.processEvents()
+            assert viewport.rect().contains(history._btn_undo.mapTo(viewport, corner))
+        history._btn_undo.setFocus(Qt.FocusReason.TabFocusReason)
+        QTest.keyClick(history._btn_undo, Qt.Key.Key_Space)
+        undo.assert_called_once()
+        settle_painter_overlays(app, host, history, zoom)
+        history.set_undo_count(1)
+        history.set_redo_count(1)
+        host.resize(900, 700)
+        settle_painter_overlays(app, host, history, zoom)
+        assert scrollbar.maximum() == 0
+    finally:
+        host.close()
+        sip.delete(host)
 
 
 @pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))

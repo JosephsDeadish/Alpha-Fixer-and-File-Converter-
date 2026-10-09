@@ -7,6 +7,28 @@ pulling in heavy Qt or Pillow dependencies.
 from contextlib import contextmanager
 
 
+def reserve_space_for_focused_control(dialog, event):
+    """Let focused buttons and text editors handle Space before preview shortcuts."""
+    from PyQt6.QtCore import QEvent, Qt
+    from PyQt6.QtWidgets import (
+        QApplication, QAbstractButton, QLineEdit, QTextEdit, QPlainTextEdit,
+        QAbstractSpinBox, QComboBox,
+    )
+
+    if (event.type() != QEvent.Type.ShortcutOverride
+            or event.key() != Qt.Key.Key_Space
+            or event.modifiers() != Qt.KeyboardModifier.NoModifier):
+        return False
+    focused = QApplication.focusWidget()
+    if (focused is not None and dialog.isAncestorOf(focused)
+            and isinstance(focused, (
+                QAbstractButton, QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox,
+            ))):
+        event.accept()
+        return True
+    return False
+
+
 def set_status_tone(label, tone: str) -> None:
     """Refresh theme styling after a status label changes semantic tone."""
     from PyQt6.QtCore import QCoreApplication, QEvent

@@ -40,7 +40,7 @@ import tempfile
 from threading import Lock
 from typing import Callable, Optional
 
-from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout
+from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
 
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, pyqtSignal,
@@ -3201,12 +3201,14 @@ class VideoToolDialog(QDialog):
         # Transport
         ctrl = QHBoxLayout()
         self._btn_rewind = QPushButton("⏮")
-        self._btn_rewind.setFixedWidth(36)
+        self._btn_rewind.setMinimumWidth(36)
+        self._btn_rewind.setAccessibleName("Rewind video preview")
         self._btn_rewind.setToolTip("Rewind to beginning")
         self._btn_rewind.clicked.connect(self._rewind)
         ctrl.addWidget(self._btn_rewind)
 
         self._btn_play = QPushButton("▶  Play")
+        self._btn_play.setAccessibleName("Play or pause video preview")
         self._btn_play.setCheckable(True)
         self._btn_play.setToolTip("Play / Pause.  Space bar also works.")
         self._btn_play.toggled.connect(self._on_play_toggled)
@@ -3469,6 +3471,11 @@ class VideoToolDialog(QDialog):
         shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
         if shortcut is not None:
             shortcut.setKey(QKeySequence(key_sequence))
+
+    def event(self, event):
+        if reserve_space_for_focused_control(self, event):
+            return True
+        return super().event(event)
 
     def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
         settings = self._resolve_settings()

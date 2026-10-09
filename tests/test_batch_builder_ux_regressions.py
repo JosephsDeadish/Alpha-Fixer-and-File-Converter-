@@ -7,7 +7,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
+from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel, QLineEdit
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
@@ -408,6 +408,76 @@ def test_video_readouts_fit_live_fonts_and_boundary_values(app, name, tmp_path):
                 assert label.font().pixelSize() == pixels
                 assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
                 assert label.height() >= label.sizeHint().height()
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_builder_transport_names_scaling_and_keyboard_rewind(app, kind, tmp_path):
+    widget = GifBuilderDialog() if kind == "gif" else VideoToolDialog()
+    try:
+        path = tmp_path / "animated.gif"
+        with Image.new("RGBA", (8, 8), "red") as first, Image.new("RGBA", (8, 8), "blue") as second:
+            first.save(path, save_all=True, append_images=[second], duration=100)
+        if kind == "gif":
+            widget._add_paths([str(path)])
+        else:
+            widget._load_image_paths([str(path)])
+        widget.resize(1200, 900)
+        widget.show()
+        for pixels in [13, 24, 32, 13]:
+            widget.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Light"])
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            app.processEvents()
+            assert widget._btn_rewind.width() >= widget._btn_rewind.sizeHint().width()
+            assert widget._btn_rewind.font().pixelSize() == pixels
+        assert widget._btn_rewind.accessibleName() == f"Rewind {kind if kind == 'video' else 'GIF'} preview"
+        assert widget._btn_play.accessibleName() == f"Play or pause {kind if kind == 'video' else 'GIF'} preview"
+        widget._scrubber.setValue(widget._scrubber.maximum())
+        assert widget._scrubber.value() > 0
+        widget.activateWindow()
+        widget._btn_rewind.setFocus()
+        app.processEvents()
+        QTest.keyClick(widget._btn_rewind, Qt.Key.Key_Space)
+        assert widget._scrubber.value() == 0
+        widget._scrubber.setValue(widget._scrubber.maximum())
+        widget._btn_rewind.setEnabled(False)
+        QTest.keyClick(widget._btn_rewind, Qt.Key.Key_Space)
+        assert widget._scrubber.value() == widget._scrubber.maximum()
+        widget._btn_play.setFocus()
+        app.processEvents()
+        QTest.keyClick(widget._btn_play, Qt.Key.Key_Space)
+        assert widget._btn_play.isChecked()
+        QTest.keyClick(widget._btn_play, Qt.Key.Key_Space)
+        assert not widget._btn_play.isChecked()
+        listing = widget._frame_list if kind == "gif" else widget._clip_list
+        listing.setFocus()
+        app.processEvents()
+        QTest.keyClick(listing, Qt.Key.Key_Space)
+        assert widget._btn_play.isChecked()
+        QTest.keyClick(listing, Qt.Key.Key_Space)
+        assert not widget._btn_play.isChecked()
+        check = widget._optimize_check if kind == "gif" else widget._audio_enable_check
+        check.setEnabled(True)
+        check.setFocus()
+        app.processEvents()
+        checked = check.isChecked()
+        QTest.keyClick(check, Qt.Key.Key_Space)
+        assert check.isChecked() != checked
+        assert not widget._btn_play.isChecked()
+        editor = QLineEdit(widget)
+        editor.show()
+        editor.setFocus()
+        app.processEvents()
+        QTest.keyClicks(editor, "two words")
+        assert editor.text() == "two words"
+        assert not widget._btn_play.isChecked()
+        shortcut_id = f"{kind}_toggle_play" if kind == "gif" else "video_toggle_play"
+        widget.update_shortcut_binding(shortcut_id, "Ctrl+P")
+        QTest.keyClick(editor, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+        assert widget._btn_play.isChecked()
+        widget._btn_play.setChecked(False)
     finally:
         widget.close()
         sip.delete(widget)

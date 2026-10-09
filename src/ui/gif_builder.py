@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout
+from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
 
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, pyqtSignal,
@@ -736,6 +736,7 @@ class GifBuilderDialog(QDialog):
         # Transport controls
         pv_ctrl = QHBoxLayout()
         self._btn_rewind = QPushButton("⏮  Rewind")
+        self._btn_rewind.setAccessibleName("Rewind GIF preview")
         self._btn_rewind.setMinimumWidth(96)
         self._btn_rewind.setMinimumHeight(26)
         self._btn_rewind.setToolTip("Rewind to first frame (jump to frame 1)")
@@ -743,6 +744,7 @@ class GifBuilderDialog(QDialog):
         pv_ctrl.addWidget(self._btn_rewind)
 
         self._btn_play = QPushButton("▶  Play")
+        self._btn_play.setAccessibleName("Play or pause GIF preview")
         self._btn_play.setCheckable(True)
         self._btn_play.setToolTip("Start / stop the animated preview.  Space bar also works.")
         self._btn_play.toggled.connect(self._on_play_toggled)
@@ -946,6 +948,11 @@ class GifBuilderDialog(QDialog):
             "Space",
             lambda: self._btn_play.setChecked(not self._btn_play.isChecked()),
         )
+
+    def event(self, event):
+        if reserve_space_for_focused_control(self, event):
+            return True
+        return super().event(event)
 
     def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
         shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
