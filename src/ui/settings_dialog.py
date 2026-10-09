@@ -4,7 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
-from PyQt6.QtCore import pyqtSignal, Qt, QRect
+from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,

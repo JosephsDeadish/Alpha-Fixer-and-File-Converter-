@@ -6,6 +6,7 @@ the application with fun, friendly descriptions and keyboard-shortcut hints.
 """
 
 from html import escape
+from ..core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
 
 from ._ui_utils import fit_dialog_to_screen
 
@@ -72,7 +73,7 @@ _TUTORIAL_STEPS = [
             "image and assign a different alpha (transparency) value to each zone.\n\n"
             "• Choose a drawing tool: Freehand, Line, Rectangle, Ellipse, or Fill.\n"
             "• Set the zone's alpha (0 = fully transparent, 255 = fully opaque).\n"
-            "• Use up to 40 independent colour-coded zones per image.\n"
+            f"• Use {SELECTIVE_ALPHA_UI_ZONE_COUNT} independent colour-coded zones per image.\n"
             "• Press <b>Ctrl+Z</b> to undo strokes, or the floating Undo button.\n\n"
             "When you're happy, click <b>Save Result</b> to write the new PNG."
         ),

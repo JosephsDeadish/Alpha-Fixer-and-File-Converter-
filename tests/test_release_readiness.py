@@ -191,7 +191,7 @@ class TestUnattendedValidation(unittest.TestCase):
 class TestSettingsScreenFitting(unittest.TestCase):
     def test_settings_fit_decorated_window_on_small_secondary_screen(self):
         from PyQt6.QtCore import QRect
-        from PyQt6.QtGui import QFont
+        from PyQt6.QtGui import QFont, QShowEvent
         from PyQt6.QtWidgets import QApplication, QScrollArea
         from unittest.mock import MagicMock
         from src.core.settings_manager import SettingsManager
@@ -215,6 +215,8 @@ class TestSettingsScreenFitting(unittest.TestCase):
                             dialog = SettingsDialog(manager)
                             try:
                                 with patch.object(dialog, "screen", return_value=screen):
+                                    # Direct dispatch makes callback failures fail this test.
+                                    dialog.showEvent(QShowEvent())
                                     dialog.show()
                                     app.processEvents()
                                     app.processEvents()

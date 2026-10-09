@@ -203,6 +203,7 @@ Bundling a runtime does not make every variant of every file format supported.
 | Disc-image video | ISO/UMD/BIN/CUE inputs are experimental and require demuxable video that FFmpeg can find. This is not a console disc filesystem extractor or universal PSP/PS1/PS2 player. |
 | XNB | Texture2D formats supported by the reader are converted to an 8-bit image; export writes RGBA8888 Color textures, not arbitrary XNA assets or original texture encodings. |
 | TIM | Export uses 16-bit direct colour and TIM's limited transparent/semi-transparent states; arbitrary alpha and original indexed palettes are not preserved. Mixed mode is unsupported. |
+| Alpha Painter | Seven visible editable zones. The interface does not expose 40 independently configurable zone controls. |
 | Audio | MP4 export can preserve supported source audio, mute it, or apply volume. Still images/GIFs contribute silence. Preview playback is intentionally silent; GIF output has no audio. |
 | Optional image codecs | AVIF/JPEG2000 availability is checked against the packaged Pillow build. Missing advertised codecs must block release qualification, not be hidden by a successful PNG fallback. |
 
@@ -220,7 +221,8 @@ supported platform:
   scaling, small screens, long filenames, keyboard-only use, and monitor changes.
 - Real audio playback/export verification, cancellation, corrupt files, missing
   inputs, unwritable output folders, overwrite decisions, and memory-growth checks.
-- Review bundled dependency/license notices and exact build versions; produce
+- Review bundled dependency/license notices and exact build versions, and satisfy
+  any applicable corresponding-source/source-offer obligations. Produce
   platform-specific signing/notarization/installer artifacts where required.
 
 Passing an offscreen test on a Linux build host is not certification of Windows,

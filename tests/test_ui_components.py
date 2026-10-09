@@ -7433,6 +7433,48 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self._widget.deleteLater()
         self._app.processEvents()
 
+    def test_visible_palette_matches_settings_count_without_reducing_engine_capacity(self):
+        from src.core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
+        from src.core.selective_alpha_processor import NUM_ZONES
+        self.assertEqual(SELECTIVE_ALPHA_UI_ZONE_COUNT, 7)
+        self.assertEqual(self._widget._active_zone_combo.count(), SELECTIVE_ALPHA_UI_ZONE_COUNT)
+        self.assertEqual(NUM_ZONES, 40)
+        self.assertEqual(len(self._widget._canvas.get_all_masks()), NUM_ZONES)
+        self._widget._active_zone_combo.setCurrentIndex(SELECTIVE_ALPHA_UI_ZONE_COUNT - 1)
+        self._widget._cycle_zone(1)
+        self.assertEqual(self._widget._active_zone_combo.currentIndex(), 0)
+        self._widget._cycle_zone(-1)
+        self.assertEqual(self._widget._active_zone_combo.currentIndex(), SELECTIVE_ALPHA_UI_ZONE_COUNT - 1)
+
+    def test_painter_help_and_tutorial_match_visible_palette(self):
+        from PyQt6.QtWidgets import QDialog, QLabel
+        from src.core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
+        from src.ui.main_window import MainWindow
+        from src.ui.selective_alpha_tool import _selective_alpha_capability_details
+        from src.ui.tutorial_dialog import _TUTORIAL_STEPS
+        count = SELECTIVE_ALPHA_UI_ZONE_COUNT
+        self.assertIn(f"{count} independent alpha zones", _selective_alpha_capability_details())
+        step = next(step for step in _TUTORIAL_STEPS if step["title"] == "Alpha Painter")
+        self.assertIn(f"{count} independent colour-coded zones", step["body"])
+
+        def inspect_about(dialog):
+            content = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+            self.assertIn(f"{count} visible zones", content)
+            self.assertNotIn("40 zones", content)
+            return QDialog.DialogCode.Rejected
+
+        with patch.object(QDialog, "exec", inspect_about):
+            MainWindow._show_about(self._widget)
+
+    def test_painter_tooltip_variants_do_not_advertise_engine_only_capacity(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for variants in (_NORMAL, _DUMBED, _VULGAR):
+            for key, tips in variants.items():
+                if key.startswith("sa_") or key == "selective_alpha_tab":
+                    for tip in tips:
+                        with self.subTest(key=key, tip=tip):
+                            self.assertNotRegex(tip, r"\b40\b")
+
     def test_saved_mask_slots_grow_to_configured_limit(self):
         self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_INIT)
         while self._widget._btn_slot_add.isEnabled():

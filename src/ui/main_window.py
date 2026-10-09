@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFileDialog,
 )
 
-from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI
+from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI, SELECTIVE_ALPHA_UI_ZONE_COUNT
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab, _alpha_capability_details
 from .converter_tool import ConverterTab, _converter_capability_details, _converter_capability_summary
@@ -4307,7 +4307,7 @@ class MainWindow(QMainWindow):
             "custom fine-tune (set / multiply / add / subtract), per-channel RGBA ±255 adjustments</li>"
             "<li><b>File Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, "
             "QOI and more — batch folder processing with live before/after preview</li>"
-            "<li><b>Alpha Painter:</b> paint alpha zones on images (up to 40 zones), "
+            f"<li><b>Alpha Painter:</b> paint alpha zones on images ({SELECTIVE_ALPHA_UI_ZONE_COUNT} visible zones), "
             "freehand / line / rectangle / ellipse / fill / polygon / eraser / transform tools, "
             "keyboard shortcuts (B/E/L/R/X/F/P/T), copy/paste zones, clipboard slots</li>"
             "<li><b>GIF Builder &amp; Video Builder:</b> create animated GIFs and videos from "

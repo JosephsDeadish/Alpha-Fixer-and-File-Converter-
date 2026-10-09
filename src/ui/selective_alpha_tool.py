@@ -1,7 +1,7 @@
 """
 Selective Alpha editor tab.
 
-Lets the user paint up to 40 coloured mask zones on top of a single image
+Lets the user paint seven visible coloured mask zones on top of a single image
 and assign a distinct alpha value to each zone.  On "Apply" the alpha
 channel of every painted pixel is replaced with its zone's alpha value.
 
@@ -33,6 +33,7 @@ _NO_ALPHA_EXTS = frozenset({".jpg", ".jpeg", ".jfif", ".jpe", ".bmp", ".gif"})
 
 import numpy as np
 from PIL import Image, ImageDraw
+from ..core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
 
 from PyQt6.QtCore import (
     Qt, QEvent, QPointF, QRectF, QTimer, pyqtSignal,
@@ -103,7 +104,7 @@ def _selective_alpha_capability_details() -> str:
             _selective_alpha_capability_summary(),
             "",
             "Alpha Painter tools available here:",
-            "• Paint, flood-fill, move, and transform up to 40 independent alpha zones.",
+            f"• Paint, flood-fill, move, and transform {SELECTIVE_ALPHA_UI_ZONE_COUNT} independent alpha zones.",
             "• Copy zones from the Alpha & RGBA tool, the single-zone clipboard, or saved full-layout slots.",
             "• Preview overlays, alpha labels, and the saved result before exporting the edited image.",
         ]
@@ -1934,7 +1935,7 @@ class SelectiveAlphaTool(QWidget):
         self._active_zone_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        for i in range(NUM_ZONES):
+        for i in range(SELECTIVE_ALPHA_UI_ZONE_COUNT):
             r, g, b, _ = ZONE_COLORS[i]
             self._active_zone_combo.addItem(
                 self._make_zone_color_icon(r, g, b), ZONE_NAMES[i]
@@ -2480,7 +2481,7 @@ class SelectiveAlphaTool(QWidget):
 
     def _cycle_zone(self, direction: int) -> None:
         """Cycle the active zone editor to the next (+1) or previous (-1) zone."""
-        new_idx = (self._ze_cur_idx + direction) % NUM_ZONES
+        new_idx = (self._ze_cur_idx + direction) % SELECTIVE_ALPHA_UI_ZONE_COUNT
         self._active_zone_combo.setCurrentIndex(new_idx)
         self._refresh_zone_editor(new_idx)
 
