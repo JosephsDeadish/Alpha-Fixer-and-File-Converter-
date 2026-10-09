@@ -5,6 +5,10 @@ import sys
 from pathlib import Path
 
 
+_DEFAULT_REQUIRED_PLATFORMS = ("linux", "win32", "darwin")
+_DEFAULT_REQUIRED_BUNDLE_KINDS = ("folder", "onefile")
+
+
 def _load_report(path: str) -> dict[str, object]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -237,6 +241,7 @@ def _aggregate_reviews(reviews: list[dict[str, object]]) -> dict[str, object]:
         "status_counts": {},
         "platform_counts": {},
         "bundle_kind_counts": {},
+        "platform_bundle_counts": {},
         "failed_report_count": 0,
         "reports_with_failed_checks": 0,
         "reports_with_unstable_checks": 0,
@@ -244,6 +249,7 @@ def _aggregate_reviews(reviews: list[dict[str, object]]) -> dict[str, object]:
     status_counts: dict[str, int] = {}
     platform_counts: dict[str, int] = {}
     bundle_counts: dict[str, int] = {}
+    platform_bundle_counts: dict[str, int] = {}
     for review in reviews:
         status = str(review.get("status") or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -251,6 +257,8 @@ def _aggregate_reviews(reviews: list[dict[str, object]]) -> dict[str, object]:
         platform_counts[platform] = platform_counts.get(platform, 0) + 1
         bundle = str(review.get("bundle_kind") or "unspecified")
         bundle_counts[bundle] = bundle_counts.get(bundle, 0) + 1
+        matrix_key = f"{platform}:{bundle}"
+        platform_bundle_counts[matrix_key] = platform_bundle_counts.get(matrix_key, 0) + 1
         if status != "completed":
             aggregate["failed_report_count"] = int(aggregate["failed_report_count"]) + 1
         if int(review.get("failed_check_count") or 0) > 0:
@@ -260,7 +268,82 @@ def _aggregate_reviews(reviews: list[dict[str, object]]) -> dict[str, object]:
     aggregate["status_counts"] = status_counts
     aggregate["platform_counts"] = platform_counts
     aggregate["bundle_kind_counts"] = bundle_counts
+    aggregate["platform_bundle_counts"] = platform_bundle_counts
     return aggregate
+
+
+def _normalize_expected(values: list[str] | None, fallback: tuple[str, ...]) -> list[str]:
+    normalized = [str(value or "").strip() for value in (values or []) if str(value or "").strip()]
+    return normalized or list(fallback)
+
+
+def _coverage_matrix(
+    reviews: list[dict[str, object]],
+    *,
+    required_platforms: list[str],
+    required_bundle_kinds: list[str],
+) -> dict[str, object]:
+    present: dict[str, int] = {}
+    for review in reviews:
+        platform = str(review.get("host_platform") or "unknown").strip()
+        bundle = str(review.get("bundle_kind") or "unspecified").strip()
+        if not platform or not bundle:
+            continue
+        key = f"{platform}:{bundle}"
+        present[key] = present.get(key, 0) + 1
+    present_entries = [
+        {
+            "platform": platform,
+            "bundle_kind": bundle,
+            "count": present.get(f"{platform}:{bundle}", 0),
+        }
+        for platform in required_platforms
+        for bundle in required_bundle_kinds
+        if present.get(f"{platform}:{bundle}", 0) > 0
+    ]
+    missing_entries = [
+        {
+            "platform": platform,
+            "bundle_kind": bundle,
+        }
+        for platform in required_platforms
+        for bundle in required_bundle_kinds
+        if present.get(f"{platform}:{bundle}", 0) <= 0
+    ]
+    return {
+        "required_platforms": required_platforms,
+        "required_bundle_kinds": required_bundle_kinds,
+        "present": present_entries,
+        "missing": missing_entries,
+        "complete": not missing_entries,
+    }
+
+
+def _discover_report_paths(raw_inputs: list[str], *, exclude_paths: list[str] | None = None) -> list[str]:
+    discovered: list[str] = []
+    seen: set[str] = set()
+    excluded = {str(Path(path).resolve()) for path in (exclude_paths or []) if str(path or "").strip()}
+    for raw in raw_inputs:
+        if not str(raw or "").strip():
+            continue
+        candidate = Path(raw).resolve()
+        if candidate.is_dir():
+            for path in sorted(candidate.rglob("*.json")):
+                resolved = str(path.resolve())
+                if resolved in seen or resolved in excluded:
+                    continue
+                discovered.append(resolved)
+                seen.add(resolved)
+        elif candidate.is_file():
+            resolved = str(candidate)
+            if resolved not in seen and resolved not in excluded:
+                discovered.append(resolved)
+                seen.add(resolved)
+        else:
+            raise SystemExit(f"Report path not found: {raw}")
+    if not discovered:
+        raise SystemExit("No JSON report files were found.")
+    return discovered
 
 
 def _render_report_text(review: dict[str, object]) -> list[str]:
@@ -315,7 +398,7 @@ def _render_report_text(review: dict[str, object]) -> list[str]:
     return lines
 
 
-def _render_text(reviews: list[dict[str, object]], aggregate: dict[str, object]) -> str:
+def _render_text(reviews: list[dict[str, object]], aggregate: dict[str, object], coverage_matrix: dict[str, object]) -> str:
     lines = [
         "# Packaged Validation Review",
         f"Reports: {aggregate.get('report_count', 0)}",
@@ -325,6 +408,16 @@ def _render_text(reviews: list[dict[str, object]], aggregate: dict[str, object])
         + ", ".join(f"{name}={count}" for name, count in sorted((aggregate.get("platform_counts") or {}).items())),
         "Bundle kinds: "
         + ", ".join(f"{name}={count}" for name, count in sorted((aggregate.get("bundle_kind_counts") or {}).items())),
+        "Coverage matrix: "
+        + (
+            "complete"
+            if coverage_matrix.get("complete")
+            else "missing "
+            + ", ".join(
+                f"{item.get('platform')}:{item.get('bundle_kind')}"
+                for item in (coverage_matrix.get("missing") or [])
+            )
+        ),
         "",
     ]
     for index, review in enumerate(reviews):
@@ -336,19 +429,31 @@ def _render_text(reviews: list[dict[str, object]], aggregate: dict[str, object])
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Review packaged validation JSON output and summarize the failures, unstable checks, and real-sample triage points.")
-    parser.add_argument("reports", nargs="+", help="One or more JSON report paths from verify_packaged_app.py or run_private_packaged_validation.py")
+    parser.add_argument("reports", nargs="+", help="One or more JSON report paths or directories containing reports from verify_packaged_app.py or run_private_packaged_validation.py")
     parser.add_argument("--top-samples", type=int, default=12, help="Maximum interesting sample outcomes to keep per report (0 = keep all).")
+    parser.add_argument("--require-platform", action="append", default=[], help="Required host platform label for coverage review. Repeat for multiple labels.")
+    parser.add_argument("--require-bundle-kind", action="append", default=[], help="Required bundle kind label for coverage review. Repeat for multiple labels.")
     parser.add_argument("--json-out", help="Optional path to write the normalized review payload as JSON.")
     parser.add_argument("--markdown-out", help="Optional path to write the rendered review summary as Markdown/text.")
     args = parser.parse_args(argv)
 
-    reviews = [_review_report(path, _load_report(path), top_samples=max(0, int(args.top_samples))) for path in args.reports]
+    report_paths = _discover_report_paths(
+        args.reports,
+        exclude_paths=[args.json_out or "", args.markdown_out or ""],
+    )
+    reviews = [_review_report(path, _load_report(path), top_samples=max(0, int(args.top_samples))) for path in report_paths]
     aggregate = _aggregate_reviews(reviews)
+    coverage_matrix = _coverage_matrix(
+        reviews,
+        required_platforms=_normalize_expected(args.require_platform, _DEFAULT_REQUIRED_PLATFORMS),
+        required_bundle_kinds=_normalize_expected(args.require_bundle_kind, _DEFAULT_REQUIRED_BUNDLE_KINDS),
+    )
     payload = {
         "reports": reviews,
         "aggregate": aggregate,
+        "coverage_matrix": coverage_matrix,
     }
-    rendered = _render_text(reviews, aggregate)
+    rendered = _render_text(reviews, aggregate, coverage_matrix)
     print(rendered, end="")
 
     if args.json_out:

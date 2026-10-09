@@ -142,6 +142,59 @@ class TestPackagedReportReview(unittest.TestCase):
             self.assertEqual(payload["aggregate"]["bundle_kind_counts"]["folder"], 1)
             self.assertEqual(payload["aggregate"]["bundle_kind_counts"]["onefile"], 1)
             self.assertEqual(payload["aggregate"]["reports_with_failed_checks"], 1)
+            self.assertFalse(payload["coverage_matrix"]["complete"])
+            self.assertIn(
+                {"platform": "win32", "bundle_kind": "folder"},
+                payload["coverage_matrix"]["missing"],
+            )
+            self.assertIn(
+                {"platform": "win32", "bundle_kind": "onefile"},
+                payload["coverage_matrix"]["missing"],
+            )
+
+    def test_review_script_can_discover_reports_from_directory(self):
+        script = self._load_script()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reports_dir = Path(tmpdir) / "reports"
+            nested_dir = reports_dir / "nested"
+            nested_dir.mkdir(parents=True, exist_ok=True)
+            (reports_dir / "linux-folder.json").write_text(
+                json.dumps(
+                    {
+                        "validation_host_platform": "linux",
+                        "validation_bundle_kind": "folder",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (nested_dir / "win-onefile.json").write_text(
+                json.dumps(
+                    {
+                        "validation_host_platform": "win32",
+                        "validation_bundle_kind": "onefile",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_json = Path(tmpdir) / "review.json"
+            rc = script.main(
+                [
+                    str(reports_dir),
+                    "--json-out",
+                    str(out_json),
+                ]
+            )
+            self.assertEqual(rc, 0)
+            payload = json.loads(out_json.read_text(encoding="utf-8"))
+            self.assertEqual(payload["aggregate"]["report_count"], 2)
+            self.assertEqual(payload["aggregate"]["platform_counts"]["linux"], 1)
+            self.assertEqual(payload["aggregate"]["platform_counts"]["win32"], 1)
+            self.assertEqual(payload["aggregate"]["platform_bundle_counts"]["linux:folder"], 1)
+            self.assertEqual(payload["aggregate"]["platform_bundle_counts"]["win32:onefile"], 1)
+            self.assertIn(
+                {"platform": "darwin", "bundle_kind": "folder"},
+                payload["coverage_matrix"]["missing"],
+            )
 
 
 if __name__ == "__main__":
