@@ -338,6 +338,8 @@ class AlphaFixerTab(QWidget):
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
+        self._preview_request_id = 0
+        self._retired_preview_loaders: set[_AlphaPreviewLoader] = set()
         # Debounce timer so rapid fine-tune slider changes don't flood with threads
         self._preview_debounce = QTimer(self)
         self._preview_debounce.setSingleShot(True)
@@ -1176,15 +1178,19 @@ class AlphaFixerTab(QWidget):
 
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
+        self._preview_debounce.stop()
+        self._stop_preview_loader()
+        self._compare.clear()
+        self._before_stats_lbl.setText("")
+        self._after_stats_lbl.setText("")
+        self._atlas_cells = []
         item = self._file_list.item(row)
         if item and os.path.isfile(item.text()):
             self._preview_path = item.text()
             self._preview_debounce.start()
         else:
             self._preview_path = None
-            self._compare.clear()
-            self._before_stats_lbl.setText("")
-            self._after_stats_lbl.setText("")
+        self._refresh_preview_helper_status()
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     # ------------------------------------------------------------------
@@ -1277,14 +1283,9 @@ class AlphaFixerTab(QWidget):
         # Disconnect the previous loader's signals before replacing it so that
         # a stale thread finishing late cannot overwrite the current result.
         # Also ask the thread to abandon its work so CPU is freed quickly.
-        if self._preview_loader is not None:
-            self._preview_loader.stop()
-            try:
-                self._preview_loader.preview_ready.disconnect()
-                self._preview_loader.stats_ready.disconnect()
-                self._preview_loader.failed.disconnect()
-            except RuntimeError:
-                pass  # already disconnected
+        self._stop_preview_loader()
+        request_id = self._preview_request_id
+        path = self._preview_path
 
         manual = self._build_manual_params()
 
@@ -1301,10 +1302,52 @@ class AlphaFixerTab(QWidget):
         self._preview_loader = _AlphaPreviewLoader(
             self._preview_path, preset=None, manual_params=manual
         )
-        self._preview_loader.preview_ready.connect(self._on_compare_ready)
-        self._preview_loader.stats_ready.connect(self._on_stats_ready)
-        self._preview_loader.failed.connect(self._on_compare_failed)
+        self._preview_loader.preview_ready.connect(
+            lambda before, after: self._apply_preview_result(
+                request_id, path, self._on_compare_ready, before, after,
+            )
+        )
+        self._preview_loader.stats_ready.connect(
+            lambda before, after: self._apply_preview_result(
+                request_id, path, self._on_stats_ready, before, after,
+            )
+        )
+        self._preview_loader.failed.connect(
+            lambda error: self._apply_preview_result(
+                request_id, path, self._on_compare_failed, error,
+            )
+        )
         self._preview_loader.start()
+
+    def _apply_preview_result(self, request_id, path, callback, *args) -> None:
+        if request_id == self._preview_request_id and path == self._preview_path:
+            callback(*args)
+
+    def _stop_preview_loader(self) -> None:
+        self._preview_request_id += 1
+        loader = self._preview_loader
+        self._preview_loader = None
+        if loader is None:
+            return
+        loader.stop()
+        for signal in (loader.preview_ready, loader.stats_ready, loader.failed):
+            try:
+                signal.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+        if loader.isRunning():
+            self._retired_preview_loaders.add(loader)
+            loader.finished.connect(lambda: self._release_preview_loader(loader))
+            # The thread may finish between isRunning() and connecting finished.
+            if not loader.isRunning():
+                self._release_preview_loader(loader)
+        else:
+            loader.deleteLater()
+
+    def _release_preview_loader(self, loader) -> None:
+        if loader in self._retired_preview_loaders:
+            self._retired_preview_loaders.remove(loader)
+            loader.deleteLater()
 
     # ------------------------------------------------------------------
     # Alpha visualization helpers

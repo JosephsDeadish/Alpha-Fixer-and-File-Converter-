@@ -205,6 +205,7 @@ class SelectiveAlphaCanvas(QWidget):
         self._show_zero_alpha:    bool = False
         self._show_alpha_labels:  bool = False
         self._paste_available:    bool = False
+        self._paste_all_available: bool = False
         self._alpha_paste_available: bool = False
 
         # ── drawing state ─────────────────────────────────────────────
@@ -286,6 +287,9 @@ class SelectiveAlphaCanvas(QWidget):
 
     def set_paste_available(self, v: bool) -> None:
         self._paste_available = bool(v)
+
+    def set_paste_all_available(self, v: bool) -> None:
+        self._paste_all_available = bool(v)
 
     def set_alpha_paste_available(self, v: bool) -> None:
         """Signal whether zones from the Alpha/RGBA Adjuster tool are ready to paste."""
@@ -1176,38 +1180,43 @@ class SelectiveAlphaCanvas(QWidget):
     def _show_context_menu(self, pos) -> None:
         menu = QMenu(self)
         act_copy      = menu.addAction("Copy Zone Mask")
+        act_copy.setEnabled(self.has_image())
         act_paste     = menu.addAction("Paste Zone Mask")
-        act_paste.setEnabled(self._paste_available)
+        act_paste.setEnabled(self.has_image() and self._paste_available)
         menu.addSeparator()
         act_copy_all  = menu.addAction("Copy All Zones")
+        act_copy_all.setEnabled(self.has_image())
         act_paste_all = menu.addAction("Paste All Zones")
-        act_paste_all.setEnabled(self._paste_available)
+        act_paste_all.setEnabled(self.has_image() and self._paste_all_available)
         menu.addSeparator()
         act_paste_alpha = menu.addAction("📋  Paste Zone from Alpha/RGBA Tool")
-        act_paste_alpha.setEnabled(self._alpha_paste_available)
+        act_paste_alpha.setEnabled(self.has_image() and self._alpha_paste_available)
         act_paste_alpha.setToolTip(
             "Paste the alpha zone received from the Alpha & RGBA Adjuster\n"
             "into the currently active zone on this canvas."
         )
         act_paste_all_alpha = menu.addAction("📋  Paste All Zones from Alpha/RGBA Tool")
-        act_paste_all_alpha.setEnabled(self._alpha_paste_available)
+        act_paste_all_alpha.setEnabled(self.has_image() and self._alpha_paste_available)
         act_paste_all_alpha.setToolTip(
             "Paste all alpha zones received from the Alpha & RGBA Adjuster\n"
             "into the corresponding zones on this canvas."
         )
-        chosen = menu.exec(self.mapToGlobal(pos))
-        if chosen is act_copy:
-            self.copy_requested.emit(self._active_zone)
-        elif chosen is act_paste:
-            self.paste_requested.emit(self._active_zone)
-        elif chosen is act_copy_all:
-            self.copy_all_requested.emit()
-        elif chosen is act_paste_all:
-            self.paste_all_requested.emit()
-        elif chosen is act_paste_alpha:
-            self.paste_from_alpha_requested.emit()
-        elif chosen is act_paste_all_alpha:
-            self.paste_all_from_alpha_requested.emit()
+        try:
+            chosen = menu.exec(self.mapToGlobal(pos))
+            if chosen is act_copy:
+                self.copy_requested.emit(self._active_zone)
+            elif chosen is act_paste:
+                self.paste_requested.emit(self._active_zone)
+            elif chosen is act_copy_all:
+                self.copy_all_requested.emit()
+            elif chosen is act_paste_all:
+                self.paste_all_requested.emit()
+            elif chosen is act_paste_alpha:
+                self.paste_from_alpha_requested.emit()
+            elif chosen is act_paste_all_alpha:
+                self.paste_all_from_alpha_requested.emit()
+        finally:
+            menu.deleteLater()
 
 
 class _FloatingZoomOverlay(QFrame):
@@ -2686,6 +2695,7 @@ class SelectiveAlphaTool(QWidget):
         return summary + ("  •  " + "  •  ".join(extras) if extras else "")
 
     def _refresh_session_status(self, *_args) -> None:
+        self._sync_paste_actions()
         status = self.get_status_bar_text().strip()
         next_text = self._next_step_text(
             self._src_path or "",
@@ -2700,6 +2710,25 @@ class SelectiveAlphaTool(QWidget):
         self._session_status_lbl.setText(text)
         self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
         self.queue_status_changed.emit(status)
+
+    def _sync_paste_actions(self) -> None:
+        can_paste = self._canvas.has_image() and self._mask_clipboard is not None
+        self._ze_paste_btn.setEnabled(can_paste)
+        self._canvas.set_paste_available(can_paste)
+        idx = self._az_slot_combo.currentIndex()
+        can_paste_all = (
+            self._canvas.has_image()
+            and 0 <= idx < len(self._az_slots)
+            and self._az_slots[idx] is not None
+        )
+        self._canvas.set_paste_all_available(can_paste_all)
+        self._btn_paste_all_zones.setEnabled(can_paste_all)
+        slot_idx = self._slot_combo.currentIndex()
+        self._btn_slot_paste.setEnabled(
+            self._canvas.has_image()
+            and 0 <= slot_idx < len(self._mask_slots)
+            and self._mask_slots[slot_idx] is not None
+        )
 
     def _set_btn_save_enabled(self, v: bool) -> None:
         self._btn_save.setEnabled(v)
@@ -2757,10 +2786,10 @@ class SelectiveAlphaTool(QWidget):
             return
         self._mask_clipboard = arr
         # Enable Paste button and the canvas context menu.
-        self._ze_paste_btn.setEnabled(True)
-        self._canvas.set_paste_available(True)
+        self._sync_paste_actions()
         if self._sound is not None:
             self._sound.play_mask_copy()
+        self._refresh_session_status()
 
     def _on_paste_mask(self, zone_idx: int) -> None:
         """Paste the clipboard mask into *zone_idx*, replacing its current mask."""
@@ -2851,6 +2880,7 @@ class SelectiveAlphaTool(QWidget):
             )
             self._slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
             self._btn_slot_paste.setEnabled(True)
+        self._sync_paste_actions()
 
     def _on_save_to_slot_current(self) -> None:
         """Save active zone's mask into the currently selected slot."""
@@ -2925,6 +2955,8 @@ class SelectiveAlphaTool(QWidget):
 
     def _on_copy_all_zones(self) -> None:
         """Copy all painted zone masks into the currently selected full-layout slot."""
+        if not self._canvas.has_image():
+            return
         snapshot = self._canvas.get_all_masks()
         idx = self._az_slot_combo.currentIndex()
         self._az_slots[idx] = snapshot
@@ -3044,6 +3076,7 @@ class SelectiveAlphaTool(QWidget):
             )
             self._az_slot_info_lbl.setStyleSheet("color: #aef; font-size: 10px;")
             self._btn_paste_all_zones.setEnabled(True)
+        self._sync_paste_actions()
 
     def _on_az_slot_clear(self) -> None:
         """Erase the snapshot stored in the currently selected full-layout slot."""

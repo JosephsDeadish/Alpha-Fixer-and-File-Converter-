@@ -2169,8 +2169,11 @@ class TestCrashHangLagPrevention(unittest.TestCase):
         # Find the next method after _update_compare
         next_method = src.find("\n    def ", update_pos + 1)
         update_section = src[update_pos:next_method]
-        self.assertIn(".stop()", update_section,
-                      "_update_compare() must call stop() on the old preview loader")
+        self.assertIn("self._stop_preview_loader()", update_section)
+        stop_pos = src.find("def _stop_preview_loader(")
+        stop_end = src.find("\n    def ", stop_pos + 1)
+        self.assertIn("loader.stop()", src[stop_pos:stop_end],
+                      "The shared cancellation helper must stop the old loader")
 
     def test_converter_preview_loader_has_abort_flag(self):
         """_ConverterPreviewLoader must have an _abort flag and a stop() method."""
@@ -2733,8 +2736,8 @@ class TestRound3Hardening(unittest.TestCase):
         clear_all_pos = src.find("def _clear_all(")
         next_method = src.find("\n    def ", clear_all_pos + 1)
         clear_all_src = src[clear_all_pos:next_method]
-        self.assertIn("_cancel_event.set()", clear_all_src,
-                      "_clear_all() must call self._cancel_event.set() to retire old event")
+        self.assertIn("self.clear()", clear_all_src,
+                      "_clear_all() must use the shared clear() cleanup path")
         # Find clear()
         clear_pos = src.find("def clear(")
         next_method2 = src.find("\n    def ", clear_pos + 1)

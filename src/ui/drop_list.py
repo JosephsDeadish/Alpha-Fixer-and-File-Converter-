@@ -674,7 +674,7 @@ class DropFileList(QListWidget):
 
     def _show_context_menu(self, pos):
         menu = QMenu(self)
-        act_remove = QAction("🗑  Remove Selected", self)
+        act_remove = QAction("🗑  Remove Selected", menu)
         act_remove.setEnabled(bool(self.selectedItems()))
         act_remove.triggered.connect(self._remove_selected)
         menu.addAction(act_remove)
@@ -682,20 +682,20 @@ class DropFileList(QListWidget):
         menu.addSeparator()
 
         # Select-all / Deselect-all
-        act_select_all = QAction("Select All", self)
+        act_select_all = QAction("Select All", menu)
         act_select_all.setShortcut("Ctrl+A")
         act_select_all.setEnabled(self.count() > 0)
         act_select_all.triggered.connect(self.selectAll)
         menu.addAction(act_select_all)
 
-        act_deselect = QAction("Deselect All", self)
+        act_deselect = QAction("Deselect All", menu)
         act_deselect.setEnabled(bool(self.selectedItems()))
         act_deselect.triggered.connect(self.clearSelection)
         menu.addAction(act_deselect)
 
         menu.addSeparator()
 
-        act_clear = QAction("Clear All", self)
+        act_clear = QAction("Clear All", menu)
         act_clear.setEnabled(self.count() > 0)
         act_clear.triggered.connect(self._clear_all)
         menu.addAction(act_clear)
@@ -704,7 +704,7 @@ class DropFileList(QListWidget):
         selected = self.selectedItems()
         if len(selected) == 1:
             menu.addSeparator()
-            act_open = QAction("📂  Open Containing Folder", self)
+            act_open = QAction("📂  Open Containing Folder", menu)
             act_open.triggered.connect(lambda: self._open_containing_folder(selected[0].text()))
             menu.addAction(act_open)
 
@@ -712,14 +712,17 @@ class DropFileList(QListWidget):
 
         act_thumbs = QAction(
             "✓ Thumbnails" if self._thumb_enabled else "  Thumbnails",
-            self,
+            menu,
         )
         act_thumbs.setCheckable(True)
         act_thumbs.setChecked(self._thumb_enabled)
         act_thumbs.triggered.connect(self._toggle_thumbs)
         menu.addAction(act_thumbs)
 
-        menu.exec(self.mapToGlobal(pos))
+        try:
+            menu.exec(self.mapToGlobal(pos))
+        finally:
+            menu.deleteLater()
 
     def _toggle_thumbs(self) -> None:
         self.set_thumbnails_enabled(not self._thumb_enabled)
@@ -790,26 +793,9 @@ class DropFileList(QListWidget):
         self.file_removed.emit()
 
     def _clear_all(self):
-        if self.count() == 0:
-            return
-        self._thumb_cache.clear()
-        self._pending.clear()
-        self._reported_thumb_failures.clear()
-        self._thumb_failure_reasons.clear()
-        self._load_tick.stop()
-        # Cancel any runnables that are still queued or running so they don't
-        # waste CPU decoding thumbnails for items that no longer exist.
-        # Create a fresh event for the next batch of thumbnail requests.
-        self._cancel_event.set()
-        self._cancel_event = threading.Event()
-        super().clear()
-        self._update_dynamic_tooltip()
-        self._emit_thumbnail_status_changed()
-        self.viewport().update()
-        self.count_changed.emit(0)
-        self.list_cleared.emit()
+        self.clear()
 
-    # Override clear() so external callers also get count_changed
+    # Keep external callers and the Clear All action on the same cleanup path.
     def clear(self):
         if self.count() == 0:
             return
@@ -818,7 +804,7 @@ class DropFileList(QListWidget):
         self._reported_thumb_failures.clear()
         self._thumb_failure_reasons.clear()
         self._load_tick.stop()
-        # Same cancellation as _clear_all for consistency.
+        # Cancel outstanding thumbnail work before accepting another batch.
         self._cancel_event.set()
         self._cancel_event = threading.Event()
         super().clear()
@@ -826,3 +812,4 @@ class DropFileList(QListWidget):
         self._emit_thumbnail_status_changed()
         self.viewport().update()
         self.count_changed.emit(0)
+        self.list_cleared.emit()

@@ -4723,6 +4723,9 @@ class MainWindow(QMainWindow):
                 # Wait for the preview thread to finish so it cannot emit into
                 # widgets that are being torn down below.
                 tab._preview_loader.wait(3000)
+            for loader in tuple(getattr(tab, "_retired_preview_loaders", ())):
+                loader.stop()
+                loader.wait(3000)
             # Stop preview debounce timers so pending timeouts don't fire
             # after the tab widgets have been torn down.
             if hasattr(tab, "_preview_debounce") and tab._preview_debounce is not None:

@@ -32,6 +32,7 @@ Convert between image formats with optional resize and quality control.
 
 ### 🎨 Selective Alpha Tool
 Paint or erase alpha adjustments, work with visible zones and masks, and undo/redo edits before saving.
+Single-zone clipboard paste and full-layout slot paste have independent availability in the canvas menu. Shared zones work through both sidebar and menu paste; copied masks scale to the newly opened image. Failed image loads preserve existing edits and their save target.
 
 ### 🎞 GIF Builder
 Arrange image/GIF frames, preview animation, adjust frame timing, and export a GIF. Preview playback respects per-frame delays from its first tick and during live timing edits; removing frames immediately stops playback when fewer than two remain.
@@ -73,6 +74,7 @@ History exports follow the visible, filtered row order and preserve complete fil
 - Right-click or Delete key to remove items from file lists
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
+- Alpha preview results and statistics are tied to the current file and adjustment request, so switching or clearing selections cannot restore stale images or errors. Queue clearing consistently cancels thumbnail work and notifies the host; repeated queue/painter menus release their temporary actions.
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
 - **Selective Alpha Tool** – paint alpha zones directly on an image with seven visible color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
