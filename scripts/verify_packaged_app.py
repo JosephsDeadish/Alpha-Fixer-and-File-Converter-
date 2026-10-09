@@ -57,6 +57,8 @@ _CORE_SELFTEST_CHECKS = (
     "generated_mp4_load",
     "mpegts_load",
     "synthetic_bin_probe",
+    "svg_rasterization",
+    "svg_vectorization",
 )
 
 
@@ -73,6 +75,27 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
     return result
+
+
+def _verification_environment(offline: bool) -> dict[str, str]:
+    env = os.environ.copy()
+    if offline:
+        for name in (
+            "PYTHONHOME", "PYTHONPATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+            "MAGICK_HOME", "IMAGEMAGICK_HOME", "MAGICK_CONFIGURE_PATH",
+            "MAGICK_CODER_MODULE_PATH", "WAND_MAGICK_LIBRARY_SUFFIX",
+            "IMAGEIO_FFMPEG_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE",
+            "ALPHA_FIXER_FFPROBE_EXE", "QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH",
+            "ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS", "ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS",
+        ):
+            env.pop(name, None)
+        # Keep only OS executables on Windows; no Python, ffmpeg or ImageMagick PATH.
+        env["PATH"] = str(Path(env.get("SystemRoot", r"C:\Windows")) / "System32") if os.name == "nt" else ""
+        env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "0"
+        env["ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS"] = "0"
+    if sys.platform.startswith("linux"):
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+    return env
 
 
 def _capability_payload(output: str) -> dict[str, object]:
@@ -516,6 +539,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
     parser.add_argument("--bundle-kind", choices=("folder", "onefile"), help="Optional packaged artifact kind label to include in reports.")
+    parser.add_argument("--offline", action="store_true", help="Clear external tool/runtime paths and forbid sample downloads. Does not replace clean-machine OS testing.")
     parser.add_argument("--smoke-seconds", type=float, default=1.5, help="Seconds to keep each smoke-launch alive.")
     parser.add_argument("--repeat", type=int, default=1, help="How many smoke-launch cycles to run before auditing capabilities.")
     parser.add_argument("--smoke-launch-delay-seconds", type=float, default=0.0, help="Optional pause between repeated smoke launches.")
@@ -706,9 +730,9 @@ def main(argv: list[str] | None = None) -> int:
     if (_required_selftest_checks(args) or manifest_group_required_checks) and not args.run_selftest:
         raise SystemExit("Self-test check requirements need --run-selftest so the packaged app can execute them.")
 
-    base_env = os.environ.copy()
-    if sys.platform.startswith("linux"):
-        base_env.setdefault("QT_QPA_PLATFORM", "offscreen")
+    if args.offline and args.allow_sample_downloads:
+        raise SystemExit("--offline cannot be combined with --allow-sample-downloads.")
+    base_env = _verification_environment(args.offline)
 
     command = [str(launch_target)]
     repeats = max(1, int(args.repeat))
@@ -927,6 +951,7 @@ def main(argv: list[str] | None = None) -> int:
         final_payload = dict(payload)
         final_payload["validation_bundle_kind"] = bundle_kind
         final_payload["validation_host_platform"] = sys.platform
+        final_payload["validation_offline_path_isolation"] = args.offline
         final_payload["validation_launch_target"] = str(launch_target)
         final_payload["validation_launch_target_name"] = launch_target.name
         final_payload["manifest_inputs"] = manifest_inputs

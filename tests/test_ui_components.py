@@ -5251,7 +5251,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             self.assertIn("2 recovered", dialog._import_status_lbl.text())
             self.assertIn("remux ×1", dialog._import_status_lbl.text())
             self.assertIn("transcode ×1", dialog._import_status_lbl.text())
-            self.assertIn("audio-only container ×1", dialog._import_status_lbl.text())
+            self.assertIn("audio-only container ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_status_lbl.toolTip())
             self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
             self.assertIn("Probe-detected containers: mpeg ×1, ogg ×1", dialog._import_status_lbl.toolTip())
@@ -6049,6 +6049,20 @@ class TestBuilderHistoryPolish(unittest.TestCase):
     def setUp(self):
         _require_qt_gui(self)
         self._app = _get_app()
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        for name in ("information", "warning", "critical", "question"):
+            patcher = patch.object(QMessageBox, name, return_value=QMessageBox.StandardButton.No)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name, result in (
+            ("getSaveFileName", ("", "")),
+            ("getOpenFileName", ("", "")),
+            ("getOpenFileNames", ([], "")),
+            ("getExistingDirectory", ""),
+        ):
+            patcher = patch.object(QFileDialog, name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def tearDown(self):
         self._app.processEvents()
@@ -6252,7 +6266,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 alpha_source_count=0,
                 largest_frame=(0, 0),
             )
-            self.assertIn("transport stream timing ×2", dialog._import_status_lbl.text())
+            self.assertIn("transport stream timing ×2", dialog._import_status_lbl.toolTip())
             self.assertIn("transport stream timing", dialog._import_detail_box.toPlainText())
             self.assertIn("Probe-detected containers: mpegts ×2", dialog._import_detail_box.toPlainText())
             self.assertIn("Probe-detected video codecs: h264 ×2", dialog._import_detail_box.toPlainText())
@@ -6310,8 +6324,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertTrue(dialog._capability_lbl.text())
             self.assertIn("Ready", dialog._capability_lbl.text())
             self.assertIn("audio is ignored", dialog._capability_lbl.text())
-            self.assertIn("Audio-only containers", dialog._capability_lbl.text())
-            self.assertIn("single-frame fallbacks", dialog._capability_lbl.text())
+            self.assertIn("Audio-only containers", dialog._capability_lbl.toolTip())
+            self.assertIn("single-frame fallbacks", dialog._capability_lbl.toolTip())
             self.assertIn("manual multi-stream picker is not available yet", dialog._capability_lbl.toolTip())
         finally:
             dialog.close()
@@ -6368,8 +6382,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         dialog.queue_status_changed.connect(queue_updates.append)
         try:
             dialog._frames = [
-                types.SimpleNamespace(source_path="/tmp/a.png"),
-                types.SimpleNamespace(source_path="/tmp/b.png"),
+                types.SimpleNamespace(source_path="/tmp/a.png", close=lambda: None),
+                types.SimpleNamespace(source_path="/tmp/b.png", close=lambda: None),
             ]
             dialog._update_count()
             dialog._update_import_status(
@@ -6408,8 +6422,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                     with patch.object(gb, "_has_imageio_ffmpeg", return_value=False):
                         self.assertIn("image/GIF mode", dialog.get_status_bar_text())
             dialog._frames = [
-                types.SimpleNamespace(source_path="/tmp/a.png"),
-                types.SimpleNamespace(source_path="/tmp/b.png"),
+                types.SimpleNamespace(source_path="/tmp/a.png", close=lambda: None),
+                types.SimpleNamespace(source_path="/tmp/b.png", close=lambda: None),
             ]
             dialog._update_count()
             dialog._preview_frame_lbl.setText("2 / 2")
@@ -6447,7 +6461,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             )
             summary = dialog.get_status_bar_text()
             self.assertIn("GIF Builder ready", summary)
-            self.assertIn("image/GIF mode", summary)
+            self.assertIn("video imports available", summary)
             self.assertIn("import Loaded 0 sources", summary)
             self.assertIn("1 failed", summary)
             self.assertIn("1 skipped", summary)
@@ -6511,7 +6525,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                     dialog._add_paths(["/tmp/sample.vob"])
             self.assertEqual(len(dialog._frames), 1)
             self.assertIn("1 recovered", dialog._import_status_lbl.text())
-            self.assertIn("still-frame fallback", dialog._import_detail_box.toPlainText())
+            self.assertIn("single-frame salvage fallback", dialog._import_detail_box.toPlainText())
         finally:
             for entry in list(dialog._frames):
                 entry.close()
@@ -6690,7 +6704,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("preview unavailable", widget.get_status_bar_text())
             widget._refresh_session_status()
             self.assertIn("Tool status:", widget._session_status_lbl.text())
-            self.assertIn("Converter ready", widget._session_status_lbl.text())
+            self.assertIn(summary, widget._session_status_lbl.text())
             self.assertIn("preview sample.png", widget._session_status_lbl.text())
             self.assertIn("Next:", widget._session_status_lbl.text())
             self.assertIn("review the live preview", widget._next_step_lbl.text())
@@ -6795,6 +6809,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             _gif_builder_dlg=None,
             _connect_builder_status=lambda dialog: connected.append(dialog),
             _update_builder_status=lambda: updated.append("ok"),
+            _update_current_tool_status=lambda: None,
         )
 
         with patch.object(mw, "GifBuilderDialog", _FakeDialog):
@@ -7192,7 +7207,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Next:", tab._session_status_lbl.text())
             tab._vid_search.setText("transcode")
             self.assertIn("filter transcode", tab.get_status_bar_text())
-            self.assertIn("filtered status/notes results", tab._next_step_lbl.text())
+            self.assertIn("review status and notes details", tab._next_step_lbl.text())
             tab._vid_search.setText("missing")
             self.assertIn("0/1 shown", tab.get_status_bar_text())
             self.assertIn("bring matching history entries back", tab._next_step_lbl.text())

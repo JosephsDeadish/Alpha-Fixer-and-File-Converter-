@@ -24,84 +24,7 @@ fi
 echo "Installing runtime dependencies from requirements.txt…"
 python -m pip install -r requirements.txt
 
-python - <<'PY'
-import importlib.util
-import os
-import ctypes
-import shutil
-import sys
-from pathlib import Path
-
-has_wand = importlib.util.find_spec("wand") is not None
-magick_home = os.environ.get("MAGICK_HOME") or os.environ.get("IMAGEMAGICK_HOME")
-runtime_libs = [
-    "libEGL.so.1",
-    "libGL.so.1",
-    "libGLESv2.so.2",
-    "libpulse.so.0",
-    "libxcb-cursor.so.0",
-    "libxcb-icccm.so.4",
-    "libxcb-image.so.0",
-    "libxcb-keysyms.so.1",
-    "libxcb-render-util.so.0",
-    "libxcb-util.so.1",
-    "libxcb-xkb.so.1",
-    "libxkbcommon-x11.so.0",
-]
-missing_runtime_libs = []
-for name in runtime_libs:
-    try:
-        ctypes.CDLL(name)
-    except OSError:
-        missing_runtime_libs.append(name)
-
-ffprobe_source = ""
-for env_name in ("ALPHA_FIXER_FFPROBE_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE"):
-    configured = os.environ.get(env_name, "").strip()
-    if configured and Path(configured).is_file():
-        ffprobe_source = configured
-        break
-if not ffprobe_source:
-    configured_ffmpeg = os.environ.get("IMAGEIO_FFMPEG_EXE", "").strip()
-    if configured_ffmpeg:
-        for candidate in (Path(configured_ffmpeg).with_name("ffprobe"), Path(configured_ffmpeg).with_name("ffprobe.exe")):
-            if candidate.is_file():
-                ffprobe_source = str(candidate)
-                break
-if not ffprobe_source:
-    try:
-        import imageio_ffmpeg
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        ffmpeg_exe = ""
-    if ffmpeg_exe:
-        for candidate in (Path(ffmpeg_exe).with_name("ffprobe"), Path(ffmpeg_exe).with_name("ffprobe.exe")):
-            if candidate.is_file():
-                ffprobe_source = str(candidate)
-                break
-if not ffprobe_source:
-    ffprobe_source = shutil.which("ffprobe") or shutil.which("ffprobe.exe") or ""
-
-print("Build capability audit:")
-print("  - imageio/imageio-ffmpeg runtime support will be bundled by the PyInstaller spec.")
-if ffprobe_source:
-    print(f"  - ffprobe bundling source ready: {ffprobe_source}")
-else:
-    print("  - WARNING: No ffprobe source found for packaging, so packaged odd-container probing will fail strict validation.")
-    if sys.platform == "darwin":
-        print("    Install it first with: brew install ffmpeg")
-    else:
-        print("    Install it first with: bash scripts/install_linux_deps.sh")
-if has_wand and magick_home:
-    print(f"  - DDS compressed variants can be bundled for out-of-box builds (wand + MAGICK_HOME={magick_home}).")
-else:
-    print("  - NOTE: Full bundled DDS compression support needs wand plus MAGICK_HOME/IMAGEMAGICK_HOME set at build time.")
-if missing_runtime_libs:
-    print("  - WARNING: Packaging host is missing Linux runtime libs needed for a fully launchable Qt build:")
-    for name in missing_runtime_libs:
-        print(f"      * {name}")
-    print("    Install them first with: bash scripts/install_linux_deps.sh")
-PY
+python scripts/bundle_dependencies.py
 
 # ── 3. Clean previous build artefacts ────────────────────────────────────────
 rm -rf build dist __pycache__
@@ -146,6 +69,8 @@ if [[ -x "$launch_target" ]]; then
         --require-ffprobe-selfcheck
         --require-bundled-ffmpeg
         --require-bundled-ffprobe
+        --require-wand-runtime
+        --require-bundled-imagemagick
         --require-bundled-default-theme-svg
         --require-packaged-bundle-ready
         --require-no-missing-libs

@@ -973,6 +973,8 @@ def _status_summary_and_tooltip(source) -> tuple[str, str]:
     tooltip_parts: list[str] = []
     if session_text:
         tooltip_parts.append(session_text)
+        if next_text and next_text.removeprefix("Next step:").strip() not in session_text:
+            tooltip_parts.append(next_text)
     elif summary:
         tooltip_parts.append(f"What works here right now: {summary}")
         if next_text:

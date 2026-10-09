@@ -573,14 +573,15 @@ def _runtime_capability_summary() -> dict[str, object]:
         list(summary["missing_linux_runtime_libs"])
     )
     try:
-        from src.core.file_converter import dds_compression_available, optional_pillow_output_limits
+        from src.core.file_converter import dds_compression_available, optional_pillow_output_limits, _has_vtracer
         from src.ui.video_tool import _get_ffmpeg_exe, _get_ffprobe_exe, _has_imageio, _has_imageio_ffmpeg
     except Exception as exc:
         summary["runtime_audit_error"] = str(exc)
         summary["video_runtime_ready"] = False
         summary["dds_compression_available"] = False
         summary["optional_output_limits"] = []
-        summary["feature_readiness_notice"] = ""
+        summary["packaged_bundle_ready"] = False
+        summary["feature_readiness_notice"] = f"Runtime capability audit failed: {exc}"
         return summary
 
     has_imageio = bool(_has_imageio())
@@ -604,6 +605,7 @@ def _runtime_capability_summary() -> dict[str, object]:
     dds_variant_selfcheck = _dds_compression_variant_selfcheck()
     dds_variant_failures = list(dds_variant_selfcheck.get("failures") or [])
     dds_variant_ready = bool(dds_variant_selfcheck.get("ready"))
+    svg_vectorization_ready = _has_vtracer()
     ffmpeg_bundled = bool(frozen and ffmpeg_path_exists and _path_is_within_any(ffmpeg_path, bundle_roots))
     ffprobe_bundled = bool(frozen and ffprobe_path_exists and _path_is_within_any(ffprobe_path, bundle_roots))
     default_theme_svg_bundled = bool(
@@ -634,7 +636,7 @@ def _runtime_capability_summary() -> dict[str, object]:
         readiness_limits.append(
             "video import/MP4 export unavailable: missing " + ", ".join(missing_video_bits)
         )
-    elif not ffprobe_path:
+    if not ffprobe_path:
         readiness_limits.append(
             "odd-container probing/detail guidance limited: ffprobe unavailable"
         )
@@ -710,7 +712,7 @@ def _runtime_capability_summary() -> dict[str, object]:
             packaged_asset_warnings.append("default theme SVG resolves outside the packaged app")
         if missing_svg_count > 0:
             packaged_asset_warnings.append(f"{missing_svg_count} theme SVG asset(s) missing from package")
-        if imagemagick_configured and not wand_runtime_ready:
+        if not imagemagick_bundled or not wand_runtime_ready:
             packaged_asset_warnings.append(
                 "bundled ImageMagick/wand runtime incomplete"
                 if imagemagick_bundled else
@@ -720,6 +722,16 @@ def _runtime_capability_summary() -> dict[str, object]:
             packaged_asset_warnings.append(
                 "packaged DDS compressed output self-check failed: "
                 + ", ".join(_DDS_COMPRESSED_VARIANT_LABELS.get(name, name.upper()) for name in dds_variant_failures)
+            )
+        elif not dds_variant_ready:
+            packaged_asset_warnings.append("packaged DDS compressed output self-check unavailable")
+        if not bool(svg_details.get("qt_svg_ready")):
+            packaged_asset_warnings.append("packaged Qt SVG renderer unavailable")
+        if not svg_vectorization_ready:
+            packaged_asset_warnings.append("packaged SVG vector tracer unavailable")
+        if unavailable_outputs:
+            packaged_asset_warnings.append(
+                "packaged image exports unavailable: " + ", ".join(name for name, _ in unavailable_outputs)
             )
     packaged_bundle_ready = bool(frozen and not packaged_asset_warnings)
     if packaged_asset_warnings:
@@ -757,6 +769,7 @@ def _runtime_capability_summary() -> dict[str, object]:
         "dds_compression_variant_failures": dds_variant_failures,
         "dds_compression_variant_checks": dict(dds_variant_selfcheck.get("variants") or {}),
         "optional_output_limits": unavailable_outputs,
+        "svg_vectorization_ready": svg_vectorization_ready,
         "default_theme_svg_bundled": default_theme_svg_bundled,
         "imagemagick_bundled": imagemagick_bundled,
         "imagemagick_configured": imagemagick_configured,
@@ -872,7 +885,10 @@ def _env_truthy(name: str) -> bool:
 def _emit_runtime_selftest_dump() -> int:
     from PIL import Image
     from src.core.alpha_processor import _load_dds
-    from src.core.file_converter import SUPPORTED_OUTPUT_FORMATS, convert_file, dds_compression_available
+    from src.core.file_converter import (
+        SUPPORTED_OUTPUT_FORMATS, convert_file, dds_compression_available,
+        _has_vtracer, _load_svg,
+    )
     from src.ui import video_tool as vt
 
     iterations = _runtime_selftest_iterations()
@@ -908,10 +924,40 @@ def _emit_runtime_selftest_dump() -> int:
         sample_mp4 = os.path.join(tmpdir, "sample.mp4")
         sample_ts = os.path.join(tmpdir, "sample.ts")
         sample_bin = os.path.join(tmpdir, "sample.bin")
+        sample_svg = os.path.join(tmpdir, "sample.svg")
+        traced_svg = os.path.join(tmpdir, "traced.svg")
+        Path(sample_svg).write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'
+            '<rect width="16" height="24" fill="#ff0000"/></svg>',
+            encoding="utf-8",
+        )
 
         Image.new("RGBA", (32, 24), (32, 160, 255, 192)).save(sample_png)
 
         for _idx in range(iterations):
+            try:
+                with _load_svg(sample_svg) as svg_img:
+                    _record_check(
+                        "svg_rasterization",
+                        svg_img.size == (32, 24)
+                        and svg_img.getpixel((8, 12)) == (255, 0, 0, 255)
+                        and svg_img.getpixel((24, 12))[3] == 0,
+                        f"size={svg_img.size}; vector colour and transparency",
+                    )
+            except Exception as exc:
+                _record_check("svg_rasterization", False, str(exc))
+            try:
+                if not _has_vtracer():
+                    raise RuntimeError("Bundled SVG vector tracer unavailable")
+                convert_file(sample_png, traced_svg, "SVG")
+                vector_text = Path(traced_svg).read_text(encoding="utf-8")
+                _record_check(
+                    "svg_vectorization",
+                    "<path" in vector_text and "data:image/png;base64," not in vector_text,
+                    "raster-to-vector path export",
+                )
+            except Exception as exc:
+                _record_check("svg_vectorization", False, str(exc))
             convert_file(sample_png, sample_gif, "GIF")
             with Image.open(sample_gif) as gif_img:
                 gif_img.load()

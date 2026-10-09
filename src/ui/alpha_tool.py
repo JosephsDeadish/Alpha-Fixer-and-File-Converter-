@@ -27,18 +27,18 @@ from ..core.alpha_processor import collect_files, SUPPORTED_READ, _has_wand
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
 from .preview_pane import BeforeAfterWidget
-from ..core.file_converter import _has_cairosvg, _has_svglib
+from ..core.file_converter import svg_input_available
 
 
 def _alpha_capability_summary() -> str:
-    svg_ready = _has_cairosvg() or _has_svglib()
+    svg_ready = svg_input_available()
     parts = [
         "Ready: raster alpha/RGBA processing and preview tools are available.",
     ]
     if svg_ready:
-        parts.append("SVG input ready.")
+        parts.append("SVG inputs ready (bundled QtSvg or an available renderer).")
     else:
-        parts.append("SVG input needs cairosvg or svglib.")
+        parts.append("SVG inputs unavailable: SVG renderer runtime missing.")
     if _has_wand():
         parts.append("Complex DDS helpers ready.")
     else:
@@ -47,7 +47,7 @@ def _alpha_capability_summary() -> str:
 
 
 def _alpha_capability_has_limits() -> bool:
-    return not (_has_cairosvg() or _has_svglib()) or not _has_wand()
+    return not svg_input_available() or not _has_wand()
 
 
 def _alpha_capability_details() -> str:
@@ -56,7 +56,7 @@ def _alpha_capability_details() -> str:
         "",
         "Optional alpha-path dependencies:",
         "• SVG input: "
-        + ("ready" if (_has_cairosvg() or _has_svglib()) else "limited (install cairosvg or svglib)"),
+        + ("ready" if svg_input_available() else "limited (SVG renderer runtime missing)"),
         "• ImageMagick/wand: "
         + ("ready" if _has_wand() else "limited (complex DDS inspection / compressed DDS helpers unavailable)"),
     ]

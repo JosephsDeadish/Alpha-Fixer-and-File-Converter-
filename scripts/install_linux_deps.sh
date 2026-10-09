@@ -45,7 +45,7 @@ echo ""
 case "$DISTRO" in
   debian)
     PKGS=(
-      ffmpeg
+      ffmpeg imagemagick libmagickwand-dev
       libegl1 libgl1 libgles2 libpulse0 libxkbcommon0 libdbus-1-3
       libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
       libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0
@@ -56,7 +56,7 @@ case "$DISTRO" in
     ;;
   fedora)
     PKGS=(
-      ffmpeg-free
+      ffmpeg-free ImageMagick ImageMagick-libs
       mesa-libEGL mesa-libGL mesa-libGLES pulseaudio-libs libxkbcommon
       libxkbcommon-x11 dbus-libs xcb-util xcb-util-cursor xcb-util-image
       xcb-util-keysyms xcb-util-renderutil xcb-util-wm
@@ -66,7 +66,7 @@ case "$DISTRO" in
     ;;
   arch)
     PKGS=(
-      ffmpeg
+      ffmpeg imagemagick
       mesa libpulse libxkbcommon libxkbcommon-x11 dbus
       xcb-util xcb-util-cursor xcb-util-image xcb-util-keysyms
       xcb-util-renderutil xcb-util-wm
@@ -76,7 +76,7 @@ case "$DISTRO" in
     ;;
   opensuse)
     PKGS=(
-      ffmpeg
+      ffmpeg ImageMagick
       libEGL1 libGL1 Mesa-libEGL1 libpulse0 libxkbcommon0 libdbus-1-3
       libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
       libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0

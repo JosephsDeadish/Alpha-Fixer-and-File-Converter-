@@ -117,15 +117,21 @@ jobs:
         if: runner.os == 'Linux'
         run: bash scripts/install_linux_deps.sh
 
-      - name: Install macOS ffmpeg
+      - name: Install macOS native release runtimes
         if: runner.os == 'macOS'
-        run: brew install ffmpeg
+        run: |
+          brew install ffmpeg imagemagick
+          echo "MAGICK_HOME=$(brew --prefix imagemagick)" >> "$GITHUB_ENV"
 
-      - name: Install Windows ffmpeg
+      - name: Install Windows native release runtimes
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install ffmpeg -y
+          choco install ffmpeg imagemagick -y
+          $magick = Get-ChildItem "C:\Program Files" -Directory -Filter "ImageMagick*" | Select-Object -First 1
+          if (-not $magick) { throw "ImageMagick installation not found" }
+          "MAGICK_HOME=$($magick.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Add-Content -Path $env:GITHUB_PATH -Value $magick.FullName
           Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin"
 
       - name: Build packaged app (Linux/macOS)
@@ -188,6 +194,9 @@ jobs:
             --require-ffprobe-selfcheck \
             --require-bundled-ffmpeg \
             --require-bundled-ffprobe \
+            --require-wand-runtime \
+            --require-bundled-imagemagick \
+            --offline-runtime \
             --require-bundled-default-theme-svg \
             --require-packaged-bundle-ready \
             --require-no-packaged-asset-gaps \
@@ -237,6 +246,9 @@ jobs:
             --require-ffprobe-selfcheck `
             --require-bundled-ffmpeg `
             --require-bundled-ffprobe `
+            --require-wand-runtime `
+            --require-bundled-imagemagick `
+            --offline-runtime `
             --require-bundled-default-theme-svg `
             --require-packaged-bundle-ready `
             --require-no-packaged-asset-gaps `

@@ -2046,7 +2046,7 @@ def _audio_source_plan_hint(plan: dict[str, int | str]) -> str:
         )
     if manual_audio_override_clips > 0:
         parts.append(
-            f"{manual_audio_override_clips} clip{'s' if manual_audio_override_clips != 1 else ''} use manual audio stream override{'s' if manual_audio_override_clips != 1 else ''}."
+            f"{manual_audio_override_clips} clip{'s use' if manual_audio_override_clips != 1 else ' uses'} manual audio stream override{'s' if manual_audio_override_clips != 1 else ''}."
         )
     return " ".join(parts)
 

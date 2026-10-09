@@ -3,6 +3,6 @@ Pillow>=10.0.0
 numpy>=1.24.0
 imageio>=2.33.0
 imageio-ffmpeg>=0.4.9
-# wand>=0.6.13  # Optional: improves DDS read/write quality.
-#               # Requires ImageMagick to be installed on the system.
-#               # The app works without it using the built-in raw DDS loader.
+Wand==0.7.2
+vtracer==0.6.15
+# Native ImageMagick is installed on the build host and included in release bundles.

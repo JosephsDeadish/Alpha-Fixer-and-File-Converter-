@@ -59,7 +59,7 @@ Convert between image formats with optional resize and quality control.
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
 - **Selective Alpha Tool** – paint alpha zones directly on an image with up to 40 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
-- **HiDPI & multi-monitor aware** – fractional DPI scaling (125 %, 150 %, 200 %) and multiple displays are fully supported; window position is automatically corrected if a monitor is disconnected
+- **HiDPI & multi-monitor aware** – fractional DPI scaling and multiple displays are handled by Qt; window position is corrected if a monitor is disconnected. Release qualification still requires native display testing on each supported platform.
 - **Small-screen dialog access** – GIF/Video Builder windows fit the current screen, with scrollable controls when space or larger fonts require it. Tutorial, GIF frame selection, and shortcut dialogs also fit the available screen area.
 - **GIF frame selection safeguards** – exporting requires at least one selected frame; unreadable GIFs cannot be accepted as empty exports.
 - **❤ Patreon button** – support development at [patreon.com/c/DeadOnTheInside](https://www.patreon.com/c/DeadOnTheInside)
@@ -79,7 +79,18 @@ Convert between image formats with optional resize and quality control.
 - Pillow ≥ 10.0.0
 - numpy ≥ 1.24.0
 - imageio ≥ 2.33.0
-- wand ≥ 0.6.13 (for DDS via ImageMagick — optional but recommended)
+- Wand 0.7.2 (DDS compression through ImageMagick)
+- vtracer 0.6.15 (raster-to-vector SVG export)
+
+These are **source/build requirements**, not installations required on an end user's
+machine. Release bundles include the Python runtime, these packages, QtSvg,
+FFmpeg, ffprobe, and the ImageMagick libraries, coder modules, and configuration.
+The build must fail if required native components are unavailable; a reduced-capability
+build must not be published as a complete release.
+
+Native dependencies must be installed on the **build host**. Windows/macOS/Linux
+still need a compatible operating system, graphics/display stack, and audio device
+for features that use them; packaging does not replace operating-system drivers.
 
 Install Python dependencies:
 ```bash
@@ -105,7 +116,8 @@ Or install manually by distribution:
 
 If any of these are missing, `main.py` will detect the problem at startup and print the exact install command for your distribution before exiting cleanly — no cryptic crashes.
 
-For DDS support also install [ImageMagick](https://imagemagick.org/).
+For **source development/building**, also install [ImageMagick](https://imagemagick.org/).
+Packaged users do not need a separate ImageMagick installation.
 BC6H / BC7 / other advanced DX10 DDS variants are currently only supported when Pillow or ImageMagick/wand can decode them directly; the pure-Python fallback now fails clearly instead of fabricating placeholder pixels.
 
 ## Running
@@ -135,6 +147,24 @@ The finished application is placed in `dist/AlphaFixerConverter/`.
 Run `AlphaFixerConverter` (Linux/macOS) or `AlphaFixerConverter.exe` (Windows) from that folder.
 Both build scripts now reuse `scripts/verify_packaged_app.py` to smoke-launch the packaged app and dump runtime capabilities, so the same verification step can be re-run manually on a fresh machine later.
 
+The build inputs must include FFmpeg/ffprobe and ImageMagick on the build host.
+Python dependencies are installed from `requirements.txt`. Missing mandatory
+native runtimes are build errors rather than optional omissions.
+
+To verify a built folder bundle without external tool paths or sample downloads:
+
+```bash
+python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --offline --run-selftest --require-selftest-pass --require-core-selftest-checks \
+  --require-video-runtime --require-wand-runtime --require-bundled-ffmpeg \
+  --require-bundled-ffprobe --require-bundled-imagemagick --require-packaged-bundle-ready
+```
+
+On Windows, use `dist\AlphaFixerConverter\AlphaFixerConverter.exe`. For a one-file
+build, use the executable directly under `dist/`. `--offline` clears inherited
+Python/native-library/tool paths and forbids downloads; it is not a network sandbox
+or a substitute for testing on a clean target operating system.
+
 ### Single-file build (slower startup)
 
 ```bash
@@ -155,6 +185,42 @@ pyinstaller alpha_fixer.spec
 ```bash
 python -m pytest tests/ -v
 ```
+
+## Format and media boundaries
+
+Bundling a runtime does not make every variant of every file format supported.
+
+| Area | Actual behavior / limit |
+|---|---|
+| SVG input | Bundled QtSvg rasterizes its supported SVG subset to RGBA. Browser-only scripting, external web resources, and arbitrary SVG/CSS features are not promised. Oversized raster surfaces are rejected before allocation. |
+| SVG output | Bundled vtracer produces approximate vector paths, suited to logos and pixel art. Source runs without vtracer can embed a PNG instead; that fallback is not a vectorization feature and will not remain sharp beyond its original resolution. |
+| DDS | Raw RGB/RGBA and compressed DXT1/DXT3/DXT5 paths are checked. BC6H/BC7 and other DX10 variants depend on the actual decoder. Arrays, cubemaps, and volumes are not preserved as complete multi-surface assets; the raw loader rejects them, and mipmapped inputs use the base level. |
+| Disc-image video | ISO/UMD/BIN/CUE inputs are experimental and require demuxable video that FFmpeg can find. This is not a console disc filesystem extractor or universal PSP/PS1/PS2 player. |
+| XNB | Texture2D formats supported by the reader are converted to an 8-bit image; export writes RGBA8888 Color textures, not arbitrary XNA assets or original texture encodings. |
+| TIM | Export uses 16-bit direct colour and TIM's limited transparent/semi-transparent states; arbitrary alpha and original indexed palettes are not preserved. Mixed mode is unsupported. |
+| Audio | MP4 export can preserve supported source audio, mute it, or apply volume. Still images/GIFs contribute silence. Preview playback is intentionally silent; GIF output has no audio. |
+| Optional image codecs | AVIF/JPEG2000 availability is checked against the packaged Pillow build. Missing advertised codecs must block release qualification, not be hidden by a successful PNG fallback. |
+
+## Release qualification
+
+Before publishing a release, retain the results for **both** bundle types on every
+supported platform:
+
+- Full Qt-enabled tests with no unexplained failures, hangs, or environment skips.
+- Offline packaged capability/self-test checks, including SVG input/vector output,
+  compressed DDS, generated video, and repeated-session stress checks.
+- Clean-machine installation/launch with no Python, FFmpeg, ImageMagick, or developer
+  directories available; validate native X11/Wayland, Windows, and macOS behavior.
+- Visual checks of every tool/dialog/theme at 8–24pt fonts, 100/125/150/200% display
+  scaling, small screens, long filenames, keyboard-only use, and monitor changes.
+- Real audio playback/export verification, cancellation, corrupt files, missing
+  inputs, unwritable output folders, overwrite decisions, and memory-growth checks.
+- Review bundled dependency/license notices and exact build versions; produce
+  platform-specific signing/notarization/installer artifacts where required.
+
+Passing an offscreen test on a Linux build host is not certification of Windows,
+macOS, every graphics driver, or every experimental media variant. Signing requires
+the distributor's credentials and must not be fabricated or committed.
 
 ### Real corpus validation
 

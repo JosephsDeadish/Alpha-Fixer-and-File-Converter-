@@ -5,21 +5,20 @@ Supported output formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
                           PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG,
                           JPEG2000, XNB, TIM.
 
-SVG input (raster rendering) requires one of:
+SVG input uses bundled QtSvg, with source-run alternatives:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
   - svglib    (pip install svglib)      – pure Python, may need reportlab
-If neither is installed the app will raise an ImportError with install
-instructions when an SVG file is opened.
+QtSvg's supported SVG subset is rasterized to RGBA.
 
 SVG output — two modes depending on installed libraries:
-  • vtracer available (pip install vtracer):
+  • vtracer available (included in release bundles):
       Traces the raster into true vector paths (colour polygons/beziers).
       The result is a genuine scalable vector document suitable for logos,
       icons, pixel art, and game sprites.  Large or photographic images
       may produce complex SVGs.
   • vtracer not installed (fallback):
       Embeds the raster as a base64-encoded PNG inside an <svg> element.
-      Pixel-perfect at any zoom level but not a true vector document.
+      Pixel-perfect at original resolution but not a true vector document.
 """
 import base64
 import io
@@ -212,10 +211,10 @@ FORMAT_DESCRIPTIONS = {
     "SVG": (
         "Scalable Vector Graphics — XML-based vector/lossless format.\n"
         "SVG input: renders the vector art to a full-colour RGBA raster.\n"
-        "  Requires cairosvg (pip install cairosvg) or svglib.\n"
+        "  Uses QtSvg bundled with the application (SVG feature support follows QtSvg).\n"
         "SVG output — two modes:\n"
-        "  • vtracer installed: traces raster into true vector paths\n"
-        "      (pip install vtracer). Best for logos, icons, pixel art.\n"
+        "  • bundled vtracer: traces raster into true vector paths\n"
+        "      Best for logos, icons, pixel art; tracing is approximate.\n"
         "  • fallback: embeds raster as base64 PNG — pixel-perfect but\n"
         "      not true vector. No extra libraries required.\n"
         "Useful for icons, logos, UI assets, and scalable game graphics."
@@ -261,6 +260,57 @@ def _has_svglib() -> bool:
         return False
 
 
+def _has_qt_svg() -> bool:
+    """QtSvg ships with the application and needs no external SVG renderer."""
+    try:
+        from PyQt6.QtSvg import QSvgRenderer
+        from PyQt6.QtGui import QImage, QPainter
+        return True
+    except (ImportError, OSError):
+        return False
+
+
+def svg_input_available() -> bool:
+    return _has_qt_svg() or _has_cairosvg() or _has_svglib()
+
+
+_svg_app = None
+
+
+def _load_svg_via_qt(path: str) -> Image.Image:
+    from PyQt6.QtCore import QRectF
+    from PyQt6.QtGui import QImage, QPainter
+    from PyQt6.QtSvg import QSvgRenderer
+    from PyQt6.QtWidgets import QApplication
+
+    global _svg_app
+    if QApplication.instance() is None:
+        # Retain the application for command-line conversions and text rendering.
+        _svg_app = QApplication(["AlphaFixer SVG", "-platform", "offscreen"])
+    renderer = QSvgRenderer(path)
+    if not renderer.isValid():
+        raise ValueError(f"Invalid or unsupported SVG file: {path}")
+    size = renderer.defaultSize()
+    width, height = size.width(), size.height()
+    if width <= 0 or height <= 0:
+        raise ValueError("SVG must have positive dimensions or a valid viewBox.")
+    if Image.MAX_IMAGE_PIXELS and width * height > Image.MAX_IMAGE_PIXELS:
+        raise Image.DecompressionBombError("SVG dimensions exceed the safe pixel limit.")
+    surface = QImage(width, height, QImage.Format.Format_RGBA8888)
+    if surface.isNull():
+        raise MemoryError("Cannot allocate SVG rendering surface.")
+    surface.fill(0)
+    painter = QPainter(surface)
+    try:
+        renderer.render(painter, QRectF(0, 0, width, height))
+    finally:
+        painter.end()
+    pixels = surface.constBits()
+    pixels.setsize(surface.sizeInBytes())
+    return Image.frombytes("RGBA", (width, height), bytes(pixels), "raw", "RGBA",
+                           surface.bytesPerLine())
+
+
 def _has_vtracer() -> bool:
     """Return True when vtracer is importable (used for raster→SVG vectorization)."""
     try:
@@ -275,10 +325,12 @@ def _load_svg(path: str) -> Image.Image:
     Render an SVG file to an RGBA PIL Image.
 
     Tries (in order):
-    1. cairosvg       — pip install cairosvg
-    2. svglib         — pip install svglib
-    3. Raises ImportError with installation instructions.
+    1. QtSvg         — bundled with PyQt6
+    2. cairosvg / svglib — optional source-run alternatives
+    3. Raises ImportError if no renderer is available.
     """
+    if _has_qt_svg():
+        return _load_svg_via_qt(path)
     if _has_cairosvg():
         import cairosvg
         png_bytes = cairosvg.svg2png(url=path)
@@ -306,7 +358,7 @@ def _load_svg(path: str) -> Image.Image:
         return img.convert("RGBA")
 
     raise ImportError(
-        "SVG input requires cairosvg or svglib.\n"
+        "SVG input requires bundled QtSvg, cairosvg or svglib.\n"
         "Install one of them:\n"
         "    pip install cairosvg\n"
         "    pip install svglib\n"

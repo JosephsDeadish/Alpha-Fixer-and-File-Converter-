@@ -829,7 +829,7 @@ class GifBuilderDialog(QDialog):
                     continue
             loaded_sources += 1
             added_frames += len(pil_frames)
-            source_kind = _frame_source_kind(path, len(pil_frames))
+            source_kind = "video" if treat_as_video else _frame_source_kind(path, len(pil_frames))
             source_type_counts[source_kind] = source_type_counts.get(source_kind, 0) + 1
             frame_width = frame_height = 0
             if pil_frames:
