@@ -175,6 +175,26 @@ def test_painter_history_overlay_scales_counts_and_preserves_actions(app, name):
         QTest.keyClick(overlay._btn_all_vis, Qt.Key.Key_Space)
         zones.assert_called_once_with(True)
         assert overlay._btn_all_vis.text() == "👁  Hide All Zones"
+        host.setStyleSheet(build_stylesheet(theme) + "\nQWidget { font-size: 32px; }")
+        host.resize(200, 600)
+        overlay.set_undo_count(9999)
+        overlay.set_redo_count(9999)
+        for _ in range(20):
+            app.processEvents()
+        assert host.rect().contains(overlay.geometry())
+        assert host.rect().contains(zoom.geometry())
+        assert not overlay.geometry().intersects(zoom.geometry())
+        assert not overlay._position_timer.isActive()
+        assert overlay._chk_highlight.text() == "α=0"
+        assert overlay._btn_all_vis.text() == "👁"
+        assert all(control.accessibleName() for control in controls)
+        for control in controls:
+            assert control.width() >= control.sizeHint().width()
+        host.resize(900, 600)
+        for _ in range(20):
+            app.processEvents()
+        assert overlay._chk_highlight.text() == "Highlight transparent"
+        assert overlay._btn_all_vis.text() == "👁  Hide All Zones"
     finally:
         host.close()
         sip.delete(host)

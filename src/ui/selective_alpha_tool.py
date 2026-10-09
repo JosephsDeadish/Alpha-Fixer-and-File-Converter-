@@ -1336,6 +1336,7 @@ class _FloatingHistoryOverlay(QFrame):
         row = QHBoxLayout()
         row.setSpacing(3)
         row.setContentsMargins(0, 0, 0, 0)
+        self._history_button_row = row
         self._btn_undo = QPushButton("↩")
         self._btn_undo.setProperty("previewOverlay", True)
         self._btn_undo.setAccessibleName("Undo Painter action")
@@ -1397,9 +1398,32 @@ class _FloatingHistoryOverlay(QFrame):
         self.raise_()
 
     def _refresh_position(self):
+        parent = self.parentWidget()
+        if parent is not None:
+            from PyQt6.QtWidgets import QBoxLayout
+
+            available = parent.width() - 12
+            full_width = max(
+                self._chk_highlight.fontMetrics().horizontalAdvance("Highlight transparent") + 64,
+                self._btn_all_vis.fontMetrics().horizontalAdvance("👁  Show All Zones") + 24,
+            )
+            compact = available < full_width
+            for control, text in [
+                (self._chk_highlight, "α=0" if compact else "Highlight transparent"),
+                (self._chk_labels, "α labels" if compact else "Show α values"),
+                (self._btn_all_vis, "👁" if compact else (
+                    "👁  Show All Zones" if self._btn_all_vis.isChecked() else "👁  Hide All Zones")),
+            ]:
+                if control.text() != text:
+                    control.setText(text)
+            row = self._history_button_row
+            needed = self._btn_undo.sizeHint().width() + self._btn_redo.sizeHint().width() + 16
+            direction = (QBoxLayout.Direction.TopToBottom if available < needed
+                         else QBoxLayout.Direction.LeftToRight)
+            if row.direction() != direction:
+                row.setDirection(direction)
         self.layout().activate()
         self.adjustSize()
-        parent = self.parentWidget()
         if parent is not None:
             self.reposition(parent.size())
             zoom = parent.findChild(_FloatingZoomOverlay)
