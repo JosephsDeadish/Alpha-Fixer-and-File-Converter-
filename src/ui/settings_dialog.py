@@ -2079,6 +2079,7 @@ class SettingsDialog(QDialog):
         self._btn_close.setObjectName("accent")
         self._btn_close.setMinimumWidth(100)
         btn_row.addWidget(self._btn_close)
+        self._footer_layout = btn_row
         layout.addLayout(btn_row)
 
         # Connections
@@ -2789,11 +2790,33 @@ class SettingsDialog(QDialog):
     def _fit_to_screen(self):
         from ._ui_utils import fit_dialog_to_screen
 
+        screen = self.screen()
+        if screen is not None:
+            self._update_footer_layout(min(self.width(), screen.availableGeometry().width() - 16))
         fit_dialog_to_screen(self)
         screen = self.screen()
         if screen is not None:
             delta = screen.availableGeometry().center() - self.frameGeometry().center()
             self.move(self.pos() + delta)
+
+    def _update_footer_layout(self, width):
+        from PyQt6.QtWidgets import QBoxLayout
+
+        footer = getattr(self, "_footer_layout", None)
+        if footer is None:
+            return
+        buttons = (self._btn_reset, self._btn_reset_unlocks, self._btn_close)
+        margins = self.layout().contentsMargins()
+        needed = (sum(max(button.minimumWidth(), button.sizeHint().width()) for button in buttons)
+                  + 3 * footer.spacing() + margins.left() + margins.right() + 16)
+        direction = (QBoxLayout.Direction.TopToBottom if width < needed
+                     else QBoxLayout.Direction.LeftToRight)
+        if footer.direction() != direction:
+            footer.setDirection(direction)
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self._update_footer_layout(event.size().width())
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply

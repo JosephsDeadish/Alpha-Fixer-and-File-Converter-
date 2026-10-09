@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtCore import QEvent, Qt, QRect
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import (
@@ -424,6 +424,40 @@ def test_settings_tabs_remain_scrollable_in_small_window(dialog, app):
             0, scroll.widget().height() - scroll.viewport().height(),
         )
     widget.close()
+
+
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+def test_settings_footer_stacks_on_small_screen_and_restores_without_changes(dialog, app, pixels, name):
+    from src.ui.theme_engine import build_stylesheet
+    from PyQt6.QtWidgets import QBoxLayout
+
+    widget, manager = dialog
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                        + f"\nQWidget {{ font-size: {pixels}px; }}")
+    screen = Mock()
+    screen.availableGeometry.return_value = QRect(-640, 0, 640, 600)
+    with patch.object(widget, "screen", return_value=screen):
+        widget.show()
+        app.processEvents()
+        widget._fit_to_screen()
+        app.processEvents()
+        assert widget.width() <= 624
+        assert screen.availableGeometry().contains(widget.frameGeometry())
+        buttons = [widget._btn_reset, widget._btn_reset_unlocks, widget._btn_close]
+        for button in buttons:
+            assert widget.rect().contains(button.geometry())
+            assert button.width() >= button.sizeHint().width()
+        if pixels >= 24:
+            assert widget._footer_layout.direction() == QBoxLayout.Direction.TopToBottom
+        screen.availableGeometry.return_value = QRect(0, 0, 2400, 1200)
+        widget.resize(2200, 900)
+        app.processEvents()
+        assert widget._footer_layout.direction() == QBoxLayout.Direction.LeftToRight
+        assert max(button.geometry().top() for button in buttons) <= min(
+            button.geometry().bottom() for button in buttons)
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
 
 
 def test_settings_guidance_follows_live_theme_colors_and_scaled_fonts(dialog, app):
