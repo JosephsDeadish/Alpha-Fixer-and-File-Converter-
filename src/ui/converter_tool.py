@@ -197,22 +197,20 @@ class ConverterTab(QWidget):
 
         self._capability_lbl = QLabel(_converter_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet(
-            "color: #b26a00; font-size: 11px;"
-            if _converter_capability_has_limits()
-            else "color: #2e7d32; font-size: 11px;"
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _converter_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_converter_capability_details())
         main_layout.addWidget(self._capability_lbl)
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._session_status_lbl.setProperty("toolGuidance", True)
         main_layout.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel("Next step: add files or a folder, choose an output format, then preview or convert.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setProperty("toolGuidance", True)
         main_layout.addWidget(self._next_step_lbl)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -593,7 +591,7 @@ class ConverterTab(QWidget):
         # Log
         log_btn_row = QHBoxLayout()
         self._failure_actions_lbl = QLabel("")
-        self._failure_actions_lbl.setStyleSheet("color: #8ea0b6; font-size: 11px;")
+        self._failure_actions_lbl.setProperty("toolGuidance", True)
         self._failure_actions_lbl.setWordWrap(True)
         log_btn_row.addWidget(self._failure_actions_lbl, 1)
         self._btn_retry_failed = QPushButton("Retry Failed")

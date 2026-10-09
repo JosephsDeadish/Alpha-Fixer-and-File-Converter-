@@ -7,12 +7,13 @@ import pytest
 from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtGui import QImage
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtGui import QImage, QColor, QPalette
+from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
 
 from src.core.settings_manager import SettingsManager
 from src.ui.converter_tool import ConverterTab
 from src.ui.history_tab import HistoryTab
+from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
 
 
 class PreviewLoader(QObject):
@@ -63,6 +64,47 @@ def select_format(converter, fmt):
     converter._fmt_combo.setCurrentIndex(index)
     converter._on_format_changed(index)
     converter._preview_debounce.stop()
+
+
+@pytest.mark.parametrize("tool", ["converter", "history"])
+@pytest.mark.parametrize("limited", [False, True])
+def test_tool_guidance_tracks_theme_and_scale_without_losing_status(
+        settings, app, tool, limited):
+    cls = ConverterTab if tool == "converter" else HistoryTab
+    target = ("src.ui.converter_tool._converter_capability_has_limits"
+              if tool == "converter" else "src.ui.history_tab._history_capability_has_limits")
+    with patch(target, return_value=limited):
+        widget = cls(settings)
+    try:
+        widget.show()
+        guidance = [label for label in widget.findChildren(QLabel)
+                    if label.property("toolGuidance")]
+        assert len(guidance) == 3
+        capability = widget._capability_lbl
+        assert capability.property("capabilityState") == ("limited" if limited else "ready")
+        original_capability = capability.text(), capability.toolTip()
+        for name, pixels in [("Panda Dark", 13), ("Panda Light", 24), ("Panda Dark", 18)]:
+            theme = PRESET_THEMES[name]
+            widget.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
+            widget._refresh_session_status()
+            app.processEvents()
+            for label in guidance + [capability]:
+                assert not label.styleSheet()
+                assert label.wordWrap()
+                assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+                assert label.font().pixelSize() == pixels
+            assert capability.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
+            assert (capability.text(), capability.toolTip()) == original_capability
+            assert widget._session_status_lbl.text()
+            assert widget._next_step_lbl.text()
+            assert widget._next_step_lbl.toolTip()
+    finally:
+        if tool == "converter":
+            widget._preview_debounce.stop()
+            widget._stop_preview_loader()
+            widget._compare.clear()
+        widget.close()
+        sip.delete(widget)
 
 
 def test_format_change_clears_stale_capability_warning(converter):

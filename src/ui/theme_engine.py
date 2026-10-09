@@ -3880,6 +3880,19 @@ QLabel[settingsHint="true"] {{
     color: {t['text']};
     margin-left: 4px;
 }}
+QLabel[toolGuidance="true"] {{
+    color: {t['text']};
+}}
+QLabel[capabilityState="limited"], QLabel[capabilityState="ready"] {{
+    color: {t['text']};
+    background-color: {t['surface']};
+    padding: 4px 6px;
+    border: 1px solid {t['warning']};
+    border-radius: 4px;
+}}
+QLabel[capabilityState="ready"] {{
+    border-color: {t['success']};
+}}
 QLabel[settingsGuide="true"] {{
     color: {t['text']};
     background-color: {t['surface']};

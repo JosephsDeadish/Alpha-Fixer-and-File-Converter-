@@ -471,15 +471,14 @@ class HistoryTab(QWidget):
 
         # Hint pointing users to where settings live (item 8)
         hint = QLabel("⚙  History settings are in  Settings → General → History")
-        hint.setStyleSheet("color: #888; font-size: 10px;")
+        hint.setProperty("toolGuidance", True)
+        hint.setWordWrap(True)
         layout.addWidget(hint)
 
         self._capability_lbl = QLabel(_history_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet(
-            "color: #b26a00; font-size: 11px;"
-            if _history_capability_has_limits()
-            else "color: #2e7d32; font-size: 11px;"
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _history_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_history_capability_details())
         layout.addWidget(self._capability_lbl)
@@ -487,12 +486,12 @@ class HistoryTab(QWidget):
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._session_status_lbl.setProperty("toolGuidance", True)
         layout.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel("Next step: run a tool or export from a builder to populate history here.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setProperty("toolGuidance", True)
         layout.addWidget(self._next_step_lbl)
 
         btn_row = QHBoxLayout()
