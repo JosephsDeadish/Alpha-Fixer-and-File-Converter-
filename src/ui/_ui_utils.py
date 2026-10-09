@@ -7,6 +7,17 @@ pulling in heavy Qt or Pillow dependencies.
 from contextlib import contextmanager
 
 
+def set_status_tone(label, tone: str) -> None:
+    """Refresh theme styling after a status label changes semantic tone."""
+    tone = tone if tone in ("neutral", "success", "warning", "error") else "neutral"
+    if label.property("statusTone") == tone:
+        return
+    label.setProperty("statusTone", tone)
+    label.style().unpolish(label)
+    label.style().polish(label)
+    label.update()
+
+
 def confirm_normalized_save_path(parent, chosen_path, final_path):
     """Confirm an existing destination missed by the native save dialog."""
     from pathlib import Path

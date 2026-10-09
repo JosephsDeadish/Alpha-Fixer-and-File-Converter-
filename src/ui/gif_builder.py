@@ -535,7 +535,8 @@ class GifBuilderDialog(QDialog):
 
         # Hint label
         hint = QLabel("💡 Drag frames to reorder  •  Drop image or video files to add")
-        hint.setStyleSheet("color: gray; font-style: italic; font-size: 11px;")
+        hint.setProperty("toolGuidance", True)
+        hint.setWordWrap(True)
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
 
@@ -543,7 +544,7 @@ class GifBuilderDialog(QDialog):
             "Ready: add images, GIFs, videos, or probe-detected odd containers. Import notes, grouped failures, and skipped-file details will appear here."
         )
         self._import_status_lbl.setWordWrap(True)
-        self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._import_status_lbl.setProperty("statusTone", "neutral")
         self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._import_status_lbl)
         self._import_detail_box = QPlainTextEdit()
@@ -568,16 +569,14 @@ class GifBuilderDialog(QDialog):
         left_layout.addLayout(import_detail_actions)
         self._next_step_lbl = QLabel("Next step: add media to build a frame timeline, then preview or export.")
         self._next_step_lbl.setWordWrap(True)
-        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setProperty("statusTone", "neutral")
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._next_step_lbl)
 
         self._capability_lbl = QLabel(_gif_builder_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet(
-            "color: #b26a00; font-size: 11px;"
-            if _gif_builder_capability_has_limits()
-            else "color: #2e7d32; font-size: 11px;"
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _gif_builder_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_gif_builder_capability_details())
         self._capability_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -585,7 +584,7 @@ class GifBuilderDialog(QDialog):
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._session_status_lbl.setProperty("toolGuidance", True)
         left_layout.addWidget(self._session_status_lbl)
 
         # Frame grid
@@ -739,7 +738,7 @@ class GifBuilderDialog(QDialog):
 
         self._frame_diag_lbl = QLabel("Frame diagnostics: add or select media to inspect frame size, source, and timing.")
         self._frame_diag_lbl.setWordWrap(True)
-        self._frame_diag_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._frame_diag_lbl.setProperty("toolGuidance", True)
         pv_layout.addWidget(self._frame_diag_lbl)
 
         right_layout.addWidget(grp_preview, 1)
@@ -1166,14 +1165,10 @@ class GifBuilderDialog(QDialog):
         self.status_notice.emit("GIF Builder: copied import diagnostics", 4000)
 
     def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
-        colors = {
-            "neutral": "gray",
-            "success": "#2e7d32",
-            "warning": "#b26a00",
-            "error": "#b00020",
-        }
+        from ._ui_utils import set_status_tone
+
         self._import_status_lbl.setText(message)
-        self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
+        set_status_tone(self._import_status_lbl, tone)
         self._import_status_lbl.setToolTip(detail or message)
         detail = str(detail or "").strip()
         self._import_detail_box.setPlainText(detail)
@@ -1185,16 +1180,12 @@ class GifBuilderDialog(QDialog):
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _set_next_step_text(self, text: str, *, tone: str = "neutral") -> None:
-        colors = {
-            "neutral": "#888",
-            "success": "#2e7d32",
-            "warning": "#b26a00",
-            "error": "#b00020",
-        }
+        from ._ui_utils import set_status_tone
+
         rendered = str(text or "").strip() or "Next step: add media to build a frame timeline, then preview or export."
         self._next_step_lbl.setText(rendered)
         self._next_step_lbl.setToolTip(rendered)
-        self._next_step_lbl.setStyleSheet(f"color: {colors.get(tone, '#888')}; font-size: 11px;")
+        set_status_tone(self._next_step_lbl, tone)
         self._refresh_session_status()
 
     def _update_import_status(

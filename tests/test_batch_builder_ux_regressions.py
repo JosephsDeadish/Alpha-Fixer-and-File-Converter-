@@ -4,7 +4,8 @@ from unittest.mock import Mock, patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
@@ -13,6 +14,8 @@ from src.ui._ui_utils import batch_completion_summary, verified_originals
 from src.ui.alpha_tool import AlphaFixerTab
 from src.ui.converter_tool import ConverterTab
 from src.ui.gif_builder import GifBuilderDialog
+from src.ui.video_tool import VideoToolDialog
+from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
 from src.ui.history_tab import HistoryTab
 from src.version import APP_NAME
 
@@ -245,6 +248,51 @@ def builder(app):
     widget._clear_all()
     widget.close()
     sip.delete(widget)
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_builder_guidance_and_recovery_tones_follow_live_theme_and_scale(app, kind):
+    widget = GifBuilderDialog() if kind == "gif" else VideoToolDialog()
+    try:
+        widget.show()
+        capability = widget._capability_lbl
+        original_capability = capability.text(), capability.toolTip()
+        guidance = [label for label in widget.findChildren(QLabel)
+                    if label.property("toolGuidance")]
+        assert guidance
+        for name, pixels in [("Panda Dark", 13), ("Panda Light", 24), ("Panda Dark", 18)]:
+            theme = PRESET_THEMES[name]
+            widget.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for tone in ["warning", "success", "error", "neutral", "unknown"]:
+                expected_tone = "neutral" if tone == "unknown" else tone
+                summary = f"Import result: {tone}"
+                widget._set_import_status(summary, detail="Recovery details\nFailed source: example.png", tone=tone)
+                widget._set_next_step_text("Next step: review diagnostics.", tone=tone)
+                app.processEvents()
+                for label in guidance + [capability, widget._import_status_lbl, widget._next_step_lbl]:
+                    assert not label.styleSheet()
+                    assert label.wordWrap()
+                    assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+                    assert label.font().pixelSize() == pixels
+                for label in [widget._import_status_lbl, widget._next_step_lbl]:
+                    assert label.property("statusTone") == expected_tone
+                    if expected_tone != "neutral":
+                        assert label.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
+                assert widget._import_status_lbl.text() == summary
+                assert widget._import_status_lbl.toolTip() == "Recovery details\nFailed source: example.png"
+                assert widget._import_detail_box.toPlainText() == widget._import_status_lbl.toolTip()
+                assert widget._next_step_lbl.toolTip() == "Next step: review diagnostics."
+                if tone in ("warning", "error"):
+                    assert not widget._import_detail_box.isHidden()
+                assert (capability.text(), capability.toolTip()) == original_capability
+            widget._set_import_status("Ready", detail="", tone="neutral")
+            assert widget._import_detail_box.isHidden()
+            assert widget._import_detail_toggle_btn.isHidden()
+    finally:
+        if kind == "gif":
+            widget._clear_all()
+        widget.close()
+        sip.delete(widget)
 
 
 def add_frames(builder, tmp_path):

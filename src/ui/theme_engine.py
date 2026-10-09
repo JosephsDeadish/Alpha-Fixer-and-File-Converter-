@@ -3883,6 +3883,21 @@ QLabel[settingsHint="true"] {{
 QLabel[toolGuidance="true"] {{
     color: {t['text']};
 }}
+QLabel[statusTone] {{
+    color: {t['text']};
+}}
+QLabel[statusTone="success"], QLabel[statusTone="warning"], QLabel[statusTone="error"] {{
+    background-color: {t['surface']};
+    padding: 4px 6px;
+    border: 1px solid {t['success']};
+    border-radius: 4px;
+}}
+QLabel[statusTone="warning"] {{
+    border-color: {t['warning']};
+}}
+QLabel[statusTone="error"] {{
+    border-color: {t['error']};
+}}
 QLabel[capabilityState="limited"], QLabel[capabilityState="ready"] {{
     color: {t['text']};
     background-color: {t['surface']};

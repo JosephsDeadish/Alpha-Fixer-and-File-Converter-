@@ -2935,17 +2935,15 @@ class VideoToolDialog(QDialog):
 
         self._capability_lbl = QLabel(_video_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet(
-            "color: #b26a00; font-size: 11px;"
-            if _video_capability_has_limits()
-            else "color: #2e7d32; font-size: 11px;"
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _video_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_video_capability_details())
         root.addWidget(self._capability_lbl)
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._session_status_lbl.setProperty("toolGuidance", True)
         root.addWidget(self._session_status_lbl)
 
         if not self._video_io_available:
@@ -2955,7 +2953,7 @@ class VideoToolDialog(QDialog):
                 f"{self._video_io_diagnostics}"
             )
             warn.setWordWrap(True)
-            warn.setStyleSheet("color: orange;")
+            warn.setProperty("statusTone", "warning")
             root.addWidget(warn)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -3006,7 +3004,8 @@ class VideoToolDialog(QDialog):
         left_layout.addLayout(insert_row)
 
         hint = QLabel("💡 Drag clips to reorder  •  Drop files to add")
-        hint.setStyleSheet("color: gray; font-style: italic; font-size: 11px;")
+        hint.setProperty("toolGuidance", True)
+        hint.setWordWrap(True)
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(hint)
 
@@ -3014,7 +3013,7 @@ class VideoToolDialog(QDialog):
             "Ready: add videos, images, or animated GIFs. Recovery notes, failure groups, and skipped-file details will appear here."
         )
         self._import_status_lbl.setWordWrap(True)
-        self._import_status_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._import_status_lbl.setProperty("statusTone", "neutral")
         self._import_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._import_status_lbl)
         self._import_detail_box = QPlainTextEdit()
@@ -3039,13 +3038,13 @@ class VideoToolDialog(QDialog):
         left_layout.addLayout(import_detail_actions)
         self._next_step_lbl = QLabel("Next step: add clips to start a timeline, then preview or export.")
         self._next_step_lbl.setWordWrap(True)
-        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setProperty("statusTone", "neutral")
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._next_step_lbl)
 
         self._timeline_summary_lbl = QLabel("Timeline: 0 clips  •  0.00 s  •  0 frames")
         self._timeline_summary_lbl.setWordWrap(True)
-        self._timeline_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._timeline_summary_lbl.setProperty("toolGuidance", True)
         self._timeline_summary_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(self._timeline_summary_lbl)
 
@@ -3087,7 +3086,7 @@ class VideoToolDialog(QDialog):
         trim_vl.addLayout(end_row)
 
         self._clip_info_lbl = QLabel("")
-        self._clip_info_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._clip_info_lbl.setProperty("toolGuidance", True)
         self._clip_info_lbl.setWordWrap(True)
         trim_vl.addWidget(self._clip_info_lbl)
         left_layout.addWidget(grp_trim)
@@ -3097,7 +3096,7 @@ class VideoToolDialog(QDialog):
         stream_vl.setSpacing(5)
         self._stream_summary_lbl = QLabel("Select a loaded video clip to inspect its available video/audio streams.")
         self._stream_summary_lbl.setWordWrap(True)
-        self._stream_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._stream_summary_lbl.setProperty("toolGuidance", True)
         stream_vl.addWidget(self._stream_summary_lbl)
         stream_row = QGridLayout()
         stream_row.addWidget(QLabel("Video stream:"), 0, 0)
@@ -3125,7 +3124,7 @@ class VideoToolDialog(QDialog):
         stream_vl.addWidget(self._btn_apply_stream)
         self._stream_hint_lbl = QLabel("Use Auto to keep the probe-preferred video/audio streams, or choose explicit streams to preserve a manual override.")
         self._stream_hint_lbl.setWordWrap(True)
-        self._stream_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._stream_hint_lbl.setProperty("toolGuidance", True)
         stream_vl.addWidget(self._stream_hint_lbl)
         left_layout.addWidget(grp_stream)
         self._stream_group = grp_stream
@@ -3167,7 +3166,7 @@ class VideoToolDialog(QDialog):
 
         self._timing_hint_lbl = QLabel("")
         self._timing_hint_lbl.setWordWrap(True)
-        self._timing_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._timing_hint_lbl.setProperty("toolGuidance", True)
         timing_vl.addWidget(self._timing_hint_lbl)
         left_layout.addWidget(grp_timing)
 
@@ -3336,14 +3335,14 @@ class VideoToolDialog(QDialog):
 
         self._export_size_lbl = QLabel("Canvas: auto once clips are added")
         self._export_size_lbl.setWordWrap(True)
-        self._export_size_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._export_size_lbl.setProperty("toolGuidance", True)
         ex_vl.addWidget(self._export_size_lbl)
 
         self._export_pad_lbl = QLabel(
             "Mixed-size clips are resized to fit and centred automatically."
         )
         self._export_pad_lbl.setWordWrap(True)
-        self._export_pad_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._export_pad_lbl.setProperty("toolGuidance", True)
         ex_vl.addWidget(self._export_pad_lbl)
 
         self._audio_group = QGroupBox("Audio (MP4 export only)")
@@ -3354,7 +3353,7 @@ class VideoToolDialog(QDialog):
             "These controls only affect exported MP4 audio. Preview playback stays silent."
         )
         self._audio_scope_lbl.setWordWrap(True)
-        self._audio_scope_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._audio_scope_lbl.setProperty("toolGuidance", True)
         audio_vl.addWidget(self._audio_scope_lbl)
 
         self._audio_enable_check = QCheckBox("Keep source audio in MP4 export")
@@ -3390,7 +3389,7 @@ class VideoToolDialog(QDialog):
 
         self._audio_hint_lbl = QLabel("")
         self._audio_hint_lbl.setWordWrap(True)
-        self._audio_hint_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._audio_hint_lbl.setProperty("toolGuidance", True)
         audio_vl.addWidget(self._audio_hint_lbl)
 
         ex_vl.addWidget(self._audio_group)
@@ -3507,14 +3506,10 @@ class VideoToolDialog(QDialog):
         return insert_row + 1
 
     def _set_import_status(self, message: str, *, detail: str = "", tone: str = "neutral") -> None:
-        colors = {
-            "neutral": "gray",
-            "success": "#2e7d32",
-            "warning": "#b26a00",
-            "error": "#b00020",
-        }
+        from ._ui_utils import set_status_tone
+
         self._import_status_lbl.setText(message)
-        self._import_status_lbl.setStyleSheet(f"color: {colors.get(tone, 'gray')}; font-size: 11px;")
+        set_status_tone(self._import_status_lbl, tone)
         self._import_status_lbl.setToolTip(detail or message)
         detail = str(detail or "").strip()
         self._import_detail_box.setPlainText(detail)
@@ -3526,16 +3521,12 @@ class VideoToolDialog(QDialog):
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _set_next_step_text(self, text: str, *, tone: str = "neutral") -> None:
-        colors = {
-            "neutral": "#888",
-            "success": "#2e7d32",
-            "warning": "#b26a00",
-            "error": "#b00020",
-        }
+        from ._ui_utils import set_status_tone
+
         rendered = str(text or "").strip() or "Next step: add clips to start a timeline, then preview or export."
         self._next_step_lbl.setText(rendered)
         self._next_step_lbl.setToolTip(rendered)
-        self._next_step_lbl.setStyleSheet(f"color: {colors.get(tone, '#888')}; font-size: 11px;")
+        set_status_tone(self._next_step_lbl, tone)
         self._refresh_session_status()
 
     def _update_import_status(
