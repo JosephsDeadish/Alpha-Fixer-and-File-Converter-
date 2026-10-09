@@ -4,7 +4,9 @@ from unittest.mock import Mock, patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
 
 from src.core.presets import PresetManager
@@ -77,6 +79,73 @@ def test_real_completion_feedback(tool, stopped, success, errors, total, pct, pr
     assert not tool._btn_stop.isEnabled()
     assert APP_NAME in tool.windowTitle()
     assert tool._log.toPlainText().count(f"─── {prefix}") == 1
+
+
+def test_processing_input_labels_have_buddies_and_accessible_names(tool, app):
+    if isinstance(tool, AlphaFixerTab):
+        controls = [tool._clamp_min_spin, tool._clamp_max_spin, tool._threshold_spin,
+                    tool._red_spin, tool._green_spin, tool._blue_spin, tool._alpha_delta_spin]
+        edit = tool._red_spin
+    else:
+        controls = [tool._fmt_combo, tool._quality_spin, tool._dds_variant_combo,
+                    tool._width_spin, tool._height_spin]
+        edit = tool._width_spin
+        tool._resize_check.setChecked(True)
+    labels = tool.findChildren(QLabel)
+    for control in controls:
+        assert control.accessibleName()
+        assert len([label for label in labels if label.buddy() is control]) == 1
+    tool.show()
+    tool.activateWindow()
+    app.processEvents()
+    edit.setFocus()
+    before = edit.value()
+    QTest.keyClick(edit, Qt.Key.Key_Up)
+    assert edit.value() == before + edit.singleStep()
+    name = edit.accessibleName()
+    edit.setEnabled(False)
+    QTest.keyClick(edit, Qt.Key.Key_Up)
+    assert edit.value() == before + edit.singleStep()
+    assert edit.accessibleName() == name
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_builder_accessible_timing_names_and_keyboard_edits(app, kind):
+    widget = GifBuilderDialog() if kind == "gif" else VideoToolDialog()
+    try:
+        if kind == "gif":
+            controls = [widget._pf_slider, widget._delay_slider, widget._loop_slider,
+                        widget._width_slider, widget._height_slider, widget._scrubber]
+            edit = widget._delay_slider
+            labels = widget.findChildren(QLabel)
+            for control in controls[1:5]:
+                assert any(label.buddy() is control for label in labels)
+            assert "0" in widget._loop_slider.accessibleDescription()
+            assert "0" in widget._width_slider.accessibleDescription()
+            assert "0" in widget._height_slider.accessibleDescription()
+        else:
+            controls = [widget._insert_mode_combo, widget._stream_picker_combo,
+                        widget._audio_stream_picker_combo, widget._trim_start_slider,
+                        widget._trim_end_slider, widget._clip_speed_slider,
+                        widget._still_duration_spin, widget._scrubber, widget._fps_slider,
+                        widget._filter_combo, widget._export_fmt_combo, widget._audio_volume_slider]
+            edit = widget._fps_slider
+        names = [control.accessibleName() for control in controls]
+        assert all(names) and len(set(names)) == len(names)
+        widget.show()
+        widget.activateWindow()
+        app.processEvents()
+        before = edit.value()
+        edit.setFocus()
+        QTest.keyClick(edit, Qt.Key.Key_Right)
+        assert edit.value() == before + edit.singleStep()
+        edit.setEnabled(False)
+        QTest.keyClick(edit, Qt.Key.Key_Right)
+        assert edit.value() == before + edit.singleStep()
+    finally:
+        widget._preview_timer.stop()
+        widget.close()
+        sip.delete(widget)
 
 
 def test_stop_is_idempotent_and_late_progress_keeps_stopping_status(tool):

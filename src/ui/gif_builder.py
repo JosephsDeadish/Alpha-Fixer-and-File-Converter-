@@ -607,6 +607,7 @@ class GifBuilderDialog(QDialog):
         pf_top.addWidget(self._pf_val_lbl)
         pf_layout.addLayout(pf_top)
         self._pf_slider = _make_hslider(10, 3000, 100)
+        self._pf_slider.setAccessibleName("Selected frame delay (milliseconds)")
         self._pf_slider.setEnabled(False)
         self._pf_slider.setToolTip("Per-frame delay in milliseconds.  Drag left = faster.")
         self._pf_slider.valueChanged.connect(self._on_pf_slider_changed)
@@ -628,9 +629,12 @@ class GifBuilderDialog(QDialog):
         gl.setVerticalSpacing(6)
 
         # Delay slider  (10–3000 ms)
-        gl.addWidget(QLabel("Frame speed:"), 0, 0)
+        delay_label = QLabel("Frame speed:")
+        gl.addWidget(delay_label, 0, 0)
         delay_row = QHBoxLayout()
         self._delay_slider = _make_hslider(10, 3000, 100)
+        delay_label.setBuddy(self._delay_slider)
+        self._delay_slider.setAccessibleName("Global frame delay (milliseconds)")
         self._delay_slider.setToolTip(
             "How long each frame is shown (milliseconds).\n"
             "Drag left for faster animation, right for slower.\n"
@@ -645,9 +649,13 @@ class GifBuilderDialog(QDialog):
         gl.addLayout(delay_row, 0, 1)
 
         # Loop count
-        gl.addWidget(QLabel("Loop count:"), 1, 0)
+        loop_label = QLabel("Loop count:")
+        gl.addWidget(loop_label, 1, 0)
         loop_row = QHBoxLayout()
         self._loop_slider = _make_hslider(0, 20, 0)
+        loop_label.setBuddy(self._loop_slider)
+        self._loop_slider.setAccessibleName("GIF loop count")
+        self._loop_slider.setAccessibleDescription("0 loops forever; 1 plays once.")
         self._loop_slider.setToolTip("0 = loop forever.  1 = play once.  N = repeat N times.")
         self._loop_val_lbl = QLabel("∞")
         self._loop_val_lbl.setFixedWidth(40)
@@ -660,9 +668,13 @@ class GifBuilderDialog(QDialog):
         gl.addLayout(loop_row, 1, 1)
 
         # Max width
-        gl.addWidget(QLabel("Max width:"), 2, 0)
+        width_label = QLabel("Max width:")
+        gl.addWidget(width_label, 2, 0)
         w_row = QHBoxLayout()
         self._width_slider = _make_hslider(0, 3840, 0)
+        width_label.setBuddy(self._width_slider)
+        self._width_slider.setAccessibleName("Maximum GIF width (pixels)")
+        self._width_slider.setAccessibleDescription("0 keeps the original width.")
         self._width_slider.setToolTip("Resize frames to this width (preserves aspect ratio).  0 = no resize.")
         self._width_val_lbl = QLabel("original")
         self._width_val_lbl.setFixedWidth(65)
@@ -676,9 +688,13 @@ class GifBuilderDialog(QDialog):
         gl.addLayout(w_row, 2, 1)
 
         # Max height
-        gl.addWidget(QLabel("Max height:"), 3, 0)
+        height_label = QLabel("Max height:")
+        gl.addWidget(height_label, 3, 0)
         h_row = QHBoxLayout()
         self._height_slider = _make_hslider(0, 2160, 0)
+        height_label.setBuddy(self._height_slider)
+        self._height_slider.setAccessibleName("Maximum GIF height (pixels)")
+        self._height_slider.setAccessibleDescription("0 keeps the original height.")
         self._height_slider.setToolTip("Resize frames to this height (preserves aspect ratio).  0 = no resize.")
         self._height_val_lbl = QLabel("original")
         self._height_val_lbl.setFixedWidth(65)
@@ -711,6 +727,7 @@ class GifBuilderDialog(QDialog):
 
         # Scrubber
         self._scrubber = _make_hslider(0, 0, 0)
+        self._scrubber.setAccessibleName("GIF preview frame")
         self._scrubber.setToolTip("Drag to jump to any frame.")
         self._scrubber.valueChanged.connect(self._on_scrub)
         pv_layout.addWidget(self._scrubber)

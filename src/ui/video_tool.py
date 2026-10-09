@@ -3405,6 +3405,22 @@ class VideoToolDialog(QDialog):
 
         splitter.addWidget(right_scroll)
         splitter.setSizes([240, 420, 260])
+        for control, name in (
+            (self._insert_mode_combo, "New clip insertion position"),
+            (self._stream_picker_combo, "Selected clip video stream"),
+            (self._audio_stream_picker_combo, "Selected clip audio stream"),
+            (self._trim_start_slider, "Clip trim start (frames)"),
+            (self._trim_end_slider, "Clip trim end (frames)"),
+            (self._clip_speed_slider, "Selected clip speed (percent)"),
+            (self._still_duration_spin, "Still image duration (frames)"),
+            (self._scrubber, "Video preview frame"),
+            (self._fps_slider, "Timeline frame rate (frames per second)"),
+            (self._filter_combo, "Video filter"),
+            (self._export_fmt_combo, "Video export format"),
+            (self._audio_volume_slider, "MP4 audio volume (percent)"),
+        ):
+            control.setAccessibleName(name)
+            control.setAccessibleDescription(control.toolTip())
         self._update_audio_controls()
         self._refresh_stream_controls()
         self._update_ui_state()

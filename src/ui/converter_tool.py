@@ -586,6 +586,16 @@ class ConverterTab(QWidget):
         self._lock_aspect_check.setChecked(True)
         gr_layout.addWidget(self._lock_aspect_check, 3, 0, 1, 2)
 
+        for label, control, name in (
+            (lbl_fmt, self._fmt_combo, "Output format"),
+            (lbl_quality, self._quality_spin, "Output quality (1–100)"),
+            (self._lbl_dds_variant, self._dds_variant_combo, "DDS output variant"),
+            (lbl_w, self._width_spin, "Output width (pixels)"),
+            (lbl_h, self._height_spin, "Output height (pixels)"),
+        ):
+            label.setBuddy(control)
+            control.setAccessibleName(name)
+
         rv.addWidget(grp_resize)
 
         # Log

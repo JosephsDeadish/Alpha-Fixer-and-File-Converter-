@@ -839,6 +839,16 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(self._apply_rgb_check, 16, 0, 1, 2)
 
+        for label, control in (
+            (lbl_cmin, self._clamp_min_spin), (lbl_cmax, self._clamp_max_spin),
+            (lbl_thresh, self._threshold_spin), (lbl_red, self._red_spin),
+            (lbl_green, self._green_spin), (lbl_blue, self._blue_spin),
+            (lbl_alpha_adj, self._alpha_delta_spin),
+        ):
+            label.setBuddy(control)
+            control.setAccessibleName(label.text().rstrip(":"))
+        self._threshold_spin.setAccessibleDescription(lbl_thresh.toolTip())
+
         rv.addWidget(grp_tune)
 
         # Log
