@@ -2806,7 +2806,8 @@ class SettingsDialog(QDialog):
         # Update color swatches to reflect the new preset
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
-        self._set_effect_combo(self._theme.get("_effect", "default"))
+        with QSignalBlocker(self._effect_combo):
+            self._set_effect_combo(self._theme.get("_effect", "default"))
         # Persist and broadcast immediately
         self._settings.set_theme(self._theme)
         # These controls read the persisted theme, so save before synchronizing.
@@ -2956,7 +2957,8 @@ class SettingsDialog(QDialog):
         # Sync color buttons to the imported theme
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
-        self._set_effect_combo(self._theme.get("_effect", "default"))
+        with QSignalBlocker(self._effect_combo):
+            self._set_effect_combo(self._theme.get("_effect", "default"))
         self._settings.set_theme(self._theme)
         self._sync_use_theme_combos()
         self.theme_changed.emit(self._theme)
@@ -3365,9 +3367,11 @@ class SettingsDialog(QDialog):
 
     def _update_effect_theme_info(self) -> None:
         """Refresh the click effect theme info label."""
+        from .theme_engine import THEME_EFFECTS
+
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "")
-        effect_key = theme.get("_effect", "default")
+        effect_key = THEME_EFFECTS.get(theme_name, theme.get("_effect", "default"))
         # Look up a human-friendly label for the effect key
         _effect_labels = {k: lbl.split("—")[0].strip() for k, lbl in _EFFECT_OPTIONS}
         effect_label = _effect_labels.get(effect_key, effect_key)
@@ -3615,7 +3619,7 @@ class SettingsDialog(QDialog):
         self._effect_combo.setEnabled(enabled and not use_theme)
         self._effect_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            self._update_effect_theme_info()
+            self._sync_use_theme_combos()
         else:
             # Restore last-used effect when "Use theme" is turned off (item 1).
             self._effect_combo.blockSignals(True)

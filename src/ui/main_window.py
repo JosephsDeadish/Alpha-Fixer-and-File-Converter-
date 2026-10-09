@@ -1723,9 +1723,9 @@ class MainWindow(QMainWindow):
             return
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "Panda Dark")
-        # If "use theme effect" is enabled, always auto-select from THEME_EFFECTS map
+        # Built-in themes use their mapped effect; custom themes use their metadata.
         if self._settings.get("use_theme_effect", False):
-            effect_key = THEME_EFFECTS.get(theme_name, "default")
+            effect_key = THEME_EFFECTS.get(theme_name, theme.get("_effect", "default"))
         else:
             # Prefer the theme dict's own _effect key (which the user may have
             # customised in the settings dialog) over the hardcoded THEME_EFFECTS
@@ -3382,6 +3382,10 @@ class MainWindow(QMainWindow):
                 theme = self._settings.get_theme()
                 effect_key = (theme.get("_effect")
                               or THEME_EFFECTS.get(theme.get("name", ""), "default"))
+                if self._settings.get("use_theme_effect", False):
+                    effect_key = THEME_EFFECTS.get(
+                        theme.get("name", ""), theme.get("_effect", "default")
+                    )
                 dlg_overlay.set_effect(effect_key)
                 custom_emoji = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
                 dlg_overlay.set_custom_emoji(custom_emoji.split() if custom_emoji.strip() else [])
@@ -3484,6 +3488,10 @@ class MainWindow(QMainWindow):
                 _theme = self._settings.get_theme()
                 _effect_key = (_theme.get("_effect")
                                or THEME_EFFECTS.get(_theme.get("name", ""), "default"))
+                if self._settings.get("use_theme_effect", False):
+                    _effect_key = THEME_EFFECTS.get(
+                        _theme.get("name", ""), _theme.get("_effect", "default")
+                    )
                 _ov.set_effect(_effect_key)
                 _custom = self._settings.get("custom_emoji", DEFAULT_CUSTOM_EMOJI)
                 _ov.set_custom_emoji(_custom.split() if _custom.strip() else [])

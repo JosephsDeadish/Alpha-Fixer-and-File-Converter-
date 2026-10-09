@@ -88,6 +88,77 @@ def test_theme_following_controls_show_the_new_theme_immediately(dialog):
     assert widget._trail_style_combo.currentIndex() == 3
 
 
+def test_click_effect_theme_toggle_updates_display_without_saving_manual_choice(dialog):
+    from src.ui.theme_engine import THEME_EFFECTS
+
+    widget, manager = dialog
+    widget._click_effects_theme_check.setChecked(True)
+    widget._use_theme_effect_check.setChecked(False)
+    widget._effect_combo.setCurrentIndex(widget._effect_combo.findData("shark"))
+    expected = THEME_EFFECTS[manager.get_theme()["name"]]
+    widget._use_theme_effect_check.setChecked(True)
+    assert widget._effect_combo.currentData() == expected
+    assert not widget._effect_combo.isEnabled()
+    assert "Shark" not in widget._effect_theme_info_lbl.text()
+    assert manager.get("last_effect_key_pref") == "shark"
+    widget._use_theme_effect_check.setChecked(False)
+    assert widget._effect_combo.currentData() == "shark"
+    assert widget._effect_combo.isEnabled()
+    assert manager.get_theme()["_effect"] == "shark"
+
+
+@pytest.mark.parametrize("method", ["preset", "import"])
+def test_programmatic_theme_change_preserves_manual_effect_for_restoration(
+        dialog, tmp_path, method):
+    widget, manager = dialog
+    widget._use_theme_effect_check.setChecked(False)
+    widget._effect_combo.setCurrentIndex(widget._effect_combo.findData("shark"))
+    theme = dict(PRESET_THEMES["Bat Cave"])
+    if method == "preset":
+        widget._rebuild_theme_combo(select="Bat Cave")
+        widget._on_preset_selected_live()
+    else:
+        theme["name"] = "Imported bat theme"
+        path = tmp_path / "theme.json"
+        path.write_text(json.dumps(theme), encoding="utf-8")
+        with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
+                   return_value=(str(path), "")), \
+                patch.object(QMessageBox, "information"):
+            widget._import_theme()
+    assert manager.get_theme()["_effect"] == theme["_effect"]
+    assert manager.get("last_effect_key_pref") == "shark"
+    widget._use_theme_effect_check.setChecked(True)
+    reopened = SettingsDialog(manager)
+    try:
+        reopened._use_theme_effect_check.setChecked(False)
+        assert reopened._effect_combo.currentData() == "shark"
+        assert manager.get_theme()["_effect"] == "shark"
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+
+
+@pytest.mark.parametrize("use_theme", [False, True])
+@pytest.mark.parametrize("name", ["Custom bat theme", "Panda Dark"])
+def test_theme_effect_runtime_matches_settings_display(dialog, use_theme, name):
+    from src.ui.main_window import MainWindow
+    from src.ui.theme_engine import THEME_EFFECTS
+
+    widget, manager = dialog
+    manager.set_theme(dict(PRESET_THEMES["Bat Cave"], name=name))
+    manager.set("use_theme_effect", use_theme)
+    widget._theme = manager.get_theme()
+    widget._load_values()
+    host = Mock()
+    host._settings = manager
+    host._click_effects = Mock()
+    MainWindow._apply_theme_effect(host)
+    host._click_effects.set_effect.assert_called_once_with(widget._effect_combo.currentData())
+    expected = (THEME_EFFECTS.get(name, manager.get_theme()["_effect"])
+                if use_theme else manager.get_theme()["_effect"])
+    assert widget._effect_combo.currentData() == expected
+
+
 def test_corrupt_persisted_theme_recovers_without_overwriting_disk_data(dialog):
     widget, manager = dialog
     raw = json.dumps({
