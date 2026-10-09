@@ -1653,15 +1653,24 @@ class AlphaFixerTab(QWidget):
         chk.toggled.connect(_toggle)
         atlas_chk.toggled.connect(_toggle_atlas)
         # Also keep pop-out in sync when main checkbox changes.
-        self._alpha_vis_check.toggled.connect(lambda v: chk.setChecked(v))
-        self._atlas_detect_check.toggled.connect(lambda v: atlas_chk.setChecked(v))
-        if pop_compare is not None:
-            self._alpha_vis_check.toggled.connect(
-                lambda _v: pop_compare.has_images() and self._apply_alpha_vis_to_widget(pop_compare)
-            )
-            self._atlas_detect_check.toggled.connect(
-                lambda _v: pop_compare.has_images() and self._apply_alpha_vis_to_widget(pop_compare)
-            )
+        def _sync_alpha(checked: bool) -> None:
+            chk.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        def _sync_atlas(checked: bool) -> None:
+            atlas_chk.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        self._alpha_vis_check.toggled.connect(_sync_alpha)
+        self._atlas_detect_check.toggled.connect(_sync_atlas)
+
+        def _disconnect_helpers(_result) -> None:
+            self._alpha_vis_check.toggled.disconnect(_sync_alpha)
+            self._atlas_detect_check.toggled.disconnect(_sync_atlas)
+
+        dlg.finished.connect(_disconnect_helpers)
 
     def _on_compare_docked_back(self) -> None:
         """Restore the embedded compare area after the floating dialog is closed."""

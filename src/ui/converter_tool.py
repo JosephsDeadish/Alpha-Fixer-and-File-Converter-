@@ -1064,6 +1064,7 @@ class ConverterTab(QWidget):
         self._compare.clear()
         self._source_info_lbl.setText("")
         self._output_info_lbl.setText("")
+        self._gif_speed_widget.setVisible(False)
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(int)
@@ -1135,14 +1136,7 @@ class ConverterTab(QWidget):
         effect of the chosen format and quality before committing.
         """
         if not path or not os.path.isfile(path):
-            self._stop_preview_loader()
-            self._current_preview_path = ""
-            self._before_is_animated = False
-            self._compare.clear()
-            self._source_info_lbl.setText("")
-            self._output_info_lbl.setText("")
-            self._gif_speed_widget.setVisible(False)
-            self.queue_status_changed.emit(self.get_queue_status_text())
+            self._clear_preview_state()
             return
 
         # Disconnect any stale previous loader to prevent it from overwriting
@@ -2160,8 +2154,7 @@ class ConverterTab(QWidget):
         self._preview_lbl.setVisible(True)
         self._source_info_lbl.setVisible(True)
         self._output_info_lbl.setVisible(True)
-        # gif_speed_widget only shows for animated GIFs; restore its previous
-        # visibility by letting _on_selection_changed re-evaluate it.
+        self._gif_speed_widget.setVisible(self._before_is_animated)
         self._btn_dock_back.setVisible(False)
         if hasattr(self, "_left_vsplit_normal_sizes"):
             self._left_vsplit.setSizes(self._left_vsplit_normal_sizes)

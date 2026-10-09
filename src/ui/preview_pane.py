@@ -539,6 +539,7 @@ class BeforeAfterWidget(QWidget):
                     pass
             self._popout_dialog = None
             self._apply_popout_button_state(self._popout_btn, undocked=False)
+            dlg.deleteLater()
 
         dlg.finished.connect(_on_dialog_finished)
 
@@ -553,6 +554,20 @@ class BeforeAfterWidget(QWidget):
     def hide_popout_button(self) -> None:
         """Hide the pop-out overlay button (e.g. when widget is already inside a pop-out dialog)."""
         self._popout_btn.hide()
+
+    def close_popout_dialog(self) -> None:
+        dlg = self._popout_dialog
+        if dlg is None:
+            return
+        try:
+            dlg.close()
+        except RuntimeError:
+            self._popout_dialog = None
+
+    def closeEvent(self, event):
+        self.close_popout_dialog()
+        self._stop_movie()
+        super().closeEvent(event)
 
     # ------------------------------------------------------------------
     # Theme tinting
@@ -1266,17 +1281,7 @@ class ImagePreviewPane(QWidget):
         self._set_placeholder()
         self._meta_label.setText("Select a file to preview")
 
-    def close_popout_dialog(self) -> None:
-        dlg = self._popout_dialog
-        if dlg is None:
-            return
-        try:
-            dlg.close()
-        except RuntimeError:
-            self._popout_dialog = None
-
     def closeEvent(self, event):
-        self.close_popout_dialog()
         self._stop_loader()
         super().closeEvent(event)
 

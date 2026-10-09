@@ -44,6 +44,7 @@ All three tools confirm replacing an existing file when an automatically added o
 History exports (TXT, CSV, JSON, HTML) and Converter failure reports (TXT, JSON) use the same overwrite confirmation and staged-save protection, including preserving an existing report if writing fails.
 Confirmed builder exports pause preview playback. Canceling the save dialog leaves playback unchanged. GIF/Video exports also honor cancellation after the last rendered frame, and Video Builder checks again before starting audio muxing. Encoding and muxing themselves are synchronous and cannot be interrupted mid-call.
 GIF Builder reordering preserves the playing frame and refreshes the selected frame's delay controls. Frames using global timing show the current global delay; enabling an override starts from that value.
+Floating comparisons release their windows when redocked or closed. Alpha helper switches stay synchronized only with the currently open comparison, and Converter restores GIF speed controls on redock without resetting playback speed. Clearing a Converter preview also closes its floating comparison.
 Trim edits immediately refresh the paused preview, including a playhead clamped by a shorter timeline. Preview FPS changes update active playback and duration summaries without restarting playback. Single-frame timelines remain exportable, but play and scrubbing are disabled.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.
