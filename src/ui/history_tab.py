@@ -1304,6 +1304,7 @@ class HistoryTab(QWidget):
         if not path:
             return
 
+        chosen_path = path
         final_ext = _filter_default_ext(selected_filter)
         current_ext = Path(path).suffix.lower()
         if final_ext and current_ext != final_ext and not (
@@ -1312,6 +1313,9 @@ class HistoryTab(QWidget):
             path = str(Path(path).with_suffix(final_ext))
         elif not current_ext:
             path = str(Path(path).with_suffix(".txt"))
+        from ._ui_utils import confirm_normalized_save_path, staged_output_path
+        if not confirm_normalized_save_path(self, chosen_path, path):
+            return
 
         # Collect rows in the same visible order shown to the user.
         if tab_idx in (0, 1):
@@ -1336,7 +1340,7 @@ class HistoryTab(QWidget):
 
             elif ext == "json":
                 data = [dict(zip(headers, row)) for row in rows]
-                with open(path, "w", encoding="utf-8") as f:
+                with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                     _json.dump(data, f, indent=2, ensure_ascii=False)
 
             elif ext in ("html", "htm"):
@@ -1356,7 +1360,7 @@ class HistoryTab(QWidget):
                     f"<table><caption>{title} History</caption><thead><tr>{th_cells}</tr></thead><tbody>{tr_rows}</tbody></table>"
                     "</body></html>"
                 )
-                with open(path, "w", encoding="utf-8") as f:
+                with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                     f.write(content)
 
             else:
@@ -1373,7 +1377,7 @@ class HistoryTab(QWidget):
                 sep = "-" * len(header_line)
                 lines = [header_line, sep] + [_fmt_row(r) for r in txt_rows]
                 content = "\n".join(lines) + "\n"
-                with open(path, "w", encoding="utf-8") as f:
+                with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                     f.write(content)
 
             QMessageBox.information(
@@ -1394,5 +1398,6 @@ class HistoryTab(QWidget):
             writer.writerow(headers)
             writer.writerows(rows)
             content = buf.getvalue()
-        with open(path, "w", newline="", encoding="utf-8") as f:
+        from ._ui_utils import staged_output_path
+        with staged_output_path(path) as staged_path, open(staged_path, "w", newline="", encoding="utf-8") as f:
             f.write(content)

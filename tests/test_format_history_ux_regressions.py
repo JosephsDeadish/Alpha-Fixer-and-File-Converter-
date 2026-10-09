@@ -1,5 +1,6 @@
 import csv
 import json
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -7,7 +8,7 @@ from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QImage
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.core.settings_manager import SettingsManager
 from src.ui.converter_tool import ConverterTab
@@ -194,3 +195,111 @@ def test_legacy_completed_history_exports_keep_status_and_zero_remaining(setting
     finally:
         widget.close()
         sip.delete(widget)
+
+
+@pytest.fixture(params=[
+    ("history", "txt", "Text Files (*.txt)"),
+    ("history", "csv", "CSV Files (*.csv)"),
+    ("history", "json", "JSON Files (*.json)"),
+    ("history", "html", "HTML Files (*.html *.htm)"),
+    ("converter", "txt", "Text Report (*.txt)"),
+    ("converter", "json", "JSON Report (*.json)"),
+])
+def report(request, settings):
+    kind, extension, selected_filter = request.param
+    if kind == "history":
+        settings.add_converter_history({
+            "timestamp": "2026-10-09T12:00:00", "format": "PNG",
+            "file_count": 1, "success": 0, "errors": 1, "files": ["source.png"],
+        })
+        widget = HistoryTab(settings)
+        callback = widget._export_history
+        success_patch = patch.object(QMessageBox, "information")
+    else:
+        widget = request.getfixturevalue("converter")
+        widget._last_run_format = "PNG"
+        widget._last_run_files = ["source.png"]
+        widget._batch_error_reasons.update({"decode failed": 1})
+        widget._batch_error_files = {"decode failed": ["source.png"]}
+        widget._batch_failure_details = [{"source": "source.png", "reason": "decode failed"}]
+        callback = widget._export_failure_report
+        success_patch = patch.object(widget, "_log_msg")
+    with success_patch as success:
+        yield widget, callback, extension, selected_filter, success
+    if kind == "history":
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("accept", [False, True])
+def test_report_normalized_overwrite_confirms_and_reports_final_path(report, tmp_path, accept):
+    widget, export, extension, selected_filter, success = report
+    chosen = tmp_path / "report"
+    final = chosen.with_suffix("." + extension)
+    final.write_bytes(b"existing report")
+    reply = QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(chosen), selected_filter)), \
+            patch.object(QMessageBox, "question", return_value=reply) as question:
+        export()
+    question.assert_called_once()
+    assert str(final) in question.call_args.args[2]
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    if accept:
+        assert "source.png" in final.read_text(encoding="utf-8")
+        success.assert_called_once()
+        assert str(final) in str(success.call_args)
+        assert ".alpha_fixer_save_" not in str(success.call_args)
+    else:
+        assert final.read_bytes() == b"existing report"
+        success.assert_not_called()
+    assert not chosen.exists()
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+
+
+def test_report_unchanged_destination_does_not_prompt_twice(report, tmp_path):
+    widget, export, extension, selected_filter, success = report
+    final = tmp_path / ("report." + extension)
+    final.write_bytes(b"existing")
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(final), selected_filter)), \
+            patch.object(QMessageBox, "question") as question:
+        export()
+    question.assert_not_called()
+    assert "source.png" in final.read_text(encoding="utf-8")
+    success.assert_called_once()
+
+
+@pytest.mark.parametrize("failure", ["write", "replace"])
+def test_report_failure_preserves_existing_output_without_success(report, tmp_path, failure):
+    widget, export, extension, selected_filter, success = report
+    final = tmp_path / ("report." + extension)
+    final.write_bytes(b"existing report")
+    real_open = open
+
+    class FailingWriter:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def write(self, text):
+            self.stream.write(text[:1])
+            raise OSError("disk write failed")
+
+    @contextmanager
+    def failing_open(path, *args, **kwargs):
+        with real_open(path, *args, **kwargs) as stream:
+            yield FailingWriter(stream)
+
+    target = widget.__class__.__module__ + ".open"
+    failure_patch = (
+        patch(target, failing_open, create=True) if failure == "write"
+        else patch("os.replace", side_effect=PermissionError("destination locked"))
+    )
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(final), selected_filter)), failure_patch, \
+            patch.object(QMessageBox, "warning") as warning:
+        export()
+    warning.assert_called_once()
+    assert final.read_bytes() == b"existing report"
+    success.assert_not_called()
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))

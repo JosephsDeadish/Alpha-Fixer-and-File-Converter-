@@ -1954,17 +1954,21 @@ class ConverterTab(QWidget):
         )
         if not path:
             return
+        chosen_path = path
+        is_json = path.lower().endswith(".json") or "json" in selected_filter.lower()
+        extension = ".json" if is_json else ".txt"
+        if not path.lower().endswith(extension):
+            path = f"{path}{extension}"
+        from ._ui_utils import confirm_normalized_save_path, staged_output_path
+        if not confirm_normalized_save_path(self, chosen_path, path):
+            return
         try:
-            if path.lower().endswith(".json") or "json" in selected_filter.lower():
+            if is_json:
                 payload = self._build_failure_report_payload()
-                if not path.lower().endswith(".json"):
-                    path = f"{path}.json"
-                with open(path, "w", encoding="utf-8") as f:
+                with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                     json.dump(payload, f, indent=2)
             else:
-                if not path.lower().endswith(".txt"):
-                    path = f"{path}.txt"
-                with open(path, "w", encoding="utf-8") as f:
+                with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                     f.write(self._build_failure_report_text())
             self._log_msg(f"📁 Failure report exported: {path}")
         except Exception as exc:
