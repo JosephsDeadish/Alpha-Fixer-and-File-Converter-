@@ -8949,10 +8949,14 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("Installing runtime dependencies from requirements.txt", sh_src)
         self.assertIn("python -m pip install -r requirements.txt", sh_src)
         self.assertIn("Build capability audit:", sh_src)
+        self.assertIn("ffprobe bundling source ready", sh_src)
+        self.assertIn("No ffprobe source found for packaging", sh_src)
         self.assertIn("MAGICK_HOME", sh_src)
         self.assertIn("Installing runtime dependencies from requirements.txt", bat_src)
         self.assertIn("python -m pip install -r requirements.txt", bat_src)
         self.assertIn("Build capability audit:", bat_src)
+        self.assertIn("ffprobe bundling source ready", bat_src)
+        self.assertIn("No ffprobe source found for packaging", bat_src)
         self.assertIn("MAGICK_HOME", bat_src)
 
     def test_pyinstaller_specs_bundle_imageio_and_ffmpeg_metadata(self):
@@ -8968,6 +8972,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
             self.assertIn('collect_data_files("imageio_ffmpeg")', src)
             self.assertIn('copy_metadata("imageio_ffmpeg")', src)
             self.assertIn("def _optional_ffprobe_bundle():", src)
+            self.assertIn('for env_name in ("ALPHA_FIXER_FFPROBE_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE"):', src)
+            self.assertIn('configured_ffmpeg = os.environ.get("IMAGEIO_FFMPEG_EXE")', src)
             self.assertIn('binaries.append((resolved_text, "imageio_ffmpeg/binaries"))', src)
             self.assertIn("def _optional_wand_bundle():", src)
             self.assertIn('os.environ.get("MAGICK_HOME")', src)
@@ -9172,6 +9178,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_linux_dependency_installer_includes_qxcb_runtime_packages(self):
         src = self._src("../scripts/install_linux_deps.sh")
+        self.assertIn("ffmpeg", src)
+        self.assertIn("ffmpeg-free", src)
         self.assertIn("libxcb-cursor0", src)
         self.assertIn("libxcb-icccm4", src)
         self.assertIn("libxcb-image0", src)

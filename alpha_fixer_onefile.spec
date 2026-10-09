@@ -162,6 +162,17 @@ def _optional_ffprobe_bundle():
     binaries = []
     seen: set[str] = set()
     candidates = []
+    for env_name in ("ALPHA_FIXER_FFPROBE_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE"):
+        configured = os.environ.get(env_name)
+        if configured:
+            candidates.append(Path(configured))
+    configured_ffmpeg = os.environ.get("IMAGEIO_FFMPEG_EXE")
+    if configured_ffmpeg:
+        configured_ffmpeg_path = Path(configured_ffmpeg)
+        candidates.extend([
+            configured_ffmpeg_path.with_name("ffprobe"),
+            configured_ffmpeg_path.with_name("ffprobe.exe"),
+        ])
     try:
         import imageio_ffmpeg
 

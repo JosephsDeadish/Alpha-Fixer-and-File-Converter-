@@ -4,7 +4,7 @@
 #
 # Installs the system-level libraries that PyQt6 requires on Linux,
 # including the extra X11/XCB libraries needed by Qt's qxcb platform plugin.
-# Run once before launching the application for the first time.
+# Run once before launching the application or building packaged validation bundles.
 #
 # Usage:
 #   bash scripts/install_linux_deps.sh
@@ -45,6 +45,7 @@ echo ""
 case "$DISTRO" in
   debian)
     PKGS=(
+      ffmpeg
       libegl1 libgl1 libgles2 libpulse0 libxkbcommon0 libdbus-1-3
       libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
       libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0
@@ -55,6 +56,7 @@ case "$DISTRO" in
     ;;
   fedora)
     PKGS=(
+      ffmpeg-free
       mesa-libEGL mesa-libGL mesa-libGLES pulseaudio-libs libxkbcommon
       libxkbcommon-x11 dbus-libs xcb-util xcb-util-cursor xcb-util-image
       xcb-util-keysyms xcb-util-renderutil xcb-util-wm
@@ -64,6 +66,7 @@ case "$DISTRO" in
     ;;
   arch)
     PKGS=(
+      ffmpeg
       mesa libpulse libxkbcommon libxkbcommon-x11 dbus
       xcb-util xcb-util-cursor xcb-util-image xcb-util-keysyms
       xcb-util-renderutil xcb-util-wm
@@ -73,6 +76,7 @@ case "$DISTRO" in
     ;;
   opensuse)
     PKGS=(
+      ffmpeg
       libEGL1 libGL1 Mesa-libEGL1 libpulse0 libxkbcommon0 libdbus-1-3
       libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
       libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0

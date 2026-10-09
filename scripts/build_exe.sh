@@ -28,6 +28,9 @@ python - <<'PY'
 import importlib.util
 import os
 import ctypes
+import shutil
+import sys
+from pathlib import Path
 
 has_wand = importlib.util.find_spec("wand") is not None
 magick_home = os.environ.get("MAGICK_HOME") or os.environ.get("IMAGEMAGICK_HOME")
@@ -51,8 +54,44 @@ for name in runtime_libs:
         ctypes.CDLL(name)
     except OSError:
         missing_runtime_libs.append(name)
+
+ffprobe_source = ""
+for env_name in ("ALPHA_FIXER_FFPROBE_EXE", "IMAGEIO_FFPROBE_EXE", "FFPROBE_EXE"):
+    configured = os.environ.get(env_name, "").strip()
+    if configured and Path(configured).is_file():
+        ffprobe_source = configured
+        break
+if not ffprobe_source:
+    configured_ffmpeg = os.environ.get("IMAGEIO_FFMPEG_EXE", "").strip()
+    if configured_ffmpeg:
+        for candidate in (Path(configured_ffmpeg).with_name("ffprobe"), Path(configured_ffmpeg).with_name("ffprobe.exe")):
+            if candidate.is_file():
+                ffprobe_source = str(candidate)
+                break
+if not ffprobe_source:
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        ffmpeg_exe = ""
+    if ffmpeg_exe:
+        for candidate in (Path(ffmpeg_exe).with_name("ffprobe"), Path(ffmpeg_exe).with_name("ffprobe.exe")):
+            if candidate.is_file():
+                ffprobe_source = str(candidate)
+                break
+if not ffprobe_source:
+    ffprobe_source = shutil.which("ffprobe") or shutil.which("ffprobe.exe") or ""
+
 print("Build capability audit:")
 print("  - imageio/imageio-ffmpeg runtime support will be bundled by the PyInstaller spec.")
+if ffprobe_source:
+    print(f"  - ffprobe bundling source ready: {ffprobe_source}")
+else:
+    print("  - WARNING: No ffprobe source found for packaging, so packaged odd-container probing will fail strict validation.")
+    if sys.platform == "darwin":
+        print("    Install it first with: brew install ffmpeg")
+    else:
+        print("    Install it first with: bash scripts/install_linux_deps.sh")
 if has_wand and magick_home:
     print(f"  - DDS compressed variants can be bundled for out-of-box builds (wand + MAGICK_HOME={magick_home}).")
 else:
