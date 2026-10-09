@@ -9554,7 +9554,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_settings_dialog_has_clear_general_and_sound_guidance(self):
         src = self._src("ui/settings_dialog.py")
-        self.assertIn("Quick guide: Theme changes colors and visuals, General handles layout/tooltips/effects,", src)
+        self.assertIn("Quick guide: Theme changes colors and visuals, General handles layout and tooltips,", src)
+        self.assertIn("Effects controls optional visual effects.", src)
         self.assertIn("Sound settings are kept separate from visual theme controls so it is easier to tell", src)
 
     def test_theme_ambient_tooltips_keep_panda_mapping_consistent(self):

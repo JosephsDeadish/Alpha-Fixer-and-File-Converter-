@@ -4,7 +4,9 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
+from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QGroupBox, QScrollArea, QLabel
 
 from src.core.settings_manager import SettingsManager
@@ -442,6 +444,29 @@ def test_large_font_settings_guidance_remains_reachable_in_small_window(dialog, 
                 assert label.wordWrap()
                 if label.isVisible():
                     assert label.height() >= label.minimumSizeHint().height()
+
+
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+def test_reset_hover_and_pressed_use_readable_theme_surface(dialog, app, name):
+    from src.ui.theme_engine import build_stylesheet
+
+    widget, manager = dialog
+    theme = PRESET_THEMES[name]
+    widget.setStyleSheet(build_stylesheet(theme))
+    widget.show()
+    app.processEvents()
+    button = widget._btn_reset
+    QTest.mouseMove(widget, widget.rect().topRight())
+    app.processEvents()
+    QTest.mouseMove(button, button.rect().center())
+    app.sendEvent(button, QEvent(QEvent.Type.Enter))
+    app.processEvents()
+    assert button.grab().toImage().pixelColor(4, button.height() // 2) == QColor(theme["surface"])
+    QTest.mousePress(button, Qt.MouseButton.LeftButton, pos=button.rect().center())
+    app.processEvents()
+    assert button.grab().toImage().pixelColor(4, button.height() // 2) == QColor(theme["surface"])
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+        QTest.mouseRelease(button, Qt.MouseButton.LeftButton, pos=button.rect().center())
 
 
 @pytest.mark.parametrize("finish", ["accept", "reject", "close"])

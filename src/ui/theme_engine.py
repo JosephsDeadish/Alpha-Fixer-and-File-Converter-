@@ -3893,6 +3893,11 @@ QPushButton#resetBtn {{
     border-radius: 4px;
     padding: 4px 8px;
 }}
+QPushButton#resetBtn:hover, QPushButton#resetBtn:pressed {{
+    color: {t['text']};
+    background-color: {t['surface']};
+    border-color: {t['error']};
+}}
 QLabel#section {{
     font-size: 13px;
     font-weight: 700;
