@@ -2,6 +2,9 @@
 
 A panda-themed desktop application for image, animation, and video processing:
 
+The desktop interface uses **Qt 6 through PyQt6**, not Tkinter. Both release
+bundle specifications exclude Tkinter; no toolkit migration is required.
+
 ## Tools
 
 ### 🖼 Alpha Fixer
@@ -312,6 +315,12 @@ the widget tree; disabling a background restores each host's previous background
 fill setting. Regression checks cover repeated PNG/GIF background and theme changes
 and unmocked builder shutdown, but native displays and screen readers still require
 separate acceptance testing.
+
+Main-window restore and monitor-change handling use the screen with the greatest
+window overlap instead of always resizing or relocating to the primary display.
+Disconnected-monitor recovery uses the primary (or first available) screen.
+Window decorations, taskbar-reserved areas and smaller-screen minimum-size caps
+are included when fitting the window; negative-coordinate monitors remain valid.
 
 ### Real corpus validation
 

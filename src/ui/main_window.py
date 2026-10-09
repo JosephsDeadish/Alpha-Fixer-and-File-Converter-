@@ -1312,7 +1312,7 @@ class MainWindow(QMainWindow):
     # Window setup / minimum-size helpers (screen-adaptive)
     # ------------------------------------------------------------------
 
-    def _update_minimum_size(self) -> None:
+    def _update_minimum_size(self, screen=None) -> None:
         """Recompute and apply the window's minimum size based on the current
         screen's available geometry.
 
@@ -1321,15 +1321,19 @@ class MainWindow(QMainWindow):
         we shrink the minimum proportionally so the window can still be shown
         without the OS forcing it to overflow the working area.
         """
-        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            screen, _ = self._screen_for_geometry(self.frameGeometry())
         if screen is not None:
             ag = screen.availableGeometry()
+            left, top, right, bottom = self._window_frame_margins()
+            available_w = max(1, ag.width() - left - right)
+            available_h = max(1, ag.height() - top - bottom)
             # Use at most 75 % of the available width/height so there is
             # meaningful margin on common laptop screens (e.g. 1366×768).
             # The caps of 900×700 are the design-target minimums; the floors
             # of 640×520 ensure the UI is still usable on very small displays.
-            min_w = min(900, max(640, int(ag.width()  * 0.75)))
-            min_h = min(700, max(520, int(ag.height() * 0.75)))
+            min_w = min(available_w, 900, max(640, int(available_w * 0.75)))
+            min_h = min(available_h, 700, max(520, int(available_h * 0.75)))
         else:
             min_w, min_h = 900, 700
         self.setMinimumSize(min_w, min_h)
@@ -2455,7 +2459,59 @@ class MainWindow(QMainWindow):
     # Geometry / state
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _screen_for_geometry(geometry: QRect):
+        """Choose the greatest available-area overlap, then primary/list order."""
+        screens = [
+            screen for screen in QApplication.screens()
+            if not screen.availableGeometry().isEmpty()
+        ]
+        if not screens:
+            return None, False
+        primary = QApplication.primaryScreen()
+        fallback = primary if primary in screens else screens[0]
+
+        def overlap(screen):
+            intersection = geometry.intersected(screen.availableGeometry())
+            return max(0, intersection.width()) * max(0, intersection.height())
+
+        screen = max(screens, key=lambda item: (overlap(item), item == fallback))
+        on_screen = overlap(screen) > 0
+        return (screen if on_screen else fallback), on_screen
+
+    def _window_frame_margins(self):
+        geometry, frame = self.geometry(), self.frameGeometry()
+        return (
+            max(0, geometry.x() - frame.x()),
+            max(0, geometry.y() - frame.y()),
+            max(0, frame.right() - geometry.right()),
+            max(0, frame.bottom() - geometry.bottom()),
+        )
+
+    def _fit_geometry_to_screen(self, geometry: QRect) -> QRect:
+        """Fit client geometry and its decorations to the selected working area."""
+        left, top, right, bottom = self._window_frame_margins()
+        frame = geometry.adjusted(-left, -top, right, bottom)
+        screen, on_screen = self._screen_for_geometry(frame)
+        if screen is None:
+            return QRect(geometry)
+        ag = screen.availableGeometry()
+        # Lower the old monitor's minimum before Qt applies the smaller size.
+        self._update_minimum_size(screen)
+        w = max(self.minimumWidth(), min(geometry.width(), max(1, ag.width() - left - right)))
+        h = max(self.minimumHeight(), min(geometry.height(), max(1, ag.height() - top - bottom)))
+        frame_w, frame_h = w + left + right, h + top + bottom
+        x, y = frame.x(), frame.y()
+        if not on_screen:
+            x = ag.x() + max(0, (ag.width() - frame_w) // 2)
+            y = ag.y() + max(0, (ag.height() - frame_h) // 2)
+        x = max(ag.x(), min(x, ag.x() + ag.width() - frame_w))
+        y = max(ag.y(), min(y, ag.y() + ag.height() - frame_h))
+        return QRect(x + left, y + top, w, h)
+
     def _restore_geometry(self):
+        if self.isMaximized() or self.isFullScreen():
+            return
         if self._settings.get("window_maximized", False):
             self.showMaximized()
             return
@@ -2463,37 +2519,7 @@ class MainWindow(QMainWindow):
         y = self._settings.get("window_y")
         w = self._settings.get("window_w")
         h = self._settings.get("window_h")
-        # Guard against the window being positioned entirely off-screen
-        # (e.g. after a secondary monitor is disconnected).  We check that at
-        # least a strip of the title bar is visible on *some* available screen.
-        _MIN_VISIBLE_W = 100   # minimum logical pixels of title bar that must be visible
-        _MIN_VISIBLE_H = 50    # height of the title-bar strip we check
-        title_bar_strip = QRect(x, y, max(w, _MIN_VISIBLE_W), _MIN_VISIBLE_H)
-        screens = QApplication.screens()
-        on_screen = any(
-            scr.availableGeometry().intersects(title_bar_strip)
-            for scr in screens
-        )
-        primary = QApplication.primaryScreen()
-        if primary is None and screens:
-            primary = screens[0]
-        if not on_screen:
-            # Centre on the primary (or first available) screen instead.
-            if primary is not None:
-                ag = primary.availableGeometry()
-                x = ag.x() + max(0, (ag.width()  - w) // 2)
-                y = ag.y() + max(0, (ag.height() - h) // 2)
-        # Clamp saved size so it doesn't exceed the available area
-        # (e.g. the user previously ran on a larger monitor or higher resolution)
-        # and clamp position so the window is fully within the available area.
-        if primary is not None:
-            ag = primary.availableGeometry()
-            w = min(w, ag.width())
-            h = min(h, ag.height())
-            # Shift the window left/up if the right/bottom edge extends off screen.
-            x = max(ag.x(), min(x, ag.x() + ag.width()  - w))
-            y = max(ag.y(), min(y, ag.y() + ag.height() - h))
-        self.setGeometry(x, y, w, h)
+        self.setGeometry(self._fit_geometry_to_screen(QRect(x, y, w, h)))
 
     def _save_geometry(self):
         self._settings.set("window_maximized", self.isMaximized())
@@ -2512,44 +2538,20 @@ class MainWindow(QMainWindow):
         • Changes the system DPI / display-scale setting
         • Connects or disconnects a monitor
 
-        If the title bar is entirely off-screen the window is centred on the
-        primary (or first available) screen.  The window size is also clamped
-        so it never exceeds the available screen area.
+        Keep the monitor with the greatest overlap, or centre on the primary
+        (or first available) screen if disconnected.  Both the decorated size
+        and position are clamped to that screen's available area.
         """
         if self.isMaximized() or self.isFullScreen():
             return
-        g = self.geometry()
-        x, y, w, h = g.x(), g.y(), g.width(), g.height()
-        _MIN_VISIBLE_W = 100
-        _MIN_VISIBLE_H = 50
-        title_bar_strip = QRect(x, y, max(w, _MIN_VISIBLE_W), _MIN_VISIBLE_H)
-        screens = QApplication.screens()
-        on_screen = any(
-            scr.availableGeometry().intersects(title_bar_strip)
-            for scr in screens
-        )
-        primary = QApplication.primaryScreen()
-        if primary is None and screens:
-            primary = screens[0]
-        if primary is not None:
-            ag = primary.availableGeometry()
-            # Clamp size to available area
-            w = min(w, ag.width())
-            h = min(h, ag.height())
-            if not on_screen:
-                x = ag.x() + max(0, (ag.width()  - w) // 2)
-                y = ag.y() + max(0, (ag.height() - h) // 2)
-            self.setGeometry(x, y, w, h)
-        elif not on_screen and screens:
-            # No primary screen object – just re-centre on the first screen
-            ag = screens[0].availableGeometry()
-            w = min(w, ag.width())
-            h = min(h, ag.height())
-            self.setGeometry(
-                ag.x() + max(0, (ag.width()  - w) // 2),
-                ag.y() + max(0, (ag.height() - h) // 2),
-                w, h,
-            )
+        geometry = self._fit_geometry_to_screen(self.geometry())
+        if geometry != self.geometry():
+            self.setGeometry(geometry)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        # Native frame margins may only be known after the first show.
+        QTimer.singleShot(0, self._clamp_to_screen)
 
     def _on_screens_changed(self, *_args) -> None:
         """Handle monitor added/removed or primary-screen change.
