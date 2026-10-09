@@ -3876,6 +3876,23 @@ QLabel#subheader {{
     font-weight: 600;
     color: {t['text_secondary']};
 }}
+QLabel[settingsHint="true"] {{
+    color: {t['text']};
+    margin-left: 4px;
+}}
+QLabel[settingsGuide="true"] {{
+    color: {t['text']};
+    background-color: {t['surface']};
+    padding: 6px 8px;
+    border: 1px solid {t['border']};
+    border-radius: 6px;
+}}
+QPushButton#resetBtn {{
+    color: {t['error']};
+    border: 1px solid {t['error']};
+    border-radius: 4px;
+    padding: 4px 8px;
+}}
 QLabel#section {{
     font-size: 13px;
     font-weight: 700;

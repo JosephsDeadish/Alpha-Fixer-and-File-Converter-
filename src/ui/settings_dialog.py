@@ -314,11 +314,13 @@ class SettingsDialog(QDialog):
         self._custom_bg_theme_info_lbl = QLabel(
             "Theme background override is on. Turn it off to use the selected media file."
         )
-        self._custom_bg_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._custom_bg_theme_info_lbl.setProperty("settingsHint", True)
+        self._custom_bg_theme_info_lbl.setWordWrap(True)
         self._custom_bg_theme_info_lbl.setVisible(False)
         _cbg_vl.addWidget(self._custom_bg_theme_info_lbl)
         self._custom_bg_status_lbl = QLabel("")
-        self._custom_bg_status_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._custom_bg_status_lbl.setProperty("settingsHint", True)
+        self._custom_bg_status_lbl.setWordWrap(True)
         self._custom_bg_status_lbl.setWordWrap(True)
         self._custom_bg_status_lbl.setVisible(False)
         _cbg_vl.addWidget(self._custom_bg_status_lbl)
@@ -466,7 +468,8 @@ class SettingsDialog(QDialog):
         _ce_sub_vl.addWidget(self._use_theme_effect_check)
         # Info label shown when "Use theme effect" is ON (replaces manual combo, item 4)
         self._effect_theme_info_lbl = QLabel("Theme effect: —")
-        self._effect_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._effect_theme_info_lbl.setProperty("settingsHint", True)
+        self._effect_theme_info_lbl.setWordWrap(True)
         self._effect_theme_info_lbl.setVisible(False)
         _ce_sub_vl.addWidget(self._effect_theme_info_lbl)
         self._effect_inner_widget = QWidget()
@@ -738,7 +741,8 @@ class SettingsDialog(QDialog):
         bg_drip_sub_layout.addWidget(self._use_theme_drip_check)
         # Info label shown when use-theme is on (replaces the manual drip combo)
         self._bg_drip_theme_lbl = QLabel("Theme drip: —")
-        self._bg_drip_theme_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._bg_drip_theme_lbl.setProperty("settingsHint", True)
+        self._bg_drip_theme_lbl.setWordWrap(True)
         self._bg_drip_theme_lbl.setVisible(False)
         bg_drip_sub_layout.addWidget(self._bg_drip_theme_lbl)
         bg_drip_inner = QHBoxLayout()
@@ -824,7 +828,8 @@ class SettingsDialog(QDialog):
         _bf_sub_vl.addWidget(self._use_theme_flock_check)
         # Info label shown when "Use theme flock" is ON (replaces the manual combo, item 4)
         self._bg_flock_theme_lbl = QLabel("Theme flock: —")
-        self._bg_flock_theme_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._bg_flock_theme_lbl.setProperty("settingsHint", True)
+        self._bg_flock_theme_lbl.setWordWrap(True)
         self._bg_flock_theme_lbl.setVisible(False)
         _bf_sub_vl.addWidget(self._bg_flock_theme_lbl)
         self._bg_flock_combo = QComboBox()
@@ -891,7 +896,8 @@ class SettingsDialog(QDialog):
         _ba_sub_vl.addWidget(self._use_theme_ambient_check)
         # Info label shown when "Use theme ambient" is ON (replaces the manual combo, item 4)
         self._bg_ambient_theme_lbl = QLabel("Theme ambient: —")
-        self._bg_ambient_theme_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._bg_ambient_theme_lbl.setProperty("settingsHint", True)
+        self._bg_ambient_theme_lbl.setWordWrap(True)
         self._bg_ambient_theme_lbl.setVisible(False)
         _ba_sub_vl.addWidget(self._bg_ambient_theme_lbl)
         self._bg_ambient_combo = QComboBox()
@@ -968,9 +974,8 @@ class SettingsDialog(QDialog):
         _notif_sub_vl.addWidget(self._use_theme_notif_check)
         # Info label shown when "Use theme" is ON
         self._notif_theme_info_lbl = QLabel("Using theme styling for floating notifications")
-        self._notif_theme_info_lbl.setStyleSheet(
-            "color: #aaa; font-size: 10px; margin-left: 4px;"
-        )
+        self._notif_theme_info_lbl.setProperty("settingsHint", True)
+        self._notif_theme_info_lbl.setWordWrap(True)
         self._notif_theme_info_lbl.setVisible(True)
         _notif_sub_vl.addWidget(self._notif_theme_info_lbl)
         notif_layout.addWidget(self._notif_overlay_sub)
@@ -1016,7 +1021,8 @@ class SettingsDialog(QDialog):
         _trail_sub_vl.addWidget(self._use_theme_trail_check)
         # Info label shown when "Use theme trail" is ON (replaces manual color/style, item 4)
         self._trail_theme_info_lbl = QLabel("Theme trail: —")
-        self._trail_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._trail_theme_info_lbl.setProperty("settingsHint", True)
+        self._trail_theme_info_lbl.setWordWrap(True)
         self._trail_theme_info_lbl.setVisible(False)
         _trail_sub_vl.addWidget(self._trail_theme_info_lbl)
         # Manual color + style widget (hidden when use_theme is ON)
@@ -1171,7 +1177,8 @@ class SettingsDialog(QDialog):
         _cursor_sub_vl.addWidget(self._use_theme_cursor_check)
         # Info label shown when "Use theme cursor" is ON (item 4)
         self._cursor_theme_info_lbl = QLabel("Theme cursor: —")
-        self._cursor_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._cursor_theme_info_lbl.setProperty("settingsHint", True)
+        self._cursor_theme_info_lbl.setWordWrap(True)
         self._cursor_theme_info_lbl.setVisible(False)
         _cursor_sub_vl.addWidget(self._cursor_theme_info_lbl)
         # Manual style widget (hidden when use_theme is ON)
@@ -1280,7 +1287,8 @@ class SettingsDialog(QDialog):
         # detection fails (item 1 — combo stays visible, not replaced by label).
         self._sound_theme_info_lbl = QLabel("")
         self._sound_theme_info_lbl.setWordWrap(True)
-        self._sound_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
+        self._sound_theme_info_lbl.setProperty("settingsHint", True)
+        self._sound_theme_info_lbl.setWordWrap(True)
         _s.addWidget(self._sound_theme_info_lbl, 1, 0, 1, 2)
         self._sound_theme_info_lbl.setVisible(False)
 
@@ -1497,7 +1505,8 @@ class SettingsDialog(QDialog):
         _bas_vl.addLayout(_ba_style_row)
         _ba_vl.addWidget(self._btn_anim_style_widget)
         self._btn_anim_theme_info_lbl = QLabel("Theme animation: —")
-        self._btn_anim_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._btn_anim_theme_info_lbl.setProperty("settingsHint", True)
+        self._btn_anim_theme_info_lbl.setWordWrap(True)
         self._btn_anim_theme_info_lbl.setVisible(False)
         _ba_vl.addWidget(self._btn_anim_theme_info_lbl)
         btn_anim_gl.addWidget(self._btn_anim_sub, 1, 0, 1, 2)
@@ -1602,7 +1611,8 @@ class SettingsDialog(QDialog):
         _ban_sub_gl.addWidget(self._banner_use_theme_anim_check, 1, 0, 1, 2)
         # Info label shown when use-theme is ON (item 4)
         self._banner_theme_info_lbl = QLabel("Theme animation: —")
-        self._banner_theme_info_lbl.setStyleSheet("color: #aaa; font-size: 10px; margin-left: 4px;")
+        self._banner_theme_info_lbl.setProperty("settingsHint", True)
+        self._banner_theme_info_lbl.setWordWrap(True)
         self._banner_theme_info_lbl.setVisible(False)
         _ban_sub_gl.addWidget(self._banner_theme_info_lbl, 2, 0, 1, 2)
         # Add sub-container to banner_gl and wire visibility to enable checkbox
@@ -1651,14 +1661,12 @@ class SettingsDialog(QDialog):
         gv.setSpacing(6)
 
         general_intro = QLabel(
-            "Quick guide: Theme changes colors and visuals, General handles layout/tooltips/effects, "
-            "and Sound controls clicks and ambience. Most changes apply immediately."
+            "Quick guide: Theme changes colors and visuals, General handles layout and tooltips, "
+            "Sound controls clicks and ambience, and Effects controls optional visual effects. "
+            "Most changes apply immediately."
         )
         general_intro.setWordWrap(True)
-        general_intro.setStyleSheet(
-            "padding: 6px 8px; border: 1px solid rgba(255,255,255,40); "
-            "border-radius: 6px; color: #bbb;"
-        )
+        general_intro.setProperty("settingsGuide", True)
         gv.addWidget(general_intro)
 
         # ---- Tooltip Appearance GroupBox ----
@@ -1725,7 +1733,7 @@ class SettingsDialog(QDialog):
             "ℹ  Tooltip Mode changes the writing style. Tooltip Style changes the box appearance."
         )
         tooltip_note.setWordWrap(True)
-        tooltip_note.setStyleSheet("color: #999; font-size: 10px;")
+        tooltip_note.setProperty("settingsHint", True)
         misc_gl.addWidget(tooltip_note, 3, 0, 1, 2)
 
         gv.addWidget(grp_misc)
@@ -1762,7 +1770,7 @@ class SettingsDialog(QDialog):
             "ℹ  Scales all text and controls. Tooltip size is controlled separately in Tooltip Appearance above."
         )
         scale_note.setWordWrap(True)
-        scale_note.setStyleSheet("color: #888; font-size: 10px;")
+        scale_note.setProperty("settingsHint", True)
         scale_gl.addWidget(scale_note, 1, 0, 1, 2)
 
         # Button / Control Height (items 6/7)
@@ -1871,7 +1879,8 @@ class SettingsDialog(QDialog):
 
         # Per-tool max entries
         per_lbl = QLabel("Per-tool / per-builder limits (0 = use default above):")
-        per_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
+        per_lbl.setProperty("settingsHint", True)
+        per_lbl.setWordWrap(True)
         hist_gl.addWidget(per_lbl, 1, 0, 1, 2)
 
         hist_gl.addWidget(QLabel("  Converter:"), 2, 0)
@@ -1936,7 +1945,8 @@ class SettingsDialog(QDialog):
 
         # Track history checkboxes
         track_lbl = QLabel("Track history for these tools and builders:")
-        track_lbl.setStyleSheet("color: #aaa; font-size: 10px;")
+        track_lbl.setProperty("settingsHint", True)
+        track_lbl.setWordWrap(True)
         hist_gl.addWidget(track_lbl, 7, 0, 1, 2)
 
         self._chk_track_converter = QCheckBox("Converter")
@@ -1979,7 +1989,7 @@ class SettingsDialog(QDialog):
             "only apply to new entries going forward, and disabling tracking does not delete entries already saved."
         )
         hist_note.setWordWrap(True)
-        hist_note.setStyleSheet("color: #888; font-size: 10px;")
+        hist_note.setProperty("settingsHint", True)
         hist_gl.addWidget(hist_note, 11, 0, 1, 2)
 
         gv.addWidget(grp_history)
@@ -2005,10 +2015,7 @@ class SettingsDialog(QDialog):
             "what affects ambience, clicks, and notifications."
         )
         sound_intro.setWordWrap(True)
-        sound_intro.setStyleSheet(
-            "padding: 6px 8px; border: 1px solid rgba(255,255,255,40); "
-            "border-radius: 6px; color: #bbb;"
-        )
+        sound_intro.setProperty("settingsGuide", True)
         sv.addWidget(sound_intro)
         sv.addWidget(self._grp_sound)
         sv.addStretch(1)
@@ -2038,15 +2045,6 @@ class SettingsDialog(QDialog):
         self._btn_reset.setToolTip(
             "⚠ DESTRUCTIVE: Reset ALL settings, unlock flags, and history to factory defaults.\n"
             "This cannot be undone. Restart afterward to fully apply factory defaults."
-        )
-        self._btn_reset.setStyleSheet(
-            "QPushButton#resetBtn {"
-            "  color: #ff8a80;"
-            "  border: 1px solid #c62828;"
-            "  border-radius: 4px;"
-            "  padding: 4px 8px;"
-            "}"
-            "QPushButton#resetBtn:hover { background: rgba(198,40,40,60); }"
         )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")

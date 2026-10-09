@@ -52,6 +52,7 @@ Click-effect theme mode updates the displayed style immediately and uses importe
 Cursor and hold-click dropdowns also show their effective themed styles while disabled in theme mode, without replacing saved manual choices. Theme emoji cursors are displayed even when their glyph is not in the standard cursor list. Turning theme mode off restores the manual selection.
 Font size and UI scale apply live. The splash-screen preference applies on the next launch; a full factory reset requires restarting to fully apply defaults, as stated before confirmation. Opening Settings loads these preferences without reapplying scale or emitting live-save notifications.
 Settings backup imports validate recognized preference types before changing anything. Invalid values reject the whole import; legacy boolean/integer strings remain supported and unknown keys are ignored.
+Settings guidance and theme-status hints follow the active theme's text colors and UI font size, with wrapping for narrow windows. The reset button uses the theme's error color instead of a fixed light-red style.
 Trim edits immediately refresh the paused preview, including a playhead clamped by a shorter timeline. Preview FPS changes update active playback and duration summaries without restarting playback. Single-frame timelines remain exportable, but play and scrubbing are disabled.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.

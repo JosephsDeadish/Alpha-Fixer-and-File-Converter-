@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtWidgets import QApplication, QMessageBox, QGroupBox, QScrollArea
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QApplication, QMessageBox, QGroupBox, QScrollArea, QLabel
 
 from src.core.settings_manager import SettingsManager
 from src.ui.settings_dialog import SettingsDialog
@@ -393,6 +394,54 @@ def test_settings_tabs_remain_scrollable_in_small_window(dialog, app):
             0, scroll.widget().height() - scroll.viewport().height(),
         )
     widget.close()
+
+
+def test_settings_guidance_follows_live_theme_colors_and_scaled_fonts(dialog, app):
+    from src.ui.theme_engine import build_stylesheet
+
+    widget, manager = dialog
+    hints = [label for label in widget.findChildren(QLabel) if label.property("settingsHint")]
+    guides = [label for label in widget.findChildren(QLabel) if label.property("settingsGuide")]
+    assert len(hints) == 17
+    assert len(guides) == 2
+    assert any("Effects controls optional visual effects" in label.text() for label in guides)
+    widget.show()
+    for name, pixels in [("Panda Light", 24), ("Panda Dark", 13), ("Panda Light", 18)]:
+        theme = PRESET_THEMES[name]
+        widget.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
+        app.processEvents()
+        for label in hints + guides:
+            assert not label.styleSheet()
+            assert label.wordWrap()
+            assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+            assert label.font().pixelSize() == pixels
+        for label in guides:
+            assert label.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
+        assert not widget._btn_reset.styleSheet()
+        assert widget._btn_reset.palette().color(QPalette.ColorRole.ButtonText) == QColor(theme["error"])
+
+
+def test_large_font_settings_guidance_remains_reachable_in_small_window(dialog, app):
+    from src.ui.theme_engine import build_stylesheet
+
+    widget, manager = dialog
+    widget.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Light"])
+                        + "\nQWidget { font-size: 24px; }")
+    widget.setMinimumSize(0, 0)
+    widget.resize(640, 480)
+    widget.show()
+    for index in range(widget._settings_tabs.count()):
+        widget._settings_tabs.setCurrentIndex(index)
+        app.processEvents()
+        scroll = widget._settings_tabs.widget(index)
+        assert scroll.verticalScrollBar().maximum() == max(
+            0, scroll.widget().height() - scroll.viewport().height(),
+        )
+        for label in scroll.findChildren(QLabel):
+            if label.property("settingsHint") or label.property("settingsGuide"):
+                assert label.wordWrap()
+                if label.isVisible():
+                    assert label.height() >= label.minimumSizeHint().height()
 
 
 @pytest.mark.parametrize("finish", ["accept", "reject", "close"])
