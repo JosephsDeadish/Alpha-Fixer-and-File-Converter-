@@ -1500,6 +1500,7 @@ class MainWindow(QMainWindow):
 
         self._tabs = QTabWidget()
         self._bg_tabs = self._tabs
+        self._tabs.setDocumentMode(True)
         self._tabs.setUsesScrollButtons(True)
         self._tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         self._tabs.tabBar().setExpanding(False)

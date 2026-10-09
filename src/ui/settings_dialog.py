@@ -184,10 +184,14 @@ class SettingsDialog(QDialog):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
         self._settings_tabs = QTabWidget()
         tabs = self._settings_tabs
+        tabs.setDocumentMode(True)
+        tabs.setUsesScrollButtons(True)
+        tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
+        tabs.tabBar().setExpanding(False)
 
         # ================================================================
         # ---- Theme tab ----
@@ -1609,8 +1613,8 @@ class SettingsDialog(QDialog):
         # ================================================================
         gen_tab = QWidget()
         gv = QVBoxLayout(gen_tab)
-        gv.setContentsMargins(8, 8, 8, 8)
-        gv.setSpacing(8)
+        gv.setContentsMargins(6, 6, 6, 6)
+        gv.setSpacing(6)
 
         general_intro = QLabel(
             "Quick guide: Theme changes colors and visuals, General handles layout/tooltips/effects, "
@@ -1960,8 +1964,8 @@ class SettingsDialog(QDialog):
         # ================================================================
         sound_tab = QWidget()
         sv = QVBoxLayout(sound_tab)
-        sv.setContentsMargins(8, 8, 8, 8)
-        sv.setSpacing(8)
+        sv.setContentsMargins(6, 6, 6, 6)
+        sv.setSpacing(6)
         sound_intro = QLabel(
             "Sound settings are kept separate from visual theme controls so it is easier to tell "
             "what affects ambience, clicks, and notifications."

@@ -358,8 +358,8 @@ class AlphaFixerTab(QWidget):
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
 
         # Header – uses the default-theme label; updated to the active theme via update_theme()
         from .theme_engine import get_theme_tab_labels
@@ -398,8 +398,8 @@ class AlphaFixerTab(QWidget):
         left = QWidget()
         left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(0, 0, 6, 0)
-        lv.setSpacing(6)
+        lv.setContentsMargins(0, 0, 4, 0)
+        lv.setSpacing(5)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
@@ -426,7 +426,7 @@ class AlphaFixerTab(QWidget):
         grp_out = QGroupBox("Output")
         self._grp_out = grp_out
         go_layout = QGridLayout(grp_out)
-        go_layout.setContentsMargins(10, 14, 10, 12)
+        go_layout.setContentsMargins(8, 12, 8, 10)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
         go_layout.setColumnMinimumWidth(0, 120)
@@ -622,8 +622,8 @@ class AlphaFixerTab(QWidget):
         right = QWidget()
         right.setMinimumWidth(380)
         rv = QVBoxLayout(right)
-        rv.setContentsMargins(6, 0, 0, 0)
-        rv.setSpacing(8)
+        rv.setContentsMargins(4, 0, 0, 0)
+        rv.setSpacing(6)
 
         # Run controls – at the very top so the Process button is always
         # immediately visible when the tab is opened.
@@ -670,7 +670,7 @@ class AlphaFixerTab(QWidget):
         grp_tune = QGroupBox("Alpha Channel Settings")
         self._grp_tune = grp_tune
         gt_layout = QGridLayout(grp_tune)
-        gt_layout.setContentsMargins(10, 14, 10, 12)
+        gt_layout.setContentsMargins(8, 12, 8, 10)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
         gt_layout.setColumnMinimumWidth(0, 165)

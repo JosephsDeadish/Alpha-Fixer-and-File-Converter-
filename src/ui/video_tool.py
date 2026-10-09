@@ -2926,8 +2926,8 @@ class VideoToolDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(8)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
 
         title = QLabel("🎬  Video Builder")
         title.setObjectName("subheader")
@@ -2965,7 +2965,7 @@ class VideoToolDialog(QDialog):
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(6)
+        left_layout.setSpacing(5)
 
         tb = QHBoxLayout()
         self._btn_add_video = QPushButton("🎞  Add Video")
@@ -3058,7 +3058,7 @@ class VideoToolDialog(QDialog):
         # Trim sliders
         grp_trim = QGroupBox("Trim Selected Clip")
         trim_vl = QVBoxLayout(grp_trim)
-        trim_vl.setSpacing(6)
+        trim_vl.setSpacing(5)
 
         # Start trim
         start_row = QHBoxLayout()
@@ -3094,7 +3094,7 @@ class VideoToolDialog(QDialog):
 
         grp_stream = QGroupBox("Selected Stream")
         stream_vl = QVBoxLayout(grp_stream)
-        stream_vl.setSpacing(6)
+        stream_vl.setSpacing(5)
         self._stream_summary_lbl = QLabel("Select a loaded video clip to inspect its available video/audio streams.")
         self._stream_summary_lbl.setWordWrap(True)
         self._stream_summary_lbl.setStyleSheet("color: gray; font-size: 11px;")
@@ -3132,7 +3132,7 @@ class VideoToolDialog(QDialog):
 
         grp_timing = QGroupBox("Selected Clip Timing")
         timing_vl = QVBoxLayout(grp_timing)
-        timing_vl.setSpacing(6)
+        timing_vl.setSpacing(5)
 
         clip_speed_row = QHBoxLayout()
         clip_speed_row.addWidget(QLabel("Clip speed:"))
@@ -3177,11 +3177,11 @@ class VideoToolDialog(QDialog):
         centre = QWidget()
         centre_layout = QVBoxLayout(centre)
         centre_layout.setContentsMargins(0, 0, 0, 0)
-        centre_layout.setSpacing(6)
+        centre_layout.setSpacing(5)
 
         grp_preview = QGroupBox("Preview")
         pv_layout = QVBoxLayout(grp_preview)
-        pv_layout.setSpacing(6)
+        pv_layout.setSpacing(5)
 
         self._preview_lbl = QLabel()
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3241,13 +3241,13 @@ class VideoToolDialog(QDialog):
         right_scroll.setFrameShape(QFrame.Shape.NoFrame)
         right_inner = QWidget()
         right_layout = QVBoxLayout(right_inner)
-        right_layout.setContentsMargins(4, 0, 4, 0)
-        right_layout.setSpacing(6)
+        right_layout.setContentsMargins(2, 0, 2, 0)
+        right_layout.setSpacing(5)
         right_scroll.setWidget(right_inner)
 
         grp_adj = QGroupBox("Visual Adjustments")
         adj_vl = QVBoxLayout(grp_adj)
-        adj_vl.setSpacing(8)
+        adj_vl.setSpacing(6)
 
         def _adj_row(label: str, lo: int, hi: int, val: int,
                      fmt_fn=None, tooltip: str = "") -> QSlider:
@@ -3325,7 +3325,7 @@ class VideoToolDialog(QDialog):
 
         grp_export = QGroupBox("Export")
         ex_vl = QVBoxLayout(grp_export)
-        ex_vl.setSpacing(8)
+        ex_vl.setSpacing(6)
 
         fmt_row = QHBoxLayout()
         fmt_row.addWidget(QLabel("Format:"))
@@ -3351,7 +3351,7 @@ class VideoToolDialog(QDialog):
 
         self._audio_group = QGroupBox("Audio (MP4 export only)")
         audio_vl = QVBoxLayout(self._audio_group)
-        audio_vl.setSpacing(6)
+        audio_vl.setSpacing(5)
 
         self._audio_scope_lbl = QLabel(
             "These controls only affect exported MP4 audio. Preview playback stays silent."

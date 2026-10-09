@@ -437,8 +437,8 @@ class HistoryTab(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
 
         hdr = QLabel("📋  Processing History")
         hdr.setObjectName("header")
@@ -472,6 +472,7 @@ class HistoryTab(QWidget):
         layout.addWidget(self._next_step_lbl)
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
         self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
         btn_row.addWidget(self._btn_export)
@@ -481,6 +482,7 @@ class HistoryTab(QWidget):
 
         # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
+        self._sub_tabs.setDocumentMode(True)
         self._sub_tabs.setUsesScrollButtons(True)
         self._sub_tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         self._sub_tabs.tabBar().setExpanding(False)
@@ -488,7 +490,8 @@ class HistoryTab(QWidget):
         # --- Converter sub-tab ---
         conv_widget = QWidget()
         conv_layout = QVBoxLayout(conv_widget)
-        conv_layout.setContentsMargins(0, 6, 0, 0)
+        conv_layout.setContentsMargins(0, 4, 0, 0)
+        conv_layout.setSpacing(4)
         self._conv_search = self._make_search_field("converter")
         conv_layout.addWidget(self._conv_search)
         self._conv_tree = _make_tree(
@@ -512,7 +515,8 @@ class HistoryTab(QWidget):
         # --- Alpha & RGBA Adjuster sub-tab ---
         alpha_widget = QWidget()
         alpha_layout = QVBoxLayout(alpha_widget)
-        alpha_layout.setContentsMargins(0, 6, 0, 0)
+        alpha_layout.setContentsMargins(0, 4, 0, 0)
+        alpha_layout.setSpacing(4)
         self._alpha_search = self._make_search_field("alpha")
         alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
@@ -536,7 +540,8 @@ class HistoryTab(QWidget):
         # --- Selective Alpha sub-tab ---
         sel_widget = QWidget()
         sel_layout = QVBoxLayout(sel_widget)
-        sel_layout.setContentsMargins(0, 6, 0, 0)
+        sel_layout.setContentsMargins(0, 4, 0, 0)
+        sel_layout.setSpacing(4)
         self._sel_search = self._make_search_field("selective")
         sel_layout.addWidget(self._sel_search)
         self._sel_tree = _make_tree(
@@ -560,7 +565,8 @@ class HistoryTab(QWidget):
         # --- GIF Builder sub-tab (item 74) ---
         gif_widget = QWidget()
         gif_layout = QVBoxLayout(gif_widget)
-        gif_layout.setContentsMargins(0, 6, 0, 0)
+        gif_layout.setContentsMargins(0, 4, 0, 0)
+        gif_layout.setSpacing(4)
         self._gif_search = self._make_search_field("gif")
         gif_layout.addWidget(self._gif_search)
         self._gif_tree = _make_tree(
@@ -597,7 +603,8 @@ class HistoryTab(QWidget):
         # --- Video Builder sub-tab (item 74) ---
         vid_widget = QWidget()
         vid_layout = QVBoxLayout(vid_widget)
-        vid_layout.setContentsMargins(0, 6, 0, 0)
+        vid_layout.setContentsMargins(0, 4, 0, 0)
+        vid_layout.setSpacing(4)
         self._vid_search = self._make_search_field("video")
         vid_layout.addWidget(self._vid_search)
         self._vid_tree = _make_tree(

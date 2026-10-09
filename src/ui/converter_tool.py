@@ -181,8 +181,8 @@ class ConverterTab(QWidget):
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
 
         # Header – uses the default-theme label; updated to the active theme via update_theme()
         from .theme_engine import get_theme_tab_labels
@@ -220,8 +220,8 @@ class ConverterTab(QWidget):
         left = QWidget()
         left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(0, 0, 6, 0)
-        lv.setSpacing(6)
+        lv.setContentsMargins(0, 0, 4, 0)
+        lv.setSpacing(5)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
@@ -248,7 +248,7 @@ class ConverterTab(QWidget):
         grp_out = QGroupBox("Output")
         self._grp_out = grp_out
         go_layout = QGridLayout(grp_out)
-        go_layout.setContentsMargins(10, 14, 10, 12)
+        go_layout.setContentsMargins(8, 12, 8, 10)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
         go_layout.setColumnStretch(2, 0)
@@ -437,8 +437,8 @@ class ConverterTab(QWidget):
         right = QWidget()
         right.setMinimumWidth(360)
         rv = QVBoxLayout(right)
-        rv.setContentsMargins(6, 0, 0, 0)
-        rv.setSpacing(8)
+        rv.setContentsMargins(4, 0, 0, 0)
+        rv.setSpacing(6)
 
         # Run controls – at the very top so the Convert button is always
         # immediately visible when the tab is opened.
@@ -464,7 +464,7 @@ class ConverterTab(QWidget):
         grp_fmt = QGroupBox("Output Format")
         self._grp_fmt = grp_fmt
         gf_layout = QGridLayout(grp_fmt)
-        gf_layout.setContentsMargins(10, 14, 10, 12)
+        gf_layout.setContentsMargins(8, 12, 8, 10)
         gf_layout.setColumnStretch(0, 0)
         gf_layout.setColumnStretch(1, 1)
         gf_layout.setColumnMinimumWidth(0, 140)
@@ -549,7 +549,7 @@ class ConverterTab(QWidget):
         grp_resize = QGroupBox("Resize (optional)")
         self._grp_resize = grp_resize
         gr_layout = QGridLayout(grp_resize)
-        gr_layout.setContentsMargins(10, 14, 10, 12)
+        gr_layout.setContentsMargins(8, 12, 8, 10)
         gr_layout.setColumnStretch(0, 0)
         gr_layout.setColumnStretch(1, 1)
         gr_layout.setColumnMinimumWidth(0, 80)

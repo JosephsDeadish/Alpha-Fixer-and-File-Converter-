@@ -7201,6 +7201,104 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             tab.deleteLater()
             self._app.processEvents()
 
+    def test_history_tab_uses_compact_secondary_tab_spacing(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        tab = HistoryTab(settings)
+        try:
+            margins = tab.layout().contentsMargins()
+            self.assertEqual(
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                (10, 10, 10, 10),
+            )
+            self.assertEqual(tab.layout().spacing(), 8)
+            self.assertTrue(tab._sub_tabs.documentMode())
+            self.assertTrue(tab._sub_tabs.usesScrollButtons())
+            self.assertFalse(tab._sub_tabs.tabBar().expanding())
+            page_layout = tab._sub_tabs.widget(0).layout()
+            page_margins = page_layout.contentsMargins()
+            self.assertEqual(
+                (page_margins.left(), page_margins.top(), page_margins.right(), page_margins.bottom()),
+                (0, 4, 0, 0),
+            )
+            self.assertEqual(page_layout.spacing(), 4)
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_settings_dialog_uses_compact_nonexpanding_tabs(self):
+        try:
+            from src.ui.settings_dialog import SettingsDialog
+        except ImportError as exc:
+            self.skipTest(f"settings_dialog import unavailable in test env: {exc}")
+
+        class _SettingsStub:
+            def get_theme(self):
+                return {"name": "Panda Dark"}
+
+            def get_saved_themes(self):
+                return {}
+
+            def get(self, key, fallback=None):
+                return fallback
+
+        with patch.object(SettingsDialog, "_load_values", lambda self: None):
+            dialog = SettingsDialog(_SettingsStub())
+        try:
+            margins = dialog.layout().contentsMargins()
+            self.assertEqual(
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                (8, 8, 8, 8),
+            )
+            self.assertEqual(dialog.layout().spacing(), 6)
+            self.assertTrue(dialog._settings_tabs.documentMode())
+            self.assertTrue(dialog._settings_tabs.usesScrollButtons())
+            self.assertFalse(dialog._settings_tabs.tabBar().expanding())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_primary_tools_use_tighter_root_layout_spacing(self):
+        try:
+            from src.ui.alpha_tool import AlphaFixerTab
+            from src.ui.converter_tool import ConverterTab
+            from src.ui.gif_builder import GifBuilderDialog
+            from src.ui.video_tool import VideoToolDialog
+        except ImportError as exc:
+            self.skipTest(f"tool import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        converter = ConverterTab(settings)
+        alpha = AlphaFixerTab(MagicMock(), settings)
+        gif = GifBuilderDialog()
+        video = VideoToolDialog()
+        widgets = [converter, alpha, gif, video]
+        try:
+            expectations = {
+                converter: ((10, 10, 10, 10), 8),
+                alpha: ((10, 10, 10, 10), 8),
+                gif: ((8, 8, 8, 8), 6),
+                video: ((8, 8, 8, 8), 6),
+            }
+            for widget, (expected_margins, expected_spacing) in expectations.items():
+                margins = widget.layout().contentsMargins()
+                self.assertEqual(
+                    (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                    expected_margins,
+                )
+                self.assertEqual(widget.layout().spacing(), expected_spacing)
+        finally:
+            for widget in widgets:
+                widget.close()
+                widget.deleteLater()
+            self._app.processEvents()
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

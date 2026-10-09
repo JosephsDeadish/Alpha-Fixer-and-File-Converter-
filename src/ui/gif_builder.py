@@ -483,8 +483,8 @@ class GifBuilderDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(8)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
 
         # Title bar row
         title_row = QHBoxLayout()
@@ -504,7 +504,7 @@ class GifBuilderDialog(QDialog):
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(6)
+        left_layout.setSpacing(5)
 
         # Toolbar
         tb = QHBoxLayout()
@@ -616,13 +616,13 @@ class GifBuilderDialog(QDialog):
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(6)
+        right_layout.setSpacing(5)
 
         # Global settings
         grp_settings = QGroupBox("GIF Settings")
         gl = QGridLayout(grp_settings)
-        gl.setHorizontalSpacing(8)
-        gl.setVerticalSpacing(8)
+        gl.setHorizontalSpacing(6)
+        gl.setVerticalSpacing(6)
 
         # Delay slider  (10–3000 ms)
         gl.addWidget(QLabel("Frame speed:"), 0, 0)
@@ -697,7 +697,7 @@ class GifBuilderDialog(QDialog):
         # Live preview
         grp_preview = QGroupBox("Live Preview")
         pv_layout = QVBoxLayout(grp_preview)
-        pv_layout.setSpacing(6)
+        pv_layout.setSpacing(5)
 
         self._preview_lbl = QLabel()
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
