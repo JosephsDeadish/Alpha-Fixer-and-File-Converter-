@@ -1,4 +1,5 @@
 import json
+from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
@@ -148,6 +149,127 @@ def test_locked_active_hidden_theme_remains_selectable(dialog):
     widget._on_preset_selected_live()
     assert manager.get_theme()["name"] == name
     assert not widget._btn_delete_theme.isEnabled()
+
+
+@pytest.mark.parametrize("operation", ["save", "import"])
+@pytest.mark.parametrize("accept", [False, True])
+def test_saved_theme_replacement_requires_confirmation_without_mutating_on_decline(dialog, tmp_path, operation, accept):
+    widget, manager = dialog
+    name = "My ★ theme"
+    previous = dict(manager.get_theme(), name=name, accent="#123456")
+    manager.save_named_theme(name, previous)
+    original = manager.get_theme()
+    replacement = dict(original, name=name, accent="#abcdef")
+    emitted = Mock()
+    widget.theme_changed.connect(emitted)
+    reply = QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+    with patch.object(QMessageBox, "question", return_value=reply) as question, \
+            patch.object(QMessageBox, "information") as info:
+        if operation == "save":
+            widget._theme = dict(replacement, name=original["name"])
+            with patch("src.ui.settings_dialog.QInputDialog.getText", return_value=(name, True)):
+                widget._save_custom_theme()
+        else:
+            path = tmp_path / "theme.json"
+            path.write_text(json.dumps(replacement), encoding="utf-8")
+            with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName", return_value=(str(path), "")):
+                widget._import_theme()
+    question.assert_called_once()
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    if accept:
+        assert manager.get_saved_themes()[name]["accent"] == "#abcdef"
+        assert manager.get_theme()["name"] == name
+        assert widget._theme_preset_combo.currentData() == ("saved", name)
+        info.assert_called_once()
+        emitted.assert_called_once()
+    else:
+        assert manager.get_saved_themes()[name] == previous
+        assert manager.get_theme() == original
+        assert widget._theme["name"] == original["name"]
+        info.assert_not_called()
+        emitted.assert_not_called()
+
+
+def test_delete_theme_defaults_to_no_and_retains_active_colors(dialog):
+    widget, manager = dialog
+    theme = dict(manager.get_theme(), name="Delete me", accent="#123456")
+    manager.save_named_theme(theme["name"], theme)
+    widget._rebuild_theme_combo(select="★ Delete me")
+    widget._on_preset_selected_live()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as question:
+        widget._delete_custom_theme()
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    assert "Delete me" in manager.get_saved_themes()
+    assert manager.get_theme() == theme
+
+
+@pytest.mark.parametrize("accept", [False, True])
+def test_theme_extensionless_export_confirms_existing_final_name(dialog, tmp_path, accept):
+    widget, manager = dialog
+    chosen = tmp_path / "theme"
+    final = chosen.with_suffix(".json")
+    final.write_bytes(b"previous export")
+    reply = QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+    with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName", return_value=(str(chosen), "")), \
+            patch.object(QMessageBox, "question", return_value=reply) as question, \
+            patch.object(QMessageBox, "information") as info:
+        widget._export_theme()
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    if accept:
+        assert json.loads(final.read_text())["accent"] == widget._theme["accent"]
+        assert str(final) in info.call_args.args[2]
+    else:
+        assert final.read_bytes() == b"previous export"
+        info.assert_not_called()
+    assert not chosen.exists()
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+
+
+@pytest.mark.parametrize("stage", ["encode", "replace"])
+def test_theme_export_failure_preserves_existing_file(dialog, tmp_path, stage):
+    widget, manager = dialog
+    final = tmp_path / "theme.json"
+    final.write_bytes(b"previous export")
+
+    def partial(data, stream, **kwargs):
+        stream.write("{")
+        raise OSError("write failed")
+
+    failure = (patch("src.ui.settings_dialog.json.dump", partial) if stage == "encode"
+               else patch("os.replace", side_effect=PermissionError("file locked")))
+    with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName", return_value=(str(final), "")), \
+            failure, patch.object(QMessageBox, "warning") as warning, \
+            patch.object(QMessageBox, "information") as info:
+        widget._export_theme()
+    warning.assert_called_once()
+    info.assert_not_called()
+    assert final.read_bytes() == b"previous export"
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+
+
+def test_new_custom_theme_save_does_not_ask_to_replace(dialog):
+    widget, manager = dialog
+    with patch("src.ui.settings_dialog.QInputDialog.getText", return_value=("New theme", True)), \
+            patch.object(QMessageBox, "question") as question, \
+            patch.object(QMessageBox, "information"):
+        widget._save_custom_theme()
+    question.assert_not_called()
+    assert manager.get_theme()["name"] == "New theme"
+    assert manager.get_saved_themes()["New theme"] == widget._theme
+
+
+def test_theme_export_keeps_existing_json_suffix_and_full_metadata(dialog, tmp_path):
+    widget, manager = dialog
+    widget._theme = dict(PRESET_THEMES["Bat Cave"], name="My 🦇 theme")
+    widget._set_effect_combo(widget._theme["_effect"])
+    final = tmp_path / "theme.JSON"
+    with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName", return_value=(str(final), "")), \
+            patch.object(QMessageBox, "question") as question, \
+            patch.object(QMessageBox, "information"):
+        widget._export_theme()
+    question.assert_not_called()
+    assert json.loads(final.read_text(encoding="utf-8")) == widget._theme
+    assert not (tmp_path / "theme.JSON.json").exists()
 
 
 @pytest.mark.parametrize("finish", ["accept", "reject", "close"])

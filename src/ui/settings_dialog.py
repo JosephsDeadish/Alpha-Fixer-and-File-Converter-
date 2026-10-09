@@ -2803,6 +2803,8 @@ class SettingsDialog(QDialog):
             QMessageBox.warning(self, "Save Theme",
                                 f"'{name}' is a built-in theme name. Choose a different name.")
             return
+        if not self._confirm_saved_theme_replacement(name):
+            return
         # Ensure the stored dict has the correct display name and the current
         # effect key (the latter may not have been written if the user never
         # changed the effect combo away from its pre-selected value).
@@ -2816,6 +2818,16 @@ class SettingsDialog(QDialog):
         self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
         QMessageBox.information(self, "Save Theme", f"Theme '{name}' saved.")
 
+    def _confirm_saved_theme_replacement(self, name: str) -> bool:
+        if name not in self._settings.get_saved_themes():
+            return True
+        return QMessageBox.question(
+            self, "Replace Saved Theme?",
+            f"A saved theme named '{name}' already exists.\n\nReplace it?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        ) == QMessageBox.StandardButton.Yes
+
     def _delete_custom_theme(self):
         self._flush_pending_preferences()
         selection = self._theme_preset_combo.currentData()
@@ -2826,6 +2838,7 @@ class SettingsDialog(QDialog):
             self, "Delete Theme",
             f"Delete saved theme '{raw_name}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.delete_named_theme(raw_name)
@@ -2842,10 +2855,16 @@ class SettingsDialog(QDialog):
         )
         if not path:
             return
+        chosen_path = path
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        from ._ui_utils import confirm_normalized_save_path, staged_output_path
+        if not confirm_normalized_save_path(self, chosen_path, path):
+            return
         export_data = dict(self._theme)
         export_data["_effect"] = self._effect_combo.currentData() or "default"
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             QMessageBox.information(self, "Export Theme", f"Theme exported to:\n{path}")
         except OSError as exc:
@@ -2900,6 +2919,8 @@ class SettingsDialog(QDialog):
         # Use filename as display name if the JSON has no "name" key
         theme_data["name"] = name.strip()
         name = theme_data["name"]
+        if not self._confirm_saved_theme_replacement(name):
+            return
         self._settings.save_named_theme(name, theme_data)
         self._theme_search.clear()
         self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
