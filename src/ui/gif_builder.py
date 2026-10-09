@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
     QProgressDialog, QSplitter, QWidget, QApplication,
-    QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox,
+    QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox, QSizePolicy, QLayout,
 )
 from .video_tool import (
     _VIDEO_EXTS,
@@ -597,12 +597,13 @@ class GifBuilderDialog(QDialog):
         # Per-frame delay override  (slider-based)
         pf_box = QGroupBox("Per-Frame Delay Override")
         pf_layout = QVBoxLayout(pf_box)
+        pf_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         pf_top = QHBoxLayout()
         self._pf_check = QCheckBox("Override delay for selected frame")
         self._pf_check.toggled.connect(self._on_pf_check)
         pf_top.addWidget(self._pf_check)
         self._pf_val_lbl = QLabel("100 ms")
-        self._pf_val_lbl.setFixedWidth(60)
+        self._pf_val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._pf_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         pf_top.addWidget(self._pf_val_lbl)
         pf_layout.addLayout(pf_top)
@@ -641,7 +642,7 @@ class GifBuilderDialog(QDialog):
             "100 ms ≈ 10 fps  |  50 ms ≈ 20 fps  |  33 ms ≈ 30 fps"
         )
         self._delay_val_lbl = QLabel("100 ms")
-        self._delay_val_lbl.setFixedWidth(60)
+        self._delay_val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._delay_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._delay_slider.valueChanged.connect(self._on_delay_changed)
         delay_row.addWidget(self._delay_slider, 1)
@@ -658,7 +659,7 @@ class GifBuilderDialog(QDialog):
         self._loop_slider.setAccessibleDescription("0 loops forever; 1 plays once.")
         self._loop_slider.setToolTip("0 = loop forever.  1 = play once.  N = repeat N times.")
         self._loop_val_lbl = QLabel("∞")
-        self._loop_val_lbl.setFixedWidth(40)
+        self._loop_val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._loop_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._loop_slider.valueChanged.connect(
             lambda v: self._loop_val_lbl.setText("∞" if v == 0 else str(v))
@@ -677,7 +678,7 @@ class GifBuilderDialog(QDialog):
         self._width_slider.setAccessibleDescription("0 keeps the original width.")
         self._width_slider.setToolTip("Resize frames to this width (preserves aspect ratio).  0 = no resize.")
         self._width_val_lbl = QLabel("original")
-        self._width_val_lbl.setFixedWidth(65)
+        self._width_val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._width_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._width_slider.valueChanged.connect(
             lambda v: self._width_val_lbl.setText("original" if v == 0 else f"{v} px")
@@ -697,7 +698,7 @@ class GifBuilderDialog(QDialog):
         self._height_slider.setAccessibleDescription("0 keeps the original height.")
         self._height_slider.setToolTip("Resize frames to this height (preserves aspect ratio).  0 = no resize.")
         self._height_val_lbl = QLabel("original")
-        self._height_val_lbl.setFixedWidth(65)
+        self._height_val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._height_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._height_slider.valueChanged.connect(
             lambda v: self._height_val_lbl.setText("original" if v == 0 else f"{v} px")

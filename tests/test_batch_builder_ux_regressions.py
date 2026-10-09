@@ -17,7 +17,7 @@ from src.ui.alpha_tool import AlphaFixerTab
 from src.ui.converter_tool import ConverterTab
 from src.ui.gif_builder import GifBuilderDialog
 from src.ui.video_tool import VideoToolDialog
-from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
+from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, build_stylesheet
 from src.ui.history_tab import HistoryTab
 from src.version import APP_NAME
 
@@ -324,6 +324,37 @@ def builder(app):
     widget._clear_all()
     widget.close()
     sip.delete(widget)
+
+
+@pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
+def test_gif_value_readouts_fit_live_fonts_and_slider_boundaries(builder, app, name, tmp_path):
+    theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+    add_frames(builder, tmp_path)
+    builder._pf_check.setChecked(True)
+    builder.resize(900, 900)
+    builder.show()
+    pairs = [
+        (builder._pf_slider, builder._pf_val_lbl, lambda value: f"{value} ms"),
+        (builder._delay_slider, builder._delay_val_lbl, lambda value: f"{value} ms"),
+        (builder._loop_slider, builder._loop_val_lbl, lambda value: "∞" if value == 0 else str(value)),
+        (builder._width_slider, builder._width_val_lbl, lambda value: "original" if value == 0 else f"{value} px"),
+        (builder._height_slider, builder._height_val_lbl, lambda value: "original" if value == 0 else f"{value} px"),
+    ]
+    for pixels in [13, 24, 32, 13]:
+        builder.setStyleSheet(build_stylesheet(theme)
+                             + f"\nQWidget {{ font-size: {pixels}px; }}")
+        for slider, label, text in pairs:
+            for value in [slider.minimum(), slider.maximum(), slider.minimum()]:
+                slider.setValue(value)
+                for _ in range(4):
+                    app.processEvents()
+                assert label.text() == text(value)
+                assert label.font().pixelSize() == pixels
+                assert label.width() >= label.sizeHint().width()
+                assert label.height() >= label.sizeHint().height()
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+                assert label.parentWidget().rect().contains(label.geometry())
+    assert builder._frames[builder._frame_list.currentRow()].delay_ms == builder._pf_slider.value()
 
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
