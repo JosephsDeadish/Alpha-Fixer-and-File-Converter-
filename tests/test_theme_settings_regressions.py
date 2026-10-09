@@ -646,6 +646,40 @@ def test_theme_sound_preview_does_not_overwrite_manual_profile(dialog):
     assert widget._sound_profile_combo.currentData() == manual
 
 
+@pytest.mark.parametrize("enabled,follow,combo,manual,key", [
+    ("_bg_flock_check", "_use_theme_flock_check", "_bg_flock_combo", "fish", "bg_flock_style"),
+    ("_bg_ambient_check", "_use_theme_ambient_check", "_bg_ambient_combo", "snow", "bg_ambient_type"),
+    ("_button_anim_check", "_use_theme_button_anim_check", "_button_anim_style_combo",
+     "abduct", "button_anim_style"),
+    ("_animated_banner_check", "_banner_use_theme_anim_check", "_banner_anim_combo",
+     "glitch", "banner_anim_style"),
+])
+def test_theme_control_guidance_matches_visible_disabled_manual_restoration(
+        dialog, app, enabled, follow, combo, manual, key):
+    widget, manager = dialog
+    enable_control = getattr(widget, enabled)
+    follow_control = getattr(widget, follow)
+    style_control = getattr(widget, combo)
+    enable_control.setChecked(True)
+    follow_control.setChecked(False)
+    style_control.setCurrentIndex(style_control.findData(manual))
+    widget.show()
+    widget._settings_tabs.setCurrentIndex(
+        0 if enabled == "_animated_banner_check" else 3
+    )
+    app.processEvents()
+    follow_control.setChecked(True)
+    assert style_control.isVisible()
+    assert not style_control.isEnabled()
+    assert "Visible but disabled" in style_control.toolTip()
+    assert "restore your manual" in style_control.toolTip()
+    assert manager.get(key) == manual
+    follow_control.setChecked(False)
+    assert style_control.isEnabled()
+    assert style_control.currentData() == manual
+    assert manager.get(key) == manual
+
+
 @pytest.mark.parametrize("theme,expected", [
     ("Gore", "blood"), ("Bat Cave", "shake"), ("Panda Dark", "bubble"),
 ])

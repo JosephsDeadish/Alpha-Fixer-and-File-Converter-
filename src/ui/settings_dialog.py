@@ -839,7 +839,8 @@ class SettingsDialog(QDialog):
         self._bg_flock_combo.addItem("🦈 Sharks", userData="sharks")
         self._bg_flock_combo.setToolTip(
             "Choose the emoji used for the background flock.\n"
-            "Hidden while 'Use theme flock' is checked — the theme controls the style."
+            "Visible but disabled while 'Use theme flock' is checked.\n"
+            "Uncheck it to restore your manual flock style."
         )
         self._bg_flock_inner_widget = QWidget()
         _bfi_row = QHBoxLayout(self._bg_flock_inner_widget)
@@ -910,7 +911,8 @@ class SettingsDialog(QDialog):
         self._bg_ambient_combo.addItem("🎋 Bamboo Leaves", userData="bamboo")
         self._bg_ambient_combo.setToolTip(
             "Choose the ambient background animation style.\n"
-            "Hidden while 'Use theme ambient' is checked — the theme controls the style."
+            "Visible but disabled while 'Use theme ambient' is checked.\n"
+            "Uncheck it to restore your manual ambient style."
         )
         self._bg_ambient_inner_widget = QWidget()
         _bai_row = QHBoxLayout(self._bg_ambient_inner_widget)
@@ -1483,7 +1485,8 @@ class SettingsDialog(QDialog):
                 )
         self._button_anim_style_combo.setToolTip(
             "Choose the press-animation style applied to every button.\n"
-            "Hidden while 'Use theme animation' is checked."
+            "Visible but disabled while 'Use theme animation' is checked.\n"
+            "Uncheck it to restore your manual button animation."
         )
         self._button_anim_style_combo.setMinimumWidth(220)
         _ba_style_row.addWidget(self._button_anim_style_combo, 1)
@@ -1575,7 +1578,8 @@ class SettingsDialog(QDialog):
                 self._banner_anim_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._banner_anim_combo.setToolTip(
             "Choose the animation style for the banner emoji when animation is enabled.\n"
-            "Hidden while 'Use theme animation' is checked."
+            "Visible but disabled while 'Use theme animation' is checked.\n"
+            "Uncheck it to restore your manual banner animation."
         )
         self._banner_anim_combo.setMinimumWidth(220)
 
