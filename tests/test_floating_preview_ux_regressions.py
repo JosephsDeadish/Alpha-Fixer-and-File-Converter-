@@ -87,6 +87,9 @@ def test_embedded_preview_controls_scale_and_remain_contained_with_keyboard_zoom
                 widget.resize(width, 220)
                 for _ in range(5):
                     app.processEvents()
+                for _ in range(10):
+                    app.processEvents()
+                assert not widget._overlay_update_timer.isActive()
                 assert widget.rect().contains(widget._zoom_bar.geometry())
                 assert widget.rect().contains(widget._popout_btn.geometry())
                 assert not widget._zoom_bar.geometry().intersects(widget._popout_btn.geometry())

@@ -17,7 +17,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame,
-    QPushButton, QHBoxLayout, QDialog,
+    QPushButton, QHBoxLayout, QDialog, QStyle, QStyleOptionButton,
 )
 
 _UNDOCK_TOOLTIP = (
@@ -429,9 +429,22 @@ class BeforeAfterWidget(QWidget):
         return btn
 
     @staticmethod
-    def _apply_popout_button_state(btn: "QPushButton", *, undocked: bool) -> None:
+    def _apply_popout_button_state(btn: "QPushButton", *, undocked: bool,
+                                  available_width=None) -> None:
         """Keep pop-out button text and tooltip in sync from one source of truth."""
-        btn.setText("⇙ Redock" if undocked else "⇗ Undock")
+        text = "⇙ Redock" if undocked else "⇗ Undock"
+        if available_width is not None:
+            option = QStyleOptionButton()
+            btn.initStyleOption(option)
+            option.text = text
+            content_size = btn.fontMetrics().size(Qt.TextFlag.TextShowMnemonic, text)
+            full_size = btn.style().sizeFromContents(
+                QStyle.ContentsType.CT_PushButton, option, content_size, btn,
+            )
+            if full_size.width() > available_width:
+                text = "⇙" if undocked else "⇗"
+        if btn.text() != text:
+            btn.setText(text)
         btn.setAccessibleName("Redock preview" if undocked else "Undock preview")
         btn.setToolTip(_REDOCK_TOOLTIP if undocked else _UNDOCK_TOOLTIP)
         btn.adjustSize()
@@ -444,10 +457,9 @@ class BeforeAfterWidget(QWidget):
         self._zoom_bar.adjustSize()
         self._zoom_bar.reposition(self.size())
         undocked = self._popout_dialog is not None and not self._popout_dialog.isHidden()
-        self._apply_popout_button_state(self._popout_btn, undocked=undocked)
-        if self._popout_btn.width() > self.width() - 12:
-            self._popout_btn.setText("⇙" if undocked else "⇗")
-            self._popout_btn.adjustSize()
+        self._apply_popout_button_state(
+            self._popout_btn, undocked=undocked, available_width=self.width() - 12,
+        )
         self._reposition_popout_btn()
         if (not self._popout_btn.isHidden()
                 and self._popout_btn.geometry().adjusted(-3, -3, 3, 3).intersects(
