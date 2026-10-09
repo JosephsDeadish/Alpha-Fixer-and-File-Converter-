@@ -495,8 +495,6 @@ class BeforeAfterWidget(QWidget):
 
         # Stand-alone BeforeAfterWidget with the same images
         compare = BeforeAfterWidget(dlg)
-        connected_movie = None
-        _mirror_movie_frame = None
         if self._pix_before is not None:
             compare._pix_before = self._pix_before.copy()
         if self._pix_after is not None:
@@ -508,20 +506,8 @@ class BeforeAfterWidget(QWidget):
         compare._divider_color = self._divider_color
         compare._stats_before = self._stats_before
         compare._stats_after = self._stats_after
-        if self._movie_path:
-            compare._movie_path = self._movie_path
-
-            def _mirror_movie_frame(_frame_no: int) -> None:
-                if connected_movie is None:
-                    return
-                pix = connected_movie.currentPixmap()
-                if not pix.isNull():
-                    compare._pix_before = pix
-                    compare.update()
-
-            if self._movie is not None:
-                connected_movie = self._movie
-                self._movie.frameChanged.connect(_mirror_movie_frame)
+        compare._movie_path = self._movie_path
+        compare._loading = self._loading
         dlg_layout.addWidget(compare, 1)
 
         self._popout_dialog = dlg
@@ -532,11 +518,6 @@ class BeforeAfterWidget(QWidget):
 
         def _on_dialog_finished(_result=None) -> None:
             """Reset button and stored reference when dialog closes for any reason."""
-            if connected_movie is not None and _mirror_movie_frame is not None:
-                try:
-                    connected_movie.frameChanged.disconnect(_mirror_movie_frame)
-                except (RuntimeError, TypeError):
-                    pass
             self._popout_dialog = None
             self._apply_popout_button_state(self._popout_btn, undocked=False)
             dlg.deleteLater()
@@ -554,6 +535,24 @@ class BeforeAfterWidget(QWidget):
     def hide_popout_button(self) -> None:
         """Hide the pop-out overlay button (e.g. when widget is already inside a pop-out dialog)."""
         self._popout_btn.hide()
+
+    def _sync_popout_state(self) -> None:
+        dlg = self._popout_dialog
+        if dlg is None:
+            return
+        compare = dlg.findChild(BeforeAfterWidget)
+        if compare is None:
+            return
+        compare._pix_before = QPixmap(self._pix_before) if self._pix_before is not None else None
+        compare._pix_after = QPixmap(self._pix_after) if self._pix_after is not None else None
+        compare._raw_before = QImage(self._raw_before) if self._raw_before is not None else None
+        compare._raw_after = QImage(self._raw_after) if self._raw_after is not None else None
+        compare._stats_before = self._stats_before
+        compare._stats_after = self._stats_after
+        compare._loading = self._loading
+        compare._movie_path = self._movie_path
+        compare._divider_color = self._divider_color
+        compare.update()
 
     def close_popout_dialog(self) -> None:
         dlg = self._popout_dialog
@@ -576,6 +575,7 @@ class BeforeAfterWidget(QWidget):
     def set_divider_color(self, color: str) -> None:
         """Update the divider / handle accent color to match the active theme."""
         self._divider_color = color or self._DEFAULT_DIVIDER_COLOR
+        self._sync_popout_state()
         self.update()
 
     # ------------------------------------------------------------------
@@ -632,6 +632,7 @@ class BeforeAfterWidget(QWidget):
             self._raw_before = qimg.copy()
         self._pix_before = QPixmap.fromImage(qimg)
         self._loading = False
+        self._sync_popout_state()
         self.update()
 
     def set_after(self, qimg: QImage, *, store_raw: bool = True) -> None:
@@ -640,12 +641,14 @@ class BeforeAfterWidget(QWidget):
             self._raw_after = qimg.copy()
         self._pix_after = QPixmap.fromImage(qimg)
         self._loading = False
+        self._sync_popout_state()
         self.update()
 
     def set_loading(self) -> None:
         """Show a processing indicator on the 'after' side."""
         self._pix_after = None
         self._loading = True
+        self._sync_popout_state()
         self.update()
 
     def set_stats(self, before: dict, after: dict) -> None:
@@ -661,6 +664,7 @@ class BeforeAfterWidget(QWidget):
 
         self._stats_before = _fmt(before)
         self._stats_after = _fmt(after)
+        self._sync_popout_state()
         self.update()
 
     def clear(self) -> None:
@@ -673,6 +677,7 @@ class BeforeAfterWidget(QWidget):
         self._stats_after = ""
         self._raw_before = None
         self._raw_after = None
+        self._sync_popout_state()
         self.update()
 
     def store_raw_images(self, before: QImage, after: QImage) -> None:
@@ -680,6 +685,7 @@ class BeforeAfterWidget(QWidget):
         re-apply or remove visualisation without re-running the worker."""
         self._raw_before = before
         self._raw_after = after
+        self._sync_popout_state()
 
     def before_image(self) -> QImage | None:
         """Return the stored raw 'before' image, or None if not set."""
@@ -939,6 +945,7 @@ class BeforeAfterWidget(QWidget):
         self._movie.setSpeed(self._movie_speed)
         self._movie.start()
         self._loading = False
+        self._sync_popout_state()
         self.update()
 
     def set_animation_speed(self, percent: int) -> None:
@@ -962,6 +969,7 @@ class BeforeAfterWidget(QWidget):
             self._movie.deleteLater()
             self._movie = None
         self._movie_path = ""
+        self._sync_popout_state()
 
     def _on_movie_frame(self, _frame_no: int) -> None:
         """Slot called by QMovie on each new frame; updates the before pixmap."""
@@ -969,6 +977,7 @@ class BeforeAfterWidget(QWidget):
             pix = self._movie.currentPixmap()
             if not pix.isNull():
                 self._pix_before = pix
+                self._sync_popout_state()
                 self.update()
 
 

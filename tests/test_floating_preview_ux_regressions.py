@@ -173,3 +173,80 @@ def test_plain_preview_close_has_no_floating_window_dependency(app):
         assert widget.close()
     finally:
         sip.delete(widget)
+
+
+@pytest.fixture
+def comparison(app):
+    widget = BeforeAfterWidget()
+    image = QImage(8, 8, QImage.Format.Format_RGBA8888)
+    image.fill(0xFF123456)
+    widget.set_before(image)
+    widget.set_after(image)
+    widget._on_popout_clicked()
+    floating = widget._popout_dialog.findChild(BeforeAfterWidget)
+    yield widget, floating
+    widget.close_popout_dialog()
+    dispose_events()
+    sip.delete(widget)
+
+
+def test_floating_preview_mirrors_images_raw_state_loading_stats_and_theme(comparison):
+    widget, floating = comparison
+    floating._zoom = 2.0
+    floating._split = 0.7
+    before = QImage(10, 12, QImage.Format.Format_RGBA8888)
+    before.fill(0xFFAA1122)
+    after = QImage(10, 12, QImage.Format.Format_RGBA8888)
+    after.fill(0xFF2233AA)
+    widget.set_loading()
+    assert floating._loading
+    assert floating._pix_after is None
+    widget.set_before(before)
+    widget.set_after(after)
+    assert floating._pix_before.toImage().convertToFormat(before.format()) == before
+    assert floating._pix_after.toImage().convertToFormat(after.format()) == after
+    assert floating.before_image() == before
+    assert floating.after_image() == after
+    assert not floating._loading
+    widget.set_stats({"min": 1, "max": 255, "mean": 100}, {"min": 0, "max": 200, "mean": 50})
+    assert floating._stats_before == widget._stats_before
+    assert floating._stats_after == widget._stats_after
+    widget.set_divider_color("#abcdef")
+    assert floating._divider_color == "#abcdef"
+    assert floating._zoom == 2.0
+    assert floating._split == 0.7
+    widget.clear()
+    assert floating._pix_before is None
+    assert floating._pix_after is None
+    assert not floating.has_images()
+    assert floating._stats_before == floating._stats_after == ""
+
+
+def test_floating_overlay_updates_do_not_replace_raw_images(comparison):
+    widget, floating = comparison
+    original = widget.before_image().copy()
+    overlay = original.copy()
+    overlay.fill(0xFFEE2211)
+    widget.set_before(overlay, store_raw=False, stop_movie=False)
+    widget.set_after(overlay, store_raw=False)
+    assert floating._pix_before.toImage().convertToFormat(overlay.format()) == overlay
+    assert floating.before_image() == original
+    assert floating.after_image() == original
+
+
+def test_floating_movie_tracks_replaced_animation_without_own_decoder(comparison, tmp_path):
+    widget, floating = comparison
+    for index, color in enumerate(["red", "green"]):
+        path = tmp_path / f"animation{index}.gif"
+        with Image.new("RGB", (8, 8), color) as first, Image.new("RGB", (8, 8), "blue") as second:
+            first.save(path, save_all=True, append_images=[second], duration=100)
+        widget.animate_before(str(path))
+        widget._movie.setPaused(True)
+        assert widget._movie.jumpToFrame(1)
+        assert floating._movie is None
+        assert floating._movie_path == str(path)
+        assert floating._pix_before.toImage() == widget._pix_before.toImage()
+        dispose_events()
+    widget.clear()
+    assert floating._movie_path == ""
+    assert floating._pix_before is None

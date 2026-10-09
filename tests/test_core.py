@@ -8926,9 +8926,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
     def test_preview_popout_copies_active_gif_animation_state(self):
         src = self._src("ui/preview_pane.py")
         self.assertIn("self._movie_path: str = \"\"", src)
-        self.assertIn("def _mirror_movie_frame(_frame_no: int) -> None:", src)
-        self.assertIn("self._movie.frameChanged.connect(_mirror_movie_frame)", src)
-        self.assertIn("connected_movie.frameChanged.disconnect(_mirror_movie_frame)", src)
+        self.assertIn("def _sync_popout_state(self) -> None:", src)
+        self.assertIn("self._movie.frameChanged.connect(self._on_movie_frame)", src)
+        self.assertIn("self._movie.frameChanged.disconnect(self._on_movie_frame)", src)
+        movie_frame = src[src.index("    def _on_movie_frame("):]
+        self.assertIn("self._sync_popout_state()", movie_frame)
         self.assertIn("compare._pix_before = self._pix_before.copy()", src)
 
     def test_gif_builder_closes_progress_dialog_on_cancel(self):
