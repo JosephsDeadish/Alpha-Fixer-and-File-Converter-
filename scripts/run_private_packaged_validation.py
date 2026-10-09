@@ -62,6 +62,34 @@ _VALIDATION_PROFILES: dict[str, dict[str, float | int]] = {
         "max_smoke_elapsed_growth_seconds": 15.0,
         "max_smoke_elapsed_spread_seconds": 15.0,
     },
+    "soak": {
+        "repeat": 8,
+        "smoke_launch_delay_seconds": 1.5,
+        "timeout": 90,
+        "selftest_iterations": 10,
+        "selftest_sample_limit": 32,
+        "selftest_stress_loops": 8,
+        "repeat_selftest_runs": 6,
+        "max_selftest_rss_growth_mb": 384.0,
+        "max_selftest_rss_spread_mb": 384.0,
+        "max_smoke_elapsed_seconds": 60.0,
+        "max_smoke_elapsed_growth_seconds": 20.0,
+        "max_smoke_elapsed_spread_seconds": 20.0,
+    },
+    "onefile-soak": {
+        "repeat": 10,
+        "smoke_launch_delay_seconds": 1.5,
+        "timeout": 120,
+        "selftest_iterations": 12,
+        "selftest_sample_limit": 32,
+        "selftest_stress_loops": 10,
+        "repeat_selftest_runs": 8,
+        "max_selftest_rss_growth_mb": 448.0,
+        "max_selftest_rss_spread_mb": 448.0,
+        "max_smoke_elapsed_seconds": 75.0,
+        "max_smoke_elapsed_growth_seconds": 25.0,
+        "max_smoke_elapsed_spread_seconds": 25.0,
+    },
 }
 
 
@@ -158,6 +186,8 @@ def _preflight_summary(
     return {
         "launch_target": launch_target,
         "launch_target_exists": Path(launch_target).exists(),
+        "host_platform": sys.platform,
+        "python_version": sys.version.split()[0],
         "output_dir": str(output_dir),
         "manifests_dir": str(manifests_dir),
         "sample_cache_dir": str(sample_cache_dir),

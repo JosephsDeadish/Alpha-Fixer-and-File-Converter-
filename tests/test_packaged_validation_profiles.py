@@ -54,6 +54,38 @@ class TestPackagedValidationProfiles(unittest.TestCase):
         self.assertEqual(settings["max_smoke_elapsed_seconds"], 45.0)
         self.assertTrue(settings["use_public_sample_manifests"])
 
+    def test_effective_validation_settings_raise_minimums_for_soak_profile(self):
+        script = self._load_runner_script()
+
+        class Args:
+            validation_profile = "soak"
+            bundle_kind = "folder"
+            smoke_seconds = 2.0
+            repeat = 2
+            smoke_launch_delay_seconds = 0.25
+            timeout = 45
+            selftest_iterations = 6
+            selftest_sample_limit = 8
+            selftest_stress_loops = 2
+            repeat_selftest_runs = 2
+            max_selftest_rss_growth_mb = 256.0
+            max_selftest_rss_spread_mb = 256.0
+            max_smoke_elapsed_seconds = 30.0
+            max_smoke_elapsed_growth_seconds = 10.0
+            max_smoke_elapsed_spread_seconds = 10.0
+            use_public_sample_manifests = False
+            allow_sample_downloads = False
+
+        settings = script._effective_validation_settings(Args())
+        self.assertEqual(settings["validation_profile"], "soak")
+        self.assertEqual(settings["bundle_kind"], "folder")
+        self.assertEqual(settings["repeat"], 8)
+        self.assertEqual(settings["selftest_iterations"], 10)
+        self.assertEqual(settings["selftest_stress_loops"], 8)
+        self.assertEqual(settings["repeat_selftest_runs"], 6)
+        self.assertEqual(settings["max_selftest_rss_growth_mb"], 384.0)
+        self.assertEqual(settings["max_smoke_elapsed_seconds"], 60.0)
+
     def test_runner_forwards_profile_and_public_manifest_requirements(self):
         script = self._load_runner_script()
 
