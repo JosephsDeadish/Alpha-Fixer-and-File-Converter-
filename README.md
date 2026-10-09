@@ -322,6 +322,14 @@ Disconnected-monitor recovery uses the primary (or first available) screen.
 Window decorations, taskbar-reserved areas and smaller-screen minimum-size caps
 are included when fitting the window; negative-coordinate monitors remain valid.
 
+History regression qualification covers all five views with up to 5,000 entries,
+missing media, refreshes, filtered ordering and TXT/CSV/JSON/HTML exports.
+Error-row text inherits the active theme rather than a fixed yellow color;
+counts, status and tooltips retain error details. Filtered-out GIF thumbnails
+pause, and corrupt GIF outputs fall back to available source thumbnails.
+These checks do not establish a sustained memory ceiling or qualify thousands
+of simultaneously playing animations.
+
 ### Real corpus validation
 
 Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because many of the most relevant PSP / PS1 / PS2 corpora are large, private, or copyrighted, they are **not** bundled in this repository.

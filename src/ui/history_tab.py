@@ -86,7 +86,7 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
     # Public helpers
     # ------------------------------------------------------------------
 
-    def set_gif_path(self, item: QTreeWidgetItem, path: str) -> None:
+    def set_gif_path(self, item: QTreeWidgetItem, path: str) -> bool:
         """Store *path* on *item* and start a QMovie for .gif files."""
         item.setData(0, self._GIF_PATH_ROLE, path)
         if path and path.lower().endswith(".gif") and os.path.isfile(path):
@@ -97,13 +97,36 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
                     m.setScaledSize(QSize(_THUMB_SIZE, _THUMB_SIZE))
                     if not m.isValid():
                         m.deleteLater()
-                        return
+                        return False
                     self._movies[path] = m
                     if self._tree.isVisible():
                         m.start()
                         self._tick_timer.start()
                 except Exception:
-                    pass
+                    return False
+            return True
+        return False
+
+    def sync_visibility(self) -> None:
+        """Pause movies whose rows are filtered out or whose tree is hidden."""
+        active = set()
+        if self._tree.isVisible():
+            for row in range(self._tree.topLevelItemCount()):
+                item = self._tree.topLevelItem(row)
+                if not item.isHidden():
+                    active.add(item.data(0, self._GIF_PATH_ROLE))
+        for path, movie in self._movies.items():
+            if path in active:
+                if movie.state() == movie.MovieState.NotRunning:
+                    movie.start()
+                else:
+                    movie.setPaused(False)
+            else:
+                movie.setPaused(True)
+        if active.intersection(self._movies):
+            self._tick_timer.start()
+        else:
+            self._tick_timer.stop()
 
     def clear_movies(self) -> None:
         """Stop and discard all loaded movies (call before rebuilding the tree)."""
@@ -120,17 +143,8 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
         from PyQt6.QtCore import QEvent
 
         if watched is self._tree:
-            if event.type() == QEvent.Type.Hide:
-                self._tick_timer.stop()
-                for movie in self._movies.values():
-                    movie.setPaused(True)
-            elif event.type() == QEvent.Type.Show and self._movies:
-                for movie in self._movies.values():
-                    if movie.state() == movie.MovieState.NotRunning:
-                        movie.start()
-                    else:
-                        movie.setPaused(False)
-                self._tick_timer.start()
+            if event.type() in (QEvent.Type.Hide, QEvent.Type.Show):
+                self.sync_visibility()
         return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------
@@ -233,11 +247,16 @@ _FILTER_FIELD_ALIASES = {
 }
 _FILTER_COMPARATORS = (">=", "<=", ">", "<", "=")
 _FILTER_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+_FILTER_NUMERIC_FIELDS = {"success", "errors", "frames", "clips", "fps", "delay", "loop"}
 
 
 def _filter_tokens(text: str) -> list[str]:
     try:
-        return [token.casefold() for token in shlex.split(text) if token.strip()]
+        lexer = shlex.shlex(text, posix=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        lexer.escape = ""  # File paths are literal, including Windows backslashes.
+        return [token.casefold() for token in lexer if token.strip()]
     except ValueError:
         return [token.casefold() for token in text.split() if token.strip()]
 
@@ -294,7 +313,7 @@ def _matches_numeric_filter(haystack: str, option: str) -> bool:
     return any(abs(value - query) < 1e-9 for value in candidate_values)
 
 
-def _matches_field_filter(haystack: str, value: str) -> bool:
+def _matches_field_filter(haystack: str, value: str, *, numeric: bool = False) -> bool:
     text = str(haystack or "")
     for option in (part.strip() for part in value.split("|")):
         if not option:
@@ -303,11 +322,12 @@ def _matches_field_filter(haystack: str, value: str) -> bool:
             if fnmatch.fnmatch(text, option):
                 return True
             continue
-        if (
-            option[0] in "><="
-            or (_numeric_filter_values(option) and _numeric_filter_values(text))
-        ) and _matches_numeric_filter(text, option):
-            return True
+        if option[0] in "><=" or (
+            numeric and _FILTER_NUMBER_RE.fullmatch(option) and _numeric_filter_values(text)
+        ):
+            if _matches_numeric_filter(text, option):
+                return True
+            continue
         if option in text:
             return True
     return False
@@ -324,14 +344,10 @@ def _load_thumb(path: str) -> QIcon:
             try:
                 from PIL import Image as _PILImage
                 from PIL.ImageQt import ImageQt
-                img = _PILImage.open(path)
-                rgba = img.convert("RGBA")
-                try:
-                    rgba.thumbnail((_THUMB_SIZE * 2, _THUMB_SIZE * 2))
-                    px = QPixmap.fromImage(ImageQt(rgba))
-                finally:
-                    rgba.close()
-                    img.close()
+                with _PILImage.open(path) as img:
+                    with img.convert("RGBA") as rgba:
+                        rgba.thumbnail((_THUMB_SIZE * 2, _THUMB_SIZE * 2))
+                        px = QPixmap.fromImage(ImageQt(rgba))
             except Exception:
                 return QIcon()
         if px.isNull():
@@ -772,10 +788,16 @@ class HistoryTab(QWidget):
             if visible:
                 for key, values in grouped_fields.items():
                     haystack = str(fields.get(key, ""))
-                    if not haystack or not any(_matches_field_filter(haystack, value) for value in values):
+                    if not haystack or not any(
+                        _matches_field_filter(haystack, value, numeric=key in _FILTER_NUMERIC_FIELDS)
+                        for value in values
+                    ):
                         visible = False
                         break
             item.setHidden(not visible)
+        delegate = tree.itemDelegate()
+        if isinstance(delegate, _AnimatedGifDelegate):
+            delegate.sync_visibility()
 
     # ------------------------------------------------------------------
     # Tooltip registration
@@ -922,6 +944,7 @@ class HistoryTab(QWidget):
                 format=fmt,
                 file=file_list,
                 status=status,
+                success=n_ok,
                 errors=n_err,
             )
             # Thumbnail icon from first processed file (item 9)
@@ -938,9 +961,6 @@ class HistoryTab(QWidget):
                 f"{preview_text}",
                 file_list,
             )
-            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
-                    item.setForeground(col, Qt.GlobalColor.yellow)
             self._conv_tree.addTopLevelItem(item)
         _apply_default_sort(self._conv_tree)
         total = len(history)
@@ -973,6 +993,7 @@ class HistoryTab(QWidget):
                 mode=mode,
                 file=file_list,
                 status=status,
+                success=n_ok,
                 errors=n_err,
             )
             # Thumbnail icon from first processed file (item 9)
@@ -990,9 +1011,6 @@ class HistoryTab(QWidget):
                 f"{preview_text}",
                 file_list,
             )
-            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
-                    item.setForeground(col, Qt.GlobalColor.yellow)
             self._alpha_tree.addTopLevelItem(item)
         _apply_default_sort(self._alpha_tree)
         total = len(history)
@@ -1039,6 +1057,7 @@ class HistoryTab(QWidget):
                 output=entry.get("output", ""),
                 file=file_list,
                 status="issues" if str(n_err) not in {"0", "?"} else "ok",
+                success=n_ok,
                 errors=n_err,
             )
             # Thumbnail icon from source image (item 9)
@@ -1055,9 +1074,6 @@ class HistoryTab(QWidget):
                 f"{preview_text}",
                 file_list,
             )
-            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(6):
-                    item.setForeground(col, Qt.GlobalColor.yellow)
             self._sel_tree.addTopLevelItem(item)
         _apply_default_sort(self._sel_tree)
         total = len(history)
@@ -1142,9 +1158,8 @@ class HistoryTab(QWidget):
             # the first input file for non-GIF outputs or missing files.
             gif_output = output_path if (output_path and output_path.lower().endswith(".gif")
                                          and os.path.isfile(output_path)) else ""
-            if gif_output:
+            if gif_output and self._gif_anim_delegate.set_gif_path(item, gif_output):
                 # Let the animated delegate handle thumbnail rendering
-                self._gif_anim_delegate.set_gif_path(item, gif_output)
                 preview_text = "Preview: animated GIF thumbnail shown from the output file."
             else:
                 thumb = _load_thumb(entry.get("first_file", ""))
@@ -1160,9 +1175,6 @@ class HistoryTab(QWidget):
                 + (f"\nNotes: {notes}" if notes else ""),
                 file_list,
             )
-            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(16):
-                    item.setForeground(col, Qt.GlobalColor.yellow)
             self._gif_tree.addTopLevelItem(item)
         _apply_default_sort(self._gif_tree)
         total = len(history)
@@ -1260,9 +1272,6 @@ class HistoryTab(QWidget):
                 f"{preview_text}{note_text}{clip_text}",
                 file_list,
             )
-            if isinstance(entry.get("errors", 0), int) and entry.get("errors", 0) > 0:
-                for col in range(17):
-                    item.setForeground(col, Qt.GlobalColor.yellow)
             self._vid_tree.addTopLevelItem(item)
         _apply_default_sort(self._vid_tree)
         total = len(history)
