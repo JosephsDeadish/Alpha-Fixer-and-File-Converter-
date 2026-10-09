@@ -2591,7 +2591,9 @@ class TestOrderlyApplicationShutdown(unittest.TestCase):
         from src.core.settings_manager import SettingsManager
         from src.ui.main_window import MainWindow
 
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as directory:
+        scratch = Path.cwd() / "build" / "shutdown-tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
             with patch("src.core.settings_manager._settings_ini_path",
                        return_value=str(Path(directory) / "settings.ini")):
                 settings = SettingsManager()
@@ -2623,6 +2625,7 @@ class TestOrderlyApplicationShutdown(unittest.TestCase):
                 self.assertFalse(sip.isdeleted(app))
             finally:
                 sip.delete(window)
+                sip.delete(settings._qs)
 
     def test_direct_exit_closes_without_forcing_widget_destruction(self):
         app = _get_app()
