@@ -11,7 +11,7 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import (
     QApplication, QMessageBox, QGroupBox, QScrollArea, QLabel, QWidget, QVBoxLayout,
     QPushButton, QToolButton, QLineEdit, QTextEdit, QComboBox, QSpinBox,
-    QDoubleSpinBox, QCheckBox, QRadioButton, QPlainTextEdit,
+    QDoubleSpinBox, QCheckBox, QRadioButton, QPlainTextEdit, QSlider, QTabBar,
 )
 
 from src.core.settings_manager import SettingsManager
@@ -551,6 +551,64 @@ def test_keyboard_focus_is_visible_without_layout_shifts(app, theme):
         clicked = Mock()
         controls[0].clicked.connect(clicked)
         QTest.keyClick(controls[0], Qt.Key.Key_Space)
+        clicked.assert_called_once()
+    finally:
+        window.close()
+        sip.delete(window)
+
+
+@pytest.mark.parametrize("theme", [*PRESET_THEMES.values(), *HIDDEN_THEMES.values()],
+                         ids=lambda theme: theme["name"])
+def test_slider_and_toolbutton_focus_rendering_preserves_geometry_and_keyboard_actions(app, theme):
+    from src.ui.theme_engine import build_stylesheet
+
+    window = QWidget()
+    window.setStyleSheet(build_stylesheet(theme))
+    layout = QVBoxLayout(window)
+    anchor = QPushButton("Move focus here")
+    button = QToolButton()
+    button.setText("Action")
+    button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    slider = QSlider(Qt.Orientation.Horizontal)
+    slider.setRange(0, 100)
+    slider.setValue(50)
+    tabs = QTabBar()
+    tab_button = QToolButton(tabs)
+    tab_button.setText("Next tab")
+    tab_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    tabs_layout = QVBoxLayout(tabs)
+    tabs_layout.addWidget(tab_button)
+    for control in (anchor, button, slider, tabs):
+        layout.addWidget(control)
+    try:
+        window.show()
+        window.activateWindow()
+        app.processEvents()
+        QTest.mouseMove(window, window.rect().bottomRight())
+        for control in (button, slider, tab_button):
+            anchor.setFocus()
+            app.processEvents()
+            before_size, before_geometry = control.sizeHint(), control.geometry()
+            before_image = control.grab().toImage()
+            control.setFocus(Qt.FocusReason.TabFocusReason)
+            app.processEvents()
+            assert control.hasFocus()
+            assert control.sizeHint() == before_size
+            assert control.geometry() == before_geometry
+            assert control.grab().toImage() != before_image, theme["name"]
+        slider.setFocus()
+        QTest.keyClick(slider, Qt.Key.Key_Right)
+        assert slider.value() == 51
+        slider.setEnabled(False)
+        QTest.keyClick(slider, Qt.Key.Key_Right)
+        assert slider.value() == 51
+        clicked = Mock()
+        button.clicked.connect(clicked)
+        button.setFocus()
+        QTest.keyClick(button, Qt.Key.Key_Space)
+        clicked.assert_called_once()
+        button.setEnabled(False)
+        QTest.keyClick(button, Qt.Key.Key_Space)
         clicked.assert_called_once()
     finally:
         window.close()

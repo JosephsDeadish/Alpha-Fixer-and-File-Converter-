@@ -3718,6 +3718,9 @@ QTabBar QToolButton:disabled {{
 }}
 
 /* ===== Buttons ===== */
+QToolButton {{
+    border: 1px solid transparent;
+}}
 QPushButton {{
     background-color: {t['button_bg']};
     color: {t['text']};
@@ -3864,6 +3867,7 @@ QSlider::groove:horizontal {{
 }}
 QSlider::handle:horizontal {{
     background: {t['accent']};
+    border: 1px solid transparent;
     width: 18px;
     height: 18px;
     margin: -6px 0;
@@ -4160,6 +4164,14 @@ QFrame#card {{
 {_get_theme_extra_css(t)}
 
 /* ===== Keyboard Focus (preserve existing border widths) ===== */
+QToolButton:enabled:focus, QTabBar QToolButton:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+QSlider::handle:horizontal:enabled:focus {{
+    border-style: dotted;
+    border-color: {accent_focus};
+}}
 QPushButton:enabled:focus, QPushButton#accent:enabled:focus,
 QPushButton#resetBtn:enabled:focus,
 QLineEdit:enabled:focus, QTextEdit:enabled:focus, QPlainTextEdit:enabled:focus,
