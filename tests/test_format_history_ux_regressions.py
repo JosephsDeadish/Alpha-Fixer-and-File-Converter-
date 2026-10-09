@@ -11,7 +11,9 @@ from PyQt6.QtGui import QImage, QColor, QPalette
 from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel
 
 from src.core.settings_manager import SettingsManager
+from src.core.presets import PresetManager
 from src.ui.converter_tool import ConverterTab
+from src.ui.alpha_tool import AlphaFixerTab
 from src.ui.history_tab import HistoryTab
 from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
 
@@ -66,20 +68,20 @@ def select_format(converter, fmt):
     converter._preview_debounce.stop()
 
 
-@pytest.mark.parametrize("tool", ["converter", "history"])
+@pytest.mark.parametrize("tool", ["converter", "history", "alpha"])
 @pytest.mark.parametrize("limited", [False, True])
 def test_tool_guidance_tracks_theme_and_scale_without_losing_status(
         settings, app, tool, limited):
-    cls = ConverterTab if tool == "converter" else HistoryTab
-    target = ("src.ui.converter_tool._converter_capability_has_limits"
-              if tool == "converter" else "src.ui.history_tab._history_capability_has_limits")
+    cls = {"converter": ConverterTab, "history": HistoryTab, "alpha": AlphaFixerTab}[tool]
+    module = "history_tab" if tool == "history" else f"{tool}_tool"
+    target = f"src.ui.{module}._{tool}_capability_has_limits"
     with patch(target, return_value=limited):
-        widget = cls(settings)
+        widget = cls(PresetManager(settings), settings) if tool == "alpha" else cls(settings)
     try:
         widget.show()
         guidance = [label for label in widget.findChildren(QLabel)
                     if label.property("toolGuidance")]
-        assert len(guidance) == 3
+        assert len(guidance) == (4 if tool == "alpha" else 3)
         capability = widget._capability_lbl
         assert capability.property("capabilityState") == ("limited" if limited else "ready")
         original_capability = capability.text(), capability.toolTip()
@@ -87,6 +89,8 @@ def test_tool_guidance_tracks_theme_and_scale_without_losing_status(
             theme = PRESET_THEMES[name]
             widget.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
             widget._refresh_session_status()
+            if tool == "alpha":
+                widget._refresh_preview_helper_status()
             app.processEvents()
             for label in guidance + [capability]:
                 assert not label.styleSheet()
@@ -99,7 +103,7 @@ def test_tool_guidance_tracks_theme_and_scale_without_losing_status(
             assert widget._next_step_lbl.text()
             assert widget._next_step_lbl.toolTip()
     finally:
-        if tool == "converter":
+        if tool in ("converter", "alpha"):
             widget._preview_debounce.stop()
             widget._stop_preview_loader()
             widget._compare.clear()

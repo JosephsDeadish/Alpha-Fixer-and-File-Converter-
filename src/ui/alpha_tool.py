@@ -375,22 +375,20 @@ class AlphaFixerTab(QWidget):
 
         self._capability_lbl = QLabel(_alpha_capability_summary())
         self._capability_lbl.setWordWrap(True)
-        self._capability_lbl.setStyleSheet(
-            "color: #b26a00; font-size: 11px;"
-            if _alpha_capability_has_limits()
-            else "color: #2e7d32; font-size: 11px;"
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _alpha_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_alpha_capability_details())
         main_layout.addWidget(self._capability_lbl)
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._session_status_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._session_status_lbl.setProperty("toolGuidance", True)
         main_layout.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel("Next step: add image files to preview or process, then choose a preset or manual adjustments.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._next_step_lbl.setStyleSheet("color: #888; font-size: 11px;")
+        self._next_step_lbl.setProperty("toolGuidance", True)
         main_layout.addWidget(self._next_step_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -551,12 +549,12 @@ class AlphaFixerTab(QWidget):
             "Preview helpers only change the viewer, not the processed file."
         )
         self._preview_hint_lbl = preview_hint
-        preview_hint.setStyleSheet("color: gray; font-size: 11px;")
+        preview_hint.setProperty("toolGuidance", True)
         preview_hint.setWordWrap(True)
         ca_layout.addWidget(preview_hint)
         self._preview_helper_lbl = QLabel("Preview helpers idle.")
         self._preview_helper_lbl.setObjectName("alphaPreviewHelperStatus")
-        self._preview_helper_lbl.setStyleSheet("color: #8ea0b6; font-size: 11px;")
+        self._preview_helper_lbl.setProperty("toolGuidance", True)
         self._preview_helper_lbl.setWordWrap(True)
         ca_layout.addWidget(self._preview_helper_lbl)
         # Atlas region list for overlay drawing (updated when atlas detect is on)
