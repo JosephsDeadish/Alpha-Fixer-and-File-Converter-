@@ -34,6 +34,32 @@ _PRIVATE_MANIFEST_ENV_NAMES = (
     "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST",
     "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST",
 )
+_VALIDATION_PROFILES: dict[str, dict[str, float | int]] = {
+    "standard": {},
+    "deep": {
+        "repeat": 4,
+        "smoke_launch_delay_seconds": 1.0,
+        "timeout": 60,
+        "selftest_iterations": 8,
+        "selftest_sample_limit": 24,
+        "selftest_stress_loops": 4,
+        "repeat_selftest_runs": 3,
+    },
+    "onefile-deep": {
+        "repeat": 5,
+        "smoke_launch_delay_seconds": 1.0,
+        "timeout": 75,
+        "selftest_iterations": 8,
+        "selftest_sample_limit": 24,
+        "selftest_stress_loops": 5,
+        "repeat_selftest_runs": 4,
+        "max_selftest_rss_growth_mb": 320.0,
+        "max_selftest_rss_spread_mb": 320.0,
+        "max_smoke_elapsed_seconds": 45.0,
+        "max_smoke_elapsed_growth_seconds": 15.0,
+        "max_smoke_elapsed_spread_seconds": 15.0,
+    },
+}
 
 
 def _default_launch_target() -> str:
@@ -78,6 +104,32 @@ def _load_json(path: Path) -> dict[str, object] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _effective_validation_settings(args) -> dict[str, object]:
+    profile_name = str(getattr(args, "validation_profile", "standard") or "standard").strip().lower()
+    profile = _VALIDATION_PROFILES.get(profile_name, {})
+    bundle_kind = str(getattr(args, "bundle_kind", "") or "").strip().lower()
+    settings: dict[str, object] = {
+        "validation_profile": profile_name,
+        "bundle_kind": bundle_kind,
+        "smoke_seconds": max(0.25, float(getattr(args, "smoke_seconds", 2.0))),
+        "repeat": max(int(profile.get("repeat", 1)), max(1, int(getattr(args, "repeat", 1)))),
+        "smoke_launch_delay_seconds": max(float(profile.get("smoke_launch_delay_seconds", 0.0)), max(0.0, float(getattr(args, "smoke_launch_delay_seconds", 0.0)))),
+        "timeout": max(int(profile.get("timeout", 1)), max(1, int(getattr(args, "timeout", 45)))),
+        "selftest_iterations": max(int(profile.get("selftest_iterations", 1)), max(1, int(getattr(args, "selftest_iterations", 6)))),
+        "selftest_sample_limit": max(int(profile.get("selftest_sample_limit", 1)), max(1, int(getattr(args, "selftest_sample_limit", 16)))),
+        "selftest_stress_loops": max(int(profile.get("selftest_stress_loops", 0)), max(0, int(getattr(args, "selftest_stress_loops", 4)))),
+        "repeat_selftest_runs": max(int(profile.get("repeat_selftest_runs", 1)), max(1, int(getattr(args, "repeat_selftest_runs", 2)))),
+        "max_selftest_rss_growth_mb": max(float(profile.get("max_selftest_rss_growth_mb", 0.0)), float(getattr(args, "max_selftest_rss_growth_mb", 256.0))),
+        "max_selftest_rss_spread_mb": max(float(profile.get("max_selftest_rss_spread_mb", 0.0)), float(getattr(args, "max_selftest_rss_spread_mb", 256.0))),
+        "max_smoke_elapsed_seconds": max(float(profile.get("max_smoke_elapsed_seconds", 0.0)), float(getattr(args, "max_smoke_elapsed_seconds", 30.0))),
+        "max_smoke_elapsed_growth_seconds": max(float(profile.get("max_smoke_elapsed_growth_seconds", 0.0)), float(getattr(args, "max_smoke_elapsed_growth_seconds", 10.0))),
+        "max_smoke_elapsed_spread_seconds": max(float(profile.get("max_smoke_elapsed_spread_seconds", 0.0)), float(getattr(args, "max_smoke_elapsed_spread_seconds", 10.0))),
+        "use_public_sample_manifests": bool(getattr(args, "use_public_sample_manifests", False)),
+        "allow_sample_downloads": bool(getattr(args, "allow_sample_downloads", False)),
+    }
+    return settings
+
+
 def _preflight_summary(
     *,
     launch_target: str,
@@ -85,6 +137,7 @@ def _preflight_summary(
     manifests_dir: Path,
     sample_cache_dir: Path,
     manifest_limit: int,
+    validation_settings: dict[str, object],
 ) -> dict[str, object]:
     video_roots = corpus_roots_from_env(*_VIDEO_CORPUS_ENV_NAMES)
     dds_roots = corpus_roots_from_env(*_DDS_CORPUS_ENV_NAMES)
@@ -98,6 +151,9 @@ def _preflight_summary(
         "output_dir": str(output_dir),
         "manifests_dir": str(manifests_dir),
         "sample_cache_dir": str(sample_cache_dir),
+        "validation_profile": str(validation_settings.get("validation_profile") or "standard"),
+        "bundle_kind": str(validation_settings.get("bundle_kind") or ""),
+        "requested_validation_settings": validation_settings,
         "private_manifest_env": {name: str(os.environ.get(name, "") or "") for name in _PRIVATE_MANIFEST_ENV_NAMES},
         "corpus_env": {
             **{name: str(os.environ.get(name, "") or "") for name in _VIDEO_CORPUS_ENV_NAMES},
@@ -230,6 +286,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Directory where generated manifests, sample cache, and JSON reports should be written.",
     )
     parser.add_argument("--manifest-limit", type=int, default=24, help="Maximum auto-discovered entries per private manifest.")
+    parser.add_argument("--bundle-kind", choices=("folder", "onefile"), help="Optional packaged bundle kind label to forward into reports.")
+    parser.add_argument(
+        "--validation-profile",
+        choices=tuple(_VALIDATION_PROFILES.keys()),
+        default="standard",
+        help="Raise the runner's minimum repeat/self-test settings for deeper packaged validation without hand-editing each flag.",
+    )
     parser.add_argument("--smoke-seconds", type=float, default=2.0, help="Seconds to keep each smoke launch alive.")
     parser.add_argument("--repeat", type=int, default=3, help="How many smoke-launch cycles to run.")
     parser.add_argument("--smoke-launch-delay-seconds", type=float, default=0.5, help="Pause between repeated smoke launches.")
@@ -244,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-smoke-elapsed-growth-seconds", type=float, default=10.0, help="Upper bound for repeated packaged smoke-launch elapsed-time growth.")
     parser.add_argument("--max-smoke-elapsed-spread-seconds", type=float, default=10.0, help="Upper bound for repeated packaged smoke-launch elapsed-time spread.")
     parser.add_argument("--private-sample-cache-dir", help="Optional cache directory for local/download-backed private samples.")
+    parser.add_argument("--use-public-sample-manifests", action="store_true", help="Also run the repository's built-in public manifests during the packaged validation pass.")
     parser.add_argument("--allow-sample-downloads", action="store_true", help="Allow private manifest entries with download URLs to populate missing samples.")
     args = parser.parse_args(argv)
 
@@ -256,12 +320,14 @@ def main(argv: list[str] | None = None) -> int:
     sample_cache_dir.mkdir(parents=True, exist_ok=True)
 
     launch_target = args.launch_target or _default_launch_target()
+    validation_settings = _effective_validation_settings(args)
     preflight = _preflight_summary(
         launch_target=launch_target,
         output_dir=output_dir,
         manifests_dir=manifests_dir,
         sample_cache_dir=sample_cache_dir,
         manifest_limit=max(1, int(args.manifest_limit)),
+        validation_settings=validation_settings,
     )
     if int(preflight.get("total_discovered_entries") or 0) <= 0:
         error = "No eligible private corpus samples were discovered. Configure the ALPHA_FIXER_REAL_* corpus directories first."
@@ -288,35 +354,37 @@ def main(argv: list[str] | None = None) -> int:
     verify_args = [
         launch_target,
         "--smoke-seconds",
-        str(max(0.25, float(args.smoke_seconds))),
+        str(validation_settings["smoke_seconds"]),
         "--repeat",
-        str(max(1, int(args.repeat))),
+        str(validation_settings["repeat"]),
         "--smoke-launch-delay-seconds",
-        str(max(0.0, float(args.smoke_launch_delay_seconds))),
+        str(validation_settings["smoke_launch_delay_seconds"]),
         "--timeout",
-        str(max(1, int(args.timeout))),
+        str(validation_settings["timeout"]),
         "--run-selftest",
         "--selftest-iterations",
-        str(max(1, int(args.selftest_iterations))),
+        str(validation_settings["selftest_iterations"]),
         "--selftest-sample-limit",
-        str(max(1, int(args.selftest_sample_limit))),
+        str(validation_settings["selftest_sample_limit"]),
         "--selftest-stress-loops",
-        str(max(0, int(args.selftest_stress_loops))),
+        str(validation_settings["selftest_stress_loops"]),
         "--repeat-selftest-runs",
-        str(max(1, int(args.repeat_selftest_runs))),
+        str(validation_settings["repeat_selftest_runs"]),
         "--max-selftest-rss-growth-mb",
-        str(float(args.max_selftest_rss_growth_mb)),
+        str(validation_settings["max_selftest_rss_growth_mb"]),
         "--max-selftest-rss-spread-mb",
-        str(float(args.max_selftest_rss_spread_mb)),
+        str(validation_settings["max_selftest_rss_spread_mb"]),
         "--max-smoke-elapsed-seconds",
-        str(float(args.max_smoke_elapsed_seconds)),
+        str(validation_settings["max_smoke_elapsed_seconds"]),
         "--max-smoke-elapsed-growth-seconds",
-        str(float(args.max_smoke_elapsed_growth_seconds)),
+        str(validation_settings["max_smoke_elapsed_growth_seconds"]),
         "--max-smoke-elapsed-spread-seconds",
-        str(float(args.max_smoke_elapsed_spread_seconds)),
+        str(validation_settings["max_smoke_elapsed_spread_seconds"]),
         "--require-selftest-pass",
         "--require-core-selftest-checks",
         "--require-video-selftest-checks",
+        "--require-dds-selftest-checks",
+        "--require-odd-probe-ready",
         "--require-video-runtime",
         "--require-ffmpeg-selfcheck",
         "--require-ffprobe-selfcheck",
@@ -324,16 +392,27 @@ def main(argv: list[str] | None = None) -> int:
         "--require-bundled-ffprobe",
         "--require-bundled-default-theme-svg",
         "--require-packaged-bundle-ready",
+        "--require-no-packaged-asset-gaps",
         "--json-out",
         str(verifier_report_path),
         "--sample-cache-dir",
         str(sample_cache_dir),
     ]
+    if validation_settings["bundle_kind"]:
+        verify_args.extend(["--bundle-kind", str(validation_settings["bundle_kind"])])
     if sys.platform.startswith("linux"):
         verify_args.append("--require-no-missing-libs")
-    if max(0, int(args.selftest_stress_loops)) > 0:
+    if int(validation_settings["selftest_stress_loops"]) > 0:
         verify_args.append("--require-stress-selftest-checks")
-    if args.allow_sample_downloads:
+    if bool(validation_settings["use_public_sample_manifests"]):
+        verify_args.extend(
+            [
+                "--use-public-sample-manifests",
+                "--require-public-manifest-checks",
+                "--require-public-manifest-group-checks",
+            ]
+        )
+    if bool(validation_settings["allow_sample_downloads"]):
         verify_args.append("--allow-sample-downloads")
 
     disc_manifest = manifests_dir / "private_real_disc_video_manifest.json"

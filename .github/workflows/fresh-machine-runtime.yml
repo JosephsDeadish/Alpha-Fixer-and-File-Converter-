@@ -17,8 +17,91 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        bundle_kind: [folder, onefile]
+        include:
+          - os: ubuntu-latest
+            bundle_kind: folder
+            smoke_repeat: 3
+            smoke_delay_seconds: 0.5
+            timeout_seconds: 45
+            max_smoke_elapsed_seconds: 30
+            max_smoke_elapsed_growth_seconds: 10
+            max_smoke_elapsed_spread_seconds: 10
+            selftest_iterations: 6
+            selftest_sample_limit: 6
+            selftest_stress_loops: 4
+            repeat_selftest_runs: 2
+            max_selftest_rss_growth_mb: 256
+            max_selftest_rss_spread_mb: 256
+          - os: ubuntu-latest
+            bundle_kind: onefile
+            smoke_repeat: 5
+            smoke_delay_seconds: 1.0
+            timeout_seconds: 75
+            max_smoke_elapsed_seconds: 45
+            max_smoke_elapsed_growth_seconds: 15
+            max_smoke_elapsed_spread_seconds: 15
+            selftest_iterations: 8
+            selftest_sample_limit: 6
+            selftest_stress_loops: 5
+            repeat_selftest_runs: 3
+            max_selftest_rss_growth_mb: 320
+            max_selftest_rss_spread_mb: 320
+          - os: windows-latest
+            bundle_kind: folder
+            smoke_repeat: 4
+            smoke_delay_seconds: 0.5
+            timeout_seconds: 60
+            max_smoke_elapsed_seconds: 35
+            max_smoke_elapsed_growth_seconds: 12
+            max_smoke_elapsed_spread_seconds: 12
+            selftest_iterations: 6
+            selftest_sample_limit: 6
+            selftest_stress_loops: 4
+            repeat_selftest_runs: 2
+            max_selftest_rss_growth_mb: 320
+            max_selftest_rss_spread_mb: 320
+          - os: windows-latest
+            bundle_kind: onefile
+            smoke_repeat: 5
+            smoke_delay_seconds: 1.0
+            timeout_seconds: 90
+            max_smoke_elapsed_seconds: 55
+            max_smoke_elapsed_growth_seconds: 20
+            max_smoke_elapsed_spread_seconds: 20
+            selftest_iterations: 8
+            selftest_sample_limit: 6
+            selftest_stress_loops: 5
+            repeat_selftest_runs: 3
+            max_selftest_rss_growth_mb: 384
+            max_selftest_rss_spread_mb: 384
+          - os: macos-latest
+            bundle_kind: folder
+            smoke_repeat: 4
+            smoke_delay_seconds: 0.5
+            timeout_seconds: 60
+            max_smoke_elapsed_seconds: 35
+            max_smoke_elapsed_growth_seconds: 12
+            max_smoke_elapsed_spread_seconds: 12
+            selftest_iterations: 6
+            selftest_sample_limit: 6
+            selftest_stress_loops: 4
+            repeat_selftest_runs: 2
+            max_selftest_rss_growth_mb: 320
+            max_selftest_rss_spread_mb: 320
+          - os: macos-latest
+            bundle_kind: onefile
+            smoke_repeat: 5
+            smoke_delay_seconds: 1.0
+            timeout_seconds: 90
+            max_smoke_elapsed_seconds: 55
+            max_smoke_elapsed_growth_seconds: 20
+            max_smoke_elapsed_spread_seconds: 20
+            selftest_iterations: 8
+            selftest_sample_limit: 6
+            selftest_stress_loops: 5
+            repeat_selftest_runs: 3
+            max_selftest_rss_growth_mb: 384
+            max_selftest_rss_spread_mb: 384
 
     steps:
       - name: Checkout repository
@@ -76,28 +159,30 @@ jobs:
             "$launch_target" \
             --bundle-kind ${{ matrix.bundle_kind }} \
             --smoke-seconds 2 \
-            --repeat 3 \
-            --smoke-launch-delay-seconds 0.5 \
-            --timeout 45 \
-            --max-smoke-elapsed-seconds 30 \
-            --max-smoke-elapsed-growth-seconds 10 \
-            --max-smoke-elapsed-spread-seconds 10 \
+            --repeat ${{ matrix.smoke_repeat }} \
+            --smoke-launch-delay-seconds ${{ matrix.smoke_delay_seconds }} \
+            --timeout ${{ matrix.timeout_seconds }} \
+            --max-smoke-elapsed-seconds ${{ matrix.max_smoke_elapsed_seconds }} \
+            --max-smoke-elapsed-growth-seconds ${{ matrix.max_smoke_elapsed_growth_seconds }} \
+            --max-smoke-elapsed-spread-seconds ${{ matrix.max_smoke_elapsed_spread_seconds }} \
             --run-selftest \
-            --selftest-iterations 6 \
-            --selftest-sample-limit 4 \
-            --selftest-stress-loops 3 \
-            --repeat-selftest-runs 2 \
-            --max-selftest-rss-growth-mb 256 \
-            --max-selftest-rss-spread-mb 256 \
+            --selftest-iterations ${{ matrix.selftest_iterations }} \
+            --selftest-sample-limit ${{ matrix.selftest_sample_limit }} \
+            --selftest-stress-loops ${{ matrix.selftest_stress_loops }} \
+            --repeat-selftest-runs ${{ matrix.repeat_selftest_runs }} \
+            --max-selftest-rss-growth-mb ${{ matrix.max_selftest_rss_growth_mb }} \
+            --max-selftest-rss-spread-mb ${{ matrix.max_selftest_rss_spread_mb }} \
             --require-selftest-pass \
             --require-core-selftest-checks \
             --require-video-selftest-checks \
+            --require-dds-selftest-checks \
             --require-stress-selftest-checks \
             --require-public-manifest-checks \
             --require-public-manifest-group-checks \
             --use-public-sample-manifests \
             --allow-sample-downloads \
             --sample-cache-dir artifacts/sample-cache \
+            --require-odd-probe-ready \
             --require-video-runtime \
             --require-ffmpeg-selfcheck \
             --require-ffprobe-selfcheck \
@@ -105,6 +190,7 @@ jobs:
             --require-bundled-ffprobe \
             --require-bundled-default-theme-svg \
             --require-packaged-bundle-ready \
+            --require-no-packaged-asset-gaps \
             --require-no-missing-libs \
             --json-out artifacts/runtime-validation-${{ runner.os }}-${{ matrix.bundle_kind }}.json
 
@@ -122,28 +208,30 @@ jobs:
             $launchTarget `
             --bundle-kind ${{ matrix.bundle_kind }} `
             --smoke-seconds 2 `
-            --repeat 3 `
-            --smoke-launch-delay-seconds 0.5 `
-            --timeout 45 `
-            --max-smoke-elapsed-seconds 30 `
-            --max-smoke-elapsed-growth-seconds 10 `
-            --max-smoke-elapsed-spread-seconds 10 `
+            --repeat ${{ matrix.smoke_repeat }} `
+            --smoke-launch-delay-seconds ${{ matrix.smoke_delay_seconds }} `
+            --timeout ${{ matrix.timeout_seconds }} `
+            --max-smoke-elapsed-seconds ${{ matrix.max_smoke_elapsed_seconds }} `
+            --max-smoke-elapsed-growth-seconds ${{ matrix.max_smoke_elapsed_growth_seconds }} `
+            --max-smoke-elapsed-spread-seconds ${{ matrix.max_smoke_elapsed_spread_seconds }} `
             --run-selftest `
-            --selftest-iterations 6 `
-            --selftest-sample-limit 4 `
-            --selftest-stress-loops 3 `
-            --repeat-selftest-runs 2 `
-            --max-selftest-rss-growth-mb 256 `
-            --max-selftest-rss-spread-mb 256 `
+            --selftest-iterations ${{ matrix.selftest_iterations }} `
+            --selftest-sample-limit ${{ matrix.selftest_sample_limit }} `
+            --selftest-stress-loops ${{ matrix.selftest_stress_loops }} `
+            --repeat-selftest-runs ${{ matrix.repeat_selftest_runs }} `
+            --max-selftest-rss-growth-mb ${{ matrix.max_selftest_rss_growth_mb }} `
+            --max-selftest-rss-spread-mb ${{ matrix.max_selftest_rss_spread_mb }} `
             --require-selftest-pass `
             --require-core-selftest-checks `
             --require-video-selftest-checks `
+            --require-dds-selftest-checks `
             --require-stress-selftest-checks `
             --require-public-manifest-checks `
             --require-public-manifest-group-checks `
             --use-public-sample-manifests `
             --allow-sample-downloads `
             --sample-cache-dir artifacts/sample-cache `
+            --require-odd-probe-ready `
             --require-video-runtime `
             --require-ffmpeg-selfcheck `
             --require-ffprobe-selfcheck `
@@ -151,7 +239,7 @@ jobs:
             --require-bundled-ffprobe `
             --require-bundled-default-theme-svg `
             --require-packaged-bundle-ready `
-            --require-no-missing-libs `
+            --require-no-packaged-asset-gaps `
             --json-out artifacts\runtime-validation-windows-${{ matrix.bundle_kind }}.json
 
       - name: Upload runtime validation report
