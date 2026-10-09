@@ -3615,6 +3615,8 @@ def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (f
     """
     t = {**DEFAULT_THEME, **(theme or {})}
     disabled_text = _readable_disabled_color(t)
+    accent_focus = _readable_disabled_color(
+        {**t, "surface": t["accent"], "background": t["button_hover"]})
     return f"""
 /* ===== Global ===== */
 QWidget {{
@@ -3751,7 +3753,7 @@ QPushButton:disabled {{
 QPushButton#accent {{
     background-color: {t['accent']};
     color: {t['panda_white']};
-    border: none;
+    border: 1px solid transparent;
     font-size: 14px;
     padding: 9px 20px;
 }}
@@ -4156,6 +4158,23 @@ QFrame#card {{
 {_get_tooltip_css(t, tooltip_style)}
 {_get_theme_gradient_css(t)}
 {_get_theme_extra_css(t)}
+
+/* ===== Keyboard Focus (preserve existing border widths) ===== */
+QPushButton:enabled:focus, QPushButton#accent:enabled:focus,
+QPushButton#resetBtn:enabled:focus,
+QLineEdit:enabled:focus, QTextEdit:enabled:focus, QPlainTextEdit:enabled:focus,
+QComboBox:enabled:focus, QSpinBox:enabled:focus, QDoubleSpinBox:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+QPushButton#accent:enabled:focus, QPushButton:enabled:checked:focus {{
+    border-style: dotted;
+    border-color: {accent_focus};
+}}
+QCheckBox::indicator:enabled:focus, QRadioButton::indicator:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
 
 /* ===== Disabled Controls (after theme-specific decorations) ===== */
 QPushButton:disabled, QPushButton:disabled:hover, QPushButton:disabled:checked,

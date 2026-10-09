@@ -10,7 +10,7 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import (
     QApplication, QMessageBox, QGroupBox, QScrollArea, QLabel, QWidget, QVBoxLayout,
     QPushButton, QToolButton, QLineEdit, QTextEdit, QComboBox, QSpinBox,
-    QDoubleSpinBox, QCheckBox, QRadioButton,
+    QDoubleSpinBox, QCheckBox, QRadioButton, QPlainTextEdit,
 )
 
 from src.core.settings_manager import SettingsManager
@@ -471,6 +471,66 @@ def test_reset_hover_and_pressed_use_readable_theme_surface(dialog, app, name):
     assert button.grab().toImage().pixelColor(4, button.height() // 2) == QColor(theme["surface"])
     with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
         QTest.mouseRelease(button, Qt.MouseButton.LeftButton, pos=button.rect().center())
+
+
+@pytest.mark.parametrize("theme", [*PRESET_THEMES.values(), *HIDDEN_THEMES.values()],
+                         ids=lambda theme: theme["name"])
+def test_keyboard_focus_is_visible_without_layout_shifts(app, theme):
+    from src.ui.theme_engine import build_stylesheet
+
+    window = QWidget()
+    window.setStyleSheet(build_stylesheet(theme))
+    layout = QVBoxLayout(window)
+    controls = [QPushButton("Action"), QPushButton("Export"), QPushButton("Reset"),
+                QLineEdit(), QTextEdit(), QPlainTextEdit(), QComboBox(),
+                QSpinBox(), QDoubleSpinBox(), QCheckBox("Option"), QRadioButton("Choice")]
+    controls[1].setObjectName("accent")
+    controls[2].setObjectName("resetBtn")
+    controls[6].addItem("Value")
+    for control in controls:
+        layout.addWidget(control)
+    try:
+        window.show()
+        window.activateWindow()
+        app.processEvents()
+        QTest.mouseMove(window, window.rect().bottomRight())
+        for index, control in enumerate(controls):
+            controls[(index + 1) % len(controls)].setFocus()
+            app.processEvents()
+            before_size = control.sizeHint()
+            before_geometry = control.geometry()
+            before_image = control.grab().toImage()
+            control.setFocus(Qt.FocusReason.TabFocusReason)
+            app.processEvents()
+            assert control.hasFocus(), (theme["name"], index)
+            assert control.sizeHint() == before_size, (theme["name"], index)
+            assert control.geometry() == before_geometry, (theme["name"], index)
+            after_image = control.grab().toImage()
+            # Inputs have a caret and native focus effects; sample the top
+            # border so the assertion specifically checks the shared focus cue.
+            if index < 9:
+                y = 0
+                x_range = range(12, min(control.width() - 12, 60))
+            else:
+                # Checkbox/radio indicators are centered vertically.
+                y = control.height() // 2
+                x_range = range(0, 4)
+            assert any(before_image.pixelColor(x, y) != after_image.pixelColor(x, y)
+                       for x in x_range), (theme["name"], index)
+        # Ordinary tab traversal skips disabled actions.
+        controls[1].setEnabled(False)
+        controls[0].setFocus()
+        QTest.keyClick(controls[0], Qt.Key.Key_Tab)
+        assert controls[2].hasFocus()
+        QTest.keyClick(controls[2], Qt.Key.Key_Backtab)
+        assert controls[0].hasFocus()
+        clicked = Mock()
+        controls[0].clicked.connect(clicked)
+        QTest.keyClick(controls[0], Qt.Key.Key_Space)
+        clicked.assert_called_once()
+    finally:
+        window.close()
+        sip.delete(window)
 
 
 def test_disabled_controls_keep_readable_theme_colors_and_do_not_activate(app):
