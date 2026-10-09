@@ -425,6 +425,53 @@ def test_reset_cannot_be_overwritten_by_pending_debounce(dialog):
     assert widget._misc_combo_pending == {}
 
 
+def test_loading_scale_sound_path_and_history_does_not_apply_live_changes(dialog, app):
+    widget, manager = dialog
+    preferences = {
+        "font_size": 12, "ui_scale": "Huge", "history_max_entries": 25,
+        "click_sound_path": "/example/custom-click.wav", "sound_enabled": True,
+        "use_theme_sound": True,
+    }
+    for key, value in preferences.items():
+        manager.set(key, value)
+    before_font = app.font()
+    changed = Mock()
+    widget.settings_changed.connect(changed)
+    widget._load_values()
+    changed.assert_not_called()
+    assert app.font() == before_font
+    assert {key: manager.get(key) for key in preferences} == preferences
+    assert widget._ui_scale_combo.currentText().startswith("Huge")
+    assert widget._history_max_spin.value() == 25
+    assert widget._click_sound_path_edit.text() == preferences["click_sound_path"]
+
+
+def test_declined_reset_preserves_preferences_and_pending_changes(dialog):
+    widget, manager = dialog
+    widget._theme_preset_combo.setCurrentText("Bat Cave")
+    widget._tooltip_style_combo.setCurrentText("Angular")
+    before = manager.get_theme()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as question:
+        widget._reset_all_settings()
+    assert "Restart" in question.call_args.args[2]
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    assert manager.get_theme() == before
+    assert widget._theme_debounce.isActive()
+    assert widget._misc_combo_debounce.isActive()
+    widget._flush_pending_preferences()
+    assert manager.get_theme()["name"] == "Bat Cave"
+    assert manager.get("tooltip_style") == "Angular"
+
+
+def test_next_launch_and_reset_timing_are_visible_before_changes(dialog):
+    widget, manager = dialog
+    assert "next launch" in widget._show_splash_check.text()
+    assert "next time" in widget._show_splash_check.toolTip()
+    assert "Restart" in widget._btn_reset.toolTip()
+    widget._show_splash_check.setChecked(True)
+    assert manager.get("show_splash_screen") is True
+
+
 def test_reset_unlocks_rearms_every_first_use_trigger_without_losing_preferences(dialog):
     widget, manager = dialog
     flags = ["theme_changed_once", "cursor_anim_used_once", "trail_enabled_once",

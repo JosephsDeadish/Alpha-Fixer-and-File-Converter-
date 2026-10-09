@@ -1618,11 +1618,12 @@ class SettingsDialog(QDialog):
         self._banner_anim_sub.setVisible(False)  # hidden until banner is enabled
 
         self._show_splash_check = QCheckBox(
-            "Show themed splash screen on startup (off by default)"
+            "Show themed splash screen on startup (next launch; off by default)"
         )
         self._show_splash_check.setToolTip(
             "When enabled: an animated themed splash screen is shown while the\n"
-            "app loads on startup.  Disable to skip straight to the main window."
+            "app loads on startup.  Disable to skip straight to the main window.\n"
+            "Saved now; takes effect the next time you launch the application."
         )
         banner_gl.addWidget(self._show_splash_check, 2, 0, 1, 2)
 
@@ -2032,7 +2033,7 @@ class SettingsDialog(QDialog):
         self._btn_reset.setObjectName("resetBtn")
         self._btn_reset.setToolTip(
             "⚠ DESTRUCTIVE: Reset ALL settings, unlock flags, and history to factory defaults.\n"
-            "This cannot be undone. Useful for testing easter eggs and unlock events."
+            "This cannot be undone. Restart afterward to fully apply factory defaults."
         )
         self._btn_reset.setStyleSheet(
             "QPushButton#resetBtn {"
@@ -2248,6 +2249,7 @@ class SettingsDialog(QDialog):
             self._trail_color_btn, self._trail_style_combo, self._use_theme_trail_check,
             self._cursor_enable_check, self._cursor_combo, self._use_theme_cursor_check,
             self._cursor_anim_check, self._font_size_spin,
+            self._ui_scale_combo, self._history_max_spin, self._click_sound_path_edit,
             self._click_effects_theme_check,
             self._use_theme_effect_check, self._tooltip_mode_combo, self._tooltip_style_combo,
             self._animated_banner_check, self._banner_anim_combo,
@@ -3209,6 +3211,7 @@ class SettingsDialog(QDialog):
             "Reset All Settings?",
             "This will erase ALL settings, unlock flags, history, and custom themes.\n\n"
             "Unlock events like easter eggs will be re-triggerable from scratch.\n\n"
+            "Restart the application afterward to fully apply factory defaults.\n\n"
             "Are you sure?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
