@@ -765,17 +765,50 @@ class SettingsManager:
                 raise ValueError(f"Invalid theme preference: {label}.{field}")
 
     @classmethod
+    def _validate_backup_presets(cls, data) -> None:
+        from .presets import AlphaPreset
+
+        if not isinstance(data, list):
+            raise ValueError("Invalid custom_presets (expected a list)")
+        for index, record in enumerate(data):
+            label = f"custom_presets[{index}]"
+            if not isinstance(record, dict):
+                raise ValueError(f"Invalid {label} (expected an object)")
+            if not isinstance(record.get("name"), str) or not record["name"].strip():
+                raise ValueError(f"Invalid {label}.name (expected a non-empty name)")
+            if not isinstance(record.get("description"), str):
+                raise ValueError(f"Invalid {label}.description (expected text)")
+            for field in ("builtin", "invert", "binary_cut"):
+                if field in record and not isinstance(record[field], bool):
+                    raise ValueError(f"Invalid {label}.{field} (expected a boolean)")
+            for field in ("clamp_min", "clamp_max", "alpha_value"):
+                value = record.get(field)
+                if value is not None and type(value) not in (int, str):
+                    raise ValueError(f"Invalid {label}.{field} (expected an integer)")
+            try:
+                preset = AlphaPreset.from_dict(record)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"Invalid {label} (unusable alpha range)") from None
+            for field in ("clamp_min", "clamp_max", "threshold"):
+                value = getattr(preset, field)
+                if type(value) is not int or not 0 <= value <= 255:
+                    raise ValueError(f"Invalid {label}.{field} (expected an integer 0–255)")
+
+    @classmethod
     def _validate_backup_structure(cls, key: str, value: str) -> None:
         if key not in ("custom_shortcuts", "sa_zone_alphas", "sa_zone_colors",
-                       "theme_data", "saved_themes"):
+                       "theme_data", "saved_themes", "custom_presets"):
             return
         # Empty shortcut maps, saved themes and zone colors mean "use defaults".
-        if not value and key in ("custom_shortcuts", "sa_zone_colors", "saved_themes"):
+        if not value and key in ("custom_shortcuts", "sa_zone_colors", "saved_themes", "custom_presets"):
             return
         try:
             data = json.loads(value)
         except ValueError:
             raise ValueError(f"Invalid JSON preference: {key}") from None
+        if key == "custom_presets":
+            cls._validate_backup_presets(data)
+            return
         if key == "theme_data":
             cls._validate_backup_theme(data, key)
             return

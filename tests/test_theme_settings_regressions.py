@@ -1078,6 +1078,75 @@ def test_partial_legacy_theme_backup_reopens_without_losing_metadata(dialog, tmp
         sip.delete(reloaded._qs)
 
 
+@pytest.mark.parametrize("payload", ["{", "null", "{}",
+    json.dumps([None]), json.dumps([[]]),
+    *[json.dumps([{"name": "Custom", "description": "Description", **change}])
+      for change in [
+          {"name": ""}, {"name": 4}, {"description": None},
+          {"invert": "false"}, {"binary_cut": 1}, {"builtin": []},
+          {"clamp_min": True}, {"clamp_max": 1.5}, {"clamp_min": "invalid"},
+          {"clamp_min": -1}, {"clamp_max": 256}, {"threshold": -1},
+          {"threshold": 256}, {"threshold": "128"}, {"threshold": False},
+          {"alpha_value": "invalid"}, {"alpha_value": 256}, {"alpha_value": 1.5},
+      ]],
+    json.dumps([{"name": "Missing description"}]),
+])
+def test_invalid_custom_preset_backup_preserves_disk_and_preferences(dialog, tmp_path, payload):
+    widget, manager = dialog
+    manager.set("font_size", 12)
+    manager.save_custom_presets([{"name": "Existing", "description": "Keep me"}])
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    before_disk = Path(manager._qs.fileName()).read_bytes()
+    path = tmp_path / "invalid-presets.json"
+    path.write_text(json.dumps({"font_size": 20, "custom_presets": payload}), encoding="utf-8")
+    with pytest.raises(ValueError, match="custom_presets"):
+        manager.import_settings(str(path))
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+    assert Path(manager._qs.fileName()).read_bytes() == before_disk
+
+
+def test_custom_preset_backup_legacy_and_current_records_reload(dialog, tmp_path):
+    from src.core.presets import PresetManager
+
+    widget, manager = dialog
+    records = [
+        {"name": "Legacy fixed", "description": "Legacy", "alpha_value": "128", "mode": "set"},
+        {"name": "Legacy default", "description": "Default mode", "alpha_value": 0},
+        {"name": "Legacy add", "description": "Range retained", "alpha_value": 10,
+         "mode": "add", "clamp_min": "32", "clamp_max": "255"},
+        {"name": "Partial range", "description": "Defaults", "clamp_min": None, "clamp_max": None},
+        {"name": "Current", "description": "Binary", "clamp_min": 0, "clamp_max": 255,
+         "threshold": 128, "binary_cut": True, "invert": False, "builtin": False,
+         "future_extension": {"enabled": True}},
+    ]
+    path = tmp_path / "presets.json"
+    raw = json.dumps(records)
+    path.write_text(json.dumps({"custom_presets": raw}), encoding="utf-8")
+    manager.import_settings(str(path))
+    with patch("src.core.settings_manager._settings_ini_path", return_value=manager._qs.fileName()):
+        reloaded = SettingsManager()
+    try:
+        presets = PresetManager(reloaded).custom_presets()
+        assert len(presets) == len(records)
+        assert [(preset.clamp_min, preset.clamp_max) for preset in presets] == [
+            (128, 128), (0, 0), (32, 255), (0, 255), (0, 255)]
+        assert all(not preset.builtin for preset in presets)
+        assert presets[-1].threshold == 128 and presets[-1].binary_cut
+        assert reloaded.get("custom_presets") == raw
+    finally:
+        reloaded.sync()
+        sip.delete(reloaded._qs)
+
+
+@pytest.mark.parametrize("payload", ["", "[]"])
+def test_empty_custom_preset_backup_remains_supported(dialog, tmp_path, payload):
+    widget, manager = dialog
+    path = tmp_path / "empty-presets.json"
+    path.write_text(json.dumps({"custom_presets": payload}), encoding="utf-8")
+    manager.import_settings(str(path))
+    assert manager.get_custom_presets() == []
+
+
 def test_backup_round_trip_accepts_every_exportable_default(dialog, tmp_path):
     widget, manager = dialog
     for key in manager.EXPORT_KEYS:
