@@ -1,4 +1,0 @@
-dlname='png.so'
-installed=yes
-libdir='/build-host/lib/coders'
-dependency_libs='/build-host/lib/libpng.so'

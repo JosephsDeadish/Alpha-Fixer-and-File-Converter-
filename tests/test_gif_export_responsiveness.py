@@ -365,3 +365,146 @@ def test_snapshot_error_during_shutdown_emits_safe_completion_without_modal(buil
     settings.add_gif_builder_history.assert_not_called()
     info.assert_not_called()
     error.assert_not_called()
+
+
+def test_real_main_window_close_waits_for_parented_gif_worker_cleanup(tmp_path):
+    from src.core.settings_manager import SettingsManager
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings.ini")):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    window.show()
+    window._open_or_focus_gif_builder()
+    widget = window._gif_builder_dlg
+    assert widget.parentWidget() is window
+    widget._frames = [
+        _FrameEntry("red.png", 0, Image.new("RGBA", (18, 12), "red"), delay_ms=80),
+        _FrameEntry("blue.png", 0, Image.new("RGBA", (18, 12), "blue"), delay_ms=140),
+    ]
+    widget._update_count()
+    output = tmp_path / "parented.gif"
+    output.write_bytes(b"old destination")
+    exported = Mock()
+    widget.exported.connect(exported)
+    release = None
+    try:
+        with ExitStack() as stack:
+            stack.enter_context(patch("src.ui.gif_builder.QFileDialog.getSaveFileName",
+                                      return_value=(str(output), "")))
+            info = stack.enter_context(patch("src.ui.gif_builder.QMessageBox.information"))
+            error = stack.enter_context(patch("src.ui.gif_builder.QMessageBox.critical"))
+            sync = stack.enter_context(patch.object(settings, "sync", wraps=settings.sync))
+            entered, release, _, images = slow_save(stack)
+            try:
+                widget._export()
+                worker = widget._export_worker
+                completion = []
+                widget.export_finished.connect(lambda: completion.append(
+                    (widget.is_exporting(), worker.isRunning(), worker.frames,
+                     sip.isdeleted(window), getattr(window, "_shutdown_complete", False))
+                ))
+                wait_until(entered.is_set)
+                assert widget.is_exporting()
+                assert not window.close()
+                assert not window.close()
+                assert window._gif_shutdown_pending
+                assert window.isVisible()
+                assert widget._close_after_export
+                assert widget._export_canceling
+                assert worker.isRunning()
+                assert not sip.isdeleted(window)
+                assert output.read_bytes() == b"old destination"
+                sync.assert_not_called()
+                heartbeat = []
+                QTimer.singleShot(0, lambda: heartbeat.append(1))
+                wait_until(lambda: heartbeat)
+            finally:
+                release.set()
+                wait_for_gif_export(widget)
+            wait_until(lambda: getattr(window, "_shutdown_complete", False))
+            assert completion == [(False, False, (), False, False)]
+            assert not window._gif_shutdown_pending
+            assert not window.isVisible()
+            assert not widget.isVisible()
+            assert widget._frames == []
+            assert output.read_bytes() == b"old destination"
+            assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+            exported.assert_not_called()
+            assert settings.get_gif_builder_history() == []
+            info.assert_not_called()
+            error.assert_not_called()
+            sync.assert_called_once()
+            assert_closed(images)
+            wait_until(lambda: sip.isdeleted(worker))
+    finally:
+        if release is not None:
+            release.set()
+        if widget.is_exporting():
+            widget.request_export_cancel()
+            wait_for_gif_export(widget)
+        window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+
+
+@pytest.mark.parametrize("outcome", ["success", "error"])
+def test_shutdown_after_native_finish_before_queued_cleanup_never_opens_modal(builder, outcome):
+    from PyQt6.QtCore import Qt
+
+    _, widget, output, settings, info, error = builder
+    output.write_bytes(b"old destination")
+    entered, release, native_finished = Event(), Event(), Event()
+    original_quantize = Image.Image.quantize
+    exported, completed = Mock(), Mock()
+    widget.exported.connect(exported)
+    widget.export_finished.connect(completed)
+
+    def quantize(image, *args, **kwargs):
+        entered.set()
+        assert release.wait(10), "test failed to release preparation"
+        if outcome == "error":
+            raise OSError("queued worker failure")
+        return original_quantize(image, *args, **kwargs)
+
+    with patch.object(Image.Image, "quantize", quantize):
+        try:
+            widget._export()
+            worker = widget._export_worker
+            # Only a threading.Event is touched directly by the native signal.
+            worker.finished.connect(native_finished.set, Qt.ConnectionType.DirectConnection)
+            wait_until(entered.is_set)
+            release.set()
+            # Deliberately do not pump Qt here: cleanup remains queued while
+            # shutdown requests cancellation after the worker's final outcome.
+            assert native_finished.wait(10)
+            assert worker.outcome == outcome
+            assert worker.frames == ()
+            assert widget.is_exporting()
+            widget.request_export_cancel()
+            assert widget._close_after_export
+            wait_for_gif_export(widget)
+        finally:
+            release.set()
+            if widget.is_exporting():
+                widget.request_export_cancel()
+                wait_for_gif_export(widget)
+    assert not widget.is_exporting()
+    assert not widget.isVisible()
+    completed.assert_called_once_with()
+    info.assert_not_called()
+    error.assert_not_called()
+    assert not list(output.parent.glob(".alpha_fixer_save_*"))
+    if outcome == "success":
+        exported.assert_called_once_with(str(output))
+        settings.add_gif_builder_history.assert_called_once()
+        with Image.open(output) as image:
+            assert image.n_frames == 2
+    else:
+        exported.assert_not_called()
+        settings.add_gif_builder_history.assert_not_called()
+        assert output.read_bytes() == b"old destination"

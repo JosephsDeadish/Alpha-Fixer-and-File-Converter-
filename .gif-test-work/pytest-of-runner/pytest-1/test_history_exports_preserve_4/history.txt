@@ -1,3 +1,0 @@
-Time                  Format  Files  OK    Errors  File names  Status   Not processed
--------------------------------------------------------------------------------------
-2026-10-09  11:00:00  PNG     5      2     0       停止.png      Stopped  3            

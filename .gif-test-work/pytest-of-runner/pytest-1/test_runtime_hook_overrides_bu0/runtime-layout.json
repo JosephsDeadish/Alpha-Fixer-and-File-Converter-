@@ -1,1 +1,0 @@
-{"imagemagick_library": "libMagickWand.so.7", "imagemagick_home": ".", "imagemagick_config": ["imagemagick/config", "imagemagick/config/config-Q16"], "imagemagick_coders": "imagemagick/modules/coders", "ffmpeg": "ffmpeg-bundled", "ffprobe": "ffprobe"}
