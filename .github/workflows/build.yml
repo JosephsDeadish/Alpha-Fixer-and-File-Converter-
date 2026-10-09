@@ -71,6 +71,15 @@ jobs:
             --json-out dist\validation-reports\release-offline-${{ matrix.bundle_kind }}.json
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
+      - name: Upload validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-validation-${{ matrix.bundle_kind }}
+          path: dist/validation-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:

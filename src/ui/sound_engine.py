@@ -734,6 +734,8 @@ class SoundEngine(QObject):
         super().__init__(parent)
         self._settings = settings
         self._effect = None          # QSoundEffect for click (may be None)
+        self._closed = False
+        self._app = None
         self._click_wav: str = ""
         self._success_wav: str = ""
         self._error_wav: str = ""
@@ -822,7 +824,12 @@ class SoundEngine(QObject):
 
     def install_on_app(self, app: QObject) -> None:
         """Install event filter so every button click triggers a sound."""
+        if self._closed:
+            return
+        if self._filter is not None and self._app is not None:
+            self._app.removeEventFilter(self._filter)
         self._filter = _ButtonClickFilter(self)
+        self._app = app
         app.installEventFilter(self._filter)
 
     def set_theme(self, theme_name: str) -> None:
@@ -1043,6 +1050,8 @@ class SoundEngine(QObject):
 
     def _play(self, wav_path: str) -> None:
         """Route playback through QSoundEffect when available, else subprocess."""
+        if self._closed:
+            return
         if self._effect is not None:
             try:
                 from PyQt6.QtCore import QUrl
@@ -1089,7 +1098,23 @@ class SoundEngine(QObject):
     # ------------------------------------------------------------------
 
     def cleanup(self) -> None:
-        """Remove temp WAV files on application exit."""
+        """Release the audio backend before removing its source files."""
+        if self._closed:
+            return
+        self._closed = True
+        if self._filter is not None and self._app is not None:
+            self._app.removeEventFilter(self._filter)
+        self._app = None
+        if self._effect is not None:
+            from PyQt6 import sip
+            from PyQt6.QtCore import QUrl
+            effect = self._effect
+            self._effect = None
+            effect.stop()
+            effect.setSource(QUrl())
+            # deleteLater() alone may never run once the main event loop exits.
+            # Destroy the native audio resources while QApplication still exists.
+            sip.delete(effect)
         all_wavs = [self._click_wav, self._success_wav,
                     self._error_wav, self._unlock_wav,
                     self._file_add_wav, self._preview_wav,

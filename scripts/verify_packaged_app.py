@@ -66,6 +66,16 @@ _CORE_SELFTEST_CHECKS = (
 )
 
 
+def _record_launch_output(env: dict[str, str], stdout: str, status: object) -> None:
+    log_path = env.get("ALPHA_FIXER_VALIDATION_LOG_OUT")
+    if log_path:
+        with Path(log_path).open("a", encoding="utf-8") as log:
+            log.write(f"\n--- Packaged launch: {status} ---\n")
+            log.write(stdout)
+            if not stdout.endswith("\n"):
+                log.write("\n")
+
+
 def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory(prefix="alpha_fixer_validation_") as directory:
         output = Path(directory) / "result.json"
@@ -108,6 +118,7 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
                     pass
                 capture.seek(0)
                 stdout = capture.read()
+                _record_launch_output(env, stdout, "timed out")
                 if stdout:
                     print(stdout, end="" if stdout.endswith("\n") else "\n")
                 raise
@@ -124,6 +135,7 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
             # Use the file channel when a windowed executable has no stdout.
             if not any(line.startswith(prefix + "=") for line in (result.stdout or "").splitlines()):
                 result.stdout = (result.stdout or "") + "\n" + prefix + "=" + json.dumps(data["payload"]) + "\n"
+    _record_launch_output(env, result.stdout or "", f"exit code {result.returncode}")
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
     return result
@@ -140,7 +152,7 @@ def _verification_environment(offline: bool) -> dict[str, str]:
         "ALPHA_FIXER_RUNTIME_DDS_MANIFEST", "ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST",
         "ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS", "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS",
         "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS", "ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR",
-        "ALPHA_FIXER_VALIDATION_JSON_OUT",
+        "ALPHA_FIXER_VALIDATION_JSON_OUT", "ALPHA_FIXER_VALIDATION_LOG_OUT",
     ):
         env.pop(name, None)
     env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "0"
@@ -602,6 +614,13 @@ def _validation_bundle_kind(raw_value: object) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Redirected Windows consoles may use cp1252 even when reports and filenames
+    # contain Unicode. Preserve that encoding, but never fail a valid audit when
+    # rendering an unsupported character.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(errors="backslashreplace")
     parser = argparse.ArgumentParser(description="Smoke-launch and audit a built Alpha Fixer package.")
     parser.add_argument("launch_target", help="Path to the packaged executable/app entrypoint.")
     parser.add_argument("--bundle-kind", choices=("folder", "onefile"), help="Optional packaged artifact kind label to include in reports.")
@@ -799,6 +818,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.offline and args.allow_sample_downloads:
         raise SystemExit("--offline cannot be combined with --allow-sample-downloads.")
     base_env = _verification_environment(args.offline)
+    if args.json_out:
+        log_path = Path(args.json_out).with_suffix(".log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+        base_env["ALPHA_FIXER_VALIDATION_LOG_OUT"] = str(log_path.absolute())
 
     command = [str(launch_target)]
     repeats = max(1, int(args.repeat))
@@ -979,7 +1003,11 @@ def main(argv: list[str] | None = None) -> int:
                 _print_manifest_result_summary(manifest_results)
             for check_name in required_checks:
                 check = checks.get(check_name)
-                if not isinstance(check, dict) or not check.get("ok"):
+                if (
+                    not isinstance(check, dict)
+                    or not check.get("ok")
+                    or str(check.get("detail", "")).strip().casefold().startswith("skipped:")
+                ):
                     raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")
             errors = selftest_payload.get("errors") or []
             if errors:

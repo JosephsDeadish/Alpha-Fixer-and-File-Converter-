@@ -2522,7 +2522,7 @@ class TestSoundEngine(unittest.TestCase):
 
     def test_play_click_respects_sound_disabled(self):
         """play_click should not attempt to play when sound_enabled=False."""
-        _get_app()
+        app = _get_app()
         settings = MagicMock()
         settings.get.side_effect = lambda k, d=None: False if k == "sound_enabled" else (d or "")
         from src.ui.sound_engine import SoundEngine
@@ -2530,10 +2530,11 @@ class TestSoundEngine(unittest.TestCase):
         # Should not raise even with no multimedia backend
         engine.play_click()
         engine.cleanup()
+        self.assertIsNotNone(app)
 
     def test_cleanup_removes_temp_file(self):
         """cleanup() should remove the generated temp WAV."""
-        _get_app()
+        app = _get_app()
         settings = MagicMock()
         settings.get.return_value = False
         from src.ui.sound_engine import SoundEngine
@@ -2542,6 +2543,152 @@ class TestSoundEngine(unittest.TestCase):
         engine.cleanup()
         if wav:
             self.assertFalse(os.path.isfile(wav))
+        self.assertIsNotNone(app)
+
+    def test_cleanup_destroys_audio_before_unlink_and_disables_playback(self):
+        app = _get_app()
+        from PyQt6 import sip
+        from PyQt6.QtCore import QObject
+        from src.ui.sound_engine import SoundEngine
+
+        with patch.object(SoundEngine, "_setup"):
+            engine = SoundEngine(MagicMock())
+        engine.install_on_app(app)
+        effect = QObject(engine)
+        effect.stop = MagicMock()
+        effect.setSource = MagicMock()
+        engine._effect = effect
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as directory:
+            wav = Path(directory) / "click.wav"
+            wav.write_bytes(b"test audio")
+            engine._click_wav = str(wav)
+            real_unlink = os.unlink
+
+            def unlink_after_destroy(path):
+                self.assertTrue(sip.isdeleted(effect))
+                self.assertIsNone(engine._app)
+                real_unlink(path)
+
+            with patch("src.ui.sound_engine.os.unlink", side_effect=unlink_after_destroy):
+                engine.cleanup()
+                engine.cleanup()
+            self.assertFalse(wav.exists())
+        effect.stop.assert_called_once()
+        effect.setSource.assert_called_once()
+        self.assertTrue(effect.setSource.call_args.args[0].isEmpty())
+        self.assertIsNone(engine._effect)
+        with patch.object(engine, "_play_subprocess") as fallback:
+            engine._play("no-longer-available.wav")
+            fallback.assert_not_called()
+        sip.delete(engine)
+
+
+class TestOrderlyApplicationShutdown(unittest.TestCase):
+    def test_main_window_shutdown_joins_workers_and_is_idempotent(self):
+        app = _get_app()
+        from PyQt6 import sip
+        from PyQt6.QtGui import QCloseEvent
+        from src.core.settings_manager import SettingsManager
+        from src.ui.main_window import MainWindow
+
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as directory:
+            with patch("src.core.settings_manager._settings_ini_path",
+                       return_value=str(Path(directory) / "settings.ini")):
+                settings = SettingsManager()
+            window = MainWindow(settings)
+            threads = []
+            for tab in (window._alpha_tab, window._converter_tab):
+                for name in ("_worker", "_preview_loader", "_collect_thread"):
+                    thread = MagicMock()
+                    thread.isRunning.return_value = True
+                    setattr(tab, name, thread)
+                    threads.append(thread)
+            effect = window._sound._effect
+            try:
+                with patch.object(settings, "sync", wraps=settings.sync) as sync:
+                    window.closeEvent(QCloseEvent())
+                    window.closeEvent(QCloseEvent())
+                    sync.assert_called_once()
+                for thread in threads:
+                    thread.stop.assert_called_once()
+                    thread.wait.assert_called_once_with()
+                if effect is not None:
+                    self.assertTrue(sip.isdeleted(effect))
+                self.assertIsNone(window._sound._effect)
+                self.assertFalse(sip.isdeleted(app))
+            finally:
+                sip.delete(window)
+
+    def test_direct_exit_closes_and_destroys_window_while_app_alive(self):
+        app = _get_app()
+        import main
+        from PyQt6 import sip
+        from PyQt6.QtCore import QObject, QTimer
+        from PyQt6.QtWidgets import QWidget
+
+        events = []
+
+        class Window(QWidget):
+            def closeEvent(self, event):
+                events.append("close")
+                self.assert_app_alive()
+                super().closeEvent(event)
+
+            def assert_app_alive(self):
+                if sip.isdeleted(app):
+                    raise AssertionError("QApplication destroyed before window")
+
+        window = Window()
+        window.destroyed.connect(lambda: events.append("destroy"))
+        deferred = QObject(window)
+        deferred.destroyed.connect(lambda: events.append("deferred"))
+        deferred.deleteLater()
+        watchdog = MagicMock()
+        watchdog.stop.side_effect = lambda: events.append("watchdog")
+        window.show()
+        QTimer.singleShot(0, lambda: app.exit(7))
+
+        self.assertEqual(main._run_gui_event_loop(app, window, watchdog), 7)
+        self.assertTrue(sip.isdeleted(window))
+        self.assertIn("deferred", events)
+        self.assertLess(events.index("watchdog"), events.index("close"))
+        self.assertLess(events.index("close"), events.index("destroy"))
+        self.assertFalse(sip.isdeleted(app))
+
+    def test_event_loop_exception_still_releases_window(self):
+        qt_app = _get_app()
+        import main
+        from PyQt6 import sip
+        from PyQt6.QtWidgets import QWidget
+
+        window = QWidget()
+        app = MagicMock()
+        app.exec.side_effect = RuntimeError("event loop failed")
+        watchdog = MagicMock()
+        with self.assertRaisesRegex(RuntimeError, "event loop failed"):
+            main._run_gui_event_loop(app, window, watchdog)
+        self.assertTrue(sip.isdeleted(window))
+        watchdog.stop.assert_called_once()
+        app.aboutToQuit.disconnect.assert_called_once()
+        self.assertFalse(sip.isdeleted(qt_app))
+
+    def test_watchdog_stop_wakes_and_joins_monitor(self):
+        app = _get_app()
+        import main
+
+        watchdog = main._HangWatchdog()
+        watchdog._CHECK_INTERVAL_S = 60.0
+        watchdog.start()
+        thread = watchdog._thread
+        try:
+            watchdog.stop()
+            self.assertFalse(thread.is_alive())
+            self.assertIsNone(watchdog._thread)
+            self.assertFalse(watchdog._timer.isActive())
+            self.assertIsNotNone(app)
+            watchdog.stop()
+        finally:
+            watchdog.stop()
 
 
 # ---------------------------------------------------------------------------

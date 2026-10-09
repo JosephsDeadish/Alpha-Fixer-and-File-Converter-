@@ -4688,6 +4688,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event):
+        if getattr(self, "_shutdown_complete", False):
+            event.accept()
+            return
+        self._shutdown_complete = True
         # Remove the global keyboard-secret event filter so it cannot fire
         # against partially-torn-down widgets after close begins.
         if self._key_secret_filter is not None:
@@ -4703,21 +4707,24 @@ class MainWindow(QMainWindow):
             self._trail_overlay.set_enabled(False)
         if self._button_anim is not None:
             self._button_anim.set_enabled(False)
+        self._stop_custom_background_media()
         # Stop any running workers gracefully
         for tab in (self._alpha_tab, self._converter_tab):
             if hasattr(tab, "_worker") and tab._worker and tab._worker.isRunning():
                 tab._worker.stop()
-                # Allow up to 15 seconds for an in-flight batch to finish its
-                # current file so it can reach the abort check.  3 seconds was
-                # too short when processing large images or slow storage.
-                tab._worker.wait(15000)
+                # Cancellation is cooperative: never destroy a running QThread.
+                tab._worker.wait()
             # Cancel any in-flight preview loaders so their threads don't
             # try to emit signals into already-destroyed Qt objects.
             if hasattr(tab, "_preview_loader") and tab._preview_loader is not None:
                 tab._preview_loader.stop()
                 # Wait for the preview thread to finish so it cannot emit into
                 # widgets that are being torn down below.
-                tab._preview_loader.wait(3000)
+                tab._preview_loader.wait()
+            collect_thread = getattr(tab, "_collect_thread", None)
+            if collect_thread is not None and collect_thread.isRunning():
+                collect_thread.stop()
+                collect_thread.wait()
             # Stop preview debounce timers so pending timeouts don't fire
             # after the tab widgets have been torn down.
             if hasattr(tab, "_preview_debounce") and tab._preview_debounce is not None:
@@ -4726,8 +4733,8 @@ class MainWindow(QMainWindow):
         # lists).  Without this, runnables that are still running when Qt
         # starts tearing down widgets may emit signals to deleted objects and
         # crash.  We cancel all pending runnables first via the cancel events
-        # already held by each DropFileList, then give the pool 3 seconds to
-        # let any already-running runnable reach its own cancel check.
+        # already held by each DropFileList, then wait for already-running
+        # runnables to finish before destroying their signal receivers.
         try:
             from .drop_list import DropFileList
             from PyQt6.QtCore import QThreadPool
@@ -4736,7 +4743,7 @@ class MainWindow(QMainWindow):
                     widget = getattr(tab, attr, None)
                     if isinstance(widget, DropFileList):
                         widget._cancel_event.set()
-            QThreadPool.globalInstance().waitForDone(3000)
+            QThreadPool.globalInstance().waitForDone()
         except Exception:
             pass
         # Stop main-window timers before the window is destroyed

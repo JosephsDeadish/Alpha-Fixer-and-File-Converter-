@@ -420,7 +420,7 @@ python scripts/run_private_packaged_validation.py dist/AlphaFixerConverter/Alpha
 
 That helper auto-populates private manifests from the configured `ALPHA_FIXER_REAL_*` corpus roots, writes them into the output directory, runs repeated smoke launches plus packaged self-tests, and records JSON timing / RSS summaries for relaunch and memory-trend baselining.
 
-BC6H / BC7 note: the public manifests above improve real external validation coverage, but they do **not** add pure in-repo BC6H / BC7 software decoding. Advanced BC6H / BC7 DDS inspection still depends on Pillow support or optional ImageMagick/wand decoding when available.
+BC6H / BC7 note: the public manifests above improve real external validation coverage, but they do **not** add pure in-repo BC6H / BC7 software decoding. Advanced BC6H / BC7 DDS inspection still depends on the codecs supported by Pillow or ImageMagick/wand. Release builds require a bundled ImageMagick/wand runtime, but this does not guarantee support for every advanced DDS surface or codec.
 
 Example packaged format-matrix manifest:
 
@@ -440,9 +440,7 @@ Example packaged format-matrix manifest:
     {
       "input": "hdr_texture.png",
       "target_format": "DDS",
-      "dds_variant": "dxt1",
-      "expect": "fail",
-      "detail_contains": ["wand", "ImageMagick", "DDS"]
+      "dds_variant": "dxt1"
     }
   ]
 }
@@ -481,6 +479,8 @@ python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConvert
 ```
 
 The verifier smoke-launches the packaged app, performs the runtime capability dump, and can be repeated multiple times to catch packaging regressions that only appear after several launches. With `--run-selftest`, the packaged executable also generates a tiny built-in media/format matrix (GIF, DDS, MP4, MPEG-TS, and a synthetic odd-extension probe) so fresh-machine checks can validate more than just startup. When you provide `--disc-video-manifest`, `--dds-manifest`, or `--format-matrix-manifest`, the packaged app also executes those external real-sample sets in-process and reports them as `external_disc_video_manifest`, `external_dds_manifest`, and `external_format_matrix_manifest` self-test checks.
+
+Required self-test checks must actually run; a skipped feature cannot satisfy a release gate. With `--json-out`, a companion UTF-8 `.log` retains launch output and exit status even if validation fails before a JSON report is available. CI uploads these diagnostics on failure as well as success. Console output safely escapes characters unsupported by legacy Windows encodings without changing the Unicode data in JSON reports.
 
 Windows packaged example:
 

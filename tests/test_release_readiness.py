@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import os
 import json
 import signal
@@ -88,6 +89,77 @@ class TestOfflineVerification(unittest.TestCase):
         cls.verifier = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.verifier)
 
+    def test_legacy_windows_console_does_not_fail_successful_validation(self):
+        capabilities = {"packaged_bundle_ready": True}
+        selftest = {"passed": True, "checks": {
+            "unicode_check": {"ok": True, "detail": "画像 ✅"},
+        }}
+        launches = [
+            subprocess.CompletedProcess(["app"], 0, stdout=""),
+            subprocess.CompletedProcess(["app"], 0, stdout=(
+                "ALPHA_FIXER_RUNTIME_CAPABILITIES=" + json.dumps(capabilities)
+            )),
+            subprocess.CompletedProcess(["app"], 0, stdout=(
+                "ALPHA_FIXER_RUNTIME_SELFTEST=" + json.dumps(selftest)
+            )),
+        ]
+        output = io.BytesIO()
+        errors = io.BytesIO()
+        stdout = io.TextIOWrapper(output, encoding="cp1252")
+        stderr = io.TextIOWrapper(errors, encoding="cp1252")
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app.exe"
+            target.touch()
+            report = Path(directory) / "report.json"
+            with patch("sys.stdout", stdout), patch("sys.stderr", stderr):
+                with patch.object(self.verifier, "_run_and_echo", side_effect=launches):
+                    result = self.verifier.main([
+                        str(target), "--run-selftest", "--require-selftest-pass",
+                        "--require-selftest-check", "unicode_check", "--json-out", str(report),
+                    ])
+                print("画像 ⚠", file=sys.stderr)
+            stdout.flush()
+            stderr.flush()
+            self.assertEqual(result, 0)
+            self.assertIn(b"capability audit verified", output.getvalue())
+            self.assertIn(b"\\u2705", output.getvalue())
+            self.assertIn(b"\\u753b", errors.getvalue())
+            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["runtime_selftest"], selftest)
+
+    def test_required_selftest_cannot_pass_by_skipping_a_feature(self):
+        launches = [
+            subprocess.CompletedProcess(["app"], 0, stdout=""),
+            subprocess.CompletedProcess(["app"], 0, stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={}\n'),
+            subprocess.CompletedProcess(["app"], 0, stdout=(
+                'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "checks": '
+                '{"png_to_dds_dxt5": {"ok": true, "detail": "skipped: wand unavailable"}}}\n'
+            )),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            with patch.object(self.verifier, "_run_and_echo", side_effect=launches):
+                with patch("sys.stdout"):
+                    with self.assertRaisesRegex(SystemExit, "failed or missing: png_to_dds_dxt5"):
+                        self.verifier.main([
+                            str(target), "--run-selftest",
+                            "--require-selftest-check", "png_to_dds_dxt5",
+                        ])
+
+    def test_failed_launch_retains_utf8_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "launch.log"
+            env = dict(os.environ, ALPHA_FIXER_VALIDATION_LOG_OUT=str(log_path))
+            with patch("sys.stdout"):
+                result = self.verifier._run_and_echo(
+                    [sys.executable, "-c", "import sys; print('shutdown diagnostic'); sys.exit(10)"],
+                    env=env, timeout=10,
+                )
+            self.assertEqual(result.returncode, 10)
+            text = log_path.read_text(encoding="utf-8")
+            self.assertIn("exit code 10", text)
+            self.assertIn("shutdown diagnostic", text)
+
     def test_external_runtime_configuration_removed(self):
         external = {
             "PATH": "/external/tools", "PYTHONPATH": "/external/python",
@@ -127,6 +199,7 @@ class TestOfflineVerification(unittest.TestCase):
             "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS": "1",
             "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS": "1",
             "ALPHA_FIXER_VALIDATION_JSON_OUT": "/host/result.json",
+            "ALPHA_FIXER_VALIDATION_LOG_OUT": "/host/result.log",
             "ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS": "1",
             "ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS": "1",
         }
@@ -219,6 +292,19 @@ class TestOfflineVerification(unittest.TestCase):
         self.assertNotIn("apt-get", step)
         self.assertNotIn("pip install", step)
 
+    def test_ci_retains_validation_diagnostics_after_failures(self):
+        root = Path(__file__).resolve().parents[1]
+        for filename, step_name in (
+            ("build.yml", "Upload validation diagnostics"),
+            ("fresh-machine-runtime.yml", "Upload build validation diagnostics"),
+            ("fresh-machine-runtime.yml", "Upload runtime validation report"),
+        ):
+            with self.subTest(workflow=filename, step=step_name):
+                text = (root / ".github/workflows" / filename).read_text(encoding="utf-8")
+                step = text.split(f"- name: {step_name}", 1)[1].split("- name:", 1)[0]
+                self.assertIn("if: always()", step)
+                self.assertIn("if-no-files-found: warn", step)
+
     def test_windowed_executable_reports_through_file_channel(self):
         payload = {"frozen": True, "packaged_bundle_ready": True}
 
@@ -233,9 +319,14 @@ class TestOfflineVerification(unittest.TestCase):
             process.returncode = 0
             return process
 
-        with patch.object(self.verifier.subprocess, "Popen", side_effect=run):
-            with patch("sys.stdout"):
-                result = self.verifier._run_and_echo(["app.exe"], env={}, timeout=5)
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "launch.log"
+            with patch.object(self.verifier.subprocess, "Popen", side_effect=run):
+                with patch("sys.stdout"):
+                    result = self.verifier._run_and_echo(
+                        ["app.exe"], env={"ALPHA_FIXER_VALIDATION_LOG_OUT": str(log_path)}, timeout=5,
+                    )
+            self.assertIn("ALPHA_FIXER_RUNTIME_CAPABILITIES=", log_path.read_text(encoding="utf-8"))
         self.assertEqual(self.verifier._capability_payload(result.stdout), payload)
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Uses Linux process-state inspection")

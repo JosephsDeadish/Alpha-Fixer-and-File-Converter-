@@ -1944,6 +1944,7 @@ class _HangWatchdog:
         self._heartbeat: float = time.monotonic()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
         self._timer = None          # QTimer — created in start() on the UI thread
         self._last_log: float = 0.0
 
@@ -1952,6 +1953,7 @@ class _HangWatchdog:
         from PyQt6.QtCore import QTimer
         self._heartbeat = time.monotonic()
         self._running = True
+        self._stop_event.clear()
 
         # QTimer fires on the UI thread → proves the event loop is alive.
         self._timer = QTimer()
@@ -1969,11 +1971,15 @@ class _HangWatchdog:
     def stop(self) -> None:
         """Stop the watchdog (call before the QApplication is destroyed)."""
         self._running = False
+        self._stop_event.set()
         if self._timer is not None:
             try:
                 self._timer.stop()
             except Exception:
                 pass
+        if self._thread is not None:
+            self._thread.join()
+            self._thread = None
 
     def _on_tick(self) -> None:
         """Called by QTimer on the UI thread — proof the event loop is running."""
@@ -1981,10 +1987,7 @@ class _HangWatchdog:
 
     def _monitor(self) -> None:
         """Background thread: periodically check whether the heartbeat is fresh."""
-        while self._running:
-            time.sleep(self._CHECK_INTERVAL_S)
-            if not self._running:
-                break
+        while not self._stop_event.wait(self._CHECK_INTERVAL_S):
             age = time.monotonic() - self._heartbeat
             if age >= self._HANG_THRESHOLD_S:
                 now = time.monotonic()
@@ -2017,6 +2020,32 @@ class _HangWatchdog:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
+    """Close native UI resources before QApplication/interpreter teardown."""
+    from PyQt6 import sip
+    from PyQt6.QtCore import QCoreApplication, QEvent
+
+    def shutdown():
+        watchdog.stop()
+        if not sip.isdeleted(window):
+            window.close()
+        if splash is not None and not sip.isdeleted(splash):
+            splash.close()
+
+    # Also cover exits that do not send close events, such as QApplication.exit().
+    app.aboutToQuit.connect(shutdown)
+    try:
+        return app.exec()
+    finally:
+        shutdown()
+        app.aboutToQuit.disconnect(shutdown)
+        if not sip.isdeleted(window):
+            sip.delete(window)
+        if splash is not None and not sip.isdeleted(splash):
+            sip.delete(splash)
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
 
 def main():
     sys.excepthook = _excepthook
@@ -2174,10 +2203,9 @@ def main():
     _watchdog.start()
 
     logger.info("Main window shown.")
-    exit_code = app.exec()
+    exit_code = _run_gui_event_loop(app, window, _watchdog, splash)
     if _unattended_validation_errors:
         exit_code = 1
-    _watchdog.stop()
     logger.info("Application exited with code %d", exit_code)
     sys.exit(exit_code)
 
