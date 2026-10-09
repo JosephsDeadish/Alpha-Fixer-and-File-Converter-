@@ -1067,6 +1067,77 @@ class TestCorpusHelperInputs(unittest.TestCase):
             self.assertIn("ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS", summary_payload["preflight"]["corpus_env"])
             self.assertIn("No eligible private corpus samples were discovered", summary_payload["error"])
 
+    def test_run_private_packaged_validation_summary_propagates_verifier_review_fields(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "run_private_packaged_validation.py")
+        spec = importlib.util.spec_from_file_location("run_private_packaged_validation", module_path)
+        script = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(script)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_root = os.path.join(tmpdir, "video")
+            dds_root = os.path.join(tmpdir, "dds")
+            out_dir = os.path.join(tmpdir, "out")
+            launch_target = os.path.join(tmpdir, "AlphaFixerConverter")
+            os.makedirs(os.path.join(video_root, "ps2"), exist_ok=True)
+            os.makedirs(dds_root, exist_ok=True)
+            Path(os.path.join(video_root, "ps2", "sample.iso")).write_bytes(b"iso")
+            Path(os.path.join(dds_root, "texture_array.dds")).write_bytes(b"dds")
+            Path(launch_target).write_text("stub", encoding="utf-8")
+            os.chmod(launch_target, 0o755)
+
+            def _fake_verify(argv):
+                json_out = Path(argv[argv.index("--json-out") + 1])
+                json_out.parent.mkdir(parents=True, exist_ok=True)
+                json_out.write_text(
+                    json.dumps(
+                        {
+                            "manifest_inputs": {"disc_video": {"provided": True}},
+                            "runtime_selftest": {
+                                "checks": {
+                                    "external_disc_video_manifest_ps2": {"ok": True},
+                                    "external_dds_manifest_array": {"ok": False, "detail": "array failed"},
+                                },
+                                "manifest_results": {
+                                    "disc_video": {"ok": True, "detail": "disc ok", "sample_results": []},
+                                    "dds": {"ok": False, "detail": "dds failed", "sample_results": [{"status": "failed", "label": "texture_array.dds", "detail": "unsupported array"}]},
+                                },
+                            },
+                            "runtime_selftest_repeat_summary": {"runs": 2},
+                            "runtime_selftest_check_repeat_summary": {
+                                "runs": 2,
+                                "checks": {"external_dds_manifest_array": {"stable_ok": False, "failed_runs": 1, "ok_runs": 1, "missing_runs": 0, "details": ["array failed"]}},
+                                "unstable_checks": ["external_dds_manifest_array"],
+                            },
+                            "runtime_selftest_failed_checks": [{"name": "external_dds_manifest_array", "detail": "array failed"}],
+                            "runtime_selftest_interesting_sample_outcomes": [{"manifest": "dds", "status": "failed", "label": "texture_array.dds", "detail": "unsupported array"}],
+                            "runtime_selftest_manifest_review": {"dds": {"ok": False, "sample_status_counts": {"failed": 1}}},
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    ),
+                    encoding="utf-8",
+                )
+                return 0
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_VIDEO_CORPUS": video_root,
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": dds_root,
+                },
+                clear=False,
+            ), mock.patch.object(script.verify_packaged_app_script, "main", side_effect=_fake_verify):
+                rc = script.main([launch_target, "--output-dir", out_dir, "--manifest-limit", "8"])
+            self.assertEqual(rc, 0)
+            summary_path = os.path.join(out_dir, "private-runtime-validation-summary.json")
+            summary_payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["runtime_selftest_repeat_summary"]["runs"], 2)
+            self.assertIn("external_dds_manifest_array", summary_payload["runtime_selftest_check_repeat_summary"]["unstable_checks"])
+            self.assertEqual(summary_payload["runtime_selftest_failed_checks"][0]["name"], "external_dds_manifest_array")
+            self.assertEqual(summary_payload["runtime_selftest_interesting_sample_outcomes"][0]["label"], "texture_array.dds")
+            self.assertEqual(summary_payload["runtime_selftest_manifest_review"]["dds"]["sample_status_counts"]["failed"], 1)
+
 
 class TestRuntimeFormatMatrixManifest(unittest.TestCase):
     def test_execute_format_matrix_manifest_validates_successful_output(self):

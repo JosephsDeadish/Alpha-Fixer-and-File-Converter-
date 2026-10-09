@@ -299,6 +299,181 @@ def _selftest_repeat_summary(payloads: list[dict[str, object]]) -> dict[str, obj
     return summary
 
 
+def _failed_selftest_checks(payload: dict[str, object] | None) -> list[dict[str, str]]:
+    if not isinstance(payload, dict):
+        return []
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        return []
+    failures: list[dict[str, str]] = []
+    for name in sorted(checks):
+        check = checks.get(name)
+        if not isinstance(check, dict) or bool(check.get("ok")):
+            continue
+        failures.append(
+            {
+                "name": str(name),
+                "detail": str(check.get("detail") or "").strip(),
+            }
+        )
+    return failures
+
+
+def _interesting_manifest_outcomes(
+    manifest_results: dict[str, object] | None,
+    *,
+    limit: int = 0,
+) -> list[dict[str, str]]:
+    if not isinstance(manifest_results, dict):
+        return []
+    interesting: list[dict[str, str]] = []
+    for base_key in ("disc_video", "dds", "format_matrix"):
+        report = manifest_results.get(base_key)
+        if not isinstance(report, dict):
+            continue
+        for sample in report.get("sample_results") or []:
+            if not isinstance(sample, dict):
+                continue
+            status = str(sample.get("status") or "").strip().lower()
+            if status not in {"failed", "explained", "expected_failure", "missing"}:
+                continue
+            entry = {
+                "manifest": str(base_key),
+                "status": status,
+                "label": str(sample.get("label") or sample.get("path") or "sample").strip(),
+                "detail": str(sample.get("detail") or "").strip(),
+                "stage": str(sample.get("stage") or "").strip(),
+            }
+            if base_key == "dds":
+                for key in ("surface_kind", "decode_policy", "export_policy", "policy_status"):
+                    value = str(sample.get(key) or "").strip()
+                    if value:
+                        entry[key] = value
+            interesting.append(entry)
+            if limit > 0 and len(interesting) >= limit:
+                return interesting
+    return interesting
+
+
+def _group_review(grouped: object) -> dict[str, object]:
+    groups = grouped if isinstance(grouped, dict) else {}
+    labels: list[str] = []
+    ok_count = 0
+    failed_count = 0
+    for suffix in sorted(groups):
+        report = groups.get(suffix)
+        if not isinstance(report, dict):
+            continue
+        labels.append(str(report.get("label") or suffix))
+        if bool(report.get("ok")):
+            ok_count += 1
+        else:
+            failed_count += 1
+    return {
+        "total": len(labels),
+        "ok": ok_count,
+        "failed": failed_count,
+        "labels": labels,
+    }
+
+
+def _manifest_result_review(manifest_results: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(manifest_results, dict):
+        return {}
+    review: dict[str, object] = {}
+    for base_key, group_key in (
+        ("disc_video", "disc_video_groups"),
+        ("dds", "dds_groups"),
+        ("format_matrix", "format_matrix_groups"),
+    ):
+        report = manifest_results.get(base_key)
+        if not isinstance(report, dict):
+            continue
+        sample_status_counts: dict[str, int] = {}
+        for sample in report.get("sample_results") or []:
+            if not isinstance(sample, dict):
+                continue
+            status = str(sample.get("status") or "").strip().lower() or "unknown"
+            sample_status_counts[status] = sample_status_counts.get(status, 0) + 1
+        review[base_key] = {
+            "ok": bool(report.get("ok")),
+            "detail": str(report.get("detail") or "").strip(),
+            "sample_count": len(report.get("sample_results") or []),
+            "sample_status_counts": sample_status_counts,
+            "group_review": _group_review(manifest_results.get(group_key)),
+        }
+    dds_policy_groups = manifest_results.get("dds_policy_groups")
+    if isinstance(dds_policy_groups, dict):
+        policy_review: dict[str, object] = {}
+        for axis in ("surface_kind", "decode_policy", "export_policy", "policy_status"):
+            grouped = dds_policy_groups.get(axis)
+            axis_review = _group_review(grouped)
+            if axis_review.get("total"):
+                policy_review[axis] = axis_review
+        if policy_review:
+            review["dds_policy_groups"] = policy_review
+    return review
+
+
+def _selftest_check_repeat_summary(payloads: list[dict[str, object]]) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "runs": len(payloads),
+        "checks": {},
+        "unstable_checks": [],
+    }
+    per_check: dict[str, dict[str, object]] = {}
+    total_runs = len(payloads)
+    for payload in payloads:
+        checks = payload.get("checks")
+        if not isinstance(checks, dict):
+            checks = {}
+        seen_in_run: set[str] = set()
+        for name, check in checks.items():
+            key = str(name)
+            entry = per_check.setdefault(
+                key,
+                {
+                    "ok_runs": 0,
+                    "failed_runs": 0,
+                    "missing_runs": 0,
+                    "details": [],
+                },
+            )
+            seen_in_run.add(key)
+            ok = isinstance(check, dict) and bool(check.get("ok"))
+            if ok:
+                entry["ok_runs"] = int(entry.get("ok_runs") or 0) + 1
+            else:
+                entry["failed_runs"] = int(entry.get("failed_runs") or 0) + 1
+                detail = str(check.get("detail") or "").strip() if isinstance(check, dict) else ""
+                if detail and detail not in entry["details"]:
+                    entry["details"].append(detail)
+        for key, entry in per_check.items():
+            if key not in seen_in_run:
+                entry["missing_runs"] = int(entry.get("missing_runs") or 0) + 1
+    unstable: list[str] = []
+    finalized: dict[str, dict[str, object]] = {}
+    for key in sorted(per_check):
+        entry = per_check[key]
+        stable_ok = (
+            int(entry.get("ok_runs") or 0) == total_runs
+            and int(entry.get("failed_runs") or 0) == 0
+            and int(entry.get("missing_runs") or 0) == 0
+        )
+        finalized[key] = {
+            "ok_runs": int(entry.get("ok_runs") or 0),
+            "failed_runs": int(entry.get("failed_runs") or 0),
+            "missing_runs": int(entry.get("missing_runs") or 0),
+            "stable_ok": stable_ok,
+            "details": list(entry.get("details") or []),
+        }
+        if not stable_ok:
+            unstable.append(key)
+    summary["checks"] = finalized
+    summary["unstable_checks"] = unstable
+    return summary
+
+
 def _smoke_repeat_summary(runs: list[dict[str, object]]) -> dict[str, object]:
     elapsed_values: list[float] = []
     exit_codes: list[int] = []
@@ -706,9 +881,15 @@ def main(argv: list[str] | None = None) -> int:
         final_payload["smoke_runs"] = smoke_runs
         if selftest_payload is not None:
             final_payload["runtime_selftest"] = selftest_payload
+            manifest_results = selftest_payload.get("manifest_results")
+            if isinstance(manifest_results, dict):
+                final_payload["runtime_selftest_manifest_review"] = _manifest_result_review(manifest_results)
+                final_payload["runtime_selftest_interesting_sample_outcomes"] = _interesting_manifest_outcomes(manifest_results)
+            final_payload["runtime_selftest_failed_checks"] = _failed_selftest_checks(selftest_payload)
         if selftest_runs:
             final_payload["runtime_selftest_runs"] = selftest_runs
             final_payload["runtime_selftest_repeat_summary"] = _selftest_repeat_summary(selftest_runs)
+            final_payload["runtime_selftest_check_repeat_summary"] = _selftest_check_repeat_summary(selftest_runs)
         json_out.write_text(json.dumps(final_payload, indent=2, sort_keys=True), encoding="utf-8")
     print("✅  Packaged runtime capability audit verified.")
     return 0

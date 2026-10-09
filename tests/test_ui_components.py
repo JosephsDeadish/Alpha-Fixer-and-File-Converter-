@@ -1245,8 +1245,8 @@ class TestStartupCapabilityNotice(unittest.TestCase):
             calls = []
             selftest_payloads = iter(
                 [
-                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 120.0, "checks": {"generated_mp4_load": {"ok": true}}}\n',
-                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 132.5, "checks": {"generated_mp4_load": {"ok": true}}, "manifest_results": {"disc_video": {"ok": true, "detail": "disc ok", "sample_results": []}}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 120.0, "checks": {"generated_mp4_load": {"ok": true}, "external_dds_manifest": {"ok": true, "detail": "dds ok"}}, "manifest_results": {"disc_video": {"ok": true, "detail": "disc ok", "sample_results": [{"status": "explained", "label": "disc-a", "detail": "explained detail"}]}}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 132.5, "checks": {"generated_mp4_load": {"ok": true}, "external_dds_manifest": {"ok": false, "detail": "dds failed"}}, "manifest_results": {"disc_video": {"ok": true, "detail": "disc ok", "sample_results": [{"status": "failed", "label": "disc-b", "detail": "bad stream", "stage": "load"}]}}}\n',
                 ]
             )
 
@@ -1293,6 +1293,15 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertFalse(payload["manifest_inputs"]["disc_video"]["provided"])
         self.assertIn("runtime_selftest", payload)
         self.assertEqual(payload["runtime_selftest"]["manifest_results"]["disc_video"]["detail"], "disc ok")
+        self.assertEqual(payload["runtime_selftest_failed_checks"][0]["name"], "external_dds_manifest")
+        self.assertEqual(payload["runtime_selftest_failed_checks"][0]["detail"], "dds failed")
+        self.assertEqual(payload["runtime_selftest_interesting_sample_outcomes"][0]["status"], "failed")
+        self.assertEqual(payload["runtime_selftest_interesting_sample_outcomes"][0]["label"], "disc-b")
+        self.assertEqual(payload["runtime_selftest_manifest_review"]["disc_video"]["sample_status_counts"]["failed"], 1)
+        repeat_checks = payload["runtime_selftest_check_repeat_summary"]["checks"]
+        self.assertTrue(repeat_checks["generated_mp4_load"]["stable_ok"])
+        self.assertEqual(repeat_checks["external_dds_manifest"]["failed_runs"], 1)
+        self.assertIn("external_dds_manifest", payload["runtime_selftest_check_repeat_summary"]["unstable_checks"])
 
     def test_verify_packaged_app_repeat_selftest_runs_can_fail_rss_growth_limit(self):
         module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")

@@ -201,12 +201,16 @@ def _write_runner_summary(
     if isinstance(verifier_payload, dict):
         payload["manifest_inputs"] = verifier_payload.get("manifest_inputs") or {}
         payload["runtime_selftest_repeat_summary"] = verifier_payload.get("runtime_selftest_repeat_summary") or {}
+        payload["runtime_selftest_check_repeat_summary"] = verifier_payload.get("runtime_selftest_check_repeat_summary") or {}
         runtime = verifier_payload.get("runtime_selftest")
         if isinstance(runtime, dict):
             payload["runtime_selftest_checks"] = runtime.get("checks") or {}
             payload["manifest_results"] = runtime.get("manifest_results") or {}
         payload["failed_checks"] = _failed_checks(verifier_payload)
         payload["interesting_sample_outcomes"] = _interesting_sample_outcomes(verifier_payload)
+        payload["runtime_selftest_failed_checks"] = verifier_payload.get("runtime_selftest_failed_checks") or []
+        payload["runtime_selftest_interesting_sample_outcomes"] = verifier_payload.get("runtime_selftest_interesting_sample_outcomes") or []
+        payload["runtime_selftest_manifest_review"] = verifier_payload.get("runtime_selftest_manifest_review") or {}
     _write_json(path, payload)
 
 
