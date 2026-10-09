@@ -196,6 +196,12 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
+        self._live_settings_note = QLabel(
+            "Changes are saved automatically and apply immediately unless stated otherwise. "
+            "Close keeps your changes; there is no Apply or Cancel step."
+        )
+        self._live_settings_note.setWordWrap(True)
+        layout.addWidget(self._live_settings_note)
         self._settings_tabs = QTabWidget()
         tabs = self._settings_tabs
         tabs.setDocumentMode(True)
@@ -210,6 +216,17 @@ class SettingsDialog(QDialog):
         tv = QVBoxLayout(theme_tab)
         tv.setContentsMargins(4, 4, 4, 4)  # item 50: tighter margins for more content on screen
         tv.setSpacing(4)  # item 50: reduced spacing between GroupBoxes
+        effects_tab = QWidget()
+        ev = QVBoxLayout(effects_tab)
+        ev.setContentsMargins(6, 6, 6, 6)
+        ev.setSpacing(6)
+        effects_intro = QLabel(
+            "Visual effects are optional. Enable only the effects you want. "
+            "'Use theme' follows the active theme; turn it off to choose your own style. "
+            "Turning an effect off keeps its saved preferences."
+        )
+        effects_intro.setWordWrap(True)
+        ev.addWidget(effects_intro)
 
         # ---- Preset GroupBox ----
         grp_preset_select = QGroupBox("Active Theme Preset")
@@ -639,7 +656,7 @@ class SettingsDialog(QDialog):
         effect_emoji_row.addWidget(grp_emoji, 2)
 
 
-        tv.addLayout(effect_emoji_row)
+        ev.addLayout(effect_emoji_row)
 
         # ---- Hold-Click Effects GroupBox (item 48/49) ----
         grp_hold = QGroupBox("Hold-Click Effects")
@@ -690,7 +707,7 @@ class SettingsDialog(QDialog):
         self._hold_effects_check.toggled.connect(lambda _: _update_hold_sub())
         self._use_theme_hold_check.toggled.connect(lambda _: _update_hold_sub())
         self._hold_effect_sub.setVisible(False)
-        tv.addWidget(grp_hold)
+        ev.addWidget(grp_hold)
 
         # ---- Background Effects GroupBox ----
         grp_bg_drip = QGroupBox("Background Effects")
@@ -916,7 +933,7 @@ class SettingsDialog(QDialog):
         self._use_theme_ambient_check.toggled.connect(lambda _: _update_ambient_combo_state())
         self._bg_ambient_sub.setVisible(False)  # hidden until ambient is enabled
 
-        tv.addWidget(grp_bg_drip)
+        ev.addWidget(grp_bg_drip)
 
         # ---- Notifications & Pop-ups Overlay GroupBox (item 66) ----
         grp_notif = QGroupBox("Achievement && Unlock Notifications")
@@ -966,7 +983,7 @@ class SettingsDialog(QDialog):
         self._use_theme_notif_check.toggled.connect(lambda _: _update_notif_state())
         # Default: sub visible (enabled=True), theme info visible (use_theme=True)
         self._notif_overlay_sub.setVisible(True)
-        tv.addWidget(grp_notif)
+        ev.addWidget(grp_notif)
 
 
         mouse_row = QHBoxLayout()
@@ -1222,7 +1239,7 @@ class SettingsDialog(QDialog):
         self._use_theme_cursor_check.toggled.connect(lambda _: _update_cursor_sub())
         mouse_row.addWidget(grp_cursor, 1)
 
-        tv.addLayout(mouse_row)
+        ev.addLayout(mouse_row)
 
         # ---- Sound GroupBox (theme-related — click sounds follow the theme) ----
         grp_sound = QGroupBox("Sound")
@@ -1499,7 +1516,7 @@ class SettingsDialog(QDialog):
         self._use_theme_button_anim_check.toggled.connect(lambda _: _update_btn_anim_sub())
         self._btn_anim_sub.setVisible(False)  # hidden by default
 
-        tv.addWidget(grp_btn_anim)
+        ev.addWidget(grp_btn_anim)
 
         # ---- Banner & SVG Animation GroupBox (moved here from General tab) ----
         grp_banner = QGroupBox("Banner && SVG Badge Animation")
@@ -1999,6 +2016,16 @@ class SettingsDialog(QDialog):
         sound_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         sound_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         tabs.addTab(sound_scroll, "🔊 Sound")
+        effects_scroll = QScrollArea()
+        effects_scroll.setWidget(effects_tab)
+        effects_scroll.setWidgetResizable(True)
+        effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tabs.addTab(effects_scroll, "✨ Effects")
+        tabs.setTabToolTip(0, "Theme presets, colors, custom background, and banner appearance.")
+        tabs.setTabToolTip(1, "Layout, scaling, tooltips, and history preferences.")
+        tabs.setTabToolTip(2, "Sound enablement, theme sound profiles, and event volumes.")
+        tabs.setTabToolTip(3, "Optional click, background, mouse, cursor, and button effects.")
 
         layout.addWidget(tabs, 1)
 

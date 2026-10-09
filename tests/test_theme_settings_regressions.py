@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMessageBox, QGroupBox, QScrollArea
 
 from src.core.settings_manager import SettingsManager
 from src.ui.settings_dialog import SettingsDialog
@@ -270,6 +270,58 @@ def test_theme_export_keeps_existing_json_suffix_and_full_metadata(dialog, tmp_p
     question.assert_not_called()
     assert json.loads(final.read_text(encoding="utf-8")) == widget._theme
     assert not (tmp_path / "theme.JSON.json").exists()
+
+
+def test_settings_effects_have_dedicated_tab_without_duplicated_controls(dialog):
+    widget, manager = dialog
+    tabs = widget._settings_tabs
+    assert [tabs.tabText(i) for i in range(tabs.count())] == [
+        "🎨 Theme", "⚙ General", "🔊 Sound", "✨ Effects",
+    ]
+    theme_groups = {group.title() for group in tabs.widget(0).findChildren(QGroupBox)}
+    effect_groups = {group.title() for group in tabs.widget(3).findChildren(QGroupBox)}
+    assert "Active Theme Preset" in theme_groups
+    assert "Theme Colors" in theme_groups
+    for title in ["Click Effect Style", "Hold-Click Effects", "Background Effects",
+                  "Mouse Trail", "Cursor", "Button Press Animation"]:
+        assert title not in theme_groups
+        assert title in effect_groups
+        assert sum(group.title() == title for group in widget.findChildren(QGroupBox)) == 1
+    assert "Sound" not in effect_groups
+    assert all(tabs.tabToolTip(i) for i in range(tabs.count()))
+    assert "automatically" in widget._live_settings_note.text()
+    assert "Close keeps" in widget._live_settings_note.text()
+
+
+def test_settings_tab_navigation_does_not_change_preferences(dialog):
+    widget, manager = dialog
+    before = manager.get_theme()
+    emitted = Mock()
+    widget.settings_changed.connect(emitted)
+    for index in [3, 0, 2, 1, 3]:
+        widget._settings_tabs.setCurrentIndex(index)
+    assert manager.get_theme() == before
+    emitted.assert_not_called()
+    widget._font_size_spin.setValue(16)
+    assert manager.get("font_size") == 16
+
+
+def test_settings_tabs_remain_scrollable_in_small_window(dialog, app):
+    widget, manager = dialog
+    widget.show()
+    widget.setMinimumSize(0, 0)
+    widget.resize(640, 480)
+    for index in range(widget._settings_tabs.count()):
+        widget._settings_tabs.setCurrentIndex(index)
+        app.processEvents()
+        scroll = widget._settings_tabs.widget(index)
+        assert isinstance(scroll, QScrollArea)
+        assert scroll.widgetResizable()
+        assert scroll.widget().height() >= scroll.viewport().height()
+        assert scroll.verticalScrollBar().maximum() == max(
+            0, scroll.widget().height() - scroll.viewport().height(),
+        )
+    widget.close()
 
 
 @pytest.mark.parametrize("finish", ["accept", "reject", "close"])
