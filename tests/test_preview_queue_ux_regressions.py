@@ -222,6 +222,141 @@ def test_painter_zoom_overlay_avoids_history_and_updates_actual_canvas(painter, 
     assert overlay._zoom_lbl.text() == before
 
 
+def settle_painter_overlays(app, host, history, zoom=None):
+    for _ in range(25):
+        app.processEvents()
+    assert not history._position_timer.isActive()
+    assert host.rect().contains(history.geometry())
+    if zoom is not None:
+        assert not zoom._position_timer.isActive()
+        assert host.rect().contains(zoom.geometry())
+        assert not history.geometry().intersects(zoom.geometry())
+
+
+def focus_visible_history_control(app, history, control):
+    control.setFocus(Qt.FocusReason.TabFocusReason)
+    app.processEvents()
+    assert control.hasFocus()
+    viewport = history._scroll_area.viewport()
+    assert viewport.rect().contains(
+        control.rect().translated(control.mapTo(viewport, QPoint()))
+    )
+
+
+@pytest.mark.parametrize("width", [200, 360])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("with_zoom", [False, True])
+def test_painter_short_history_scrolls_and_restores(app, width, pixels, with_zoom):
+    host = QWidget()
+    undo, redo = Mock(), Mock()
+    history = _FloatingHistoryOverlay(undo, redo, host)
+    zoom = _FloatingZoomOverlay(Mock(), Mock(), Mock(), host) if with_zoom else None
+    highlight, labels, zones = Mock(), Mock(), Mock()
+    history.highlight_toggled.connect(highlight)
+    history.labels_toggled.connect(labels)
+    history.all_zones_toggled.connect(zones)
+    controls = [history._btn_undo, history._btn_redo, history._chk_highlight,
+                history._chk_labels, history._btn_all_vis]
+    try:
+        host.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Light"])
+                          + f"\nQWidget {{ font-size: {pixels}px; }}")
+        host.resize(width, 200)
+        history.set_undo_count(9999)
+        history.set_redo_count(9999)
+        host.show()
+        host.activateWindow()
+        history.show()
+        if zoom is not None:
+            zoom.show()
+        settle_painter_overlays(app, host, history, zoom)
+        scrollbar = history._scroll_area.verticalScrollBar()
+        if pixels == 32 or (pixels == 24 and with_zoom):
+            assert scrollbar.maximum() > 0
+        for control in controls:
+            assert control.font().pixelSize() == pixels
+            assert control.width() >= control.sizeHint().width()
+            assert control.height() >= control.sizeHint().height()
+        focus_visible_history_control(app, history, controls[0])
+        for index, control in enumerate(controls):
+            assert control.hasFocus()
+            focus_visible_history_control(app, history, control)
+            QTest.keyClick(control, Qt.Key.Key_Space)
+            if index < len(controls) - 1:
+                QTest.keyClick(control, Qt.Key.Key_Tab)
+                app.processEvents()
+                assert controls[index + 1].hasFocus()
+        undo.assert_called_once()
+        redo.assert_called_once()
+        highlight.assert_called_once_with(True)
+        labels.assert_called_once_with(False)
+        zones.assert_called_once_with(False)
+        if scrollbar.maximum():
+            assert scrollbar.value() > 0
+            focus_visible_history_control(app, history, controls[0])
+            assert scrollbar.value() == 0
+        if zoom is not None:
+            QTest.keyClick(controls[-1], Qt.Key.Key_Tab)
+            app.processEvents()
+            assert zoom._zoom_buttons[0].hasFocus()
+            for button in zoom._zoom_buttons:
+                button.setFocus()
+                QTest.keyClick(button, Qt.Key.Key_Space)
+        settle_painter_overlays(app, host, history, zoom)
+        host.resize(900, 700)
+        settle_painter_overlays(app, host, history, zoom)
+        assert history._chk_highlight.text() == "Highlight transparent"
+        assert history._btn_all_vis.text() == "👁  Show All Zones"
+        assert history._scroll_area.verticalScrollBar().maximum() == 0
+        assert history._scroll_area.horizontalScrollBar().maximum() == 0
+        if zoom is not None:
+            assert not zoom._compact
+        host.resize(200, 700)
+        settle_painter_overlays(app, host, history, zoom)
+        assert history._scroll_area.verticalScrollBar().maximum() == 0
+        host.resize(width, 200)
+        settle_painter_overlays(app, host, history, zoom)
+    finally:
+        host.close()
+        sip.delete(host)
+
+
+@pytest.mark.parametrize("width", [200, 360])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+def test_painter_short_actual_canvas_keeps_controls_and_masks(painter, app, tmp_path, width, pixels):
+    open_painter_image(painter, tmp_path)
+    painter.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Dark"])
+                         + f"\nQWidget {{ font-size: {pixels}px; }}")
+    painter._canvas.setFixedSize(width, 200)
+    painter.show()
+    painter.activateWindow()
+    history, zoom, canvas = painter._history_overlay, painter._zoom_overlay, painter._canvas
+    canvas._masks[0][0, 0] = 1
+    masks = canvas.get_all_masks()
+    history.set_undo_count(9999)
+    history.set_redo_count(9999)
+    settle_painter_overlays(app, canvas, history, zoom)
+    for control, attribute in [
+        (history._chk_highlight, "_show_zero_alpha"),
+        (history._chk_labels, "_show_alpha_labels"),
+    ]:
+        before = getattr(canvas, attribute)
+        focus_visible_history_control(app, history, control)
+        QTest.keyClick(control, Qt.Key.Key_Space)
+        assert getattr(canvas, attribute) != before
+    focus_visible_history_control(app, history, history._btn_all_vis)
+    QTest.keyClick(history._btn_all_vis, Qt.Key.Key_Space)
+    assert all(np.array_equal(before, after) for before, after in zip(masks, canvas.get_all_masks()))
+    for button in zoom._zoom_buttons:
+        button.setFocus()
+        assert button.hasFocus()
+        QTest.keyClick(button, Qt.Key.Key_Space)
+    settle_painter_overlays(app, canvas, history, zoom)
+    canvas.setFixedSize(900, 700)
+    settle_painter_overlays(app, canvas, history, zoom)
+    assert history._scroll_area.verticalScrollBar().maximum() == 0
+    assert history._chk_highlight.text() == "Highlight transparent"
+
+
 @pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
 def test_painter_zoom_overlay_scales_fits_and_preserves_keyboard_actions(app, name):
     host = QWidget()

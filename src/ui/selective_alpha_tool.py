@@ -47,7 +47,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
-    QAbstractSpinBox, QInputDialog, QSlider, QLineEdit,
+    QAbstractSpinBox, QInputDialog, QSlider, QLineEdit, QStyle,
 )
 
 from ..core.selective_alpha_processor import (
@@ -1290,6 +1290,8 @@ class _FloatingZoomOverlay(QFrame):
         self.move(max(margin, parent_size.width() - self.width() - margin), margin)
         parent = self.parentWidget()
         history = parent.findChild(QFrame, "historyOverlay") if parent is not None else None
+        if isinstance(history, _FloatingHistoryOverlay) and not history.isHidden():
+            history.reposition(parent_size)
         if history is not None and not history.isHidden() and self.geometry().intersects(history.geometry()):
             self.move(self.x(), history.geometry().bottom() + margin)
 
@@ -1328,7 +1330,15 @@ class _FloatingHistoryOverlay(QFrame):
         super().__init__(parent)
         self.setObjectName("historyOverlay")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-        vlay = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._scroll_area = QScrollArea(self)
+        self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll_area.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._scroll_content = QWidget()
+        self._scroll_area.setWidget(self._scroll_content)
+        outer.addWidget(self._scroll_area)
+        vlay = QVBoxLayout(self._scroll_content)
         vlay.setContentsMargins(4, 3, 4, 3)
         vlay.setSpacing(3)
 
@@ -1392,43 +1402,19 @@ class _FloatingHistoryOverlay(QFrame):
         self._position_timer = QTimer(self)
         self._position_timer.setSingleShot(True)
         self._position_timer.timeout.connect(self._refresh_position)
+        self._scroll_content.installEventFilter(self)
         if parent is not None:
             parent.installEventFilter(self)
-        self.adjustSize()
         self.raise_()
 
     def _refresh_position(self):
         parent = self.parentWidget()
         if parent is not None:
-            from PyQt6.QtWidgets import QBoxLayout
-
-            available = parent.width() - 12
-            full_width = max(
-                self._chk_highlight.fontMetrics().horizontalAdvance("Highlight transparent") + 64,
-                self._btn_all_vis.fontMetrics().horizontalAdvance("👁  Show All Zones") + 24,
-            )
-            compact = available < full_width
-            for control, text in [
-                (self._chk_highlight, "α=0" if compact else "Highlight transparent"),
-                (self._chk_labels, "α labels" if compact else "Show α values"),
-                (self._btn_all_vis, "👁" if compact else (
-                    "👁  Show All Zones" if self._btn_all_vis.isChecked() else "👁  Hide All Zones")),
-            ]:
-                if control.text() != text:
-                    control.setText(text)
-            row = self._history_button_row
-            needed = self._btn_undo.sizeHint().width() + self._btn_redo.sizeHint().width() + 16
-            direction = (QBoxLayout.Direction.TopToBottom if available < needed
-                         else QBoxLayout.Direction.LeftToRight)
-            if row.direction() != direction:
-                row.setDirection(direction)
-        self.layout().activate()
-        self.adjustSize()
-        if parent is not None:
-            self.reposition(parent.size())
             zoom = parent.findChild(_FloatingZoomOverlay)
             if zoom is not None:
                 zoom.reposition(parent.size())
+            else:
+                self.reposition(parent.size())
 
     def event(self, event):
         result = super().event(event)
@@ -1441,6 +1427,10 @@ class _FloatingHistoryOverlay(QFrame):
 
     def eventFilter(self, obj, event):
         if obj is self.parentWidget() and event.type() == QEvent.Type.Resize:
+            self._position_timer.start(0)
+        elif obj is self._scroll_content and event.type() in (
+            QEvent.Type.LayoutRequest, QEvent.Type.StyleChange, QEvent.Type.FontChange,
+        ):
             self._position_timer.start(0)
         return super().eventFilter(obj, event)
 
@@ -1477,7 +1467,6 @@ class _FloatingHistoryOverlay(QFrame):
         label = f"↩ {count}" if count > 0 else "↩"
         self._btn_undo.setText(label)
         self._btn_undo.setAccessibleDescription(self._btn_undo.toolTip())
-        self.adjustSize()
         self._position_timer.start(0)
 
     def set_redo_count(self, count: int) -> None:
@@ -1491,7 +1480,6 @@ class _FloatingHistoryOverlay(QFrame):
         label = f"↪ {count}" if count > 0 else "↪"
         self._btn_redo.setText(label)
         self._btn_redo.setAccessibleDescription(self._btn_redo.toolTip())
-        self.adjustSize()
         self._position_timer.start(0)
 
     def set_highlight_checked(self, v: bool) -> None:
@@ -1511,8 +1499,50 @@ class _FloatingHistoryOverlay(QFrame):
         return self._chk_labels.isChecked()
 
     def reposition(self, parent_size) -> None:
-        """Pin the overlay to the top-left corner."""
+        """Keep controls scrollable within the canvas, reserving room for zoom."""
+        from PyQt6.QtWidgets import QBoxLayout
+
         margin = 6
+        available = max(1, parent_size.width() - 2 * margin)
+        full_width = max(
+            self._chk_highlight.fontMetrics().horizontalAdvance("Highlight transparent") + 64,
+            self._btn_all_vis.fontMetrics().horizontalAdvance("👁  Show All Zones") + 24,
+        )
+        compact = available < full_width
+        for control, text in [
+            (self._chk_highlight, "α=0" if compact else "Highlight transparent"),
+            (self._chk_labels, "α labels" if compact else "Show α values"),
+            (self._btn_all_vis, "👁" if compact else (
+                "👁  Show All Zones" if self._btn_all_vis.isChecked() else "👁  Hide All Zones")),
+        ]:
+            if control.text() != text:
+                control.setText(text)
+        row = self._history_button_row
+        needed = self._btn_undo.sizeHint().width() + self._btn_redo.sizeHint().width() + 16
+        direction = (QBoxLayout.Direction.TopToBottom if available < needed
+                     else QBoxLayout.Direction.LeftToRight)
+        if row.direction() != direction:
+            row.setDirection(direction)
+        self._scroll_content.layout().activate()
+        self._scroll_content.adjustSize()
+        content_size = self._scroll_content.size()
+        border = 2 * self.frameWidth()
+        height = max(1, parent_size.height() - 2 * margin)
+        width = min(available, content_size.width() + border)
+        parent = self.parentWidget()
+        zoom = parent.findChild(_FloatingZoomOverlay) if parent is not None else None
+        if zoom is not None and not zoom.isHidden():
+            if width + zoom.width() + margin > available:
+                height = max(1, height - zoom.height() - margin)
+        if content_size.height() + border > height:
+            width = min(available, content_size.width() + border
+                        + self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent))
+            if zoom is not None and not zoom.isHidden() and width + zoom.width() + margin > available:
+                height = max(1, parent_size.height() - 3 * margin - zoom.height())
+        horizontal = (self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent)
+                      if content_size.width() + border > width else 0)
+        self.resize(width, min(height, content_size.height() + border + horizontal))
+        self.layout().activate()
         self.move(margin, margin)
 
 # ---------------------------------------------------------------------------
