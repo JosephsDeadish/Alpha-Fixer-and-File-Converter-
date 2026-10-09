@@ -66,6 +66,8 @@ if "%1"=="--onefile" (
 if exist "!LAUNCH_TARGET!" (
     echo Running packaged validation...
     if not exist dist\validation-reports mkdir dist\validation-reports
+    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --offline --smoke-seconds 1.5 --timeout 25 --run-selftest --selftest-iterations 2 --require-selftest-pass --require-core-selftest-checks --require-video-selftest-checks --require-dds-selftest-checks --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-wand-runtime --require-bundled-imagemagick --require-bundled-default-theme-svg --require-packaged-bundle-ready --require-no-missing-libs --bundle-kind !BUNDLE_KIND! --json-out dist\validation-reports\packaged-runtime-audit-windows-!BUNDLE_KIND!.json
+    if errorlevel 1 exit /b 1
     set "VERIFY_PRIVATE_ARGS=--require-wand-runtime --require-bundled-imagemagick"
     if "%ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS%"=="1" (
         if not defined ALPHA_FIXER_PRIVATE_SAMPLE_LIMIT (
@@ -101,7 +103,7 @@ if exist "!LAUNCH_TARGET!" (
         if defined ALPHA_FIXER_PUBLIC_MAX_SMOKE_ELAPSED_SPREAD_SECONDS set "VERIFY_PUBLIC_EXTRA_ARGS=!VERIFY_PUBLIC_EXTRA_ARGS! --max-smoke-elapsed-spread-seconds !ALPHA_FIXER_PUBLIC_MAX_SMOKE_ELAPSED_SPREAD_SECONDS!"
         if "%ALPHA_FIXER_REQUIRE_DDS_SELFTEST%"=="1" set "VERIFY_DDS_ARGS=--require-dds-selftest-checks --require-wand-runtime --require-bundled-imagemagick --require-no-packaged-asset-gaps"
         python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --max-smoke-elapsed-seconds 20 --max-smoke-elapsed-growth-seconds 8 --max-smoke-elapsed-spread-seconds 8 --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-bundled-default-theme-svg --require-packaged-bundle-ready --require-no-missing-libs --bundle-kind !BUNDLE_KIND! --json-out dist\validation-reports\packaged-runtime-audit-windows-!BUNDLE_KIND!.json !VERIFY_PRIVATE_ARGS! --run-selftest --selftest-iterations 2 --selftest-sample-limit !ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT! --require-selftest-pass --require-core-selftest-checks --use-public-sample-manifests --require-video-selftest-checks --require-public-manifest-checks --require-public-manifest-group-checks --allow-sample-downloads --sample-cache-dir "!ALPHA_FIXER_SAMPLE_CACHE_DIR!" !VERIFY_PUBLIC_EXTRA_ARGS! !VERIFY_DDS_ARGS!
-    ) else (
+    ) else if "%ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS%"=="1" (
         python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --smoke-seconds 1.5 --timeout 25 --max-smoke-elapsed-seconds 20 --max-smoke-elapsed-growth-seconds 8 --max-smoke-elapsed-spread-seconds 8 --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-bundled-default-theme-svg --require-packaged-bundle-ready --require-no-missing-libs --bundle-kind !BUNDLE_KIND! --json-out dist\validation-reports\packaged-runtime-audit-windows-!BUNDLE_KIND!.json !VERIFY_PRIVATE_ARGS!
     )
     if errorlevel 1 (

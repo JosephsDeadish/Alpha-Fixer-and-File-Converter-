@@ -151,6 +151,10 @@ scripts\build_exe.bat
 The finished application is placed in `dist/AlphaFixerConverter/`.
 Run `AlphaFixerConverter` (Linux/macOS) or `AlphaFixerConverter.exe` (Windows) from that folder.
 Both build scripts now reuse `scripts/verify_packaged_app.py` to smoke-launch the packaged app and dump runtime capabilities, so the same verification step can be re-run manually on a fresh machine later.
+Every build also runs generated offline SVG, GIF, DDS (RGBA/DXT1/DXT3/DXT5),
+and video checks before any optional external corpus validation. A missing or
+failed required check stops the build. Qt's PyInstaller hooks collect the
+application's required libraries/plugins rather than unrelated QML/WebEngine assets.
 
 The build inputs must include FFmpeg/ffprobe and ImageMagick on the build host.
 Python dependencies are installed from `requirements.txt`. Missing mandatory
@@ -169,6 +173,10 @@ On Windows, use `dist\AlphaFixerConverter\AlphaFixerConverter.exe`. For a one-fi
 build, use the executable directly under `dist/`. `--offline` clears inherited
 Python/native-library/tool paths and forbids downloads; it is not a network sandbox
 or a substitute for testing on a clean target operating system.
+The verifier clears inherited smoke/audit/self-test modes and sample settings so
+each launch tests the mode requested on the command line. Sample downloads must
+be explicitly enabled. Timed-out validations terminate their process tree, including
+one-file bootloader and FFmpeg children, instead of leaving a hung validation running.
 
 ### Single-file build (slower startup)
 

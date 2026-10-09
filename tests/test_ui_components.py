@@ -381,8 +381,11 @@ class TestConverterTab(unittest.TestCase):
         self.assertIn("AVIF", details)
 
     def test_converter_capability_banner_is_visible(self):
+        from src.ui.converter_tool import _converter_capability_summary
         self.assertTrue(hasattr(self._widget, "_capability_lbl"))
-        self.assertTrue(self._widget._capability_lbl.text().startswith("Ready"))
+        self.assertEqual(self._widget._capability_lbl.text(), _converter_capability_summary())
+        self.assertFalse(self._widget._capability_lbl.isHidden())
+        self.assertTrue(self._widget._capability_lbl.wordWrap())
 
     def test_build_failure_report_text_groups_repeated_failures(self):
         self._widget._last_run_format = "DDS"
@@ -6143,6 +6146,55 @@ class TestBuilderHistoryPolish(unittest.TestCase):
     def tearDown(self):
         self._app.processEvents()
 
+    def test_history_filters_casefold_unicode_filenames_and_fields(self):
+        from PyQt6.QtWidgets import QTreeWidget
+        from src.ui.history_tab import (
+            HistoryTab, _HistoryItem, _set_filter_text, _set_filter_fields,
+        )
+        tree = QTreeWidget()
+        tree.setColumnCount(1)
+        self.addCleanup(tree.deleteLater)
+        for cached in (False, True):
+            item = _HistoryItem(["Straße.PNG"])
+            tree.addTopLevelItem(item)
+            if cached:
+                _set_filter_text(item, "Straße.PNG")
+            _set_filter_fields(item, file="Straße.PNG", notes="Σ τέλος")
+            for query in ("STRASSE", "straße", "file:STRASSE.PNG", "file:*STRASSE*", "notes:ς"):
+                with self.subTest(cached=cached, query=query):
+                    HistoryTab._apply_filter(tree, query)
+                    self.assertFalse(item.isHidden())
+            HistoryTab._apply_filter(tree, "file:missing.png")
+            self.assertTrue(item.isHidden())
+            HistoryTab._apply_filter(tree, "")
+            self.assertFalse(item.isHidden())
+            tree.clear()
+
+    def test_history_refresh_releases_owned_gif_movies(self):
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        from PyQt6.QtGui import QMovie
+        from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem
+        from src.ui.history_tab import _AnimatedGifDelegate
+        tree = QTreeWidget()
+        self.addCleanup(tree.deleteLater)
+        delegate = _AnimatedGifDelegate(tree, tree)
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "preview.gif")
+            frame = Image.new("RGBA", (2, 2), "red")
+            try:
+                frame.save(path, format="GIF")
+            finally:
+                frame.close()
+            for _ in range(3):
+                item = QTreeWidgetItem(tree, ["preview"])
+                delegate.set_gif_path(item, path)
+                self.assertEqual(len(delegate.findChildren(QMovie)), 1)
+                delegate.clear_movies()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.assertEqual(delegate.findChildren(QMovie), [])
+                self.assertEqual(delegate._movies, {})
+                tree.clear()
+
     def test_alpha_readiness_uses_svg_runtime_capability(self):
         from src.ui import alpha_tool
         with patch.object(alpha_tool, "_has_wand", return_value=True):
@@ -7432,6 +7484,102 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self._widget.hide()
         self._widget.deleteLater()
         self._app.processEvents()
+
+    def test_canvas_unload_clears_undo_redo_controls_and_transient_state(self):
+        canvas = self._widget._canvas
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "image.png")
+            image = Image.new("RGBA", (4, 4), "red")
+            try:
+                image.save(path)
+            finally:
+                image.close()
+            self.assertTrue(canvas.load_image(path))
+        canvas.set_mask_from_array(0, np.ones((4, 4), dtype=np.uint8))
+        canvas.set_mask_from_array(0, np.zeros((4, 4), dtype=np.uint8))
+        canvas.undo_mask()
+        self.assertTrue(self._widget._history_overlay._btn_undo.isEnabled())
+        self.assertTrue(self._widget._history_overlay._btn_redo.isEnabled())
+        canvas._drawing = True
+        canvas._drag_start_img = (1, 1)
+        canvas._transform_orig_mask = np.ones((4, 4), dtype=np.uint8)
+        canvas.unload_image()
+        self.assertFalse(canvas.has_image())
+        self.assertFalse(self._widget._history_overlay._btn_undo.isEnabled())
+        self.assertFalse(self._widget._history_overlay._btn_redo.isEnabled())
+        self.assertFalse(canvas._drawing)
+        self.assertIsNone(canvas._drag_start_img)
+        self.assertIsNone(canvas._transform_orig_mask)
+
+    def test_canvas_load_closes_original_after_rgba_conversion(self):
+        from src.ui import selective_alpha_tool as sa
+        image = Image.new("RGB", (3, 2), "red")
+        with patch.object(sa.Image, "open", return_value=image):
+            self.assertTrue(self._widget._canvas.load_image("image.jpg"))
+        with self.assertRaises(ValueError):
+            image.getpixel((0, 0))
+        self.assertEqual(self._widget._canvas.get_source_image().getpixel((0, 0)), (255, 0, 0, 255))
+
+    def test_canvas_load_memory_error_closes_both_images(self):
+        from src.ui import selective_alpha_tool as sa
+        image = Image.new("RGB", (3, 2), "red")
+        rgba = Image.new("RGBA", (3, 2), "red")
+        with patch.object(sa.Image, "open", return_value=image), \
+                patch.object(image, "convert", return_value=rgba), \
+                patch.object(sa.np, "array", side_effect=MemoryError):
+            with self.assertRaises(MemoryError):
+                self._widget._canvas.load_image("image.jpg")
+        for resource in (image, rgba):
+            with self.assertRaises(ValueError):
+                resource.getpixel((0, 0))
+
+    def test_painter_sidebar_large_font_controls_remain_scrollable(self):
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QScrollArea
+        self._widget.resize(900, 700)
+        self._widget.setFont(QFont("Sans Serif", 24))
+        self._widget.show()
+        self._app.processEvents()
+        self._app.processEvents()
+        scroll = self._widget.findChild(QScrollArea)
+        panel = scroll.widget()
+        self.assertGreaterEqual(panel.width(), panel.minimumSizeHint().width())
+        self.assertGreater(scroll.horizontalScrollBar().maximum(), 0)
+        for key in ("freehand", "eraser", "polygon"):
+            button = self._widget._tool_btns[key]
+            self.assertGreaterEqual(button.width(), button.minimumSizeHint().width())
+
+    def test_painter_source_callbacks_change_state_without_uncaught_errors(self):
+        from PyQt6.QtWidgets import QFileDialog
+        canvas = self._widget._canvas
+        errors = []
+        with tempfile.TemporaryDirectory(dir=".") as folder:
+            path = os.path.join(folder, "image.png")
+            image = Image.new("RGBA", (4, 4), "red")
+            try:
+                image.save(path)
+            finally:
+                image.close()
+            with patch.object(sys, "excepthook", side_effect=lambda *error: errors.append(error)), \
+                    patch.object(QFileDialog, "getOpenFileName", return_value=(path, "")):
+                self._widget._btn_open.click()
+                self._app.processEvents()
+                self.assertTrue(canvas.has_image())
+                self._widget._tool_btns["eraser"].click()
+                self.assertEqual(canvas._tool, "eraser")
+                self._widget._tool_btns["freehand"].click()
+                self.assertEqual(canvas._tool, "freehand")
+                canvas.set_mask_from_array(0, np.ones((4, 4), dtype=np.uint8))
+                self._widget._history_overlay._btn_undo.click()
+                self.assertIsNone(canvas.get_mask_as_array(0))
+                self._widget._history_overlay._btn_redo.click()
+                np.testing.assert_array_equal(canvas.get_mask_as_array(0), np.ones((4, 4), dtype=np.uint8))
+                self._widget._history_overlay._btn_all_vis.click()
+                self.assertFalse(any(canvas._zone_visible))
+                self._widget._history_overlay._btn_all_vis.click()
+                self.assertTrue(all(canvas._zone_visible))
+                self._app.processEvents()
+        self.assertEqual(errors, [], "Uncaught Qt callback exception")
 
     def test_visible_palette_matches_settings_count_without_reducing_engine_capacity(self):
         from src.core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT

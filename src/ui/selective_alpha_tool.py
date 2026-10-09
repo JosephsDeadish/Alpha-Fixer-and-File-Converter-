@@ -43,7 +43,7 @@ from PyQt6.QtGui import (
     QBrush, QKeySequence, QShortcut, QPixmap, QIcon,
 )
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLayout,
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
@@ -390,17 +390,15 @@ class SelectiveAlphaCanvas(QWidget):
         try:
             img = Image.open(path)
             img.load()
-            try:
-                rgba = img.convert("RGBA") if img.mode != "RGBA" else img
-            except MemoryError:
+            rgba = img.convert("RGBA") if img.mode != "RGBA" else img
+            if rgba is not img:
                 img.close()
-                raise
             new_arr = np.array(rgba, dtype=np.uint8).copy()
             src_qimage = _pil_to_qimage(rgba)
         except MemoryError:
             if rgba is not None and rgba is not img:
                 rgba.close()
-            if img is not None and img is rgba:
+            if img is not None:
                 img.close()
             raise
         except Exception:
@@ -442,7 +440,18 @@ class SelectiveAlphaCanvas(QWidget):
         self._img_w = self._img_h = 0
         self._undo_stack.clear()
         self._redo_stack.clear()
+        self._emit_undo_redo_state()
         self._composite_dirty = True
+        self._composite_qimage = None
+        self._drag_preview = None
+        self._drawing = False
+        self._last_img_pt = None
+        self._drag_start_img = None
+        self._transform_start_mouse = None
+        self._transform_orig_mask = None
+        self._panning = False
+        self._pan_start_mouse = None
+        self._pan_start_offset = None
         self._poly_pts.clear()
         self.update()
 
@@ -1731,8 +1740,9 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Left panel (controls) ─────────────────────────────────────────
         left_panel = QWidget()
-        left_panel.setFixedWidth(340)
+        left_panel.setMinimumWidth(340)
         lv = QVBoxLayout(left_panel)
+        lv.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
 

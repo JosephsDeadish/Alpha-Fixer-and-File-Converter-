@@ -980,8 +980,11 @@ class TestWorkerBehavior(unittest.TestCase):
             self.assertIn(os.path.join("nested", "image.png"), second_backup)
 
     def test_converter_worker_emits_progress_and_results_in_input_order(self):
+        from PyQt6.QtCore import QCoreApplication
         from src.core.worker import ConverterWorker
 
+        # Keep any QApplication from earlier UI tests alive during worker GC.
+        app = QCoreApplication.instance()
         with tempfile.TemporaryDirectory() as tmpdir:
             first = os.path.join(tmpdir, "first.png")
             second = os.path.join(tmpdir, "second.png")

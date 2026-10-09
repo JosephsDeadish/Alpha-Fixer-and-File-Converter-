@@ -74,9 +74,16 @@ if [[ -x "$launch_target" ]]; then
         --require-bundled-default-theme-svg
         --require-packaged-bundle-ready
         --require-no-missing-libs
+        --run-selftest
+        --selftest-iterations 2
+        --require-selftest-pass
+        --require-core-selftest-checks
+        --require-video-selftest-checks
+        --require-dds-selftest-checks
         --bundle-kind "$bundle_kind"
         --json-out "dist/validation-reports/packaged-runtime-audit-$bundle_kind.json"
     )
+    python scripts/verify_packaged_app.py "${verify_args[@]}" --offline
     if [[ "${ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
         private_sample_limit="${ALPHA_FIXER_PRIVATE_SAMPLE_LIMIT:-${ALPHA_FIXER_PUBLIC_SAMPLE_LIMIT:-12}}"
         private_cache_dir="${ALPHA_FIXER_PRIVATE_SAMPLE_CACHE_DIR:-${ALPHA_FIXER_SAMPLE_CACHE_DIR:-$REPO_ROOT/.sample-cache-private}}"
@@ -173,7 +180,9 @@ if [[ -x "$launch_target" ]]; then
             )
         fi
     fi
-    python scripts/verify_packaged_app.py "${verify_args[@]}"
+    if [[ "${ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS:-0}" == "1" || "${ALPHA_FIXER_VERIFY_PUBLIC_SAMPLE_MANIFESTS:-0}" == "1" ]]; then
+        python scripts/verify_packaged_app.py "${verify_args[@]}"
+    fi
 else
     echo "ERROR: Packaged executable is missing or not executable: $launch_target"
     exit 1

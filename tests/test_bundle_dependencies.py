@@ -4,11 +4,20 @@ import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
 from scripts import bundle_dependencies as bundle
 from scripts import runtime_hook_dependencies as hook
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_environment():
+    # Runtime hooks assign several environment variables directly, not through
+    # monkeypatch; their fake bundle paths must not escape into later media tests.
+    with patch.dict(os.environ):
+        yield
 
 
 def make_file(path, content="runtime"):
@@ -23,6 +32,10 @@ def test_missing_ffprobe_is_fatal(monkeypatch):
     monkeypatch.setattr(bundle.shutil, "which", lambda name: None)
     with pytest.raises(RuntimeError, match="Mandatory runtime executable.*ffprobe"):
         bundle.find_executable("ffprobe")
+
+def test_minimal_linux_release_includes_generic_graphics_dependencies():
+    for name in ("libxcb.so.1", "libGLX.so.0", "libGLdispatch.so.0"):
+        assert name in bundle.LINUX_QT_LIBS
 
 
 def test_invalid_configured_executable_is_fatal(monkeypatch):
@@ -197,9 +210,23 @@ def test_collector_preserves_versioned_config_layout(tmp_path, monkeypatch):
     config = make_file(tmp_path / "etc/ImageMagick-7/nested/policy.xml")
     coder = make_file(tmp_path / "lib/ImageMagick-7/modules-Q16HDRI/coders/dds.so")
     monkeypatch.setitem(sys.modules, "wand.api", SimpleNamespace(library=SimpleNamespace(_name=str(library))))
+    collected_data, collected_binaries, metadata = [], [], []
+
+    def collect_data(package, **kwargs):
+        collected_data.append(package)
+        return []
+
+    def collect_binaries(package):
+        collected_binaries.append(package)
+        return []
+
+    def copy_metadata(package):
+        metadata.append(package)
+        return []
+
     monkeypatch.setitem(sys.modules, "PyInstaller.utils.hooks", SimpleNamespace(
-        collect_data_files=lambda *a, **k: [], collect_dynamic_libs=lambda *a: [],
-        copy_metadata=lambda *a: [],
+        collect_data_files=collect_data, collect_dynamic_libs=collect_binaries,
+        copy_metadata=copy_metadata,
     ))
     monkeypatch.setitem(sys.modules, "PyQt6", SimpleNamespace(QtCore=None, QtGui=None, QtSvg=None, QtWidgets=None))
     monkeypatch.setattr(bundle, "find_executable", lambda name: tmp_path / name)
@@ -223,6 +250,9 @@ def test_collector_preserves_versioned_config_layout(tmp_path, monkeypatch):
     assert "wand.api" in hidden
     assert "vtracer.vtracer" in hidden
     assert (str(extension), "vtracer") in binaries
+    assert "PyQt6" in metadata
+    assert "PyQt6" not in collected_data
+    assert "PyQt6" not in collected_binaries
 
 
 def test_missing_vtracer_native_runtime_is_fatal(monkeypatch):

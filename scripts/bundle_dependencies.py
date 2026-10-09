@@ -16,6 +16,9 @@ import sys
 
 LINUX_QT_LIBS = (
     "libEGL.so.1", "libGL.so.1", "libGLESv2.so.2", "libpulse.so.0",
+    # PyInstaller treats these as host graphics-stack libraries, but the
+    # portable bundle also needs their generic loaders on a minimal target OS.
+    "libGLX.so.0", "libGLdispatch.so.0", "libxcb.so.1",
     "libxcb-keysyms.so.1", "libxcb-image.so.0", "libxcb-icccm.so.4",
     "libxcb-xkb.so.1", "libxcb-shape.so.0", "libxcb-cursor.so.0",
     "libxcb-render-util.so.0", "libxkbcommon-x11.so.0", "libxcb-util.so.1",
@@ -283,7 +286,11 @@ def collect_release_dependencies(output: Path = Path("build/runtime-resources"))
         destination = Path("imagemagick/config") / config.relative_to(tree).parent
         datas.append((str(config), destination.as_posix()))
         config_paths.add(destination.as_posix())
-    for package in ("wand", "PyQt6", "imageio", "imageio_ffmpeg", "vtracer"):
+    # Qt's PyInstaller hooks collect the libraries, platform/image plugins and
+    # translations used by imported modules. Copying the entire wheel also adds
+    # unrelated QML/WebEngine plugins whose dependencies are not part of this app.
+    datas.extend(copy_metadata("PyQt6"))
+    for package in ("wand", "imageio", "imageio_ffmpeg", "vtracer"):
         datas.extend(collect_data_files(
             package, excludes=["binaries/ffmpeg*"] if package == "imageio_ffmpeg" else None,
         ))

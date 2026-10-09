@@ -104,6 +104,7 @@ class _AnimatedGifDelegate(QStyledItemDelegate):
         for m in self._movies.values():
             try:
                 m.stop()
+                m.deleteLater()
             except Exception:
                 pass
         self._movies.clear()
@@ -168,7 +169,7 @@ def _set_filter_text(item: QTreeWidgetItem, *parts) -> None:
             text = str(part or "").strip()
             if text:
                 tokens.append(text)
-    item.setData(0, _HistoryItem._FILTER_ROLE, " ".join(tokens).lower())
+    item.setData(0, _HistoryItem._FILTER_ROLE, " ".join(tokens).casefold())
 
 
 def _set_filter_fields(item: QTreeWidgetItem, **fields) -> None:
@@ -179,7 +180,7 @@ def _set_filter_fields(item: QTreeWidgetItem, **fields) -> None:
         else:
             text = str(value or "").strip()
         if text:
-            normalized[str(key).strip().lower()] = text.lower()
+            normalized[str(key).strip().casefold()] = text.casefold()
     item.setData(0, _HistoryItem._FILTER_FIELDS_ROLE, normalized)
 
 
@@ -679,7 +680,7 @@ class HistoryTab(QWidget):
     @staticmethod
     def _apply_filter(tree: QTreeWidget, text: str) -> None:
         """Show only rows whose text in any column contains *text* (case-insensitive)."""
-        needle = text.strip().lower()
+        needle = text.strip().casefold()
         free_text, grouped_fields = _field_filter_groups(needle)
         root = tree.invisibleRootItem()
         for row in range(root.childCount()):
@@ -691,7 +692,7 @@ class HistoryTab(QWidget):
             if not row_text:
                 row_text = " ".join(
                     item.text(col) for col in range(tree.columnCount())
-                ).lower()
+                ).casefold()
             fields = item.data(0, _HistoryItem._FILTER_FIELDS_ROLE) or {}
             visible = True
             for token in free_text:

@@ -1,7 +1,9 @@
 import importlib.util
 import os
 import json
+import signal
 import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -110,6 +112,67 @@ class TestOfflineVerification(unittest.TestCase):
             env = self.verifier._verification_environment(False)
         self.assertEqual(env["IMAGEIO_FFMPEG_EXE"], "/test/ffmpeg")
 
+    def test_inherited_validation_modes_and_samples_cannot_override_launches(self):
+        inherited = {
+            "ALPHA_FIXER_RUNTIME_SELFTEST": "64",
+            "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP": "1",
+            "ALPHA_FIXER_SMOKE_TEST": "1000",
+            "ALPHA_FIXER_RUNTIME_STRESS_LOOPS": "50",
+            "ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT": "1",
+            "ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST": "/host/private-video.json",
+            "ALPHA_FIXER_RUNTIME_DDS_MANIFEST": "/host/private-dds.json",
+            "ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST": "/host/private-formats.json",
+            "ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR": "/host/sample-cache",
+            "ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS": "1",
+            "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS": "1",
+            "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS": "1",
+            "ALPHA_FIXER_VALIDATION_JSON_OUT": "/host/result.json",
+            "ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS": "1",
+            "ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS": "1",
+        }
+        launches = []
+
+        def run(command, *, env, timeout):
+            launches.append(dict(env))
+            if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP"):
+                output = 'ALPHA_FIXER_RUNTIME_CAPABILITIES={"packaged_bundle_ready": true}\n'
+            elif env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                output = 'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "checks": {}}\n'
+            else:
+                output = ""
+            return subprocess.CompletedProcess(command, 0, stdout=output)
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            with patch.dict(os.environ, inherited):
+                with patch.object(self.verifier, "_run_and_echo", side_effect=run):
+                    with patch("sys.stdout"):
+                        self.assertEqual(self.verifier.main([
+                            str(target), "--run-selftest", "--selftest-iterations", "2",
+                            "--require-selftest-pass",
+                        ]), 0)
+        self.assertEqual(len(launches), 3)
+        smoke, capabilities, selftest = launches
+        self.assertIn("ALPHA_FIXER_SMOKE_TEST", smoke)
+        self.assertNotIn("ALPHA_FIXER_RUNTIME_SELFTEST", smoke)
+        self.assertNotIn("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", smoke)
+        self.assertEqual(capabilities["ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP"], "1")
+        self.assertNotIn("ALPHA_FIXER_RUNTIME_SELFTEST", capabilities)
+        self.assertNotIn("ALPHA_FIXER_SMOKE_TEST", capabilities)
+        self.assertEqual(selftest["ALPHA_FIXER_RUNTIME_SELFTEST"], "2")
+        self.assertNotIn("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", selftest)
+        self.assertNotIn("ALPHA_FIXER_SMOKE_TEST", selftest)
+        for env in launches:
+            for name in inherited.keys() - {
+                "ALPHA_FIXER_SMOKE_TEST", "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP",
+                "ALPHA_FIXER_RUNTIME_SELFTEST", "ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS",
+                "ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS",
+            }:
+                self.assertNotIn(name, env)
+            self.assertEqual(env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"], "0")
+            self.assertEqual(env["ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS"], "0")
+
     def test_offline_mode_rejects_explicit_downloads_before_launch(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "app"
@@ -119,6 +182,28 @@ class TestOfflineVerification(unittest.TestCase):
                     self.verifier.main([str(target), "--offline", "--allow-sample-downloads"])
                 run.assert_not_called()
 
+    def test_all_advertised_dds_exports_are_required_by_release_check(self):
+        from types import SimpleNamespace
+
+        args = SimpleNamespace(require_dds_selftest_checks=True)
+        checks = self.verifier._required_selftest_checks(args)
+        for name in ("png_to_dds_rgba", "png_to_dds_dxt1", "png_to_dds_dxt3", "png_to_dds_dxt5"):
+            self.assertIn(name, checks)
+
+    def test_build_scripts_run_offline_generated_checks_before_optional_corpora(self):
+        root = Path(__file__).resolve().parents[1]
+        for filename in ("build_exe.sh", "build_exe.bat"):
+            with self.subTest(script=filename):
+                text = (root / "scripts" / filename).read_text(encoding="utf-8")
+                offline = text.index("--offline")
+                self.assertLess(offline, text.index("ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS"))
+                for flag in (
+                    "--run-selftest", "--require-selftest-pass", "--require-core-selftest-checks",
+                    "--require-video-selftest-checks", "--require-dds-selftest-checks",
+                ):
+                    invocation = next(line for line in text.splitlines() if "--offline" in line)
+                    self.assertIn(flag, text[:offline] if filename.endswith(".sh") else invocation)
+
     def test_windowed_executable_reports_through_file_channel(self):
         payload = {"frozen": True, "packaged_bundle_ready": True}
 
@@ -127,13 +212,46 @@ class TestOfflineVerification(unittest.TestCase):
             output.write_text(json.dumps({
                 "prefix": "ALPHA_FIXER_RUNTIME_CAPABILITIES", "payload": payload,
             }), encoding="utf-8")
-            return subprocess.CompletedProcess(command, 0, stdout="")
+            from unittest.mock import MagicMock
+            process = MagicMock()
+            process.__enter__.return_value = process
+            process.communicate.return_value = ("", None)
+            process.returncode = 0
+            return process
 
-        with patch.object(self.verifier.subprocess, "run", side_effect=run):
+        with patch.object(self.verifier.subprocess, "Popen", side_effect=run):
             with patch("sys.stdout"):
                 result = self.verifier._run_and_echo(["app.exe"], env={}, timeout=5)
         self.assertEqual(self.verifier._capability_payload(result.stdout), payload)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Uses Linux process-state inspection")
+    def test_timeout_terminates_bootloader_descendants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_file = Path(directory) / "child.pid"
+            code = (
+                "import subprocess,sys,time; from pathlib import Path; "
+                "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
+                f"Path({str(pid_file)!r}).write_text(str(child.pid)); "
+                "print('validation started',flush=True); time.sleep(60)"
+            )
+            try:
+                with patch("sys.stdout") as output:
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        self.verifier._run_and_echo(
+                            [sys.executable, "-c", code], env=os.environ.copy(), timeout=2,
+                        )
+                    self.assertTrue(any(
+                        "validation started" in str(call) for call in output.write.call_args_list
+                    ))
+                self.assertTrue(pid_file.is_file())
+                state = Path("/proc") / pid_file.read_text() / "stat"
+                self.assertTrue(not state.exists() or state.read_text().split()[2] == "Z")
+            finally:
+                if pid_file.is_file():
+                    try:
+                        os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
 
 class TestUnattendedValidation(unittest.TestCase):
     def test_validation_payload_can_be_written_without_console(self):

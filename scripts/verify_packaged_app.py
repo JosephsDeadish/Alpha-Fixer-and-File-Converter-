@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -51,6 +52,8 @@ _STRESS_SELFTEST_CHECKS = (
 _DDS_SELFTEST_CHECKS = (
     "png_to_dds_rgba",
     "png_to_dds_dxt1",
+    "png_to_dds_dxt3",
+    "png_to_dds_dxt5",
 )
 _CORE_SELFTEST_CHECKS = (
     "png_to_gif",
@@ -68,15 +71,44 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
         output = Path(directory) / "result.json"
         child_env = dict(env)
         child_env["ALPHA_FIXER_VALIDATION_JSON_OUT"] = str(output)
-        result = subprocess.run(
+        with subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            timeout=timeout,
-            check=False,
             env=child_env,
-        )
+            start_new_session=os.name != "nt",
+        ) as process:
+            try:
+                stdout, _ = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # One-file bootloaders and FFmpeg can leave descendants holding
+                # the output pipe open if only the top-level process is killed.
+                if os.name == "nt":
+                    taskkill = Path(child_env.get("SystemRoot", r"C:\Windows")) / "System32/taskkill.exe"
+                    try:
+                        subprocess.run(
+                            [str(taskkill), "/PID", str(process.pid), "/T", "/F"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            timeout=10, check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        process.kill()
+                else:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                process.kill()
+                # Do not wait forever if a descendant deliberately detached.
+                try:
+                    stdout, _ = process.communicate(timeout=5)
+                    if stdout:
+                        print(stdout, end="" if stdout.endswith("\n") else "\n")
+                except subprocess.TimeoutExpired:
+                    process.stdout.close()
+                raise
+            result = subprocess.CompletedProcess(command, process.returncode, stdout=stdout)
         if output.is_file():
             data = json.loads(output.read_text(encoding="utf-8"))
             prefix = data.get("prefix")
@@ -94,6 +126,20 @@ def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> s
 
 def _verification_environment(offline: bool) -> dict[str, str]:
     env = os.environ.copy()
+    # Each launch must exercise its requested mode, not an inherited audit or
+    # self-test that can return success without ever displaying the application.
+    for name in (
+        "ALPHA_FIXER_SMOKE_TEST", "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP",
+        "ALPHA_FIXER_RUNTIME_SELFTEST", "ALPHA_FIXER_RUNTIME_STRESS_LOOPS",
+        "ALPHA_FIXER_RUNTIME_SAMPLE_LIMIT", "ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST",
+        "ALPHA_FIXER_RUNTIME_DDS_MANIFEST", "ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST",
+        "ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS", "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS",
+        "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS", "ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR",
+        "ALPHA_FIXER_VALIDATION_JSON_OUT",
+    ):
+        env.pop(name, None)
+    env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "0"
+    env["ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS"] = "0"
     if offline:
         for name in (
             "PYTHONHOME", "PYTHONPATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
