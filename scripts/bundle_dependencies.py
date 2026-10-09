@@ -96,6 +96,17 @@ def relocate_libtool_descriptor(descriptor: Path, output: Path) -> Path:
     return generated
 
 
+def vtracer_native_extension() -> Path:
+    try:
+        import vtracer.vtracer as native
+    except ImportError as exc:
+        raise RuntimeError("Mandatory SVG vectorization runtime vtracer is missing") from exc
+    extension = Path(native.__file__)
+    if not extension.is_file() or not callable(getattr(native, "convert_image_to_svg_py", None)):
+        raise RuntimeError("Mandatory vtracer native extension is incomplete")
+    return extension
+
+
 def imagemagick_layout(library: Path, home: Path | None = None):
     """Find IM's versioned config/module trees without scanning unrelated files."""
     roots = []
@@ -156,7 +167,15 @@ def _native_license_files(source: Path):
         roots.append(Path(home))
     found = []
     for root in dict.fromkeys(roots):
-        for pattern in ("*LICENSE*", "*license*", "*COPYING*", "*copyright*", "licenses/**/*"):
+        for pattern in (
+            "*LICENSE*", "*license*", "*COPYING*", "*copyright*", "licenses/**/*",
+            "share/licenses/**/*", "share/doc/**/LICENSE*", "share/doc/**/COPYING*",
+            "share/*/LICENSE*", "share/*/COPYING*",
+        ):
+            if pattern.startswith("share/") and root in (
+                Path("/usr"), Path("/usr/local"), Path("/opt/homebrew"),
+            ):
+                continue
             found.extend(p for p in root.glob(pattern) if p.is_file())
     # Native Qt wheel licenses live in dist-info, not beside Qt6/lib/*.so.
     found.extend(_wheel_native_licenses().get(source.resolve(), ()))
@@ -171,6 +190,12 @@ def _native_license_files(source: Path):
             candidate = Path("/usr/share/doc") / package / "copyright"
             if candidate.is_file():
                 found.append(candidate)
+    for notice in list(found):
+        text = notice.read_text(encoding="utf-8", errors="replace")
+        for reference in re.findall(r"/usr/share/common-licenses/[A-Za-z0-9_.+-]+", text):
+            license_file = Path(reference)
+            if license_file.is_file():
+                found.append(license_file)
     return sorted(set(found))
 
 
@@ -207,6 +232,13 @@ def write_notices(binaries, output: Path):
             "file": source.name, "source": str(source),
             "license_sources": [str(p) for p in licenses],
         })
+        # Homebrew records upstream license declarations in installed formula
+        # receipts even when the formula does not install the full license text.
+        receipts = list(source.parent.parent.glob(".brew/*.rb"))
+        for receipt in receipts:
+            datas.append((str(receipt), f"licenses/native/{source.name}/package-metadata"))
+        if receipts:
+            native[-1]["package_metadata_sources"] = [str(p) for p in receipts]
     notice = output / "THIRD_PARTY_NOTICES.json"
     notice.write_text(json.dumps({"python": metadata, "native": native}, indent=2), encoding="utf-8")
     datas.append((str(notice), "licenses"))
@@ -251,12 +283,13 @@ def collect_release_dependencies(output: Path = Path("build/runtime-resources"))
         destination = Path("imagemagick/config") / config.relative_to(tree).parent
         datas.append((str(config), destination.as_posix()))
         config_paths.add(destination.as_posix())
-    for package in ("wand", "PyQt6", "imageio", "imageio_ffmpeg"):
+    for package in ("wand", "PyQt6", "imageio", "imageio_ffmpeg", "vtracer"):
         datas.extend(collect_data_files(
             package, excludes=["binaries/ffmpeg*"] if package == "imageio_ffmpeg" else None,
         ))
         datas.extend(copy_metadata(package))
         binaries.extend(collect_dynamic_libs(package))
+    binaries.append((str(vtracer_native_extension()), "vtracer"))
     # Qt hooks collect plugin dependencies; fail early if its mandatory SVG library is absent.
     from PyQt6 import QtCore, QtGui, QtSvg, QtWidgets  # noqa: F401
     binaries = list(dict.fromkeys(binaries))
@@ -271,7 +304,10 @@ def collect_release_dependencies(output: Path = Path("build/runtime-resources"))
         "ffprobe": next(Path(p).name for p, d in binaries if d == "imageio_ffmpeg/binaries" and "ffprobe" in Path(p).name),
     }), encoding="utf-8")
     datas.append((str(manifest), "."))
-    return datas, binaries, ["wand", "wand.api", "wand.image", "wand.resource", "PyQt6.QtSvg"]
+    return datas, binaries, [
+        "wand", "wand.api", "wand.image", "wand.resource", "PyQt6.QtSvg",
+        "vtracer", "vtracer.vtracer",
+    ]
 
 
 def add_analysis_notices(analysis):

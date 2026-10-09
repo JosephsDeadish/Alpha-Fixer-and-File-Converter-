@@ -23,6 +23,7 @@ import tempfile
 import subprocess
 from pathlib import Path
 
+from src.core.app_paths import writable_app_directory
 from src.core.runtime_validation import (
     enrich_dds_manifest_entries,
     execute_dds_manifest,
@@ -56,8 +57,11 @@ def _log_dir() -> Path:
     else:
         base = Path(__file__).parent
     d = base / "logs"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return writable_app_directory(d, "logs")
 
 
 LOG_DIR = _log_dir()
@@ -790,8 +794,23 @@ def _runtime_capability_dump_requested() -> bool:
 
 def _emit_runtime_capability_dump() -> int:
     summary = _runtime_capability_summary()
-    print("ALPHA_FIXER_RUNTIME_CAPABILITIES=" + json.dumps(summary, sort_keys=True))
-    return 0
+    if _unattended_validation_errors:
+        summary["runtime_audit_errors"] = list(_unattended_validation_errors)
+        summary["packaged_bundle_ready"] = False
+    _emit_validation_payload("ALPHA_FIXER_RUNTIME_CAPABILITIES", summary)
+    return 1 if _unattended_validation_errors else 0
+
+
+def _emit_validation_payload(prefix: str, payload: dict) -> None:
+    """Windowed Windows executables can report without console streams."""
+    output = os.environ.get("ALPHA_FIXER_VALIDATION_JSON_OUT", "").strip()
+    if output:
+        Path(output).write_text(
+            json.dumps({"prefix": prefix, "payload": payload}, sort_keys=True),
+            encoding="utf-8",
+        )
+    if sys.stdout is not None:
+        print(prefix + "=" + json.dumps(payload, sort_keys=True))
 
 
 def _runtime_selftest_iterations() -> int:
@@ -883,6 +902,7 @@ def _env_truthy(name: str) -> bool:
 
 
 def _emit_runtime_selftest_dump() -> int:
+    _unattended_validation_errors.clear()
     from PIL import Image
     from src.core.alpha_processor import _load_dds
     from src.core.file_converter import (
@@ -1431,7 +1451,12 @@ def _emit_runtime_selftest_dump() -> int:
     peak_rss_mb = _runtime_selftest_peak_rss_mb()
     if peak_rss_mb is not None:
         summary["peak_rss_mb"] = peak_rss_mb
-    print("ALPHA_FIXER_RUNTIME_SELFTEST=" + json.dumps(summary, sort_keys=True))
+    if _unattended_validation_errors:
+        _record_check(
+            "unattended_callback_errors", False,
+            "\n".join(_unattended_validation_errors),
+        )
+    _emit_validation_payload("ALPHA_FIXER_RUNTIME_SELFTEST", summary)
     return 0 if bool(summary.get("passed")) else 1
 
 
@@ -1458,6 +1483,7 @@ os.environ.setdefault("QT_OPENGL", "software")
 # can re-trigger the same faulting handler, producing an endless stack of
 # error dialogs that the user cannot close.
 _excepthook_active = False
+_unattended_validation_errors: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -1742,6 +1768,7 @@ def _excepthook(exc_type, exc_value, exc_tb):
     sysinfo = _collect_sysinfo()
     logger.critical("Uncaught exception:\n%s\nSystem info:\n%s", msg, sysinfo)
     if _unattended_validation_requested():
+        _unattended_validation_errors.append(msg)
         print(msg, file=sys.stderr)
         try:
             from PyQt6.QtCore import QCoreApplication
@@ -2148,6 +2175,8 @@ def main():
 
     logger.info("Main window shown.")
     exit_code = app.exec()
+    if _unattended_validation_errors:
+        exit_code = 1
     _watchdog.stop()
     logger.info("Application exited with code %d", exit_code)
     sys.exit(exit_code)

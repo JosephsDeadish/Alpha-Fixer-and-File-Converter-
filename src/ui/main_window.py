@@ -3981,14 +3981,31 @@ class MainWindow(QMainWindow):
                 "group": group,
             }
 
-    def _update_shortcut(self, sc_id: str, new_key: str) -> None:
+    def _update_shortcut(self, sc_id: str, new_key: str) -> bool:
         """Apply a new key sequence to a registered shortcut and persist it (item 20)."""
         info = self._shortcut_map.get(sc_id)
         if info is None:
-            return
+            return False
+        sequence = QKeySequence(new_key)
+        group = info["group"]
+        if not sequence.isEmpty():
+            for other_id, other in self._shortcut_map.items():
+                if other_id == sc_id:
+                    continue
+                if group != other["group"] and "Global" not in (group, other["group"]):
+                    continue
+                if sequence == QKeySequence(other["current"]):
+                    QMessageBox.warning(
+                        self,
+                        "Shortcut Conflict",
+                        f"{sequence.toString()} is already assigned to "
+                        f"“{other['desc']}” ({other['group']}).\n\n"
+                        "Choose a different key combination. Your binding has not changed.",
+                    )
+                    return False
         shortcut = info.get("sc")
         if shortcut is not None:
-            shortcut.setKey(QKeySequence(new_key))
+            shortcut.setKey(sequence)
         owner = info.get("owner")
         if owner is not None and hasattr(owner, "update_shortcut_binding"):
             try:
@@ -4005,14 +4022,15 @@ class MainWindow(QMainWindow):
                     pass
         info["current"] = new_key
         self._settings.set_shortcut_binding(sc_id, new_key, info["default"])
+        return True
 
     def _show_shortcuts(self):
         """Show an interactive keyboard-shortcuts dialog (item 20).
 
         Each row has the action name, the current key binding, a "Change"
         button that captures a new key press, and a "Reset" button that
-        restores the default.  Non-global shortcuts (canvas, GIF/video) are
-        shown in a read-only section below.
+        restores the default. Bindings can be reused across separate tools,
+        but must not conflict within a tool or with a Global shortcut.
         """
         from PyQt6.QtWidgets import (
             QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -4047,7 +4065,8 @@ class MainWindow(QMainWindow):
         outer.setSpacing(8)
 
         heading = QLabel(
-            "<b>⌨  Customizable Shortcuts</b>  — click <i>Change</i> to remap any shortcut."
+            "<b>⌨  Customizable Shortcuts</b>  — click <i>Change</i> to remap any shortcut.<br>"
+            "Bindings must be unique within a tool; Global bindings apply everywhere."
         )
         heading.setWordWrap(True)
         outer.addWidget(heading)
@@ -4169,7 +4188,8 @@ class MainWindow(QMainWindow):
 
                         if result == QDialog.DialogCode.Accepted and _captured_key[0]:
                             new_key = _captured_key[0]
-                            self._update_shortcut(_sc_id, new_key)
+                            if not self._update_shortcut(_sc_id, new_key):
+                                return
                             _key_item.setText(new_key)
                             is_c = (new_key != _info["default"])
                             if is_c:
@@ -4188,7 +4208,8 @@ class MainWindow(QMainWindow):
 
                 def _make_reset_handler(_sc_id, _btn_c, _key_item, _btn_r, _info):
                     def _on_reset():
-                        self._update_shortcut(_sc_id, _info["default"])
+                        if not self._update_shortcut(_sc_id, _info["default"]):
+                            return
                         _key_item.setText(_info["default"])
                         _key_item.setForeground(
                             dlg.palette().color(dlg.palette().ColorRole.Text)

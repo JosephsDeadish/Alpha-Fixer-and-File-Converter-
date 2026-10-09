@@ -1,5 +1,7 @@
 import importlib.util
 import os
+import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -117,8 +119,35 @@ class TestOfflineVerification(unittest.TestCase):
                     self.verifier.main([str(target), "--offline", "--allow-sample-downloads"])
                 run.assert_not_called()
 
+    def test_windowed_executable_reports_through_file_channel(self):
+        payload = {"frozen": True, "packaged_bundle_ready": True}
+
+        def run(command, **kwargs):
+            output = Path(kwargs["env"]["ALPHA_FIXER_VALIDATION_JSON_OUT"])
+            output.write_text(json.dumps({
+                "prefix": "ALPHA_FIXER_RUNTIME_CAPABILITIES", "payload": payload,
+            }), encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="")
+
+        with patch.object(self.verifier.subprocess, "run", side_effect=run):
+            with patch("sys.stdout"):
+                result = self.verifier._run_and_echo(["app.exe"], env={}, timeout=5)
+        self.assertEqual(self.verifier._capability_payload(result.stdout), payload)
+
 
 class TestUnattendedValidation(unittest.TestCase):
+    def test_validation_payload_can_be_written_without_console(self):
+        import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "result.json"
+            with patch.dict(os.environ, {"ALPHA_FIXER_VALIDATION_JSON_OUT": str(output)}):
+                with patch("sys.stdout", None):
+                    main._emit_validation_payload("ALPHA_FIXER_RUNTIME_SELFTEST", {"passed": True})
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), {
+                "prefix": "ALPHA_FIXER_RUNTIME_SELFTEST", "payload": {"passed": True},
+            })
+
     def test_validation_errors_do_not_open_modal_crash_dialog(self):
         import main
         from PyQt6.QtWidgets import QDialog
@@ -139,12 +168,24 @@ class TestUnattendedValidation(unittest.TestCase):
         from unittest.mock import MagicMock
 
         app = MagicMock()
-        with patch.dict(os.environ, {"ALPHA_FIXER_RUNTIME_SELFTEST": "1"}):
-            with patch("PyQt6.QtCore.QCoreApplication.instance", return_value=app):
-                with patch("sys.stderr"), patch.object(main, "_show_crash_dialog") as dialog:
-                    main._excepthook(ValueError, ValueError("Validation failed"), None)
-                app.exit.assert_called_once_with(1)
-                dialog.assert_not_called()
+        with patch.object(main, "_unattended_validation_errors", []):
+            with patch.dict(os.environ, {"ALPHA_FIXER_RUNTIME_SELFTEST": "1"}):
+                with patch("PyQt6.QtCore.QCoreApplication.instance", return_value=app):
+                    with patch("sys.stderr"), patch.object(main, "_show_crash_dialog") as dialog:
+                        main._excepthook(ValueError, ValueError("Validation failed"), None)
+                    app.exit.assert_called_once_with(1)
+                    dialog.assert_not_called()
+                    self.assertIn("Validation failed", main._unattended_validation_errors[0])
+
+    def test_capability_callback_failure_cannot_report_ready(self):
+        import main
+
+        with patch.object(main, "_unattended_validation_errors", ["callback failed"]):
+            with patch.object(main, "_runtime_capability_summary", return_value={"packaged_bundle_ready": True}):
+                with patch.object(main, "_emit_validation_payload") as emit:
+                    self.assertEqual(main._emit_runtime_capability_dump(), 1)
+                self.assertFalse(emit.call_args.args[1]["packaged_bundle_ready"])
+                self.assertEqual(emit.call_args.args[1]["runtime_audit_errors"], ["callback failed"])
 
 
 class TestSettingsScreenFitting(unittest.TestCase):
@@ -185,6 +226,36 @@ class TestSettingsScreenFitting(unittest.TestCase):
                                 app.processEvents()
                 finally:
                     app.setFont(original_font)
+
+
+class TestReadOnlyInstallation(unittest.TestCase):
+    def test_writable_portable_directory_is_preserved(self):
+        from src.core.app_paths import writable_app_directory
+
+        with tempfile.TemporaryDirectory() as directory:
+            preferred = Path(directory)
+            self.assertEqual(writable_app_directory(preferred), preferred)
+
+    def test_settings_and_logs_fall_back_to_user_storage(self):
+        import main
+        from src.core.settings_manager import SettingsManager, _settings_ini_path
+        from src.core import app_paths
+
+        with tempfile.TemporaryDirectory() as directory:
+            install = Path(directory) / "installation"
+            install.mkdir()
+            user_data = Path(directory) / "user-data"
+            with patch.object(main.sys, "frozen", True, create=True):
+                with patch.object(main.sys, "executable", str(install / "app.exe")):
+                    with patch.object(app_paths, "user_data_directory", return_value=user_data):
+                        with patch.object(app_paths.tempfile, "TemporaryFile", side_effect=PermissionError):
+                            self.assertEqual(Path(_settings_ini_path()).parent, user_data)
+                            self.assertEqual(main._log_dir(), user_data / "logs")
+                            manager = SettingsManager()
+                            manager.set("font_size", 18)
+                            manager.sync()
+            self.assertTrue((user_data / "AlphaFixerConverter.ini").is_file())
+            self.assertEqual(manager.get("font_size"), 18)
 
 
 if __name__ == "__main__":

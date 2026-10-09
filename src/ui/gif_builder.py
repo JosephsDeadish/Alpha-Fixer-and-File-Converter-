@@ -208,8 +208,9 @@ class _FrameEntry:
 
     def __init__(self, source_path: str, frame_index: int,
                  pil_image: "PIL.Image.Image", delay_ms: Optional[int] = None,
-                 source_delay_ms: Optional[int] = None):
+                 source_delay_ms: Optional[int] = None, source_kind: str = ""):
         self.source_path = source_path
+        self.source_kind = source_kind
         self.frame_index = frame_index  # 0-based index within source (>0 for animated GIF)
         self._pil = pil_image           # RGBA PIL image; ownership transferred here
         self.delay_ms: Optional[int] = delay_ms  # None = use global delay
@@ -862,6 +863,7 @@ class GifBuilderDialog(QDialog):
                     pil_frame,
                     delay_ms=frame_delay_ms,
                     source_delay_ms=frame_delay_ms,
+                    source_kind=source_kind,
                 )
                 self._frames.append(entry)
                 item = QListWidgetItem()
@@ -960,7 +962,7 @@ class GifBuilderDialog(QDialog):
                 continue
             seen_sources.add(source_path)
             source_frames = sum(1 for candidate in self._frames if _frame_source_path(candidate) == source_path)
-            kind = _frame_source_kind(source_path, source_frames)
+            kind = entry.source_kind or _frame_source_kind(source_path, source_frames)
             source_counts[kind] = source_counts.get(kind, 0) + 1
         source_summary = ", ".join(f"{kind} ×{count}" for kind, count in sorted(source_counts.items()))
         alpha_frames = sum(
@@ -1293,7 +1295,7 @@ class GifBuilderDialog(QDialog):
         effective_delay = entry.delay_ms if entry.delay_ms is not None else self._delay_slider.value()
         alpha = "yes" if "A" in entry._pil.getbands() else "no"
         source_frames = sum(1 for candidate in self._frames if _frame_source_path(candidate) == source_path)
-        source_kind = _frame_source_kind(source_path, source_frames)
+        source_kind = entry.source_kind or _frame_source_kind(source_path, source_frames)
         export_w, export_h = _scaled_size_for_export(
             (width, height),
             self._width_slider.value(),

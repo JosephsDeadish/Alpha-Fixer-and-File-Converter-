@@ -22,7 +22,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=["scripts/runtime_hook_dependencies.py"],
-    excludes=["tkinter", "unittest", "test", "tests"],
+    excludes=["tkinter", "test", "tests"],
     noarchive=False,
 )
 add_analysis_notices(a)

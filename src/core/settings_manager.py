@@ -4,13 +4,15 @@ Settings manager – persists all application settings using QSettings.
 Settings are stored in an INI file next to the executable so they are easy
 to find, back-up, and delete when testing.  When running from source the INI
 file lands next to main.py; when frozen by PyInstaller it lands next to the
-.exe.
+.exe when writable, otherwise in the per-user application data directory.
 """
 import json
 import os
 import sys
+from pathlib import Path
 from PyQt6.QtCore import QSettings
 
+from .app_paths import writable_app_directory
 
 APP_NAME = "AlphaFixerConverter"
 ORG_NAME = "PandaTools"
@@ -36,7 +38,8 @@ def _settings_ini_path() -> str:
         exe_dir = os.path.normpath(
             os.path.join(os.path.dirname(__file__), "..", "..")
         )
-    return os.path.join(exe_dir, f"{APP_NAME}.ini")
+    directory = writable_app_directory(Path(exe_dir))
+    return str(directory / f"{APP_NAME}.ini")
 
 
 class SettingsManager:
@@ -249,7 +252,7 @@ class SettingsManager:
         # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
-        # Zone alpha values (40 zones, defaults to 128 each – 50% transparent)
+        # Visible zone alpha values, defaulting to 128 each – 50% transparent.
         "sa_zone_alphas": json.dumps([128] * SELECTIVE_ALPHA_UI_ZONE_COUNT),
         # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
         # Empty string = use built-in ZONE_COLORS palette.
@@ -573,7 +576,7 @@ class SettingsManager:
         return [128] * SELECTIVE_ALPHA_UI_ZONE_COUNT
 
     def set_sa_zone_alphas(self, alphas: list[int]) -> None:
-        """Persist the zone alpha values (up to 40 zones)."""
+        """Persist the visible zone alpha values."""
         self._qs.setValue("sa_zone_alphas", json.dumps(
             [max(0, min(255, int(v))) for v in alphas]
         ))
@@ -601,7 +604,7 @@ class SettingsManager:
         return None
 
     def set_sa_zone_colors(self, colors: list[list[int]]) -> None:
-        """Persist zone overlay colors as [[R,G,B,A], …] (up to 40 zones)."""
+        """Persist zone overlay colors as [[R,G,B,A], …]."""
         self._qs.setValue("sa_zone_colors", json.dumps(
             [[max(0, min(255, int(v))) for v in c] for c in colors]
         ))
@@ -611,7 +614,7 @@ class SettingsManager:
 
         Useful for testing/debugging: removes all unlock flags, click counts,
         history, and UI preferences so easter eggs can be re-triggered.
-        Equivalent to deleting the .ini file next to the application.
+        Equivalent to deleting the active settings INI file.
         """
         self._qs.clear()
         self._qs.sync()

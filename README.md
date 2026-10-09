@@ -57,7 +57,7 @@ Convert between image formats with optional resize and quality control.
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs
-- **Selective Alpha Tool** – paint alpha zones directly on an image with up to 40 color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
+- **Selective Alpha Tool** – paint alpha zones directly on an image with seven visible color-coded zones, brush/eraser tools, transform (move/rotate/scale), zone masks, and clipboard slots
 - **Single-instance protection** – if you try to open the app a second time while it is already running, a friendly warning is shown instead of launching a duplicate window
 - **HiDPI & multi-monitor aware** – fractional DPI scaling and multiple displays are handled by Qt; window position is corrected if a monitor is disconnected. Release qualification still requires native display testing on each supported platform.
 - **Small-screen dialog access** – GIF/Video Builder windows fit the current screen, with scrollable controls when space or larger fonts require it. Tutorial, GIF frame selection, and shortcut dialogs also fit the available screen area.
@@ -91,6 +91,11 @@ build must not be published as a complete release.
 Native dependencies must be installed on the **build host**. Windows/macOS/Linux
 still need a compatible operating system, graphics/display stack, and audio device
 for features that use them; packaging does not replace operating-system drivers.
+
+Settings and logs remain next to the executable for writable portable installs.
+Read-only installations use per-user application data instead (`LOCALAPPDATA` on
+Windows, `~/Library/Application Support` on macOS, and `XDG_DATA_HOME` or
+`~/.local/share` on Linux), so ordinary users do not need administrator access.
 
 Install Python dependencies:
 ```bash
@@ -438,11 +443,14 @@ python -m pytest \
 
 ### Re-running packaged verification on a fresh machine
 
-After copying a built app to another machine, you can rerun the same packaged smoke/capability checks without rebuilding:
+After copying a built app to another machine, you can rerun the same packaged smoke/capability checks without rebuilding. The executable itself needs no Python installation: set `ALPHA_FIXER_RUNTIME_SELFTEST=2`, `ALPHA_FIXER_RUNTIME_STRESS_LOOPS=2`, and `ALPHA_FIXER_VALIDATION_JSON_OUT` to a writable report-file path before launching it. It generates test media internally, writes its results, and exits with a failing status if a check fails. Leave both sample-download settings disabled for offline testing, and unset these validation variables before normal use.
+
+The following developer/QA wrapper additionally requires Python:
 
 ```bash
 # Linux / macOS example
 python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --offline \
   --smoke-seconds 2 \
   --repeat 3 \
   --run-selftest \
@@ -482,7 +490,7 @@ python scripts/verify_packaged_app.py dist\AlphaFixerConverter\AlphaFixerConvert
   --require-bundled-ffprobe
 ```
 
-The repository also includes a dedicated GitHub Actions workflow, `.github/workflows/fresh-machine-runtime.yml`, which runs the packaged verifier on hosted Ubuntu and Windows machines with repeated smoke launches and runtime self-tests.
+The repository also includes a dedicated GitHub Actions workflow, `.github/workflows/fresh-machine-runtime.yml`, which qualifies folder and single-file bundles on hosted Ubuntu, Windows, and macOS machines with offline checks, repeated smoke launches, and runtime self-tests. Hosted runners are not substitutes for separate clean-machine GUI qualification.
 
 ## Architecture
 

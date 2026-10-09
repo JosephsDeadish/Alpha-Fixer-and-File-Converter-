@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -63,15 +64,29 @@ _CORE_SELFTEST_CHECKS = (
 
 
 def _run_and_echo(command: list[str], *, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=timeout,
-        check=False,
-        env=env,
-    )
+    with tempfile.TemporaryDirectory(prefix="alpha_fixer_validation_") as directory:
+        output = Path(directory) / "result.json"
+        child_env = dict(env)
+        child_env["ALPHA_FIXER_VALIDATION_JSON_OUT"] = str(output)
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=child_env,
+        )
+        if output.is_file():
+            data = json.loads(output.read_text(encoding="utf-8"))
+            prefix = data.get("prefix")
+            if prefix not in ("ALPHA_FIXER_RUNTIME_CAPABILITIES", "ALPHA_FIXER_RUNTIME_SELFTEST"):
+                raise ValueError("Packaged executable emitted an unknown validation payload.")
+            if not isinstance(data.get("payload"), dict):
+                raise ValueError("Packaged executable emitted a non-object validation payload.")
+            # Use the file channel when a windowed executable has no stdout.
+            if not any(line.startswith(prefix + "=") for line in (result.stdout or "").splitlines()):
+                result.stdout = (result.stdout or "") + "\n" + prefix + "=" + json.dumps(data["payload"]) + "\n"
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
     return result

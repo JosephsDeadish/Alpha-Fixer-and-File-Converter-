@@ -5809,7 +5809,7 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
 
     # ---- snapshot helpers -------------------------------------------------
 
-    def test_snapshot_all_none(self):
+    def test_snapshot_empty_masks(self):
         canvas = self._make_canvas_with_image()
         snap = canvas.get_all_masks()
         from src.ui.selective_alpha_tool import NUM_ZONES
@@ -5827,7 +5827,8 @@ class TestSelectiveAlphaCanvasLogic(unittest.TestCase):
     def test_restore_snapshot_restores_mask(self):
         canvas = self._make_canvas_with_image()
         arr = np.full((16, 16), 200, dtype=np.uint8)
-        snap = [arr.copy()] + [np.zeros((16, 16), dtype=np.uint8) for _ in range(6)]
+        snap = canvas.get_all_masks()
+        snap[0] = arr.copy()
 
         # Manually stub update() so it doesn't try to paint
         canvas.update = lambda: None
@@ -8839,7 +8840,7 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("_ADJUSTMENT_DEFAULT_VALUES = {", src)
         self.assertIn('(self._brightness_slider, _ADJUSTMENT_DEFAULT_VALUES["brightness"])', src)
         self.assertIn('f"Could not save output during {export_stage}:\\n{exc}"', src)
-        self.assertIn("Unsupported Files Skipped", src)
+        self.assertIn("Skipped unsupported files:", src)
         self.assertIn("imageio-ffmpeg or a bundled/system ffmpeg binary is available", src)
         self.assertIn("def _probe_video_clip(path: str)", src)
         self.assertIn("def _coerce_frame_size(value) -> Optional[tuple[int, int]]:", src)
@@ -9058,12 +9059,16 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("build_exe.bat --onefile", src)
         self.assertIn("scripts/verify_packaged_app.py", src)
         self.assertIn("--bundle-kind ${{ matrix.bundle_kind }}", src)
-        self.assertIn("--repeat 3", src)
-        self.assertIn("--selftest-iterations 6", src)
-        self.assertIn("--selftest-sample-limit 4", src)
-        self.assertIn("--repeat-selftest-runs 2", src)
-        self.assertIn("--max-selftest-rss-growth-mb 256", src)
-        self.assertIn("--max-selftest-rss-spread-mb 256", src)
+        for option, field in (
+            ("repeat", "smoke_repeat"),
+            ("selftest-iterations", "selftest_iterations"),
+            ("selftest-sample-limit", "selftest_sample_limit"),
+            ("repeat-selftest-runs", "repeat_selftest_runs"),
+            ("max-selftest-rss-growth-mb", "max_selftest_rss_growth_mb"),
+            ("max-selftest-rss-spread-mb", "max_selftest_rss_spread_mb"),
+        ):
+            self.assertIn(f"--{option} ${{{{ matrix.{field} }}}}", src)
+            self.assertIn(f"{field}:", src)
         self.assertIn("--require-core-selftest-checks", src)
         self.assertIn("--require-video-selftest-checks", src)
         self.assertIn("--require-public-manifest-checks", src)
@@ -9085,11 +9090,11 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("def _missing_linux_runtime_libs() -> list[str]:", src)
         self.assertIn("def _packaged_runtime_notice(missing_libs: list[str]) -> str:", src)
         self.assertIn("def _runtime_capability_summary() -> dict[str, object]:", src)
-        self.assertIn('ALPHA_FIXER_RUNTIME_CAPABILITIES=', src)
+        self.assertIn('_emit_validation_payload("ALPHA_FIXER_RUNTIME_CAPABILITIES", summary)', src)
         self.assertIn('os.environ.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", "").strip().lower()', src)
         self.assertIn('os.environ.get("ALPHA_FIXER_SMOKE_TEST", "").strip()', src)
         self.assertIn('os.environ.get("ALPHA_FIXER_RUNTIME_SELFTEST", "").strip()', src)
-        self.assertIn('ALPHA_FIXER_RUNTIME_SELFTEST=', src)
+        self.assertIn('_emit_validation_payload("ALPHA_FIXER_RUNTIME_SELFTEST", summary)', src)
         self.assertIn('QTimer.singleShot(smoke_test_ms, app.quit)', src)
         self.assertIn('window.statusBar().showMessage(runtime_notice, 12000)', src)
 

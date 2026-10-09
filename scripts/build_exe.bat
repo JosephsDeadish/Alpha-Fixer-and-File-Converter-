@@ -107,6 +107,9 @@ if exist "!LAUNCH_TARGET!" (
     if errorlevel 1 (
         exit /b 1
     )
+) else (
+    echo ERROR: Packaged executable is missing: !LAUNCH_TARGET!
+    exit /b 1
 )
 
 echo.

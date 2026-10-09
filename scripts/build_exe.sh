@@ -175,7 +175,8 @@ if [[ -x "$launch_target" ]]; then
     fi
     python scripts/verify_packaged_app.py "${verify_args[@]}"
 else
-    echo "⚠️  Skipping packaged launch smoke test because executable was not found at $launch_target"
+    echo "ERROR: Packaged executable is missing or not executable: $launch_target"
+    exit 1
 fi
 
 echo ""

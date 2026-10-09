@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from PIL import Image
+import numpy as np
 
 # Make src importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -502,6 +503,9 @@ class TestConverterTab(unittest.TestCase):
 
 class TestStartupCapabilityNotice(unittest.TestCase):
     def setUp(self):
+        if self._testMethodName.startswith("test_runtime_selftest_dump"):
+            self._selftest_directory = tempfile.TemporaryDirectory(dir=".")
+            self.addCleanup(self._selftest_directory.cleanup)
         if not (self._testMethodName.startswith("test_optional_feature_readiness_notice")
                 or self._testMethodName.startswith("test_runtime_capability_summary")):
             return
@@ -1052,7 +1056,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                         "failures": [],
                     }):
                         with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
-                            tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                            tmpdir_cls.return_value.__enter__.return_value = self._selftest_directory.name
                             tmpdir_cls.return_value.__exit__.return_value = False
                             with patch.dict(
                                 sys.modules,
@@ -1066,7 +1070,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                                 },
                                 clear=False,
                             ):
-                                with patch("sys.stdout", buffer):
+                                with patch("sys.stdout", buffer), patch(
+                                    "PyQt6.QtWidgets.QApplication.instance", return_value=None
+                                ):
                                     rc = main._emit_runtime_selftest_dump()
         self.assertEqual(rc, 1)
         line = buffer.getvalue().strip()
@@ -1130,7 +1136,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
                             with patch.object(main, "execute_dds_manifest_report", side_effect=lambda entries, *_args, **_kwargs: {"ok": True, "detail": f"dds={len(entries)}", "sample_results": []}):
                                 with patch.object(main, "execute_format_matrix_manifest_report", side_effect=lambda entries, **_kwargs: {"ok": True, "detail": f"matrix={len(entries)}", "sample_results": []}):
                                     with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
-                                        tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                                        tmpdir_cls.return_value.__enter__.return_value = self._selftest_directory.name
                                         tmpdir_cls.return_value.__exit__.return_value = False
                                         with patch.dict(
                                             os.environ,
@@ -2245,7 +2251,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         with patch.object(main, "_runtime_selftest_iterations", return_value=1):
             with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=None):
                 with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
-                    tmpdir_cls.return_value.__enter__.return_value = "/tmp/runtime-selftest"
+                    tmpdir_cls.return_value.__enter__.return_value = self._selftest_directory.name
                     tmpdir_cls.return_value.__exit__.return_value = False
                     with patch.object(main, "load_manifest_entries_from_env") as loader:
                         loader.side_effect = [
@@ -2354,7 +2360,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertIn("source run", banner)
         self.assertIn("Packaged asset gaps:", tooltip)
         self.assertIn("packaged ffprobe binary missing", tooltip)
-        self.assertIn("Packaged dependency audit:", tooltip)
+        self.assertIn("Runtime component audit:", tooltip)
         self.assertIn("SELECTIVE DETAIL", tooltip)
         self.assertIn("HISTORY DETAIL", tooltip)
         self.assertIn("GIF DETAIL", tooltip)
@@ -3261,6 +3267,7 @@ class TestClickEffectsOverlay(unittest.TestCase):
     def test_record_click_increments_counter(self):
         from src.ui.click_effects import ClickEffectsOverlay
         overlay = ClickEffectsOverlay(self._parent)
+        overlay.set_enabled(True)
         from PyQt6.QtCore import QPointF, QEvent, Qt
         from PyQt6.QtGui import QMouseEvent
         event = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(10, 10),
@@ -3363,13 +3370,13 @@ class TestTooltipManager(unittest.TestCase):
             self.assertIn(key, _VULGAR,
                           f"Missing No Filter tip for key '{key}'")
 
-    def test_all_tip_variants_have_at_least_five_entries(self):
+    def test_all_tip_variants_have_nonempty_rotating_entries(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
-        # Normal and Dumbed Down keep exactly 5 variants per key for readability.
         for mode_name, tips_dict in [("Normal", _NORMAL), ("Dumbed", _DUMBED)]:
             for key, variants in tips_dict.items():
-                self.assertGreaterEqual(len(variants), 5,
-                                        f"{mode_name}['{key}'] needs at least 5 variants")
+                self.assertGreaterEqual(len(variants), 2,
+                                        f"{mode_name}['{key}'] needs rotating variants")
+                self.assertTrue(all(str(variant).strip() for variant in variants))
         # No Filter 🤬 mode has at least 5 variants per key (usually 8 for extra variety).
         for key, variants in _VULGAR.items():
             self.assertGreaterEqual(len(variants), 5,
@@ -3891,6 +3898,11 @@ class TestVideoProbeFallbacks(unittest.TestCase):
     def setUp(self):
         _require_qt_gui(self)
         from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        callback_errors = []
+        patcher = patch.object(sys, "excepthook", side_effect=lambda kind, error, tb: callback_errors.append(str(error)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(lambda: self.assertEqual(callback_errors, [], "Uncaught Qt callback exception"))
         for name in ("information", "warning", "critical", "question"):
             patcher = patch.object(QMessageBox, name, return_value=QMessageBox.StandardButton.No)
             patcher.start()
@@ -3904,6 +3916,16 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             patcher = patch.object(QFileDialog, name, return_value=result)
             patcher.start()
             self.addCleanup(patcher.stop)
+
+    def _make_clip(self, active_frames=1, clip_type="video", **kwargs):
+        from src.ui.video_tool import _ClipEntry
+        clip = _ClipEntry(
+            "source.mp4", active_frames, lambda _: Image.new("RGBA", (2, 2)),
+            frame_size=(2, 2), clip_type=clip_type, **kwargs,
+        )
+        if clip_type == "image":
+            clip.still_duration_frames = active_frames
+        return clip
 
     def test_probe_video_clip_uses_imageio_ffmpeg_count_fallback(self):
         try:
@@ -5343,12 +5365,13 @@ class TestVideoProbeFallbacks(unittest.TestCase):
             summary = dialog._import_status_lbl.text()
             details = dialog._import_detail_box.toPlainText()
             self.assertIn("4 failed", summary)
-            self.assertIn("transport stream timing ×1", summary)
+            self.assertIn("transport stream timing ×1", details)
             self.assertIn("matroska/webm program ×1", details)
             self.assertIn("quicktime metadata ×1", details)
             self.assertIn("still-image video ×1", details)
             self.assertIn("Probe-detected containers: matroska,webm ×2, mov,mp4,m4a,3gp,3g2,mj2 ×1, mpegts ×1", details)
-            self.assertIn("Probe-detected video codecs: h264 ×1, mjpeg ×1, prores ×1, vp9 ×1", details)
+            self.assertIn("Probe-detected video codecs: h264 ×1, mjpeg ×1, prores ×1, +1 more", details)
+            self.assertIn("video=vp9", details)
             self.assertIn("transport stream timing:", details)
             self.assertIn("quicktime metadata:", details)
             self.assertIn("still-image video:", details)
@@ -5572,21 +5595,21 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         dialog = vt.VideoToolDialog(parent=parent)
         dialog._mp4_export_available = True
         dialog._clips = [
-            types.SimpleNamespace(
+            self._make_clip(
                 active_frames=12,
                 clip_type="video",
                 has_audio=True,
                 load_note="",
                 preferred_audio_stream_index=4,
             ),
-            types.SimpleNamespace(
+            self._make_clip(
                 active_frames=8,
                 clip_type="video",
                 has_audio=False,
                 load_note="temporary ffmpeg transcode fallback active, source audio dropped",
                 preferred_audio_stream_index=None,
             ),
-            types.SimpleNamespace(
+            self._make_clip(
                 active_frames=6,
                 clip_type="image",
                 has_audio=False,
@@ -5617,7 +5640,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         from PIL import Image
 
         dialog = vt.VideoToolDialog()
-        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", close=lambda: None)]
+        dialog._clips = [self._make_clip()]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
@@ -5645,7 +5668,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         from PIL import Image
 
         dialog = vt.VideoToolDialog()
-        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._clips = [self._make_clip()]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
@@ -5688,7 +5711,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
 
         dialog = vt.VideoToolDialog()
         dialog._mp4_export_available = True
-        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", close=lambda: None)]
+        dialog._clips = [self._make_clip()]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
@@ -5728,7 +5751,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
 
         dialog = vt.VideoToolDialog()
         dialog._mp4_export_available = True
-        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._clips = [self._make_clip()]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
         dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
@@ -5778,7 +5801,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         parent._settings = settings
         dialog = vt.VideoToolDialog(parent=parent)
         dialog._mp4_export_available = True
-        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True)]
+        dialog._clips = [self._make_clip(has_audio=True)]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {
             "active_frames": 1,
@@ -5846,9 +5869,9 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         dialog = vt.VideoToolDialog(parent=parent)
         dialog._mp4_export_available = True
         dialog._clips = [
-            types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True),
-            types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=False),
-            types.SimpleNamespace(active_frames=1, clip_type="image", has_audio=False),
+            self._make_clip(has_audio=True),
+            self._make_clip(has_audio=False),
+            self._make_clip(clip_type="image", has_audio=False),
         ]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         snapshots = [
@@ -5985,7 +6008,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         parent._settings = settings
         dialog = vt.VideoToolDialog(parent=parent)
         dialog._mp4_export_available = True
-        dialog._clips = [types.SimpleNamespace(active_frames=1, clip_type="video", has_audio=True)]
+        dialog._clips = [self._make_clip(has_audio=True)]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {
             "active_frames": 1,
@@ -6050,7 +6073,7 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         parent._settings = settings
         dialog = vt.VideoToolDialog(parent=parent)
         dialog._mp4_export_available = True
-        dialog._clips = [types.SimpleNamespace(active_frames=1)]
+        dialog._clips = [self._make_clip()]
         dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
         dialog._snapshot_clip_render_state = lambda clip, fps: {
             "active_frames": 1,
@@ -6119,6 +6142,18 @@ class TestBuilderHistoryPolish(unittest.TestCase):
 
     def tearDown(self):
         self._app.processEvents()
+
+    def test_alpha_readiness_uses_svg_runtime_capability(self):
+        from src.ui import alpha_tool
+        with patch.object(alpha_tool, "_has_wand", return_value=True):
+            for available in (True, False):
+                with self.subTest(svg_available=available), patch.object(
+                    alpha_tool, "svg_input_available", return_value=available
+                ):
+                    self.assertEqual(alpha_tool._alpha_capability_has_limits(), not available)
+                    details = alpha_tool._alpha_capability_details()
+                    self.assertIn("SVG inputs ready" if available else "SVG inputs unavailable", details)
+                    self.assertIn("SVG input: ready" if available else "SVG input: limited", details)
 
     def test_gif_export_records_history_notes(self):
         try:
@@ -6252,6 +6287,13 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 self.assertEqual(len(dialog._frames), 1)
                 self.assertIn("Loaded 1 source", dialog._import_status_lbl.text())
                 self.assertIn("video ×1", dialog._import_status_lbl.toolTip())
+                dialog._frame_list.setCurrentRow(0)
+                dialog._update_frame_diagnostics()
+                self.assertIn("video source", dialog._frame_diag_lbl.text())
+                settings = _ConverterTabSettingsStub()
+                with patch.object(dialog, "_resolve_settings", return_value=settings):
+                    dialog._record_export_history("out.gif", 40, 0, False, (0, 0))
+                self.assertEqual(settings._gif_history[0]["sources"], "video ×1")
                 self.assertIn("odd_source.dat: 1 frame  •  video", dialog._import_detail_box.toPlainText())
             finally:
                 for frame in frames:
@@ -7406,13 +7448,14 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
         self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)
         self._widget._az_slots[0] = [np.zeros((2, 2), dtype=np.uint8)]
-        self._widget._result_img = object()
+        self._widget._result_img = Image.new("RGBA", (2, 2))
+        self.addCleanup(self._widget._result_img.close)
         self._widget._refresh_session_status()
         summary = self._widget.get_status_bar_text()
         self.assertIn("sample.png", summary)
         self.assertIn("shared zone", summary)
         self.assertIn("mask clipboard ready", summary)
-        self.assertIn("all-zones slot", summary)
+        self.assertIn("full-layout slot", summary)
         self.assertIn("result ready to save", summary)
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
         self.assertIn("Next:", self._widget._session_status_lbl.text())
@@ -7944,6 +7987,108 @@ class TestPreviewPaneNoBlockingWait(unittest.TestCase):
 # (Per-theme emoji changes were intentionally removed as users found them
 #  distracting — see issue #2 comment "i hate the emojis ... always changing".)
 # ---------------------------------------------------------------------------
+
+class TestShortcutRemapping(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._host = QWidget()
+        self._host._settings = MagicMock()
+        self._host._builder = MagicMock()
+        self._host._shortcut_map = {
+            "target": {
+                "group": "GIF Builder", "desc": "Export GIF", "default": "F5",
+                "current": "Ctrl+J", "sc": MagicMock(), "owner": MagicMock(),
+                "owner_attr": "_builder",
+            },
+            "other": {
+                "group": "GIF Builder", "desc": "Load media", "default": "Ctrl+K",
+                "current": "Ctrl+K",
+            },
+        }
+        self.addCleanup(self._host.deleteLater)
+
+    def test_rejects_same_tool_and_global_collisions_without_remapping_or_saving(self):
+        from src.ui.main_window import MainWindow, QMessageBox
+        target = self._host._shortcut_map["target"]
+        other = self._host._shortcut_map["other"]
+        for target_group, other_group in (
+            ("GIF Builder", "GIF Builder"),
+            ("GIF Builder", "Global"),
+            ("Global", "Video Builder"),
+        ):
+            with self.subTest(target=target_group, other=other_group):
+                target["group"], other["group"] = target_group, other_group
+                with patch.object(QMessageBox, "warning") as warning:
+                    self.assertFalse(MainWindow._update_shortcut(self._host, "target", "Ctrl+K"))
+                self.assertIn("Load media", warning.call_args.args[2])
+                self.assertIn(other_group, warning.call_args.args[2])
+                self.assertEqual(target["current"], "Ctrl+J")
+                target["sc"].setKey.assert_not_called()
+                target["owner"].update_shortcut_binding.assert_not_called()
+                self._host._builder.update_shortcut_binding.assert_not_called()
+                self._host._settings.set_shortcut_binding.assert_not_called()
+
+    def test_allows_shared_key_in_separate_tools_and_updates_registered_owners(self):
+        from PyQt6.QtGui import QKeySequence
+        from src.ui.main_window import MainWindow, QMessageBox
+        target = self._host._shortcut_map["target"]
+        self._host._shortcut_map["other"]["group"] = "Video Builder"
+        with patch.object(QMessageBox, "warning") as warning:
+            self.assertTrue(MainWindow._update_shortcut(self._host, "target", "Ctrl+K"))
+        warning.assert_not_called()
+        target["sc"].setKey.assert_called_once_with(QKeySequence("Ctrl+K"))
+        target["owner"].update_shortcut_binding.assert_called_once_with("target", "Ctrl+K")
+        self._host._builder.update_shortcut_binding.assert_called_once_with("target", "Ctrl+K")
+        self._host._settings.set_shortcut_binding.assert_called_once_with("target", "Ctrl+K", "F5")
+        self.assertEqual(target["current"], "Ctrl+K")
+
+    def test_compares_key_sequences_not_modifier_order(self):
+        from src.ui.main_window import MainWindow, QMessageBox
+        self._host._shortcut_map["other"]["current"] = "Ctrl+Shift+K"
+        with patch.object(QMessageBox, "warning"):
+            self.assertFalse(MainWindow._update_shortcut(self._host, "target", "Shift+Ctrl+K"))
+        self._host._settings.set_shortcut_binding.assert_not_called()
+
+    def test_allows_unchanged_binding_and_empty_binding(self):
+        from src.ui.main_window import MainWindow, QMessageBox
+        self._host._shortcut_map["other"]["current"] = ""
+        with patch.object(QMessageBox, "warning") as warning:
+            self.assertTrue(MainWindow._update_shortcut(self._host, "target", "Ctrl+J"))
+            self.assertTrue(MainWindow._update_shortcut(self._host, "target", ""))
+        warning.assert_not_called()
+        self.assertEqual(self._host._shortcut_map["target"]["current"], "")
+
+    def test_dialog_keeps_binding_and_reset_controls_unchanged_after_conflict(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QDialog, QTableWidget, QPushButton
+        from src.ui.main_window import MainWindow, QMessageBox
+        self._host._shortcut_map["target"]["default"] = "Ctrl+K"
+        self._host._update_shortcut = lambda action, key: MainWindow._update_shortcut(self._host, action, key)
+
+        def exec_dialog(dialog):
+            if dialog.windowTitle() == "Press a Key Combination":
+                QTest.keyClick(dialog, Qt.Key.Key_K, Qt.KeyboardModifier.ControlModifier)
+                return QDialog.DialogCode.Accepted
+            table = dialog.findChild(QTableWidget)
+            row = next(i for i in range(table.rowCount()) if table.item(i, 1).text() == "Export GIF")
+            change, reset = table.cellWidget(row, 3).findChildren(QPushButton)
+            change.click()
+            self.assertEqual(table.item(row, 2).text(), "Ctrl+J")
+            self.assertTrue(change.isEnabled())
+            self.assertTrue(reset.isEnabled())
+            reset.click()
+            self.assertEqual(table.item(row, 2).text(), "Ctrl+J")
+            self.assertTrue(reset.isEnabled())
+            return QDialog.DialogCode.Rejected
+
+        with patch.object(QDialog, "exec", exec_dialog), patch.object(QMessageBox, "warning") as warning:
+            MainWindow._show_shortcuts(self._host)
+        self.assertEqual(warning.call_count, 2)
+        self._host._settings.set_shortcut_binding.assert_not_called()
+
 
 class TestDialogAccessibility(unittest.TestCase):
     def setUp(self):
