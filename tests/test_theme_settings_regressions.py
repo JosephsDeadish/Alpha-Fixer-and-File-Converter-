@@ -460,6 +460,41 @@ def test_settings_footer_stacks_on_small_screen_and_restores_without_changes(dia
     assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
 
 
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+def test_settings_footer_adapts_to_live_font_changes_without_resize(dialog, app, name):
+    from src.ui.theme_engine import build_stylesheet
+    from PyQt6.QtWidgets import QBoxLayout
+
+    widget, manager = dialog
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    screen = Mock()
+    screen.availableGeometry.return_value = QRect(-640, 0, 640, 600)
+    buttons = [widget._btn_reset, widget._btn_reset_unlocks, widget._btn_close]
+    with patch.object(widget, "screen", return_value=screen):
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + "\nQWidget { font-size: 13px; }")
+        widget.show()
+        for _ in range(4):
+            app.processEvents()
+        width = widget.width()
+        for pixels, direction in [
+            (32, QBoxLayout.Direction.TopToBottom),
+            (13, QBoxLayout.Direction.LeftToRight),
+            (24, QBoxLayout.Direction.TopToBottom),
+            (13, QBoxLayout.Direction.LeftToRight),
+        ]:
+            widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for _ in range(4):
+                app.processEvents()
+            assert widget.width() == width
+            assert widget._footer_layout.direction() == direction
+            for button in buttons:
+                assert widget.rect().contains(button.geometry())
+                assert button.width() >= button.sizeHint().width()
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+
+
 def test_settings_guidance_follows_live_theme_colors_and_scaled_fonts(dialog, app):
     from src.ui.theme_engine import build_stylesheet
 

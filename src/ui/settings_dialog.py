@@ -4,7 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
-from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker
+from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker, QEvent
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -2081,6 +2081,9 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(self._btn_close)
         self._footer_layout = btn_row
         layout.addLayout(btn_row)
+        self._footer_update_timer = QTimer(self)
+        self._footer_update_timer.setSingleShot(True)
+        self._footer_update_timer.timeout.connect(self._refresh_footer_layout)
 
         # Connections
         # Preset combo: debounced live apply (120 ms) so quickly scrolling
@@ -2817,6 +2820,18 @@ class SettingsDialog(QDialog):
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
         self._update_footer_layout(event.size().width())
+
+    def _refresh_footer_layout(self):
+        self._update_footer_layout(self.width())
+
+    def event(self, event):
+        result = super().event(event)
+        timer = getattr(self, "_footer_update_timer", None)
+        if timer is not None and event.type() in (
+            QEvent.Type.StyleChange, QEvent.Type.FontChange, QEvent.Type.LayoutRequest,
+        ):
+            timer.start(0)
+        return result
 
     # ------------------------------------------------------------------
     # Color-button callback — live apply
