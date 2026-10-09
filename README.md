@@ -41,7 +41,7 @@ Arrange image/GIF frames, preview animation, adjust frame timing, and export a G
 Build a timeline from images, animations, and video clips, trim clips, and export GIF or MP4. Video import and MP4 export use the bundled FFmpeg runtime.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.
-Alpha/Converter stopped batches retain their actual completion percentage and report unprocessed files instead of displaying 100% “Done”. History tooltips retain that status, searchable with `status:stopped`.
+Alpha/Converter stopped batches retain their actual completion percentage and report unprocessed files instead of displaying 100% “Done”. History tooltips retain that status, searchable with `status:stopped`; TXT, CSV, JSON, and HTML exports also include Status and Not processed fields.
 Original-file deletion defaults to **Keep Originals** and is offered only after a fully successful batch for recorded, existing, distinct outputs. Failed/unprocessed originals, in-place outputs, and sources sharing an output are never offered. Large batches retain an output manifest even when per-file success logging is suppressed.
 History exports follow the visible, filtered row order and preserve complete filenames, including in plain text. GIF history thumbnails pause when their view is hidden, and export destination failures provide a recovery warning instead of an unhandled error.
 
@@ -73,6 +73,7 @@ History exports follow the visible, filtered row order and preserve complete fil
 - Drag-and-drop files from Explorer/Finder directly onto the file lists
 - Right-click or Delete key to remove items from file lists
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
+- Converter format warnings clear when switching to a supported output and do not replace running/stopping batch feedback. Refreshing an animated source for format/quality edits preserves its preview playback speed; selecting a different source resets both the slider and animation to normal speed.
 - **Before/After comparison slider** (Alpha Fixer) – select a file to see the original and processed result side by side, separated by a draggable red handle; drag left/right to reveal more of either side; auto-updates when preset or fine-tune settings change
 - Alpha preview results and statistics are tied to the current file and adjustment request, so switching or clearing selections cannot restore stale images or errors. Queue clearing consistently cancels thumbnail work and notifies the host; repeated queue/painter menus release their temporary actions.
 - **Processing history tab** – all past sessions (Converter **and** Alpha Fixer) recorded with timestamp, preset/format, and file count; split into two sub-tabs

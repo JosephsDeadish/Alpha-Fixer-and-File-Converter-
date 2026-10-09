@@ -982,18 +982,18 @@ class ConverterTab(QWidget):
         self._lbl_dds_variant.setVisible(dds_selected)
         self._dds_variant_combo.setVisible(dds_selected)
         format_unavailable = output_format_unavailable_reason(fmt)
+        self._fmt_combo.setToolTip(format_unavailable or "")
+        busy = not self._btn_run.isEnabled()
+        ready_text = "Ready."
         if format_unavailable:
-            self._status_lbl.setText(f"Ready. {fmt} export unavailable here — batch will fall back to PNG.")
-            self._fmt_combo.setToolTip(format_unavailable)
+            ready_text = f"Ready. {fmt} export unavailable here — batch will fall back to PNG."
         elif dds_selected and not self._dds_compression_available:
-            self._status_lbl.setText(
-                "Ready. DDS raw variants are available; BC1/DXT1, BC2/DXT3, and BC3/DXT5 need ImageMagick/wand."
-            )
+            ready_text = "Ready. DDS raw variants are available; BC1/DXT1, BC2/DXT3, and BC3/DXT5 need ImageMagick/wand."
         elif output_format_discards_alpha(fmt):
-            self._status_lbl.setText(
-                f"Ready. Transparent sources will be auto-saved as PNG because {fmt} does not preserve alpha."
-            )
-        elif dds_selected and not self._dds_compression_available:
+            ready_text = f"Ready. Transparent sources will be auto-saved as PNG because {fmt} does not preserve alpha."
+        if not busy:
+            self._status_lbl.setText(ready_text)
+        if dds_selected and not self._dds_compression_available:
             self._dds_variant_combo.setToolTip(
                 "Compressed DDS variants require ImageMagick/wand.\n"
                 "Auto, RGB, and RGBA DDS output still work without it."
@@ -1004,7 +1004,14 @@ class ConverterTab(QWidget):
                 "Compressed BC1/DXT1 and BC3/DXT5 variants are available."
             )
         # When GIF is selected, the Process button opens the GIF Builder instead
-        if fmt == "GIF":
+        if not busy:
+            self._sync_run_button()
+        self._preview_debounce.start()
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def _sync_run_button(self) -> None:
+        fmt_data = self._fmt_combo.currentData()
+        if fmt_data and fmt_data[0] == "GIF":
             self._btn_run.setText("🎞  Open GIF Builder  [F5]")
             self._btn_run.setToolTip(
                 "Open the GIF Builder to compose an animated GIF from the files in the queue."
@@ -1012,8 +1019,6 @@ class ConverterTab(QWidget):
         else:
             self._btn_run.setText("▶  Convert  [F5]")
             self._btn_run.setToolTip("")
-        self._preview_debounce.start()
-        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(int)
     def _on_quality_changed(self, value: int):
@@ -1149,6 +1154,7 @@ class ConverterTab(QWidget):
         quality = self._quality_spin.value()
         self._preview_request_id += 1
         request_id = self._preview_request_id
+        source_changed = path != self._current_preview_path
         self._current_preview_path = path
 
         # Detect animated GIF so we can play it in the before side
@@ -1164,11 +1170,12 @@ class ConverterTab(QWidget):
             self._compare.animate_before(path)
             # Set the after side to "loading" while we convert the first frame.
             self._compare.set_loading()
-            # Show GIF speed slider and reset to normal speed.
-            self._gif_speed_slider.blockSignals(True)
-            self._gif_speed_slider.setValue(100)
-            self._gif_speed_slider.blockSignals(False)
-            self._gif_speed_value_lbl.setText("100 %")
+            # Only a new source resets playback; format/quality edits preserve it.
+            if source_changed:
+                self._gif_speed_slider.blockSignals(True)
+                self._gif_speed_slider.setValue(100)
+                self._gif_speed_slider.blockSignals(False)
+            self._on_gif_speed_changed(self._gif_speed_slider.value())
             self._gif_speed_widget.setVisible(True)
             # Populate source info panel directly (frame count etc.) since the
             # background loader only gets the first PIL frame.
@@ -1805,7 +1812,7 @@ class ConverterTab(QWidget):
     def _on_finished(self, success: int, errors: int):
         from ._ui_utils import batch_completion_summary
         self._spinner_timer.stop()
-        self._btn_run.setText("▶  Convert  [F5]")
+        self._sync_run_button()
         progress, status = batch_completion_summary(
             success, errors, self._batch_total, self._stop_requested,
         )

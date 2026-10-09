@@ -51,6 +51,7 @@ class _HistoryItem(QTreeWidgetItem):
     _SORT_ROLE = Qt.ItemDataRole.UserRole + 2
     _FILTER_ROLE = Qt.ItemDataRole.UserRole + 3
     _FILTER_FIELDS_ROLE = Qt.ItemDataRole.UserRole + 4
+    _BATCH_STATUS_ROLE = Qt.ItemDataRole.UserRole + 5
 
     def __lt__(self, other) -> bool:
         tree = self.treeWidget()
@@ -866,6 +867,7 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, fmt, n_files, n_ok, n_err, files])
             status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
+            item.setData(0, _HistoryItem._BATCH_STATUS_ROLE, [status, str(entry.get("not_processed", 0))])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(item, ts, fmt, n_files, n_ok, n_err, file_list, status)
             _set_filter_fields(
@@ -916,6 +918,7 @@ class HistoryTab(QWidget):
             files = ", ".join(file_list)
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
             status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
+            item.setData(0, _HistoryItem._BATCH_STATUS_ROLE, [status, str(entry.get("not_processed", 0))])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(item, ts, mode, n_files, n_ok, n_err, file_list, status)
             _set_filter_fields(
@@ -1311,12 +1314,18 @@ class HistoryTab(QWidget):
             path = str(Path(path).with_suffix(".txt"))
 
         # Collect rows in the same visible order shown to the user.
+        if tab_idx in (0, 1):
+            headers.extend(["Status", "Not processed"])
         rows = []
         for r in range(tree.topLevelItemCount()):
             item = tree.topLevelItem(r)
             if item is None or item.isHidden():
                 continue
-            rows.append([item.text(c) for c in range(tree.columnCount())])
+            row = [item.text(c) for c in range(tree.columnCount())]
+            if tab_idx in (0, 1):
+                batch_status = item.data(0, _HistoryItem._BATCH_STATUS_ROLE)
+                row.extend(batch_status or ["Unknown", ""])
+            rows.append(row)
 
         ext = Path(path).suffix.lower().lstrip(".") or "txt"
 
