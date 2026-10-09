@@ -1011,6 +1011,73 @@ def test_empty_structured_backup_defaults_remain_supported(dialog, tmp_path):
     assert manager.get_sa_zone_colors() is None
 
 
+@pytest.mark.parametrize("key,payload", [
+    ("theme_data", ""), ("theme_data", "{"), ("theme_data", "null"),
+    ("theme_data", "[]"), ("theme_data", '{"name": ""}'),
+    ("theme_data", '{"name": 3}'), ("theme_data", '{"accent": null}'),
+    ("theme_data", '{"surface": "not-a-color"}'), ("theme_data", '{"_effect": []}'),
+    ("theme_data", '{"_cursor": {}}'), ("theme_data", '{"_trail_color": "bad color"}'),
+    ("saved_themes", "{"), ("saved_themes", "[]"), ("saved_themes", "null"),
+    ("saved_themes", '{"": {}}'), ("saved_themes", '{"  ": {}}'),
+    ("saved_themes", '{"Custom": null}'), ("saved_themes", '{"Custom": []}'),
+    ("saved_themes", '{"Custom": {"text": "invalid"}}'),
+    ("saved_themes", '{"Custom": {"_future_effect": false}}'),
+])
+def test_invalid_theme_backup_rejects_without_disk_changes(dialog, tmp_path, key, payload):
+    widget, manager = dialog
+    manager.set("font_size", 12)
+    manager.save_named_theme("Existing", {"accent": "#123456"})
+    manager.sync()
+    before = {name: manager.get(name) for name in manager.EXPORT_KEYS}
+    before_disk = Path(manager._qs.fileName()).read_bytes()
+    path = tmp_path / "invalid-theme-backup.json"
+    path.write_text(json.dumps({"font_size": 20, key: payload}), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        manager.import_settings(str(path))
+    assert {name: manager.get(name) for name in manager.EXPORT_KEYS} == before
+    assert Path(manager._qs.fileName()).read_bytes() == before_disk
+
+
+@pytest.mark.parametrize("theme", [*PRESET_THEMES.values(), *HIDDEN_THEMES.values()],
+                         ids=lambda theme: theme["name"])
+def test_builtin_theme_backups_remain_valid(dialog, tmp_path, theme):
+    widget, manager = dialog
+    values = {"theme_data": json.dumps(theme), "saved_themes": json.dumps({theme["name"]: theme})}
+    path = tmp_path / "builtin-backup.json"
+    path.write_text(json.dumps(values), encoding="utf-8")
+    manager.import_settings(str(path))
+    assert manager.get_theme()["accent"] == theme["accent"]
+    assert manager.get_saved_themes()[theme["name"]]["accent"] == theme["accent"]
+    assert {key: manager.get(key) for key in values} == values
+
+
+def test_partial_legacy_theme_backup_reopens_without_losing_metadata(dialog, tmp_path):
+    widget, manager = dialog
+    partial = {"accent": "red", "_cursor": "emoji:🧪", "_effect": "future-effect",
+               "_future_setting": "future-value", "future_extension": {"enabled": True}}
+    values = {"theme_data": json.dumps(partial),
+              "saved_themes": json.dumps({"★ Custom": partial})}
+    path = tmp_path / "legacy-theme-backup.json"
+    path.write_text(json.dumps(values), encoding="utf-8")
+    manager.import_settings(str(path))
+    with patch("src.core.settings_manager._settings_ini_path", return_value=manager._qs.fileName()):
+        reloaded = SettingsManager()
+    reopened = SettingsDialog(reloaded)
+    try:
+        theme = reloaded.get_theme()
+        assert theme["background"] == manager._DEFAULT_THEME["background"]
+        assert theme["accent"] == "red"
+        assert theme["_cursor"] == "emoji:🧪"
+        assert theme["future_extension"] == {"enabled": True}
+        assert reloaded.get_saved_themes()["★ Custom"]["name"] == "★ Custom"
+        assert {key: reloaded.get(key) for key in values} == values
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+        reloaded.sync()
+        sip.delete(reloaded._qs)
+
+
 def test_backup_round_trip_accepts_every_exportable_default(dialog, tmp_path):
     widget, manager = dialog
     for key in manager.EXPORT_KEYS:

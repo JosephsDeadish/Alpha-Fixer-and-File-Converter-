@@ -746,17 +746,47 @@ class SettingsManager:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-    @staticmethod
-    def _validate_backup_structure(key: str, value: str) -> None:
-        if key not in ("custom_shortcuts", "sa_zone_alphas", "sa_zone_colors"):
+    @classmethod
+    def _validate_backup_theme(cls, theme: dict, label: str) -> None:
+        if not isinstance(theme, dict):
+            raise ValueError(f"Invalid theme preference: {label} (expected an object)")
+        for field, value in theme.items():
+            if field == "name":
+                valid = isinstance(value, str) and bool(value.strip())
+            elif field.startswith("_"):
+                valid = isinstance(value, str)
+                if field == "_trail_color":
+                    valid = valid and QColor(value).isValid()
+            elif field in cls._DEFAULT_THEME:
+                valid = isinstance(value, str) and QColor(value).isValid()
+            else:
+                continue
+            if not valid:
+                raise ValueError(f"Invalid theme preference: {label}.{field}")
+
+    @classmethod
+    def _validate_backup_structure(cls, key: str, value: str) -> None:
+        if key not in ("custom_shortcuts", "sa_zone_alphas", "sa_zone_colors",
+                       "theme_data", "saved_themes"):
             return
-        # Empty shortcut maps and zone colors mean "use defaults".
-        if not value and key != "sa_zone_alphas":
+        # Empty shortcut maps, saved themes and zone colors mean "use defaults".
+        if not value and key in ("custom_shortcuts", "sa_zone_colors", "saved_themes"):
             return
         try:
             data = json.loads(value)
         except ValueError:
             raise ValueError(f"Invalid JSON preference: {key}") from None
+        if key == "theme_data":
+            cls._validate_backup_theme(data, key)
+            return
+        if key == "saved_themes":
+            if not isinstance(data, dict):
+                raise ValueError(f"Invalid theme preference: {key} (expected an object)")
+            for name, theme in data.items():
+                if not name.strip():
+                    raise ValueError(f"Invalid theme preference: {key} (empty theme name)")
+                cls._validate_backup_theme(theme, f"{key}[{name}]")
+            return
         if key == "custom_shortcuts":
             if not isinstance(data, dict) or not all(
                 isinstance(binding, str) for binding in data.values()
