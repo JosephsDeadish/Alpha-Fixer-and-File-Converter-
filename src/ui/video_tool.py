@@ -3224,10 +3224,7 @@ class VideoToolDialog(QDialog):
         self._fps_val_lbl = QLabel("25 fps")
         self._fps_val_lbl.setFixedWidth(50)
         self._fps_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._fps_slider.valueChanged.connect(
-            lambda v: self._fps_val_lbl.setText(f"{v} fps")
-        )
-        self._fps_slider.valueChanged.connect(lambda _v: self._update_timing_controls())
+        self._fps_slider.valueChanged.connect(self._on_preview_fps_changed)
         fps_row.addWidget(self._fps_slider, 1)
         fps_row.addWidget(self._fps_val_lbl)
         pv_layout.addLayout(fps_row)
@@ -3974,10 +3971,11 @@ class VideoToolDialog(QDialog):
 
     def _update_ui_state(self) -> None:
         has_clips = bool(self._clips)
+        can_play = self._total_preview_frames() > 1
         row = self._clip_list.currentRow()
         has_selection = 0 <= row < len(self._clips)
 
-        if not has_clips:
+        if not can_play:
             if self._is_playing:
                 self._preview_timer.stop()
                 self._is_playing = False
@@ -3988,8 +3986,8 @@ class VideoToolDialog(QDialog):
 
         self._btn_remove.setEnabled(has_selection)
         self._btn_rewind.setEnabled(has_clips)
-        self._btn_play.setEnabled(has_clips)
-        self._scrubber.setEnabled(has_clips)
+        self._btn_play.setEnabled(can_play)
+        self._scrubber.setEnabled(can_play)
         self._btn_export.setEnabled(has_clips)
         self._trim_start_slider.setEnabled(has_selection)
         self._trim_end_slider.setEnabled(has_selection)
@@ -4332,6 +4330,7 @@ class VideoToolDialog(QDialog):
             self._refresh_clip_item(row)
             self._update_timing_controls()
             self._update_scrubber()
+            self._update_preview()
             self._update_ui_state()
         else:
             self._trim_start_lbl.setText(str(val))
@@ -4349,6 +4348,7 @@ class VideoToolDialog(QDialog):
             self._refresh_clip_item(row)
             self._update_timing_controls()
             self._update_scrubber()
+            self._update_preview()
             self._update_ui_state()
         else:
             self._trim_end_lbl.setText(str(val))
@@ -4602,7 +4602,7 @@ class VideoToolDialog(QDialog):
     def _on_play_toggled(self, playing: bool) -> None:
         self._is_playing = playing
         if playing:
-            if self._total_preview_frames() == 0:
+            if self._total_preview_frames() < 2:
                 self._btn_play.setChecked(False)
                 return
             fps = max(0.1, float(self._fps_slider.value()))
@@ -4612,6 +4612,14 @@ class VideoToolDialog(QDialog):
             self._preview_timer.stop()
             self._btn_play.setText("▶  Play")
         self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def _on_preview_fps_changed(self, value: int) -> None:
+        self._fps_val_lbl.setText(f"{value} fps")
+        if self._preview_timer.isActive():
+            self._preview_timer.setInterval(max(1, int(1000 / max(1, value))))
+        self._update_timing_controls()
+        self._update_timeline_summary()
+        self._update_export_summary()
 
     def _advance_preview(self) -> None:
         total = self._total_preview_frames()

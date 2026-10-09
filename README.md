@@ -39,6 +39,7 @@ Arrange image/GIF frames, preview animation, adjust frame timing, and export a G
 
 ### 🎬 Video Builder
 Build a timeline from images, animations, and video clips, trim clips, and export GIF or MP4. Video import and MP4 export use the bundled FFmpeg runtime.
+Trim edits immediately refresh the paused preview, including a playhead clamped by a shorter timeline. Preview FPS changes update active playback and duration summaries without restarting playback. Single-frame timelines remain exportable, but play and scrubbing are disabled.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.
 Alpha/Converter stopped batches retain their actual completion percentage and report unprocessed files instead of displaying 100% “Done”. History tooltips retain that status, searchable with `status:stopped`; TXT, CSV, JSON, and HTML exports also include Status and Not processed fields.
