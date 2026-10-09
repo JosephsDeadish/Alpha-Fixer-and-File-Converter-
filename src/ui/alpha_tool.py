@@ -333,6 +333,8 @@ class AlphaFixerTab(QWidget):
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
+        self._stop_requested = False
+        self._batch_outputs: dict[str, str] = {}
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
@@ -1925,6 +1927,8 @@ class AlphaFixerTab(QWidget):
 
         self._log.clear()
         self._progress.setValue(0)
+        self._stop_requested = False
+        self._batch_outputs.clear()
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._btn_undo_batch.setVisible(False)
@@ -1963,6 +1967,7 @@ class AlphaFixerTab(QWidget):
                 self._worker.file_done.disconnect()
                 self._worker.finished.disconnect()
                 self._worker.backup_manifest.disconnect()
+                self._worker.output_manifest.disconnect()
             except RuntimeError:
                 pass  # already disconnected
 
@@ -1979,11 +1984,14 @@ class AlphaFixerTab(QWidget):
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
         self._worker.backup_manifest.connect(self._on_backup_manifest)
+        self._worker.output_manifest.connect(self._on_output_manifest)
         self._worker.start()
 
     def _stop(self):
-        if self._worker:
+        if self._worker and self._btn_stop.isEnabled():
+            self._stop_requested = True
             self._worker.stop()
+            self._btn_stop.setEnabled(False)
             self._status_lbl.setText("Stopping…")
 
     # ------------------------------------------------------------------
@@ -2045,14 +2053,15 @@ class AlphaFixerTab(QWidget):
         elapsed = time.monotonic() - self._batch_start_time
         eta_str = format_eta(current, total, elapsed)
         file_name = Path(path).name
+        action = "Stopping…" if self._stop_requested else "Processing"
         self._status_lbl.setText(
-            f"Processing {current + 1}/{total}: {file_name}{eta_str}"
+            f"{action} {current + 1}/{total}: {file_name}{eta_str}"
         )
         # Update window title so the progress is visible in the taskbar
         win = self.window()
         if win is not None:
             win.setWindowTitle(
-                f"[{pct}%] Processing {current + 1}/{total}: {file_name}"
+                f"[{pct}%] {action} {current + 1}/{total}: {file_name}"
             )
 
     @pyqtSlot(str, bool, str)
@@ -2067,15 +2076,23 @@ class AlphaFixerTab(QWidget):
         else:
             self._log_msg(f"{icon} {name}" + (f"  →  {msg.splitlines()[-1] if msg else ''}"))
 
+    @pyqtSlot(dict)
+    def _on_output_manifest(self, outputs: dict) -> None:
+        self._batch_outputs = outputs
+
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
+        from ._ui_utils import batch_completion_summary
         self._spinner_timer.stop()
         self._btn_run.setText("▶  Process  [F5]")
-        self._progress.setValue(100)
+        progress, status = batch_completion_summary(
+            success, errors, self._batch_total, self._stop_requested,
+        )
+        self._progress.setValue(progress)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
-        self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
-        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        self._status_lbl.setText(status)
+        self._log_msg(f"─── {status} ───")
         # Show "Undo Last Batch" button when a backup was created (item 10)
         if self._last_backup_pairs and success > 0:
             self._btn_undo_batch.setVisible(True)
@@ -2084,19 +2101,19 @@ class AlphaFixerTab(QWidget):
             )
         # Restore the window title after processing
         try:
-            from ..version import __version__
+            from ..version import __version__, APP_NAME
         except Exception:
             try:
-                from src.version import __version__  # type: ignore[no-redef]
+                from src.version import __version__, APP_NAME  # type: ignore[no-redef]
             except Exception:
                 __version__ = ""
+                APP_NAME = "FORMATOMANCER: Alpha & Media Alchemy"
         win = self.window()
         if win is not None:
             ver_str = f"  v{__version__}" if __version__ else ""
             win.setWindowTitle(
-                f"🐼 Alpha & RGBA Adjuster  |  File Converter{ver_str}"
+                f"🐼 {APP_NAME}{ver_str}"
             )
-        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
         # Refresh compare for currently selected file to show the processed result
         if self._preview_path and success > 0:
             self._update_compare()
@@ -2109,6 +2126,8 @@ class AlphaFixerTab(QWidget):
             "file_count": len(_last_files),
             "success": success,
             "errors": errors,
+            "stopped": self._stop_requested or success + errors < self._batch_total,
+            "not_processed": max(0, self._batch_total - success - errors),
             "files": [Path(f).name for f in _last_files[:10]],
             # Store first file path for thumbnail display (item 9)
             "first_file": str(_last_files[0]) if _last_files else "",
@@ -2123,12 +2142,11 @@ class AlphaFixerTab(QWidget):
                 self._settings.set("alpha_fix_done_once", True)
                 self.first_alpha_fix.emit()
             # Offer to delete the original source files when output is separate.
-            suffix = self._suffix_edit.text().strip()
-            out_dir = self._out_dir_edit.text().strip()
-            if suffix or out_dir:
-                self._offer_delete_originals(
-                    getattr(self, "_last_run_files", []), success
-                )
+            if not errors and success == self._batch_total:
+                from ._ui_utils import verified_originals
+                originals = verified_originals(self._batch_outputs)
+                if originals:
+                    self._offer_delete_originals(originals, len(originals))
         if errors > 0:
             self.processing_error.emit(errors)
 
@@ -2183,13 +2201,14 @@ class AlphaFixerTab(QWidget):
             "Would you like to delete the original source file(s)?\n\n"
             "⚠  This cannot be undone."
         )
-        detail_lines = [Path(p).name for p in source_files[:20]]
+        detail_lines = [str(Path(p).resolve()) for p in source_files[:20]]
         if n > 20:
             detail_lines.append(f"… and {n - 20} more")
         msg.setDetailedText("Files that will be deleted:\n" + "\n".join(detail_lines))
         btn_delete = msg.addButton("🗑  Delete Originals", QMessageBox.ButtonRole.DestructiveRole)
-        msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
-        msg.setDefaultButton(btn_delete)
+        btn_keep = msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_keep)
+        msg.setEscapeButton(btn_keep)
         msg.exec()
         if msg.clickedButton() is btn_delete:
             deleted = 0

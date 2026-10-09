@@ -59,6 +59,7 @@ class AlphaWorker(QThread):
     finished = pyqtSignal(int, int)                # success_count, error_count
     # Emitted when backup is enabled: list of (original_path, backup_path) pairs
     backup_manifest = pyqtSignal(list)
+    output_manifest = pyqtSignal(dict)
     error = pyqtSignal(str)
 
     def __init__(
@@ -109,6 +110,7 @@ class AlphaWorker(QThread):
         total = len(self._files)
         success = 0
         errors = 0
+        outputs: dict[str, str] = {}
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
         # Track (original_path, backup_path) pairs for undo support
@@ -183,6 +185,7 @@ class AlphaWorker(QThread):
                     os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
                     save_image(img, dest, save_ext)
                     success += 1
+                    outputs[src] = dest
                     # Warn when saving to a format that does not support alpha so
                     # the user knows their alpha changes were silently discarded.
                     warn = ""
@@ -234,6 +237,7 @@ class AlphaWorker(QThread):
             except RuntimeError:
                 pass
         try:
+            self.output_manifest.emit(outputs)
             self.finished.emit(success, errors)
         except RuntimeError:
             pass  # receiver destroyed during shutdown; nothing to do
@@ -287,6 +291,7 @@ class ConverterWorker(QThread):
     file_done = pyqtSignal(str, bool, str)
     finished = pyqtSignal(int, int)
     error = pyqtSignal(str)
+    output_manifest = pyqtSignal(dict)
 
     def __init__(
         self,
@@ -374,6 +379,7 @@ class ConverterWorker(QThread):
         total = len(self._files)
         success = 0
         errors = 0
+        outputs: dict[str, str] = {}
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
 
@@ -475,6 +481,7 @@ class ConverterWorker(QThread):
                             last_progress_time = now
                         if ok:
                             success += 1
+                            outputs[src_path] = dest_or_err.splitlines()[0]
                             if not large_batch:
                                 try:
                                     self.file_done.emit(src_path, True, dest_or_err)
@@ -501,6 +508,7 @@ class ConverterWorker(QThread):
             pool.shutdown(wait=not skip_wait_shutdown, cancel_futures=(self._abort or skip_wait_shutdown))
 
         try:
+            self.output_manifest.emit(outputs)
             self.finished.emit(success, errors)
         except RuntimeError:
             pass  # receiver destroyed during shutdown; nothing to do

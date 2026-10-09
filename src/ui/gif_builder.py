@@ -466,6 +466,8 @@ class GifBuilderDialog(QDialog):
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._build_ui()
+        self._on_selection_changed(-1)
+        self._update_preview_frame()
         self.queue_status_changed.connect(self._refresh_session_status)
         mgr = self._resolve_tooltip_mgr()
         if mgr is not None:
@@ -1060,6 +1062,7 @@ class GifBuilderDialog(QDialog):
             self._frame_list.takeItem(row)
         self._update_count()
         self._update_scrubber()
+        self._on_selection_changed(self._frame_list.currentRow())
         self._update_preview_frame()
 
     def _clear_all(self) -> None:
@@ -1329,6 +1332,7 @@ class GifBuilderDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_selection_changed(self, row: int) -> None:
+        self._pf_check.setEnabled(0 <= row < len(self._frames))
         if row < 0 or row >= len(self._frames):
             self._pf_check.blockSignals(True)
             self._pf_check.setChecked(False)
@@ -1354,10 +1358,12 @@ class GifBuilderDialog(QDialog):
         self._update_frame_diagnostics()
 
     def _on_pf_check(self, checked: bool) -> None:
-        self._pf_slider.setEnabled(checked)
         row = self._frame_list.currentRow()
+        self._pf_slider.setEnabled(checked and 0 <= row < len(self._frames))
         if 0 <= row < len(self._frames):
             self._frames[row].delay_ms = self._pf_slider.value() if checked else None
+        if self._preview_timer.isActive():
+            self._preview_timer.setInterval(self._current_preview_delay())
         self._update_frame_diagnostics()
 
     def _on_pf_slider_changed(self, value: int) -> None:
@@ -1365,6 +1371,8 @@ class GifBuilderDialog(QDialog):
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames) and self._pf_check.isChecked():
             self._frames[row].delay_ms = value
+        if self._preview_timer.isActive():
+            self._preview_timer.setInterval(self._current_preview_delay())
         self._update_frame_diagnostics()
 
     # ------------------------------------------------------------------
@@ -1374,7 +1382,7 @@ class GifBuilderDialog(QDialog):
     def _on_delay_changed(self, value: int) -> None:
         self._delay_val_lbl.setText(f"{value} ms")
         if self._preview_timer.isActive():
-            self._preview_timer.setInterval(max(10, value))
+            self._preview_timer.setInterval(self._current_preview_delay())
         self._update_frame_diagnostics()
 
     # ------------------------------------------------------------------
@@ -1402,12 +1410,20 @@ class GifBuilderDialog(QDialog):
             if len(self._frames) < 2:
                 self._btn_play.setChecked(False)
                 return
-            self._preview_timer.start(max(10, self._delay_slider.value()))
+            self._preview_timer.start(self._current_preview_delay())
             self._btn_play.setText("⏸  Pause")
         else:
             self._preview_timer.stop()
             self._btn_play.setText("▶  Play")
         self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def _current_preview_delay(self) -> int:
+        delay = self._delay_slider.value()
+        if self._frames:
+            entry = self._frames[max(0, min(self._preview_idx, len(self._frames) - 1))]
+            if entry.delay_ms is not None:
+                delay = entry.delay_ms
+        return max(10, delay)
 
     def _advance_preview(self) -> None:
         if not self._frames:
@@ -1419,13 +1435,17 @@ class GifBuilderDialog(QDialog):
         self._scrubber.setValue(self._preview_idx)
         self._scrubber.blockSignals(False)
         self._update_preview_frame()
-        # Honour per-frame delay for the next tick
-        entry = self._frames[self._preview_idx]
-        interval = entry.delay_ms if entry.delay_ms is not None else self._delay_slider.value()
-        self._preview_timer.setInterval(max(10, interval))
 
     def _update_preview_frame(self) -> None:
         total = len(self._frames)
+        self._btn_play.setEnabled(total >= 2)
+        self._btn_rewind.setEnabled(total > 0)
+        self._scrubber.setEnabled(total > 1)
+        if total < 2:
+            self._preview_timer.stop()
+            self._btn_play.setChecked(False)
+        elif self._preview_timer.isActive():
+            self._preview_timer.setInterval(self._current_preview_delay())
         if total == 0:
             self._preview_lbl.setText("(no frames yet)")
             self._preview_frame_lbl.setText("0 / 0")

@@ -34,12 +34,14 @@ Convert between image formats with optional resize and quality control.
 Paint or erase alpha adjustments, work with visible zones and masks, and undo/redo edits before saving.
 
 ### 🎞 GIF Builder
-Arrange image/GIF frames, preview animation, adjust frame timing, and export a GIF.
+Arrange image/GIF frames, preview animation, adjust frame timing, and export a GIF. Preview playback respects per-frame delays from its first tick and during live timing edits; removing frames immediately stops playback when fewer than two remain.
 
 ### 🎬 Video Builder
 Build a timeline from images, animations, and video clips, trim clips, and export GIF or MP4. Video import and MP4 export use the bundled FFmpeg runtime.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.
+Alpha/Converter stopped batches retain their actual completion percentage and report unprocessed files instead of displaying 100% “Done”. History tooltips retain that status, searchable with `status:stopped`.
+Original-file deletion defaults to **Keep Originals** and is offered only after a fully successful batch for recorded, existing, distinct outputs. Failed/unprocessed originals, in-place outputs, and sources sharing an output are never offered. Large batches retain an output manifest even when per-file success logging is suppressed.
 History exports follow the visible, filtered row order and preserve complete filenames, including in plain text. GIF history thumbnails pause when their view is hidden, and export destination failures provide a recovery warning instead of an unhandled error.
 
 ## UI & Customization

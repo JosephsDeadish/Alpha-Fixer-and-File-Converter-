@@ -51,6 +51,45 @@ def fit_dialog_to_screen(dialog):
     dialog.move(dialog.pos() + QPoint(x - frame.x(), y - frame.y()))
 
 
+def batch_completion_summary(success: int, errors: int, total: int, stopped: bool) -> tuple[int, str]:
+    """Keep cancelled batch feedback distinct from a fully completed run."""
+    processed = success + errors
+    remaining = max(0, total - processed)
+    interrupted = stopped or remaining > 0
+    progress = min(100, int(100 * processed / total)) if total > 0 else (0 if stopped else 100)
+    status = f"{'Stopped' if interrupted else 'Done'}. ✔ {success} succeeded, ✘ {errors} failed."
+    if remaining:
+        status += f" {remaining} not processed."
+    return progress, status
+
+
+def verified_originals(outputs: dict[str, str]) -> list[str]:
+    """Only offer originals with existing outputs that are not originals themselves."""
+    from collections import Counter
+    from pathlib import Path
+
+    try:
+        output_paths = {Path(dest).resolve() for dest in outputs.values()}
+        output_stats = [Path(dest).stat() for dest in outputs.values() if Path(dest).is_file()]
+        output_ids = Counter((stat.st_dev, stat.st_ino) for stat in output_stats)
+    except (OSError, RuntimeError):
+        return []
+    originals = []
+    for source, dest in outputs.items():
+        try:
+            if not Path(source).is_file() or not Path(dest).is_file():
+                continue
+            source_stat = Path(source).stat()
+            dest_stat = Path(dest).stat()
+            if (Path(source).resolve() not in output_paths
+                    and (source_stat.st_dev, source_stat.st_ino) not in output_ids
+                    and output_ids[(dest_stat.st_dev, dest_stat.st_ino)] == 1):
+                originals.append(source)
+        except (OSError, RuntimeError):
+            continue
+    return originals
+
+
 def format_eta(current: int, total: int, elapsed: float, threshold: int = 500) -> str:
     """Return an ETA string for a batch progress update, or '' if not shown.
 

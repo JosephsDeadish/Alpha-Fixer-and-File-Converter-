@@ -134,6 +134,8 @@ class ConverterTab(QWidget):
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
+        self._stop_requested = False
+        self._batch_outputs: dict[str, str] = {}
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
@@ -1421,6 +1423,8 @@ class ConverterTab(QWidget):
                 f"⚠ {target_format} export unavailable — falling back to PNG for this batch."
             )
         self._progress.setValue(0)
+        self._stop_requested = False
+        self._batch_outputs.clear()
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._status_lbl.setText("Converting…")
@@ -1452,6 +1456,7 @@ class ConverterTab(QWidget):
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
+        self._worker.output_manifest.connect(self._on_output_manifest)
         self._worker.start()
 
     @staticmethod
@@ -1690,8 +1695,10 @@ class ConverterTab(QWidget):
         dlg.activateWindow()
 
     def _stop(self):
-        if self._worker:
+        if self._worker and self._btn_stop.isEnabled():
+            self._stop_requested = True
             self._worker.stop()
+            self._btn_stop.setEnabled(False)
             self._status_lbl.setText("Stopping…")
 
     def _stop_preview_loader(self) -> None:
@@ -1733,6 +1740,7 @@ class ConverterTab(QWidget):
             worker.progress.disconnect()
             worker.file_done.disconnect()
             worker.finished.disconnect()
+            worker.output_manifest.disconnect()
         except (RuntimeError, TypeError):
             pass
 
@@ -1748,14 +1756,15 @@ class ConverterTab(QWidget):
         elapsed = time.monotonic() - self._batch_start_time
         eta_str = format_eta(current, total, elapsed)
         file_name = Path(path).name
+        action = "Stopping…" if self._stop_requested else "Converting"
         self._status_lbl.setText(
-            f"Converting {current + 1}/{total}: {file_name}{eta_str}"
+            f"{action} {current + 1}/{total}: {file_name}{eta_str}"
         )
         # Update window title so the progress is visible in the taskbar
         win = self.window()
         if win is not None:
             win.setWindowTitle(
-                f"[{pct}%] Converting {current + 1}/{total}: {file_name}"
+                f"[{pct}%] {action} {current + 1}/{total}: {file_name}"
             )
 
     @pyqtSlot(int)
@@ -1788,19 +1797,27 @@ class ConverterTab(QWidget):
             })
             self._log_msg(f"✘ {name}  →  {reason}")
 
+    @pyqtSlot(dict)
+    def _on_output_manifest(self, outputs: dict) -> None:
+        self._batch_outputs = outputs
+
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
+        from ._ui_utils import batch_completion_summary
         self._spinner_timer.stop()
         self._btn_run.setText("▶  Convert  [F5]")
-        self._progress.setValue(100)
+        progress, status = batch_completion_summary(
+            success, errors, self._batch_total, self._stop_requested,
+        )
+        self._progress.setValue(progress)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
         summary_note = ""
         if errors > 0 and self._batch_error_reasons:
             top_reason, top_count = self._batch_error_reasons.most_common(1)[0]
             summary_note = f" Most common issue: {top_reason} ({top_count} file{'s' if top_count != 1 else ''})."
-        self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.{summary_note}")
-        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        self._status_lbl.setText(f"{status}{summary_note}")
+        self._log_msg(f"─── {status} ───")
         self._last_failed_files = self._failed_source_paths()
         if errors > 0 and self._batch_error_reasons:
             parts = [
@@ -1851,6 +1868,8 @@ class ConverterTab(QWidget):
             "file_count": len(self._last_run_files),
             "success": success,
             "errors": errors,
+            "stopped": self._stop_requested or success + errors < self._batch_total,
+            "not_processed": max(0, self._batch_total - success - errors),
             "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
             # Store first file path for thumbnail display (item 9)
             "first_file": str(self._last_run_files[0]) if self._last_run_files else "",
@@ -1866,10 +1885,11 @@ class ConverterTab(QWidget):
                 self.first_conversion.emit()
             # Offer to delete the original source files when the conversion
             # produced separate output files (suffix set or different output dir).
-            suffix = self._suffix_edit.text().strip()
-            out_dir = self._out_dir_edit.text().strip()
-            if suffix or out_dir:
-                self._offer_delete_originals(self._last_run_files, success)
+            if not errors and success == self._batch_total:
+                from ._ui_utils import verified_originals
+                originals = verified_originals(self._batch_outputs)
+                if originals:
+                    self._offer_delete_originals(originals, len(originals))
         if errors > 0:
             self.processing_error.emit(errors)
 
@@ -1978,13 +1998,14 @@ class ConverterTab(QWidget):
             "Would you like to delete the original source file(s)?\n\n"
             "⚠  This cannot be undone."
         )
-        detail_lines = [f.name for f in (Path(p) for p in source_files[:20])]
+        detail_lines = [str(Path(p).resolve()) for p in source_files[:20]]
         if n > 20:
             detail_lines.append(f"… and {n - 20} more")
         msg.setDetailedText("Files that will be deleted:\n" + "\n".join(detail_lines))
         btn_delete = msg.addButton("🗑  Delete Originals", QMessageBox.ButtonRole.DestructiveRole)
-        msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
-        msg.setDefaultButton(btn_delete)
+        btn_keep = msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_keep)
+        msg.setEscapeButton(btn_keep)
         msg.exec()
 
         if msg.clickedButton() is btn_delete:

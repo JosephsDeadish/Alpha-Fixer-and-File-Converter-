@@ -865,14 +865,15 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = _HistoryItem([ts, fmt, n_files, n_ok, n_err, files])
+            status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
-            _set_filter_text(item, ts, fmt, n_files, n_ok, n_err, file_list)
+            _set_filter_text(item, ts, fmt, n_files, n_ok, n_err, file_list, status)
             _set_filter_fields(
                 item,
                 time=ts,
                 format=fmt,
                 file=file_list,
-                status="issues" if str(n_err) not in {"0", "?"} else "ok",
+                status=status,
                 errors=n_err,
             )
             # Thumbnail icon from first processed file (item 9)
@@ -885,6 +886,7 @@ class HistoryTab(QWidget):
                 6,
                 f"Batch: {ts}\nFormat: {fmt}\n"
                 f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                f"Status: {status}  Not processed: {entry.get('not_processed', 0)}\n"
                 f"{preview_text}",
                 file_list,
             )
@@ -913,14 +915,15 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
+            status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
-            _set_filter_text(item, ts, mode, n_files, n_ok, n_err, file_list)
+            _set_filter_text(item, ts, mode, n_files, n_ok, n_err, file_list, status)
             _set_filter_fields(
                 item,
                 time=ts,
                 mode=mode,
                 file=file_list,
-                status="issues" if str(n_err) not in {"0", "?"} else "ok",
+                status=status,
                 errors=n_err,
             )
             # Thumbnail icon from first processed file (item 9)
@@ -934,6 +937,7 @@ class HistoryTab(QWidget):
                 f"Batch: {ts}\n"
                 f"Mode: {mode}\n"
                 f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
+                f"Status: {status}  Not processed: {entry.get('not_processed', 0)}\n"
                 f"{preview_text}",
                 file_list,
             )
