@@ -357,6 +357,62 @@ def test_gif_value_readouts_fit_live_fonts_and_slider_boundaries(builder, app, n
     assert builder._frames[builder._frame_list.currentRow()].delay_ms == builder._pf_slider.value()
 
 
+@pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
+def test_video_readouts_fit_live_fonts_and_boundary_values(app, name, tmp_path):
+    widget = VideoToolDialog()
+    theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+    try:
+        path = tmp_path / "clip.gif"
+        with Image.new("RGBA", (8, 8), "red") as first, Image.new("RGBA", (8, 8), "blue") as second:
+            first.save(path, save_all=True, append_images=[second], duration=100)
+        widget._load_image_paths([str(path)])
+        widget._clip_list.setCurrentRow(0)
+        widget.resize(1200, 900)
+        widget.show()
+        pairs = [
+            (widget._clip_speed_slider, widget._clip_speed_lbl, lambda value: f"{value / 100:.2f}×"),
+            (widget._fps_slider, widget._fps_val_lbl, lambda value: f"{value} fps"),
+            (widget._audio_volume_slider, widget._audio_volume_lbl, lambda value: f"{value}%"),
+        ]
+        adjustment_labels = []
+        for key in ["brightness", "contrast", "saturation", "sharpness", "black", "white"]:
+            slider = getattr(widget, f"_{key}_slider")
+            label = next(label for label in widget.findChildren(QLabel) if label.buddy() is slider)
+            adjustment_labels.append(label)
+            group_layout = label.parentWidget().layout()
+            row = next(group_layout.itemAt(i).layout() for i in range(group_layout.count())
+                       if group_layout.itemAt(i).layout() is not None
+                       and group_layout.itemAt(i).layout().indexOf(slider) >= 0)
+            value_label = row.itemAt(2).widget()
+            formatter = (lambda value: f"{value / 100:.2f}") if key in [
+                "brightness", "contrast", "saturation", "sharpness",
+            ] else str
+            pairs.append((slider, value_label, formatter))
+        for pixels in [13, 24, 32, 13]:
+            widget.setStyleSheet(build_stylesheet(theme)
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for slider, label, formatter in pairs:
+                for value in [slider.minimum(), slider.maximum(), slider.minimum()]:
+                    slider.setValue(value)
+                    for _ in range(5):
+                        app.processEvents()
+                    assert label.text() == formatter(value)
+                    assert label.width() >= label.sizeHint().width()
+                    assert label.height() >= label.sizeHint().height()
+                    assert label.parentWidget().rect().contains(label.geometry())
+            for label in [widget._trim_start_lbl, widget._trim_end_lbl]:
+                label.setText("123456")
+            for _ in range(5):
+                app.processEvents()
+            for label in adjustment_labels + [widget._trim_start_lbl, widget._trim_end_lbl]:
+                assert label.font().pixelSize() == pixels
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+                assert label.height() >= label.sizeHint().height()
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
 @pytest.mark.parametrize("kind", ["gif", "video"])
 def test_builder_guidance_and_recovery_tones_follow_live_theme_and_scale(app, kind):
     widget = GifBuilderDialog() if kind == "gif" else VideoToolDialog()

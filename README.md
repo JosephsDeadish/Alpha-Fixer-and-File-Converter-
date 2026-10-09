@@ -69,6 +69,7 @@ Painter undo/redo and visibility controls also follow shared theme/font styling.
 On narrow Painter canvases, visibility controls use compact labels with full accessible names and tooltips, and undo/redo buttons stack when their counts cannot fit side by side.
 Painted comparison-preview messages, Before/After labels and statistics inherit the live UI font. Messages wrap and narrow comparison labels/statistics use ellipses rather than drawing across the divider.
 GIF Builder delay, loop and dimension readouts grow with their text and live UI font instead of using fixed pixel widths, keeping units and boundary values readable.
+Video Builder trim, clip-speed, FPS, visual-adjustment and audio-volume readouts also grow with their text and font; adjustment names no longer use fixed-width caps.
 Alpha range/channel and Converter format/resize inputs are associated with their visible labels and have explicit accessible names. GIF/Video timing, stream, preview and export controls also have descriptive accessible names with units; GIF loop/size controls explain their zero-value behavior.
 Settings appearance/history inputs and Video adjustment sliders are also associated with their labels. Settings sound/trail sliders have descriptive accessible names, independent of tooltip display preferences.
 Painter brush/eraser sizes, overlay opacity, active zone alpha and slot selectors have label associations and distinct accessible names. Active-zone naming/color controls and History search fields also have explicit names that remain available when tooltips are off.

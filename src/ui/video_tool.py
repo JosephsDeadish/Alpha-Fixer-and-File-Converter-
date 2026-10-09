@@ -54,7 +54,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
-    QFrame, QPlainTextEdit, QScrollArea,
+    QFrame, QPlainTextEdit, QScrollArea, QSizePolicy, QLayout,
 )
 
 _VIDEO_EXTS = {
@@ -3057,6 +3057,7 @@ class VideoToolDialog(QDialog):
         # Trim sliders
         grp_trim = QGroupBox("Trim Selected Clip")
         trim_vl = QVBoxLayout(grp_trim)
+        trim_vl.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         trim_vl.setSpacing(5)
 
         # Start trim
@@ -3067,7 +3068,7 @@ class VideoToolDialog(QDialog):
         self._trim_start_slider.valueChanged.connect(self._on_trim_start_changed)
         start_row.addWidget(self._trim_start_slider, 1)
         self._trim_start_lbl = QLabel("0")
-        self._trim_start_lbl.setFixedWidth(48)
+        self._trim_start_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._trim_start_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         start_row.addWidget(self._trim_start_lbl)
         trim_vl.addLayout(start_row)
@@ -3080,7 +3081,7 @@ class VideoToolDialog(QDialog):
         self._trim_end_slider.valueChanged.connect(self._on_trim_end_changed)
         end_row.addWidget(self._trim_end_slider, 1)
         self._trim_end_lbl = QLabel("0")
-        self._trim_end_lbl.setFixedWidth(48)
+        self._trim_end_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._trim_end_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         end_row.addWidget(self._trim_end_lbl)
         trim_vl.addLayout(end_row)
@@ -3131,6 +3132,7 @@ class VideoToolDialog(QDialog):
 
         grp_timing = QGroupBox("Selected Clip Timing")
         timing_vl = QVBoxLayout(grp_timing)
+        timing_vl.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         timing_vl.setSpacing(5)
 
         clip_speed_row = QHBoxLayout()
@@ -3143,7 +3145,7 @@ class VideoToolDialog(QDialog):
         self._clip_speed_slider.valueChanged.connect(self._on_clip_speed_changed)
         clip_speed_row.addWidget(self._clip_speed_slider, 1)
         self._clip_speed_lbl = QLabel("1.00×")
-        self._clip_speed_lbl.setFixedWidth(56)
+        self._clip_speed_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._clip_speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         clip_speed_row.addWidget(self._clip_speed_lbl)
         timing_vl.addLayout(clip_speed_row)
@@ -3180,6 +3182,7 @@ class VideoToolDialog(QDialog):
 
         grp_preview = QGroupBox("Preview")
         pv_layout = QVBoxLayout(grp_preview)
+        pv_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         pv_layout.setSpacing(5)
 
         self._preview_lbl = QLabel()
@@ -3221,7 +3224,7 @@ class VideoToolDialog(QDialog):
         self._fps_slider = _make_hslider(1, 60, 25)
         self._fps_slider.setToolTip("Playback speed for preview and export.")
         self._fps_val_lbl = QLabel("25 fps")
-        self._fps_val_lbl.setFixedWidth(50)
+        self._fps_val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._fps_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._fps_slider.valueChanged.connect(self._on_preview_fps_changed)
         fps_row.addWidget(self._fps_slider, 1)
@@ -3243,6 +3246,7 @@ class VideoToolDialog(QDialog):
 
         grp_adj = QGroupBox("Visual Adjustments")
         adj_vl = QVBoxLayout(grp_adj)
+        adj_vl.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         adj_vl.setSpacing(6)
 
         def _adj_row(label: str, lo: int, hi: int, val: int,
@@ -3250,7 +3254,7 @@ class VideoToolDialog(QDialog):
             """Add a labelled slider row; return the slider."""
             row = QHBoxLayout()
             lbl = QLabel(label)
-            lbl.setFixedWidth(90)
+            lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
             row.addWidget(lbl)
             slider = _make_hslider(lo, hi, val)
             lbl.setBuddy(slider)
@@ -3260,7 +3264,7 @@ class VideoToolDialog(QDialog):
                 slider.setToolTip(tooltip)
             row.addWidget(slider, 1)
             val_lbl = QLabel()
-            val_lbl.setFixedWidth(52)
+            val_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
             val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             if fmt_fn is None:
                 fmt_fn = str
@@ -3350,6 +3354,7 @@ class VideoToolDialog(QDialog):
 
         self._audio_group = QGroupBox("Audio (MP4 export only)")
         audio_vl = QVBoxLayout(self._audio_group)
+        audio_vl.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         audio_vl.setSpacing(5)
 
         self._audio_scope_lbl = QLabel(
@@ -3385,7 +3390,7 @@ class VideoToolDialog(QDialog):
         self._audio_volume_slider.valueChanged.connect(lambda _v: self._update_audio_controls())
         audio_volume_row.addWidget(self._audio_volume_slider, 1)
         self._audio_volume_lbl = QLabel("100%")
-        self._audio_volume_lbl.setFixedWidth(52)
+        self._audio_volume_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._audio_volume_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         audio_volume_row.addWidget(self._audio_volume_lbl)
         audio_vl.addLayout(audio_volume_row)
