@@ -505,6 +505,71 @@ def test_settings_backup_preserves_theme_controls_and_history_policy(dialog, tmp
     assert {key: manager.get(key) for key in preferences} == preferences
 
 
+@pytest.mark.parametrize("key,value", [
+    ("sound_enabled", []), ("sound_enabled", "maybe"), ("sound_enabled", 2),
+    ("font_size", {}), ("font_size", True), ("font_size", 12.5),
+    ("font_size", "large"), ("font_size", 2**80),
+    ("history_max_entries_video_builder", []),
+    ("cursor", None), ("ui_scale", {}), ("click_sound_path", []),
+])
+def test_invalid_backup_value_rejects_import_without_partial_changes(dialog, tmp_path, key, value):
+    widget, manager = dialog
+    manager.set("theme", "Existing theme")
+    before = {name: manager.get(name) for name in manager.EXPORT_KEYS}
+    path = tmp_path / "invalid-backup.json"
+    path.write_text(json.dumps({"theme": "Replacement theme", key: value}), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        manager.import_settings(str(path))
+    assert {name: manager.get(name) for name in manager.EXPORT_KEYS} == before
+
+
+def test_legacy_backup_scalars_survive_disk_reload_and_settings_reopening(dialog, tmp_path):
+    widget, manager = dialog
+    path = tmp_path / "legacy-backup.json"
+    path.write_text(json.dumps({
+        "sound_enabled": "true", "use_theme_sound": "no", "sound_volume": "65",
+        "font_size": "12", "ui_scale": "Large",
+        "hold_effects_enabled": 1, "hold_effects_key": "blood",
+        "use_theme_hold_effects": "0", "cursor_enabled": "yes",
+        "cursor": "emoji:🧪", "last_cursor_key_pref": "emoji:🧪",
+        "history_max_entries_video_builder": "12", "unknown_future_setting": [],
+    }), encoding="utf-8")
+    imported = manager.import_settings(str(path))
+    assert "unknown_future_setting" not in imported
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=manager._qs.fileName()):
+        reloaded = SettingsManager()
+    reopened = SettingsDialog(reloaded)
+    try:
+        assert reloaded.get("sound_volume") == 65
+        assert reloaded.get("history_max_entries_video_builder", 0) == 12
+        assert reopened._sound_check.isChecked()
+        assert not reopened._use_theme_sound_check.isChecked()
+        assert reopened._font_size_spin.value() == 12
+        assert reopened._hold_key_combo.currentData() == "blood"
+        assert reopened._cursor_combo.currentText() == "🧪"
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+        reloaded.sync()
+        sip.delete(reloaded._qs)
+
+
+def test_backup_round_trip_accepts_every_exportable_default(dialog, tmp_path):
+    widget, manager = dialog
+    for key in manager.EXPORT_KEYS:
+        value = manager._DEFAULTS.get(key, "")
+        if key.startswith("history_max_entries_"):
+            value = 0
+        manager.set(key, value)
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    path = tmp_path / "complete-backup.json"
+    manager.export_settings(str(path))
+    manager.reset_all()
+    assert manager.import_settings(str(path)) == manager.EXPORT_KEYS
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+
+
 @pytest.mark.parametrize("name,mode", [("Shark Bait", "bite"), ("Alien", "abduct")])
 def test_theme_specific_button_modes_are_represented_in_settings(dialog, name, mode):
     widget, manager = dialog

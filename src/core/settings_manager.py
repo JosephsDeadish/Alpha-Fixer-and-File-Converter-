@@ -735,7 +735,8 @@ class SettingsManager:
         Returns a list of keys that were imported.
         Raises OSError on file-read failure, json.JSONDecodeError if the
         file contains invalid JSON syntax, or ValueError if the JSON root
-        is not an object (dict).
+        is not an object (dict) or a recognized preference has an invalid type.
+        All recognized values are validated before any preferences are changed.
         """
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -744,10 +745,38 @@ class SettingsManager:
                 f"Settings file must contain a JSON object, "
                 f"got {type(data).__name__!r} instead."
             )
-        imported = []
+        validated = {}
         for key in self.EXPORT_KEYS:
             if key in data:
-                self._qs.setValue(key, data[key])
-                imported.append(key)
+                value = data[key]
+                default = self._DEFAULTS.get(key, "")
+                if key.startswith("history_max_entries_"):
+                    default = 0
+                if isinstance(default, bool):
+                    if isinstance(value, str):
+                        normalized = value.lower()
+                        if normalized not in ("true", "false", "1", "0", "yes", "no"):
+                            raise ValueError(f"Invalid boolean preference: {key}")
+                        value = normalized in ("true", "1", "yes")
+                    elif type(value) is int and value in (0, 1):
+                        value = bool(value)
+                    elif not isinstance(value, bool):
+                        raise ValueError(f"Invalid boolean preference: {key}")
+                elif isinstance(default, int):
+                    if isinstance(value, str):
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            raise ValueError(f"Invalid integer preference: {key}") from None
+                    elif type(value) is not int:
+                        raise ValueError(f"Invalid integer preference: {key}")
+                    # QSettings stores integer variants as signed 64-bit values.
+                    if not -(2**63) <= value < 2**63:
+                        raise ValueError(f"Integer preference out of range: {key}")
+                elif not isinstance(value, str):
+                    raise ValueError(f"Invalid text preference: {key}")
+                validated[key] = value
+        for key, value in validated.items():
+            self._qs.setValue(key, value)
         self._qs.sync()
-        return imported
+        return list(validated)
