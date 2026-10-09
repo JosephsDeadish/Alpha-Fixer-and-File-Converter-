@@ -1,0 +1,12 @@
+FORMATOMANCER Conversion Failure Report
+Generated: 2026-10-09T21:34:07
+Target format: PNG
+Batch size: 1
+Failures: 1
+
+Failure groups:
+- 1× decode failed
+    • source.png
+
+Per-file failures:
+- source.png: decode failed

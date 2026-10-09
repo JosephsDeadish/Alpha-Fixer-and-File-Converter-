@@ -14,6 +14,7 @@ from src.ui._ui_utils import confirm_normalized_save_path, staged_output_path
 from src.ui.gif_builder import GifBuilderDialog
 from src.ui.selective_alpha_tool import SelectiveAlphaTool
 from src.ui.video_tool import VideoToolDialog, _ClipEntry, _CLIP_ROLE
+from tests.gif_export_helpers import wait_for_gif_export
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +106,8 @@ def test_save_failure_never_deletes_existing_output_or_records_success(app, pain
                 with patch.object(Image.Image, "save", fail_encoding):
                     with patch(f"{dialog_path}.QMessageBox.critical") as error:
                         save()
+                        if kind == "gif":
+                            wait_for_gif_export(widget)
             error.assert_called_once()
             history.assert_not_called()
         success.assert_not_called()
@@ -152,6 +155,7 @@ def test_gif_success_replaces_existing_output_and_emits_final_path(app, painter,
                    return_value=(str(output), "GIF Files (*.gif)")):
             with patch("src.ui.gif_builder.QMessageBox.information"):
                 widget._export()
+                wait_for_gif_export(widget)
         exported.assert_called_once_with(str(output))
         with Image.open(output) as image:
             assert image.n_frames == count
@@ -306,6 +310,8 @@ def test_builder_normalized_destination_confirms_before_export(app, painter, tmp
             if suffix == ".mp4":
                 stack.enter_context(patch("imageio.get_writer", get_writer))
             widget._export()
+            if kind == "gif_builder":
+                wait_for_gif_export(widget)
         question.assert_called_once()
         assert str(final) in question.call_args.args[2]
         assert question.call_args.args[-1] == QMessageBox.StandardButton.No
@@ -404,6 +410,8 @@ def test_confirmed_export_pauses_preview(playing_builder, tmp_path):
             patch(f"{module}.QProgressDialog", progress), \
             patch.object(QMessageBox, "information"):
         widget._export()
+        if module.endswith("gif_builder"):
+            wait_for_gif_export(widget)
     with Image.open(output) as image:
         assert image.format == "GIF"
     assert not widget._preview_timer.isActive()
@@ -423,12 +431,13 @@ def test_cancel_on_last_gif_frame_preserves_destination(playing_builder, tmp_pat
     if module.endswith("gif_builder"):
         original = Image.Image.quantize
         calls = []
+        frame_count = len(widget._frames)
 
         def frame(image, *args, **kwargs):
             result = original(image, *args, **kwargs)
             calls.append(1)
-            if len(calls) == len(widget._frames):
-                dialogs[0].cancel()
+            if len(calls) == frame_count:
+                widget._export_worker.cancel()
             return result
 
         cancel_hook = patch.object(Image.Image, "quantize", frame)
@@ -450,11 +459,13 @@ def test_cancel_on_last_gif_frame_preserves_destination(playing_builder, tmp_pat
             patch.object(widget, "_record_export_history") as history, \
             patch.object(QMessageBox, "information") as info:
         widget._export()
+        if module.endswith("gif_builder"):
+            wait_for_gif_export(widget)
     assert output.read_bytes() == b"existing"
     history.assert_not_called()
     info.assert_not_called()
     notice.assert_not_called()
-    assert not dialogs[0].isVisible()
+    assert sip.isdeleted(dialogs[0]) or not dialogs[0].isVisible()
     assert not list(tmp_path.glob("*alpha_fixer*"))
 
 

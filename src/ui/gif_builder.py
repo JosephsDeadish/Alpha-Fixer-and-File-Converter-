@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from src.core.gif_export import GifExportSettings, GifExportWorker
 from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
 
 from PyQt6.QtCore import (
@@ -445,6 +446,7 @@ class GifBuilderDialog(QDialog):
     """
 
     exported = pyqtSignal(str)  # emitted with output path on successful export
+    export_finished = pyqtSignal()  # all outcomes, after worker/resource cleanup
     status_notice = pyqtSignal(str, int)
     queue_status_changed = pyqtSignal(str)
     SHORTCUT_DEFS = (
@@ -462,6 +464,14 @@ class GifBuilderDialog(QDialog):
         self._tooltip_mgr = tooltip_mgr
         self._import_detail_expanded = False
         self._frames: list[_FrameEntry] = []
+        self._export_worker: Optional[GifExportWorker] = None
+        self._export_selecting = False
+        self._export_canceling = False
+        self._close_after_export = False
+        self._export_progress = None
+        self._export_snapshot = []
+        self._export_poll = QTimer(self)
+        self._export_poll.timeout.connect(self._poll_export_cancel)
         self._preview_idx: int = 0
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
@@ -489,6 +499,7 @@ class GifBuilderDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = scrollable_dialog_layout(self)
+        self._export_content = root.parentWidget()
 
         # Title bar row
         title_row = QHBoxLayout()
@@ -793,6 +804,8 @@ class GifBuilderDialog(QDialog):
 
     def _add_paths(self, paths: list[str]) -> None:
         """Load image/video files and append their frames to the list."""
+        if self._export_worker is not None:
+            return
         progress = QProgressDialog("Loading media…", "Cancel", 0, len(paths), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(500)
@@ -1085,6 +1098,8 @@ class GifBuilderDialog(QDialog):
         self._update_preview_frame()
 
     def _remove_selected(self) -> None:
+        if self._export_worker is not None:
+            return
         rows = sorted(
             {self._frame_list.row(item) for item in self._frame_list.selectedItems()},
             reverse=True,
@@ -1100,6 +1115,8 @@ class GifBuilderDialog(QDialog):
         self._update_preview_frame()
 
     def _clear_all(self) -> None:
+        if self._export_worker is not None:
+            return
         for entry in self._frames:
             entry.close()
         self._frames.clear()
@@ -1508,129 +1525,170 @@ class GifBuilderDialog(QDialog):
     # Export
     # ------------------------------------------------------------------
 
+    def is_exporting(self) -> bool:
+        return self._export_worker is not None
+
+    def request_export_cancel(self) -> None:
+        if self._export_worker is not None:
+            # Parent/application shutdown must not open a completion dialog,
+            # even when publication has already made cancellation too late.
+            self._close_after_export = True
+        self._cancel_export()
+
     def _export(self) -> None:
+        if self._export_worker is not None or self._export_selecting:
+            return
         if not self._frames:
             QMessageBox.information(self, "No Frames", "Add at least one image first.")
             return
 
-        out_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Animated GIF", "animation.gif",
-            "GIF Files (*.gif);;All Files (*)",
-        )
-        if not out_path:
-            return
-        chosen_path = out_path
-        if not out_path.lower().endswith(".gif"):
-            out_path += ".gif"
-        from ._ui_utils import confirm_normalized_save_path
-        if not confirm_normalized_save_path(self, chosen_path, out_path):
-            return
+        self._export_selecting = True
+        try:
+            out_path, _ = QFileDialog.getSaveFileName(
+                self, "Save Animated GIF", "animation.gif",
+                "GIF Files (*.gif);;All Files (*)",
+            )
+            if not out_path:
+                return
+            chosen_path = out_path
+            if not out_path.lower().endswith(".gif"):
+                out_path += ".gif"
+            from ._ui_utils import confirm_normalized_save_path
+            if not confirm_normalized_save_path(self, chosen_path, out_path):
+                return
+        finally:
+            self._export_selecting = False
         self._btn_play.setChecked(False)
 
-        from PIL import Image
-
-        max_w = self._width_slider.value()
-        max_h = self._height_slider.value()
-        global_delay = self._delay_slider.value()
-        loop = self._loop_slider.value()
-        optimize = self._optimize_check.isChecked()
-
-        progress = QProgressDialog("Building GIF…", "Cancel", 0, len(self._frames), self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(300)
+        settings = GifExportSettings(
+            out_path, self._width_slider.value(), self._height_slider.value(),
+            self._delay_slider.value(), self._loop_slider.value(),
+            self._optimize_check.isChecked(),
+        )
+        worker = GifExportWorker(settings, self)
+        self._export_worker = worker
+        self._export_canceling = False
+        self._export_snapshot = []
+        self._export_sources = tuple(
+            (entry._pil, entry.delay_ms if entry.delay_ms is not None else settings.delay)
+            for entry in self._frames
+        )
+        self._export_content_enabled = self._export_content.isEnabled()
+        self._export_content.setEnabled(False)
+        self._export_shortcuts = [(shortcut, shortcut.isEnabled())
+                                  for shortcut in self._shortcut_objects.values()]
+        for shortcut, _ in self._export_shortcuts:
+            shortcut.setEnabled(False)
+        progress = QProgressDialog("Copying GIF frames…", "Cancel", 0, len(self._frames), self)
+        # Non-modal setValue() does not pump a nested event loop.
+        progress.setWindowModality(Qt.WindowModality.NonModal)
+        progress.setMinimumDuration(0)
         progress.setAutoReset(False)
         progress.setAutoClose(False)
+        self._export_progress = progress
+        progress.canceled.connect(self._cancel_export)
+        worker.progress.connect(self._on_export_progress)
+        worker.finished.connect(self._on_export_finished)
+        progress.show()
+        self._export_poll.start(25)
+        QTimer.singleShot(0, self._copy_export_frame)
 
-        import time as _time
-        import datetime
-        _build_start = _time.monotonic()
-
-        pil_frames: list[Image.Image] = []
-        durations: list[int] = []
-        try:
-            for idx, entry in enumerate(self._frames):
-                progress.setValue(idx)
-                if progress.wasCanceled():
-                    for f in pil_frames:
-                        f.close()
-                    progress.close()
-                    return
-                # Update progress label with time estimate (item 40)
-                if idx > 0:
-                    elapsed = _time.monotonic() - _build_start
-                    rate = idx / elapsed
-                    remaining = (len(self._frames) - idx) / rate if rate > 0 else 0
-                    if remaining > 60:
-                        eta_str = f"{int(remaining // 60)}m {int(remaining % 60)}s"
-                    else:
-                        eta_str = f"{int(remaining)}s"
-                    progress.setLabelText(
-                        f"Building GIF…  frame {idx + 1} / {len(self._frames)}"
-                        f"  (≈ {eta_str} remaining)"
-                    )
-                frame = entry._pil.copy()
-                if max_w > 0 or max_h > 0:
-                    target_w = max_w if max_w > 0 else 99999
-                    target_h = max_h if max_h > 0 else 99999
-                    frame.thumbnail((target_w, target_h), Image.LANCZOS)
-                frame_p = frame.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
-                pil_frames.append(frame_p)
-                durations.append(entry.delay_ms if entry.delay_ms is not None else global_delay)
-                frame.close()
-        except Exception as exc:
-            for f in pil_frames:
-                try:
-                    f.close()
-                except Exception:
-                    pass
-            progress.close()
-            QMessageBox.critical(self, "Build Error", f"Error preparing frames:\n{exc}")
+    def _copy_export_frame(self) -> None:
+        """Yield between snapshot copies; all heavy transformations run off-thread."""
+        worker = self._export_worker
+        if worker is None:
             return
-
-        progress.setLabelText("Saving GIF…")
-        progress.setValue(len(self._frames))
-        try:
-            QApplication.processEvents()
-            if progress.wasCanceled():
+        self._poll_export_cancel()
+        index = len(self._export_snapshot)
+        if not self._export_canceling and index < len(self._export_sources):
+            try:
+                source, delay = self._export_sources[index]
+                self._export_snapshot.append((source.copy(), delay))
+                self._on_export_progress(index, f"Copying GIF frames… {index + 1} / {len(self._export_sources)}")
+            except Exception as exc:
+                worker.outcome = "error"
+                worker.error = str(exc)
+                for frame, _ in self._export_snapshot:
+                    frame.close()
+                self._on_export_finished()
                 return
-            from ._ui_utils import staged_output_path
-            with staged_output_path(out_path) as staged_path:
-                pil_frames[0].save(
-                    staged_path, format="GIF",
-                    save_all=True,
-                    append_images=pil_frames[1:],
-                    duration=durations if len(pil_frames) > 1 else durations[0],
-                    loop=loop,
-                    optimize=optimize,
-                )
-        except Exception as exc:
-            QMessageBox.critical(self, "Save Error", f"Could not save GIF:\n{exc}")
+            QTimer.singleShot(0, self._copy_export_frame)
             return
-        finally:
-            progress.close()
-            for f in pil_frames:
-                try:
-                    f.close()
-                except Exception:
-                    pass
+        worker.frames = tuple(self._export_snapshot)
+        self._export_snapshot = []
+        self._export_sources = ()
+        worker.start()
 
-        self.exported.emit(out_path)
-        self._record_export_history(
-            out_path,
-            delay_ms=global_delay,
-            loop=loop,
-            optimize=optimize,
-            resize=(max_w, max_h),
+    def _poll_export_cancel(self) -> None:
+        # QProgressDialog.cancel() (as opposed to clicking Cancel) does not emit
+        # canceled; also honor that path without touching widgets in the worker.
+        if self._export_progress is not None and self._export_progress.wasCanceled():
+            self._cancel_export()
+        if self._export_canceling and self._export_progress is not None:
+            self._export_progress.show()
+
+    def _cancel_export(self) -> None:
+        worker = self._export_worker
+        if worker is None or self._export_progress is None or self._export_canceling or not worker.cancel():
+            return
+        self._export_canceling = True
+        self._export_progress.setLabelText(
+            "Cancelling GIF export… Waiting for any active encoding to finish; output will be discarded."
         )
-        self.status_notice.emit(
-            f"GIF Builder export saved: {Path(out_path).name} ({len(self._frames)} frame{'s' if len(self._frames) != 1 else ''})",
-            8000,
-        )
-        QMessageBox.information(
-            self, "GIF Saved",
-            f"Animated GIF saved to:\n{out_path}\n\n"
-            f"{len(self._frames)} frame(s), loop={loop if loop > 0 else '∞'}",
-        )
+        self._export_progress.setCancelButton(None)
+        # The native Cancel action hides its dialog before emitting canceled.
+        QTimer.singleShot(0, self._show_canceling_export)
+
+    def _show_canceling_export(self) -> None:
+        if self._export_progress is not None:
+            self._export_progress.show()
+
+    def _on_export_progress(self, value: int, text: str) -> None:
+        if self._export_progress is not None and not self._export_canceling:
+            self._export_progress.setLabelText(text)
+            self._export_progress.setValue(value)
+
+    def _on_export_finished(self) -> None:
+        worker = self._export_worker
+        if worker is None:
+            return
+        settings = worker.settings
+        outcome, error = worker.outcome, worker.error
+        self._export_poll.stop()
+        progress = self._export_progress
+        self._export_progress = None
+        progress.canceled.disconnect(self._cancel_export)
+        progress.close()
+        progress.deleteLater()
+        self._export_content.setEnabled(self._export_content_enabled)
+        for shortcut, enabled in self._export_shortcuts:
+            shortcut.setEnabled(enabled)
+        self._export_snapshot = []
+        self._export_sources = ()
+        # Native QThread.finished is emitted after run() and image cleanup.
+        self._export_worker = None
+        worker.deleteLater()
+        if outcome == "success":
+            self._record_export_history(
+                settings.output, delay_ms=settings.delay, loop=settings.loop,
+                optimize=settings.optimize, resize=(settings.max_width, settings.max_height),
+            )
+            self.exported.emit(settings.output)
+            self.status_notice.emit(
+                f"GIF Builder export saved: {Path(settings.output).name} ({len(self._frames)} frame(s))",
+                8000,
+            )
+            if not self._close_after_export:
+                QMessageBox.information(
+                    self, "GIF Saved", f"Animated GIF saved to:\n{settings.output}\n\n"
+                    f"{len(self._frames)} frame(s), loop={settings.loop if settings.loop > 0 else '∞'}",
+                )
+        elif outcome == "error" and not self._close_after_export:
+            QMessageBox.critical(self, "GIF Export Error", f"Could not export GIF:\n{error}")
+        self.export_finished.emit()
+        if self._close_after_export:
+            self._close_after_export = False
+            self.close()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -1647,8 +1705,21 @@ class GifBuilderDialog(QDialog):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        if self._export_worker is not None:
+            self._close_after_export = True
+            self._cancel_export()
+            event.ignore()
+            return
         self._preview_timer.stop()
         for entry in self._frames:
             entry.close()
         self._frames.clear()
         super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        # Escape/reject/accept can bypass closeEvent on QDialog.
+        if self._export_worker is not None:
+            self._close_after_export = True
+            self._cancel_export()
+            return
+        super().done(result)

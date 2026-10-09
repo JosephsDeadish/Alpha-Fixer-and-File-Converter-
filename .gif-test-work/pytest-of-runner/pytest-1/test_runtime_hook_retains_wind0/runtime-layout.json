@@ -1,0 +1,1 @@
+{"imagemagick_library": "CORE_RL_MagickWand_.dll", "imagemagick_home": ".", "imagemagick_config": ["imagemagick/config"], "imagemagick_coders": "imagemagick/modules/coders", "ffmpeg": "ffmpeg.exe", "ffprobe": "ffprobe.exe"}

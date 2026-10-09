@@ -4695,9 +4695,24 @@ class MainWindow(QMainWindow):
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def _resume_close_after_gif_export(self):
+        dialog = getattr(self, "_gif_builder_dlg", None)
+        if dialog is not None:
+            dialog.export_finished.disconnect(self._resume_close_after_gif_export)
+        self._gif_shutdown_pending = False
+        QTimer.singleShot(0, self.close)
+
     def closeEvent(self, event):
         if getattr(self, "_shutdown_complete", False):
             event.accept()
+            return
+        dialog = getattr(self, "_gif_builder_dlg", None)
+        if dialog is not None and dialog.is_exporting():
+            event.ignore()
+            if not getattr(self, "_gif_shutdown_pending", False):
+                self._gif_shutdown_pending = True
+                dialog.export_finished.connect(self._resume_close_after_gif_export)
+                dialog.request_export_cancel()
             return
         self._shutdown_complete = True
         # Remove the global keyboard-secret event filter so it cannot fire

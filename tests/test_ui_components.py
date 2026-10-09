@@ -6466,6 +6466,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 with patch.object(gb.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
                     with patch.object(gb.QMessageBox, "information"):
                         dialog._export()
+                        from tests.gif_export_helpers import wait_for_gif_export
+                        wait_for_gif_export(dialog)
         finally:
             source.close()
             dialog.close()

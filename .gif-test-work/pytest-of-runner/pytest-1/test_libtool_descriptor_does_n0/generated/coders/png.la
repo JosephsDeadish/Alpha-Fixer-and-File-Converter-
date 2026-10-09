@@ -1,0 +1,4 @@
+dlname='png.so'
+installed=no
+libdir=''
+dependency_libs=''

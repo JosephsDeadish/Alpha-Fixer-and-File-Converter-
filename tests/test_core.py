@@ -8752,8 +8752,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_gif_builder_removes_partial_file_on_save_error(self):
         src = self._src("ui/gif_builder.py")
-        self.assertIn("with staged_output_path(out_path) as staged_path:", src)
+        worker = self._src("core/gif_export.py")
+        self.assertIn("with staged_output_path(settings.output) as staged_path:", worker)
         self.assertNotIn("Path(out_path).unlink(missing_ok=True)", src)
+        self.assertNotIn("Path(settings.output).unlink(missing_ok=True)", worker)
         helper = self._src("ui/_ui_utils.py")
         self.assertIn("staged.unlink(missing_ok=True)", helper)
 

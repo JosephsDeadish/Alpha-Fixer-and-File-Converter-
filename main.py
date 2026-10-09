@@ -2025,7 +2025,7 @@ class _HangWatchdog:
 def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
     """Run UI cleanup while QApplication still exists."""
     from PyQt6 import sip
-    from PyQt6.QtCore import QCoreApplication, QEvent
+    from PyQt6.QtCore import QCoreApplication, QEvent, QEventLoop
 
     def shutdown():
         watchdog.stop()
@@ -2041,6 +2041,18 @@ def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
     finally:
         shutdown()
         app.aboutToQuit.disconnect(shutdown)
+        dialog = getattr(window, "_gif_builder_dlg", None) if not sip.isdeleted(window) else None
+        if dialog is not None and dialog.is_exporting():
+            # Direct QApplication.exit() bypasses the deferred main-window close.
+            # Keep queued worker cleanup running before releasing the Qt tree.
+            cleanup_loop = QEventLoop()
+            dialog.export_finished.connect(cleanup_loop.quit)
+            dialog.request_export_cancel()
+            if dialog.is_exporting():
+                cleanup_loop.exec()
+            dialog.export_finished.disconnect(cleanup_loop.quit)
+            if not sip.isdeleted(window):
+                window.close()
         # Do not force-delete the widget tree: a bounded closeEvent wait may
         # have timed out while a cooperative worker is still using its objects.
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
