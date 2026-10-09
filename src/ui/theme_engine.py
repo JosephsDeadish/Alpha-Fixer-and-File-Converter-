@@ -3912,7 +3912,7 @@ QLabel[settingsHint="true"] {{
 QLabel[toolGuidance="true"], QLabel[previewZoomValue="true"] {{
     color: {t['text']};
 }}
-QFrame#zoomOverlayBar, QFrame#zoomOverlay {{
+QFrame#zoomOverlayBar, QFrame#zoomOverlay, QFrame#historyOverlay {{
     background-color: {t['surface']};
     border: 1px solid {t['border']};
     border-radius: 6px;

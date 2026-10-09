@@ -14,7 +14,9 @@ from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
 from src.ui.alpha_tool import AlphaFixerTab, _AlphaPreviewLoader
 from src.ui.drop_list import DropFileList
-from src.ui.selective_alpha_tool import SelectiveAlphaTool, _FloatingZoomOverlay
+from src.ui.selective_alpha_tool import (
+    SelectiveAlphaTool, _FloatingZoomOverlay, _FloatingHistoryOverlay,
+)
 from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, build_stylesheet
 
 
@@ -88,6 +90,94 @@ def sample_image():
 
 def sample_stats():
     return {"min": 0, "max": 255, "mean": 100.0, "percent_nonzero": 50.0}
+
+
+@pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
+def test_painter_history_overlay_scales_counts_and_preserves_actions(app, name):
+    host = QWidget()
+    undo, redo = Mock(), Mock()
+    overlay = _FloatingHistoryOverlay(undo, redo, host)
+    zoom = _FloatingZoomOverlay(Mock(), Mock(), Mock(), host)
+    theme = {**PRESET_THEMES, **HIDDEN_THEMES}[name]
+    highlight, labels, zones = Mock(), Mock(), Mock()
+    overlay.highlight_toggled.connect(highlight)
+    overlay.labels_toggled.connect(labels)
+    overlay.all_zones_toggled.connect(zones)
+    try:
+        host.resize(640, 500)
+        host.show()
+        overlay.show()
+        zoom.show()
+        controls = [overlay._btn_undo, overlay._btn_redo, overlay._btn_all_vis,
+                    overlay._chk_highlight, overlay._chk_labels]
+        assert len({control.accessibleName() for control in controls}) == 5
+        for pixels in [13, 24, 32, 13]:
+            host.setStyleSheet(build_stylesheet(theme)
+                              + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for count in [0, 1, 123, 9999, 0]:
+                overlay.set_undo_count(count)
+                overlay.set_redo_count(count)
+                for _ in range(15):
+                    app.processEvents()
+                assert not overlay._position_timer.isActive()
+                assert not zoom._position_timer.isActive()
+                assert host.rect().contains(overlay.geometry())
+                assert host.rect().contains(zoom.geometry())
+                assert not overlay.geometry().intersects(zoom.geometry())
+                for control in controls:
+                    assert not control.styleSheet()
+                    assert control.font().pixelSize() == pixels
+                    assert control.width() >= control.sizeHint().width()
+                    assert control.height() >= control.sizeHint().height()
+                for button in (overlay._btn_undo, overlay._btn_redo):
+                    assert button.isEnabled() == (count > 0)
+                    assert button.accessibleDescription() == button.toolTip()
+                    if count:
+                        assert str(count) in button.text()
+                        assert button.palette().color(QPalette.ColorRole.ButtonText) == QColor(theme["text"])
+        overlay.set_highlight_checked(True)
+        overlay.set_labels_checked(False)
+        overlay.set_all_zones_visible(False)
+        highlight.assert_not_called()
+        labels.assert_not_called()
+        zones.assert_not_called()
+        host.activateWindow()
+        for button, callback in [(overlay._btn_undo, undo), (overlay._btn_redo, redo)]:
+            button.setFocus()
+            app.processEvents()
+            QTest.keyClick(button, Qt.Key.Key_Space)
+            callback.assert_not_called()
+        overlay.set_undo_count(1)
+        overlay.set_redo_count(1)
+        app.processEvents()
+        QTest.mouseMove(host, host.rect().bottomRight())
+        for control in controls:
+            other = overlay._btn_undo if control is not overlay._btn_undo else overlay._btn_redo
+            other.setFocus()
+            app.processEvents()
+            geometry, hint = control.geometry(), control.sizeHint()
+            image = control.grab().toImage()
+            control.setFocus(Qt.FocusReason.TabFocusReason)
+            app.processEvents()
+            assert control.hasFocus()
+            assert control.geometry() == geometry
+            assert control.sizeHint() == hint
+            assert control.grab().toImage() != image, name
+        for button, callback in [(overlay._btn_undo, undo), (overlay._btn_redo, redo)]:
+            button.setFocus()
+            app.processEvents()
+            QTest.keyClick(button, Qt.Key.Key_Space)
+            callback.assert_called_once()
+        QTest.keyClick(overlay._chk_highlight, Qt.Key.Key_Space)
+        highlight.assert_called_once_with(False)
+        QTest.keyClick(overlay._chk_labels, Qt.Key.Key_Space)
+        labels.assert_called_once_with(True)
+        QTest.keyClick(overlay._btn_all_vis, Qt.Key.Key_Space)
+        zones.assert_called_once_with(True)
+        assert overlay._btn_all_vis.text() == "👁  Hide All Zones"
+    finally:
+        host.close()
+        sip.delete(host)
 
 
 def test_painter_zoom_overlay_avoids_history_and_updates_actual_canvas(painter, app, tmp_path):

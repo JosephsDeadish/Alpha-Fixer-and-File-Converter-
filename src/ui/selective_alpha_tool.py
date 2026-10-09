@@ -1313,7 +1313,7 @@ class _FloatingZoomOverlay(QFrame):
 
 
 class _FloatingHistoryOverlay(QFrame):
-    """Semi-transparent floating overlay with Undo / Redo canvas-drawing buttons
+    """Themed floating overlay with Undo / Redo canvas-drawing buttons
     and visibility toggles (Highlight transparent pixels, Show α values, Hide/Show all zones).
 
     Positioned at the top-left corner of its parent widget.  Reparent to the
@@ -1328,28 +1328,6 @@ class _FloatingHistoryOverlay(QFrame):
         super().__init__(parent)
         self.setObjectName("historyOverlay")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-        self.setStyleSheet(
-            "QFrame#historyOverlay {"
-            "  background: rgba(30, 30, 30, 160);"
-            "  border-radius: 6px;"
-            "  border: 1px solid rgba(255,255,255,40);"
-            "}"
-            "QPushButton {"
-            "  background: rgba(60,60,60,200);"
-            "  color: #eee;"
-            "  border: none;"
-            "  border-radius: 4px;"
-            "  font-size: 12px;"
-            "  min-height: 22px;"
-            "  max-height: 22px;"
-            "  padding: 0 4px;"
-            "}"
-            "QPushButton:hover { background: rgba(100,100,100,220); }"
-            "QPushButton:pressed { background: rgba(40,40,40,255); }"
-            "QPushButton:disabled { color: rgba(150,150,150,120); }"
-            "QCheckBox { color: #ddd; font-size: 11px; }"
-            "QCheckBox::indicator { width: 13px; height: 13px; }"
-        )
         vlay = QVBoxLayout(self)
         vlay.setContentsMargins(4, 3, 4, 3)
         vlay.setSpacing(3)
@@ -1359,10 +1337,14 @@ class _FloatingHistoryOverlay(QFrame):
         row.setSpacing(3)
         row.setContentsMargins(0, 0, 0, 0)
         self._btn_undo = QPushButton("↩")
+        self._btn_undo.setProperty("previewOverlay", True)
+        self._btn_undo.setAccessibleName("Undo Painter action")
         self._btn_undo.setToolTip("Undo the last brush/erase action  (Ctrl+Z)")
         self._btn_undo.setEnabled(False)
         self._btn_undo.clicked.connect(undo_cb)
         self._btn_redo = QPushButton("↪")
+        self._btn_redo.setProperty("previewOverlay", True)
+        self._btn_redo.setAccessibleName("Redo Painter action")
         self._btn_redo.setToolTip("Redo the last undone action  (Ctrl+Y)")
         self._btn_redo.setEnabled(False)
         self._btn_redo.clicked.connect(redo_cb)
@@ -1372,6 +1354,7 @@ class _FloatingHistoryOverlay(QFrame):
 
         # Row 2: Highlight transparent pixels checkbox
         self._chk_highlight = QCheckBox("Highlight transparent")
+        self._chk_highlight.setAccessibleName("Highlight transparent Painter pixels")
         self._chk_highlight.setChecked(False)
         self._chk_highlight.setToolTip(
             "When checked, zone highlights are shown even over fully-transparent\n"
@@ -1383,6 +1366,7 @@ class _FloatingHistoryOverlay(QFrame):
 
         # Row 3: Show α values checkbox
         self._chk_labels = QCheckBox("Show α values")
+        self._chk_labels.setAccessibleName("Show Painter zone alpha values")
         self._chk_labels.setChecked(True)
         self._chk_labels.setToolTip(
             "When checked, each zone's alpha value is drawn as text at the\n"
@@ -1393,6 +1377,8 @@ class _FloatingHistoryOverlay(QFrame):
 
         # Row 4: Hide / Show all zone highlights toggle button (item 83)
         self._btn_all_vis = QPushButton("👁  Hide All Zones")
+        self._btn_all_vis.setProperty("previewOverlay", True)
+        self._btn_all_vis.setAccessibleName("Toggle all Painter zone highlights")
         self._btn_all_vis.setCheckable(True)
         self._btn_all_vis.setChecked(False)
         self._btn_all_vis.setToolTip(
@@ -1402,8 +1388,37 @@ class _FloatingHistoryOverlay(QFrame):
         self._btn_all_vis.clicked.connect(self._on_all_vis_clicked)
         vlay.addWidget(self._btn_all_vis)
 
+        self._position_timer = QTimer(self)
+        self._position_timer.setSingleShot(True)
+        self._position_timer.timeout.connect(self._refresh_position)
+        if parent is not None:
+            parent.installEventFilter(self)
         self.adjustSize()
         self.raise_()
+
+    def _refresh_position(self):
+        self.layout().activate()
+        self.adjustSize()
+        parent = self.parentWidget()
+        if parent is not None:
+            self.reposition(parent.size())
+            zoom = parent.findChild(_FloatingZoomOverlay)
+            if zoom is not None:
+                zoom.reposition(parent.size())
+
+    def event(self, event):
+        result = super().event(event)
+        timer = getattr(self, "_position_timer", None)
+        if timer is not None and event.type() in (
+            QEvent.Type.StyleChange, QEvent.Type.FontChange, QEvent.Type.LayoutRequest,
+        ):
+            timer.start(0)
+        return result
+
+    def eventFilter(self, obj, event):
+        if obj is self.parentWidget() and event.type() == QEvent.Type.Resize:
+            self._position_timer.start(0)
+        return super().eventFilter(obj, event)
 
     def _on_all_vis_clicked(self, checked: bool) -> None:
         """Hide all zones when checked, show all when unchecked."""
@@ -1437,8 +1452,9 @@ class _FloatingHistoryOverlay(QFrame):
         )
         label = f"↩ {count}" if count > 0 else "↩"
         self._btn_undo.setText(label)
-        self._btn_undo.setMaximumWidth(26 + (len(str(count)) * 8 if count > 0 else 0))
+        self._btn_undo.setAccessibleDescription(self._btn_undo.toolTip())
         self.adjustSize()
+        self._position_timer.start(0)
 
     def set_redo_count(self, count: int) -> None:
         """Update redo button to reflect the number of available redo steps."""
@@ -1450,8 +1466,9 @@ class _FloatingHistoryOverlay(QFrame):
         )
         label = f"↪ {count}" if count > 0 else "↪"
         self._btn_redo.setText(label)
-        self._btn_redo.setMaximumWidth(26 + (len(str(count)) * 8 if count > 0 else 0))
+        self._btn_redo.setAccessibleDescription(self._btn_redo.toolTip())
         self.adjustSize()
+        self._position_timer.start(0)
 
     def set_highlight_checked(self, v: bool) -> None:
         self._chk_highlight.blockSignals(True)
