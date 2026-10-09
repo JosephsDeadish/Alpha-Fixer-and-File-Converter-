@@ -1482,8 +1482,12 @@ class GifBuilderDialog(QDialog):
         )
         if not out_path:
             return
+        chosen_path = out_path
         if not out_path.lower().endswith(".gif"):
             out_path += ".gif"
+        from ._ui_utils import confirm_normalized_save_path
+        if not confirm_normalized_save_path(self, chosen_path, out_path):
+            return
 
         from PIL import Image
 

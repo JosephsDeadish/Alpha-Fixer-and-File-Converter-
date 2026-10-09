@@ -10,7 +10,7 @@ from PyQt6 import sip
 from PyQt6.QtWidgets import QApplication, QListWidgetItem, QMessageBox
 
 from src.core.settings_manager import SettingsManager
-from src.ui._ui_utils import staged_output_path
+from src.ui._ui_utils import confirm_normalized_save_path, staged_output_path
 from src.ui.gif_builder import GifBuilderDialog
 from src.ui.selective_alpha_tool import SelectiveAlphaTool
 from src.ui.video_tool import VideoToolDialog, _ClipEntry, _CLIP_ROLE
@@ -254,3 +254,90 @@ def test_painter_normalized_destination_requires_overwrite_confirmation(painter,
         painter._settings.add_selective_alpha_history.assert_not_called()
         painter._offer_delete_original.assert_not_called()
     assert not list(tmp_path.glob(".existing.*"))
+
+
+@pytest.mark.parametrize("kind", ["gif_builder", "video_gif", "video_mp4"])
+@pytest.mark.parametrize("typed_suffix", ["", ".png"])
+@pytest.mark.parametrize("accept", [False, True])
+def test_builder_normalized_destination_confirms_before_export(app, painter, tmp_path, kind, typed_suffix, accept):
+    suffix = ".mp4" if kind == "video_mp4" else ".gif"
+    chosen = tmp_path / ("existing" + typed_suffix)
+    # GIF Builder appends; Video Builder replaces known media suffixes.
+    final = Path(str(chosen) + suffix) if kind == "gif_builder" else chosen.with_suffix(suffix)
+    final.write_bytes(b"original output")
+    if kind == "gif_builder":
+        widget = GifBuilderDialog()
+        widget._add_paths([painter._src_path])
+        module = "src.ui.gif_builder"
+    else:
+        widget = VideoToolDialog()
+        clip = _ClipEntry(painter._src_path, 1,
+                          lambda _: Image.new("RGBA", (8, 8), (10, 20, 30, 255)),
+                          clip_type="image", frame_size=(8, 8))
+        clip.still_duration_frames = 1
+        widget._clips.append(clip)
+        item = QListWidgetItem("source")
+        item.setData(_CLIP_ROLE, clip)
+        widget._clip_list.addItem(item)
+        widget._clip_list.setCurrentRow(0)
+        widget._export_fmt_combo.setCurrentIndex(
+            widget._export_fmt_combo.findData("mp4" if suffix == ".mp4" else "gif"))
+        widget._mp4_export_available = True
+        module = "src.ui.video_tool"
+
+    def get_writer(path, **kwargs):
+        writer = Mock()
+        writer.close.side_effect = lambda: Path(path).write_bytes(b"encoded MP4")
+        return writer
+
+    reply = QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+    try:
+        with ExitStack() as stack:
+            stack.enter_context(patch(f"{module}.QFileDialog.getSaveFileName",
+                                      return_value=(str(chosen), "All Files (*)")))
+            question = stack.enter_context(patch.object(QMessageBox, "question", return_value=reply))
+            info = stack.enter_context(patch.object(QMessageBox, "information"))
+            error = stack.enter_context(patch.object(QMessageBox, "critical"))
+            history = stack.enter_context(patch.object(widget, "_record_export_history"))
+            temps = stack.enter_context(patch("tempfile.NamedTemporaryFile",
+                                              wraps=tempfile.NamedTemporaryFile))
+            if kind != "gif_builder":
+                stack.enter_context(patch.object(widget, "_should_mux_audio", return_value=False))
+            if suffix == ".mp4":
+                stack.enter_context(patch("imageio.get_writer", get_writer))
+            widget._export()
+        question.assert_called_once()
+        assert str(final) in question.call_args.args[2]
+        assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+        error.assert_not_called()
+        if accept:
+            assert final.read_bytes() != b"original output"
+            history.assert_called_once()
+            info.assert_called_once()
+            if suffix == ".gif":
+                with Image.open(final) as image:
+                    assert image.format == "GIF"
+        else:
+            assert final.read_bytes() == b"original output"
+            history.assert_not_called()
+            temps.assert_not_called()
+            info.assert_not_called()
+        assert not chosen.exists()
+        assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+        assert not list(tmp_path.glob("alpha_fixer_export_*"))
+    finally:
+        if kind == "gif_builder":
+            widget._clear_all()
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("changed,exists", [(False, True), (False, False), (True, False)])
+def test_normalized_save_skips_unnecessary_prompt(app, tmp_path, changed, exists):
+    final = tmp_path / "output.gif"
+    if exists:
+        final.write_bytes(b"original")
+    chosen = str(tmp_path / "output") if changed else str(final)
+    with patch.object(QMessageBox, "question") as question:
+        assert confirm_normalized_save_path(None, chosen, str(final))
+    question.assert_not_called()

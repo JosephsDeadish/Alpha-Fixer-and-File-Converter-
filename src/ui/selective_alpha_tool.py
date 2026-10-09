@@ -3487,15 +3487,9 @@ class SelectiveAlphaTool(QWidget):
                 f"The file will be saved as PNG instead.",
             )
             path = os.path.splitext(path)[0] + ".png"
-        if path != chosen_path and os.path.exists(path):
-            reply = QMessageBox.question(
-                self, "Replace Existing File?",
-                f"The final output already exists:\n{path}\n\nReplace it?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+        from ._ui_utils import confirm_normalized_save_path
+        if not confirm_normalized_save_path(self, chosen_path, path):
+            return
         try:
             from ._ui_utils import staged_output_path
             with staged_output_path(path) as staged_path:

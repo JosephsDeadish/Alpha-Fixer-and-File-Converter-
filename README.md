@@ -40,6 +40,7 @@ Arrange image/GIF frames, preview animation, adjust frame timing, and export a G
 ### 🎬 Video Builder
 Build a timeline from images, animations, and video clips, trim clips, and export GIF or MP4. Video import and MP4 export use the bundled FFmpeg runtime.
 GIF Builder and Alpha Painter stage saves beside the destination and replace it only after encoding succeeds, preserving existing files on save failure. Video Builder also stages final output on the destination filesystem for cross-drive exports. Painter filenames without an extension use the selected save format (PNG by default), and its original-deletion prompt defaults to Keep Original.
+All three tools confirm replacing an existing file when an automatically added or changed extension produces a different destination; declining leaves the file untouched.
 Trim edits immediately refresh the paused preview, including a playhead clamped by a shorter timeline. Preview FPS changes update active playback and duration summaries without restarting playback. Single-frame timelines remain exportable, but play and scrubbing are disabled.
 
 History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.

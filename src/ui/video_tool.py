@@ -4872,6 +4872,7 @@ class VideoToolDialog(QDialog):
             )
         if not out_path:
             return
+        chosen_path = out_path
         target_suffix = ".gif" if fmt == "gif" else ".mp4"
         current_suffix = Path(out_path).suffix.lower()
         if current_suffix != target_suffix:
@@ -4880,6 +4881,9 @@ class VideoToolDialog(QDialog):
                 out_path = str(Path(out_path).with_suffix(target_suffix))
             else:
                 out_path = f"{out_path}{target_suffix}"
+        from ._ui_utils import confirm_normalized_save_path
+        if not confirm_normalized_save_path(self, chosen_path, out_path):
+            return
         out_path_existed = Path(out_path).exists()
 
         progress = QProgressDialog("Rendering and saving output…", "Cancel", 0, total, self)

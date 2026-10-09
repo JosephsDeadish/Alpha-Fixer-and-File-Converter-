@@ -7,6 +7,22 @@ pulling in heavy Qt or Pillow dependencies.
 from contextlib import contextmanager
 
 
+def confirm_normalized_save_path(parent, chosen_path, final_path):
+    """Confirm an existing destination missed by the native save dialog."""
+    from pathlib import Path
+    from PyQt6.QtWidgets import QMessageBox
+
+    if final_path == chosen_path or not Path(final_path).exists():
+        return True
+    reply = QMessageBox.question(
+        parent, "Replace Existing File?",
+        f"The final output already exists:\n{final_path}\n\nReplace it?",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No,
+    )
+    return reply == QMessageBox.StandardButton.Yes
+
+
 @contextmanager
 def staged_output_path(destination):
     """Replace a destination only after successfully writing a sibling file."""
