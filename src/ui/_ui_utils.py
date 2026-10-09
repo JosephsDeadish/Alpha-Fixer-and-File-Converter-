@@ -4,6 +4,28 @@ Shared UI helper utilities used by multiple tool widgets.
 Qt helpers import lazily so this module can be imported early without
 pulling in heavy Qt or Pillow dependencies.
 """
+from contextlib import contextmanager
+
+
+@contextmanager
+def staged_output_path(destination):
+    """Replace a destination only after successfully writing a sibling file."""
+    import os
+    from pathlib import Path
+    import tempfile
+
+    path = Path(destination)
+    handle = tempfile.NamedTemporaryFile(
+        prefix=".alpha_fixer_save_", suffix=path.suffix,
+        dir=str(path.absolute().parent), delete=False,
+    )
+    staged = Path(handle.name)
+    handle.close()
+    try:
+        yield str(staged)
+        os.replace(staged, path)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def scrollable_dialog_layout(dialog):

@@ -4912,6 +4912,7 @@ class VideoToolDialog(QDialog):
                 output_file = tempfile.NamedTemporaryFile(
                     prefix="alpha_fixer_export_",
                     suffix=target_suffix,
+                    dir=str(Path(out_path).absolute().parent),
                     delete=False,
                 )
                 temp_output_path = output_file.name
@@ -4921,6 +4922,7 @@ class VideoToolDialog(QDialog):
                     temp_file = tempfile.NamedTemporaryFile(
                         prefix="alpha_fixer_video_",
                         suffix=".mp4",
+                        dir=str(Path(out_path).absolute().parent),
                         delete=False,
                     )
                     temp_mp4 = temp_file.name

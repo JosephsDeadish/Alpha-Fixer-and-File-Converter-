@@ -1546,32 +1546,21 @@ class GifBuilderDialog(QDialog):
         progress.setLabelText("Saving GIF…")
         progress.setValue(len(self._frames))
         try:
-            if len(pil_frames) == 1:
+            from ._ui_utils import staged_output_path
+            with staged_output_path(out_path) as staged_path:
                 pil_frames[0].save(
-                    out_path, format="GIF",
-                    save_all=True,
-                    append_images=[],
-                    duration=durations[0] if durations else global_delay,
-                    loop=loop,
-                    optimize=optimize,
-                )
-            else:
-                pil_frames[0].save(
-                    out_path, format="GIF",
+                    staged_path, format="GIF",
                     save_all=True,
                     append_images=pil_frames[1:],
-                    duration=durations,
+                    duration=durations if len(pil_frames) > 1 else durations[0],
                     loop=loop,
                     optimize=optimize,
                 )
         except Exception as exc:
-            try:
-                Path(out_path).unlink(missing_ok=True)
-            except Exception:
-                pass
             QMessageBox.critical(self, "Save Error", f"Could not save GIF:\n{exc}")
             return
         finally:
+            progress.close()
             for f in pil_frames:
                 try:
                     f.close()

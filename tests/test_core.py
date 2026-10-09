@@ -8752,7 +8752,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_gif_builder_removes_partial_file_on_save_error(self):
         src = self._src("ui/gif_builder.py")
-        self.assertIn("Path(out_path).unlink(missing_ok=True)", src)
+        self.assertIn("with staged_output_path(out_path) as staged_path:", src)
+        self.assertNotIn("Path(out_path).unlink(missing_ok=True)", src)
+        helper = self._src("ui/_ui_utils.py")
+        self.assertIn("staged.unlink(missing_ok=True)", helper)
 
     def test_history_gif_delegate_paint_has_no_model_side_effects(self):
         src = self._src("ui/history_tab.py")

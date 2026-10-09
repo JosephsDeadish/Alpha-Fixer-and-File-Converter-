@@ -3459,7 +3459,7 @@ class SelectiveAlphaTool(QWidget):
         # format that preserves a full per-pixel alpha channel.
         base = os.path.splitext(self._src_path)[0] if self._src_path else ""
         default_path = (base + "_alpha_painter.png") if base else ""
-        path, _ = QFileDialog.getSaveFileName(
+        path, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Save Result",
             default_path,
@@ -3467,6 +3467,15 @@ class SelectiveAlphaTool(QWidget):
         )
         if not path:
             return
+        chosen_path = path
+        if not os.path.splitext(path)[1]:
+            filter_extensions = {
+                "PNG": ".png", "WebP": ".webp", "TIFF": ".tiff", "TGA": ".tga",
+            }
+            path += next(
+                (ext for name, ext in filter_extensions.items() if selected_filter.startswith(name)),
+                ".png",
+            )
         # Ensure the chosen path ends in a supported alpha-capable extension;
         # if the user typed a non-alpha extension warn and append .png.
         _, save_ext = os.path.splitext(path)
@@ -3478,8 +3487,19 @@ class SelectiveAlphaTool(QWidget):
                 f"The file will be saved as PNG instead.",
             )
             path = os.path.splitext(path)[0] + ".png"
+        if path != chosen_path and os.path.exists(path):
+            reply = QMessageBox.question(
+                self, "Replace Existing File?",
+                f"The final output already exists:\n{path}\n\nReplace it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
         try:
-            self._result_img.save(path)
+            from ._ui_utils import staged_output_path
+            with staged_output_path(path) as staged_path:
+                self._result_img.save(staged_path)
             # Record in history
             if self._settings is not None:
                 from datetime import datetime as _dt
@@ -3581,8 +3601,9 @@ class SelectiveAlphaTool(QWidget):
         )
         msg.setDetailedText(f"File that will be deleted:\n{src_path}")
         btn_delete = msg.addButton("🗑  Delete Original", QMessageBox.ButtonRole.DestructiveRole)
-        msg.addButton("Keep Original", QMessageBox.ButtonRole.RejectRole)
-        msg.setDefaultButton(btn_delete)
+        btn_keep = msg.addButton("Keep Original", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_keep)
+        msg.setEscapeButton(btn_keep)
         msg.exec()
         if msg.clickedButton() is btn_delete:
             try:
