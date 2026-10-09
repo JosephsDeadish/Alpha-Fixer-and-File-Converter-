@@ -422,30 +422,46 @@ class ConverterWorker(QThread):
         skip_wait_shutdown = False
         try:
             pending: "set[concurrent.futures.Future]" = set()
+            future_indices: dict[concurrent.futures.Future, int] = {}
             next_idx = 0
             buffered: dict[int, tuple[int, str, bool, str]] = {}
+            cancelled_indices: set[int] = set()
             emit_idx = 0
 
             while next_idx < total and len(pending) < n_workers and not self._abort:
-                pending.add(pool.submit(_convert_one, next_idx, self._files[next_idx]))
+                fut = pool.submit(_convert_one, next_idx, self._files[next_idx])
+                pending.add(fut)
+                future_indices[fut] = next_idx
                 next_idx += 1
 
             while pending:
                 if self._abort:
+                    cancelled = set()
                     for fut in pending:
-                        fut.cancel()
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    break
-                done, pending = concurrent.futures.wait(
-                    pending,
-                    return_when=concurrent.futures.FIRST_COMPLETED,
-                )
+                        if fut.cancel():
+                            cancelled.add(fut)
+                            cancelled_indices.add(future_indices.pop(fut))
+                    # Cancelled futures need not be notified by the executor before
+                    # wait() returns; exclude them and drain only in-flight work.
+                    pending.difference_update(cancelled)
+                if pending:
+                    done, pending = concurrent.futures.wait(
+                        pending,
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+                else:
+                    done = set()
                 for fut in done:
+                    order_idx = future_indices.pop(fut)
                     if fut.cancelled():
+                        cancelled_indices.add(order_idx)
                         continue
                     result = fut.result()
                     buffered[result[0]] = result
-                    while emit_idx in buffered:
+                while emit_idx in buffered or emit_idx in cancelled_indices:
+                    if emit_idx in cancelled_indices:
+                        cancelled_indices.remove(emit_idx)
+                    else:
                         order_idx, src_path, ok, dest_or_err = buffered.pop(emit_idx)
                         now = time.monotonic()
                         if (not large_batch
@@ -473,12 +489,14 @@ class ConverterWorker(QThread):
                             except RuntimeError:
                                 skip_wait_shutdown = True
                                 return
-                        emit_idx += 1
-                        if emit_idx % _GC_CLEANUP_INTERVAL == 0 and (large_batch or n_workers <= 2):
-                            gc.collect()
-                    while next_idx < total and len(pending) < n_workers and not self._abort:
-                        pending.add(pool.submit(_convert_one, next_idx, self._files[next_idx]))
-                        next_idx += 1
+                    emit_idx += 1
+                    if emit_idx % _GC_CLEANUP_INTERVAL == 0 and (large_batch or n_workers <= 2):
+                        gc.collect()
+                while next_idx < total and len(pending) < n_workers and not self._abort:
+                    fut = pool.submit(_convert_one, next_idx, self._files[next_idx])
+                    pending.add(fut)
+                    future_indices[fut] = next_idx
+                    next_idx += 1
         finally:
             pool.shutdown(wait=not skip_wait_shutdown, cancel_futures=(self._abort or skip_wait_shutdown))
 

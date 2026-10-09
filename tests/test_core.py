@@ -9540,8 +9540,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_settings_dialog_keeps_locked_hidden_current_theme_selectable(self):
         src = self._src("ui/settings_dialog.py")
-        self.assertIn('_THEME_PREFIX_CHARS = "★🔓🔒 "', src)
-        self.assertIn('self._theme_preset_combo.addItem(f"🔒 {current_hidden}")', src)
+        self.assertIn('current_hidden in HIDDEN_THEMES', src)
+        self.assertIn('self._theme_preset_combo.addItem(f"🔒 {current_hidden}", ("hidden", current_hidden))', src)
         self.assertIn('idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")', src)
 
     def test_settings_dialog_has_clear_general_and_sound_guidance(self):

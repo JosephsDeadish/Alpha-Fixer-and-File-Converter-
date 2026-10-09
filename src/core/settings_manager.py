@@ -11,6 +11,7 @@ import os
 import sys
 from pathlib import Path
 from PyQt6.QtCore import QSettings
+from PyQt6.QtGui import QColor
 
 from .app_paths import writable_app_directory
 
@@ -115,6 +116,12 @@ class SettingsManager:
         # Appearance
         "font_size": 10,
         "ui_scale": "Normal",          # Compact / Normal / Large / Extra Large
+        "btn_height": "Normal",
+        "widget_spacing": "Normal",
+        "border_radius": "Normal",
+        "panel_padding": "Normal",
+        "notif_overlay_enabled": True,
+        "use_theme_notif": True,
         # History settings
         "history_max_entries": 50,      # Max history entries saved per tool
         "history_track_converter": True,          # Record Converter history
@@ -356,6 +363,29 @@ class SettingsManager:
     # Theme
     # ------------------------------------------------------------------
 
+    @classmethod
+    def _normalize_theme(cls, data: dict, name: str | None = None) -> dict:
+        theme = {**cls._DEFAULT_THEME, **data}
+        for key, default in cls._DEFAULT_THEME.items():
+            value = theme[key]
+            if key == "name":
+                if not isinstance(value, str) or not value.strip():
+                    theme[key] = name or default
+            elif not key.startswith("_"):
+                if not isinstance(value, str) or not QColor(value).isValid():
+                    theme[key] = default
+        for key in list(theme):
+            if key.startswith("_") and not isinstance(theme[key], str):
+                if key in cls._DEFAULT_THEME:
+                    theme[key] = cls._DEFAULT_THEME[key]
+                else:
+                    del theme[key]
+        if "_trail_color" in theme and not QColor(theme["_trail_color"]).isValid():
+            del theme["_trail_color"]
+        if name is not None:
+            theme["name"] = name
+        return theme
+
     def get_theme(self) -> dict:
         raw = self.get("theme_data", json.dumps(self._DEFAULT_THEME))
         try:
@@ -366,7 +396,7 @@ class SettingsManager:
                 return dict(self._DEFAULT_THEME)
             # Merge with defaults so all required keys are always present,
             # even if the stored theme was saved by an older app version.
-            return {**self._DEFAULT_THEME, **data}
+            return self._normalize_theme(data)
         except (json.JSONDecodeError, TypeError):
             return dict(self._DEFAULT_THEME)
 
@@ -377,24 +407,30 @@ class SettingsManager:
     # Named custom themes
     # ------------------------------------------------------------------
 
-    def get_saved_themes(self) -> dict:
-        """Return {name: theme_dict} for all user-saved named themes."""
+    def _saved_theme_records(self) -> dict:
         raw = self._qs.value("saved_themes", "{}")
         try:
             data = json.loads(raw)
-            # Protect callers that iterate over the result with .items()
             return data if isinstance(data, dict) else {}
         except (json.JSONDecodeError, TypeError):
             return {}
 
+    def get_saved_themes(self) -> dict:
+        """Return usable themes without rewriting malformed records on disk."""
+        return {
+            name: self._normalize_theme(theme, name=name)
+            for name, theme in self._saved_theme_records().items()
+            if isinstance(theme, dict)
+        }
+
     def save_named_theme(self, name: str, theme: dict) -> None:
-        saved = self.get_saved_themes()
+        saved = self._saved_theme_records()
         saved[name] = theme
         self._qs.setValue("saved_themes", json.dumps(saved))
         self._qs.sync()
 
     def delete_named_theme(self, name: str) -> bool:
-        saved = self.get_saved_themes()
+        saved = self._saved_theme_records()
         if name in saved:
             del saved[name]
             self._qs.setValue("saved_themes", json.dumps(saved))
@@ -629,6 +665,8 @@ class SettingsManager:
         _progress_keys = [k for k in self._DEFAULTS if k in (
             "total_clicks", "alpha_fixes_total", "conversions_total",
             "alpha_fix_done_once", "conversion_done_once",
+            "theme_changed_once", "cursor_anim_used_once",
+            "trail_enabled_once", "tooltip_mode_changed_once",
         )]
         for key in _unlock_keys + _progress_keys:
             self._qs.setValue(key, self._DEFAULTS[key])
@@ -652,6 +690,16 @@ class SettingsManager:
         "cursor_enabled", "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
         "font_size", "ui_scale", "history_max_entries",
+        "btn_height", "widget_spacing", "border_radius", "panel_padding",
+        "history_max_entries_converter", "history_max_entries_alpha",
+        "history_max_entries_selective_alpha", "history_max_entries_gif_builder",
+        "history_max_entries_video_builder",
+        "history_track_converter", "history_track_alpha",
+        "history_track_selective_alpha", "history_track_gif_builder", "history_track_video_builder",
+        "notif_overlay_enabled", "use_theme_notif", "custom_shortcuts",
+        "hold_effects_enabled", "hold_effects_key", "use_theme_hold_effects",
+        "last_trail_style_pref", "last_effect_key_pref", "last_cursor_key_pref",
+        "last_sound_profile_pref", "last_btn_anim_pref",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
         "bg_drip_enabled", "bg_drip_type", "use_theme_drip",
         "bg_flock_enabled", "use_theme_flock", "bg_flock_style",

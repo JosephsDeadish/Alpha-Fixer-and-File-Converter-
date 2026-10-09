@@ -14,13 +14,10 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox, QFrame,
 )
 
-from .theme_engine import PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
+from .theme_engine import DEFAULT_THEME, PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
 from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
 from .video_tool import _VIDEO_EXTS
-
-# Prefix characters used on theme combo items (user-saved = ★, unlocked hidden = 🔓)
-_THEME_PREFIX_CHARS = "★🔓🔒 "
 
 # Maximum character length accepted as a directly-typed custom emoji.
 # Emoji can be multi-codepoint sequences (e.g. 🏴‍☠️ = 7 code units) but are
@@ -181,6 +178,19 @@ class SettingsDialog(QDialog):
         self._load_values()
         if tooltip_mgr is not None:
             self.register_tooltips(tooltip_mgr)
+
+    def _flush_pending_preferences(self) -> None:
+        if self._theme_debounce.isActive():
+            self._theme_debounce.stop()
+            self._on_preset_selected_live()
+        self._misc_combo_debounce.stop()
+        if self._misc_combo_pending:
+            self._flush_misc_combo_changes()
+
+    def done(self, result: int) -> None:
+        self._flush_pending_preferences()
+        self._settings.sync()
+        super().done(result)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -1426,6 +1436,8 @@ class SettingsDialog(QDialog):
             ("shatter", "Shatter — particle burst from button centre"),
             ("vanish",  "Vanish — shrinks to nothing then snaps back"),
             ("explode", "Explode — expands outward then collapses"),
+            ("bite",    "Bite — progressive shark bite marks"),
+            ("abduct",  "Abduct — lifts the button in a tractor beam"),
         ]
         _BUTTON_ANIM_TIPS = {
             "press":   "The button shifts 4 pixels down on press then springs back.\n"
@@ -1443,6 +1455,8 @@ class SettingsDialog(QDialog):
                        "Fun and punchy — great for fairy/candy/panda themes.",
             "explode": "The button rapidly expands outward then bounces back to size.\n"
                        "Big impact energy — great for volcano/storm/neon themes.",
+            "bite": "Shark bite marks accumulate on the button and fade after inactivity.",
+            "abduct": "The button rises in an alien tractor beam, then returns to its position.",
         }
         for key, label in _BUTTON_ANIM_OPTIONS:
             self._button_anim_style_combo.addItem(label, userData=key)
@@ -2125,6 +2139,7 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_theme_search_changed(self, text: str) -> None:
+        self._flush_pending_preferences()
         """Filter the theme combo to show only themes matching *text*."""
         current = self._theme_preset_combo.currentText()
         self._rebuild_theme_combo(select=current, filter_text=text)
@@ -2136,10 +2151,10 @@ class SettingsDialog(QDialog):
     def _rebuild_theme_combo(self, select: str = "", filter_text: str = ""):
         self._theme_preset_combo.blockSignals(True)
         self._theme_preset_combo.clear()
-        needle = filter_text.lower().strip()
+        needle = filter_text.casefold().strip()
 
         def _matches(name: str) -> bool:
-            return not needle or needle in name.lower()
+            return not needle or needle in name.casefold()
 
         def _set_tip(idx: int, name: str) -> None:
             """Set a tooltip on a just-added combo item using THEME_DESCRIPTIONS."""
@@ -2152,14 +2167,14 @@ class SettingsDialog(QDialog):
         for name in PRESET_THEMES:
             if _matches(name):
                 idx = self._theme_preset_combo.count()
-                self._theme_preset_combo.addItem(name)
+                self._theme_preset_combo.addItem(name, ("preset", name))
                 _set_tip(idx, name)
         # Show hidden themes that have been unlocked
         for name, t in HIDDEN_THEMES.items():
             unlock_key = f"unlock_{t.get('_unlock', '')}"
             if self._settings.get(unlock_key, False) and _matches(name):
                 idx = self._theme_preset_combo.count()
-                self._theme_preset_combo.addItem(f"🔓 {name}")
+                self._theme_preset_combo.addItem(f"🔓 {name}", ("hidden", name))
                 _set_tip(idx, name)
         current_hidden = self._theme.get("name", "")
         if (
@@ -2168,14 +2183,14 @@ class SettingsDialog(QDialog):
             and _matches(current_hidden)
         ):
             idx = self._theme_preset_combo.count()
-            self._theme_preset_combo.addItem(f"🔒 {current_hidden}")
+            self._theme_preset_combo.addItem(f"🔒 {current_hidden}", ("hidden", current_hidden))
             _set_tip(idx, current_hidden)
         saved = self._settings.get_saved_themes()
         filtered_saved = [n for n in sorted(saved) if _matches(n)]
         if filtered_saved:
             self._theme_preset_combo.insertSeparator(self._theme_preset_combo.count())
             for name in filtered_saved:
-                self._theme_preset_combo.addItem(f"★ {name}")
+                self._theme_preset_combo.addItem(f"★ {name}", ("saved", name))
         if not needle:
             self._theme_preset_combo.addItem("— Custom (unsaved) —")
         if select:
@@ -2188,8 +2203,9 @@ class SettingsDialog(QDialog):
     def _update_delete_btn(self):
         if not hasattr(self, "_btn_delete_theme"):
             return
-        name = self._theme_preset_combo.currentText().lstrip(_THEME_PREFIX_CHARS)
-        is_user = name in self._settings.get_saved_themes()
+        selection = self._theme_preset_combo.currentData()
+        is_user = bool(selection and selection[0] == "saved"
+                       and selection[1] in self._settings.get_saved_themes())
         self._btn_delete_theme.setEnabled(is_user)
 
     # ------------------------------------------------------------------
@@ -2425,7 +2441,7 @@ class SettingsDialog(QDialog):
         # Load banner animation style combo (show theme anim if "use theme" is on)
         _BANNER_ANIM_IDX_MAP = {
             "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
-            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
+            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9, "flock": 1,
         }
         banner_use_theme = self._settings.get("banner_use_theme_anim", True)
         if banner_use_theme:
@@ -2454,7 +2470,7 @@ class SettingsDialog(QDialog):
         self._use_theme_button_anim_check.setChecked(use_theme_btn_anim)
         _BUTTON_ANIM_IDX_MAP = {
             "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
-            "vanish": 5, "explode": 6,
+            "vanish": 5, "explode": 6, "bite": 7, "abduct": 8,
         }
         if use_theme_btn_anim:
             theme_btn_anim = self._settings.get_theme().get("_button_anim", "press")
@@ -2742,11 +2758,13 @@ class SettingsDialog(QDialog):
 
     def _on_preset_selected_live(self, _text: str = "") -> None:
         """Immediately load + apply the selected preset when combo changes."""
-        raw_name = self._theme_preset_combo.currentText()
-        name = raw_name.lstrip(_THEME_PREFIX_CHARS)
-        if name in PRESET_THEMES:
+        selection = self._theme_preset_combo.currentData()
+        if not selection:
+            return
+        kind, name = selection
+        if kind == "preset" and name in PRESET_THEMES:
             self._theme = dict(PRESET_THEMES[name])
-        elif name in HIDDEN_THEMES:
+        elif kind == "hidden" and name in HIDDEN_THEMES:
             self._theme = dict(HIDDEN_THEMES[name])
         else:
             saved = self._settings.get_saved_themes()
@@ -2758,10 +2776,10 @@ class SettingsDialog(QDialog):
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
         self._set_effect_combo(self._theme.get("_effect", "default"))
-        # Update "use theme" combos so they preview the new theme's values immediately.
-        self._sync_use_theme_combos()
         # Persist and broadcast immediately
         self._settings.set_theme(self._theme)
+        # These controls read the persisted theme, so save before synchronizing.
+        self._sync_use_theme_combos()
         # Emit first-change signal before theme_changed so unlock fires once.
         if not self._settings.get("theme_changed_once", False):
             self._settings.set("theme_changed_once", True)
@@ -2772,6 +2790,7 @@ class SettingsDialog(QDialog):
         self._update_delete_btn()
 
     def _save_custom_theme(self):
+        self._flush_pending_preferences()
         name, ok = QInputDialog.getText(self, "Save Theme", "Theme name:")
         if not ok or not name.strip():
             return
@@ -2786,11 +2805,19 @@ class SettingsDialog(QDialog):
         self._theme["name"] = name
         self._theme["_effect"] = self._effect_combo.currentData() or "default"
         self._settings.save_named_theme(name, dict(self._theme))
+        self._settings.set_theme(self._theme)
+        self._sync_use_theme_combos()
+        self.theme_changed.emit(self._theme)
+        self._theme_search.clear()
         self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
         QMessageBox.information(self, "Save Theme", f"Theme '{name}' saved.")
 
     def _delete_custom_theme(self):
-        raw_name = self._theme_preset_combo.currentText().lstrip(_THEME_PREFIX_CHARS)
+        self._flush_pending_preferences()
+        selection = self._theme_preset_combo.currentData()
+        if not selection or selection[0] != "saved":
+            return
+        raw_name = selection[1]
         reply = QMessageBox.question(
             self, "Delete Theme",
             f"Delete saved theme '{raw_name}'?",
@@ -2802,6 +2829,7 @@ class SettingsDialog(QDialog):
 
     def _export_theme(self):
         """Export the current theme to a JSON file chosen by the user."""
+        self._flush_pending_preferences()
         theme_name = self._theme.get("name", "my_theme")
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Theme",
@@ -2821,6 +2849,7 @@ class SettingsDialog(QDialog):
 
     def _import_theme(self):
         """Import a theme from a JSON file and apply it."""
+        self._flush_pending_preferences()
         path, _ = QFileDialog.getOpenFileName(
             self, "Import Theme", "",
             "Theme Files (*.json);;All Files (*)",
@@ -2830,7 +2859,7 @@ class SettingsDialog(QDialog):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Import Failed", f"Could not read theme file:\n{exc}")
             return
         _REQUIRED_KEYS = ("background", "surface", "primary", "accent", "text")
@@ -2842,13 +2871,33 @@ class SettingsDialog(QDialog):
                 + ", ".join(_REQUIRED_KEYS),
             )
             return
+        name = data.get("name", os.path.splitext(os.path.basename(path))[0])
+        invalid_fields = []
+        if not isinstance(name, str) or not name.strip():
+            invalid_fields.append("name")
+        for key, value in data.items():
+            if key in DEFAULT_THEME and not key.startswith("_") and key != "name":
+                if not isinstance(value, str) or not QColor(value).isValid():
+                    invalid_fields.append(key)
+            elif key == "_trail_color":
+                if not isinstance(value, str) or not QColor(value).isValid():
+                    invalid_fields.append(key)
+            elif key.startswith("_") and not isinstance(value, str):
+                invalid_fields.append(key)
+        if invalid_fields:
+            QMessageBox.warning(
+                self, "Import Failed",
+                "Invalid theme values: " + ", ".join(invalid_fields)
+                + ".\nUse a non-empty name, valid Qt colors, and text effect/cursor settings.",
+            )
+            return
         # Work on a copy so the parsed data dict is never mutated
-        theme_data = dict(data)
+        theme_data = {**DEFAULT_THEME, **data}
         # Use filename as display name if the JSON has no "name" key
-        if "name" not in theme_data:
-            theme_data["name"] = os.path.splitext(os.path.basename(path))[0]
+        theme_data["name"] = name.strip()
         name = theme_data["name"]
         self._settings.save_named_theme(name, theme_data)
+        self._theme_search.clear()
         self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
         # Apply immediately
         self._theme = dict(theme_data)
@@ -2856,8 +2905,8 @@ class SettingsDialog(QDialog):
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
         self._set_effect_combo(self._theme.get("_effect", "default"))
-        self._sync_use_theme_combos()
         self._settings.set_theme(self._theme)
+        self._sync_use_theme_combos()
         self.theme_changed.emit(self._theme)
         self.settings_changed.emit()
         QMessageBox.information(self, "Import Theme", f"Theme '{name}' imported and applied.")
@@ -2893,14 +2942,15 @@ class SettingsDialog(QDialog):
         }
         _BANNER_ANIM_IDX_MAP = {
             "spin": 0, "bounce": 1, "shake": 2, "pendulum": 3,
-            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9,
+            "pulse": 4, "float": 5, "flip": 6, "orbit": 7, "glitch": 8, "drip": 9, "flock": 1,
         }
         _BUTTON_ANIM_IDX_MAP = {
             "press": 0, "fall": 1, "bounce": 2, "shake": 3, "shatter": 4,
-            "vanish": 5, "explode": 6,
+            "vanish": 5, "explode": 6, "bite": 7, "abduct": 8,
         }
         # cascading settings_changed emissions for each individual combo change.
         _combos = [
+            self._effect_combo,
             self._trail_style_combo,
             self._banner_anim_combo,
             self._button_anim_style_combo,
@@ -3013,6 +3063,14 @@ class SettingsDialog(QDialog):
         # Update the sound theme info label if "Use theme sound" is currently checked
         if self._use_theme_sound_check.isChecked():
             self._update_sound_theme_info()
+        for checkbox, update in (
+            (self._use_theme_trail_check, self._update_trail_theme_info),
+            (self._use_theme_effect_check, self._update_effect_theme_info),
+            (self._use_theme_button_anim_check, self._update_btn_anim_theme_info),
+            (self._banner_use_theme_anim_check, self._update_banner_theme_info),
+        ):
+            if checkbox.isChecked():
+                update()
         # Update cursor combo if "Use theme cursor" is on (item 1)
         if self._use_theme_cursor_check.isChecked():
             self._update_cursor_theme_info()
@@ -3092,7 +3150,12 @@ class SettingsDialog(QDialog):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
+        self._theme_debounce.stop()
+        self._misc_combo_debounce.stop()
+        self._misc_combo_pending.clear()
         self._settings.reset_all()
+        self._theme = self._settings.get_theme()
+        self.theme_changed.emit(self._theme)
         self.settings_changed.emit()
         QMessageBox.information(
             self,
@@ -3280,6 +3343,7 @@ class SettingsDialog(QDialog):
         _anim_labels = {
             "press": "Press", "fall": "Fall", "bounce": "Bounce",
             "shake": "Shake", "shatter": "Shatter", "vanish": "Vanish", "explode": "Explode",
+            "bite": "Bite", "abduct": "Abduct",
         }
         self._btn_anim_theme_info_lbl.setText(
             f"Theme animation:  '{theme_name}'  →  {_anim_labels.get(anim_key, anim_key)}"
@@ -3290,6 +3354,8 @@ class SettingsDialog(QDialog):
         theme = self._settings.get_theme()
         theme_name = theme.get("name", "")
         anim_key = theme.get("_banner_anim", "spin")
+        if anim_key == "flock":
+            anim_key = "bounce"
         _anim_labels = {
             "spin": "Spin", "bounce": "Bounce", "shake": "Shake",
             "pendulum": "Pendulum", "pulse": "Pulse", "float": "Float",
@@ -3331,7 +3397,7 @@ class SettingsDialog(QDialog):
         self._trail_color_btn.setEnabled(enabled and not use_theme)
         self._trail_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            self._update_trail_theme_info()
+            self._sync_use_theme_combos()
         else:
             # Restore last-used trail style when "Use theme" is turned off (item 1).
             _TRAIL_STYLE_MAP = {
@@ -3558,7 +3624,12 @@ class SettingsDialog(QDialog):
         self._banner_anim_combo.setEnabled(enabled and not use_theme)
         self._banner_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            self._update_banner_theme_info()
+            self._sync_use_theme_combos()
+        else:
+            manual = self._settings.get("banner_anim_style", "spin")
+            self._banner_anim_combo.blockSignals(True)
+            self._banner_anim_combo.setCurrentIndex(max(0, self._banner_anim_combo.findData(manual)))
+            self._banner_anim_combo.blockSignals(False)
         self.settings_changed.emit()
 
     def _on_show_splash_changed(self) -> None:
@@ -3596,12 +3667,12 @@ class SettingsDialog(QDialog):
         self._button_anim_style_combo.setEnabled(enabled and not use_theme)
         self._btn_anim_theme_info_lbl.setVisible(use_theme)
         if use_theme:
-            self._update_btn_anim_theme_info()
+            self._sync_use_theme_combos()
         else:
             # Restore last-used button animation when "Use theme" is turned off (item 1).
             _BUTTON_ANIM_IDX_MAP = {
                 "press": 0, "fall": 1, "bounce": 2, "shake": 3,
-                "shatter": 4, "vanish": 5, "explode": 6,
+                "shatter": 4, "vanish": 5, "explode": 6, "bite": 7, "abduct": 8,
             }
             idx = _BUTTON_ANIM_IDX_MAP.get(self._last_btn_anim, 0)
             self._button_anim_style_combo.blockSignals(True)

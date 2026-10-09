@@ -1,6 +1,6 @@
 # 🐼 Alpha Fixer & File Converter
 
-A panda-themed desktop application with two powerful tools:
+A panda-themed desktop application for image, animation, and video processing:
 
 ## Tools
 
@@ -30,6 +30,17 @@ Convert between image formats with optional resize and quality control.
 - JPEG/WEBP/AVIF/JPEG2000 quality control
 - Custom output folder
 
+### 🎨 Selective Alpha Tool
+Paint or erase alpha adjustments, work with visible zones and masks, and undo/redo edits before saving.
+
+### 🎞 GIF Builder
+Arrange image/GIF frames, preview animation, adjust frame timing, and export a GIF.
+
+### 🎬 Video Builder
+Build a timeline from images, animations, and video clips, trim clips, and export GIF or MP4. Video import and MP4 export use the bundled FFmpeg runtime.
+
+History views record the tools' operations. Stopping a conversion prevents new work from starting; already-running files can finish, and their results are included in the final counts.
+
 ## UI & Customization
 - 🐼 **18 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄, Fairy Garden 🧚, Mermaid 🧜, Shark Bait 🦈, Alien 🛸, Noodle 🍜, Pancake 🥞
 - **🔓 39 hidden unlockable themes** – earn them through use (clicks, alpha fixes, and conversions):
@@ -38,9 +49,10 @@ Convert between image formats with optional resize and quality control.
   - Plus 37 more hidden themes that unlock progressively — keep using the app!
 - Fully customizable color palette via Settings → Theme (15 editable colors)
 - Save your own named themes and switch between them
+- Theme imports validate colors, names, and effect metadata before changing preferences. Custom names retain their exact identity, and theme-following controls update immediately. Closing Settings applies pending live changes; resetting cancels them so old timers cannot restore erased preferences.
 - **Per-theme click particle effects**: blood splatter (Gore), bat swarms + periodic flyovers (Bat Cave), unicorn sparkles (Rainbow Chaos), otter emojis (Otter Cove), star clusters (Galaxy/Galaxy Otter), skulls (Goth), rising flames (Volcano 🔥), snowflakes (Arctic ❄), pandas (Panda Dark/Light/Secret Sakura 🐼), electric bolts (Neon Panda ⚡)
 - **11 mouse trail styles**: Dots, Ribbon, Noodle 🍜 (physics), Comet, Fairy Dust ✨, Wave 🌊, Sparkle ❄, Rainbow 🌈, Distortion Wave, Fire 🔥, Lightning ⚡ — configurable color and intensity
-- **Animated banner** with 10 styles: Spin, Bounce, Shake, Pendulum, Pulse, Float, Flip, Orbit, Glitch, Static (Settings → Theme)
+- **Animated banner** with 10 styles: Spin, Bounce, Shake, Pendulum, Pulse, Float, Flip, Orbit, Glitch, Drip (Settings → Theme). Legacy flock-themed banners display Bounce; independent flocks remain available under Background Effects.
 - **Animated emoji cursors**: spin (⭐🔮💎), wobble (🦈🐉🌋), and symbol-cycling — automatically selected per theme or fully customizable (Settings → General)
 - Custom cursor style (Default, Cross, Pointing Hand, Open Hand, and more)
 - Click sound effects (built-in synthetic beep or point to your own .wav file)
@@ -51,7 +63,7 @@ Convert between image formats with optional resize and quality control.
   - **Dumbed Down** – simplified tips with gentle user-roasting
   - **No Filter 🤬** – extremely vulgar, profanity-filled, and *still actually helpful*
 - All settings are persisted across sessions (last-used preset, format, quality, window geometry, etc.)
-- **Export / Import all settings** to a portable JSON file (Settings → Export / Import)
+- **Export / Import preferences** to a portable JSON file (Help → Export / Import Settings), including theme effects, layout density, custom shortcuts, notification preferences, and history tracking/retention policies. History entries and unlock progress are not part of this preferences backup.
 - Drag-and-drop files from Explorer/Finder directly onto the file lists
 - Right-click or Delete key to remove items from file lists
 - **Image preview pane** – select any file in the Converter list to see a live thumbnail + dimensions + size
