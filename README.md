@@ -406,9 +406,14 @@ without eagerly allocating snapshot jobs, plus random seeks in a generated
 120-second, 3,000-frame video. Finished export clips release their decoder/cache;
 reader reuse and prefetched-frame cleanup are also checked. This is bounded
 logical/generated-media qualification, not sustained real-corpus acceptance.
-The combined Qt suite encountered a native MainWindow event-filter crash during
-this qualification; process-isolated coverage passed, but the combined-process
-crash remains an unresolved acceptance blocker.
+An earlier combined Qt run encountered a native MainWindow event-filter crash.
+Follow-up runs did not reproduce it: two original combined-suite runs passed,
+as did the combined suite with new unmocked MainWindow/builder lifecycle
+regressions and a full run including geometry (2,558 tests; six corpus skips).
+The regressions exercise queued callbacks, theme/show/hide transitions, immediate
+deletion and subsequent windows. No speculative production fix was applied;
+the earlier crash's cause remains unproven and native stability still needs
+qualification.
 
 The source-level checks above are partial qualification, not a release certificate.
 Retain platform-specific evidence for these remaining gates:
