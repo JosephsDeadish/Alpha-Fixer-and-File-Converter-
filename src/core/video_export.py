@@ -19,7 +19,10 @@ def source_frame_index(clip, output_index):
     if clip["clip_type"] == "image" or base <= 0:
         return start
     speed = max(0.1, int(clip["speed_percent"]) / 100.0)
-    return start + max(0, min(base - 1, int(output_index * speed)))
+    origin = int(clip.get("mapping_origin", start))
+    output_start = int(clip.get("output_start", 0))
+    mapped = origin + int((output_index + output_start) * speed)
+    return max(start, min(start + base - 1, mapped))
 
 
 def source_frame_indices(clip):
@@ -96,9 +99,15 @@ def mux_mp4_audio(silent_video_path, out_path, clips, output_fps, volume=1.0,
             label = f"a{index}"
             if clip["clip_type"] == "video" and clip["has_audio"]:
                 command.extend(["-i", str(clip["path"])])
-                start = int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"]))
-                end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
-                tempo = max(0.01, max(0.001, end - start) / max(0.001, duration))
+                start = float(clip.get(
+                    "audio_start_seconds", int(clip["trim_start"]) / max(0.1, float(clip["clip_fps"])),
+                ))
+                end = float(clip.get(
+                    "audio_end_seconds", (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"])),
+                ))
+                tempo = max(0.01, float(clip.get(
+                    "audio_tempo", max(0.001, end - start) / max(0.001, duration),
+                )))
                 chain = [
                     f"[{input_index}:a]apad=whole_dur={end:.6f}",
                     f"atrim=start={start:.6f}:end={end:.6f}",

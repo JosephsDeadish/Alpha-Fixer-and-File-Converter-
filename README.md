@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video splits preserve the original sampled frame sequence and rounded timeline
+length, including nested splits at non-unit speeds. Frozen exports retain the
+same mapping; audio boundaries preserve the original continuous span and tempo.
+Generated-frame/GIF and imageio-FFmpeg tone tests cover this behavior. Native
+FFmpeg/ffprobe checks were skipped in this pass; native playback and extended
+real-media synchronization still require qualification.
+
 Painter shared-zone imports persist their alpha values for backup/relaunch.
 Clearing an already-empty zone/layout leaves undo and redo history unchanged;
 generated-pixel and settings roundtrip tests cover these state transitions.

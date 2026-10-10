@@ -2568,6 +2568,26 @@ class _ClipEntry:
         self.still_duration_frames: int = 25 if clip_type == "image" else 1
         self.trim_start: int = 0
         self.trim_end: int = max(0, total_frames - 1)
+        self._split_timing: Optional[tuple[int, int, int, int, int, int, int, int]] = None
+
+    def _split_render_range(self) -> Optional[tuple[int, int, int]]:
+        timing = self._split_timing
+        if timing is not None and timing[3:6] == (self.trim_start, self.trim_end, self.speed_percent):
+            return timing[:3]
+        return None
+
+    def _split_audio_range(self) -> tuple[int, int, int]:
+        if self._split_render_range() is not None:
+            return self._split_timing[0], self._split_timing[6], self._split_timing[7]
+        return self.trim_start, self.trim_end, self.active_frames
+
+    def _set_split_render_range(self, origin: int, output_start: int, count: int,
+                                audio_end: int, audio_count: int) -> None:
+        # Audio follows the original continuous span, not the rounded video samples.
+        self._split_timing = (
+            origin, output_start, count, self.trim_start, self.trim_end, self.speed_percent,
+            audio_end, audio_count,
+        )
 
     @property
     def base_active_frames(self) -> int:
@@ -2577,6 +2597,9 @@ class _ClipEntry:
     def active_frames(self) -> int:
         if self.clip_type == "image":
             return max(1, int(self.still_duration_frames))
+        split_range = self._split_render_range()
+        if split_range is not None:
+            return split_range[2]
         base = self.base_active_frames
         if base <= 0:
             return 0
@@ -2590,7 +2613,9 @@ class _ClipEntry:
         if base <= 0:
             return 0
         speed = max(0.1, self.speed_percent / 100.0)
-        mapped = int(idx * speed)
+        split_range = self._split_render_range()
+        origin, output_start = split_range[:2] if split_range is not None else (self.trim_start, 0)
+        mapped = origin + int((idx + output_start) * speed) - self.trim_start
         return max(0, min(base - 1, mapped))
 
     def split_second_half_offset(self, output_idx: int) -> Optional[int]:
@@ -4100,6 +4125,8 @@ class VideoToolDialog(QDialog):
         new_clip.still_duration_frames = clip.still_duration_frames
         new_clip.trim_start = max(0, min(clip.trim_start, new_clip.total_frames - 1))
         new_clip.trim_end = max(new_clip.trim_start, min(clip.trim_end, new_clip.total_frames - 1))
+        if (new_clip.trim_start, new_clip.trim_end) == (clip.trim_start, clip.trim_end):
+            new_clip._split_timing = clip._split_timing
         return new_clip
 
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
@@ -4396,6 +4423,7 @@ class VideoToolDialog(QDialog):
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
+            clip._split_timing = None
             clip.trim_start = min(val, clip.trim_end)
             self._trim_start_slider.blockSignals(True)
             self._trim_start_slider.setValue(clip.trim_start)
@@ -4414,6 +4442,7 @@ class VideoToolDialog(QDialog):
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
+            clip._split_timing = None
             clip.trim_end = max(val, clip.trim_start)
             self._trim_end_slider.blockSignals(True)
             self._trim_end_slider.setValue(clip.trim_end)
@@ -4527,6 +4556,7 @@ class VideoToolDialog(QDialog):
         clip = self._clips[row]
         if clip.clip_type == "image":
             return
+        clip._split_timing = None
         clip.speed_percent = max(10, min(400, int(value)))
         self._clip_speed_lbl.setText(f"{clip.speed_percent / 100:.2f}×")
         self._after_selected_clip_timing_changed(row)
@@ -4576,6 +4606,13 @@ class VideoToolDialog(QDialog):
             return
         original_trim_start = clip.trim_start
         original_trim_end = clip.trim_end
+        original_count = clip.active_frames
+        split_range = clip._split_render_range()
+        origin, output_start = split_range[:2] if split_range is not None else (original_trim_start, 0)
+        _, audio_end, audio_count = clip._split_audio_range()
+        first_count = max(0, int(frame_idx)) + 1
+        while clip.output_index_to_source_offset(first_count) != second_half_offset:
+            first_count += 1
         second_half = self._reload_clip(clip)
         if second_half is None:
             QMessageBox.warning(self, "Split Clip", "Could not duplicate the selected clip for splitting.")
@@ -4583,6 +4620,10 @@ class VideoToolDialog(QDialog):
         clip.trim_end = original_trim_start + second_half_offset - 1
         second_half.trim_start = original_trim_start + second_half_offset
         second_half.trim_end = original_trim_end
+        clip._set_split_render_range(origin, output_start, first_count, audio_end, audio_count)
+        second_half._set_split_render_range(
+            origin, output_start + first_count, original_count - first_count, audio_end, audio_count,
+        )
         insert_row = clip_row + 1
         self._clips.insert(insert_row, second_half)
         item = QListWidgetItem(_format_clip_label(second_half, second_half.path, "🎞" if second_half.clip_type == "video" else "🖼"))
@@ -4729,16 +4770,17 @@ class VideoToolDialog(QDialog):
         trim_end = clip.trim_end
         clip_type = clip.clip_type
         speed_percent = clip.speed_percent
-        still_duration_frames = clip.still_duration_frames
         frame_size = clip.frame_size
         base_active_frames = max(0, trim_end - trim_start + 1)
-        if clip_type == "image":
-            active_frames = max(1, int(still_duration_frames))
-        else:
-            speed = max(0.1, speed_percent / 100.0)
-            active_frames = max(1, int(round(base_active_frames / speed))) if base_active_frames > 0 else 0
+        active_frames = clip.active_frames
+        split_range = clip._split_render_range()
+        origin, output_start = split_range[:2] if split_range is not None else (trim_start, 0)
         timeline_seconds = active_frames / max(0.1, output_fps) if active_frames > 0 else 0.0
         source_duration_seconds = base_active_frames / max(0.1, clip.fps) if base_active_frames > 0 else 0.0
+        audio_origin, audio_end, audio_count = clip._split_audio_range()
+        audio_step = (audio_end + 1 - audio_origin) / max(0.1, clip.fps) / max(1, audio_count)
+        audio_start_seconds = audio_origin / max(0.1, clip.fps) + output_start * audio_step
+        audio_end_seconds = audio_origin / max(0.1, clip.fps) + (output_start + active_frames) * audio_step
         return {
             "frame_getter": clip._get_frame,
             "active_frames": active_frames,
@@ -4751,8 +4793,13 @@ class VideoToolDialog(QDialog):
             "clip_fps": clip.fps,
             "base_active_frames": base_active_frames,
             "speed_percent": speed_percent,
+            "mapping_origin": origin,
+            "output_start": output_start,
             "timeline_seconds": timeline_seconds,
             "source_duration_seconds": source_duration_seconds,
+            "audio_start_seconds": audio_start_seconds,
+            "audio_end_seconds": audio_end_seconds,
+            "audio_tempo": audio_step * max(0.1, output_fps),
             "has_audio": clip_type == "video" and clip.has_audio,
             "load_note": clip.load_note,
             "source_probe": copy.deepcopy(clip.source_probe),
