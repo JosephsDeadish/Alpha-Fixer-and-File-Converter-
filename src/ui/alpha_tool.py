@@ -745,6 +745,7 @@ class AlphaFixerTab(QWidget):
         self._binary_cut_check.setToolTip(
             "Hard cutout mask: pixels with alpha ≥ threshold become fully opaque (255),\n"
             "pixels below threshold become fully transparent (0).\n"
+            "At threshold 0, every pixel becomes opaque before the final range clamp.\n"
             "Used by N64 1-bit alpha textures and similar hard-edge formats."
         )
         gt_layout.addWidget(self._binary_cut_check, 4, 0, 1, 2)

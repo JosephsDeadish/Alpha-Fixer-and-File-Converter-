@@ -873,7 +873,7 @@ def apply_alpha_preset(img: Image.Image, preset: AlphaPreset) -> Image.Image:
 
         # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
         # threshold is the split point here, not a selection gate).
-        if preset.binary_cut and preset.threshold > 0:
+        if preset.binary_cut:
             alpha = np.where(alpha >= preset.threshold, 255, 0)
 
         # Step 5: Clamp (safety net).
@@ -991,7 +991,7 @@ def apply_manual_alpha(
 
         # Step 4: Binary threshold cut (hard 0/255 split, applied to ALL pixels;
         # threshold is the split point here, not a selection gate).
-        if binary_cut and threshold > 0:
+        if binary_cut:
             alpha = np.where(alpha >= threshold, 255, 0)
 
         # Step 5: Clamp (safety net).

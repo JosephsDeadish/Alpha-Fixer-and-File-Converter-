@@ -402,6 +402,11 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Alpha binary-cut processing now honors an enabled cut at threshold zero rather
+than silently skipping it. Generated-pixel checks cover threshold boundaries,
+range/inversion, RGBA clipping and preview/statistics/PNG-export consistency.
+Final range clamping still applies after the binary cut.
+
 GIF frame selection adapts from one to six thumbnail columns as space changes,
 stacks its toolbar when narrow, and scrolls keyboard-focused frames into view.
 Frame tab order and accessible descriptions are covered by generated-GIF tests
