@@ -401,6 +401,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Settings theme filtering preserves the active theme and stored preferences;
+clearing the filter restores the saved theme's identity. Empty searches have an
+explicit no-results state. Saved-theme deletion updates available actions and
+keeps the current colors as unsaved. Keyboard and accessible-label regressions
+are checked offscreen, not certified against native screen readers.
+
 Long-timeline regressions exercise 128 clips with 60,000 logical frames each
 without eagerly allocating snapshot jobs, plus random seeks in a generated
 120-second, 3,000-frame video. Finished export clips release their decoder/cache;

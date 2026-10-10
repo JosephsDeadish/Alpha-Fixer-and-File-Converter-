@@ -130,6 +130,13 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self._settings = settings_manager
         self._theme = settings_manager.get_theme()
+        name = self._theme.get("name", "")
+        saved = settings_manager.get_saved_themes()
+        self._active_theme_selection = (
+            ("saved", name) if saved.get(name) == self._theme else
+            ("preset", name) if name in PRESET_THEMES else
+            ("hidden", name) if name in HIDDEN_THEMES else None
+        )
         self._color_buttons: dict[str, ColorButton] = {}
         # Debounce timer for theme preset combo: delay live theme apply by
         # 120 ms to prevent lag when the user scrolls quickly through themes.
@@ -236,13 +243,19 @@ class SettingsDialog(QDialog):
 
         # Search/filter row
         search_row = QHBoxLayout()
-        search_row.addWidget(QLabel("🔍 Filter:"))
+        filter_label = QLabel("🔍 &Filter:")
+        search_row.addWidget(filter_label)
         self._theme_search = QLineEdit()
+        filter_label.setBuddy(self._theme_search)
+        self._theme_search.setAccessibleName("Filter themes")
         self._theme_search.setPlaceholderText("Type to filter themes…")
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
-            "Type part of a theme name to filter the list below."
+            "Type part of a theme name to filter the list below.\n"
+            "Press Enter to focus the results; filtering does not change the active theme."
         )
+        self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
+        self._theme_search.installEventFilter(self)
         search_row.addWidget(self._theme_search, 1)
         ps_vl.addLayout(search_row)
 
@@ -250,13 +263,17 @@ class SettingsDialog(QDialog):
         psl = QGridLayout()
         psl.setHorizontalSpacing(8)
         psl.setVerticalSpacing(6)
-        psl.addWidget(QLabel("Theme:"), 0, 0)
+        theme_label = QLabel("&Theme:")
+        psl.addWidget(theme_label, 0, 0)
         self._theme_preset_combo = QComboBox()
+        theme_label.setBuddy(self._theme_preset_combo)
+        self._theme_preset_combo.setAccessibleName("Theme preset")
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
             "Choose a visual theme for the application.\n"
             "Hover over each theme to see a description of its style."
         )
+        self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
         psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
         self._btn_save_theme = QPushButton("Save as…")
@@ -2091,6 +2108,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.currentTextChanged.connect(
             lambda _: self._theme_debounce.start()
         )
+        self._theme_preset_combo.currentIndexChanged.connect(self._update_delete_btn)
         self._theme_search.textChanged.connect(self._on_theme_search_changed)
         self._btn_save_theme.clicked.connect(self._save_custom_theme)
         self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
@@ -2191,17 +2209,32 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_theme_search_changed(self, text: str) -> None:
-        self._flush_pending_preferences()
         """Filter the theme combo to show only themes matching *text*."""
-        current = self._theme_preset_combo.currentText()
-        self._rebuild_theme_combo(select=current, filter_text=text)
+        self._flush_pending_preferences()
+        self._rebuild_theme_combo(filter_text=text)
+
+    def eventFilter(self, watched, event):
+        if (watched is self._theme_search and event.type() == QEvent.Type.KeyPress
+                and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)):
+            if self._theme_preset_combo.isEnabled():
+                self._theme_preset_combo.setFocus()
+            return True
+        return super().eventFilter(watched, event)
+
+    def _active_theme_combo_index(self) -> int:
+        if self._active_theme_selection is None:
+            return self._theme_preset_combo.findText("— Custom (unsaved) —")
+        for index in range(self._theme_preset_combo.count()):
+            if self._theme_preset_combo.itemData(index) == self._active_theme_selection:
+                return index
+        return -1
 
     def _current_filter_text(self) -> str:
         """Return the current theme search filter text."""
         return self._theme_search.text()
 
     def _rebuild_theme_combo(self, select: str = "", filter_text: str = ""):
-        self._theme_preset_combo.blockSignals(True)
+        blocker = QSignalBlocker(self._theme_preset_combo)
         self._theme_preset_combo.clear()
         needle = filter_text.casefold().strip()
 
@@ -2245,11 +2278,16 @@ class SettingsDialog(QDialog):
                 self._theme_preset_combo.addItem(f"★ {name}", ("saved", name))
         if not needle:
             self._theme_preset_combo.addItem("— Custom (unsaved) —")
-        if select:
-            idx = self._theme_preset_combo.findText(select)
-            if idx >= 0:
-                self._theme_preset_combo.setCurrentIndex(idx)
-        self._theme_preset_combo.blockSignals(False)
+        idx = self._theme_preset_combo.findText(select) if select else -1
+        if idx < 0:
+            idx = self._active_theme_combo_index()
+        self._theme_preset_combo.setCurrentIndex(idx)
+        has_results = self._theme_preset_combo.count() > 0
+        self._theme_preset_combo.setEnabled(has_results)
+        self._theme_preset_combo.setPlaceholderText(
+            "Active theme is filtered out" if has_results else "No matching themes — clear the filter"
+        )
+        del blocker
         self._update_delete_btn()
 
     def _update_delete_btn(self):
@@ -2313,17 +2351,8 @@ class SettingsDialog(QDialog):
         for key, btn in self._color_buttons.items():
             btn.set_color(t.get(key, "#888888"))
 
-        theme_name = t.get("name", "")
-        idx = self._theme_preset_combo.findText(theme_name)
-        if idx < 0:
-            idx = self._theme_preset_combo.findText(f"★ {theme_name}")
-        if idx < 0:
-            idx = self._theme_preset_combo.findText(f"🔓 {theme_name}")
-        if idx < 0:
-            idx = self._theme_preset_combo.findText(f"🔒 {theme_name}")
-        self._theme_preset_combo.setCurrentIndex(
-            idx if idx >= 0 else self._theme_preset_combo.count() - 1
-        )
+        self._theme_preset_combo.setCurrentIndex(self._active_theme_combo_index())
+        self._update_delete_btn()
 
         self._set_effect_combo(t.get("_effect", "default"))
         self._update_emoji_display()
@@ -2867,6 +2896,7 @@ class SettingsDialog(QDialog):
                 self._theme = dict(saved[name])
             else:
                 return  # "— Custom (unsaved) —" or separator line
+        self._active_theme_selection = selection
         # Update color swatches to reflect the new preset
         for key, btn in self._color_buttons.items():
             btn.set_color(self._theme.get(key, "#888888"))
@@ -2905,6 +2935,7 @@ class SettingsDialog(QDialog):
         self._settings.save_named_theme(name, dict(self._theme))
         self._settings.set_theme(self._theme)
         self._sync_use_theme_combos()
+        self._active_theme_selection = ("saved", name)
         self.theme_changed.emit(self._theme)
         self._theme_search.clear()
         self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
@@ -2934,6 +2965,8 @@ class SettingsDialog(QDialog):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._settings.delete_named_theme(raw_name)
+            if self._active_theme_selection == ("saved", raw_name):
+                self._active_theme_selection = None
             self._rebuild_theme_combo(filter_text=self._current_filter_text())
 
     def _export_theme(self):
@@ -3014,6 +3047,7 @@ class SettingsDialog(QDialog):
         if not self._confirm_saved_theme_replacement(name):
             return
         self._settings.save_named_theme(name, theme_data)
+        self._active_theme_selection = ("saved", name)
         self._theme_search.clear()
         self._rebuild_theme_combo(select=f"★ {name}", filter_text=self._current_filter_text())
         # Apply immediately

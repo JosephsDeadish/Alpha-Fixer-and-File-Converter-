@@ -1461,6 +1461,121 @@ def test_search_cannot_redirect_an_outstanding_theme_selection(dialog):
     assert not widget._theme_debounce.isActive()
 
 
+@pytest.mark.parametrize("name", ["My theme", "★ Star", "Panda Dark"])
+def test_theme_filter_preserves_active_saved_selection_and_preferences(dialog, name):
+    widget, manager = dialog
+    theme = dict(manager.get_theme(), name=name, accent="#123456")
+    manager.save_named_theme(name, theme)
+    widget._rebuild_theme_combo(select=f"★ {name}")
+    widget._on_preset_selected_live()
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    emitted = Mock()
+    widget.theme_changed.connect(emitted)
+    widget._theme_search.setText("Galaxy")
+    assert widget._theme_preset_combo.currentIndex() == -1
+    assert not widget._btn_delete_theme.isEnabled()
+    widget._theme_search.clear()
+    assert widget._theme_preset_combo.currentData() == ("saved", name)
+    assert widget._btn_delete_theme.isEnabled()
+    widget._load_values()
+    assert widget._theme_preset_combo.currentData() == ("saved", name)
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+    emitted.assert_not_called()
+    reopened = SettingsDialog(manager)
+    try:
+        assert reopened._theme_preset_combo.currentData() == ("saved", name)
+    finally:
+        reopened.close()
+        sip.delete(reopened)
+
+
+def test_theme_filter_no_results_recovers_without_applying_a_theme(dialog):
+    widget, manager = dialog
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    active = widget._theme_preset_combo.currentData()
+    widget._theme_search.setText("no-such-theme-xyz")
+    assert widget._theme_preset_combo.count() == 0
+    assert widget._theme_preset_combo.currentIndex() == -1
+    assert "No matching themes" in widget._theme_preset_combo.placeholderText()
+    assert not widget._theme_preset_combo.isEnabled()
+    assert not widget._btn_delete_theme.isEnabled()
+    assert widget._btn_save_theme.isEnabled()
+    assert widget._btn_import_theme.isEnabled()
+    widget._theme_search.clear()
+    assert widget._theme_preset_combo.isEnabled()
+    assert widget._theme_preset_combo.currentData() == active
+    widget._flush_pending_preferences()
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+
+
+def test_theme_selection_updates_delete_action_before_debounce(dialog):
+    widget, manager = dialog
+    manager.save_named_theme("Saved", dict(manager.get_theme(), name="Saved"))
+    widget._rebuild_theme_combo(select="★ Saved")
+    assert widget._btn_delete_theme.isEnabled()
+    widget._theme_preset_combo.setCurrentText("Bat Cave")
+    assert widget._theme_debounce.isActive()
+    assert not widget._btn_delete_theme.isEnabled()
+    widget._theme_preset_combo.setCurrentText("★ Saved")
+    assert widget._btn_delete_theme.isEnabled()
+
+
+def test_deleting_active_saved_theme_keeps_colors_and_unsaved_selection(dialog):
+    widget, manager = dialog
+    theme = dict(manager.get_theme(), name="Delete me", accent="#123456")
+    manager.save_named_theme(theme["name"], theme)
+    widget._rebuild_theme_combo(select="★ Delete me")
+    widget._on_preset_selected_live()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+        widget._delete_custom_theme()
+    assert manager.get_theme() == theme
+    assert widget._theme_preset_combo.currentText() == "— Custom (unsaved) —"
+    assert not widget._btn_delete_theme.isEnabled()
+    widget._theme_search.setText("Galaxy")
+    widget._theme_search.clear()
+    assert widget._theme_preset_combo.currentText() == "— Custom (unsaved) —"
+
+
+def test_theme_filter_keyboard_labels_and_enter_do_not_open_save_dialog(dialog, app):
+    widget, manager = dialog
+    widget.setMinimumSize(440, 340)
+    widget.resize(640, 480)
+    widget.show()
+    widget.activateWindow()
+    app.processEvents()
+    for control, name in ((widget._theme_search, "Filter themes"),
+                          (widget._theme_preset_combo, "Theme preset")):
+        assert control.accessibleName() == name
+        assert control.accessibleDescription()
+        assert sum(label.buddy() is control for label in widget.findChildren(QLabel)) == 1
+    widget._theme_search.setFocus()
+    widget._theme_search.setText("Bat")
+    with patch("src.ui.settings_dialog.QInputDialog.getText",
+               return_value=("", False)) as save:
+        QTest.keyClick(widget._theme_search, Qt.Key.Key_Return)
+    save.assert_not_called()
+    assert widget.isVisible()
+    assert widget._theme_preset_combo.hasFocus()
+    QTest.keyClick(widget._theme_preset_combo, Qt.Key.Key_Down)
+    widget._flush_pending_preferences()
+    assert manager.get_theme()["name"] == "Bat Cave"
+
+
+def test_import_theme_from_empty_filter_selects_imported_theme(dialog, tmp_path):
+    widget, manager = dialog
+    widget._theme_search.setText("no-such-theme-xyz")
+    theme = dict(PRESET_THEMES["Bat Cave"], name="Imported theme")
+    path = tmp_path / "theme.json"
+    path.write_text(json.dumps(theme), encoding="utf-8")
+    with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
+               return_value=(str(path), "")), patch.object(QMessageBox, "information"):
+        widget._import_theme()
+    assert widget._theme_search.text() == ""
+    assert widget._theme_preset_combo.isEnabled()
+    assert widget._theme_preset_combo.currentData() == ("saved", theme["name"])
+    assert manager.get_theme()["accent"] == theme["accent"]
+
+
 def test_export_flushes_pending_theme_selection(dialog, tmp_path):
     widget, manager = dialog
     widget._theme_preset_combo.setCurrentText("Bat Cave")
