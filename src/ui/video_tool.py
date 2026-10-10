@@ -2480,6 +2480,7 @@ class _VideoFrameGetter:
             self._reader = None
         self._last_idx = -1
         self._last_frame = None
+        self._prefetched_frame = None
 
     def _release_resources(self) -> None:
         self._close_reader()
@@ -2492,13 +2493,15 @@ class _VideoFrameGetter:
 
         clamped = max(0, min(self._total_frames - 1, int(idx)))
         with self._lock:
-            if clamped == 0 and self._prefetched_frame is not None:
+            if clamped == self._last_idx and self._last_frame is not None:
+                frame = self._last_frame
+            elif clamped == 0 and self._prefetched_frame is not None and self._reader is None:
                 frame = self._prefetched_frame
                 self._last_idx = 0
                 self._last_frame = frame
                 self._prefetched_frame = None
             else:
-                reopened = self._reader is None or clamped < self._last_idx
+                reopened = self._reader is None
                 if reopened:
                     self._close_reader()
                     self._open_reader()
@@ -2922,6 +2925,7 @@ class VideoToolDialog(QDialog):
         self._tooltip_mgr = tooltip_mgr
         _configure_imageio_ffmpeg()
         self._clips: list[_ClipEntry] = []
+        self._preview_video_getter = None
         self._export_worker = None
         self._export_selecting = False
         self._export_canceling = False
@@ -4622,12 +4626,20 @@ class VideoToolDialog(QDialog):
     def _update_preview(self) -> None:
         total = self._total_preview_frames()
         if total == 0 or not self._clips:
+            if self._preview_video_getter is not None:
+                self._preview_video_getter._close_reader()
+                self._preview_video_getter = None
             self._preview_lbl.setText("Add clips to preview and export.")
             self._pos_lbl.setText("0 / 0")
             self.queue_status_changed.emit(self.get_queue_status_text())
             return
         g = max(0, min(self._scrubber.value(), total - 1))
         ci, fi = self._global_frame_to_clip(g)
+        getter = self._clips[ci]._get_frame
+        if getter is not self._preview_video_getter:
+            if self._preview_video_getter is not None:
+                self._preview_video_getter._close_reader()
+            self._preview_video_getter = getter if isinstance(getter, _VideoFrameGetter) else None
         source = None
         adjusted = None
         filtered = None
@@ -4861,9 +4873,7 @@ class VideoToolDialog(QDialog):
                 snapshot["frame_getter"] = owned
                 # Copy only source frames selected by the frozen trim/speed
                 # mapping. Sparse indices retain their original source identity.
-                self._export_copy_jobs.extend(
-                    (owned, getter, index) for index in source_frame_indices(snapshot)
-                )
+                self._export_copy_jobs.append((owned, getter, iter(source_frame_indices(snapshot))))
         worker.clips = clip_snapshot
         self._export_content_enabled = self._export_content.isEnabled()
         self._export_content.setEnabled(False)
@@ -4898,7 +4908,13 @@ class VideoToolDialog(QDialog):
             return
         self._poll_export_cancel()
         if self._export_copy_jobs and not self._export_canceling:
-            owned, source, index = self._export_copy_jobs.popleft()
+            owned, source, indices = self._export_copy_jobs[0]
+            try:
+                index = next(indices)
+            except StopIteration:
+                self._export_copy_jobs.popleft()
+                QTimer.singleShot(0, self._copy_export_source)
+                return
             try:
                 owned._frames[index] = source(index)
             except Exception as exc:

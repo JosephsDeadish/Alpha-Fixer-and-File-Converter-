@@ -197,7 +197,7 @@ class VideoExportWorker(QThread):
     def run(self):
         from src.ui.video_tool import (
             _apply_adjustments, _apply_filter, _fit_frame_to_canvas,
-            _audio_source_plan, _audio_source_plan_history_notes,
+            _audio_source_plan, _audio_source_plan_history_notes, _VideoFrameGetter,
         )
         from src.ui._ui_utils import staged_output_path
 
@@ -260,6 +260,10 @@ class VideoExportWorker(QThread):
                                         seen.add(id(image))
                                         image.close()
                             index += 1
+                        # Do not retain one decoder and frame cache per finished
+                        # clip throughout a long multi-clip export.
+                        if isinstance(clip["frame_getter"], _VideoFrameGetter):
+                            clip["frame_getter"]._close_reader()
                     render_complete = True
                 finally:
                     # Windows cannot remove an FFmpeg stage while its writer

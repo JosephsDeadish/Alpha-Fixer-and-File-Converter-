@@ -401,6 +401,15 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Long-timeline regressions exercise 128 clips with 60,000 logical frames each
+without eagerly allocating snapshot jobs, plus random seeks in a generated
+120-second, 3,000-frame video. Finished export clips release their decoder/cache;
+reader reuse and prefetched-frame cleanup are also checked. This is bounded
+logical/generated-media qualification, not sustained real-corpus acceptance.
+The combined Qt suite encountered a native MainWindow event-filter crash during
+this qualification; process-isolated coverage passed, but the combined-process
+crash remains an unresolved acceptance blocker.
+
 The source-level checks above are partial qualification, not a release certificate.
 Retain platform-specific evidence for these remaining gates:
 

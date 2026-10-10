@@ -395,6 +395,214 @@ def test_sequence_getter_copies_only_needed_sparse_source_frames(dialog, tmp_pat
     dialog._test_error.assert_not_called()
 
 
+def test_long_logical_snapshot_jobs_are_lazy_and_cancel_before_copy(dialog, tmp_path):
+    dialog._clips[0].close()
+    source = Mock(side_effect=AssertionError("Canceled source must not be read"))
+    dialog._clips = [
+        vt._ClipEntry(f"clip-{index}.gif", 60000, source, clip_type="gif",
+                      frame_size=(18, 20))
+        for index in range(128)
+    ]
+    with patch.object(vt.QFileDialog, "getSaveFileName",
+                      return_value=(str(tmp_path / "out.gif"), "")), \
+            patch.object(video_export, "source_frame_index",
+                         side_effect=AssertionError("Mapping must not be expanded before copying")):
+        dialog._export()
+        worker = dialog._export_worker
+        assert len(dialog._export_copy_jobs) == 128
+        assert all(iter(job[2]) is job[2] for job in dialog._export_copy_jobs)
+        dialog._cancel_export()
+        wait_for_video_export(dialog)
+    source.assert_not_called()
+    assert worker.outcome == "canceled"
+    assert all(not clip["frame_getter"]._frames for clip in worker.clips)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("speed", [10, 33, 100, 175, 400])
+def test_long_logical_timeline_preview_and_snapshot_mapping_match(dialog, speed):
+    dialog._clips[0].close()
+    requested = []
+    getter = Mock(side_effect=lambda index: requested.append(index))
+    dialog._clips = []
+    for index in range(128):
+        clip = vt._ClipEntry(f"clip-{index}.mp4", 60000, getter,
+                             fps=29.97, frame_size=(18, 20))
+        clip.trim_start, clip.trim_end, clip.speed_percent = 123, 59123, speed
+        dialog._clips.append(clip)
+    count = dialog._clips[0].active_frames
+    assert dialog._total_preview_frames() == 128 * count
+    for row in (0, 63, 127):
+        clip = dialog._clips[row]
+        snapshot = dialog._snapshot_clip_render_state(clip, 25)
+        for offset in (0, 1, count // 2, count - 1):
+            assert dialog._global_frame_to_clip(row * count + offset) == (row, offset)
+            clip.get_frame(offset)
+            assert requested[-1] == video_export.source_frame_index(snapshot, offset)
+        clip.trim_start, clip.trim_end, clip.speed_percent = 0, 1, 100
+        assert video_export.source_frame_index(snapshot, count - 1) == (
+            123 + min(59000, int((count - 1) * max(0.1, speed / 100)))
+        )
+        clip.trim_start, clip.trim_end, clip.speed_percent = 123, 59123, speed
+
+
+def test_many_clip_export_closes_completed_readers_before_next_source(dialog, tmp_path):
+    import numpy as np
+    dialog._clips[0].close()
+    dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+    opened, readers = [], []
+
+    def open_reader(path):
+        assert all(reader.close.called for reader in readers)
+        opened.append(path)
+        reader = Mock()
+        reader.get_data.return_value = np.zeros((20, 18, 3), dtype=np.uint8)
+        readers.append(reader)
+        return reader
+
+    dialog._clips = [
+        vt._ClipEntry(f"clip-{index}.mp4", 60000,
+                      vt._VideoFrameGetter(f"clip-{index}.mp4", 60000),
+                      frame_size=(18, 20))
+        for index in range(128)
+    ]
+    for clip in dialog._clips:
+        clip.trim_start = clip.trim_end = 59999
+    with patch.object(vt.QFileDialog, "getSaveFileName",
+                      return_value=(str(tmp_path / "out.mp4"), "")), \
+            patch.object(vt, "_open_video_reader", side_effect=open_reader), \
+            patch("imageio.get_writer", side_effect=lambda path, **kw: Writer(path)):
+        dialog._export()
+        worker = dialog._export_worker
+        wait_for_video_export(dialog)
+    assert worker.outcome == "success"
+    assert len(opened) == 128
+    assert all(reader.get_data.call_args.args == (59999,) for reader in readers)
+    assert all(reader.close.call_count == 1 for reader in readers)
+    assert all(clip["frame_getter"]._reader is None for clip in worker.clips)
+    assert all(clip._get_frame._reader is None for clip in dialog._clips)
+
+
+def test_long_lazy_export_cancel_releases_current_reader_and_preserves_output(dialog, tmp_path):
+    import numpy as np
+    dialog._clips[0].close()
+    getter = vt._VideoFrameGetter("logical.mp4", 60000)
+    clip = vt._ClipEntry("logical.mp4", 60000, getter, frame_size=(18, 20))
+    clip.trim_start, clip.trim_end, clip.speed_percent = 100, 59100, 10
+    dialog._clips = [clip]
+    dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+    output = tmp_path / "out.mp4"
+    output.write_bytes(b"original")
+    reader = Mock()
+    reader.get_data.return_value = np.zeros((20, 18, 3), dtype=np.uint8)
+    reader.get_next_data.return_value = reader.get_data.return_value
+    rendered = []
+
+    class CancelWriter(Writer):
+        def append_data(self, data):
+            rendered.append(1)
+            if len(rendered) == 200:
+                dialog._export_worker.cancel()
+
+    with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(str(output), "")), \
+            patch.object(vt, "_open_video_reader", return_value=reader), \
+            patch("imageio.get_writer", side_effect=lambda path, **kw: CancelWriter(path)):
+        dialog._export()
+        worker = dialog._export_worker
+        wait_for_video_export(dialog)
+    assert worker.outcome == "canceled"
+    assert len(rendered) == 200
+    assert reader.get_data.call_args.args == (100,)
+    assert reader.get_next_data.call_count == 19
+    reader.close.assert_called_once()
+    owned = worker.clips[0]["frame_getter"]
+    assert owned._reader is owned._last_frame is None
+    assert getter._reader is None
+    assert output.read_bytes() == b"original"
+    assert list(tmp_path.iterdir()) == [output]
+    dialog._record_export_history.assert_not_called()
+
+
+def test_lazy_reader_prefetch_cache_random_seeks_and_release():
+    import numpy as np
+    reader = Mock()
+    reader.get_data.side_effect = lambda index: np.full((2, 2, 3), index % 256, dtype=np.uint8)
+    reader.get_next_data.return_value = np.full((2, 2, 3), 1, dtype=np.uint8)
+    prefetched = np.zeros((2, 2, 3), dtype=np.uint8)
+    getter = vt._VideoFrameGetter("logical.mp4", 60000, prefetched)
+    with patch.object(vt, "_open_video_reader", return_value=reader) as opened:
+        for index in (0, 0, 59999, 0, 1, 1):
+            with getter(index) as frame:
+                assert frame.getpixel((0, 0))[0] == index % 256
+        opened.assert_called_once()
+        assert reader.get_data.call_count == 2
+        reader.get_next_data.assert_called_once()
+        getter._close_reader()
+    assert getter._reader is getter._last_frame is getter._prefetched_frame is None
+    unused = vt._VideoFrameGetter("logical.mp4", 60000, prefetched)
+    unused._release_resources()
+    assert unused._prefetched_frame is None
+
+
+def test_long_preview_cross_clip_scrubs_keep_only_current_reader(dialog):
+    import numpy as np
+    dialog._clips[0].close()
+    readers = []
+
+    def open_reader(path):
+        assert all(reader.close.called for reader in readers)
+        reader = Mock()
+        reader.get_data.return_value = np.zeros((20, 18, 3), dtype=np.uint8)
+        readers.append(reader)
+        return reader
+
+    dialog._clips = [
+        vt._ClipEntry(f"clip-{index}.mp4", 60000,
+                      vt._VideoFrameGetter(f"clip-{index}.mp4", 60000),
+                      frame_size=(18, 20))
+        for index in range(128)
+    ]
+    dialog._update_scrubber()
+    with patch.object(vt, "_open_video_reader", side_effect=open_reader):
+        for row in (0, 127, 63, 0, 127):
+            dialog._scrubber.setValue(row * 60000 + 59999)
+            dialog._update_preview()
+            assert sum(clip._get_frame._reader is not None for clip in dialog._clips) == 1
+            assert dialog._preview_video_getter is dialog._clips[row]._get_frame
+    dialog._release_clips()
+    assert dialog._preview_video_getter is None
+    assert all(reader.close.call_count == 1 for reader in readers)
+
+
+def test_actual_medium_video_lazy_random_seeks_keep_one_reader(tmp_path):
+    import numpy as np
+    ffmpeg = vt._get_ffmpeg_exe()
+    if not ffmpeg:
+        pytest.skip("FFmpeg unavailable")
+    source = tmp_path / "medium.mp4"
+    # 120 seconds / 3,000 real frames, without an in-memory frame collection.
+    subprocess.run([
+        ffmpeg, "-y", "-v", "error", "-f", "lavfi", "-i",
+        "testsrc2=size=32x24:rate=25:duration=120",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(source),
+    ], check=True, timeout=60)
+    fps, count, size, first = vt._probe_video_clip(str(source))
+    assert (fps, count, size) == (25, 3000, (32, 24))
+    getter = vt._VideoFrameGetter(str(source), count, first)
+    reference = vt._open_video_reader(str(source))
+    try:
+        with patch.object(vt, "_open_video_reader", wraps=vt._open_video_reader) as opened:
+            for index in (2999, 0, 1500, 1500, 1499, 1500, 2998, 2999, 0):
+                with getter(index) as frame:
+                    assert np.array_equal(np.asarray(frame)[:, :, :3], reference.get_data(index))
+            opened.assert_called_once()
+        assert getter._last_frame.shape == (24, 32, 3)
+    finally:
+        getter._close_reader()
+        reference.close()
+    assert getter._reader is getter._last_frame is getter._prefetched_frame is None
+
+
 def test_cancellable_mux_subprocess_terminates_and_drains_without_fallback():
     checkpoints = []
     process = Mock()
