@@ -2301,6 +2301,11 @@ class SettingsDialog(QDialog):
             # UI density combos
             self._btn_height_combo, self._widget_spacing_combo,
             self._border_radius_combo, self._panel_padding_combo,
+            self._history_max_conv_spin, self._history_max_alpha_spin,
+            self._history_max_sel_spin, self._history_max_gif_spin,
+            self._history_max_video_spin, self._chk_track_converter,
+            self._chk_track_alpha, self._chk_track_sel_alpha,
+            self._chk_track_gif, self._chk_track_video,
         ]
         for c in controls:
             c.blockSignals(True)

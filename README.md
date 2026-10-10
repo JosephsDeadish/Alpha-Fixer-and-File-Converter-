@@ -330,6 +330,12 @@ pause, and corrupt GIF outputs fall back to available source thumbnails.
 These checks do not establish a sustained memory ceiling or qualify thousands
 of simultaneously playing animations.
 
+Settings acceptance checks use isolated on-disk INI files for change, backup,
+reset, import and relaunch workflows, including legacy boolean/integer values,
+live appearance/effects and history policies. Opening Settings no longer rewrites
+legacy per-tool history values merely because a displayed control clamps its
+range. Imported shortcut bindings still require the documented restart.
+
 ### Real corpus validation
 
 Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because many of the most relevant PSP / PS1 / PS2 corpora are large, private, or copyrighted, they are **not** bundled in this repository.
