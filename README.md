@@ -379,6 +379,17 @@ does not enforce network isolation or remove installed host libraries. These
 results therefore do not certify clean-machine operation, real display/audio
 devices, sustained resource growth, Windows/macOS or signed release artifacts.
 
+Follow-up qualification exercised three smoke launches and three self-test
+sessions per Linux bundle, each with two ordinary iterations and three generated
+stress loops. All 33 checks passed in each session. Across separate sessions,
+peak RSS spread was 0.22 MiB (folder) and 0.06 MiB (single-file); these measurements
+do not establish leak freedom in one long-running process. Both bundles also
+passed bounded smoke/capability/stress checks in an Ubuntu 24.04 container with
+network disabled, read-only root/artifacts and an unprivileged user. This adds
+network-isolated container evidence, not full clean-machine/native acceptance.
+The generated stress fixtures use short videos, image conversions, builder-dialog
+cycles and history roundtrips, not long timelines or sustained builder exports.
+
 ### Remaining acceptance and distribution work
 
 The source-level checks above are partial qualification, not a release certificate.
@@ -402,8 +413,15 @@ Retain platform-specific evidence for these remaining gates:
   requirements and project licensing; retain exact reproducible build versions;
   qualify installers, upgrades/uninstall, signing and macOS notarization.
 - **End-to-end acceptance:** first launch through every tool's successful export,
-  settings/backup restoration and relaunch, with native visual checks and retained
-  results. Diagnose all failures and unexplained skips before claiming readiness.
+  including Painter editing, clipboard, undo/redo and saving; settings/backup
+  restoration and relaunch, with native visual checks and retained results.
+  Diagnose all failures and unexplained skips before claiming readiness.
+- **Native visual consistency:** final layout and usability checks across every
+  theme/dialog, including clipping, focus, scaling and input-device behavior.
+- **Optional feature expansion:** DDS multi-surface/DX10 coverage, disc-image
+  extraction, broader TIM/XNB and SVG support, and audible video preview. These
+  documented boundaries are distinct from acceptance of currently supported
+  features; they are not silently treated as completed features.
 
 ### Real corpus validation
 
