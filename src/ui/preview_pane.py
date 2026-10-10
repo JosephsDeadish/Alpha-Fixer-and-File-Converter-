@@ -8,9 +8,10 @@ preview_pane.py – image preview components.
 All image loading is done in background QThreads so the UI is never blocked.
 """
 import os
+import weakref
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, QRect, QSize, QTimer, QEvent, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QObject, QRect, QSize, QTimer, QEvent, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QFont, QFontMetrics,
     QPixmap, QImage, QColor, QMovie,
@@ -120,6 +121,61 @@ def _fmt_size(n: int) -> str:
 
 #: Formats that use the ``quality`` parameter when saving.
 _QUALITY_FORMATS = {"JPEG", "WEBP"}
+
+# Parentless ownership must outlive a pane destroyed while decoding is blocked.
+_active_preview_loads: set["_PreviewLoadConnection"] = set()
+
+
+class _PreviewLoadConnection(QObject):
+    """Deliver results on the GUI thread and own the worker until finished."""
+
+    def __init__(self, pane, loader, request_id):
+        super().__init__()
+        self._pane_ref = weakref.ref(pane)
+        self._loader = loader
+        self._request_id = request_id
+        loader.loaded.connect(self.loaded, Qt.ConnectionType.QueuedConnection)
+        loader.failed.connect(self.failed, Qt.ConnectionType.QueuedConnection)
+        loader.finished.connect(self.finished, Qt.ConnectionType.QueuedConnection)
+        pane.destroyed.connect(self.pane_destroyed)
+        _active_preview_loads.add(self)
+
+    @pyqtSlot()
+    def stop(self):
+        pane = self._pane_ref() if self._pane_ref is not None else None
+        if pane is not None:
+            pane.destroyed.disconnect(self.pane_destroyed)
+        self.pane_destroyed()
+
+    @pyqtSlot()
+    def pane_destroyed(self):
+        self._pane_ref = None
+        self._loader.stop()
+
+    @pyqtSlot(QImage, str)
+    def loaded(self, image, meta):
+        pane = self._pane_ref() if self._pane_ref is not None else None
+        if pane is not None:
+            pane._on_loaded(self._request_id, image, meta)
+
+    @pyqtSlot(str)
+    def failed(self, error):
+        pane = self._pane_ref() if self._pane_ref is not None else None
+        if pane is not None:
+            pane._on_failed(self._request_id, error)
+
+    @pyqtSlot()
+    def finished(self):
+        pane = self._pane_ref() if self._pane_ref is not None else None
+        if pane is not None:
+            pane.destroyed.disconnect(self.pane_destroyed)
+            if pane._loader_connection is self:
+                pane._loader = None
+                pane._loader_connection = None
+        self._pane_ref = None
+        self._loader.deleteLater()
+        _active_preview_loads.discard(self)
+        self.deleteLater()
 
 
 class _ThumbLoader(QThread):
@@ -1187,7 +1243,8 @@ class ImagePreviewPane(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._loader: _ThumbLoader | None = None
+        self._loader: _ThumbLoader | _ConvertedThumbLoader | None = None
+        self._loader_connection: _PreviewLoadConnection | None = None
         self._load_request_id: int = 0
         # Full-resolution pixmap received from the loader thread.  Stored so
         # it can be re-scaled to whatever size the pane has at any given time.
@@ -1289,28 +1346,14 @@ class ImagePreviewPane(QWidget):
 
     def _start_loader(self, loader):
         """Disconnect and stop any stale loader, then start *loader*."""
-        self._load_request_id += 1
+        self._stop_loader()
         request_id = self._load_request_id
-        if self._loader is not None:
-            self._loader.stop()
-            try:
-                self._loader.loaded.disconnect()
-                self._loader.failed.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            self._loader = None
         self._meta_label.setText("Loading…")
         self._loader = loader
-        self._loader.loaded.connect(
-            lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)
-        )
-        self._loader.failed.connect(
-            lambda err, request_id=request_id: self._on_failed(request_id, err)
-        )
+        self._loader_connection = _PreviewLoadConnection(self, loader, request_id)
         self._loader.start()
 
     def clear(self):
-        self._load_request_id += 1
         self._stop_loader()
         self._current_pix = None
         self._set_placeholder()
@@ -1321,16 +1364,12 @@ class ImagePreviewPane(QWidget):
         super().closeEvent(event)
 
     def _stop_loader(self) -> None:
-        loader = self._loader
-        if loader is None:
-            return
+        self._load_request_id += 1
+        connection = self._loader_connection
         self._loader = None
-        loader.stop()
-        try:
-            loader.loaded.disconnect()
-            loader.failed.disconnect()
-        except (RuntimeError, TypeError):
-            pass
+        self._loader_connection = None
+        if connection is not None:
+            connection.stop()
 
     # ------------------------------------------------------------------
     # Slots
@@ -1339,7 +1378,6 @@ class ImagePreviewPane(QWidget):
     def _on_loaded(self, request_id: int, qimg: QImage, meta: str):
         if request_id != self._load_request_id:
             return
-        self._loader = None
         # Store the full pixmap so _update_display_pix can re-scale it any
         # time the pane changes size (e.g., window resize or splitter drag).
         self._current_pix = QPixmap.fromImage(qimg)
@@ -1364,7 +1402,6 @@ class ImagePreviewPane(QWidget):
     def _on_failed(self, request_id: int, err: str):
         if request_id != self._load_request_id:
             return
-        self._loader = None
         self._current_pix = None
         self._set_placeholder()
         self._meta_label.setText(f"Preview unavailable\n{err[:80]}")

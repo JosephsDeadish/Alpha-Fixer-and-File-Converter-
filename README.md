@@ -402,6 +402,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Image preview loaders remain owned until their threads finish, including when
+decoding outlives a closed/deleted pane. Results use GUI-affine queued slots;
+close/clear/replacement invalidates old requests and cooperatively stops loading.
+Bounded barrier-driven lifecycle tests cover both source and converted previews.
+This fixes a reproduced preview ownership defect, not the unexplained MainWindow
+crash; native application shutdown and blocked-decoder termination still need
+separate qualification.
+
 Settings backup imports and resets refresh registered keyboard shortcuts in the
 running application and open tools through the existing deferred settings apply.
 Restoration does not rewrite shortcut preferences or reload unsaved Painter media,

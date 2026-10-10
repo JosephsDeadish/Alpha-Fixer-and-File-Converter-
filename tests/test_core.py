@@ -2641,7 +2641,7 @@ class TestRound2CrashHangLag(unittest.TestCase):
         method_pos = src.find("def _start_loader(")
         next_method = src.find("\n    def ", method_pos + 1)
         section = src[method_pos:next_method]
-        self.assertIn(".stop()", section,
+        self.assertIn("self._stop_loader()", section,
                       "_start_loader() must call stop() on the old loader")
 
 
@@ -9416,9 +9416,10 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("if request_id != self._load_request_id:", src)
         self.assertIn("def _stop_loader(self) -> None:", src)
         self.assertIn("self._loader.stop()", src)
-        self.assertIn("self._loader.loaded.connect(", src)
-        self.assertIn("lambda qimg, meta, request_id=request_id: self._on_loaded(request_id, qimg, meta)", src)
-        self.assertIn("lambda err, request_id=request_id: self._on_failed(request_id, err)", src)
+        self.assertIn("loader.loaded.connect(self.loaded, Qt.ConnectionType.QueuedConnection)", src)
+        self.assertIn("loader.failed.connect(self.failed, Qt.ConnectionType.QueuedConnection)", src)
+        self.assertIn("pane._on_loaded(self._request_id, image, meta)", src)
+        self.assertIn("pane._on_failed(self._request_id, error)", src)
 
     def test_drop_list_surfaces_thumbnail_failure_summary(self):
         src = self._src("ui/drop_list.py")
