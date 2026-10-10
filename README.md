@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Settings backup imports and resets refresh registered keyboard shortcuts in the
+running application and open tools through the existing deferred settings apply.
+Restoration does not rewrite shortcut preferences or reload unsaved Painter media,
+masks or editing history. Bounded tests use real tool widgets with a lightweight
+host; complete native MainWindow reset/restore acceptance remains outstanding.
+
 Video splits preserve the original sampled frame sequence and rounded timeline
 length, including nested splits at non-unit speeds. Frozen exports retain the
 same mapping; audio boundaries preserve the original continuous span and tempo.

@@ -3754,6 +3754,7 @@ class MainWindow(QMainWindow):
             self._apply_bg_flock,
             self._apply_bg_ambient,
             self._apply_hold_effects,
+            self._apply_shortcut_settings,
         ):
             try:
                 _fn()
@@ -4060,6 +4061,22 @@ class MainWindow(QMainWindow):
         info["current"] = new_key
         self._settings.set_shortcut_binding(sc_id, new_key, info["default"])
         return True
+
+    def _apply_shortcut_settings(self) -> None:
+        """Refresh existing bindings after import/reset without rewriting preferences."""
+        for sc_id, info in self._shortcut_map.items():
+            key = self._settings.get_shortcut_binding(sc_id, info["default"])
+            if key == info["current"]:
+                continue
+            shortcut = info.get("sc")
+            if shortcut is not None:
+                shortcut.setKey(QKeySequence(key))
+            owner = info.get("owner")
+            if info.get("owner_attr"):
+                owner = getattr(self, info["owner_attr"], None)
+            if owner is not None and hasattr(owner, "update_shortcut_binding"):
+                owner.update_shortcut_binding(sc_id, key)
+            info["current"] = key
 
     def _show_shortcuts(self):
         """Show an interactive keyboard-shortcuts dialog (item 20).
