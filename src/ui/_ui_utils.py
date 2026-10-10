@@ -74,8 +74,8 @@ def staged_output_path(destination, *, preserve_existing_mode=False):
         dir=str(path.absolute().parent), delete=False,
     )
     staged = Path(handle.name)
-    handle.close()
     try:
+        handle.close()
         yield str(staged)
         if preserve_existing_mode and os.name == "posix":
             try:
@@ -85,8 +85,14 @@ def staged_output_path(destination, *, preserve_existing_mode=False):
             else:
                 staged.chmod(mode)
         os.replace(staged, path)
-    finally:
-        staged.unlink(missing_ok=True)
+    except BaseException:
+        # Cleanup may also fail on a disconnected/full filesystem. Preserve the
+        # save error (or cancellation), not the secondary cleanup error.
+        try:
+            staged.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def scrollable_dialog_layout(dialog):

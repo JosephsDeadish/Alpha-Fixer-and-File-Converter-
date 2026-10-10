@@ -390,6 +390,15 @@ network-isolated container evidence, not full clean-machine/native acceptance.
 The generated stress fixtures use short videos, image conversions, builder-dialog
 cycles and history roundtrips, not long timelines or sustained builder exports.
 
+Storage-failure regressions inject disk-full (ENOSPC), permission (EACCES) and
+I/O-loss (EIO) errors, and exercise missing inputs, disappearing destinations,
+queue continuation and retries. Staging cleanup preserves the original failure
+instead of masking it with a secondary cleanup error; successful publication
+is not reported as a failure due to unnecessary post-publication cleanup.
+Cleanup is best-effort when storage is inaccessible, so partial staging files
+may remain there. These checks do not qualify actual full disks, disconnected
+network mounts or physical removable devices.
+
 ### Remaining acceptance and distribution work
 
 The source-level checks above are partial qualification, not a release certificate.

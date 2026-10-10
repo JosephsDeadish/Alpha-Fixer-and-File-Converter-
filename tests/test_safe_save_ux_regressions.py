@@ -1,4 +1,6 @@
 from pathlib import Path
+import errno
+import os
 import tempfile
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
@@ -75,6 +77,237 @@ def test_staged_success_replaces_destination(tmp_path):
         assert destination.read_bytes() == b"old"
     assert destination.read_bytes() == b"new"
     assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+
+
+def test_stage_close_failure_is_cleaned_before_retry(tmp_path):
+    target = tmp_path / "output.png"
+    target.write_bytes(b"original")
+    real_temporary_file = tempfile.NamedTemporaryFile
+    failure = OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+
+    def fail_close(**kwargs):
+        handle = real_temporary_file(**kwargs)
+        close = handle.close
+
+        def close_then_fail():
+            close()
+            raise failure
+
+        handle.close = close_then_fail
+        return handle
+
+    with patch("tempfile.NamedTemporaryFile", fail_close):
+        with pytest.raises(OSError) as caught:
+            with staged_output_path(target):
+                pytest.fail("must not encode after close failed")
+    assert caught.value is failure
+    assert target.read_bytes() == b"original"
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    with staged_output_path(target) as staged:
+        Path(staged).write_bytes(b"retry")
+    assert target.read_bytes() == b"retry"
+
+
+def test_cleanup_failure_does_not_hide_encoding_errno(tmp_path):
+    target = tmp_path / "output.png"
+    target.write_bytes(b"original")
+    failure = OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+    try:
+        with patch.object(Path, "unlink", side_effect=OSError(errno.EIO, os.strerror(errno.EIO))):
+            with pytest.raises(OSError) as caught:
+                with staged_output_path(target) as staged:
+                    Path(staged).write_bytes(b"partial")
+                    raise failure
+        assert caught.value is failure
+        assert target.read_bytes() == b"original"
+    finally:
+        # A disconnected filesystem cannot guarantee cleanup; remove our injected orphan.
+        for path in tmp_path.glob(".alpha_fixer_save_*"):
+            path.unlink()
+    with staged_output_path(target) as staged:
+        Path(staged).write_bytes(b"retry")
+    assert target.read_bytes() == b"retry"
+
+
+def test_successful_publish_does_not_attempt_cleanup_on_missing_stage(tmp_path):
+    target = tmp_path / "output.png"
+    with patch.object(Path, "unlink", side_effect=OSError(errno.EIO, os.strerror(errno.EIO))):
+        with staged_output_path(target) as staged:
+            Path(staged).write_bytes(b"complete")
+    assert target.read_bytes() == b"complete"
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Existing output mode preservation is POSIX-only")
+def test_stage_mode_failure_preserves_output_and_allows_retry(tmp_path):
+    target = tmp_path / "output.png"
+    target.write_bytes(b"original")
+    target.chmod(0o640)
+    with patch.object(Path, "chmod", side_effect=OSError(errno.EACCES, os.strerror(errno.EACCES))):
+        with pytest.raises(OSError) as caught:
+            with staged_output_path(target, preserve_existing_mode=True) as staged:
+                Path(staged).write_bytes(b"complete")
+    assert caught.value.errno == errno.EACCES
+    assert target.read_bytes() == b"original"
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    with staged_output_path(target, preserve_existing_mode=True) as staged:
+        Path(staged).write_bytes(b"retry")
+    assert target.read_bytes() == b"retry"
+    assert target.stat().st_mode & 0o777 == 0o640
+
+
+def test_destination_directory_removed_during_staged_save_can_be_recreated(tmp_path):
+    directory = tmp_path / "destination"
+    directory.mkdir()
+    target = directory / "output.png"
+    with pytest.raises(OSError) as caught:
+        with staged_output_path(target) as staged:
+            Path(staged).write_bytes(b"complete")
+            # Model an external process removing this small disposable destination.
+            Path(staged).unlink()
+            directory.rmdir()
+    assert caught.value.errno == errno.ENOENT
+    assert not directory.exists()
+    directory.mkdir()
+    with staged_output_path(target) as staged:
+        Path(staged).write_bytes(b"retry")
+    assert target.read_bytes() == b"retry"
+    assert not list(directory.glob(".alpha_fixer_save_*"))
+
+
+@pytest.mark.parametrize("kind", ["gif", "painter"])
+@pytest.mark.parametrize("phase,code", [
+    ("create", errno.ENOSPC), ("create", errno.EACCES),
+    ("encode", errno.ENOSPC), ("encode", errno.EIO),
+    ("replace", errno.EACCES), ("replace", errno.EIO),
+    ("missing_parent", errno.ENOENT), ("disappear", errno.ENOENT),
+    ("encode_cleanup", errno.ENOSPC),
+])
+def test_ui_storage_failure_preserves_state_and_retries(painter, tmp_path, kind, phase, code):
+    directory = tmp_path / "output"
+    if phase != "missing_parent":
+        directory.mkdir()
+    target = directory / ("result.gif" if kind == "gif" else "result.png")
+    if directory.exists() and phase != "disappear":
+        target.write_bytes(b"previous output")
+    if kind == "gif":
+        widget = GifBuilderDialog()
+        widget._add_paths([painter._src_path])
+        success = Mock()
+        widget.exported.connect(success)
+        history_patch = patch.object(widget, "_record_export_history")
+        module = "src.ui.gif_builder"
+        save = widget._export
+    else:
+        widget = painter
+        success = painter._offer_delete_original
+        history_patch = patch.object(painter._settings, "add_selective_alpha_history")
+        module = "src.ui.selective_alpha_tool"
+        save = widget._on_save
+    failure = OSError(code, os.strerror(code))
+    masks = painter._canvas.get_masks_as_bool()
+    source = Path(painter._src_path)
+    original_source = source.read_bytes()
+    real_save = Image.Image.save
+
+    def fail_encode(_image, path, *_args, **_kwargs):
+        Path(path).write_bytes(b"partial")
+        raise failure
+
+    def remove_destination(image, path, *args, **kwargs):
+        real_save(image, path, *args, **kwargs)
+        Path(path).unlink()
+        directory.rmdir()
+
+    def run_save():
+        save()
+        if kind == "gif":
+            wait_for_gif_export(widget)
+            assert widget._export_worker is None
+            assert widget._export_progress is None
+            assert widget._export_content.isEnabled()
+            assert len(widget._frames) == 1
+
+    try:
+        with history_patch as history, \
+                patch(f"{module}.QFileDialog.getSaveFileName", return_value=(str(target), "")), \
+                patch(f"{module}.QMessageBox.critical") as error, \
+                patch(f"{module}.QMessageBox.information"):
+            with ExitStack() as stack:
+                if phase == "create":
+                    stack.enter_context(patch("tempfile.NamedTemporaryFile", side_effect=failure))
+                elif phase.startswith("encode"):
+                    stack.enter_context(patch.object(Image.Image, "save", fail_encode))
+                    if phase == "encode_cleanup":
+                        stack.enter_context(patch.object(
+                            Path, "unlink", side_effect=OSError(errno.EIO, os.strerror(errno.EIO))))
+                elif phase == "replace":
+                    stack.enter_context(patch("os.replace", side_effect=failure))
+                elif phase == "disappear":
+                    stack.enter_context(patch.object(Image.Image, "save", remove_destination))
+                run_save()
+            error.assert_called_once()
+            assert f"[Errno {code}]" in error.call_args.args[2]
+            history.assert_not_called()
+            success.assert_not_called()
+            assert source.read_bytes() == original_source
+            assert all(np.array_equal(before, after) for before, after in
+                       zip(masks, painter._canvas.get_masks_as_bool()))
+            if phase in ("missing_parent", "disappear"):
+                assert not target.exists()
+                directory.mkdir()
+            else:
+                assert target.read_bytes() == b"previous output"
+            if phase == "encode_cleanup":
+                assert len(list(directory.glob(".alpha_fixer_save_*"))) == 1
+                for path in directory.glob(".alpha_fixer_save_*"):
+                    path.unlink()
+            assert not list(directory.glob(".alpha_fixer_save_*"))
+            run_save()
+            history.assert_called_once()
+            success.assert_called_once()
+            error.assert_called_once()
+        with Image.open(target) as image:
+            assert image.size == (8, 8)
+        assert source.read_bytes() == original_source
+        assert not list(directory.glob(".alpha_fixer_save_*"))
+    finally:
+        for path in directory.glob(".alpha_fixer_save_*"):
+            path.unlink()
+        if kind == "gif":
+            widget._clear_all()
+            widget.close()
+            sip.delete(widget)
+
+
+@pytest.mark.parametrize("kind", ["gif", "painter"])
+def test_cached_ui_image_can_save_after_source_disappears(painter, tmp_path, kind):
+    source = Path(painter._src_path)
+    target = tmp_path / ("cached.gif" if kind == "gif" else "cached.png")
+    widget = GifBuilderDialog() if kind == "gif" else painter
+    module = "src.ui.gif_builder" if kind == "gif" else "src.ui.selective_alpha_tool"
+    if kind == "gif":
+        widget._add_paths([str(source)])
+    source.unlink()
+    try:
+        with patch(f"{module}.QFileDialog.getSaveFileName", return_value=(str(target), "")), \
+                patch(f"{module}.QMessageBox.information"), \
+                patch(f"{module}.QMessageBox.critical") as error:
+            if kind == "gif":
+                widget._export()
+                wait_for_gif_export(widget)
+            else:
+                painter._on_save()
+        error.assert_not_called()
+        with Image.open(target) as image:
+            assert image.size == (8, 8)
+        assert not source.exists()
+        assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    finally:
+        if kind == "gif":
+            widget._clear_all()
+            widget.close()
+            sip.delete(widget)
 
 
 @pytest.mark.parametrize("kind", ["gif", "painter"])

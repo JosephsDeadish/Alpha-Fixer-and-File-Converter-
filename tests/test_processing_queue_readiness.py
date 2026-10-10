@@ -1,10 +1,12 @@
 """Source-run queue qualification; not a sustained-RSS or native-runtime benchmark."""
 
 import concurrent.futures
+import errno
 import os
 import stat
 import tempfile
 import threading
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -198,6 +200,84 @@ def test_failed_save_preserves_existing_destination_and_removes_stage(queue_root
     assert manifests == [{}]
     assert source.read_bytes() == original
     assert sorted(path.name for path in queue_root.iterdir()) == ["source.png"]
+
+
+@pytest.mark.parametrize("kind", ["alpha", "converter"])
+@pytest.mark.parametrize("phase,code", [
+    ("create", errno.ENOSPC), ("create", errno.EACCES),
+    ("encode", errno.ENOSPC), ("encode", errno.EIO),
+    ("replace", errno.EACCES), ("replace", errno.EIO),
+    ("missing_input", errno.ENOENT),
+])
+def test_queue_storage_failure_continues_and_failed_input_can_retry(queue_root, kind, phase, code):
+    files = []
+    for name in ("first.png", "second.png"):
+        source = queue_root / name
+        with Image.new("RGBA", (3, 3), (10, 20, 30, 120)) as image:
+            image.save(source)
+        files.append(str(source))
+    original = Path(files[0]).read_bytes()
+    output = queue_root / "out"
+    output.mkdir()
+    target = output / "first.png"
+    target.write_bytes(b"previous output")
+    if phase == "missing_input":
+        Path(files[0]).unlink()
+
+    def make_worker(paths):
+        return (AlphaWorker(paths, output_dir=str(output), manual_params={"invert": True})
+                if kind == "alpha" else
+                ConverterWorker(paths, "PNG", ".png", output_dir=str(output), resize=(4, 4)))
+
+    worker = make_worker(files)
+    finished, manifests, messages = [], [], []
+    worker.finished.connect(lambda *args: finished.append(args))
+    worker.output_manifest.connect(manifests.append)
+    worker.file_done.connect(lambda *args: messages.append(args))
+    failure = OSError(code, os.strerror(code))
+    real_create, real_save, real_replace = tempfile.NamedTemporaryFile, Image.Image.save, os.replace
+    calls = 0
+
+    def fail_first(operation, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            if phase == "encode":
+                Path(args[1]).write_bytes(b"partial encoding")
+            raise failure
+        return operation(*args, **kwargs)
+
+    with ExitStack() as stack:
+        stack.enter_context(mock.patch.object(ConverterWorker, "_recommend_worker_count", return_value=1))
+        if phase == "create":
+            stack.enter_context(mock.patch(
+                "tempfile.NamedTemporaryFile", side_effect=lambda *a, **kw: fail_first(real_create, *a, **kw)))
+        elif phase == "encode":
+            stack.enter_context(mock.patch.object(
+                Image.Image, "save", lambda *a, **kw: fail_first(real_save, *a, **kw)))
+        elif phase == "replace":
+            stack.enter_context(mock.patch(
+                "os.replace", side_effect=lambda *a, **kw: fail_first(real_replace, *a, **kw)))
+        worker.run()
+    assert finished == [(1, 1)]
+    assert manifests == [{files[1]: str(output / "second.png")}]
+    assert [(row[0], row[1]) for row in messages] == [(files[0], False), (files[1], True)]
+    assert f"[Errno {code}]" in messages[0][2]
+    assert target.read_bytes() == b"previous output"
+    assert not list(output.glob(".alpha_fixer_save_*"))
+    Path(files[0]).write_bytes(original)
+    retry = make_worker([files[0]])
+    retried, retry_outputs = [], []
+    retry.finished.connect(lambda *args: retried.append(args))
+    retry.output_manifest.connect(retry_outputs.append)
+    retry.run()
+    assert retried == [(1, 0)]
+    assert retry_outputs == [{files[0]: str(target)}]
+    assert Path(files[0]).read_bytes() == original
+    with Image.open(target) as image:
+        assert image.size == ((3, 3) if kind == "alpha" else (4, 4))
+        assert image.getpixel((0, 0))[3] == (135 if kind == "alpha" else 120)
+    assert not list(output.glob(".alpha_fixer_save_*"))
 
 
 @pytest.mark.parametrize("kind", ["alpha", "converter"])
