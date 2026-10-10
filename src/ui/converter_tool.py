@@ -663,6 +663,9 @@ class ConverterTab(QWidget):
         # in either field and have the other update automatically.
         self._width_spin.valueChanged.connect(self._on_width_changed)
         self._height_spin.valueChanged.connect(self._on_height_changed)
+        self._resize_check.toggled.connect(lambda _checked: self._preview_debounce.start())
+        self._width_spin.valueChanged.connect(lambda _value: self._preview_debounce.start())
+        self._height_spin.valueChanged.connect(lambda _value: self._preview_debounce.start())
         # DropFileList signals
         self._file_list.paths_dropped.connect(self._add_to_list)
         self._file_list.count_changed.connect(self._update_count)
@@ -1205,7 +1208,11 @@ class ConverterTab(QWidget):
             # Hide GIF speed slider for non-animated sources.
             self._gif_speed_widget.setVisible(False)
 
-        self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality)
+        resize = (
+            (self._width_spin.value(), self._height_spin.value())
+            if self._resize_check.isChecked() else None
+        )
+        self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality, resize=resize)
         self._preview_loader.ready.connect(
             lambda src_qi, out_qi, src_meta, out_meta, rid=request_id, expected_path=path:
             self._on_preview_ready_if_current(rid, expected_path, src_qi, out_qi, src_meta, out_meta)

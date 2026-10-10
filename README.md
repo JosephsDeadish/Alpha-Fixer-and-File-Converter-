@@ -30,6 +30,7 @@ Convert between image formats with optional resize and quality control.
 - Convert any supported format to any other
 - Batch convert whole folders and subfolders (preserves directory structure)
 - Optional resize (width × height)
+- Live previews reflect enabled resize dimensions, including aspect-linked width/height edits.
 - JPEG/WEBP/AVIF/JPEG2000 quality control
 - Custom output folder
 

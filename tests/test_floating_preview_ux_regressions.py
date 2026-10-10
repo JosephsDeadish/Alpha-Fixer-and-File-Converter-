@@ -20,7 +20,7 @@ class PreviewLoader(QObject):
     ready = pyqtSignal(QImage, QImage, str, str)
     failed = pyqtSignal(str)
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
     def start(self):

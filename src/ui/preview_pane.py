@@ -1014,12 +1014,14 @@ class _ConverterPreviewLoader(QThread):
     ready = pyqtSignal(QImage, QImage, str, str)   # (src_qi, out_qi, src_meta, out_meta)
     failed = pyqtSignal(str)
 
-    def __init__(self, path: str, target_fmt: str, quality: int, max_size: int = 512):
+    def __init__(self, path: str, target_fmt: str, quality: int, max_size: int = 512,
+                 *, resize: tuple[int, int] | None = None):
         super().__init__()
         self._path = path
         self._target_fmt = target_fmt.upper()
         self._quality = quality
         self._max_size = max_size
+        self._resize = resize
         self._abort = False
 
     def stop(self) -> None:
@@ -1066,6 +1068,10 @@ class _ConverterPreviewLoader(QThread):
                 return
 
             # --- Output side: convert in-memory to see encoding artefacts ---
+            if self._resize is not None:
+                resized = img.resize(self._resize, Image.LANCZOS)
+                img.close()
+                img = resized
             fmt = self._target_fmt
             save_img = img
             if fmt == "JPEG":
@@ -1126,6 +1132,7 @@ class _ConverterPreviewLoader(QThread):
             img.close()
             img = None
             out_mode = out_img.mode
+            out_w, out_h = out_img.size
             out_thumb = None
             try:
                 out_thumb = out_img.copy()
@@ -1138,7 +1145,7 @@ class _ConverterPreviewLoader(QThread):
 
             quality_note = f"  ·  Q {self._quality}" if fmt in _QUALITY_FORMATS else ""
             out_meta = (
-                f"{orig_w} × {orig_h}  ·  {out_mode}\n"
+                f"{out_w} × {out_h}  ·  {out_mode}\n"
                 f"Preview as {fmt}{quality_note}\n"
                 f"~{_fmt_size(converted_size)}"
             )

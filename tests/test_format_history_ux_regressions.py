@@ -12,8 +12,10 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel, QBoxLayout
 
 from src.core.settings_manager import SettingsManager
+from src.core.file_converter import convert_file
 from src.core.presets import PresetManager
 from src.ui.converter_tool import ConverterTab
+from src.ui.preview_pane import _ConverterPreviewLoader
 from src.ui.alpha_tool import AlphaFixerTab
 from src.ui.history_tab import HistoryTab
 from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
@@ -23,8 +25,9 @@ class PreviewLoader(QObject):
     ready = pyqtSignal(QImage, QImage, str, str)
     failed = pyqtSignal(str)
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         super().__init__()
+        self.options = kwargs
 
     def start(self):
         pass
@@ -67,6 +70,93 @@ def select_format(converter, fmt):
     converter._fmt_combo.setCurrentIndex(index)
     converter._on_format_changed(index)
     converter._preview_debounce.stop()
+
+
+@pytest.mark.parametrize("resize", [None, (24, 10), (160, 80)])
+def test_converter_preview_resize_matches_export(app, tmp_path, resize):
+    source = tmp_path / "source.png"
+    destination = tmp_path / "output.png"
+    image = Image.new("RGB", (80, 40), "navy")
+    image.paste("orange", (0, 0, 30, 20))
+    image.save(source)
+    image.close()
+    results, failures = [], []
+    loader = _ConverterPreviewLoader(str(source), "PNG", 90, resize=resize)
+    loader.ready.connect(lambda *args: results.append(args))
+    loader.failed.connect(failures.append)
+    loader.run()
+    assert not failures
+    assert len(results) == 1
+    src_qi, out_qi, src_meta, out_meta = results[0]
+    assert (src_qi.width(), src_qi.height()) == (80, 40)
+    assert "80 × 40" in src_meta
+    convert_file(str(source), str(destination), "PNG", resize=resize)
+    with Image.open(destination) as exported:
+        assert (out_qi.width(), out_qi.height()) == exported.size
+        assert f"{exported.width} × {exported.height}" in out_meta
+        for x, y in [(0, 0), (out_qi.width() // 2, out_qi.height() // 2)]:
+            assert out_qi.pixelColor(x, y).getRgb()[:3] == exported.getpixel((x, y))
+    sip.delete(loader)
+
+
+def test_converter_resize_edits_refresh_preview_after_aspect_update(converter, tmp_path):
+    source = tmp_path / "wide.png"
+    Image.new("RGB", (80, 40), "navy").save(source)
+    # Avoid unrelated queue thumbnail threads while exercising normal selection.
+    converter._file_list.addItem(str(source))
+    converter._file_list.setCurrentRow(0)
+    converter._preview_debounce.stop()
+    converter._resize_check.setChecked(True)
+    assert converter._preview_debounce.isActive()
+    for spin, value, expected in [
+        (converter._width_spin, 60, (60, 30)),
+        (converter._height_spin, 20, (40, 20)),
+    ]:
+        converter._preview_debounce.stop()
+        spin.setValue(value)
+        assert converter._preview_debounce.isActive()
+        converter._update_converted_preview()
+        assert converter._preview_loader.options["resize"] == expected
+    converter._lock_aspect_check.setChecked(False)
+    converter._preview_debounce.stop()
+    converter._height_spin.setValue(13)
+    assert converter._preview_debounce.isActive()
+    converter._update_converted_preview()
+    assert converter._preview_loader.options["resize"] == (40, 13)
+    converter._preview_debounce.stop()
+    converter._resize_check.setChecked(False)
+    assert converter._preview_debounce.isActive()
+    assert not converter._width_spin.isEnabled()
+    converter._update_converted_preview()
+    assert converter._preview_loader.options["resize"] is None
+
+
+@pytest.mark.parametrize("fmt", ["PNG", "JPEG", "WEBP", "AVIF", "JPEG2000", "DDS"])
+@pytest.mark.parametrize("compressed_dds", [False, True])
+def test_converter_restores_format_options_without_resetting_preferences(
+        settings, fmt, compressed_dds):
+    saved = {
+        "last_converter_format": fmt,
+        "last_converter_quality": 73,
+        "last_converter_dds_variant": "dxt5",
+        "converter_keep_metadata": True,
+    }
+    for key, value in saved.items():
+        settings.set(key, value)
+    with patch("src.ui.converter_tool.dds_compression_available", return_value=compressed_dds):
+        widget = ConverterTab(settings)
+    try:
+        assert widget._fmt_combo.currentData()[0] == fmt
+        assert widget._quality_spin.value() == 73
+        assert widget._quality_spin.isEnabled() == (fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"))
+        assert widget._dds_variant_combo.isHidden() == (fmt != "DDS")
+        assert widget._dds_variant_combo.currentData() == ("dxt5" if compressed_dds else "auto")
+        assert widget._keep_metadata_check.isChecked()
+        assert {key: settings.get(key) for key in saved} == saved
+    finally:
+        widget._preview_debounce.stop()
+        widget.close()
+        sip.delete(widget)
 
 
 def test_named_history_search_preserves_filter_and_clear_behavior(settings, app):
