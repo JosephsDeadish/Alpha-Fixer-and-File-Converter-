@@ -147,6 +147,73 @@ def test_tutorial_navigation_fits_compact_screen_and_live_font_changes(app, name
         sip.delete(widget)
 
 
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("width,height", [(480, 400), (640, 480)])
+def test_tutorial_short_screen_guidance_and_keyboard_navigation(app, name, pixels, width, height):
+    from src.ui.theme_engine import build_stylesheet
+    from src.ui.tutorial_dialog import TutorialDialog
+
+    widget = TutorialDialog()
+    screen = Mock()
+    screen.availableGeometry.return_value = QRect(0, 0, width, height)
+    try:
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + f"\nQWidget {{ font-size: {pixels}px; }}")
+        widget.resize(width - 20, height - 20)
+        with patch.object(widget, "screen", return_value=screen):
+            widget.show()
+            for index in range(widget._total):
+                widget._show_step(index)
+                for _ in range(8):
+                    app.processEvents()
+                assert screen.availableGeometry().contains(widget.frameGeometry())
+                scroll = widget._body_scroll
+                assert scroll.viewport().height() >= 60
+                for label in (widget._counter_lbl, widget._title_lbl, widget._body_lbl,
+                              widget._tip_lbl, widget._shortcut_lbl):
+                    if label.isVisible():
+                        assert label.height() >= label.heightForWidth(label.width())
+                        scroll.ensureWidgetVisible(label)
+                        app.processEvents()
+                        top = label.mapTo(scroll.viewport(), label.rect().topLeft())
+                        assert top.y() < scroll.viewport().height()
+                        assert top.y() + label.height() > 0
+                for button in (widget._btn_prev, widget._btn_close, widget._btn_next):
+                    assert button.width() >= button.sizeHint().width()
+                    assert button.height() >= button.sizeHint().height()
+                    assert widget.rect().contains(
+                        QRect(button.mapTo(widget, button.rect().topLeft()), button.size()))
+
+            widget.activateWindow()
+            widget._show_step(1)
+            widget._body_lbl.setFocus()
+            app.processEvents()
+            for button in (widget._btn_prev, widget._btn_close, widget._btn_next):
+                QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
+                assert app.focusWidget() is button
+            QTest.keyClick(widget._btn_next, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+            assert app.focusWidget() is widget._btn_close
+            QTest.keyClick(widget._btn_close, Qt.Key.Key_Tab)
+            QTest.keyClick(widget._btn_next, Qt.Key.Key_Space)
+            assert widget._step == 2
+            widget._show_step(widget._total - 1)
+            widget._btn_next.setFocus()
+            QTest.keyClick(widget._btn_next, Qt.Key.Key_Space)
+            assert not widget.isVisible()
+            widget.show()
+            app.processEvents()
+            widget._show_step(0)
+            widget._body_lbl.setFocus()
+            QTest.keyClick(widget._body_lbl, Qt.Key.Key_Tab)
+            assert app.focusWidget() is widget._btn_close
+            QTest.keyClick(widget._btn_close, Qt.Key.Key_Space)
+            assert not widget.isVisible()
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
 @pytest.mark.parametrize("field,value", [
     ("name", []), ("name", ""), ("accent", None), ("accent", "not-a-color"),
     ("_cursor", []), ("_effect", {}), ("_trail_color", "not-a-color"),

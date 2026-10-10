@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Tutorial guidance scrolls as a whole so large-font headings, tips and shortcuts
+remain reachable on compact screens. Navigation stays outside the scroll area
+with font-sized buttons and visual-order keyboard navigation. Offscreen checks
+cover compact layouts, theme/font variants and keyboard activation; physical DPI,
+native decorations and screen-reader acceptance remain separate release gates.
+
 Image preview loaders remain owned until their threads finish, including when
 decoding outlives a closed/deleted pane. Results use GUI-affine queued slots;
 close/clear/replacement invalidates old requests and cooperatively stops loading.

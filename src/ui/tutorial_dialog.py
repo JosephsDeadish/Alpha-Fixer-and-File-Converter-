@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QProgressBar, QScrollArea, QWidget, QBoxLayout, QSizePolicy,
+    QFrame, QProgressBar, QScrollArea, QWidget, QBoxLayout, QSizePolicy, QLayout,
 )
 
 
@@ -179,6 +179,20 @@ class TutorialDialog(QDialog):
         self._progress.setFixedHeight(6)
         root.addWidget(self._progress)
 
+        # Scroll all guidance together: large-font tips and headings can exceed
+        # a short screen even when the body alone is scrollable.
+        outer = root
+        scroll = self._body_scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        root = QVBoxLayout(content)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(8)
+        root.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+
         # Step counter label
         self._counter_lbl = QLabel("Step 1 / " + str(self._total))
         self._counter_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -214,13 +228,6 @@ class TutorialDialog(QDialog):
         sep.setFrameShadow(QFrame.Shadow.Sunken)
         root.addWidget(sep)
 
-        # Body text in a scroll area so long text doesn't overflow
-        scroll = self._body_scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        body_container = QWidget()
-        body_vl = QVBoxLayout(body_container)
-        body_vl.setContentsMargins(0, 0, 0, 0)
         self._body_lbl = QLabel()
         self._body_lbl.setWordWrap(True)
         self._body_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -231,10 +238,7 @@ class TutorialDialog(QDialog):
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         self._body_lbl.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        body_vl.addWidget(self._body_lbl)
-        body_vl.addStretch(1)
-        scroll.setWidget(body_container)
-        root.addWidget(scroll, 1)
+        root.addWidget(self._body_lbl)
 
         # Tip label
         self._tip_lbl = QLabel()
@@ -248,12 +252,14 @@ class TutorialDialog(QDialog):
         self._shortcut_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._shortcut_lbl.setProperty("toolGuidance", True)
         root.addWidget(self._shortcut_lbl)
+        root.addStretch(1)
 
         # Navigation buttons
         nav_host = QWidget()
         nav_host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         nav_row = QHBoxLayout(nav_host)
         nav_row.setContentsMargins(0, 0, 0, 0)
+        nav_row.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self._btn_prev = QPushButton("◀  Previous")
         self._btn_prev.setMinimumHeight(30)
         self._btn_prev.setToolTip("Go to the previous tutorial step.  (← arrow key)")
@@ -277,7 +283,10 @@ class TutorialDialog(QDialog):
         nav_row.addWidget(self._btn_next)
         nav_row.setDirection(QBoxLayout.Direction.TopToBottom)
         self._nav_layout = nav_row
-        root.addWidget(nav_host)
+        outer.addWidget(nav_host)
+        QWidget.setTabOrder(self._body_lbl, self._btn_prev)
+        QWidget.setTabOrder(self._btn_prev, self._btn_close)
+        QWidget.setTabOrder(self._btn_close, self._btn_next)
         self._nav_update_timer = QTimer(self)
         self._nav_update_timer.setSingleShot(True)
         self._nav_update_timer.timeout.connect(self._update_navigation_layout)
