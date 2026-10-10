@@ -14,6 +14,7 @@ import traceback
 import logging
 import gc
 import concurrent.futures
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -37,6 +38,7 @@ from .alpha_processor import (
 )
 from .file_converter import convert_file, build_output_path, output_format_discards_alpha
 from .presets import AlphaPreset
+from src.ui._ui_utils import staged_output_path
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,8 @@ class AlphaWorker(QThread):
         success = 0
         errors = 0
         outputs: dict[str, str] = {}
+        destinations: set[str] = set()
+        sources = {os.path.normcase(os.path.realpath(src)) for src in self._files}
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
         # Track (original_path, backup_path) pairs for undo support
@@ -134,7 +138,8 @@ class AlphaWorker(QThread):
             # file will be overwritten in-place (overwrite mode, no output_dir,
             # no suffix that would create a new name).
             if (self._backup_dir and self._overwrite
-                    and not self._output_dir and not self._suffix):
+                    and not self._output_dir and not self._suffix
+                    and os.path.normcase(os.path.realpath(src)) not in destinations):
                 try:
                     bk_path = self._resolve_backup_path(src, idx)
                     os.makedirs(os.path.dirname(bk_path) or self._backup_session_dir or self._backup_dir, exist_ok=True)
@@ -150,6 +155,15 @@ class AlphaWorker(QThread):
                         return
                     continue
             try:
+                save_ext = self._effective_output_ext(src)
+                dest = self._resolve_output(src, save_ext)
+                dest_key = os.path.normcase(os.path.realpath(dest))
+                dest_name = os.path.normcase(os.path.abspath(dest))
+                src_key = os.path.normcase(os.path.realpath(src))
+                if (dest_name in destinations or dest_key in destinations
+                        or (dest_key in sources and dest_key != src_key)):
+                    raise ValueError(f"Destination collision: {dest}")
+                destinations.update((dest_name, dest_key))
                 img = load_image(src)
                 try:
                     if self._preset is not None:
@@ -180,10 +194,9 @@ class AlphaWorker(QThread):
                         img.close()
                         img = _tmp
                     ext = Path(src).suffix.lower()
-                    save_ext = self._effective_output_ext(src)
-                    dest = self._resolve_output(src, save_ext)
                     os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-                    save_image(img, dest, save_ext)
+                    with staged_output_path(dest, preserve_existing_mode=True) as staged:
+                        save_image(img, staged, save_ext)
                     success += 1
                     outputs[src] = dest
                     # Warn when saving to a format that does not support alpha so
@@ -380,6 +393,13 @@ class ConverterWorker(QThread):
         success = 0
         errors = 0
         outputs: dict[str, str] = {}
+        destinations: set[str] = set()
+        destination_lock = threading.Lock()
+        physical_sources = {os.path.normcase(os.path.realpath(src)) for src in self._files}
+        logical_sources = {
+            os.path.normcase(os.path.realpath(src))
+            for src in self._source_aliases.values()
+        }
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
 
@@ -408,15 +428,28 @@ class ConverterWorker(QThread):
                     input_root=self._input_root,
                     suffix=self._suffix,
                 )
-                convert_file(
-                    src,
-                    dest,
-                    actual_target_format,
-                    quality=self._quality,
-                    resize=self._resize,
-                    keep_metadata=self._keep_metadata,
-                    dds_variant=self._dds_variant,
-                )
+                dest_key = os.path.normcase(os.path.realpath(dest))
+                dest_name = os.path.normcase(os.path.abspath(dest))
+                src_key = os.path.normcase(os.path.realpath(src))
+                logical_key = os.path.normcase(os.path.realpath(logical_src))
+                with destination_lock:
+                    if dest_key in physical_sources and dest_key != src_key:
+                        raise ValueError(f"Destination collision: {dest}")
+                    if dest_name in destinations or dest_key in destinations or (
+                            dest_key in logical_sources and dest_key not in (src_key, logical_key)):
+                        raise ValueError(f"Destination collision: {dest}")
+                    destinations.update((dest_name, dest_key))
+                os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+                with staged_output_path(dest, preserve_existing_mode=True) as staged:
+                    convert_file(
+                        src,
+                        staged,
+                        actual_target_format,
+                        quality=self._quality,
+                        resize=self._resize,
+                        keep_metadata=self._keep_metadata,
+                        dds_variant=self._dds_variant,
+                    )
                 return idx, src, True, f"{dest}\n{note}" if note else dest
             except MemoryError as exc:
                 return idx, src, False, f"Out of memory — {exc}"
@@ -434,7 +467,7 @@ class ConverterWorker(QThread):
             cancelled_indices: set[int] = set()
             emit_idx = 0
 
-            while next_idx < total and len(pending) < n_workers and not self._abort:
+            while next_idx < total and next_idx - emit_idx < n_workers and not self._abort:
                 fut = pool.submit(_convert_one, next_idx, self._files[next_idx])
                 pending.add(fut)
                 future_indices[fut] = next_idx
@@ -499,7 +532,9 @@ class ConverterWorker(QThread):
                     emit_idx += 1
                     if emit_idx % _GC_CLEANUP_INTERVAL == 0 and (large_batch or n_workers <= 2):
                         gc.collect()
-                while next_idx < total and len(pending) < n_workers and not self._abort:
+                # Include completed-but-not-emitted results in the admission window.
+                # A slow early input must not buffer the rest of a large queue.
+                while next_idx < total and next_idx - emit_idx < n_workers and not self._abort:
                     fut = pool.submit(_convert_one, next_idx, self._files[next_idx])
                     pending.add(fut)
                     future_indices[fut] = next_idx

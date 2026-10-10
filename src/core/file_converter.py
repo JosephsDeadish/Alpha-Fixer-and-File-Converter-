@@ -337,10 +337,9 @@ def _load_svg(path: str) -> Image.Image:
         img = Image.open(io.BytesIO(png_bytes))
         try:
             img.load()
-        except Exception:
+            return img.convert("RGBA")
+        finally:
             img.close()
-            raise
-        return img.convert("RGBA")
 
     if _has_svglib():
         from svglib.svglib import svg2rlg
@@ -352,10 +351,9 @@ def _load_svg(path: str) -> Image.Image:
         img = Image.open(io.BytesIO(png_bytes))
         try:
             img.load()
-        except Exception:
+            return img.convert("RGBA")
+        finally:
             img.close()
-            raise
-        return img.convert("RGBA")
 
     raise ImportError(
         "SVG input requires bundled QtSvg, cairosvg or svglib.\n"
@@ -691,6 +689,7 @@ def convert_file(
             if ext in (".pbm", ".pgm", ".pnm", ".ppm"):
                 flat = _flatten_alpha(img)
                 save_img = None
+                grey = None
                 try:
                     if ext == ".pbm":
                         grey = flat if flat.mode == "L" else flat.convert("L")
@@ -703,6 +702,8 @@ def convert_file(
                         save_img = flat
                     save_img.save(output_path)
                 finally:
+                    if grey is not None and grey is not flat:
+                        grey.close()
                     if save_img is not None and save_img is not flat:
                         save_img.close()
                     if flat is not img:

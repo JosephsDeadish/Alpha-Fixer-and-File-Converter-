@@ -61,9 +61,10 @@ def confirm_normalized_save_path(parent, chosen_path, final_path):
 
 
 @contextmanager
-def staged_output_path(destination):
+def staged_output_path(destination, *, preserve_existing_mode=False):
     """Replace a destination only after successfully writing a sibling file."""
     import os
+    import stat
     from pathlib import Path
     import tempfile
 
@@ -76,6 +77,13 @@ def staged_output_path(destination):
     handle.close()
     try:
         yield str(staged)
+        if preserve_existing_mode and os.name == "posix":
+            try:
+                mode = stat.S_IMODE(path.stat().st_mode)
+            except FileNotFoundError:
+                pass
+            else:
+                staged.chmod(mode)
         os.replace(staged, path)
     finally:
         staged.unlink(missing_ok=True)

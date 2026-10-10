@@ -336,6 +336,44 @@ live appearance/effects and history policies. Opening Settings no longer rewrite
 legacy per-tool history values merely because a displayed control clamps its
 range. Imported shortcut bindings still require the documented restart.
 
+Alpha and Converter batch outputs are written to sibling staging files before
+replacement, so a failed encoder does not truncate an existing destination.
+Existing POSIX file modes are retained; new staged outputs use private
+temporary-file permissions.
+Within a batch, conflicting destinations and attempts to overwrite another
+queued input are reported as failures rather than silently losing files.
+Converter admission also includes completed results waiting behind earlier
+inputs, preventing a stalled first item from buffering the rest of the queue.
+Queue regressions exercise 1,000 generated tiny images, repeated completion and
+cancellation, corrupt inputs, output failures and image/staging cleanup. They
+do not establish a sustained RSS ceiling or qualify large real-world media.
+
+### Remaining acceptance and distribution work
+
+The source-level checks above are partial qualification, not a release certificate.
+Retain platform-specific evidence for these remaining gates:
+
+- **Display and accessibility:** physical small screens, mixed DPI, monitor hot-plug,
+  native window decorations, every dialog/theme, keyboard navigation and actual
+  screen readers. Offscreen geometry checks cannot establish native accessibility.
+- **Stability and scale:** sustained memory, file-handle and thread growth; native
+  crashes; large processing queues/history; long timelines; audio synchronization;
+  repeated import/export/cancel/reopen and application shutdown.
+- **Output safety:** real permission failures, disk exhaustion, missing inputs,
+  destination collisions and recovery, including network/removable storage and
+  Windows/macOS path behavior.
+- **Media coverage:** legally available real-world corpora, malformed/large files,
+  transparency/metadata fidelity and every advertised codec in the actual bundle.
+  The format boundaries above remain limitations, not completed feature promises.
+- **Offline distribution:** clean-machine folder and single-file bundles on Windows,
+  macOS and Linux with developer runtimes and network access unavailable.
+- **Release obligations:** review actual bundled licenses, corresponding-source
+  requirements and project licensing; retain exact reproducible build versions;
+  qualify installers, upgrades/uninstall, signing and macOS notarization.
+- **End-to-end acceptance:** first launch through every tool's successful export,
+  settings/backup restoration and relaunch, with native visual checks and retained
+  results. Diagnose all failures and unexplained skips before claiming readiness.
+
 ### Real corpus validation
 
 Optional real-world corpus tests already exist for odd video containers / disc images and DDS samples. Because many of the most relevant PSP / PS1 / PS2 corpora are large, private, or copyrighted, they are **not** bundled in this repository.

@@ -1033,6 +1033,8 @@ class TestWorkerBehavior(unittest.TestCase):
                 source_aliases={extracted: logical},
             )
             seen = []
+            manifests = []
+            worker.output_manifest.connect(manifests.append)
 
             def _fake_convert(src, dest, target_format, **kwargs):
                 seen.append((src, dest, target_format))
@@ -1042,7 +1044,13 @@ class TestWorkerBehavior(unittest.TestCase):
             with mock.patch("src.core.worker.convert_file", side_effect=_fake_convert):
                 worker.run()
 
-            self.assertEqual(seen, [(extracted, os.path.join(output_dir, "nested", "anim_frame0001.png"), "PNG")])
+            destination = os.path.join(output_dir, "nested", "anim_frame0001.png")
+            self.assertEqual(manifests, [{extracted: destination}])
+            self.assertEqual(len(seen), 1)
+            self.assertEqual((seen[0][0], seen[0][2]), (extracted, "PNG"))
+            self.assertEqual(Path(seen[0][1]).parent, Path(destination).parent)
+            self.assertFalse(Path(seen[0][1]).exists())
+            self.assertEqual(Path(destination).read_bytes(), b"ok")
 
 
 # ---------------------------------------------------------------------------
