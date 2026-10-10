@@ -123,7 +123,10 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
                     if paste_img is not curr:
                         paste_img.close()
                     curr.close()
-                frames.append(composite.copy())
+                composited_frame = composite.copy()
+                if img.format == "GIF" and "duration" in img.info:
+                    composited_frame.info["duration"] = img.info["duration"]
+                frames.append(composited_frame)
                 disposal = getattr(img, "disposal_method", img.info.get("disposal", 0))
                 canvas.close()
                 if disposal == 2:
@@ -891,12 +894,17 @@ class GifBuilderDialog(QDialog):
                 source_note += f"  •  {recovery_note}"
             loaded_details.append(source_note)
             for frame_idx, pil_frame in enumerate(pil_frames):
+                source_delay_ms = frame_delay_ms
+                if ext == ".gif" and not treat_as_video:
+                    duration = pil_frame.info.get("duration", 0)
+                    if duration > 0:
+                        source_delay_ms = max(10, int(duration))
                 entry = _FrameEntry(
                     path,
                     frame_idx,
                     pil_frame,
-                    delay_ms=frame_delay_ms,
-                    source_delay_ms=frame_delay_ms,
+                    delay_ms=source_delay_ms,
+                    source_delay_ms=source_delay_ms,
                     source_kind=source_kind,
                 )
                 self._frames.append(entry)
@@ -1393,7 +1401,8 @@ class GifBuilderDialog(QDialog):
         self._pf_slider.blockSignals(True)
         self._pf_check.setChecked(delay is not None)
         val = delay if delay is not None else self._delay_slider.value()
-        self._pf_slider.setValue(max(10, min(3000, val)))
+        self._pf_slider.setMaximum(max(3000, val))
+        self._pf_slider.setValue(max(10, val))
         self._pf_val_lbl.setText(f"{self._pf_slider.value()} ms")
         self._pf_slider.setEnabled(delay is not None)
         self._pf_check.blockSignals(False)
@@ -1407,8 +1416,7 @@ class GifBuilderDialog(QDialog):
             self._frames[row].delay_ms = self._pf_slider.value() if checked else None
         if not checked:
             self._sync_inherited_delay_control()
-        if self._preview_timer.isActive():
-            self._preview_timer.setInterval(self._current_preview_delay())
+        self._sync_preview_delay()
         self._update_frame_diagnostics()
 
     def _on_pf_slider_changed(self, value: int) -> None:
@@ -1416,8 +1424,7 @@ class GifBuilderDialog(QDialog):
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames) and self._pf_check.isChecked():
             self._frames[row].delay_ms = value
-        if self._preview_timer.isActive():
-            self._preview_timer.setInterval(self._current_preview_delay())
+        self._sync_preview_delay()
         self._update_frame_diagnostics()
 
     # ------------------------------------------------------------------
@@ -1427,8 +1434,7 @@ class GifBuilderDialog(QDialog):
     def _on_delay_changed(self, value: int) -> None:
         self._delay_val_lbl.setText(f"{value} ms")
         self._sync_inherited_delay_control()
-        if self._preview_timer.isActive():
-            self._preview_timer.setInterval(self._current_preview_delay())
+        self._sync_preview_delay()
         self._update_frame_diagnostics()
 
     def _sync_inherited_delay_control(self) -> None:
@@ -1452,12 +1458,12 @@ class GifBuilderDialog(QDialog):
 
     def _on_scrub(self, value: int) -> None:
         self._preview_idx = value
-        self._update_preview_frame()
+        self._update_preview_frame(restart_timer=True)
 
     def _rewind(self) -> None:
         self._preview_idx = 0
-        self._scrubber.setValue(0)
-        self._update_preview_frame()
+        self._update_scrubber()
+        self._update_preview_frame(restart_timer=True)
 
     def _on_play_toggled(self, playing: bool) -> None:
         if playing:
@@ -1479,6 +1485,12 @@ class GifBuilderDialog(QDialog):
                 delay = entry.delay_ms
         return max(10, delay)
 
+    def _sync_preview_delay(self) -> None:
+        delay = self._current_preview_delay()
+        # setInterval restarts an active timer, even when the value is unchanged.
+        if self._preview_timer.isActive() and self._preview_timer.interval() != delay:
+            self._preview_timer.setInterval(delay)
+
     def _advance_preview(self) -> None:
         if not self._frames:
             self._preview_timer.stop()
@@ -1490,7 +1502,7 @@ class GifBuilderDialog(QDialog):
         self._scrubber.blockSignals(False)
         self._update_preview_frame()
 
-    def _update_preview_frame(self) -> None:
+    def _update_preview_frame(self, *, restart_timer: bool = False) -> None:
         total = len(self._frames)
         self._btn_play.setEnabled(total >= 2)
         self._btn_rewind.setEnabled(total > 0)
@@ -1499,7 +1511,10 @@ class GifBuilderDialog(QDialog):
             self._preview_timer.stop()
             self._btn_play.setChecked(False)
         elif self._preview_timer.isActive():
-            self._preview_timer.setInterval(self._current_preview_delay())
+            if restart_timer:
+                self._preview_timer.start(self._current_preview_delay())
+            else:
+                self._sync_preview_delay()
         if total == 0:
             self._preview_lbl.setText("(no frames yet)")
             self._preview_frame_lbl.setText("0 / 0")

@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF Builder retains imported per-frame delays, including long holds. Unrelated
+live edits no longer restart the current playback hold; explicit scrub/rewind
+starts the selected frame's full hold. Generated exports verify retained delays.
+GIF stores timing in 10ms units, so exported timing may round down from the
+millisecond value used by the preview.
+
 Alpha binary-cut processing now honors an enabled cut at threshold zero rather
 than silently skipping it. Generated-pixel checks cover threshold boundaries,
 range/inversion, RGBA clipping and preview/statistics/PNG-export consistency.
