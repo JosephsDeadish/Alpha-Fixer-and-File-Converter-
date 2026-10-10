@@ -401,6 +401,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF frame selection adapts from one to six thumbnail columns as space changes,
+stacks its toolbar when narrow, and scrolls keyboard-focused frames into view.
+Frame tab order and accessible descriptions are covered by generated-GIF tests
+at small window sizes and large fonts. Native screen-reader/display acceptance
+still requires separate testing.
+
 Settings theme filtering preserves the active theme and stored preferences;
 clearing the filter restores the saved theme's identity. Empty searches have an
 explicit no-results state. Saved-theme deletion updates available actions and

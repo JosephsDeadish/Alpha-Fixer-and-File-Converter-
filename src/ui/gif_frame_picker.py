@@ -12,19 +12,19 @@ from pathlib import Path
 
 from ._ui_utils import fit_dialog_to_screen
 
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QSize, QTimer, QEvent
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QDialog, QVBoxLayout, QLabel, QPushButton,
     QScrollArea, QWidget, QGridLayout, QCheckBox, QFrame,
-    QDialogButtonBox,
+    QDialogButtonBox, QBoxLayout,
 )
 
 # Thumbnail dimensions (pixels).  Frames are scaled proportionally to fit.
 _THUMB_W = 96
 _THUMB_H = 96
 
-# Number of thumbnails per row in the grid.
+# Maximum number of thumbnails per row.
 _COLS = 6
 
 
@@ -66,7 +66,12 @@ class GifFramePickerDialog(QDialog):
         super().__init__(parent)
         self._path = path
         self._checkboxes: list[QCheckBox] = []
+        self._cells: list[QWidget] = []
+        self._columns = 0
         self._frame_count = 0
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.timeout.connect(self._reflow)
         self.setWindowTitle(f"Select GIF Frames — {Path(path).name}")
         self.setMinimumSize(320, 240)
         self.resize(700, 480)
@@ -91,7 +96,8 @@ class GifFramePickerDialog(QDialog):
         root.addWidget(self._info_lbl)
 
         # Toolbar: Select All / Deselect All / invert
-        tool_row = QHBoxLayout()
+        tool_row = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self._tool_row = tool_row
         self._btn_all = QPushButton("Select All")
         self._btn_all.setToolTip(
             "Check all frames for export. Every single one. The whole family is coming."
@@ -106,8 +112,8 @@ class GifFramePickerDialog(QDialog):
         )
         for btn in (self._btn_all, self._btn_none, self._btn_invert):
             btn.setMinimumHeight(28)
+            btn.setAutoDefault(False)
             tool_row.addWidget(btn)
-        tool_row.addStretch()
         self._sel_lbl = QLabel("0 / 0 selected")
         self._sel_lbl.setObjectName("subheader")
         root.addLayout(tool_row)
@@ -122,8 +128,14 @@ class GifFramePickerDialog(QDialog):
         self._grid = QGridLayout(self._grid_widget)
         self._grid.setContentsMargins(4, 4, 4, 4)
         self._grid.setSpacing(8)
+        self._grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._grid_widget.installEventFilter(self)
 
         scroll = QScrollArea()
+        self._scroll = scroll
+        scroll.setAccessibleName("GIF frames")
+        scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        scroll.viewport().installEventFilter(self)
         scroll.setWidget(self._grid_widget)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.StyledPanel)
@@ -243,16 +255,83 @@ class GifFramePickerDialog(QDialog):
             cell_layout.addWidget(img_lbl)
 
             cb = QCheckBox(f"Frame {idx + 1}")
+            cb.setAccessibleDescription(
+                f"Select frame {idx + 1} for export. Press Space to toggle selection."
+            )
             cb.setChecked(True)
+            cb.installEventFilter(self)
             cb.toggled.connect(self._update_selection_label)
             cell_layout.addWidget(cb, 0, Qt.AlignmentFlag.AlignHCenter)
 
             self._checkboxes.append(cb)
+            self._cells.append(cell)
 
             row, col = divmod(idx, _COLS)
             self._grid.addWidget(cell, row, col)
 
+        self._columns = _COLS
+        previous = self._btn_invert
+        for cb in self._checkboxes:
+            QWidget.setTabOrder(previous, cb)
+            previous = cb
+        QWidget.setTabOrder(
+            previous, self._btn_box.button(QDialogButtonBox.StandardButton.Ok)
+        )
+        self._layout_timer.start(0)
         self._update_selection_label()
+
+    def eventFilter(self, watched, event):
+        if (watched is self._scroll.viewport()
+                and event.type() == QEvent.Type.Resize):
+            self._layout_timer.start(0)
+        elif (watched is self._grid_widget
+              and event.type() == QEvent.Type.LayoutRequest):
+            self._layout_timer.start(0)
+        elif isinstance(watched, QCheckBox) and event.type() == QEvent.Type.FocusIn:
+            self._reveal_frame(watched)
+        return super().eventFilter(watched, event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._layout_timer.start(0)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._layout_timer.start(0)
+
+    def _reveal_frame(self, checkbox):
+        self._scroll.ensureWidgetVisible(checkbox.parentWidget(), 4, 4)
+        # A short viewport may fit the checkbox but not the whole thumbnail.
+        self._scroll.ensureWidgetVisible(checkbox, 4, 4)
+
+    def _reflow(self):
+        buttons = (self._btn_all, self._btn_none, self._btn_invert)
+        toolbar_width = sum(btn.sizeHint().width() for btn in buttons)
+        toolbar_width += self._tool_row.spacing() * (len(buttons) - 1)
+        margins = self.layout().contentsMargins()
+        available = self.width() - margins.left() - margins.right()
+        self._tool_row.setDirection(
+            QBoxLayout.Direction.TopToBottom if toolbar_width > available
+            else QBoxLayout.Direction.LeftToRight
+        )
+        if not self._cells:
+            return
+        margins = self._grid.contentsMargins()
+        available = self._scroll.viewport().width() - margins.left() - margins.right()
+        cell_width = max(cell.minimumSizeHint().width() for cell in self._cells)
+        spacing = self._grid.horizontalSpacing()
+        columns = max(1, min(_COLS, (available + spacing) // (cell_width + spacing)))
+        if columns != self._columns:
+            for cell in self._cells:
+                self._grid.removeWidget(cell)
+            for idx, cell in enumerate(self._cells):
+                self._grid.addWidget(cell, *divmod(idx, columns))
+            self._columns = columns
+            self._grid.activate()
+        focused = self.focusWidget()
+        if focused in self._checkboxes:
+            self._reveal_frame(focused)
 
     # ------------------------------------------------------------------
     # Selection helpers
