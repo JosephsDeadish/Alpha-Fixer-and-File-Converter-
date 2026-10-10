@@ -154,6 +154,7 @@ class SelectiveAlphaCanvas(QWidget):
 
     # ── PyQt signals ─────────────────────────────────────────────────────
     mask_changed        = pyqtSignal(int)   # zone index whose mask was modified
+    zone_alpha_changed  = pyqtSignal(int)
     undo_available      = pyqtSignal(bool)  # whether Ctrl+Z is available
     redo_available      = pyqtSignal(bool)  # whether Ctrl+Y is available
     undo_count_changed  = pyqtSignal(int)   # number of steps on undo stack
@@ -320,8 +321,12 @@ class SelectiveAlphaCanvas(QWidget):
 
     def set_zone_alpha_label(self, idx: int, alpha: int) -> None:
         if 0 <= idx < NUM_ZONES:
-            self._zone_alphas[idx] = max(0, min(255, int(alpha)))
+            value = max(0, min(255, int(alpha)))
+            if self._zone_alphas[idx] == value:
+                return
+            self._zone_alphas[idx] = value
             self._composite_dirty = True
+            self.zone_alpha_changed.emit(idx)
             self.update()
 
     def set_zone_color(self, idx: int, r: int, g: int, b: int) -> None:
@@ -470,36 +475,37 @@ class SelectiveAlphaCanvas(QWidget):
             return None
         return self._masks[zone_idx].copy()
 
-    def set_mask_from_array(self, zone_idx: int, arr: np.ndarray) -> None:
-        if not self.has_image():
-            return
-        self._push_history()
+    @staticmethod
+    def _validate_mask(arr: np.ndarray) -> None:
+        if (not isinstance(arr, np.ndarray) or arr.ndim != 2
+                or not all(arr.shape) or arr.dtype.kind not in "buif"
+                or not np.isfinite(arr).all()
+                or np.any(arr < 0) or np.any(arr > 255)):
+            raise ValueError("Expected a non-empty two-dimensional numeric mask.")
+
+    def _prepare_mask(self, arr: np.ndarray) -> np.ndarray:
+        """Validate and detach a mask before committing any editing state."""
+        self._validate_mask(arr)
         h, w = self._img_h, self._img_w
         if arr.shape == (h, w):
-            self._masks[zone_idx] = arr.astype(np.uint8)
-        elif arr.ndim == 2 and arr.shape[0] > 0 and arr.shape[1] > 0:
-            # Resize the mask to match the current image dimensions.
-            # This handles cases where a mask was copied from an image of a
-            # different size (e.g. import from a different-resolution source).
-            try:
-                from PIL import Image as _PILImage
-                src = _PILImage.fromarray(arr.astype(np.uint8), mode="L")
-                resized = src.resize((w, h), _PILImage.NEAREST)
-                self._masks[zone_idx] = np.array(resized, dtype=np.uint8)
-            except Exception:
-                # Fallback: nearest-neighbour via numpy slicing
-                import numpy as np_fb
-                src_h, src_w = arr.shape
-                row_idx = np_fb.clip(
-                    (np_fb.arange(h) * src_h // h), 0, src_h - 1)
-                col_idx = np_fb.clip(
-                    (np_fb.arange(w) * src_w // w), 0, src_w - 1)
-                self._masks[zone_idx] = arr.astype(np.uint8)[np_fb.ix_(row_idx, col_idx)]
-        else:
-            self._masks[zone_idx] = np.zeros((h, w), dtype=np.uint8)
+            return arr.astype(np.uint8)
+        with Image.fromarray(arr.astype(np.uint8)) as src:
+            with src.resize((w, h), Image.Resampling.NEAREST) as resized:
+                return np.array(resized, dtype=np.uint8)
+
+    def set_mask_from_array(self, zone_idx: int, arr: np.ndarray) -> bool:
+        if not self.has_image() or not 0 <= zone_idx < NUM_ZONES:
+            return False
+        try:
+            mask = self._prepare_mask(arr)
+        except (ValueError, TypeError):
+            return False
+        self._push_history()
+        self._masks[zone_idx] = mask
         self._composite_dirty = True
         self.mask_changed.emit(zone_idx)
         self.update()
+        return True
 
     def get_masks_as_bool(self) -> list[np.ndarray]:
         return [m.astype(bool) for m in self._masks]
@@ -508,59 +514,36 @@ class SelectiveAlphaCanvas(QWidget):
         """Return a snapshot of all masks as a list of array copies."""
         return [m.copy() for m in self._masks]
 
-    def set_all_masks(self, snapshot: list[np.ndarray]) -> None:
+    def set_all_masks(self, snapshot: list[np.ndarray]) -> bool:
         """Restore all masks from a *snapshot* produced by get_all_masks().
 
         If a mask has different dimensions than the current image, it is
         automatically scaled to fit using PIL nearest-neighbour resize (item 39).
         """
-        if not self.has_image():
-            return
-        self._push_history()
+        if (not self.has_image() or not isinstance(snapshot, (list, tuple))
+                or not 0 < len(snapshot) <= NUM_ZONES):
+            return False
         h, w = self._img_h, self._img_w
-        for i, m in enumerate(snapshot):
-            if i < NUM_ZONES and m is not None:
-                if m.shape == (h, w):
-                    self._masks[i] = m.copy()
-                else:
-                    # Auto-scale to fit current image dimensions (item 39)
-                    try:
-                        from PIL import Image as _PIL
-                        pil_m = _PIL.fromarray(m.astype(np.uint8), mode="L")
-                        pil_m = pil_m.resize((w, h), _PIL.NEAREST)
-                        self._masks[i] = np.array(pil_m, dtype=np.uint8)
-                    except Exception:
-                        self._masks[i] = m.copy()
+        try:
+            masks = [
+                np.zeros((h, w), dtype=np.uint8) if m is None else self._prepare_mask(m)
+                for m in snapshot
+            ]
+            masks.extend(np.zeros((h, w), dtype=np.uint8)
+                         for _ in range(NUM_ZONES - len(masks)))
+        except (ValueError, TypeError):
+            return False
+        self._push_history()
+        self._masks = masks
         self._composite_dirty = True
         for i in range(NUM_ZONES):
             self.mask_changed.emit(i)
         self.update()
+        return True
 
-    def populate_zones_from_detection(self, zones: list) -> None:
+    def populate_zones_from_detection(self, zones: list) -> bool:
         """Fill zone masks from *zones* = [(alpha_val, bool_mask), ...]."""
-        if not self.has_image():
-            return
-        self._push_history()
-        h, w = self._img_h, self._img_w
-        for i in range(NUM_ZONES):
-            self._masks[i].fill(0)
-        for i, (_, bool_mask) in enumerate(zones):
-            if i >= NUM_ZONES:
-                break
-            if bool_mask.shape == (h, w):
-                self._masks[i] = bool_mask.astype(np.uint8)
-            else:
-                # Auto-scale if dimensions don't match (item 39)
-                try:
-                    from PIL import Image as _PIL
-                    pil_m = _PIL.fromarray((bool_mask.astype(np.uint8) * 255), mode="L")
-                    pil_m = pil_m.resize((w, h), _PIL.NEAREST)
-                    self._masks[i] = (np.array(pil_m, dtype=np.uint8) > 127).astype(np.uint8)
-                except Exception:
-                    self._masks[i] = bool_mask.astype(np.uint8)
-            self.mask_changed.emit(i)
-        self._composite_dirty = True
-        self.update()
+        return self.set_all_masks([mask for _, mask in zones[:NUM_ZONES]])
 
     # ── undo / redo ───────────────────────────────────────────────────────
 
@@ -1142,17 +1125,15 @@ class SelectiveAlphaCanvas(QWidget):
     def _do_fill(self, mask: np.ndarray, x: int, y: int) -> None:
         if self._src_img is None:
             return
-        src_arr = self._src_arr if self._src_arr is not None else np.array(self._src_img, dtype=np.uint8)
-        edges   = detect_edges(src_arr)
-        result  = edge_flood_fill(mask.astype(bool), edges, x, y)
-        mask[:] = result.astype(np.uint8)
+        edges = detect_edges(self._src_img)
+        result = edge_flood_fill((x, y), edges)
+        mask[result] = 1
 
     def _do_autocorrect(self, mask: np.ndarray) -> None:
         if self._src_img is None:
             return
         try:
-            src_arr   = self._src_arr if self._src_arr is not None else np.array(self._src_img, dtype=np.uint8)
-            edges     = detect_edges(src_arr)
+            edges     = detect_edges(self._src_img)
             corrected = autocorrect_mask(mask.astype(bool), edges)
             mask[:]   = corrected.astype(np.uint8)
         except Exception:
@@ -2489,6 +2470,7 @@ class SelectiveAlphaTool(QWidget):
             "Right-click for copy/paste menu"
         )
         self._canvas.mask_changed.connect(self._on_mask_changed)
+        self._canvas.zone_alpha_changed.connect(self._invalidate_result)
         # undo_available / redo_available are connected to the history overlay
         # below, after the overlay itself is instantiated.
         # Wire canvas context-menu copy/paste signals.
@@ -2954,7 +2936,9 @@ class SelectiveAlphaTool(QWidget):
         if not self._canvas.has_image():
             return
         # Attempt to paste; set_mask_from_array validates dimensions.
-        self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard.copy())
+        if not self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard):
+            QMessageBox.warning(self, "Invalid Mask", "The clipboard mask is not a valid two-dimensional mask.")
+            return
         if self._sound is not None:
             self._sound.play_mask_paste()
 
@@ -3001,7 +2985,9 @@ class SelectiveAlphaTool(QWidget):
             )
             return
         active_zone = self._canvas.get_active_zone()
-        self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx].copy())
+        if not self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx]):
+            QMessageBox.warning(self, "Invalid Mask", "The saved mask is not a valid two-dimensional mask.")
+            return
         if self._sound is not None:
             self._sound.play_mask_paste()
 
@@ -3129,7 +3115,9 @@ class SelectiveAlphaTool(QWidget):
                 "Please open an image before pasting zones."
             )
             return
-        self._canvas.set_all_masks(self._az_slots[idx])
+        if not self._canvas.set_all_masks(self._az_slots[idx]):
+            QMessageBox.warning(self, "Invalid Mask Layout", "The saved layout contains an invalid mask.")
+            return
         if self._sound is not None:
             self._sound.play_mask_paste()
 
@@ -3147,22 +3135,10 @@ class SelectiveAlphaTool(QWidget):
             QMessageBox.information(self, "No image loaded",
                                     "Please open an image before pasting a zone.")
             return
-        import numpy as np_imp
-        # Use the first zone for single-zone paste; scale mask to current image size.
         _alpha_val, bool_mask = self._shared_zones[0]
-        h, w = self._canvas._img_h, self._canvas._img_w
-        if bool_mask.shape != (h, w):
-            from PIL import Image as _PILImage
-            pil_m = _PILImage.fromarray((bool_mask.astype(np_imp.uint8) * 255), mode="L")
-            pil_m = pil_m.resize((w, h), _PILImage.NEAREST)
-            bool_mask = np_imp.array(pil_m, dtype=np_imp.uint8)
-        else:
-            bool_mask = bool_mask.astype(np_imp.uint8)
-        self._canvas._push_history()
-        self._canvas._masks[self._canvas._active_zone] = bool_mask
-        self._canvas._composite_dirty = True
-        self._canvas.mask_changed.emit(self._canvas._active_zone)
-        self._canvas.update()
+        if not self._canvas.set_mask_from_array(self._canvas._active_zone, bool_mask):
+            QMessageBox.warning(self, "Invalid Mask", "The shared zone contains an invalid mask.")
+            return
         if self._sound is not None:
             self._sound.play_mask_paste()
 
@@ -3180,23 +3156,9 @@ class SelectiveAlphaTool(QWidget):
             QMessageBox.information(self, "No image loaded",
                                     "Please open an image before pasting zones.")
             return
-        import numpy as np_imp
-        from PIL import Image as _PILImage
-        h, w = self._canvas._img_h, self._canvas._img_w
-        self._canvas._push_history()
-        for i, (_alpha_val, bool_mask) in enumerate(self._shared_zones):
-            if i >= NUM_ZONES:
-                break
-            if bool_mask.shape != (h, w):
-                pil_m = _PILImage.fromarray((bool_mask.astype(np_imp.uint8) * 255), mode="L")
-                pil_m = pil_m.resize((w, h), _PILImage.NEAREST)
-                scaled = np_imp.array(pil_m, dtype=np_imp.uint8)
-            else:
-                scaled = bool_mask.astype(np_imp.uint8)
-            self._canvas._masks[i] = scaled
-            self._canvas._composite_dirty = True
-            self._canvas.mask_changed.emit(i)
-        self._canvas.update()
+        if not self._canvas.populate_zones_from_detection(self._shared_zones):
+            QMessageBox.warning(self, "Invalid Mask Layout", "The shared zones contain an invalid mask.")
+            return
         if self._sound is not None:
             self._sound.play_mask_paste()
 
@@ -3313,7 +3275,17 @@ class SelectiveAlphaTool(QWidget):
         if not zones:
             return
         import numpy as np_imp
-        self._shared_zones = list(zones)
+        try:
+            shared = []
+            for alpha, mask in zones:
+                self._canvas._validate_mask(mask)
+                if not 0 <= alpha <= 255:
+                    raise ValueError("Invalid zone alpha.")
+                shared.append((int(alpha), mask.astype(bool)))
+        except (ValueError, TypeError):
+            QMessageBox.warning(self, "Invalid Shared Zones", "The shared zones contain invalid alpha or mask data.")
+            return
+        self._shared_zones = zones = shared
         # Mark the canvas alpha-paste menu items as available (item 67).
         self._canvas.set_alpha_paste_available(True)
         count = len(zones)
@@ -3367,7 +3339,9 @@ class SelectiveAlphaTool(QWidget):
             return
 
         # populate_zones_from_detection handles undo snapshotting.
-        self._canvas.populate_zones_from_detection(self._shared_zones)
+        if not self._canvas.populate_zones_from_detection(self._shared_zones):
+            QMessageBox.warning(self, "Invalid Mask Layout", "The shared zones contain an invalid mask.")
+            return
 
         # Sync UI for each imported zone.
         for i, (alpha_val, _) in enumerate(self._shared_zones):
@@ -3516,7 +3490,7 @@ class SelectiveAlphaTool(QWidget):
         # with highlights shown; _auto_populate_zones_from_image will keep it
         # on if multiple distinct alpha zones are detected.
         self._btn_show_highlights.setChecked(True)
-        self._on_hide_all_zones()
+        self._on_show_all_zones()
         # Auto-populate zone masks if the image has multiple distinct alphas.
         try:
             self._auto_populate_zones_from_image()
@@ -3757,11 +3731,18 @@ class SelectiveAlphaTool(QWidget):
 
     def _on_mask_changed(self, zone_idx: int) -> None:
         # Invalidate apply state when masks change
+        self._invalidate_result()
         if self._sound is not None:
             now = time.monotonic()
             if now - self._last_zone_paint_sound_t >= 0.2:
                 self._last_zone_paint_sound_t = now
                 self._sound.play_zone_paint()
+
+    def _invalidate_result(self, *_args) -> None:
+        if self._result_img is not None:
+            self._result_img.close()
+            self._result_img = None
+            self._refresh_session_status()
 
     def _on_undo_mask(self) -> None:
         """Undo the last drawing / erase action on the canvas.

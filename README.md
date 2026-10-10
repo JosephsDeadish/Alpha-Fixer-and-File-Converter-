@@ -355,6 +355,13 @@ audio to verify tone timing across trims, speed changes, silent slots, volume
 and normalized retry using imageio's FFmpeg and native FFmpeg. These are not
 packaged-codec certification or sustained long-timeline/native playback checks.
 
+Painter workflow checks use generated images to exercise drawing, fill,
+autocorrect, clipboard and mask/layout slots, undo/redo, and save/reopen.
+New images keep painted zones visible. Invalid masks are rejected before changing
+editing history; full-layout paste clears absent zones and resizes valid masks.
+Mask and zone-alpha edits discard stale applied results. These checks do not
+replace native mouse/tablet, screen-reader or large-canvas resource acceptance.
+
 ### Remaining acceptance and distribution work
 
 The source-level checks above are partial qualification, not a release certificate.
