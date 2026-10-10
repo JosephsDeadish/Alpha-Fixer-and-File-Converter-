@@ -370,6 +370,15 @@ and pixels, and rasterization of generated SVG paths. GIF conversion retains
 fully transparent pixels, but GIF still cannot preserve arbitrary partial alpha.
 Passing source-runtime probes is not proof of a clean-machine packaged release.
 
+Linux x86_64 qualification on Ubuntu 24.04 exercised actual folder and single-file
+PyInstaller builds with the strict `--offline` verifier. Both passed all 28 runtime
+checks with two self-test iterations, including advertised outputs, compressed
+DDS, SVG and generated video. No source/spec changes were needed for those builds.
+This verifier sanitizes runtime search paths and disables sample downloads; it
+does not enforce network isolation or remove installed host libraries. These
+results therefore do not certify clean-machine operation, real display/audio
+devices, sustained resource growth, Windows/macOS or signed release artifacts.
+
 ### Remaining acceptance and distribution work
 
 The source-level checks above are partial qualification, not a release certificate.
