@@ -602,6 +602,152 @@ def test_settings_tabs_remain_scrollable_in_small_window(dialog, app):
     widget.close()
 
 
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("width,height", [(480, 400), (640, 480)])
+def test_settings_compact_content_and_sound_keyboard_reachability(
+        dialog, app, name, pixels, width, height):
+    from src.ui.theme_engine import build_stylesheet
+
+    widget, manager = dialog
+    widget._sound_check.setChecked(True)
+    widget._use_theme_sound_check.setChecked(False)
+    widget._click_sound_path_edit.setText("example.wav")
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    screen = Mock()
+    screen.availableGeometry.return_value = QRect(0, 0, width, height)
+    with patch.object(widget, "screen", return_value=screen):
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + f"\nQWidget {{ font-size: {pixels}px; }}")
+        widget.resize(width - 20, height - 20)
+        widget.show()
+        widget.activateWindow()
+        for index in range(widget._settings_tabs.count()):
+            widget._settings_tabs.setCurrentIndex(index)
+            for _ in range(8):
+                app.processEvents()
+            assert screen.availableGeometry().contains(widget.frameGeometry())
+            scroll = widget._settings_tabs.widget(index)
+            assert scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            assert scroll.horizontalScrollBar().maximum() == max(
+                0, scroll.widget().width() - scroll.viewport().width())
+            # Focus scrolls both axes; formerly the hidden horizontal bar left
+            # wide settings permanently cropped on these screens.
+            controls = [control for control in scroll.widget().findChildren(QWidget)
+                        if control.isVisible() and control.isEnabled()
+                        and control.focusPolicy() & Qt.FocusPolicy.TabFocus
+                        and not isinstance(control.parentWidget(), (QSpinBox, QComboBox))
+                        and isinstance(control, (QPushButton, QLineEdit, QComboBox,
+                                                 QSpinBox, QCheckBox, QSlider))]
+            assert controls
+            for control in controls:
+                widget._btn_close.setFocus()
+                control.setFocus()
+                for _ in range(3):
+                    app.processEvents()
+                rect = QRect(control.mapTo(scroll.viewport(), control.rect().topLeft()),
+                             control.size())
+                assert rect.intersects(scroll.viewport().rect()), (
+                    index, type(control).__name__, control.accessibleName(),
+                    type(app.focusWidget()).__name__)
+                if control.width() <= scroll.viewport().width():
+                    assert rect.left() >= 0
+                    assert rect.right() < scroll.viewport().width(), (
+                        index, type(control).__name__, control.accessibleName())
+                if control.height() <= scroll.viewport().height():
+                    assert rect.top() >= 0
+                    assert rect.bottom() < scroll.viewport().height()
+
+        widget._settings_tabs.setCurrentIndex(2)
+        for _ in range(8):
+            app.processEvents()
+        browse, clear = [button for button in widget._sound_sub_widget.findChildren(QPushButton)
+                         if button.text() in ("…", "✕")]
+        for button in (browse, clear):
+            assert button.width() >= button.sizeHint().width()
+            assert button.height() >= button.sizeHint().height()
+            assert button.accessibleName()
+            assert button.accessibleDescription() == button.toolTip()
+        for control in (widget._sound_profile_combo, widget._click_sound_path_edit,
+                        widget._sound_volume_slider, *widget._color_buttons.values()):
+            assert control.accessibleName()
+            assert sum(label.buddy() is control for label in widget.findChildren(QLabel)) == 1
+        order = [widget._sound_check, widget._use_theme_sound_check,
+                 widget._sound_profile_combo, widget._click_sound_path_edit, browse, clear,
+                 widget._sound_volume_slider, widget._sound_theme_change_chk,
+                 widget._sound_tab_switch_chk, widget._sound_drag_enter_chk,
+                 widget._btn_mute_all_events, widget._btn_reset,
+                 widget._btn_reset_unlocks, widget._btn_close]
+        order[0].setFocus()
+        for target in order[1:]:
+            QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
+            for _ in range(3):
+                app.processEvents()
+            assert app.focusWidget() is target
+            if widget._sound_sub_widget.isAncestorOf(target):
+                scroll = widget._settings_tabs.widget(2)
+                assert scroll.viewport().rect().intersects(QRect(
+                    target.mapTo(scroll.viewport(), target.rect().topLeft()), target.size()))
+        for target in reversed(order[:-1]):
+            QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+            app.processEvents()
+            assert app.focusWidget() is target
+        assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+        widget._click_sound_path_edit.setFocus()
+        QTest.keyClick(widget._click_sound_path_edit, Qt.Key.Key_Tab)
+        with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
+                   return_value=("selected.wav", "")) as choose:
+            QTest.keyClick(browse, Qt.Key.Key_Space)
+        choose.assert_called_once()
+        assert widget._click_sound_path_edit.text() == "selected.wav"
+        assert manager.get("click_sound_path") == "selected.wav"
+        QTest.keyClick(browse, Qt.Key.Key_Tab)
+        QTest.keyClick(clear, Qt.Key.Key_Space)
+        assert widget._click_sound_path_edit.text() == ""
+        assert manager.get("click_sound_path") == ""
+        widget._use_theme_sound_check.setChecked(True)
+        assert not widget._sound_profile_combo.isEnabled()
+        widget._use_theme_sound_check.setFocus()
+        QTest.keyClick(widget._use_theme_sound_check, Qt.Key.Key_Tab)
+        assert app.focusWidget() is widget._click_sound_path_edit
+        widget._sound_check.setChecked(False)
+        widget._sound_check.setFocus()
+        QTest.keyClick(widget._sound_check, Qt.Key.Key_Tab)
+        assert app.focusWidget() is widget._btn_reset
+
+
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+def test_settings_sound_buttons_and_scrollbars_follow_live_font_and_resize(dialog, app, name):
+    from src.ui.theme_engine import build_stylesheet
+
+    widget, manager = dialog
+    widget._sound_check.setChecked(True)
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    screen = Mock()
+    screen.availableGeometry.return_value = QRect(0, 0, 640, 480)
+    with patch.object(widget, "screen", return_value=screen):
+        widget.resize(620, 460)
+        widget.show()
+        widget._settings_tabs.setCurrentIndex(2)
+        for pixels in (13, 32, 24, 13):
+            widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for _ in range(8):
+                app.processEvents()
+            for button in widget._sound_sub_widget.findChildren(QPushButton):
+                assert button.width() >= button.sizeHint().width()
+            scroll = widget._settings_tabs.widget(2)
+            assert scroll.horizontalScrollBar().isVisible() == (pixels >= 24)
+        screen.availableGeometry.return_value = QRect(0, 0, 2400, 1400)
+        widget.resize(2200, 1100)
+        for index in range(widget._settings_tabs.count()):
+            widget._settings_tabs.setCurrentIndex(index)
+            for _ in range(8):
+                app.processEvents()
+            assert widget._settings_tabs.widget(index).horizontalScrollBar().maximum() == 0
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+
+
 @pytest.mark.parametrize("pixels", [13, 24, 32])
 @pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
 def test_settings_footer_stacks_on_small_screen_and_restores_without_changes(dialog, app, pixels, name):

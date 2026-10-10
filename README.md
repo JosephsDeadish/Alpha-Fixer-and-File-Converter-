@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Settings custom-sound buttons use natural font-scaled sizes and explicit
+accessible names. Sound controls follow visual keyboard order; focused controls
+are revealed through nested scroll areas. Settings tabs allow horizontal scrolling
+when large fonts exceed a compact viewport rather than making controls unreachable.
+Compact-size/font/theme and keyboard regressions are checked offscreen; native
+screen-reader and physical display qualification remain outstanding.
+
 Tutorial guidance scrolls as a whole so large-font headings, tips and shortcuts
 remain reachable on compact screens. Navigation stays outside the scroll area
 with font-sized buttons and visual-order keyboard navigation. Offscreen checks

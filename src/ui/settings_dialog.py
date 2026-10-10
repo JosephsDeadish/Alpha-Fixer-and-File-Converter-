@@ -444,6 +444,9 @@ class SettingsDialog(QDialog):
             lbl.setToolTip(f"Custom colour for the '{key}' theme slot.")
             color_grid.addWidget(lbl, row, col * 2)
             btn = ColorButton(self._theme.get(key, "#888888"))
+            lbl.setBuddy(btn)
+            btn.setAccessibleName(f"{label} theme color")
+            btn.setAccessibleDescription(lbl.toolTip())
             btn.color_changed.connect(lambda c, k=key: self._on_color_changed(k, c))
             self._color_buttons[key] = btn
             color_grid.addWidget(btn, row, col * 2 + 1)
@@ -1346,25 +1349,34 @@ class SettingsDialog(QDialog):
             "Ignored when 'Use theme sound' is enabled."
         )
         _s.addWidget(self._sound_profile_combo, 2, 1)
+        self._sound_profile_lbl.setBuddy(self._sound_profile_combo)
+        self._sound_profile_combo.setAccessibleName("Sound profile")
+        self._sound_profile_combo.setAccessibleDescription(self._sound_profile_combo.toolTip())
 
         # Custom click sound file (item 3/52 — user-supplied WAV overrides profile)
-        _s.addWidget(QLabel("Custom click WAV:"), 3, 0)
+        click_sound_label = QLabel("Custom click WAV:")
+        _s.addWidget(click_sound_label, 3, 0)
         _cw_row = QHBoxLayout()
         self._click_sound_path_edit = QLineEdit()
+        click_sound_label.setBuddy(self._click_sound_path_edit)
+        self._click_sound_path_edit.setAccessibleName("Custom click WAV path")
         self._click_sound_path_edit.setPlaceholderText("Optional: path to a .wav file…")
         self._click_sound_path_edit.setToolTip(
             "Optional: path to a WAV file to use instead of the profile's synthesised sound.\n"
             "Leave blank to keep using the built-in synthesised sound for the selected profile.\n"
             "The file must be a valid WAV or OGG audio file."
         )
+        self._click_sound_path_edit.setAccessibleDescription(self._click_sound_path_edit.toolTip())
         _cw_row.addWidget(self._click_sound_path_edit, 1)
         _cw_browse = QPushButton("…")
-        _cw_browse.setFixedWidth(30)
+        _cw_browse.setAccessibleName("Browse custom click sound")
         _cw_browse.setToolTip("Browse for a WAV or OGG sound file.")
+        _cw_browse.setAccessibleDescription(_cw_browse.toolTip())
         _cw_row.addWidget(_cw_browse)
         _cw_clear = QPushButton("✕")
-        _cw_clear.setFixedWidth(26)
+        _cw_clear.setAccessibleName("Clear custom click sound")
         _cw_clear.setToolTip("Clear the custom sound path and revert to the built-in synthesised sound.")
+        _cw_clear.setAccessibleDescription(_cw_clear.toolTip())
         _cw_clear.clicked.connect(lambda: self._click_sound_path_edit.clear())
         _cw_row.addWidget(_cw_clear)
         _s.addLayout(_cw_row, 3, 1)
@@ -1380,9 +1392,11 @@ class SettingsDialog(QDialog):
         self._click_sound_path_edit.textChanged.connect(self._on_sound_changed)
 
         # Volume slider
-        _s.addWidget(QLabel("Volume:"), 4, 0)
+        volume_label = QLabel("Volume:")
+        _s.addWidget(volume_label, 4, 0)
         vol_row = QHBoxLayout()
         self._sound_volume_slider = QSlider(Qt.Orientation.Horizontal)
+        volume_label.setBuddy(self._sound_volume_slider)
         self._sound_volume_slider.setRange(0, 100)
         self._sound_volume_slider.setValue(50)
         self._sound_volume_slider.setToolTip(
@@ -1433,6 +1447,8 @@ class SettingsDialog(QDialog):
             "Off by default."
         )
         _s.addWidget(self._sound_drag_enter_chk, 7, 1)
+        QWidget.setTabOrder(self._sound_volume_slider, self._sound_theme_change_chk)
+        QWidget.setTabOrder(self._sound_drag_enter_chk, self._btn_mute_all_events)
 
         # grp_sound is added to the dedicated Sound tab below; keep the reference.
         self._grp_sound = grp_sound
@@ -1666,7 +1682,7 @@ class SettingsDialog(QDialog):
         theme_scroll.setWidget(theme_tab)
         theme_scroll.setWidgetResizable(True)
         theme_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        theme_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        theme_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(theme_scroll, "🎨 Theme")
 
         # ================================================================
@@ -2017,7 +2033,7 @@ class SettingsDialog(QDialog):
         gen_scroll.setWidget(gen_tab)
         gen_scroll.setWidgetResizable(True)
         gen_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        gen_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        gen_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(gen_scroll, "⚙ General")
 
         # ================================================================
@@ -2040,13 +2056,13 @@ class SettingsDialog(QDialog):
         sound_scroll.setWidget(sound_tab)
         sound_scroll.setWidgetResizable(True)
         sound_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        sound_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sound_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(sound_scroll, "🔊 Sound")
         effects_scroll = QScrollArea()
         effects_scroll.setWidget(effects_tab)
         effects_scroll.setWidgetResizable(True)
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
         tabs.setTabToolTip(0, "Theme presets, colors, custom background, and banner appearance.")
         tabs.setTabToolTip(1, "Layout, scaling, tooltips, and history preferences.")
@@ -2101,6 +2117,7 @@ class SettingsDialog(QDialog):
         self._footer_update_timer = QTimer(self)
         self._footer_update_timer.setSingleShot(True)
         self._footer_update_timer.timeout.connect(self._refresh_footer_layout)
+        QApplication.instance().focusChanged.connect(self._on_settings_focus_changed)
 
         # Connections
         # Preset combo: debounced live apply (120 ms) so quickly scrolling
@@ -2857,6 +2874,34 @@ class SettingsDialog(QDialog):
 
     def _refresh_footer_layout(self):
         self._update_footer_layout(self.width())
+
+    def _on_settings_focus_changed(self, previous, focused):
+        if focused is not None and self.isAncestorOf(focused):
+            QTimer.singleShot(0, self._reveal_focused_setting)
+
+    def _reveal_focused_setting(self):
+        focused = QApplication.focusWidget()
+        if focused is None or not self.isAncestorOf(focused):
+            return
+        parent = focused.parentWidget()
+        while parent is not None and parent is not self:
+            if isinstance(parent, QScrollArea):
+                # Qt's default 50px margins can crop a control which would fit.
+                parent.ensureWidgetVisible(focused, 0, 0)
+                rect = QRect(focused.mapTo(parent.viewport(), focused.rect().topLeft()),
+                             focused.size())
+                for bar, start, end, size, available in (
+                    (parent.horizontalScrollBar(), rect.left(), rect.right(),
+                     rect.width(), parent.viewport().width()),
+                    (parent.verticalScrollBar(), rect.top(), rect.bottom(),
+                     rect.height(), parent.viewport().height()),
+                ):
+                    if size <= available:
+                        if start < 0:
+                            bar.setValue(bar.value() + start)
+                        elif end >= available:
+                            bar.setValue(bar.value() + end - available + 1)
+            parent = parent.parentWidget()
 
     def event(self, event):
         result = super().event(event)
