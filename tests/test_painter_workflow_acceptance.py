@@ -319,3 +319,82 @@ def test_cancelled_save_preserves_disk_history_and_masks(painter, tmp_path):
     painter._offer_delete_original.assert_not_called()
     with Image.open(source) as image:
         np.testing.assert_array_equal(np.array(image), pixels)
+
+
+def test_shared_import_saves_alphas_without_requiring_another_edit(painter, tmp_path):
+    open_image(painter, tmp_path, (8, 6))
+    painter._active_zone_combo.setCurrentIndex(1)
+    painter._ze_alpha_spin.setValue(42)
+    left = np.zeros((6, 8), dtype=bool)
+    left[:, :4] = True
+    painter.receive_shared_zones([(73, left), (196, ~left)])
+    painter._btn_import_shared.click()
+    assert painter._ze_cur_idx == painter._canvas.get_active_zone() == 1
+    assert painter._ze_alpha_spin.value() == 196
+    assert painter._canvas._zone_alphas[:2] == [73, 196]
+    painter._settings.sync()
+    reopened = SettingsManager()
+    try:
+        assert reopened.get_sa_zone_alphas()[:2] == [73, 196]
+    finally:
+        sip.delete(reopened._qs)
+    painter._active_zone_combo.setCurrentIndex(0)
+    assert painter._ze_alpha_spin.value() == 73
+    assert painter._on_apply()
+    expected = np.where(left, 73, 196).astype(np.uint8)
+    np.testing.assert_array_equal(np.array(painter._result_img)[:, :, 3], expected)
+    backup = tmp_path / "painter-settings.json"
+    painter._settings.export_settings(str(backup))
+    painter._settings.reset_all()
+    assert painter._settings.get_sa_zone_alphas() == [128] * painter._active_zone_combo.count()
+    painter._settings.import_settings(str(backup))
+    reloaded_painter = SelectiveAlphaTool(painter._settings)
+    try:
+        assert reloaded_painter._canvas._zone_alphas[:2] == [73, 196]
+        reloaded_painter._active_zone_combo.setCurrentIndex(1)
+        assert reloaded_painter._ze_alpha_spin.value() == 196
+    finally:
+        reloaded_painter.close()
+        sip.delete(reloaded_painter)
+
+
+@pytest.mark.parametrize("clear", ["zone", "all"])
+def test_clearing_empty_masks_preserves_redo_and_restored_pixels(painter, tmp_path, clear):
+    _, pixels = open_image(painter, tmp_path, (8, 6))
+    painter._ze_alpha_spin.setValue(42)
+    painter._canvas.set_mask_from_array(0, np.ones((6, 8), dtype=np.uint8))
+    painter._history_overlay._btn_undo.click()
+    assert not painter._canvas._undo_stack
+    assert len(painter._canvas._redo_stack) == 1
+    if clear == "zone":
+        painter._ze_clear_btn.click()
+    else:
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+            painter._btn_clear_all.click()
+    assert not painter._canvas._undo_stack
+    assert len(painter._canvas._redo_stack) == 1
+    assert not painter._history_overlay._btn_undo.isEnabled()
+    assert painter._history_overlay._btn_redo.isEnabled()
+    painter._history_overlay._btn_redo.click()
+    assert painter._on_apply()
+    expected = pixels.copy()
+    expected[:, :, 3] = 42
+    np.testing.assert_array_equal(np.array(painter._result_img), expected)
+
+
+def test_clearing_empty_selected_zone_keeps_other_zone_result_and_history(painter, tmp_path):
+    _, pixels = open_image(painter, tmp_path, (8, 6))
+    painter._ze_alpha_spin.setValue(42)
+    painter._canvas.set_mask_from_array(0, np.ones((6, 8), dtype=np.uint8))
+    assert painter._on_apply()
+    result = painter._result_img
+    painter._active_zone_combo.setCurrentIndex(1)
+    painter._ze_clear_btn.click()
+    assert painter._result_img is result
+    assert len(painter._canvas._undo_stack) == 1
+    assert not painter._canvas._redo_stack
+    assert painter._ze_cur_idx == painter._canvas.get_active_zone() == 1
+    assert painter._ze_alpha_spin.value() == 128
+    expected = pixels.copy()
+    expected[:, :, 3] = 42
+    np.testing.assert_array_equal(np.array(result), expected)

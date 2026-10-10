@@ -402,6 +402,10 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Painter shared-zone imports persist their alpha values for backup/relaunch.
+Clearing an already-empty zone/layout leaves undo and redo history unchanged;
+generated-pixel and settings roundtrip tests cover these state transitions.
+
 GIF Builder retains imported per-frame delays, including long holds. Unrelated
 live edits no longer restart the current playback hold; explicit scrub/rewind
 starts the selected frame's full hold. Generated exports verify retained delays.

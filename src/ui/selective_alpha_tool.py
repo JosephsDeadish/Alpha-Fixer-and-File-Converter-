@@ -590,7 +590,8 @@ class SelectiveAlphaCanvas(QWidget):
     # ── zone mask operations ──────────────────────────────────────────────
 
     def clear_mask(self, zone_idx: int) -> None:
-        if not self.has_image():
+        if (not self.has_image() or not 0 <= zone_idx < NUM_ZONES
+                or not self._masks[zone_idx].any()):
             return
         self._push_history()
         self._masks[zone_idx].fill(0)
@@ -599,7 +600,7 @@ class SelectiveAlphaCanvas(QWidget):
         self.update()
 
     def clear_all_masks(self) -> None:
-        if not self.has_image():
+        if not self.has_image() or not any(m.any() for m in self._masks):
             return
         self._push_history()
         for i in range(NUM_ZONES):
@@ -3353,6 +3354,7 @@ class SelectiveAlphaTool(QWidget):
 
         self._on_show_all_zones()
         self._btn_show_highlights.setChecked(True)
+        self._save_settings()
 
         if self._sound is not None:
             self._sound.play_mask_paste()
