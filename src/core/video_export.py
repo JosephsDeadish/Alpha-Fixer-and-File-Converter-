@@ -85,8 +85,10 @@ def mux_mp4_audio(silent_video_path, out_path, clips, output_fps, volume=1.0,
             input_index += 1
         normalize = [
             "aresample=async=1:first_pts=0:min_hard_comp=0.100",
-            "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp",
         ] if normalize_audio else []
+        normalize.append(
+            "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp"
+        )
         for index, clip in enumerate(clips):
             if int(clip["active_frames"]) <= 0:
                 continue
@@ -98,13 +100,18 @@ def mux_mp4_audio(silent_video_path, out_path, clips, output_fps, volume=1.0,
                 end = (int(clip["trim_end"]) + 1) / max(0.1, float(clip["clip_fps"]))
                 tempo = max(0.01, max(0.001, end - start) / max(0.001, duration))
                 chain = [
-                    f"[{input_index}:a]atrim=start={start:.6f}:end={end:.6f}",
+                    f"[{input_index}:a]apad=whole_dur={end:.6f}",
+                    f"atrim=start={start:.6f}:end={end:.6f}",
                     "asetpts=PTS-STARTPTS", *_build_atempo_filters(tempo), *normalize,
                 ]
                 input_index += 1
             else:
                 chain = [f"[{silence_index}:a]atrim=start=0:end={duration:.6f}",
                          "asetpts=PTS-STARTPTS", *normalize]
+            # Audio can end before its video trim. Pad each segment, not just
+            # the final mix, so concat cannot pull subsequent clips forward.
+            chain.extend([f"apad=whole_dur={duration:.6f}",
+                          f"atrim=end={duration:.6f}", "asetpts=PTS-STARTPTS"])
             filters.append(",".join(chain) + f"[{label}]")
             inputs.append(f"[{label}]")
         if not inputs:
@@ -120,7 +127,8 @@ def mux_mp4_audio(silent_video_path, out_path, clips, output_fps, volume=1.0,
                 "aformat=sample_rates=48000:channel_layouts=stereo:sample_fmts=fltp[a_norm]"
             )
             label = "[a_norm]"
-        duration = sum(max(0.0, float(c["timeline_seconds"])) for c in clips)
+        duration = sum(max(0.0, float(c["timeline_seconds"])) for c in clips
+                       if int(c["active_frames"]) > 0)
         if duration > 0:
             filters.append(f"{label}apad=whole_dur={duration:.6f},atrim=end={duration:.6f}[a_final]")
             label = "[a_final]"

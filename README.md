@@ -348,6 +348,13 @@ Queue regressions exercise 1,000 generated tiny images, repeated completion and
 cancellation, corrupt inputs, output failures and image/staging cleanup. They
 do not establish a sustained RSS ceiling or qualify large real-world media.
 
+Video audio export now pads/trims each clip's audio to its timeline slot before
+concatenation. A short audio stream, or a trim beginning beyond audio EOF, no
+longer pulls subsequent audio forward. Generated-media checks decode exported
+audio to verify tone timing across trims, speed changes, silent slots, volume
+and normalized retry using imageio's FFmpeg and native FFmpeg. These are not
+packaged-codec certification or sustained long-timeline/native playback checks.
+
 ### Remaining acceptance and distribution work
 
 The source-level checks above are partial qualification, not a release certificate.
