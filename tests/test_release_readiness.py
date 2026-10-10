@@ -146,6 +146,147 @@ class TestOfflineVerification(unittest.TestCase):
                             "--require-selftest-check", "png_to_dds_dxt5",
                         ])
 
+    def test_advertised_codecs_fail_closed_despite_positive_capabilities(self):
+        for invalid in (None, {"ok": False}, {"ok": True, "detail": "skipped: unavailable"},
+                        {"ok": True, "skipped": True}, {"ok": "true"}):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                checks = {name: {"ok": True} for name in converter.output_codec_selftest_checks()}
+                if invalid is None:
+                    del checks["png_to_avif"]
+                else:
+                    checks["png_to_avif"] = invalid
+                target = Path(directory) / "app"
+                target.touch()
+                launches = [
+                    subprocess.CompletedProcess(["app"], 0, stdout=""),
+                    subprocess.CompletedProcess(["app"], 0, stdout=(
+                        'ALPHA_FIXER_RUNTIME_CAPABILITIES={"packaged_bundle_ready":true}\n')),
+                    subprocess.CompletedProcess(["app"], 0, stdout=(
+                        "ALPHA_FIXER_RUNTIME_SELFTEST=" + json.dumps({"passed": True, "checks": checks}))),
+                ]
+                with patch.object(self.verifier, "_run_and_echo", side_effect=launches), patch("sys.stdout"):
+                    with self.assertRaisesRegex(SystemExit, "failed or missing: png_to_avif"):
+                        self.verifier.main([str(target), "--run-selftest", "--require-output-codec-checks"])
+
+    def test_advertised_codec_requirements_follow_supported_outputs(self):
+        with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"NEWCODEC": ".new"}):
+            self.assertIn("png_to_newcodec", converter.output_codec_selftest_checks())
+        self.assertIn("png_to_tim", converter.output_codec_selftest_checks())
+        self.assertIn("png_to_xnb", converter.output_codec_selftest_checks())
+        self.assertIn("svg_vectorization", converter.output_codec_selftest_checks())
+
+    def test_advertised_codec_gate_accepts_complete_success(self):
+        checks = {name: {"ok": True, "detail": "generated roundtrip"}
+                  for name in converter.output_codec_selftest_checks()}
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            launches = [
+                subprocess.CompletedProcess(["app"], 0, stdout=""),
+                subprocess.CompletedProcess(["app"], 0, stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={}\n'),
+                subprocess.CompletedProcess(["app"], 0, stdout=(
+                    "ALPHA_FIXER_RUNTIME_SELFTEST=" + json.dumps({"passed": True, "checks": checks}))),
+            ]
+            with patch.object(self.verifier, "_run_and_echo", side_effect=launches), patch("sys.stdout"):
+                self.assertEqual(self.verifier.main([
+                    str(target), "--run-selftest", "--require-output-codec-checks",
+                ]), 0)
+
+    def test_advertised_codec_gate_requires_selftest_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            with patch.object(self.verifier, "_run_and_echo") as launch:
+                with self.assertRaisesRegex(SystemExit, "requirements need --run-selftest"):
+                    self.verifier.main([str(target), "--require-output-codec-checks"])
+                launch.assert_not_called()
+
+
+    def test_real_generated_codecs_encode_decode_and_transparency(self):
+        with tempfile.TemporaryDirectory() as directory:
+            results = converter.output_codec_selfcheck(directory)
+        expected = set(converter.output_codec_selftest_checks()) - {
+            "png_to_dds_rgba", "svg_rasterization", "svg_vectorization",
+        }
+        self.assertEqual(set(results), expected)
+        for fmt in converter.SUPPORTED_OUTPUT_FORMATS:
+            if fmt in {"DDS", "SVG"}:
+                continue
+            with self.subTest(fmt=fmt):
+                result = results[f"png_to_{fmt.lower()}"]
+                if converter.output_format_unavailable_reason(fmt):
+                    self.assertFalse(result["ok"])
+                else:
+                    self.assertTrue(result["ok"], result["detail"])
+
+    def test_false_availability_cannot_disguise_encoder_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"AVIF": ".avif"}, clear=True):
+                with patch.object(converter, "output_format_available", return_value=True):
+                    with patch.object(converter, "convert_file", side_effect=OSError("codec unavailable")):
+                        result = converter.output_codec_selfcheck(directory)["png_to_avif"]
+        self.assertFalse(result["ok"])
+        self.assertIn("codec unavailable", result["detail"])
+
+    def test_png_bytes_at_advertised_extension_are_rejected(self):
+        def disguised(source, destination, fmt):
+            with Image.open(source) as image:
+                image.save(destination, format="PNG")
+            return destination
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"AVIF": ".avif"}, clear=True):
+                with patch.object(converter, "convert_file", side_effect=disguised):
+                    result = converter.output_codec_selfcheck(directory)["png_to_avif"]
+        self.assertFalse(result["ok"])
+        self.assertIn("decoded as PNG", result["detail"])
+
+    def test_png_redirection_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"JPEG": ".jpg"}, clear=True):
+                with patch.object(converter, "convert_file", return_value=str(Path(directory) / "fallback.png")):
+                    result = converter.output_codec_selfcheck(directory)["png_to_jpeg"]
+        self.assertFalse(result["ok"])
+        self.assertIn("redirected", result["detail"])
+
+    def test_decoder_failure_is_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"PNG": ".png"}, clear=True):
+                with patch.object(converter, "_open_image", side_effect=OSError("decode failed")):
+                    result = converter.output_codec_selfcheck(directory)["png_to_png"]
+        self.assertFalse(result["ok"])
+        self.assertIn("decode failed", result["detail"])
+
+    def test_wrong_dimensions_and_lost_alpha_are_rejected(self):
+        original = converter._open_image
+        for broken in ("dimensions", "alpha"):
+            def decode(path):
+                if Path(path).name == "codec_output.png":
+                    return Image.new("RGB", (16, 16) if broken == "dimensions" else (32, 32))
+                return original(path)
+
+            with self.subTest(broken=broken), tempfile.TemporaryDirectory() as directory:
+                with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"PNG": ".png"}, clear=True):
+                    with patch.object(converter, "_open_image", side_effect=decode):
+                        result = converter.output_codec_selfcheck(directory)["png_to_png"]
+            self.assertFalse(result["ok"])
+            self.assertIn("dimensions changed" if broken == "dimensions" else "lost transparent", result["detail"])
+
+    def test_failed_codec_does_not_hide_other_results(self):
+        original = converter.convert_file
+
+        def fail_one(source, destination, fmt):
+            if fmt == "AVIF":
+                raise OSError("broken avif")
+            return original(source, destination, fmt)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(converter.SUPPORTED_OUTPUT_FORMATS, {"AVIF": ".avif", "PNG": ".png"}, clear=True):
+                with patch.object(converter, "convert_file", side_effect=fail_one):
+                    results = converter.output_codec_selfcheck(directory)
+        self.assertFalse(results["png_to_avif"]["ok"])
+        self.assertTrue(results["png_to_png"]["ok"])
+
     def test_failed_launch_retains_utf8_diagnostics(self):
         with tempfile.TemporaryDirectory() as directory:
             log_path = Path(directory) / "launch.log"
@@ -272,6 +413,7 @@ class TestOfflineVerification(unittest.TestCase):
                 self.assertLess(offline, text.index("ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS"))
                 for flag in (
                     "--run-selftest", "--require-selftest-pass", "--require-core-selftest-checks",
+                    "--require-output-codec-checks",
                     "--require-video-selftest-checks", "--require-dds-selftest-checks",
                 ):
                     invocation = next(line for line in text.splitlines() if "--offline" in line)
@@ -388,6 +530,110 @@ class TestOfflineVerification(unittest.TestCase):
         process.kill.assert_called_once()
         process.communicate.assert_not_called()
         process.stdout.close.assert_not_called()
+
+class TestRuntimeDdsSvgSelfchecks(unittest.TestCase):
+    def test_real_dds_rgba_roundtrip(self):
+        import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = main._dds_rgba_selfcheck(directory)
+        self.assertTrue(result["ok"], result["detail"])
+
+    def test_dds_rejects_png_masquerade_and_corrupt_output(self):
+        import main
+
+        for broken in ("png", "corrupt"):
+            def encode(source, destination, fmt, **kwargs):
+                if broken == "png":
+                    with Image.open(source) as image:
+                        image.save(destination, format="PNG")
+                else:
+                    Path(destination).write_bytes(b"DDS " + bytes(124))
+                return destination
+
+            with self.subTest(broken=broken), tempfile.TemporaryDirectory() as directory:
+                with patch.object(converter, "convert_file", side_effect=encode):
+                    result = main._dds_rgba_selfcheck(directory)
+                self.assertFalse(result["ok"], result["detail"])
+                if broken == "png":
+                    self.assertIn("signature mismatch", result["detail"])
+
+    def test_dds_rejects_wrong_dimensions_colours_and_alpha(self):
+        import main
+        from src.core import alpha_processor
+
+        for size, pixel in (
+            ((16, 24), (32, 160, 255, 255)),
+            ((32, 24), (0, 0, 0, 255)),
+            ((32, 24), (32, 160, 255, 255)),
+        ):
+            with self.subTest(size=size, pixel=pixel), tempfile.TemporaryDirectory() as directory:
+                with patch.object(alpha_processor, "_load_dds", return_value=Image.new("RGBA", size, pixel)):
+                    result = main._dds_rgba_selfcheck(directory)
+                self.assertFalse(result["ok"], result["detail"])
+
+    def test_real_generated_svg_is_renderable(self):
+        import main
+
+        if not converter._has_vtracer() or not converter.svg_input_available():
+            self.skipTest("SVG tracer/renderer unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            result = main._svg_vectorization_selfcheck(directory)
+        self.assertTrue(result["ok"], result["detail"])
+
+    def test_generated_svg_rejects_unrenderable_empty_and_wrong_content(self):
+        import main
+
+        for svg in (
+            '<svg><path',
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><path/></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="24">'
+            '<path d="M8 0H32V24H8Z" fill="#20a0ff"/></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'
+            '<path d="M8 0H32V24H8Z" fill="red"/></svg>',
+        ):
+            def encode(source, destination, fmt):
+                Path(destination).write_text(svg, encoding="utf-8")
+                return destination
+
+            with self.subTest(svg=svg), tempfile.TemporaryDirectory() as directory:
+                with patch.object(converter, "_has_vtracer", return_value=True):
+                    with patch.object(converter, "convert_file", side_effect=encode):
+                        result = main._svg_vectorization_selfcheck(directory)
+                self.assertFalse(result["ok"], result["detail"])
+
+    def test_generated_svg_allows_approximate_colour_and_geometry(self):
+        import main
+
+        def encode(source, destination, fmt):
+            Path(destination).write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'
+                '<path d="M8.5 0H32V24H8.5Z" fill="#28a8f0"/></svg>',
+                encoding="utf-8",
+            )
+            return destination
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(converter, "_has_vtracer", return_value=True):
+                with patch.object(converter, "convert_file", side_effect=encode):
+                    result = main._svg_vectorization_selfcheck(directory)
+        self.assertTrue(result["ok"], result["detail"])
+
+    def test_decoder_failure_is_reported_for_generated_svg(self):
+        import main
+
+        def encode(source, destination, fmt):
+            Path(destination).write_text("<svg><path/></svg>", encoding="utf-8")
+            return destination
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(converter, "_has_vtracer", return_value=True):
+                with patch.object(converter, "convert_file", side_effect=encode):
+                    with patch.object(converter, "_load_svg", side_effect=ValueError("render failed")):
+                        result = main._svg_vectorization_selfcheck(directory)
+        self.assertFalse(result["ok"])
+        self.assertIn("render failed", result["detail"])
+
 
 class TestUnattendedValidation(unittest.TestCase):
     def test_validation_payload_can_be_written_without_console(self):

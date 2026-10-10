@@ -66,7 +66,7 @@ if "%1"=="--onefile" (
 if exist "!LAUNCH_TARGET!" (
     echo Running packaged validation...
     if not exist dist\validation-reports mkdir dist\validation-reports
-    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --offline --smoke-seconds 1.5 --timeout 25 --run-selftest --selftest-iterations 2 --require-selftest-pass --require-core-selftest-checks --require-video-selftest-checks --require-dds-selftest-checks --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-wand-runtime --require-bundled-imagemagick --require-bundled-default-theme-svg --require-packaged-bundle-ready --require-no-missing-libs --bundle-kind !BUNDLE_KIND! --json-out dist\validation-reports\packaged-runtime-audit-windows-!BUNDLE_KIND!.json
+    python scripts\verify_packaged_app.py "!LAUNCH_TARGET!" --offline --smoke-seconds 1.5 --timeout 25 --run-selftest --selftest-iterations 2 --require-selftest-pass --require-core-selftest-checks --require-output-codec-checks --require-video-selftest-checks --require-dds-selftest-checks --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck --require-bundled-ffmpeg --require-bundled-ffprobe --require-wand-runtime --require-bundled-imagemagick --require-bundled-default-theme-svg --require-packaged-bundle-ready --require-no-missing-libs --bundle-kind !BUNDLE_KIND! --json-out dist\validation-reports\packaged-runtime-audit-windows-!BUNDLE_KIND!.json
     if errorlevel 1 exit /b 1
     set "VERIFY_PRIVATE_ARGS=--require-wand-runtime --require-bundled-imagemagick"
     if "%ALPHA_FIXER_VERIFY_PRIVATE_SAMPLE_MANIFESTS%"=="1" (

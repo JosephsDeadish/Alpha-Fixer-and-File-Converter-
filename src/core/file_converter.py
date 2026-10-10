@@ -127,6 +127,73 @@ def output_format_discards_alpha(target_format: str) -> bool:
     """Return True when *target_format* cannot preserve full alpha."""
     return target_format in _ALPHA_UNSUPPORTED_OUTPUT_FORMATS
 
+
+def output_codec_selftest_checks() -> tuple[str, ...]:
+    """Required encode/decode checks for the currently advertised outputs."""
+    checks = []
+    for fmt in SUPPORTED_OUTPUT_FORMATS:
+        if fmt == "DDS":
+            checks.append("png_to_dds_rgba")
+        elif fmt == "SVG":
+            checks.extend(("svg_rasterization", "svg_vectorization"))
+        else:
+            checks.append(f"png_to_{fmt.lower()}")
+    return tuple(checks)
+
+
+def output_codec_selfcheck(directory: str) -> dict[str, dict[str, object]]:
+    """Exercise production codecs with small offline-generated RGB/RGBA images.
+
+    DDS variants and SVG rendering/tracing have their own runtime checks.
+    Registry availability alone is not evidence of a working encoder/decoder.
+    """
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    opaque = root / "codec_rgb.png"
+    transparent = root / "codec_rgba.png"
+    with Image.new("RGB", (32, 32), (40, 120, 200)) as image:
+        image.save(opaque)
+    with Image.new("RGBA", (32, 32), (40, 120, 200, 255)) as image:
+        image.paste((40, 120, 200, 0), (0, 0, 8, 32))
+        image.paste((40, 120, 200, 128), (8, 0, 16, 32))
+        image.save(transparent)
+    results = {}
+    Image.init()
+    for fmt, ext in SUPPORTED_OUTPUT_FORMATS.items():
+        if fmt in {"DDS", "SVG"}:
+            continue
+        name = f"png_to_{fmt.lower()}"
+        destination = root / f"codec_output{ext}"
+        try:
+            source = opaque if output_format_discards_alpha(fmt) else transparent
+            actual_path = convert_file(str(source), str(destination), fmt)
+            if Path(actual_path).resolve() != destination.resolve():
+                raise ValueError(f"{fmt} export redirected to {actual_path}")
+            if fmt in {"TIM", "XNB"}:
+                signature = destination.read_bytes()[:4]
+                expected = b"\x10\x00\x00\x00" if fmt == "TIM" else b"XNB"
+                if not signature.startswith(expected):
+                    raise ValueError(f"{fmt} output signature mismatch")
+            else:
+                with Image.open(destination) as encoded:
+                    expected = Image.registered_extensions().get(ext)
+                    if encoded.format != expected or not expected:
+                        raise ValueError(f"{fmt} decoded as {encoded.format}, expected {expected}")
+            with _open_image(str(destination)) as decoded:
+                if decoded.size != (32, 32):
+                    raise ValueError(f"{fmt} dimensions changed: {decoded.size}")
+                if not output_format_discards_alpha(fmt):
+                    with decoded.convert("RGBA") as rgba:
+                        alpha = [rgba.getpixel((x, 16))[3] for x in (4, 12, 24)]
+                    if alpha[0] != 0 or alpha[2] != 255:
+                        raise ValueError(f"{fmt} lost transparent/opaque pixels: {alpha}")
+                    if fmt not in {"GIF", "TIM"} and abs(alpha[1] - 128) > 2:
+                        raise ValueError(f"{fmt} lost partial alpha: {alpha}")
+            results[name] = {"ok": True, "detail": f"{fmt} encode/decode; size=32x32; alpha={source == transparent}"}
+        except Exception as exc:
+            results[name] = {"ok": False, "detail": f"{fmt}: {exc}"}
+    return results
+
 # Human-readable descriptions for each output format, shown as combo tooltips
 FORMAT_DESCRIPTIONS = {
     "AVIF": (
@@ -723,10 +790,15 @@ def convert_file(
             # --- GIF (palette mode; optionally 1-colour transparency) ---
             if ext == ".gif":
                 if img.mode == "RGBA":
-                    # Quantise to palette preserving transparency
                     gif_img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
                     try:
-                        gif_img.save(output_path)
+                        with img.getchannel("A") as alpha:
+                            with alpha.point(lambda value: 255 if value == 0 else 0) as mask:
+                                gif_img.paste(255, mask=mask)
+                            if alpha.getextrema()[0] == 0:
+                                gif_img.save(output_path, transparency=255)
+                            else:
+                                gif_img.save(output_path)
                     finally:
                         gif_img.close()
                 elif img.mode not in ("P", "L", "1"):

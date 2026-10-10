@@ -1041,6 +1041,10 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
         fake_fc = types.SimpleNamespace(
             SUPPORTED_OUTPUT_FORMATS={"PNG": ".png"},
+            output_codec_selfcheck=MagicMock(return_value={
+                "png_to_avif": {"ok": False, "detail": "AVIF encoder unavailable"},
+                "png_to_png": {"ok": True, "detail": "PNG encode/decode verified"},
+            }),
             convert_file=MagicMock(return_value=None),
             dds_compression_available=MagicMock(return_value=False),
             _has_vtracer=MagicMock(return_value=False),
@@ -1085,6 +1089,9 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         self.assertEqual(parsed["stress_loops"], 2)
         self.assertIn("peak_rss_mb", parsed)
         self.assertIn("checks", parsed)
+        self.assertFalse(parsed["checks"]["png_to_avif"]["ok"])
+        self.assertTrue(parsed["checks"]["png_to_png"]["ok"])
+        self.assertIn("png_to_avif: AVIF encoder unavailable", parsed["errors"])
         self.assertIn("png_to_dds_dxt1", parsed["checks"])
         self.assertIn("png_to_dds_dxt3", parsed["checks"])
         self.assertIn("png_to_dds_dxt5", parsed["checks"])
@@ -1107,6 +1114,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
         fake_fc = types.SimpleNamespace(
             SUPPORTED_OUTPUT_FORMATS={"PNG": ".png", "DDS": ".dds"},
+            output_codec_selfcheck=MagicMock(return_value={}),
             convert_file=MagicMock(return_value=None),
             dds_compression_available=MagicMock(return_value=False),
             _has_vtracer=MagicMock(return_value=False),
@@ -2244,6 +2252,7 @@ class TestStartupCapabilityNotice(unittest.TestCase):
         fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
         fake_fc = types.SimpleNamespace(
             SUPPORTED_OUTPUT_FORMATS={"PNG": ".png"},
+            output_codec_selfcheck=MagicMock(return_value={}),
             convert_file=MagicMock(return_value="/tmp/out.png"),
             dds_compression_available=MagicMock(return_value=False),
             _has_vtracer=MagicMock(return_value=False),

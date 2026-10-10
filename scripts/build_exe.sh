@@ -78,6 +78,7 @@ if [[ -x "$launch_target" ]]; then
         --selftest-iterations 2
         --require-selftest-pass
         --require-core-selftest-checks
+        --require-output-codec-checks
         --require-video-selftest-checks
         --require-dds-selftest-checks
         --bundle-kind "$bundle_kind"

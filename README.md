@@ -362,6 +362,14 @@ editing history; full-layout paste clears absent zones and resizes valid masks.
 Mask and zone-alpha edits discard stale applied results. These checks do not
 replace native mouse/tablet, screen-reader or large-canvas resource acceptance.
 
+Release builds now require offline-generated encode/decode checks for every
+advertised image output (`--require-output-codec-checks`). Missing, failed or
+skipped codecs block that gate; PNG fallback cannot disguise another format.
+Checks include dimensions and representative alpha where supported, DDS signature
+and pixels, and rasterization of generated SVG paths. GIF conversion retains
+fully transparent pixels, but GIF still cannot preserve arbitrary partial alpha.
+Passing source-runtime probes is not proof of a clean-machine packaged release.
+
 ### Remaining acceptance and distribution work
 
 The source-level checks above are partial qualification, not a release certificate.

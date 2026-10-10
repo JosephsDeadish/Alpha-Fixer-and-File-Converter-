@@ -3761,7 +3761,7 @@ class TestRound9ResourceHygiene(unittest.TestCase):
         fn = self._fn_src(src, "convert_file")
         gif_pos = fn.find('".gif"')
         self.assertGreater(gif_pos, 0, "GIF branch not found in convert_file")
-        gif_section = fn[gif_pos: gif_pos + 600]
+        gif_section = fn[gif_pos: fn.find('".ico"', gif_pos)]
         # Ensure quantize result is stored in gif_img, not back into img.
         # Use a word-boundary check: "img = img.quantize" is only problematic
         # when NOT preceded by other identifier chars (e.g. "gif_img = img.quantize" is fine).
@@ -3782,7 +3782,7 @@ class TestRound9ResourceHygiene(unittest.TestCase):
         src = self._read(self._FC_SRC)
         fn = self._fn_src(src, "convert_file")
         gif_pos = fn.find('".gif"')
-        gif_section = fn[gif_pos: gif_pos + 600]
+        gif_section = fn[gif_pos: fn.find('".ico"', gif_pos)]
         finally_pos = gif_section.find("finally:")
         self.assertGreater(finally_pos, 0,
                            "GIF branch must have a try/finally for gif_img")

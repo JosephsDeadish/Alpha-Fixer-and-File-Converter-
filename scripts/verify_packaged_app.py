@@ -20,6 +20,7 @@ from src.core.runtime_validation import (
     manifest_grouped_entries,
     render_manifest_payload,
 )
+from src.core.file_converter import output_codec_selftest_checks
 _PUBLIC_DISC_VIDEO_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_disc_video_manifest.json"
 _PUBLIC_DDS_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_dds_dx10_manifest.json"
 _PUBLIC_FORMAT_MATRIX_MANIFEST = _REPO_ROOT / "sample_manifests" / "public_format_matrix_manifest.json"
@@ -248,6 +249,10 @@ def _required_selftest_checks(args) -> list[str]:
             for name in names:
                 if name not in required:
                     required.append(name)
+    if getattr(args, "require_output_codec_checks", False):
+        for name in output_codec_selftest_checks():
+            if name not in required:
+                required.append(name)
     if getattr(args, "require_public_manifest_checks", False):
         for name in _PUBLIC_MANIFEST_CHECKS:
             if name not in required:
@@ -656,6 +661,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-selftest-rss-spread-mb", type=float, help="Optional upper bound for max-minus-min peak RSS across repeated self-test runs.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
     parser.add_argument("--require-core-selftest-checks", action="store_true", help="Fail unless the built-in PNG/GIF/DDS and generated-video self-test checks all report ok=true.")
+    parser.add_argument("--require-output-codec-checks", action="store_true", help="Fail unless every advertised output has a successful generated encode/decode check (no missing or skipped checks).")
     parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
     parser.add_argument("--require-stress-selftest-checks", action="store_true", help="Fail unless the packaged self-test stress batch checks report ok=true.")
     parser.add_argument("--require-dds-selftest-checks", action="store_true", help="Fail unless the built-in DDS self-test checks, including compressed DDS output when available, all report ok=true.")
@@ -1005,7 +1011,8 @@ def main(argv: list[str] | None = None) -> int:
                 check = checks.get(check_name)
                 if (
                     not isinstance(check, dict)
-                    or not check.get("ok")
+                    or check.get("ok") is not True
+                    or check.get("skipped")
                     or str(check.get("detail", "")).strip().casefold().startswith("skipped:")
                 ):
                     raise SystemExit(f"Packaged runtime self-test check failed or missing: {check_name}")

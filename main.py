@@ -901,13 +901,78 @@ def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _dds_rgba_selfcheck(directory: str) -> dict[str, object]:
+    from PIL import Image
+    from src.core.alpha_processor import _load_dds
+    from src.core.file_converter import convert_file
+
+    source = os.path.join(directory, "dds_rgba_source.png")
+    destination = os.path.join(directory, "dds_rgba_output.dds")
+    try:
+        with Image.new("RGBA", (32, 24), (32, 160, 255, 255)) as image:
+            image.paste((32, 160, 255, 0), (0, 0, 8, 24))
+            image.paste((32, 160, 255, 128), (8, 0, 16, 24))
+            image.save(source)
+        actual = convert_file(source, destination, "DDS", dds_variant="rgba")
+        if Path(actual).resolve() != Path(destination).resolve():
+            raise ValueError(f"DDS export redirected to {actual}")
+        with open(destination, "rb") as encoded:
+            if encoded.read(4) != b"DDS ":
+                raise ValueError("DDS output signature mismatch")
+        with _load_dds(destination) as decoded:
+            if decoded.size != (32, 24):
+                raise ValueError(f"DDS dimensions changed: {decoded.size}")
+            pixels = [decoded.getpixel((x, 12)) for x in (4, 12, 24)]
+            expected = [(32, 160, 255, alpha) for alpha in (0, 128, 255)]
+            if pixels != expected:
+                raise ValueError(f"DDS decoded colour/alpha mismatch: {pixels}")
+        return {"ok": True, "detail": "DDS signature and RGBA encode/decode; size=32x24; alpha=0/128/255"}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)}
+
+
+def _svg_vectorization_selfcheck(directory: str) -> dict[str, object]:
+    from PIL import Image
+    from src.core.file_converter import convert_file, _has_vtracer, _load_svg
+
+    source = os.path.join(directory, "svg_trace_source.png")
+    destination = os.path.join(directory, "svg_trace_output.svg")
+    try:
+        if not _has_vtracer():
+            raise RuntimeError("Bundled SVG vector tracer unavailable")
+        with Image.new("RGBA", (32, 24), (32, 160, 255, 255)) as image:
+            image.paste((0, 0, 0, 0), (0, 0, 8, 24))
+            image.save(source)
+        actual = convert_file(source, destination, "SVG")
+        if Path(actual).resolve() != Path(destination).resolve():
+            raise ValueError(f"SVG export redirected to {actual}")
+        vector_text = Path(destination).read_text(encoding="utf-8")
+        if "<path" not in vector_text or "data:image/png;base64," in vector_text:
+            raise ValueError("SVG output lacks traced vector paths")
+        with _load_svg(destination) as decoded:
+            if decoded.size != (32, 24):
+                raise ValueError(f"SVG dimensions changed: {decoded.size}")
+            with decoded.convert("RGBA") as rgba:
+                pixels = [rgba.getpixel((x, 12)) for x in (16, 24)]
+                # Tracing is approximate: inspect flat interiors, not edge geometry.
+                if (rgba.getbbox() is None or rgba.getpixel((4, 12))[3] > 32
+                        or any(pixel[3] < 223 or any(
+                            abs(channel - expected) > 32
+                            for channel, expected in zip(pixel[:3], (32, 160, 255))
+                        ) for pixel in pixels)):
+                    raise ValueError(f"SVG rendered colour/content mismatch: {pixels}")
+        return {"ok": True, "detail": "raster-to-vector paths rendered; size=32x24; approximate colour and transparency"}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)}
+
+
 def _emit_runtime_selftest_dump() -> int:
     _unattended_validation_errors.clear()
     from PIL import Image
     from src.core.alpha_processor import _load_dds
     from src.core.file_converter import (
         SUPPORTED_OUTPUT_FORMATS, convert_file, dds_compression_available,
-        _has_vtracer, _load_svg,
+        _load_svg, output_codec_selfcheck,
     )
     from src.ui import video_tool as vt
 
@@ -939,13 +1004,11 @@ def _emit_runtime_selftest_dump() -> int:
     with tempfile.TemporaryDirectory(prefix="alpha_fixer_runtime_selftest_") as tmpdir:
         sample_png = os.path.join(tmpdir, "sample.png")
         sample_gif = os.path.join(tmpdir, "sample.gif")
-        sample_dds = os.path.join(tmpdir, "sample.dds")
         sample_dxt1 = os.path.join(tmpdir, "sample_dxt1.dds")
         sample_mp4 = os.path.join(tmpdir, "sample.mp4")
         sample_ts = os.path.join(tmpdir, "sample.ts")
         sample_bin = os.path.join(tmpdir, "sample.bin")
         sample_svg = os.path.join(tmpdir, "sample.svg")
-        traced_svg = os.path.join(tmpdir, "traced.svg")
         Path(sample_svg).write_text(
             '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'
             '<rect width="16" height="24" fill="#ff0000"/></svg>',
@@ -953,6 +1016,9 @@ def _emit_runtime_selftest_dump() -> int:
         )
 
         Image.new("RGBA", (32, 24), (32, 160, 255, 192)).save(sample_png)
+
+        for name, result in output_codec_selfcheck(os.path.join(tmpdir, "codecs")).items():
+            _record_check(name, result["ok"], result["detail"])
 
         for _idx in range(iterations):
             try:
@@ -966,29 +1032,15 @@ def _emit_runtime_selftest_dump() -> int:
                     )
             except Exception as exc:
                 _record_check("svg_rasterization", False, str(exc))
-            try:
-                if not _has_vtracer():
-                    raise RuntimeError("Bundled SVG vector tracer unavailable")
-                convert_file(sample_png, traced_svg, "SVG")
-                vector_text = Path(traced_svg).read_text(encoding="utf-8")
-                _record_check(
-                    "svg_vectorization",
-                    "<path" in vector_text and "data:image/png;base64," not in vector_text,
-                    "raster-to-vector path export",
-                )
-            except Exception as exc:
-                _record_check("svg_vectorization", False, str(exc))
+            vector_result = _svg_vectorization_selfcheck(tmpdir)
+            _record_check("svg_vectorization", vector_result["ok"], vector_result["detail"])
             convert_file(sample_png, sample_gif, "GIF")
             with Image.open(sample_gif) as gif_img:
                 gif_img.load()
-                _record_check("png_to_gif", gif_img.size == (32, 24), f"size={gif_img.size}")
+                _record_check("gif_session_sample", gif_img.size == (32, 24), f"size={gif_img.size}")
 
-            convert_file(sample_png, sample_dds, "DDS", dds_variant="rgba")
-            dds_img = _load_dds(sample_dds)
-            try:
-                _record_check("png_to_dds_rgba", dds_img.size == (32, 24), f"size={dds_img.size}")
-            finally:
-                dds_img.close()
+            dds_result = _dds_rgba_selfcheck(tmpdir)
+            _record_check("png_to_dds_rgba", dds_result["ok"], dds_result["detail"])
 
             if dds_compression_available():
                 dds_variant_checks = _dds_compression_variant_selfcheck()
